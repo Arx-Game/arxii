@@ -8,6 +8,7 @@ Note: Realm admin is in the `realms` app.
 
 from django.contrib import admin
 
+from world.contributors.admin import CREDIT_FIELDSET
 from world.societies.models import (
     CovenantLegendCredit,
     GangTurfDetails,
@@ -18,6 +19,7 @@ from world.societies.models import (
     LegendEvent,
     LegendHonor,
     LegendLevelCalibration,
+    LegendSettlementConfig,
     LegendSourceType,
     LegendSpread,
     NeighborhoodTurf,
@@ -31,11 +33,17 @@ from world.societies.models import (
     OrganizationType,
     OrgAppeal,
     OrgAppealSignon,
+    PhilosophicalArchetype,
+    PropagandaCampaignTier,
     RankingBandLabel,
+    RankingDisplay,
+    RenownMagnitudeAward,
     Society,
     SocietyReputation,
     SpreadingConfig,
+    StanceArchetype,
     StandingDeclaration,
+    Vacancy,
 )
 
 # =============================================================================
@@ -194,12 +202,14 @@ class OrganizationTypeAdmin(admin.ModelAdmin):
 
     list_display = [
         "name",
+        "reach",
         "rank_1_title",
         "rank_2_title",
         "rank_3_title",
         "rank_4_title",
         "rank_5_title",
     ]
+    list_filter = ["reach"]
     search_fields = ["name"]
     ordering = ["name"]
 
@@ -221,6 +231,27 @@ class OrganizationTypeAdmin(admin.ModelAdmin):
     )
 
 
+class VacancyInline(admin.TabularInline):
+    """#3648: the openings a staff family offers at CG."""
+
+    model = Vacancy
+    extra = 0
+    fields = (
+        "name",
+        "importance",
+        "presumed_importance",
+        "cg_point_cost",
+        "cost_per_influence",
+        "count_remaining",
+        "kin_pool",
+        "kin_node",
+        "rank",
+        "is_active",
+        "sort_order",
+    )
+    raw_id_fields = ("kin_pool", "kin_node", "rank")
+
+
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
     """Admin interface for Organization management.
@@ -239,7 +270,12 @@ class OrganizationAdmin(admin.ModelAdmin):
     search_fields = ["name", "description", "society__name"]
     ordering = ["society", "name"]
     raw_id_fields = ["tradition"]
-    inlines = [OrganizationRankInline, OrganizationMembershipInline, OrganizationGiftGrantInline]
+    inlines = [
+        OrganizationRankInline,
+        OrganizationMembershipInline,
+        OrganizationGiftGrantInline,
+        VacancyInline,
+    ]
 
     fieldsets = (
         (None, {"fields": ("name", "society", "org_type", "tradition", "description")}),
@@ -278,6 +314,44 @@ class OrganizationAdmin(admin.ModelAdmin):
         return obj.memberships.count()
 
     member_count.short_description = "Members"
+
+
+@admin.register(Vacancy)
+class VacancyAdmin(admin.ModelAdmin):
+    """#3648: openings on staff families, with the two importance axes and price."""
+
+    list_display = (
+        "name",
+        "organization",
+        "basis",
+        "importance",
+        "presumed_importance",
+        "cg_point_cost",
+        "cost_per_influence",
+        "count_remaining",
+        "is_active",
+    )
+    list_filter = ("is_active", "organization__family__kind")
+    search_fields = ("name", "description", "organization__name")
+    filter_horizontal = ("allowed_upbringings",)
+    raw_id_fields = ("organization", "kin_pool", "kin_node", "rank")
+    fieldsets = (
+        (None, {"fields": ("organization", "name", "description", "is_active", "sort_order")}),
+        ("Standing", {"fields": ("importance", "presumed_importance")}),
+        (
+            "Price and gate",
+            {
+                "fields": (
+                    "cg_point_cost",
+                    "cost_per_influence",
+                    "count_remaining",
+                    "allowed_upbringings",
+                )
+            },
+        ),
+        ("What the holder becomes", {"fields": ("rank", "kin_pool", "kin_node")}),
+        CREDIT_FIELDSET,
+    )
 
 
 @admin.register(OrganizationMembership)
@@ -699,6 +773,86 @@ class RankingBandLabelAdmin(admin.ModelAdmin):
     search_fields = ("label",)
 
 
+@admin.register(RankingDisplay)
+class RankingDisplayAdmin(admin.ModelAdmin):
+    """#3831 - diegetic leaderboard props staff attach to a herald/plaque object."""
+
+    list_display = ("display_object", "ranking_type", "scope_society", "top_n")
+    list_filter = ("ranking_type",)
+    list_select_related = ("scope_society",)
+    autocomplete_fields = ("scope_society",)
+    raw_id_fields = ("display_object",)
+
+
+@admin.register(RenownMagnitudeAward)
+class RenownMagnitudeAwardAdmin(admin.ModelAdmin):
+    """#3831 - fame + prestige staff prices per RenownMagnitude tier."""
+
+    list_display = ("magnitude", "fame_award", "prestige_award")
+    list_filter = ("magnitude",)
+
+
+@admin.register(LegendSettlementConfig)
+class LegendSettlementConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton Legend-settlement tuning dials (peril floor, standout)."""
+
+    list_display = ("risk_floor", "standout_fraction_tenths", "standout_min_success_level")
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not LegendSettlementConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(PhilosophicalArchetype)
+class PhilosophicalArchetypeAdmin(admin.ModelAdmin):
+    """#3831 - the six-axis principle vectors tagging renown events."""
+
+    list_display = (
+        "name",
+        "mercy_delta",
+        "method_delta",
+        "status_delta",
+        "change_delta",
+        "allegiance_delta",
+        "power_delta",
+    )
+    search_fields = ("name", "description")
+
+
+@admin.register(StanceArchetype)
+class StanceArchetypeAdmin(admin.ModelAdmin):
+    """#3831 - public philosophical stances a character may proclaim (#2842)."""
+
+    list_display = (
+        "name",
+        "mercy_delta",
+        "method_delta",
+        "status_delta",
+        "change_delta",
+        "allegiance_delta",
+        "power_delta",
+    )
+    search_fields = ("name", "description")
+
+
+@admin.register(PropagandaCampaignTier)
+class PropagandaCampaignTierAdmin(admin.ModelAdmin):
+    """#3831 - authored propaganda-campaign scale (coin cost + renown levers, #1621)."""
+
+    list_display = ("name", "threshold_coppers", "magnitude", "risk", "display_order", "is_active")
+    list_filter = ("magnitude", "risk", "is_active")
+    search_fields = ("name",)
+    filter_horizontal = ("archetypes",)
+
+
 @admin.register(GangTurfDetails)
 class GangTurfDetailsAdmin(admin.ModelAdmin):
     """#1891 — per-(GANG_TURF Project) payload."""
@@ -731,25 +885,164 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 from world.societies.houses.models import (  # noqa: E402
+    DomainCrisisType,
+    DomainCrisisTypeOption,
     DomainGarrisonPost,
+    EdictKind,
+    HoldingKind,
     HouseAspectDefinition,
     HouseAspectOption,
     HouseClaim,
     HouseClaimAspect,
     HouseFeature,
+    HouseRecognitionRule,
     HouseTemplate,
+    NobiliaryParticle,
+    PactKind,
+    PrestigeRankBand,
+    StatureBand,
+    SuccessionLaw,
+    Title,
 )
+
+
+@admin.register(SuccessionLaw)
+class SuccessionLawAdmin(admin.ModelAdmin):
+    """#2875 - the house charter's succession vocabulary (a `HouseTemplate` FK)."""
+
+    list_display = ("name", "derivation", "ordering_rule", "require_wedlock")
+    list_filter = ("derivation", "ordering_rule", "require_wedlock")
+    search_fields = ("name", "description")
+
+
+@admin.register(Title)
+class TitleAdmin(admin.ModelAdmin):
+    """#3831 - landed/dynastic titles staff mint and assign holders to."""
+
+    list_display = ("name", "tier", "realm", "house", "holder", "is_claimable")
+    list_filter = ("tier", "realm", "is_claimable")
+    search_fields = ("name",)
+    list_select_related = ("realm", "house", "holder")
+    autocomplete_fields = ("house", "holder")
+
+
+@admin.register(EdictKind)
+class EdictKindAdmin(admin.ModelAdmin):
+    """#3831 - authored standing-policy catalog for domains (#2842)."""
+
+    list_display = (
+        "name",
+        "stance",
+        "income_gross_pct",
+        "weekly_unrest_delta",
+        "weekly_upkeep_coppers",
+    )
+    list_filter = ("stance",)
+    search_fields = ("name", "description")
+    list_select_related = ("stance",)
+    autocomplete_fields = ("stance",)
+
+
+class DomainCrisisTypeOptionInline(admin.TabularInline):
+    """#3831 - the resolution options belonging to a crisis type."""
+
+    model = DomainCrisisTypeOption
+    extra = 0
+    fields = ("kind", "cost_coppers", "mission_template", "self_resolve_pct", "worsen_pct")
+    raw_id_fields = ("mission_template",)
+
+
+@admin.register(DomainCrisisType)
+class DomainCrisisTypeAdmin(admin.ModelAdmin):
+    """#3831 - authored crisis catalog row; resolution is per-type (#2238)."""
+
+    list_display = ("name", "default_severity", "valence", "audience", "automated", "spawn_weight")
+    list_filter = ("default_severity", "valence", "audience", "automated", "ignores_stature")
+    search_fields = ("name", "description")
+    inlines = (DomainCrisisTypeOptionInline,)
+
+
+@admin.register(DomainCrisisTypeOption)
+class DomainCrisisTypeOptionAdmin(admin.ModelAdmin):
+    """#3831 - one resolution option a crisis type offers (#2238)."""
+
+    list_display = ("crisis_type", "kind", "cost_coppers", "self_resolve_pct", "worsen_pct")
+    list_filter = ("kind",)
+    search_fields = ("crisis_type__name",)
+    list_select_related = ("crisis_type",)
+    raw_id_fields = ("mission_template",)
+
+
+@admin.register(StatureBand)
+class StatureBandAdmin(admin.ModelAdmin):
+    """#3831 - authored qualitative stature tier (#3091)."""
+
+    list_display = ("name", "rank", "min_percentile", "threat_multiplier")
+    search_fields = ("name",)
+
+
+@admin.register(PrestigeRankBand)
+class PrestigeRankBandAdmin(admin.ModelAdmin):
+    """#3831 - rank-relative prestige benefit tier (#3091)."""
+
+    list_display = ("name", "scope", "min_rank", "max_rank", "negative_only", "prosperity_bonus")
+    list_filter = ("scope", "negative_only")
+    search_fields = ("name",)
+
+
+@admin.register(PactKind)
+class PactKindAdmin(admin.ModelAdmin):
+    """#3831 - authored org-pact vocabulary; terms are levers, never prose (#2999)."""
+
+    list_display = (
+        "name",
+        "allied_share_pct",
+        "income_share_pct",
+        "non_aggression",
+        "mutual_defense",
+    )
+    list_filter = ("non_aggression", "mutual_defense")
+    search_fields = ("name", "description")
+
+
+@admin.register(NobiliaryParticle)
+class NobiliaryParticleAdmin(admin.ModelAdmin):
+    """#3831 - per-realm x family-type x tier-band nobiliary particle (#1884, #3261)."""
+
+    list_display = ("realm", "kind", "tier_floor", "particle", "taken_in_particle")
+    list_filter = ("realm", "kind", "tier_floor")
+    search_fields = ("particle", "taken_in_particle")
+    list_select_related = ("realm", "kind")
+
+
+@admin.register(HouseRecognitionRule)
+class HouseRecognitionRuleAdmin(admin.ModelAdmin):
+    """#3831 - a realm's law for recognizing births into houses (#1884)."""
+
+    list_display = ("realm", "kind")
+    list_filter = ("realm", "kind")
+    list_select_related = ("realm",)
+
+
+@admin.register(HoldingKind)
+class HoldingKindAdmin(admin.ModelAdmin):
+    """#2875 - the authorable catalog of domain holdings (a `HouseTemplate` M2M)."""
+
+    list_display = ("name", "stream_kind", "base_gross")
+    list_filter = ("stream_kind",)
+    search_fields = ("name", "description")
 
 
 @admin.register(HouseTemplate)
 class HouseTemplateAdmin(admin.ModelAdmin):
     """#1884 Phase D — realm recipes for CG-defined houses."""
 
-    list_display = ("name", "realm", "kind", "liege", "starting_kin_slots")
-    list_select_related = ("realm", "liege")
+    list_display = ("name", "realm", "kind", "org_type", "liege", "starting_kin_slots")
+    list_select_related = ("realm", "liege", "org_type")
     list_filter = ("realm", "kind")
     search_fields = ("name",)
-    filter_horizontal = ("holdings", "aspect_definitions", "features")
+    filter_horizontal = ("holdings", "aspect_definitions", "features", "served_house_choices")
+    autocomplete_fields = ("org_type",)
 
 
 class HouseAspectOptionInline(admin.TabularInline):

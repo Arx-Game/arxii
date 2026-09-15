@@ -53,4 +53,25 @@ describe('FormattedContent', () => {
     const { container } = render(<FormattedContent content="test" className="custom-class" />);
     expect(container.querySelector('.custom-class')).toBeInTheDocument();
   });
+
+  // #3862: an unbroken run (a URL, a keyboard mash, a long invented word) must
+  // break at the column's edge instead of widening the feed sideways. The rule
+  // lives on this wrapper, so every reader that renders a body inherits it.
+  // jsdom performs no layout, so the assertion is on the mechanism: the
+  // `overflow-wrap: anywhere` utility, which (unlike `break-word`) also lets the
+  // run shrink a flex child's min-content width, so the column never grows.
+  it('wraps an unbroken run of characters at the column edge', () => {
+    const unbroken = 'x'.repeat(500);
+    const { container } = render(<FormattedContent content={unbroken} />);
+    const wrapper = container.querySelector('span');
+    expect(wrapper).toHaveClass('[overflow-wrap:anywhere]');
+    expect(wrapper).toHaveTextContent(unbroken);
+  });
+
+  it('keeps the wrap rule when a custom className is supplied', () => {
+    const { container } = render(<FormattedContent content="test" className="custom-class" />);
+    const wrapper = container.querySelector('span');
+    expect(wrapper).toHaveClass('custom-class');
+    expect(wrapper).toHaveClass('[overflow-wrap:anywhere]');
+  });
 });

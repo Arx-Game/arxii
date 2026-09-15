@@ -8,7 +8,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Aura**: A character's soul-state as percentages across affinities
 - **Resonance**: Style tags that define magical identity - proper domain models with FK to Affinity and optional ModifierTarget link
 - **Motif**: Character-level magical aesthetic containing resonances and facets
-- **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
+- **Facet**: Flat vocabulary of imagery/symbolism (Wolf, Silk, Scythe — 2026-09-11 ruling, #3776) assigned to resonances
 - **Threads**: Per-character attachments anchored to a trait/technique/facet/
   relationship-track/relationship-capstone/covenant-role/sanctum. Each Thread
   channels a single Resonance (currency) and accrues `developed_points` → `level`
@@ -564,7 +564,7 @@ a character's Motif bindings buffs that resonance's magic through the modifier p
 
 - `Motif` - Character-level magical aesthetic (container for resonances + facets)
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
-- `Facet` - Hierarchical imagery/symbolism (Category > Subcategory > Specific)
+- `Facet` - Flat vocabulary of imagery/symbolism, name globally unique (2026-09-11 ruling, #3776 — no longer a Category > Subcategory > Specific tree)
 - `MotifResonanceLink` - Abstract base for per-resonance attachments. Declares
   NO fields; each concrete subclass declares its own `motif_resonance` FK.
   Provides `clean()`/`save()` cap-enforcement logic (Python-layer count check
@@ -1767,7 +1767,8 @@ The following models have been removed and replaced:
 - `Power` - Replaced by `Technique` (player-created abilities)
 - `CharacterPower` - Replaced by `CharacterTechnique`
 - `AnimaRitualType` - Replaced by freeform stat+skill+resonance system
-- `ResonanceAssociation` - Replaced by hierarchical `Facet` model
+- `ResonanceAssociation` - Replaced by the `Facet` model (flat vocabulary as of the
+  2026-09-11 ruling, #3776 — originally hierarchical)
 - `Thread` (legacy 5-axis model), `ThreadType`, `ThreadJournal`,
   `ThreadResonance` - Legacy 5-axis thread family. Replaced by the new
   `Thread` discriminator + typed-FK model and supporting catalogs

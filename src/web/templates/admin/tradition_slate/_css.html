@@ -1,0 +1,132 @@
+{% comment %}
+The tradition slate page's own stylesheet (#3675), mirroring the Upbringing
+Builder's `_css.html` (#3667). The page is a custom admin page, so its
+structure comes from Django admin's own CSS contract - `.module`,
+`div.help`, `.errornote`, `.submit-row`, `table.tuning-table` (the Game
+Tuning panels' own list-table class, `admin/tuning/_panel_css.html`) - and
+this sheet adds only what admin has no class for: the two-column shell, the
+module header chips, the checks list, the rail's stat rows and the entry-line
+preview block.
+
+Every colour is an admin CSS variable, or a token defined against admin's own
+light/dark selectors below, so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #tradition-slate-root {
+    --ts-ok: #2f7a3f;
+    --ts-warn: #b4541b;
+  }
+  @media (prefers-color-scheme: dark) {
+    #tradition-slate-root { --ts-ok: #8fb89a; --ts-warn: #d8a06a; }
+  }
+  html[data-theme="light"] #tradition-slate-root { --ts-ok: #2f7a3f; --ts-warn: #b4541b; }
+  html[data-theme="dark"] #tradition-slate-root { --ts-ok: #8fb89a; --ts-warn: #d8a06a; }
+
+  /* The shell: standard lines and the slate on the left, the live rail on the
+     right. The rail is a sibling of the form, not a child of it - it carries
+     its own "Mark reviewed" form and nested forms are invalid HTML. */
+  #tradition-slate-root .ts-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    #tradition-slate-root .ts-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #tradition-slate-root .ts-main { min-width: 0; }
+
+  /* Each module's header bar puts the title left and its chip right, the
+     order they are written in the template. */
+  #tradition-slate-root .module > h2 {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  #tradition-slate-root .ts-chips {
+    display: inline-flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  #tradition-slate-root .ts-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  #tradition-slate-root .ts-table td input[type="text"],
+  #tradition-slate-root .ts-table td input[type="number"] {
+    width: 100%;
+    min-width: 4rem;
+    box-sizing: border-box;
+  }
+  #tradition-slate-root .ts-table td { vertical-align: top; padding: 0.4rem 0.5rem; }
+  #tradition-slate-root .ts-table td .help { margin: 0.2rem 0 0; }
+
+  #tradition-slate-root .ts-addrow { margin: 0.5rem 0 1rem; }
+
+  /* The preview: how the entry actually reads to a player, so it is set off
+     from the admin form around it rather than looking like another row. */
+  #tradition-slate-root .preview {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    background: var(--body-bg);
+    font-family: Garamond, "EB Garamond", Georgia, serif;
+    font-size: 0.9rem;
+    overflow: hidden;
+  }
+  #tradition-slate-root .preview .ts-preview-price {
+    float: right;
+    font-family: "Cinzel", Georgia, serif;
+    font-size: 0.75rem;
+    color: var(--ts-ok);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  #tradition-slate-root .preview b { display: block; margin-bottom: 0.25rem; }
+  #tradition-slate-root .preview p { margin: 0; color: var(--body-quiet-color); }
+
+  /* The rail */
+  #tradition-slate-root .ts-rail .module { margin-bottom: 1rem; }
+  #tradition-slate-root .ts-stat {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #tradition-slate-root .ts-stat:last-child { border-bottom: none; }
+  #tradition-slate-root .ts-stat b {
+    color: var(--link-fg);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  #tradition-slate-root .tradition-checks {
+    margin: 0;
+    padding: 8px 10px 8px 10px;
+    list-style: none;
+  }
+  #tradition-slate-root .tradition-check {
+    margin: 0 0 0.35rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #tradition-slate-root .tradition-check:last-child { margin-bottom: 0; }
+  #tradition-slate-root .tradition-check--ok { border-left-color: var(--ts-ok); }
+  #tradition-slate-root .tradition-check--warn {
+    border-left-color: var(--ts-warn);
+    color: var(--ts-warn);
+  }
+  #tradition-slate-root .ts-rail p { font-size: 0.75rem; }
+  #tradition-slate-root .ts-rail .submit-row { margin: 10px; }
+</style>

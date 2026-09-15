@@ -9,6 +9,7 @@ creation commands.
 """
 
 import contextlib
+import logging
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -27,6 +28,8 @@ from world.magic.services.resonance_environment import (
     refresh_resonance_alignment,
 )
 from world.roster.models import RosterEntry
+
+logger = logging.getLogger(__name__)
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -420,15 +423,54 @@ class Character(ObjectParent, DefaultCharacter):
         desc = self.at_look(target)
         self.msg(desc)
 
+    def at_pre_puppet(self, account, session=None, **kwargs):
+        """Give a character with nowhere to be a home before Evennia restores them (#3818).
+
+        Evennia's hook moves a location-less character to ``prelogout_location``
+        or ``home`` and, when both are empty, leaves them nowhere with a one-line
+        notice to the account. On the web that is a screen that waits forever:
+        readiness is a ``room_state`` frame, and ``send_room_state`` has nothing
+        to send without a location. So when neither is set, ``home`` becomes the
+        canonical fallback room — resolved by fixture identity, so the staff
+        rename to "City Center" is honoured — and Evennia's own restore does the
+        move. Logged, because it means a character was minted without a home.
+        A fallback that was never seeded degrades to Evennia's notice.
+        """
+        has_prelogout = self.db.prelogout_location is not None
+        if self.location is None and not has_prelogout and self.home is None:
+            from world.character_creation.services import resolve_fallback_starting_room
+
+            fallback = resolve_fallback_starting_room()
+            if fallback is not None:
+                logger.warning(
+                    "Character %s (#%s) had no location, no prelogout location and no "
+                    "home; landing them in the fallback starting room %r.",
+                    self.key,
+                    self.pk,
+                    fallback.key,
+                )
+                self.home = fallback
+        super().at_pre_puppet(account, session=session, **kwargs)
+
     def at_post_puppet(self, **kwargs):
         """Handle actions after a session puppets this character.
 
-        Updates the roster entry with the time this character entered the game.
+        Sessions share a character (#3812): a second window opening is not the
+        character coming online. The roster stamp and the cmdset payload go
+        out on every puppet; the friends alert and the offline story catch-up
+        fire only when the FIRST session arrives; the joining window gets its
+        own ``look`` and room state rather than every window getting them again.
+        Evennia adds the session before calling this hook, so the newest one is
+        last in ``sessions.all()`` (a session-less call, as in tests, counts as
+        the first).
 
         Args:
             **kwargs: Arbitrary, optional arguments passed by Evennia.
         """
         super().at_post_puppet(**kwargs)
+        sessions = list(self.sessions.all())
+        first_session = len(sessions) <= 1
+        joining = sessions[-1] if sessions else None
         try:
             entry = self.sheet_data.roster_entry
         except (RosterEntry.DoesNotExist, ObjectDoesNotExist):
@@ -443,22 +485,25 @@ class Character(ObjectParent, DefaultCharacter):
 
             mark_character_active(self.sheet_data)
         payload = serialize_cmdset(self)
-        for session in self.sessions.all():
+        for session in sessions:
             session.msg(commands=(payload, {}))
 
-        # Stories login catch-up: re-evaluate active stories and deliver
-        # any queued narrative messages that accumulated while offline.
-        from world.stories.services.login import catch_up_character_stories
+        if first_session:
+            # Stories login catch-up: re-evaluate active stories and deliver
+            # any queued narrative messages that accumulated while offline.
+            from world.stories.services.login import catch_up_character_stories
 
-        catch_up_character_stories(self)
+            catch_up_character_stories(self)
 
-        # Friends watch list (#1727): alert online players who friended this character.
-        from world.scenes.friend_services import notify_friends_of_status
+            # Friends watch list (#1727): alert online players who friended this character.
+            from world.scenes.friend_services import notify_friends_of_status
 
-        notify_friends_of_status(self, online=True)
+            notify_friends_of_status(self, online=True)
 
-        # Execute look command to send room state to frontend via flow system
-        self.execute_cmd("look")
+        # Look now returns prose only. Confirm structured presence independently
+        # so web entry does not depend on moving rooms or having an active scene.
+        self.send_room_state(session=joining)
+        self.execute_cmd("look", session=joining)
 
     def announce_move_from(self, destination, msg=None, mapping=None, **kwargs):
         """Departure broadcast — suppressed entirely while sneaking (#3288).
@@ -481,21 +526,36 @@ class Character(ObjectParent, DefaultCharacter):
         identity-free unseen-presence echo (arrivals always announce — one-way
         disclosure), while a failed re-roll quietly strips the stance and falls
         through to the normal, visible announce.
+
+        Either way the line is typed ``arrive`` for the web feed (#3856). Evennia
+        types both broadcasts with the ``move_type`` it was moved with (``move``,
+        ``traverse``, ``expel``), which reaches the wire as the ``text`` frame's
+        ``type`` option; the client shows an arrival as something to act on and a
+        departure as a quiet line, so the arrival is retyped here. Nothing else
+        reads ``move_type`` on this path.
         """
         from world.stealth.services import reroll_on_arrival
 
         if reroll_on_arrival(self):
             if self.location is not None:
                 self.location.msg_contents(
-                    "PLACEHOLDER An unseen presence arrived, stealthily avoiding notice.",
+                    (
+                        "PLACEHOLDER An unseen presence arrived, stealthily avoiding notice.",
+                        {"type": "arrive"},
+                    ),
                     exclude=self,
                 )
             self.msg("PLACEHOLDER You slip in, keeping to the shadows.")
             return
+        kwargs["move_type"] = "arrive"
         super().announce_move_to(source_location, msg=msg, mapping=mapping, **kwargs)
 
-    def send_room_state(self):
+    def send_room_state(self, session=None):
         """Send current room state to this character's frontend.
+
+        ``session`` narrows the send to one window (the one that just joined,
+        #3812); ``None`` fans out to every session on the character, which is
+        what a move wants.
 
         Uses the scene_state properties to get current state information.
         Falls back to executing 'look' command if state retrieval fails.
@@ -521,7 +581,7 @@ class Character(ObjectParent, DefaultCharacter):
         room_state = room.scene_state
         if caller_state and room_state:
             payload = build_room_state_payload(caller_state, room_state)
-            self.msg(room_state=((), payload))
+            self.msg(room_state=((), payload), session=session)
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
         """Handle actions after moving to a new location.
@@ -830,6 +890,12 @@ class Character(ObjectParent, DefaultCharacter):
         target = [session] if session else self.sessions.all()
         for sess in target:
             sess.msg(commands=([], {}))
+
+        if self.sessions.all():
+            # Another window still has this character (#3812): closing one of
+            # two tabs is not going offline. Evennia's own hook applies the same
+            # rule to leaving the grid.
+            return
 
         # Clear presence-tied resonance buff on logout; character is no longer present.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):

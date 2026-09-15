@@ -25,9 +25,8 @@ from world.magic.models import (
 )
 from world.magic.services.alterations import enforce_advancement_gate
 from world.magic.services.threads import thread_level_multiplier
-from world.progression.models import XPTransaction
-from world.progression.services.awards import get_or_create_xp_tracker
-from world.progression.types import ProgressionReason
+from world.progression.exceptions import InsufficientXPError, NoAccountForCharacterError
+from world.progression.services.xp_ledger import spend_xp_for_character
 
 if TYPE_CHECKING:
     from world.achievements.constants import AccessChangeSource
@@ -102,28 +101,15 @@ def spend_xp_on_gift_unlock(
     enforce_advancement_gate(learner)
 
     xp_cost = compute_gift_unlock_xp_cost(unlock, learner)
-    account = learner.character.account
-    if account is None:
+
+    try:
+        spend_xp_for_character(learner, xp_cost, f"Gift unlock: {unlock.gift.name}")
+    except NoAccountForCharacterError as exc:
         msg = "Learner character has no linked account; cannot spend XP."
-        raise XPInsufficient(msg)
-
-    xp_tracker = get_or_create_xp_tracker(account)
-    if not xp_tracker.can_spend(xp_cost):
-        msg = (
-            f"Need {xp_cost} XP to unlock {unlock.gift.name}, have {xp_tracker.current_available}."
-        )
-        raise XPInsufficient(msg)
-
-    xp_tracker.spend_xp(xp_cost)
-
-    XPTransaction.objects.create(
-        account=account,
-        amount=-xp_cost,
-        reason=ProgressionReason.XP_PURCHASE,
-        description=f"Gift unlock: {unlock.gift.name}",
-        character=learner,
-        gm=None,
-    )
+        raise XPInsufficient(msg) from exc
+    except InsufficientXPError as exc:
+        msg = f"Need {xp_cost} XP to unlock {unlock.gift.name}, have {exc.available}."
+        raise XPInsufficient(msg) from exc
 
     return CharacterGiftUnlock.objects.create(
         character=learner,

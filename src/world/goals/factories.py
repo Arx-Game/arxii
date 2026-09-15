@@ -31,6 +31,9 @@ class CharacterGoalFactory(DjangoModelFactory):
 
     character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     domain = factory.SubFactory(GoalDomainFactory)
+    # Goals are numbered within a horizon per character (#3621); a running sequence
+    # keeps factory-made goals on one character from colliding.
+    ordinal = factory.Sequence(lambda n: n + 1)
     points = 10
     notes = factory.Faker("sentence")
 

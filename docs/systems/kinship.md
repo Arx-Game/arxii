@@ -97,14 +97,20 @@ definitions both tree builders share — never duplicate them.
 
 ## Surfaces
 
-- REST: `GET /api/roster/families/` (+`has_open_positions` and `area_id`
-  filters — `area_id` resolves through `StartingArea.realm`, matching
+- REST: `GET /api/roster/families/` (+`has_open_kin_slots` and `area_id`
+  filters (renamed from `has_open_positions`, #3648), `area_id` resolves through
+  `StartingArea.realm`, matching
   families with that realm or with no `origin_realm` at all),
   `families/:id/tree/` (viewer-filtered graph payload),
   `families/:id/slots/` (slot browser). The same `FamilyViewSet` is also
   mounted at `GET /api/character-creation/families/` (`character_creation/
   urls.py:38`) for the CG Lineage stage, producing two operation ids for one
-  ViewSet. (#3003) `kin/tree/<character_id>/`
+  ViewSet. The list serializes from two batched groupings passed through
+  serializer context - `_inherited_by_family` (#3648) and
+  `houses.services.particles_for_families` (#3654, three flat queries where
+  the per-row `resolve_particle` cost about six per housed family); nested
+  single-object use of `FamilySerializer` still takes the per-object path.
+  (#3003) `kin/tree/<character_id>/`
   (viewer-filtered graph payload centred on one character — delegates to
   `kin_tree_for_sheet`) and `kin/relationship/?a=&b=` (viewer-derived
   `RelationshipType` label between two characters, or `null` — delegates to
@@ -136,3 +142,5 @@ parentage pair, and a 2-life soul chain.
 #1884 houses: recognition rules + succession law query these facts
 (parentage kinds, `born_within_union`, memberships). #1985 estates. Dream
 sequences as past lives: designed hook on TEMPORARY personas/forms.
+#3648 Vacancies: a kin Vacancy links a `KinSlotPool` or appable `Kinsperson` and
+supplies the CG kin claim; #3620 (owner-defined slots) stays open.

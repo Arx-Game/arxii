@@ -424,8 +424,11 @@ export type SetGlimpseProseRequest = components['schemas']['GlimpseSetProseReque
  *
  * NOTE the semantic difference from CG: this id is a **CharacterDistinction**
  * row pk (the character's own distinction instance), not a catalog
- * `Distinction` id — CG's `glimpse_linked_distinction_ids` (draft_data) links
- * by catalog Distinction id instead. Never mix the two id spaces.
+ * `Distinction` id. CG links a distinction to the Glimpse through the offer
+ * that produced the pick instead (#3675: the pick's `offer_ids` names the
+ * Glimpse tag offer it came from, not a separate linked-ids list) - only this
+ * post-CG sheet dialog links *existing* distinctions by id. Never mix the two
+ * id spaces.
  */
 export type GlimpseDistinctionLinkRequest = components['schemas']['GlimpseDistinctionLinkRequest'];
 
@@ -495,11 +498,29 @@ export interface TechniqueDamageEffect {
   minimum_success_level: number;
 }
 
-/** One Capability a technique grants. */
+/**
+ * One Capability a technique grants by being KNOWN (ADR-0248).
+ *
+ * Standing possession, not something the cast does — the server's `summary`
+ * line words it that way ("Knowing it grants ..."), so any chip rendered from
+ * these rows must be labelled as standing, never listed beside the cast's own
+ * effects as if the cast produced it (#3682).
+ */
 export interface TechniqueCapabilityEffect {
   name: string;
   description: string;
   base_value: number;
+}
+
+/** One treatment a technique performs on cast (#3682). */
+export interface TechniqueTreatmentEffect {
+  name: string;
+  description: string;
+  /** Name of the condition the treatment relieves. */
+  treats: string;
+  /** "self" | "ally" | "enemy" */
+  target_kind: string;
+  minimum_success_level: number;
 }
 
 /**
@@ -524,6 +545,7 @@ export interface TechniqueEffectSummary {
   applies: TechniqueConditionEffect[];
   removes: TechniqueConditionEffect[];
   damage: TechniqueDamageEffect[];
+  treatments: TechniqueTreatmentEffect[];
   grants: TechniqueCapabilityEffect[];
   summary: string;
   is_underspecified: boolean;

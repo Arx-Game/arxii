@@ -23,6 +23,7 @@ const mockEffectSummary: TechniqueEffectSummary = {
   applies: [],
   removes: [],
   damage: [],
+  treatments: [],
   grants: [],
   summary: 'Cast on yourself, anywhere in the room, in the physical arena. Costs 5 anima.',
   is_underspecified: false,

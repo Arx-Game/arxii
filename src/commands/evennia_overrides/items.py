@@ -33,6 +33,7 @@ class CmdWear(ArxCommand):
     key = "wear"
     locks = _CMD_ALL_LOCK
     action = EquipAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = self.require_args("Wear what?")
@@ -73,6 +74,7 @@ class CmdRemove(ArxCommand):
     key = "remove"
     locks = _CMD_ALL_LOCK
     action = UnequipAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         name = self.require_args("Remove what?")
@@ -85,6 +87,7 @@ class CmdPut(ArxCommand):
     key = "put"
     locks = _CMD_ALL_LOCK
     action = PutInAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         item_name, container_name = self.parse_two_args(
@@ -116,6 +119,7 @@ class CmdWithdraw(ArxCommand):
     key = "withdraw"
     locks = _CMD_ALL_LOCK
     action = TakeOutAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = self.require_args("Withdraw what?")

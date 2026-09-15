@@ -28,9 +28,11 @@ import { PendingAttacks } from './components/PendingAttacks';
 import { ResonanceBudget } from './sections/ResonanceBudget';
 import { VitalPools, findOwnParticipant } from './sections/VitalPools';
 import { CombatantsList } from './sections/CombatantsList';
+import { CompanionOrders } from './sections/CompanionOrders';
 import { ActiveState } from './sections/ActiveState';
 import { RoundFlow } from './sections/RoundFlow';
 import { EncounterOutcomeBanner } from './components/EncounterOutcomeBanner';
+import type { AftermathDigest } from './components/AftermathDigest';
 import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import type { components } from '@/generated/api';
@@ -56,6 +58,8 @@ export interface CombatTurnPanelProps {
   onCastPositionChange?: (next: CastPosition) => void;
   /** Forwarded to YourTurn — reports the selected technique's position shape. */
   onPositionShapeChange?: (shape: PositionTargetShape) => void;
+  /** Forwarded to the outcome banner's Dismiss button once the encounter is completed (#3551). */
+  onDismissOutcome?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +71,7 @@ type SectionName =
   | 'resonanceBudget'
   | 'vitalPools'
   | 'combatantsList'
+  | 'companionOrders'
   | 'activeState'
   | 'roundFlow'
   | 'outcomeRoulette';
@@ -76,6 +81,7 @@ const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
   resonanceBudget: false,
   vitalPools: false,
   combatantsList: false,
+  companionOrders: false,
   activeState: false,
   roundFlow: false,
   outcomeRoulette: false,
@@ -92,6 +98,7 @@ export function CombatTurnPanel({
   castPosition,
   onCastPositionChange,
   onPositionShapeChange,
+  onDismissOutcome,
 }: CombatTurnPanelProps) {
   // Encounter state
   const {
@@ -151,6 +158,16 @@ export function CombatTurnPanel({
     // blank string for them); fall back to "abandoned" so the banner always
     // names a result.
     const outcome: string = encounter.outcome || 'abandoned';
+    // One digest per participant the viewer can see an aftermath for, since
+    // the server only sends a non-null aftermath to the character's own
+    // owner (or a GM), so this filter is the whole visibility rule (#3551).
+    const digests = encounter.participants
+      .filter((participant) => participant.aftermath != null)
+      .map((participant) => ({
+        participantId: participant.id,
+        characterName: participant.character_name,
+        digest: participant.aftermath as AftermathDigest,
+      }));
     return (
       <div
         className={cn('flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm')}
@@ -161,7 +178,7 @@ export function CombatTurnPanel({
             Encounter Concluded: Round {encounter.round_number ?? 0}
           </h2>
         </div>
-        <EncounterOutcomeBanner outcome={outcome} />
+        <EncounterOutcomeBanner outcome={outcome} digests={digests} onDismiss={onDismissOutcome} />
       </div>
     );
   }
@@ -326,7 +343,16 @@ export function CombatTurnPanel({
         data-testid="section-combatants-list"
       />
 
-      {/* 5. ActiveState */}
+      {/* 5. CompanionOrders — free directives for deployed companions (#3576). */}
+      <CompanionOrders
+        encounter={encounter}
+        encounterId={encounterId}
+        characterId={characterId}
+        collapsed={collapsed.companionOrders}
+        onToggleCollapse={() => toggleSection('companionOrders')}
+      />
+
+      {/* 6. ActiveState */}
       <ActiveState
         encounter={encounter}
         collapsed={collapsed.activeState}
@@ -334,7 +360,7 @@ export function CombatTurnPanel({
         data-testid="section-active-state"
       />
 
-      {/* 6. RoundFlow */}
+      {/* 7. RoundFlow */}
       <RoundFlow
         encounter={encounter}
         collapsed={collapsed.roundFlow}

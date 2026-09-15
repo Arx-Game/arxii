@@ -126,8 +126,6 @@ export interface PlayerData {
   id: number;
   profile_picture: PlayerMedia | null;
   media: PlayerMedia[];
-  max_storage: number;
-  max_file_size: number;
 }
 
 export interface TenureMedia {

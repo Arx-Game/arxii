@@ -11,6 +11,7 @@
 
 import { useRealmTheme } from '@/components/realm-theme-provider';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ChapterLeaf,
   ConfirmDialog,
@@ -22,6 +23,7 @@ import {
   PageTurn,
   Paragraphs,
   RecordRail,
+  stageEyebrow,
 } from '../folio';
 import { useCGExplanations, useStartingAreas, useUpdateDraft } from '../queries';
 import { Stage, STAGE_LABELS } from '../types';
@@ -94,7 +96,10 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         title={copy?.origin_heading ?? 'Where does the story begin?'}
         aside={
           <>
-            <RecordRail rows={[{ label: 'Origin', value: chosen?.name }]} ledger="Stage 1 of 11" />
+            <RecordRail
+              rows={[{ label: 'Origin', value: chosen?.name }]}
+              ledger={stageEyebrow(draft.current_stage)}
+            />
             <Marginalia id="note-change">
               <Note lead="Changing your starting realm">
                 clears the stages that depended on it. You will be asked first.
@@ -106,31 +111,29 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         <EntryList label="Starting realms">
           {areas?.map((area) => {
             const isChosen = chosen?.id === area.id;
-            const closed = !area.is_accessible;
             const realmName = REALM_NAMES[area.realm_theme] ?? REALM_NAMES.default;
             return (
               <Entry
                 key={area.id}
                 name={area.name}
-                tag={closed ? `${realmName} · not available to your account` : realmName}
+                tag={realmName}
                 chosen={isChosen}
-                closed={closed}
                 open={isChosen}
               >
                 <Paragraphs text={area.description} />
-                {closed ? (
-                  // The trust threshold that gates access is not on the serializer yet.
+                {area.realm_slug && (
                   <p className="ledger-line">
-                    This starting realm is not available to your account.
+                    <Link to={`/realms/${area.realm_slug}`}>
+                      About {area.realm_name ?? realmName} <span aria-hidden="true">→</span>
+                    </Link>
                   </p>
-                ) : (
-                  <EntryDoors
-                    chooseLabel={`Choose ${area.name}`}
-                    onChoose={() => choose(area)}
-                    chosen={isChosen}
-                    onSetAside={() => apply(null)}
-                  />
                 )}
+                <EntryDoors
+                  chooseLabel={`Choose ${area.name}`}
+                  onChoose={() => choose(area)}
+                  chosen={isChosen}
+                  onSetAside={() => apply(null)}
+                />
               </Entry>
             );
           })}

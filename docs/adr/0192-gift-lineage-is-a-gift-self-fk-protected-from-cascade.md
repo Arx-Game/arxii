@@ -22,7 +22,8 @@ edits. `Gift.parent` is the only shape that is both one thread and one copy.
 Vampire's grant. Both axes are needed.
 
 **Why PROTECT.** `Species.parent` (`world/species/models.py`) and `Facet.parent`
-(`world/magic/models/motifs.py`) both CASCADE, and consistency argued for a third. It was
+(`world/magic/models/motifs.py`) both CASCADE, and consistency argued for a third. (`Facet.parent`
+was removed in 2026-09 — see the amendment below.) It was
 rejected because the analogy does not hold: a subspecies row and a facet leaf are taxonomy
 entries that are meaningless without their parent, whereas a child gift is a **self-standing
 playable gift** that characters hold (`CharacterGift`) and thread (`Thread.target_gift`).
@@ -39,6 +40,13 @@ every load-bearing question ("does this learner own it?", "which techniques does
 reach?", "which thread governs this technique?") is asked from the held gift, so the upward walk
 answers all three and mirrors `Species.lineage` (PR #2897) exactly, seen-set cycle guard and all.
 A second walk shape would have been the reinvention this repo pays most for.
+
+**Amended by #3776 (ADR-0289).** One half of the precedent above is gone: `Facet.parent` no longer
+exists — #3776 flattened `Facet` to a peer vocabulary and dropped the self-FK entirely. The
+consistency argument this ADR rejected therefore now rests on `Species.parent` alone, and the
+rejection stands on the reasoning that always carried it (a child gift is self-standing playable
+state, a subspecies row is not), not on a count of sibling hierarchies. Nothing about the PROTECT
+decision changes.
 
 **Consequence.** `Gift.cached_techniques` keeps meaning "this gift's own techniques" — it is the
 `Prefetch(to_attr=)` target for the gift API — and the pool read is the new

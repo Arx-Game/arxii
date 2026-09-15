@@ -7,21 +7,28 @@
  * aura's current `glimpse_tags`/`glimpse_story`, writes through the Task 4
  * aura action mutations (`useSetGlimpseTags`/`useSetGlimpseProse`/
  * `useToggleGlimpseDistinction`, `@/magic/queries`). `showDeferralControls`
- * is false — closing the dialog IS the deferral; there is no separate "skip"
+ * is false: closing the dialog IS the deferral; there is no separate "skip"
  * affordance once a character already exists (unlike CG, which can't finish
  * later any other way).
  *
- * ID-SPACE NOTE — read before touching `linkableDistinctions` /
- * `onToggleDistinctionLink`: CG's `GlimpseSection` links suggestions by
- * **catalog** `Distinction` id (`draft_data.glimpse_linked_distinction_ids`,
- * reconciled at finalize). This live-sheet mount links by
- * **CharacterDistinction row id** instead — the id the aura's
+ * `GlimpseFlowProps` dropped its link-distinction props (#3675: CG offers
+ * distinctions by chapter now, rendered through `renderOffers`, not by tag
+ * suggestion). That is a CG-only change: this mount's own link/unlink of the
+ * character's *existing* distinctions is a different feature (not a CG
+ * offer) and stays, now rendered directly here via `DistinctionLinkChips`
+ * below `GlimpseFlow` instead of inside it.
+ *
+ * ID-SPACE NOTE, read before touching `linkableDistinctions` /
+ * `onToggleDistinctionLink`: CG links a distinction to the Glimpse through
+ * the offer that produced the pick (`offer_ids` naming a Glimpse tag offer,
+ * see `magic/types.ts`). This live-sheet mount links by
+ * **CharacterDistinction row id** instead, the id the aura's
  * `link-glimpse-distinction`/`unlink-glimpse-distinction` endpoints require
  * (`character_distinction_id`), which is exactly what
  * `CharacterSheetDistinction.id` already carries (see
  * `world.character_sheets.serializers._build_distinctions`:
  * `DistinctionEntry(id=cd.pk, ...)`). Never pass a catalog Distinction id
- * here — the two id spaces are not interchangeable.
+ * here: the two id spaces are not interchangeable.
  */
 
 import { useState } from 'react';
@@ -41,6 +48,7 @@ import {
   useToggleGlimpseDistinction,
 } from '@/magic/queries';
 import type { CharacterSheetAura, CharacterSheetDistinction } from '@/character_sheets/api';
+import { DistinctionLinkChips } from './DistinctionLinkChips';
 import { GlimpseFlow } from './GlimpseFlow';
 import type { GlimpseTagOption } from './glimpseTypes';
 
@@ -70,8 +78,8 @@ export function GlimpseEditorDialog({
 
   const selectedTagIds = aura.glimpse_tags.map((tag) => tag.id);
 
-  // Live-sheet linking is by CharacterDistinction row id (see file header) —
-  // distinct from CG's catalog-Distinction-id linking.
+  // Live-sheet linking is by CharacterDistinction row id (see file header),
+  // distinct from CG's offer-based linking.
   const linkedDistinctionIds = distinctions
     .filter((distinction) => distinction.is_from_glimpse)
     .map((distinction) => distinction.id);
@@ -104,12 +112,15 @@ export function GlimpseEditorDialog({
           tags={tags ?? []}
           selectedTagIds={selectedTagIds}
           prose={prose}
-          linkedDistinctionIds={linkedDistinctionIds}
           onChangeAxis={handleChangeAxis}
           onChangeProse={setProseDraft}
-          onToggleDistinctionLink={handleToggleDistinctionLink}
           showDeferralControls={false}
-          linkableDistinctions={linkableDistinctions}
+        />
+        <DistinctionLinkChips
+          distinctions={linkableDistinctions}
+          linkedIds={new Set(linkedDistinctionIds)}
+          onToggle={handleToggleDistinctionLink}
+          label="Link a distinction to your glimpse"
         />
         <DialogFooter>
           <Button

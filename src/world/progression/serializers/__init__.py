@@ -7,19 +7,19 @@ from rest_framework import serializers
 from world.classes.models import Path
 from world.classes.serializers import PathListSerializer
 from world.journals.models import JournalEntry
-from world.progression.constants import VoteTargetType
+from world.progression.constants import NominationTargetType
 from world.progression.models import (
     ExperiencePointsData,
     KudosClaimCategory,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    Nomination,
     PathIntent,
     RandomSceneTarget,
-    WeeklyVote,
     XPTransaction,
 )
-from world.scenes.models import Interaction, SceneParticipation
+from world.scenes.models import Interaction
 
 
 class KudosSourceCategorySerializer(serializers.ModelSerializer):
@@ -126,71 +126,50 @@ class AccountProgressionSerializer(serializers.Serializer):
     claim_categories = KudosClaimCategorySerializer(many=True)
 
 
-# --- Voting serializers ---
+# --- Nomination serializers (#3738) ---
 
 
-class CastVoteSerializer(serializers.Serializer):
-    """Input serializer for casting a vote."""
+class NominateSerializer(serializers.Serializer):
+    """Input serializer for nominating the writer of a piece."""
 
-    target_type = serializers.ChoiceField(choices=VoteTargetType.choices)
+    target_type = serializers.ChoiceField(choices=NominationTargetType.choices)
     target_id = serializers.IntegerField()
 
 
-class WeeklyVoteSerializer(serializers.ModelSerializer):
-    """Read serializer for WeeklyVote instances."""
+class NominationSerializer(serializers.ModelSerializer):
+    """One of the requesting account's own nominations this week.
 
+    The only read anyone gets of a nomination: the nominator's own list, so
+    they know whom they have already nominated. A nominee never sees a row.
+    """
+
+    nominee_name = serializers.CharField(source="nominee.character.db_key", read_only=True)
     target_name = serializers.SerializerMethodField()
 
     class Meta:
-        model = WeeklyVote
-        fields = ["id", "target_type", "target_id", "target_name", "created_at"]
+        model = Nomination
+        fields = ["id", "target_type", "target_id", "nominee_name", "target_name", "created_at"]
 
-    def get_target_name(self, obj: WeeklyVote) -> str:
-        """Resolve a human-readable name for the vote target."""
+    def get_target_name(self, obj: Nomination) -> str:
+        """A short label for the cited piece."""
         snippet_length = 50
         try:
             return self._resolve_target_name(obj, snippet_length)
-        except (
-            Interaction.DoesNotExist,
-            SceneParticipation.DoesNotExist,
-            JournalEntry.DoesNotExist,
-        ):
+        except (Interaction.DoesNotExist, JournalEntry.DoesNotExist):
             return "Deleted content"
 
     @staticmethod
-    def _resolve_target_name(obj: WeeklyVote, snippet_length: int) -> str:
-        if obj.target_type == VoteTargetType.INTERACTION:
-            interaction = Interaction.objects.select_related("persona").get(pk=obj.target_id)
-            name = interaction.persona.name if interaction.persona else "Unknown"
+    def _resolve_target_name(obj: Nomination, snippet_length: int) -> str:
+        if obj.target_type == NominationTargetType.INTERACTION:
+            interaction = Interaction.objects.get(pk=obj.target_id)
             snippet = interaction.content[:snippet_length]
             if len(interaction.content) > snippet_length:
-                return f"{name}: {snippet}..."
-            return f"{name}: {snippet}"
-        if obj.target_type == VoteTargetType.SCENE_PARTICIPATION:
-            participation = SceneParticipation.objects.select_related("scene").get(pk=obj.target_id)
-            if participation.scene:
-                return participation.scene.name
-            return "Unknown scene"
-        if obj.target_type == VoteTargetType.JOURNAL:
+                return f"{snippet}..."
+            return snippet
+        if obj.target_type == NominationTargetType.JOURNAL:
             entry = JournalEntry.objects.get(pk=obj.target_id)
             return entry.title or "Untitled journal"
         return "Unknown target"
-
-
-class VoteBudgetSerializer(serializers.Serializer):
-    """Serializer for vote budget information."""
-
-    base_votes = serializers.IntegerField()
-    scene_bonus_votes = serializers.IntegerField()
-    votes_spent = serializers.IntegerField()
-    votes_remaining = serializers.IntegerField()
-
-
-class CastVoteResponseSerializer(serializers.Serializer):
-    """Response serializer for cast vote action, includes vote + budget."""
-
-    vote = WeeklyVoteSerializer()
-    budget = VoteBudgetSerializer()
 
 
 # --- Random Scene serializers ---

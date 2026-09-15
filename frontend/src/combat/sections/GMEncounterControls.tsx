@@ -17,6 +17,10 @@
  * is the home for the lifecycle affordances #3067 newly wires (create,
  * add_opponent, add/remove_participant, begin_round, resolve_round, pause).
  *
+ * The settings row also carries an Escalation select (#3552), GM-only, backed
+ * by the authored escalation-curve catalog; choosing "None" clears the
+ * encounter's curve.
+ *
  * Lethal duel proposal (#3068): "Start Lethal Duel" is a THIRD, independent
  * affordance shown whenever the viewer has GM standing — regardless of
  * whether a wider party encounter exists — because a climactic one-on-one
@@ -62,6 +66,7 @@ import {
   useBeginRound,
   useCreateEncounter,
   useCreatureTemplates,
+  useEscalationCurves,
   useOpponentDefaults,
   usePauseEncounter,
   useProposeLethalDuel,
@@ -105,6 +110,10 @@ const PACE_OPTIONS: { value: PaceMode; label: string }[] = [
   { value: 'ready', label: 'Ready — resolves once everyone is ready' },
   { value: 'manual', label: 'Manual — GM controls each round' },
 ];
+
+/** Sentinel Select value for "clear the escalation curve" (#3552): a curve id is
+ * never a valid Select value on its own since Radix Select values are strings. */
+const NONE_CURVE = 'none';
 
 const STAKES_OPTIONS: { value: StakesLevel; label: string }[] = [
   { value: 'local', label: 'Local' },
@@ -364,14 +373,18 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
 }
 
 // ---------------------------------------------------------------------------
-// Encounter settings row (#3383) — stakes/risk/pace/timer, changeable
-// mid-encounter. A persistent settings strip, not a one-shot dialog action —
-// each control fires the mutation directly on change.
+// Encounter settings row (#3383): stakes/risk/pace/timer/escalation, changeable
+// mid-encounter. A persistent settings strip, not a one-shot dialog action;
+// each control fires the mutation directly on change. The escalation curve
+// (#3552) is GM-gated: the catalog fetch is only enabled for `encounter.is_gm`.
 // ---------------------------------------------------------------------------
 
 function EncounterSettingsRow({ encounter }: { encounter: EncounterDetail }) {
   const updateSettings = useUpdateEncounterSettings(encounter.id);
+  const curves = useEscalationCurves(encounter.is_gm);
   const [timerDraft, setTimerDraft] = useState(String(encounter.pace_timer_minutes));
+  const curveValue =
+    encounter.escalation_curve == null ? NONE_CURVE : String(encounter.escalation_curve);
 
   // Keep the draft in sync when the server value changes from elsewhere
   // (another GM's edit, or our own mutation's refetch) — cheap and avoids a
@@ -394,6 +407,11 @@ function EncounterSettingsRow({ encounter }: { encounter: EncounterDetail }) {
 
   function handlePaceChange(value: string) {
     updateSettings.mutate({ paceMode: value as PaceMode }, { onError: handleError });
+  }
+
+  function handleCurveChange(value: string) {
+    const escalationCurve = value === NONE_CURVE ? null : Number(value);
+    updateSettings.mutate({ escalationCurve }, { onError: handleError });
   }
 
   function commitTimer() {
@@ -452,6 +470,29 @@ function EncounterSettingsRow({ encounter }: { encounter: EncounterDetail }) {
               {PACE_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value} className="text-xs">
                   {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px]">Escalation</Label>
+          <Select value={curveValue} onValueChange={handleCurveChange}>
+            <SelectTrigger data-testid="encounter-curve-select" className="h-8 w-40 text-xs">
+              <SelectValue>
+                {encounter.escalation_curve == null
+                  ? 'None (does not escalate)'
+                  : (encounter.escalation_curve_name ?? 'Curve')}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE_CURVE} className="text-xs">
+                None (does not escalate)
+              </SelectItem>
+              {(curves.data ?? []).map((curve) => (
+                <SelectItem key={curve.id} value={String(curve.id)} className="text-xs">
+                  {curve.name}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -25,6 +25,7 @@ class CmdGet(ArxCommand):
     aliases: ClassVar[list[str]] = ["take"]
     locks = "cmd:all()"
     action = GetAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = self.require_args("Get what?")
@@ -53,6 +54,7 @@ class CmdDrop(ArxCommand):
     key = "drop"
     locks = "cmd:all()"
     action = DropAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         name = self.require_args("Drop what?")
@@ -72,6 +74,7 @@ class CmdGive(ArxCommand):
     key = "give"
     locks = "cmd:all()"
     action = GiveAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         item_name, recipient_name = self.parse_two_args(

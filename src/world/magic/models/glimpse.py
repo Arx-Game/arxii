@@ -11,19 +11,28 @@ All writes go through ``world.magic.services.glimpse`` so
 ``CharacterAura.glimpse_state`` stays consistent.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import CachedPropertiesMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import GlimpseTagAxis
+
+if TYPE_CHECKING:
+    from world.character_creation.models import DistinctionOffer
 
 
 class GlimpseTagManager(NaturalKeyManager):
     """Manager for GlimpseTag with natural key support."""
 
 
-class GlimpseTag(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One authored choice in the guided glimpse flow (#2427).
 
     Content model — authored in the lore repo, exported/imported via
@@ -76,6 +85,34 @@ class GlimpseTag(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["slug"]
 
+    @PrunedCachedProperty
+    def offers(self) -> list[DistinctionOffer]:
+        """This tag's active distinction offers, in display order (#3675, ADR-0298).
+
+        ``related_cache_fields`` is the PRIMARY invalidation mechanism here:
+        ``DistinctionOffer`` writes are staff-authored/admin-tooling shaped, scattered
+        across ``web/admin/distinction_builder/paste.py``, ``tradition_slate/views.py``
+        and seed data, not concentrated sole mutators. Also fed cold by a ``Prefetch``
+        (`` to_attr `` "offers") on ``CGGlimpseTagViewSet.get_queryset()``, never one
+        query per tag.
+
+        **Honest guarantee, not "always fresh":** a create/delete/``is_active`` toggle
+        on an offer clears THIS cache, for the offer's *current* ``glimpse_tag`` only.
+        Reassigning an offer's ``glimpse_tag`` FK (moving it to a different tag) clears
+        the *new* tag's cache but never the *old* one's - the old tag can keep serving
+        the moved offer for the life of the process. See the note on
+        ``DistinctionOffer.related_cache_fields`` for why; fixing it is
+        tracked as #3836, since it is a cross-cutting mixin change, not
+        specific to this relation.
+        """
+        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+
+        return list(
+            DistinctionOffer.objects.filter(glimpse_tag_id=self.pk, is_active=True)
+            .select_related("distinction")
+            .order_by("sort_order", "id")
+        )
+
     def __str__(self) -> str:
         return f"{self.get_axis_display()}: {self.name}"
 
@@ -104,48 +141,3 @@ class CharacterGlimpseTag(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.tag} on {self.aura.character}"
-
-
-class GlimpseTagDistinctionSuggestionManager(NaturalKeyManager):
-    """Manager for GlimpseTagDistinctionSuggestion with natural key support."""
-
-
-class GlimpseTagDistinctionSuggestion(NaturalKeyMixin, SharedMemoryModel):
-    """Curated tag→distinction suggestion (#2427). Content model (lore repo).
-
-    Purely a suggestion surface for the CG flow's "distinctions born of this
-    moment" panel — grants nothing. FK direction per ADR-0010: glimpse-domain
-    content points *into* the reusable ``Distinction`` primitive so
-    ``distinctions`` stays dependency-free.
-    """
-
-    tag = models.ForeignKey(
-        GlimpseTag,
-        on_delete=models.CASCADE,
-        related_name="distinction_suggestions",
-        help_text="The glimpse tag that suggests the distinction.",
-    )
-    distinction = models.ForeignKey(
-        "arxii.Distinction",
-        on_delete=models.CASCADE,
-        related_name="glimpse_tag_suggestions",
-        help_text="The distinction this tag suggests considering.",
-    )
-    sort_order = models.PositiveIntegerField(
-        default=0, help_text="Display order within the tag's suggestions."
-    )
-
-    objects = GlimpseTagDistinctionSuggestionManager()
-
-    class Meta:
-        verbose_name = "Glimpse Tag Distinction Suggestion"
-        verbose_name_plural = "Glimpse Tag Distinction Suggestions"
-        unique_together = [["tag", "distinction"]]
-        ordering = ["tag__axis", "tag__sort_order", "sort_order"]
-
-    class NaturalKeyConfig:
-        fields = ["tag", "distinction"]
-        dependencies = ["arxii.GlimpseTag", "arxii.Distinction"]
-
-    def __str__(self) -> str:
-        return f"{self.tag.name} → {self.distinction.name}"

@@ -650,7 +650,7 @@
 - `draw_clue_from_pool(pool: 'CluePool', roster_entry: 'RosterEntry') -> 'Clue | None' - Draw a weighted random clue from the pool, excluding held clues (#2293).`
 - `extract_asset(asset: 'NPCAsset', extractor) -> 'int' - Pull a recruited NPC out of their public job (#2827 phase 3).`
 - `introduce_asset(*, introducer_persona: 'Persona', ally_persona: 'Persona', asset: 'NPCAsset') -> 'NPCAsset' - Introduce an owned asset to a co-present ally, creating co-ownership (#2295).`
-- `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' - Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
+- `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction', *, display_name: 'str | None' = None) -> 'None' - Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 - `transfer_asset_to_org(asset: 'NPCAsset', organization) -> 'NPCAsset' - Convert a personally-held asset row into an org-held one (#2820 phase 2).`
 - `transition_asset_status(asset: 'NPCAsset', new_status: 'str', *, reason: 'str' = AssetTransitionReason.CONSEQUENCE) -> 'None' - Transition an NPCAsset's status, enforcing the legal-transition matrix.`
 - `transition_assets_for_dead_character(dead_character) -> 'None' - Transition all ACTIVE assets belonging to a dead character to LOST.`
@@ -1292,11 +1292,25 @@
 
 ## world.character_creation
 
-### BeginningTradition
+### AppearanceSection
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - distinction_offers <- character_creation.DistinctionOffer
+
+### BeginningEnemyOffer
 **Foreign Keys:**
   - beginning -> character_creation.Beginnings [FK]
+  - organization -> societies.Organization [FK] (nullable)
+  - reason -> character_creation.EnemyReason [FK] (nullable)
+
+### BeginningTradition
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - beginning -> character_creation.Beginnings [FK]
   - tradition -> magic.Tradition [FK]
-  - required_distinction -> distinctions.Distinction [FK] (nullable)
 
 ### Beginnings
 **Foreign Keys:**
@@ -1313,9 +1327,12 @@
   - societies -> societies.Society [M2M]
   - traditions -> magic.Tradition [M2M]
 **Pointed to by:**
+  - enemy_offers <- character_creation.BeginningEnemyOffer
   - beginning_traditions <- character_creation.BeginningTradition
   - origin_templates <- character_creation.OriginTemplate
   - drafts <- character_creation.CharacterDraft
+  - first_look_offers <- character_creation.DistinctionOffer
+  - offer_pins <- character_creation.OfferFirstLook
   - codex_grants <- codex.BeginningsCodexGrant
   - ritual_grants <- magic.BeginningsRitualGrant
 
@@ -1339,6 +1356,8 @@
   - selected_origin_template -> character_creation.OriginTemplate [FK] (nullable)
   - claimed_kin_slot -> roster.Kinsperson [FK] (nullable)
   - claimed_kin_pool -> roster.KinSlotPool [FK] (nullable)
+  - selected_vacancy -> societies.Vacancy [FK] (nullable)
+  - served_house -> societies.Organization [FK] (nullable)
   - second_parent_species -> species.Species [FK] (nullable)
   - selected_path -> classes.Path [FK] (nullable)
   - selected_tradition -> magic.Tradition [FK] (nullable)
@@ -1355,6 +1374,21 @@
   - sheet -> character_sheets.CharacterSheet [FK]
   - slot -> character_creation.OriginTemplateSlot [FK]
   - choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
+
+### DistinctionOffer
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK]
+  - glimpse_tag -> magic.GlimpseTag [FK] (nullable)
+  - origin_choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
+  - schooling_line -> character_creation.SchoolingLine [FK] (nullable)
+  - enemy_reason -> character_creation.EnemyReason [FK] (nullable)
+  - appearance_section -> character_creation.AppearanceSection [FK] (nullable)
+  - first_look -> character_creation.Beginnings [M2M]
+**Pointed to by:**
+  - pins <- character_creation.OfferFirstLook
 
 ### DraftApplication
 **Foreign Keys:**
@@ -1374,23 +1408,47 @@
 **Foreign Keys:**
   - draft -> character_creation.CharacterDraft [FK]
 
+### EnemyReason
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - beginning_enemy_offers <- character_creation.BeginningEnemyOffer
+  - distinction_offers <- character_creation.DistinctionOffer
+  - character_enemies <- character_sheets.CharacterEnemy
+
+### OfferFirstLook
+**Foreign Keys:**
+  - offer -> character_creation.DistinctionOffer [FK]
+  - beginning -> character_creation.Beginnings [FK]
+
 ### OriginTemplate
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - beginning -> character_creation.Beginnings [FK]
-  - named_family_kind -> roster.FamilyKind [FK] (nullable)
   - claimable_kinds -> roster.FamilyKind [M2M]
+  - family_templates -> societies.HouseTemplate [M2M]
+  - closed_distinctions -> distinctions.Distinction [M2M]
 **Pointed to by:**
   - slots <- character_creation.OriginTemplateSlot
   - drafts <- character_creation.CharacterDraft
+  - vacancies <- societies.Vacancy
 
 ### OriginTemplateSlot
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - template -> character_creation.OriginTemplate [FK]
+  - anchor_org_type -> societies.OrganizationType [FK] (nullable)
+  - anchor_society -> societies.Society [FK] (nullable)
+  - same_anchor_as -> character_creation.OriginTemplateSlot [FK] (nullable)
+  - follow_up_to -> character_creation.OriginTemplateSlot [FK] (nullable)
+  - anchor_orgs -> societies.Organization [M2M]
+  - shown_for_choices -> character_creation.OriginTemplateSlotChoice [M2M]
 **Pointed to by:**
+  - dependents <- character_creation.OriginTemplateSlot
+  - follow_ups <- character_creation.OriginTemplateSlot
   - choices <- character_creation.OriginTemplateSlotChoice
   - character_rows <- character_creation.CharacterOriginSlot
 
@@ -1400,7 +1458,17 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - slot -> character_creation.OriginTemplateSlot [FK]
 **Pointed to by:**
+  - branching_prompts <- character_creation.OriginTemplateSlot
   - character_rows <- character_creation.CharacterOriginSlot
+  - distinction_offers <- character_creation.DistinctionOffer
+
+### SchoolingLine
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - grants -> distinctions.Distinction [FK] (nullable)
+**Pointed to by:**
+  - distinction_offers <- character_creation.DistinctionOffer
 
 ### StartingArea
 **Foreign Keys:**
@@ -1413,13 +1481,21 @@
   - beginnings <- character_creation.Beginnings
   - drafts <- character_creation.CharacterDraft
 
+### TraditionStateLine
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - carries -> distinctions.Distinction [FK] (nullable)
+
 ### Service Functions
 - `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' - Add a message comment to an application.`
+- `age_bounds(species: 'Species | None', beginnings: 'Beginnings | None', ic_now: 'datetime | None') -> 'AgeBounds' - The one place the CG age rule lives (#3663).`
 - `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' - Approve an application and finalize the character.`
 - `assemble_origin_prose(sheet: 'CharacterSheet') -> 'str' - Compose the frame narrative + slot answers into prose.`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' - Check if an account can create a new character.`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' - Claim a submitted application for staff review.`
+- `clear_family_selection(draft: 'CharacterDraft') -> 'None' - Clear everything anchored to the family path/Upbringing (#3648 review fix).`
 - `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' - Delete a slot answer and recompute state.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Deny an application.`
@@ -1427,20 +1503,32 @@
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft', *, claim_as_npc: 'bool' = False) -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
+- `first_journal_offered(draft: 'CharacterDraft') -> 'bool' - The First Journal is offered to an Arx start; anyone else writes one in play.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' - Get all starting areas accessible to an account.`
+- `opened_feature_traits(draft_data: 'dict') -> 'set[str]' - The names of the trait rows this draft has made distinctive (#3739).`
+- `reconcile_offer_picks(draft: 'CharacterDraft') -> 'list[str]' - Apply carried and bundled offers, drop picks whose offer has gone, reprice.`
 - `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' - Recompute and persist ``origin_story_state`` from slot rows + prose.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Request revisions on an application.`
 - `require_draft_complete(draft: 'CharacterDraft') -> 'None' - Raise DraftIncompleteError unless every non-Review stage is complete.`
+- `resolve_fallback_starting_room() -> 'ObjectDB | None' - The canonical fallback starting room, or ``None`` if it was never seeded (#3818).`
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' - Resubmit a draft application after revisions.`
 - `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
 - `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
-- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None) -> 'None' - Upsert a character's answer (text and/or picked choice), then refresh state.`
+- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None, *, organization: 'Organization | None | _Keep' = <world.character_creation.services._Keep object>, figure_name: 'str | _Keep' = <world.character_creation.services._Keep object>) -> 'None' - Upsert a character's answer (text, picked choice, anchor, person), then refresh state.`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' - Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' - Un-submit a draft application, returning it to editable state.`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' - Withdraw a draft application.`
 
 
 ## world.character_sheets
+
+### CharacterEnemy
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - organization -> societies.Organization [FK] (nullable)
+  - family -> roster.Family [FK] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
+  - reason -> character_creation.EnemyReason [FK] (nullable)
 
 ### CharacterSheet
 **Foreign Keys:**
@@ -1484,6 +1572,7 @@
   - trait_changes <- traits.CharacterTraitChange
   - character_class_levels <- classes.CharacterClassLevel
   - origin_slots <- character_creation.CharacterOriginSlot
+  - enemies <- character_sheets.CharacterEnemy
   - audere_offers <- magic.PendingAudereOffer
   - legend_contributions <- societies.LegendContribution
   - org_obligations <- societies.OrganizationObligation
@@ -1499,6 +1588,7 @@
   - character_xp_transactions <- progression.CharacterXPTransaction
   - kudos_transactions <- progression.KudosTransaction
   - maturation_spends <- progression.MaturationSpend
+  - nominations_received <- progression.Nomination
   - path_intent <- progression.PathIntent
   - path_history <- progression.CharacterPathHistory
   - xptransaction_set <- progression.XPTransaction
@@ -2039,6 +2129,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - clues <- clues.Clue
   - unlocks <- codex.CodexEntry
+  - filings <- codex.CodexEntryFiling
   - character_knowledge <- codex.CharacterCodexKnowledge
   - teaching_offers <- codex.CodexTeachingOffer
   - beginnings_grants <- codex.BeginningsCodexGrant
@@ -2055,6 +2146,12 @@
   - progression_milestones <- magic.MagicProgressionMilestone
   - species <- species.Species
   - mantle_level_gates <- items.MantleLevelDefinition
+  - worshipped_beings <- worship.WorshippedBeing
+
+### CodexEntryFiling
+**Foreign Keys:**
+  - entry -> codex.CodexEntry [FK]
+  - subject -> codex.CodexSubject [FK]
 
 ### CodexSubject
 **Foreign Keys:**
@@ -2069,6 +2166,7 @@
   - children <- codex.CodexSubject
   - breadcrumb_cache <- codex.CodexSubjectBreadcrumb
   - entries <- codex.CodexEntry
+  - filed_entries <- codex.CodexEntryFiling
 
 ### CodexSubjectBreadcrumb
 **Foreign Keys:**
@@ -2098,8 +2196,10 @@
   - entry -> codex.CodexEntry [FK]
 
 ### Service Functions
+- `file_entry_under(entry: 'CodexEntry', subject: 'CodexSubject', *, sort_order: 'int' = 0) -> 'CodexEntryFiling' - Cross-list ``entry`` in ``subject``'s listing, in addition to its home.`
 - `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' - Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entries: 'Sequence[RosterEntry]') -> 'list[dict]' - Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
+- `unfile_entry(entry: 'CodexEntry', subject: 'CodexSubject') -> 'None' - Remove ``entry``'s filing under ``subject``, if any. No-op otherwise.`
 
 
 ## world.combat
@@ -2359,6 +2459,7 @@
   - participant -> combat.CombatParticipant [FK]
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - subject_opponent -> combat.CombatOpponent [FK] (nullable)
+  - subject_companion -> companions.Companion [FK] (nullable)
 
 ### DuelChallenge
 **Foreign Keys:**
@@ -2566,7 +2667,7 @@
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
 - `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' - Flip the ready flag on a round action and persist it.`
 - `try_declare_sustained_ritual(*, sheet: 'CharacterSheet', ritual: 'Ritual', kwargs: 'dict[str, Any]') -> 'SustainedAction | None' - Defer a combat-cast ritual across rounds instead of dispatching now (#2705, Task 5).`
-- `update_encounter_settings(encounter: 'CombatEncounter', *, stakes_level: 'str | None' = None, risk_level: 'str | None' = None, pace_mode: 'str | None' = None, pace_timer_minutes: 'int | None' = None) -> 'CombatEncounter' - GM-driven mid-encounter settings change (#3383).`
+- `update_encounter_settings(encounter: 'CombatEncounter', *, stakes_level: 'str | None' = None, risk_level: 'str | None' = None, pace_mode: 'str | None' = None, pace_timer_minutes: 'int | None' = None, escalation_curve: 'EscalationCurve | None | object' = <object object>) -> 'CombatEncounter' - GM-driven mid-encounter settings change (#3383, curve #3552).`
 - `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' - Mark a PC's round action as upgraded to a combo.`
 - `wind_penalty(felt: int) -> int - The missile check penalty for a room's felt WIND exposure (#1555).`
 - `windup_damage_scale(downgrades: 'int') -> 'float' - The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3).`
@@ -2584,6 +2685,7 @@
 **Pointed to by:**
   - deployments <- companions.CompanionDeployment
   - orders <- companions.CompanionOrder
+  - relationships_as_companion_target <- relationships.CharacterRelationship
 
 ### CompanionAbility
 **Foreign Keys:**
@@ -2636,9 +2738,11 @@
 - `materialize_companion_as_battle_vehicle(companion: 'Companion', battle: 'Battle', side: 'BattleSide') -> 'BattleVehicle' - Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).`
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' - Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
 - `mount_companion(sheet: 'CharacterSheet', companion: 'Companion') -> 'Companion' - Mount *sheet* on *companion* — applies the Mounted condition to the rider.`
+- `narrate_companion_loss(companion_name: 'str', scene, *, fallback_recipients=None) -> 'None' - Tell the scene that a companion died.`
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) - Validate and upsert a CompanionOrder directive (#1921).`
 - `promote_summon_to_companion(*, caster_sheet: 'CharacterSheet', combat_opponent: 'CombatOpponent', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' - Promote an ephemeral summon or charmed enemy into a persistent Companion (#2502).`
 - `release_companion(companion: 'Companion') -> 'None' - Release a bonded companion: destroy its live object, keep the row.`
+- `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from all Stables the sheet has standing in.`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Companion Capacity currently consumed by character_sheet's active companions via gift.`
@@ -3437,6 +3541,8 @@
   - distinction -> distinctions.Distinction [FK]
   - secret -> secrets.Secret [OneToOne] (nullable)
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
+  - feature_trait -> forms.FormTrait [FK] (nullable)
+  - feature_marking -> forms.FormMarking [FK] (nullable)
 **Pointed to by:**
   - modifier_sources <- mechanics.ModifierSource
   - resonance_grants <- magic.ResonanceGrant
@@ -3455,7 +3561,6 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> distinctions.DistinctionCategory [FK]
   - parent_distinction -> distinctions.Distinction [FK] (nullable)
-  - trust_category -> stories.TrustCategory [FK] (nullable)
   - mutually_exclusive_with -> distinctions.Distinction [M2M]
   - tags -> distinctions.DistinctionTag [M2M]
 **Pointed to by:**
@@ -3463,15 +3568,17 @@
   - reward_definitions <- achievements.RewardDefinition
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
+  - closed_by_routes <- character_creation.OriginTemplate
+  - carried_by_state_lines <- character_creation.TraditionStateLine
+  - granted_by_schooling_lines <- character_creation.SchoolingLine
+  - offers <- character_creation.DistinctionOffer
   - codex_grants <- codex.DistinctionCodexGrant
   - appetite_upkeep <- magic.AppetiteUpkeep
-  - glimpse_tag_suggestions <- magic.GlimpseTagDistinctionSuggestion
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
   - resonance_rank_thresholds <- magic.DistinctionResonanceRankThreshold
   - purse_drain <- currency.DistinctionPurseDrain
   - variants <- distinctions.Distinction
-  - prerequisites <- distinctions.DistinctionPrerequisite
   - effects <- distinctions.DistinctionEffect
   - character_grants <- distinctions.CharacterDistinction
   - other_entries <- distinctions.CharacterDistinctionOther
@@ -3496,10 +3603,6 @@
   - target -> mechanics.ModifierTarget [FK]
 **Pointed to by:**
   - modifier_sources <- mechanics.ModifierSource
-
-### DistinctionPrerequisite
-**Foreign Keys:**
-  - distinction -> distinctions.Distinction [FK]
 
 ### DistinctionTag
 **Pointed to by:**
@@ -3677,7 +3780,7 @@
 - `invite_organization(event: world.events.models.Event, organization: world.societies.models.Organization, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation - Invite an organization to an event.`
 - `invite_persona(event: world.events.models.Event, target_persona: world.scenes.models.Persona, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation - Invite a persona to an event.`
 - `invite_society(event: world.events.models.Event, society: world.societies.models.Society, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation - Invite a society to an event.`
-- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Grant scene completion rewards and settle reaction windows.`
+- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Settle a finished scene's reaction windows.`
 - `respond_to_invitation(invitation: world.events.models.EventInvitation, persona: world.scenes.models.Persona, *, response: str) -> world.events.models.EventInvitation - Record an invitee's RSVP (ACCEPTED / DECLINED) on a PERSONA invitation.`
 - `schedule_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from DRAFT to SCHEDULED.`
 - `set_room_description_overlay(event: world.events.models.Event, overlay_text: str) -> world.events.models.EventModification - Set or update the room description overlay for an event.`
@@ -3800,12 +3903,16 @@
 ### FormMarking
 **Foreign Keys:**
   - form -> forms.CharacterForm [FK]
+**Pointed to by:**
+  - feature_distinctions <- distinctions.CharacterDistinction
 
 ### FormTrait
 **Foreign Keys:**
   - composite_option -> forms.FormTraitOption [FK] (nullable)
+  - unnatural_option -> forms.FormTraitOption [FK] (nullable)
 **Pointed to by:**
   - kinsperson_values <- roster.KinspersonTraitValue
+  - feature_distinctions <- distinctions.CharacterDistinction
   - options <- forms.FormTraitOption
   - species_links <- forms.SpeciesFormTrait
   - character_values <- forms.CharacterFormValue
@@ -3821,6 +3928,7 @@
 **Pointed to by:**
   - kinsperson_values <- roster.KinspersonTraitValue
   - composite_for_traits <- forms.FormTrait
+  - unnatural_for_traits <- forms.FormTrait
   - species_restrictions <- forms.SpeciesFormTrait
   - character_values <- forms.CharacterFormValue
   - natural_for_values <- forms.CharacterFormValue
@@ -3836,6 +3944,9 @@
   - option -> forms.FormTraitOption [FK]
 
 ### HeightBand
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - drafts <- character_creation.CharacterDraft
 
@@ -3897,11 +4008,10 @@
 **Pointed to by:**
   - standing_declarations <- societies.StandingDeclaration
   - social_engagement_trackers <- progression.WeeklySocialEngagement
+  - nominations <- progression.Nomination
   - random_scene_targets <- progression.RandomSceneTarget
   - development_transactions <- progression.DevelopmentTransaction
   - skill_usages <- progression.WeeklySkillUsage
-  - vote_budgets <- progression.WeeklyVoteBudget
-  - votes <- progression.WeeklyVote
   - technique_progress_weekly <- magic.TechniqueProgressWeekly
   - purse_drain_weeks <- currency.PurseDrainWeek
   - gm_reward_trackers <- gm.GMWeeklyRewardTracker
@@ -4453,6 +4563,7 @@
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
   - interactions -> items.InteractionType [M2M]
+  - inherent_facets -> magic.Facet [M2M]
 **Pointed to by:**
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
@@ -4765,9 +4876,9 @@
   - game_week -> game_clock.GameWeek [FK] (nullable)
 
 ### Service Functions
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `base_entries_queryset() -> 'QuerySet[JournalEntry]' - The annotated/prefetched base queryset every list-style journal read builds on.`
-- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
+- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True, kind: 'str' = JournalKind.ENTRY) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
 - `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
 - `entry_visible_via_bequest(entry: 'JournalEntry', viewer_sheet: 'CharacterSheet | None') -> 'bool' - Whether ``viewer_sheet`` may read ``entry`` under a bequest grant (retrieve path).`
@@ -5232,15 +5343,15 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - parent -> magic.Facet [FK] (nullable)
 **Pointed to by:**
-  - children <- magic.Facet
   - motif_usages <- magic.MotifResonanceAssociation
   - signature_bonuses <- magic.SignatureMotifBonus
   - anchored_threads <- magic.Thread
+  - inherent_on_templates <- items.ItemTemplate
   - item_attachments <- items.ItemFacet
   - vogue_momentum <- items.FacetVogueMomentum
   - fashion_styles <- items.FashionStyle
+  - favored_by_beings <- worship.BeingFacet
 
 ### FallRedemptionConfig
 
@@ -5308,13 +5419,8 @@
   - affinity -> magic.Affinity [FK] (nullable)
   - paths -> classes.Path [M2M]
 **Pointed to by:**
+  - distinction_offers <- character_creation.DistinctionOffer
   - character_rows <- magic.CharacterGlimpseTag
-  - distinction_suggestions <- magic.GlimpseTagDistinctionSuggestion
-
-### GlimpseTagDistinctionSuggestion
-**Foreign Keys:**
-  - tag -> magic.GlimpseTag [FK]
-  - distinction -> distinctions.Distinction [FK]
 
 ### ImbuingProseTemplate
 **Foreign Keys:**
@@ -5530,6 +5636,7 @@
   - cascade_modifiers <- locations.LocationValueModifier
   - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
+  - favored_by_beings <- worship.BeingResonance
 
 ### ResonanceAlignmentBoonTier
 **Foreign Keys:**
@@ -7267,6 +7374,12 @@
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
 
+### Nomination
+**Foreign Keys:**
+  - nominator -> evennia.AccountDB [FK]
+  - game_week -> game_clock.GameWeek [FK]
+  - nominee -> character_sheets.CharacterSheet [FK]
+
 ### PathIntent
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
@@ -7331,17 +7444,6 @@
 **Pointed to by:**
   - initiators <- progression.WeeklyEngagementInitiator
 
-### WeeklyVote
-**Foreign Keys:**
-  - voter -> evennia.AccountDB [FK]
-  - game_week -> game_clock.GameWeek [FK]
-  - author_account -> evennia.AccountDB [FK]
-
-### WeeklyVoteBudget
-**Foreign Keys:**
-  - account -> evennia.AccountDB [FK]
-  - game_week -> game_clock.GameWeek [FK]
-
 ### XPCostChart
 **Pointed to by:**
   - cost_entries <- progression.XPCostEntry
@@ -7363,23 +7465,21 @@
 - `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int') -> 'list[tuple[str, int, int]]' - Award dp to traits used in a check.`
 - `award_development_points(character_sheet: 'CharacterSheet', trait: 'Trait', source: 'str', amount: 'int', scene: 'Scene | None' = None, reason: 'str' = ProgressionReason.SCENE_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'DevelopmentTransaction' - Award development points to a character and automatically apply them.`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.AwardResult - Award kudos to an account with full audit trail.`
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `calculate_check_dev_points(effort_level: 'str', path_level: 'int') -> 'int' - Calculate dp earned from a single check.`
 - `calculate_level_up_requirements(character: 'ObjectDB', character_class: 'CharacterClass', target_level: 'int') -> 'LevelUpRequirements | dict[str, str]' - Calculate what's required to level up a character in a specific class.`
-- `cast_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int, author_account: evennia.accounts.models.AccountDB) -> world.progression.models.voting.WeeklyVote - Cast a vote on a piece of content.`
 - `check_requirements_for_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock') -> 'tuple[bool, list[str]]' - Check if a character meets all requirements for an unlock.`
 - `claim_kudos(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str) -> world.progression.types.ClaimResult - Claim kudos from an account for conversion to rewards.`
-- `claim_kudos_for_xp(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str = '') -> world.progression.types.KudosXPResult - Claim kudos and convert the reward to account-level XP.`
+- `claim_kudos_for_xp(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str = '', *, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.KudosXPResult - Claim kudos and convert the reward to account-level XP.`
 - `get_available_unlocks_for_character(character: 'ObjectDB') -> 'AvailableUnlocks' - Get all unlocks that a character could potentially purchase.`
 - `get_development_suggestions_for_character(character: 'ObjectDB') -> 'dict[str, list[str]]' - Get development suggestions for a character based on their current traits.`
-- `get_or_create_vote_budget(account: evennia.accounts.models.AccountDB, game_week: world.game_clock.models.GameWeek | None = None) -> world.progression.models.voting.WeeklyVoteBudget - Return the vote budget for the current week, creating with defaults if needed.`
-- `get_or_create_xp_tracker(account: 'AccountDB') -> 'ExperiencePointsData' - Get or create XP tracker for an account.`
-- `get_vote_state(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> bool - Return whether the voter has an unprocessed vote for this target this week.`
-- `get_votes_by_voter(voter_account: evennia.accounts.models.AccountDB) -> django.db.models.query.QuerySet - Return all unprocessed votes for the current week.`
-- `increment_scene_bonus(account: evennia.accounts.models.AccountDB) -> None - Add 1 to scene_bonus_votes for the current week's budget (capped at 7).`
-- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Grant scene completion rewards and settle reaction windows.`
-- `remove_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None - Remove an unprocessed vote for the current week.`
+- `get_or_create_xp_tracker(account: 'AccountDB') -> 'ExperiencePointsData' - Get or create the account's XP pool row.`
+- `nominate(nominator: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> world.progression.models.nominations.Nomination - Nominate the writer of a piece of this week's prose for good RP.`
+- `nominations_by_account(nominator: evennia.accounts.models.AccountDB) -> django.db.models.query.QuerySet - This week's citations by ``nominator``: the one list a nominator may see.`
+- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Settle a finished scene's reaction windows.`
+- `spend_xp_for_character(sheet: 'CharacterSheet', amount: 'int', description: 'str', *, reason: 'str' = ProgressionReason.XP_PURCHASE, gm: 'AccountDB | None' = None) -> 'XPTransaction | None' - Debit the account's pool for something bought for ``sheet``, and attribute it.`
 - `spend_xp_on_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock', gm: 'AccountDB | None' = None) -> 'tuple[bool, str, CharacterUnlock | None]' - Spend XP to unlock something for a character.`
+- `withdraw_nomination(nominator: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None - Take back this week's citation of a piece, while the week is still open.`
 
 
 ## world.projects
@@ -7474,6 +7574,16 @@
   - titles <- societies.Title
   - house_templates <- societies.HouseTemplate
   - market_squares <- items.MarketSquare
+  - testament_sections <- realms.RealmTestamentSection
+
+### RealmTestamentSection
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - realm -> realms.Realm [FK]
+
+### Service Functions
+- `realm_by_slug(slug: 'str') -> 'Realm | None' - The realm whose ``slug`` (slugified name) is ``slug``, or None.`
 
 
 ## world.registration
@@ -7515,7 +7625,8 @@
 ### CharacterRelationship
 **Foreign Keys:**
   - source -> character_sheets.CharacterSheet [FK]
-  - target -> character_sheets.CharacterSheet [FK]
+  - target -> character_sheets.CharacterSheet [FK] (nullable)
+  - target_companion -> companions.Companion [FK] (nullable)
   - displayed_track -> relationships.RelationshipTrack [FK] (nullable)
   - displayed_tier -> relationships.RelationshipTier [FK] (nullable)
   - game_week -> game_clock.GameWeek [FK] (nullable)
@@ -7652,13 +7763,14 @@
 - `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect | None', amount: 'int', boon: 'Boon | None' = None) -> 'AffectionShift | None' - Apply a social action's automatic affection shift (#1697, boon mode #2540).`
 - `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' - Apply an ambient ±1 bump to source's regard toward target (#1699).`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.AwardResult - Award kudos to an account with full audit trail.`
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int' - Return the bond bonus for protection checks (INTERPOSE/SUCCOR).`
 - `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' - Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.`
 - `clear_very_attracted(sheets) -> 'None' - Drop Very Attracted for the given characters — the scene-end early clear (#1697).`
+- `companion_target_error(source: 'CharacterSheet', companion: 'Companion') -> 'str' - Why ``source`` may not hold a relationship toward ``companion``, else "" (#3575).`
 - `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' - Record a capstone event — adds points to both capacity and developed_points.`
 - `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' - Add permanent (developed) points to a track, up to capacity.`
-- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' - Create a pending relationship with an initial update and track progress.`
+- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet | None' = None, target_companion: 'Companion | None' = None, title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' - Create a pending relationship with an initial update and track progress.`
 - `file_writeup_complaint(*, complainant_account: 'AccountDB', writeup, reason: 'str') -> 'WriteupComplaint' - File a bad-faith-RP complaint against a writeup for staff triage.`
 - `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' - Get the account currently playing this character via roster tenure.`
 - `get_bond_combat_config() -> 'BondCombatConfig' - Get-or-create the BondCombatConfig singleton (pk=1).`
@@ -7808,12 +7920,12 @@
   - kin_slot_pools <- roster.KinSlotPool
   - character_drafts <- character_creation.CharacterDraft
   - profiles <- character_sheets.Profile
+  - enemies_of <- character_sheets.CharacterEnemy
   - organizations <- societies.Organization
 
 ### FamilyKind
 **Pointed to by:**
   - families <- roster.Family
-  - named_in_templates <- character_creation.OriginTemplate
   - claimable_in_templates <- character_creation.OriginTemplate
   - particles <- societies.NobiliaryParticle
   - house_templates <- societies.HouseTemplate
@@ -7838,6 +7950,7 @@
   - allowed_genders -> character_sheets.Gender [M2M]
 **Pointed to by:**
   - drafts <- character_creation.CharacterDraft
+  - vacancies <- societies.Vacancy
 
 ### Kinsperson
 **Foreign Keys:**
@@ -7858,6 +7971,7 @@
   - incarnations <- roster.SoulIncarnation
   - kin_slot_pools <- roster.KinSlotPool
   - drafts <- character_creation.CharacterDraft
+  - vacancies <- societies.Vacancy
   - titles_held <- societies.Title
   - pact_commitments <- societies.PactCommitment
   - betrothals_as_a <- societies.Betrothal
@@ -8060,6 +8174,7 @@
 
 ### Interaction
 **Foreign Keys:**
+  - thread -> scenes.InteractionThread [FK] (nullable)
   - persona -> scenes.Persona [FK]
   - writer_account -> evennia.AccountDB [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
@@ -8080,9 +8195,11 @@
   - relationship_bumps <- relationships.RelationshipBump
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
+  - read_receipts <- scenes.InteractionReadReceipt
   - interaction_targets <- scenes.InteractionTargetPersona
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
+  - pose_submission <- scenes.PoseSubmission
   - power_ledger_entries <- scenes.InteractionPowerLedgerEntry
   - action_request_result <- scenes.SceneActionRequest
   - action_request_action <- scenes.SceneActionRequest
@@ -8108,6 +8225,11 @@
   - interaction -> scenes.Interaction [FK]
   - account -> evennia.AccountDB [FK]
 
+### InteractionReadReceipt
+**Foreign Keys:**
+  - interaction -> scenes.Interaction [FK]
+  - account -> evennia.AccountDB [FK]
+
 ### InteractionReceiver
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
@@ -8118,6 +8240,13 @@
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
   - persona -> scenes.Persona [FK]
+
+### InteractionThread
+**Foreign Keys:**
+  - parent -> scenes.InteractionThread [FK] (nullable)
+**Pointed to by:**
+  - child_threads <- scenes.InteractionThread
+  - interactions <- scenes.Interaction
 
 ### Mute
 **Foreign Keys:**
@@ -8253,6 +8382,7 @@
   - interactions_written <- scenes.Interaction
   - interactions_targeted <- scenes.Interaction
   - targeted_in_interactions <- scenes.InteractionTargetPersona
+  - pose_submissions <- scenes.PoseSubmission
   - summary_revisions <- scenes.SceneSummaryRevision
   - targeted_scene_declarations <- scenes.SceneActionDeclaration
   - initiated_action_requests <- scenes.SceneActionRequest
@@ -8301,6 +8431,11 @@
 **Foreign Keys:**
   - place -> scenes.Place [FK]
   - persona -> scenes.Persona [FK]
+
+### PoseSubmission
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - interaction -> scenes.Interaction [FK] (nullable)
 
 ### PrecaptureConsentRequest
 **Foreign Keys:**
@@ -8513,7 +8648,7 @@
 - `record_persona_discovery(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.`
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`
-- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, personality: 'str | None' = None, background: 'str | None' = None) -> 'Profile' - Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
+- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, never_do: 'str | None' = None, protect: 'str | None' = None, fear: 'str | None' = None, background: 'str | None' = None) -> 'Profile' - Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
 
 
 ## world.secrets
@@ -8543,6 +8678,7 @@
   - societies_exposed -> societies.Society [M2M]
 **Pointed to by:**
   - consequence_effects <- checks.ConsequenceEffect
+  - enemy_rows <- character_sheets.CharacterEnemy
   - clues <- clues.Clue
   - distinction <- distinctions.CharacterDistinction
   - accusation_crime_claim <- justice.AccusationCrimeClaim
@@ -8854,6 +8990,9 @@
   - outcome_tier -> traits.CheckOutcome [FK]
 
 ### HoldingKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - holdings <- societies.DomainHolding
   - house_templates <- societies.HouseTemplate
@@ -8894,6 +9033,9 @@
   - option -> societies.HouseAspectOption [FK]
 
 ### HouseFeature
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - templates <- societies.HouseTemplate
   - organization_features <- societies.OrganizationFeature
@@ -8910,15 +9052,20 @@
 
 ### HouseTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - realm -> realms.Realm [FK]
   - kind -> roster.FamilyKind [FK]
   - society -> societies.Society [FK]
-  - liege -> societies.Organization [FK]
-  - default_succession_law -> societies.SuccessionLaw [FK]
+  - org_type -> societies.OrganizationType [FK]
+  - liege -> societies.Organization [FK] (nullable)
+  - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
+  - served_house_choices -> societies.Organization [M2M]
   - holdings -> societies.HoldingKind [M2M]
   - aspect_definitions -> societies.HouseAspectDefinition [M2M]
   - features -> societies.HouseFeature [M2M]
 **Pointed to by:**
+  - upbringings <- character_creation.OriginTemplate
   - claims <- societies.HouseClaim
 
 ### LegendContribution
@@ -9048,17 +9195,23 @@
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
+  - patron_nickname -> worship.BeingNickname [FK] (nullable)
 **Pointed to by:**
   - held_assets <- assets.NPCAsset
   - capture_consequence_effects <- checks.ConsequenceEffect
   - boards <- boards.Board
   - building_listings <- buildings.BuildingListing
   - captives <- captivity.Captivity
+  - beginning_enemy_offers <- character_creation.BeginningEnemyOffer
+  - anchor_prompts <- character_creation.OriginTemplateSlot
+  - connection_rows <- character_creation.CharacterOriginSlot
+  - enemies_of <- character_sheets.CharacterEnemy
   - child_orgs <- societies.Organization
   - ranks <- societies.OrganizationRank
   - gift_grants <- societies.OrganizationGiftGrant
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
+  - vacancies <- societies.Vacancy
   - offices <- societies.OrganizationOffice
   - appeals <- societies.OrgAppeal
   - reputations <- societies.OrganizationReputation
@@ -9151,6 +9304,7 @@
   - persona -> scenes.Persona [FK]
   - rank -> societies.OrganizationRank [FK] (nullable)
   - covert_secret -> secrets.Secret [FK] (nullable)
+  - vacancy -> societies.Vacancy [FK] (nullable)
 
 ### OrganizationMembershipOffer
 **Foreign Keys:**
@@ -9175,6 +9329,7 @@
   - organization -> societies.Organization [FK]
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
+  - vacancies <- societies.Vacancy
 
 ### OrganizationReputation
 **Foreign Keys:**
@@ -9183,7 +9338,9 @@
 
 ### OrganizationType
 **Pointed to by:**
+  - anchor_pool_prompts <- character_creation.OriginTemplateSlot
   - organizations <- societies.Organization
+  - house_templates <- societies.HouseTemplate
 
 ### PactCommitment
 **Foreign Keys:**
@@ -9255,6 +9412,7 @@
 **Pointed to by:**
   - dominant_areas <- areas.Area
   - connected_beginnings <- character_creation.Beginnings
+  - anchor_pool_prompts <- character_creation.OriginTemplateSlot
   - organizations <- societies.Organization
   - reputations <- societies.SocietyReputation
   - known_legend_entries <- societies.LegendEntry
@@ -9313,6 +9471,8 @@
 
 ### SuccessionLaw
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - chosen_heir -> roster.Kinsperson [FK] (nullable)
 **Pointed to by:**
   - houses_defaulting <- societies.Organization
@@ -9330,6 +9490,19 @@
   - coronation_ceremonies <- ceremonies.Ceremony
   - coronations <- ceremonies.Coronation
   - claims <- societies.HouseClaim
+
+### Vacancy
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - organization -> societies.Organization [FK]
+  - rank -> societies.OrganizationRank [FK] (nullable)
+  - kin_pool -> roster.KinSlotPool [FK] (nullable)
+  - kin_node -> roster.Kinsperson [FK] (nullable)
+  - allowed_upbringings -> character_creation.OriginTemplate [M2M]
+**Pointed to by:**
+  - drafts <- character_creation.CharacterDraft
+  - memberships <- societies.OrganizationMembership
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
@@ -9606,18 +9779,6 @@
   - claimed_by -> gm.GMProfile [FK] (nullable)
   - created_story -> stories.Story [FK] (nullable)
 
-### PlayerTrust
-**Foreign Keys:**
-  - account -> evennia.AccountDB [OneToOne]
-  - trust_categories -> stories.TrustCategory [M2M]
-**Pointed to by:**
-  - trust_levels <- stories.PlayerTrustLevel
-
-### PlayerTrustLevel
-**Foreign Keys:**
-  - player_trust -> stories.PlayerTrust [FK]
-  - trust_category -> stories.TrustCategory [FK]
-
 ### RiskCalibration
 
 ### SessionRequest
@@ -9686,7 +9847,6 @@
   - primary_table -> gm.GMTable [FK] (nullable)
   - owners -> evennia.AccountDB [M2M]
   - active_gms -> gm.GMProfile [M2M]
-  - required_trust_categories -> stories.TrustCategory [M2M]
 **Pointed to by:**
   - battles <- battles.Battle
   - legend_events <- societies.LegendEvent
@@ -9696,7 +9856,6 @@
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute
-  - trust_requirements <- stories.StoryTrustRequirement
   - participants <- stories.StoryParticipation
   - chapters <- stories.Chapter
   - feedback <- stories.StoryFeedback
@@ -9761,12 +9920,6 @@
   - story -> stories.Story [FK]
   - template -> missions.MissionTemplate [OneToOne]
 
-### StoryTrustRequirement
-**Foreign Keys:**
-  - story -> stories.Story [FK]
-  - trust_category -> stories.TrustCategory [FK]
-  - created_by -> evennia.AccountDB [FK] (nullable)
-
 ### TableBulletinPost
 **Foreign Keys:**
   - table -> gm.GMTable [FK]
@@ -9804,11 +9957,6 @@
 **Foreign Keys:**
   - created_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
-  - gated_distinctions <- distinctions.Distinction
-  - story_set <- stories.Story
-  - storytrustrequirement_set <- stories.StoryTrustRequirement
-  - playertrust_set <- stories.PlayerTrust
-  - player_trust_levels <- stories.PlayerTrustLevel
   - storyfeedback_set <- stories.StoryFeedback
   - trustcategoryfeedbackrating_set <- stories.TrustCategoryFeedbackRating
 
@@ -9830,6 +9978,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - profiles <- character_sheets.Profile
+  - represented_beings <- worship.WorshippedBeing
 
 
 ## world.tasking
@@ -10223,6 +10372,27 @@
 
 ## world.worship
 
+### BeingFacet
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - facet -> magic.Facet [FK]
+
+### BeingNickname
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+**Pointed to by:**
+  - patron_organizations <- societies.Organization
+
+### BeingRelationship
+**Foreign Keys:**
+  - being_a -> worship.WorshippedBeing [FK]
+  - being_b -> worship.WorshippedBeing [FK]
+
+### BeingResonance
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - resonance -> magic.Resonance [FK]
+
 ### ChosenFavorConfig
 
 ### DevotionStanding
@@ -10264,6 +10434,10 @@
   - secret_being -> worship.WorshippedBeing [FK] (nullable)
   - secret -> secrets.Secret [FK] (nullable)
 
+### WorshipFeastDay
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+
 ### WorshipGrant
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
@@ -10279,9 +10453,17 @@
 **Foreign Keys:**
   - tradition -> worship.WorshipTradition [FK]
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - tarot_cards -> tarot.TarotCard [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
+  - feast_days <- worship.WorshipFeastDay
+  - being_facets <- worship.BeingFacet
+  - resonances <- worship.BeingResonance
+  - nicknames <- worship.BeingNickname
+  - relationships_as_a <- worship.BeingRelationship
+  - relationships_as_b <- worship.BeingRelationship
   - grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
   - public_worshippers <- worship.WorshipDeclaration
@@ -10300,6 +10482,7 @@
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant - Add worship to a being's pool and record the audit ledger row.`
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
+- `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
 - `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
 - `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None) -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`

@@ -6,9 +6,11 @@ This package organizes admin interfaces into logical modules:
 - kudos_admin: Admin for kudos points and categories
 - unlocks_admin: Admin for unlocks, requirements, and XP costs
 - paths_admin: Admin for character path history
+- advancement_admin: Admin for class-level advancement receipts and training sites
 """
 
 # Import all admin classes to register them with Django
+from world.progression.admin.advancement_admin import *  # noqa: F403
 from world.progression.admin.kudos_admin import *  # noqa: F403
 from world.progression.admin.maturation_admin import *  # noqa: F403
 from world.progression.admin.paths_admin import *  # noqa: F403

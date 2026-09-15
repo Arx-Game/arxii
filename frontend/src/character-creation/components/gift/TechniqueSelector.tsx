@@ -52,7 +52,11 @@ function nextSelection(
 
 export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
   const updateDraft = useUpdateDraft();
-  const { data: options, isLoading } = useCGTechniqueOptions(draft.id, giftId);
+  const { data: options, isLoading } = useCGTechniqueOptions(
+    draft.id,
+    giftId,
+    draft.selected_species?.id
+  );
   const selectedIds = draft.draft_data.selected_technique_ids ?? [];
   const picks = draft.starting_technique_picks;
   const traditionName = draft.selected_tradition?.name ?? 'Tradition';
@@ -125,6 +129,8 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
               let tag = 'Pool';
               if (closed) {
                 tag = 'Budget reached';
+              } else if (technique.is_species_technique) {
+                tag = 'Species gift technique';
               } else if (technique.is_tradition_technique) {
                 tag = `${traditionName} technique`;
               }

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
+from commands.progression_rewards import CmdKudos, CmdNominate, CmdPathIntent, CmdRandomScene
 from world.character_sheets.factories import CharacterSheetFactory
 
 
@@ -30,9 +30,9 @@ class CommandParseTests(TestCase):
         msgs = _run(CmdKudos, self.character, "claim notanumber")
         self.assertTrue(any("usage" in m.lower() or "number" in m.lower() for m in msgs))
 
-    def test_vote_bad_target_type_messages(self) -> None:
-        msgs = _run(CmdVote, self.character, "banana 5")
-        self.assertTrue(any("target" in m.lower() for m in msgs))
+    def test_nominate_bad_target_type_messages(self) -> None:
+        msgs = _run(CmdNominate, self.character, "banana 5")
+        self.assertTrue(any("target type" in m.lower() for m in msgs))
 
     def test_randomscene_unknown_subcommand(self) -> None:
         msgs = _run(CmdRandomScene, self.character, "frobnicate")

@@ -88,18 +88,19 @@ class CastListingTests(TestCase):
 
     def test_listing_does_not_scale_queries_with_technique_count(self) -> None:
         """The payload tables prefetch onto the cached_property names the summary
-        reads, so N techniques cost a fixed handful of queries, not 4N.
+        reads, so N techniques cost a fixed handful of queries, not 5N.
 
-        7 queries: the CharacterTechnique rows, the four #2898 payload prefetches,
-        the #2901 variants prefetch (the caster's alternate forms), and one read
-        of the cached threads handler (which of those variants they have
-        unlocked). Every one is fixed; none is per technique.
+        8 queries: the CharacterTechnique rows, the four #2898 payload prefetches
+        plus treatments (#3682 — the fifth table the summary reads), the #2901
+        variants prefetch (the caster's alternate forms), and one read of the
+        cached threads handler (which of those variants they have unlocked).
+        Every one is fixed; none is per technique.
         """
         for name in ("Ward of Ash", "Ember Lash", "Cinder Step", "Ash Veil"):
             self._technique(name)
 
         cmd = _RecordingCmd(self.character)
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(8):
             lines = cmd._castable_listing()
 
         self.assertIn("Ash Veil", "\n".join(lines))

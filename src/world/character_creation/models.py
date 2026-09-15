@@ -9,9 +9,10 @@ Models for the staged character creation flow:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -25,33 +26,52 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
     CG_MODIFIER_CATEGORY,
+    ENEMY_MARKING_DEGREES,
+    REPUTATION_SEED_MAX,
+    REPUTATION_SEED_MIN,
     REQUIRED_STATS,
     STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
+    ActorSheetPrompt,
+    AnchorSource,
     ApplicationStatus,
     CommentType,
+    ConnectionKind,
+    EnemyReasonFits,
     FamilyPath,
+    LifeStage,
+    OfferArrival,
+    OfferChapter,
+    QuestionKind,
     Stage,
     StartingAreaAccessLevel,
+    TraditionState,
 )
 from world.character_creation.types import (
     CGPointBreakdownEntry,
     StageValidationErrors,
 )
+from world.character_sheets.types import EnemyDegree, EnemyPowerTier
 from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
+from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_POINT_COST
+from world.societies.constants import EnemyReach
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from world.character_creation.questionnaire import BundledDistinction, DerivedAnchor
     from world.skills.models import SkillPointBudget
+    from world.societies.houses.models import HouseTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -177,10 +197,6 @@ class StartingArea(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=AccessLevel.ALL,
         help_text="Who can select this area in character creation",
     )
-    minimum_trust = models.IntegerField(
-        default=0,
-        help_text="Minimum trust required when access_level is 'trust_required'",
-    )
     grants_residence_tenancy = models.BooleanField(
         default=True,
         help_text="Whether finalizing a character here grants a LocationTenancy at the "
@@ -203,30 +219,10 @@ class StartingArea(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
-    def is_accessible_by(self, account: AccountDB) -> bool:
-        """Check if an account can select this starting area."""
-        if not self.is_active:
-            return False
-
-        # Staff bypass all restrictions
-        if account.is_staff:
-            return True
-
-        if self.access_level == self.AccessLevel.STAFF_ONLY:
-            return False
-
-        if self.access_level == self.AccessLevel.TRUST_REQUIRED:
-            # TODO: Implement trust system - fail closed until then. A single
-            # admin flipping an area to TRUST_REQUIRED must not 500 the origin
-            # stage for every non-staff account (#3046); mirrors
-            # Beginnings.is_accessible_by's own fail-closed AttributeError guard.
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                return False
-            return account_trust >= self.minimum_trust
-
-        return True  # AccessLevel.ALL
+    # No ``is_accessible_by``: ``access_level`` is now a two-value distinction
+    # (ALL / STAFF_ONLY) that ``get_accessible_starting_areas`` expresses as a
+    # queryset filter, so every caller reads the same filtered queryset rather
+    # than a per-row predicate (#3726).
 
 
 class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -264,10 +260,6 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="beginnings",
         help_text="The starting area this option belongs to",
-    )
-    trust_required = models.IntegerField(
-        default=0,
-        help_text="Minimum trust level required to see/select this option",
     )
     is_active = models.BooleanField(
         default=True,
@@ -404,11 +396,11 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def cached_beginning_traditions(self) -> list[BeginningTradition]:
         """All BeginningTradition rows for this Beginning, ordered for CG.
 
-        Returns BT rows with ``tradition`` and ``required_distinction``
-        select_related, sorted by ``(sort_order, id)``. The list is the same
-        for every caller asking about a given Beginning, so caching on the
-        SharedMemoryModel-instance is the correct location: populated once
-        per Beginning per process, reused across all subsequent requests.
+        Returns BT rows with ``tradition`` select_related, sorted by
+        ``(sort_order, id)``. The list is the same for every caller asking
+        about a given Beginning, so caching on the SharedMemoryModel-instance
+        is the correct location: populated once per Beginning per process,
+        reused across all subsequent requests.
 
         Use this from views/serializers instead of viewset-scoped helpers.
 
@@ -417,7 +409,7 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
         return list(
-            self.beginning_traditions.select_related("tradition", "required_distinction")
+            self.beginning_traditions.select_related("tradition")
             .prefetch_related(
                 Prefetch(
                     "tradition__codex_grants",
@@ -436,22 +428,8 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         """
         return list(self.codex_grants.all())
 
-    def is_accessible_by(self, account: AccountDB) -> bool:
-        """Check if an account can see/select this option."""
-        if not self.is_active:
-            return False
-
-        if account.is_staff:
-            return True
-
-        if self.trust_required > 0:
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                return self.trust_required == 0
-            return account_trust >= self.trust_required
-
-        return True
+    # No ``is_accessible_by``: ``is_active`` is the only thing that gates a
+    # Beginnings now, and every consumer already filters on it (#3726).
 
     def get_available_species(self) -> models.QuerySet:
         """
@@ -505,7 +483,146 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return Language.objects.filter(id__in=language_ids)
 
 
-class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
+class EnemyReason(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """Why a person or group wants the character to fail, as staff wrote it (#3709).
+
+    One shared list for every enemy, filtered by ``fits``; a Beginning's enemy offer may
+    pin one (``BeginningEnemyOffer.reason``) and the finished character carries the one
+    picked (``CharacterEnemy.reason``). A reason is the enemy chapter's opener: a
+    ``DistinctionOffer`` on ``OfferChapter.ENEMY`` with ``enemy_reason`` set is shown
+    only when the draft picked that reason (``offers._opener_satisfied``). Never seeded;
+    every row is authored on the admin change list.
+    """
+
+    name = models.CharField(max_length=120, unique=True, help_text="The reason, as a line.")
+    player_line = models.CharField(
+        max_length=200, blank=True, help_text="The gloss under the reason on the leaf."
+    )
+    fits = models.CharField(
+        max_length=8, choices=EnemyReasonFits.choices, default=EnemyReasonFits.EITHER
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        verbose_name = "Enemy reason"
+        verbose_name_plural = "Enemy reasons"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def fits_kind(self, kind: str) -> bool:
+        """Whether this reason is offered for an enemy of ``kind`` (person or group)."""
+        return self.fits in {EnemyReasonFits.EITHER, kind}
+
+
+class AppearanceSection(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """A heading the Appearance chapter groups its offers under (#3709).
+
+    The opener for ``OfferChapter.APPEARANCE``: an offer line names the section it sits
+    in, and the leaf renders one block per section in ``sort_order``. Three or four rows
+    for the whole game (Frame; Face and voice; What the Gift left), authored in admin.
+    """
+
+    name = models.CharField(max_length=80, unique=True)
+    player_line = models.CharField(
+        max_length=200, blank=True, help_text="A line under the section heading, if any."
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        verbose_name = "Appearance section"
+        verbose_name_plural = "Appearance sections"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class BeginningEnemyOffer(SharedMemoryModel):
+    """An enemy a Beginning itself puts in the character's way (#3621).
+
+    The Lineage's answered group and person questions are offered automatically; these
+    rows are only for what the Beginning adds (the Republic that does not keep the Gifted).
+    A group row is an Organization and takes its reach from its type unless
+    ``reach_override`` says the group cannot reach where the character plays (issue rule
+    2, "reach is measured where the character plays"). A person row is a name and a power
+    tier, optionally inside a group.
+    """
+
+    beginning = models.ForeignKey(
+        Beginnings,
+        on_delete=models.CASCADE,
+        related_name="enemy_offers",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="beginning_enemy_offers",
+        help_text="The group offered, or the group the offered person belongs to.",
+    )
+    figure_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Set for a person: their name. Blank for a group.",
+    )
+    power_tier = models.CharField(
+        max_length=10,
+        choices=EnemyPowerTier.choices,
+        blank=True,
+        help_text="Set for a person: their power. Blank for a group.",
+    )
+    reach_override = models.CharField(
+        max_length=12,
+        choices=EnemyReach.choices,
+        blank=True,
+        help_text=(
+            "A group only: price it at this reach instead of its type's, when it cannot "
+            "reach the character where they play."
+        ),
+    )
+    why = models.CharField(
+        max_length=255,
+        help_text="Why they want the character to fail, as offered (a gloss on the list).",
+    )
+    reason = models.ForeignKey(
+        EnemyReason,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="beginning_enemy_offers",
+        help_text="The reason this offer arrives with already set (#3709); blank leaves the pick.",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["beginning_id", "sort_order", "id"]
+        verbose_name = "Beginning enemy offer"
+        verbose_name_plural = "Beginning enemy offers"
+
+    def __str__(self) -> str:
+        who = self.figure_name or (self.organization.name if self.organization_id else "?")
+        return f"{self.beginning.name}: {who}"
+
+    @property
+    def is_person(self) -> bool:
+        return bool(self.figure_name)
+
+
+class BeginningTradition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Maps which traditions are available for each beginning during CG.
     CG-only concern -- traditions exist independently post-CG."""
 
@@ -519,17 +636,20 @@ class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="beginning_traditions",
     )
-    required_distinction = models.ForeignKey(
-        "arxii.Distinction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Distinction required to select this tradition for this beginning.",
-    )
     sort_order = models.PositiveIntegerField(
         default=0,
         help_text="Display order within this beginning's tradition list.",
+    )
+    state = models.CharField(
+        max_length=20,
+        choices=TraditionState.choices,
+        default=TraditionState.LIVING_MASTERS,
+        help_text="Which standard line this entry shows and which drawback it carries (#3675).",
+    )
+    own_wording = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="Replaces the standard state line's words for this tradition only.",
     )
 
     class Meta:
@@ -551,7 +671,7 @@ class OriginTemplateManager(NaturalKeyManager):
     """Manager for OriginTemplate with natural key support."""
 
 
-class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """The Upbringing a player picks within a beginning (#2478, #3617).
 
     Content model — authored in the lore repo, exported/imported via
@@ -562,9 +682,9 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     itself (``["starting_area", "name"]``) and ``BeginningTradition``
     (``["beginning", "tradition"]``).
 
-    Carries a CG point cost, a trust gate, and three switches for how a
-    character's family record can relate to this Upbringing: claim a
-    staff-authored family, name a new one, or have none at all (#3617).
+    Carries a CG point cost and three switches for how a character's family
+    record can relate to this Upbringing: claim a staff-authored family, name
+    a new one, or have none at all (#3617).
     """
 
     beginning = models.ForeignKey(
@@ -587,9 +707,6 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=0,
         help_text="Flat CG cost of this Upbringing (#3617). Negative refunds, like a drawback.",
     )
-    trust_required = models.IntegerField(
-        default=0, help_text="Minimum trust to see/select this Upbringing (#3617)."
-    )
     allows_claim_family = models.BooleanField(
         default=False, help_text="Player may claim a staff-authored family (#3617)."
     )
@@ -605,13 +722,22 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="claimable_in_templates",
         help_text="Kinds offered on the claim path; empty = every kind (#3617).",
     )
-    named_family_kind = models.ForeignKey(
-        "arxii.FamilyKind",
-        on_delete=models.PROTECT,
-        null=True,
+    family_templates = models.ManyToManyField(
+        "arxii.HouseTemplate",
         blank=True,
-        related_name="named_in_templates",
-        help_text="Kind a player-named family gets; required when naming is allowed (#3617).",
+        related_name="upbringings",
+        help_text="Family Templates the name path offers (#3648); one is auto-picked.",
+    )
+    closed_distinctions = models.ManyToManyField(
+        "arxii.Distinction",
+        blank=True,
+        related_name="closed_by_routes",
+        help_text="Distinctions this route never offers, in any chapter (#3675).",
+    )
+    closed_reason = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="The line the player reads where a closed distinction would have been.",
     )
 
     objects = OriginTemplateManager()
@@ -650,38 +776,65 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             paths.append(FamilyPath.NONE)
         return paths
 
-    def is_accessible_by(self, account: AccountDB) -> bool:
-        """Trust gate, mirroring ``Beginnings.is_accessible_by``."""
-        if not self.is_active:
-            return False
-        if account.is_staff:
-            return True
-        if self.trust_required > 0:
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                return False
-            return account_trust >= self.trust_required
-        return True
+    @PrunedCachedProperty
+    def questions(self) -> list[OriginTemplateSlot]:
+        """This route's questions, in the order a player answers them (#3673, #3816, ADR-0298).
 
-    def clean(self) -> None:
-        super().clean()
-        if self.allows_name_family and self.named_family_kind_id is None:
-            raise ValidationError(
-                {"named_family_kind": "Required when naming a family is allowed."}
-            )
+        ``related_cache_fields`` is the ONLY invalidation path here, by necessity, not
+        by choice: ``OriginTemplateSlot`` has no application-level write site at all -
+        it is purely admin-authored (Upbringing Builder tooling), so
+        ``OriginTemplateSlot.related_cache_fields``/``RelatedCacheClearingMixin`` is the
+        sole writer side. Every consumer reads the route's questions through here - the
+        CG API serializer, the questionnaire resolver, the draft validators, the
+        Builder's rail - so none of them owns a query, an ordering or a cache of its
+        own. Also fed cold by a ``Prefetch`` (`` to_attr `` "questions") on
+        ``CGOriginTemplateViewSet.get_queryset()``, never one query per template.
+        """
+        return list(self.slots.order_by("sort_order", "id"))
+
+    # No ``is_accessible_by``: ``is_active`` is the only thing that gates an
+    # Upbringing now, and every consumer already filters on it (#3726).
+
+    # No ``clean()`` for the name path's Family Template rule. A model's
+    # ``clean()`` can only read ``self.family_templates`` off the database, and a
+    # ModelForm runs ``full_clean()`` in ``_post_clean()`` - before
+    # ``save_m2m()`` - so the check read the state the operator was submitting a
+    # change to and refused every save that turned the name path on (#3673,
+    # reported from production). The rule is enforced where the submitted value
+    # exists, in ``UpbringingForm.clean()``, and a route already saved without
+    # one is flagged in the Builder's rail checks.
 
 
 class OriginTemplateSlotManager(NaturalKeyManager):
     """Manager for OriginTemplateSlot with natural key support."""
 
 
-class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class OriginTemplateSlot(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
     """Authored slot prompt within an origin-story template (#2478).
 
     Content model — authored in the lore repo. No slug — natural key is
     (template, name), mirroring ``BeginningTradition``.
     """
+
+    #: Saving or deleting a question drops its Upbringing's cached properties,
+    #: which is where ``OriginTemplate.questions`` lives. A cascade or a
+    #: ``queryset.delete()`` bypasses ``Model.delete()`` and never gets here -
+    #: ``PrunedCachedProperty``'s own pk check is what covers those (#3673,
+    #: mirroring ``DistinctionOffer.related_cache_fields``).
+    #: **Known gap:** this mixin only ever sees an FK's value AT SAVE TIME, so
+    #: reassigning ``template`` to a different Upbringing (the standalone
+    #: ``OriginTemplateSlotAdmin`` change form exposes it as a plain, unrestricted
+    #: FK field - no ``fields``/``fieldsets``/``exclude`` narrows it) clears the
+    #: NEW template's cache but never the OLD one's - the old template can keep
+    #: serving this slot, stale, for the life of the process. Applies to this
+    #: model specifically since it's admin-editable content whose owner FK can be
+    #: reassigned, unlike most other ``related_cache_fields`` relations in #3816,
+    #: which are created-once/deleted, never re-parented. Not fixed here -
+    #: cross-cutting decision tracked as #3836 (see the identical note on
+    #: ``DistinctionOffer.related_cache_fields``).
+    related_cache_fields: ClassVar[list[str]] = ["template"]
 
     template = models.ForeignKey(
         OriginTemplate,
@@ -709,6 +862,86 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Player may write a free-text answer (the 'other' box on a pick-list) (#3617).",
     )
+    kind = models.CharField(
+        max_length=10,
+        choices=QuestionKind.choices,
+        default=QuestionKind.TEXT,
+        help_text="What this question asks for (#3660).",
+    )
+    connection_kind = models.CharField(
+        max_length=20,
+        choices=ConnectionKind.choices,
+        blank=True,
+        default="",
+        help_text="What the tie was; a tag shown on the page and the sheet (#3660).",
+    )
+    life_stage = models.CharField(
+        max_length=20,
+        choices=LifeStage.choices,
+        blank=True,
+        default="",
+        help_text="When the tie was formed; a tag (#3660).",
+    )
+    anchor_source = models.CharField(
+        max_length=20,
+        choices=AnchorSource.choices,
+        blank=True,
+        default="",
+        help_text="Which groups a 'pick a group' question offers (#3660).",
+    )
+    anchor_org_type = models.ForeignKey(
+        "arxii.OrganizationType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchor_pool_prompts",
+        help_text="POOL source: the org type groups must have (#3660).",
+    )
+    anchor_society = models.ForeignKey(
+        "arxii.Society",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchor_pool_prompts",
+        help_text="POOL source: the society groups must belong to (#3660).",
+    )
+    anchor_orgs = models.ManyToManyField(
+        "arxii.Organization",
+        blank=True,
+        related_name="anchor_prompts",
+        help_text="LISTED source: the groups offered, in name order (#3660).",
+    )
+    exclude_covert = models.BooleanField(
+        default=True, help_text="POOL source: leave out covert org types (#3660)."
+    )
+    same_anchor_as = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependents",
+        help_text=(
+            "GROUP with SAME_AS: the earlier group question whose answer is this anchor. "
+            "PERSON: the group question this person belongs to (#3660)."
+        ),
+    )
+    follow_up_to = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="follow_ups",
+        help_text="Shown only once this earlier question is answered (#3660).",
+    )
+    shown_for_choices = models.ManyToManyField(
+        "arxii.OriginTemplateSlotChoice",
+        blank=True,
+        related_name="branching_prompts",
+        help_text=(
+            "With follow_up_to: shown only when the answer picked there is one of these; "
+            "empty means any answer (#3660)."
+        ),
+    )
 
     objects = OriginTemplateSlotManager()
 
@@ -724,6 +957,59 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def is_connection(self) -> bool:
+        return self.kind == QuestionKind.GROUP
+
+    def _clean_anchor_source(self, errors: dict[str, str]) -> None:
+        if self.kind == QuestionKind.GROUP:
+            if not self.anchor_source:
+                errors["anchor_source"] = "A 'pick a group' question needs a group source."
+            elif self.anchor_source == AnchorSource.POOL and not (
+                self.anchor_org_type_id or self.anchor_society_id
+            ):
+                errors["anchor_org_type"] = "A pool needs an org type, a society, or both."
+            elif self.anchor_source == AnchorSource.SAME_AS and self.same_anchor_as_id is None:
+                errors["same_anchor_as"] = "Name the earlier question whose group this reuses."
+        elif self.anchor_source:
+            errors["anchor_source"] = "Only a 'pick a group' question has a group source."
+
+    def _clean_same_anchor_as(self, errors: dict[str, str]) -> None:
+        if self.same_anchor_as_id is None:
+            return
+        target = self.same_anchor_as
+        if target.template_id != self.template_id or target.kind != QuestionKind.GROUP:
+            errors["same_anchor_as"] = "Must be a 'pick a group' question on this Upbringing."
+        elif target.sort_order >= self.sort_order:
+            errors["same_anchor_as"] = "Must be an earlier question."
+
+    def _clean_follow_up_to(self, errors: dict[str, str]) -> None:
+        if self.follow_up_to_id is None:
+            return
+        target = self.follow_up_to
+        if target.template_id != self.template_id or target.sort_order >= self.sort_order:
+            errors["follow_up_to"] = "Must be an earlier question on this Upbringing."
+
+    def _clean_shown_for_choices(self, errors: dict[str, str]) -> None:
+        if not self.pk or not self.shown_for_choices.exists():
+            return
+        if self.follow_up_to_id is None:
+            errors["shown_for_choices"] = "Branching answers need 'follow up to' set."
+        elif self.shown_for_choices.exclude(slot_id=self.follow_up_to_id).exists():
+            errors["shown_for_choices"] = (
+                "Every branching answer must belong to the follow-up question."
+            )
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        self._clean_anchor_source(errors)
+        self._clean_same_anchor_as(errors)
+        self._clean_follow_up_to(errors)
+        self._clean_shown_for_choices(errors)
+        if errors:
+            raise ValidationError(errors)
 
 
 class OriginTemplateSlotChoiceManager(NaturalKeyManager):
@@ -744,6 +1030,10 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     cost_per_influence = models.IntegerField(
         default=0, help_text="CG cost per point of the claimed family's influence."
     )
+    reputation_seed = models.IntegerField(
+        default=0,
+        help_text="Starting opinion of the anchor toward the character, -1000 to 1000 (#3660).",
+    )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
 
@@ -760,11 +1050,39 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
         dependencies = ["arxii.OriginTemplateSlot"]
 
     def __str__(self) -> str:
-        return f"{self.slot}: {self.name}"
+        # Full chain plus the question's ordinal, not just "{slot}: {name}" -
+        # this is what the Distinction Builder's `origin_choice` autocomplete
+        # shows for its search results AND its pre-selected option (both read
+        # plain `str(obj)`), and a slot name alone is not unique across
+        # Upbringings (#3675; ordinal added in review round 1, matching the
+        # demo's own "Q2 · Who taught you" wording).
+        return (
+            f"{self.slot.template.name} › Q{self.slot.sort_order + 1} · "
+            f"{self.slot.name} › {self.name}"
+        )
 
     def cost_for(self, influence: int) -> int:
         """Price of this choice against a family of ``influence`` (#3617)."""
         return self.cg_point_cost + self.cost_per_influence * influence
+
+    def clean(self) -> None:
+        super().clean()
+        if self.reputation_seed and self.slot.kind != QuestionKind.GROUP:
+            raise ValidationError(
+                {"reputation_seed": "Only a group question's answer seeds an opinion."}
+            )
+        if not REPUTATION_SEED_MIN <= self.reputation_seed <= REPUTATION_SEED_MAX:
+            raise ValidationError(
+                {
+                    "reputation_seed": (
+                        f"Seed must be between {REPUTATION_SEED_MIN} and {REPUTATION_SEED_MAX}."
+                    )
+                }
+            )
+        if self.slot.kind not in (QuestionKind.PICK, QuestionKind.GROUP):
+            raise ValidationError(
+                {"slot": "Answers belong only to a 'pick one answer' or 'pick a group' question."}
+            )
 
 
 class CharacterOriginSlot(SharedMemoryModel):
@@ -794,6 +1112,22 @@ class CharacterOriginSlot(SharedMemoryModel):
         blank=True,
         related_name="character_rows",
         help_text="The picked choice on a pick-list prompt; null for a pure write-in (#3617).",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="connection_rows",
+        help_text=(
+            "The anchor a group question resolved to, or the group a person belongs to (#3660)."
+        ),
+    )
+    figure_name = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="A 'name a person' answer: the person the player named (#3660).",
     )
 
     class Meta:
@@ -963,6 +1297,22 @@ class CharacterDraft(SharedMemoryModel):
         related_name="drafts",
         help_text="Slot pool a node is minted from at finalization.",
     )
+    selected_vacancy = models.ForeignKey(
+        "arxii.Vacancy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="The Vacancy this character takes at finalization (#3648).",
+    )
+    served_house = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="On the name path, the staff house the new family served (#3648).",
+    )
     defer_parents = models.BooleanField(
         default=False,
         help_text=(
@@ -1093,50 +1443,82 @@ class CharacterDraft(SharedMemoryModel):
             return allowed[0]
         return self.family_path if self.family_path in allowed else ""
 
-    def visible_origin_slot_ids(self) -> set[int]:
-        """Ids of this draft's Upbringing slots visible on the resolved family path (#3617).
-
-        A slot applies when ``applies_to`` is ANY or matches the resolved
-        path; a slot scoped to a path the draft is not currently on is
-        hidden, and its answer/choice must be ignored everywhere (pricing,
-        finalize persistence), mirroring ``validators._get_prompt_errors``.
-        """
+    def resolve_family_template(self) -> HouseTemplate | None:
+        """The Family Template the name path builds from (#3648): the only one, else the pick."""
         template = self.selected_origin_template
         if template is None:
-            return set()
-        path = self.resolve_family_path()
-        return {
-            slot_id
-            for slot_id, applies_to in template.slots.values_list("id", "applies_to")
-            if applies_to in (FamilyPath.ANY, path)
-        }
+            return None
+        offered = list(template.family_templates.all())
+        if len(offered) == 1:
+            return offered[0]
+        chosen_id = self.draft_data.get("family_template_id")
+        if chosen_id is None:
+            return None
+        return next((row for row in offered if row.pk == int(chosen_id)), None)
+
+    def visible_origin_slot_ids(self) -> set[int]:
+        """Ids of this draft's Upbringing slots visible under the questionnaire rules (#3660).
+
+        Delegates to ``questionnaire.visible_slot_ids``: a slot applies when
+        ``applies_to`` is ANY or matches the resolved family path, and a
+        follow-up slot also needs its target shown and answered (and, for a
+        branching follow-up, one of the wanted answers picked). A slot hidden
+        by any of this must be ignored everywhere else (pricing, finalize
+        persistence), mirroring ``validators._get_prompt_errors``.
+        """
+        from world.character_creation.questionnaire import visible_slot_ids  # noqa: PLC0415
+
+        return visible_slot_ids(self)
 
     def calculate_upbringing_cost(self) -> int:
-        """Upbringing flat cost + each picked choice priced against the claimed family (#3617).
+        """Upbringing flat cost + each visible picked choice, priced per question (#3660).
 
-        Only choices on slots visible under the resolved family path are
-        priced: a choice on a slot the current path hides was answered
-        before a path switch and must not be charged for (#3617 review).
+        Only choices on slots visible under the questionnaire rules are
+        priced: a choice on a slot the current path/branch hides was
+        answered before a switch and must not be charged for (#3617 review).
+        A GROUP question prices against the influence of the family behind
+        its own anchor (which family need not be the claimed one); every
+        other question keeps the claim-path rule.
         """
+        from world.character_creation.questionnaire import (  # noqa: PLC0415
+            DraftAnswers,
+            question_influences,
+        )
+
         template = self.selected_origin_template
         if template is None:
             return 0
         path = self.resolve_family_path()
-        influence = self.family.influence if (path == FamilyPath.CLAIMED and self.family) else 0
-        visible_slot_ids = self.visible_origin_slot_ids()
-        picks = self.draft_data.get("origin_choices") or {}
-        ids = [
-            int(choice_id)
-            for slot_id, choice_id in picks.items()
-            if choice_id is not None and int(slot_id) in visible_slot_ids
-        ]
+        answers = DraftAnswers.from_draft(self)
+        visible = self.visible_origin_slot_ids()
+        picked = {sid: cid for sid, cid in answers.picks.items() if sid in visible}
         total = template.cg_point_cost
-        if ids:
-            for choice in OriginTemplateSlotChoice.objects.filter(
-                pk__in=ids, slot__template=template, is_active=True
-            ):
-                total += choice.cost_for(influence)
+        if picked:
+            choices = list(
+                OriginTemplateSlotChoice.objects.filter(
+                    pk__in=picked.values(), slot__template=template, is_active=True
+                ).select_related("slot")
+            )
+            influences = question_influences(choices, self, answers, path)
+            for choice in choices:
+                total += choice.cost_for(influences[choice.id])
+        vacancy = self.selected_vacancy
+        if vacancy is not None:
+            family = vacancy.organization.family
+            total += vacancy.cost_for(family.influence if family is not None else 0)
         return total
+
+    def bundled_distinctions(self) -> list[BundledDistinction]:
+        """Distinctions granted by the Upbringing answers this draft has picked (#3660)."""
+        from world.character_creation.questionnaire import bundled_distinctions  # noqa: PLC0415
+
+        return bundled_distinctions(self)
+
+    def derived_anchors(self) -> dict[int, DerivedAnchor | None]:
+        """OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id (#3660)."""
+        from world.character_creation.questionnaire import derived_anchors  # noqa: PLC0415
+
+        return derived_anchors(self)
 
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object
         """
@@ -1161,15 +1543,12 @@ class CharacterDraft(SharedMemoryModel):
         if self.selected_area and self.selected_area.default_starting_room:
             return self.selected_area.default_starting_room.objectdb
 
-        from world.character_creation.constants import (  # noqa: PLC0415
-            FALLBACK_STARTING_ROOM_KEY,
-            FALLBACK_STARTING_ROOM_TYPECLASS,
+        from world.character_creation.services import (  # noqa: PLC0415
+            resolve_fallback_starting_room,
         )
 
-        fallback = ObjectDB.objects.filter(
-            db_key=FALLBACK_STARTING_ROOM_KEY,
-            db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS,
-        ).first()
+        # By fixture identity, so a staff rename of the room is honoured (#3818).
+        fallback = resolve_fallback_starting_room()
         if fallback is not None:
             logger.warning(
                 "CharacterDraft %s has no Beginnings/StartingArea starting room "
@@ -1234,21 +1613,27 @@ class CharacterDraft(SharedMemoryModel):
         if not distinctions_data:
             return 0
 
-        entries = {
-            d["distinction_id"]: d.get("rank", 1)
-            for d in distinctions_data
-            if d.get("distinction_id")
-        }
-        if not entries:
+        # A per-feature distinction (#3739) is held once per feature, so ranks are
+        # collected as a list per distinction and every one of them pays: "Alluring 2"
+        # on your hair and "Alluring 3" on a scar are two purchases, not one.
+        ranks: dict[int, list[int]] = defaultdict(list)
+        for d in distinctions_data:
+            if d.get("distinction_id"):
+                ranks[d["distinction_id"]].append(d.get("rank", 1))
+        if not ranks:
             return 0
 
         effects = DistinctionEffect.objects.filter(
-            distinction_id__in=entries.keys(),
+            distinction_id__in=ranks.keys(),
             target__name=modifier_target_name,
             target__category__name=category_name,
         ).select_related("target")
 
-        return sum(effect.get_value_at_rank(entries[effect.distinction_id]) for effect in effects)
+        return sum(
+            effect.get_value_at_rank(rank)
+            for effect in effects
+            for rank in ranks[effect.distinction_id]
+        )
 
     @property
     def starting_technique_picks(self) -> int:
@@ -1278,6 +1663,95 @@ class CharacterDraft(SharedMemoryModel):
         spent = sum(stats.values())
         return budget - spent
 
+    def _append_beginnings_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the selected Beginnings cost, when it has one."""
+        beginnings = self.selected_beginnings
+        if beginnings is None or not beginnings.cg_point_cost:
+            return
+        breakdown.append(
+            {
+                "category": "heritage",
+                "item": beginnings.name,
+                "cost": beginnings.cg_point_cost,
+            }
+        )
+
+    def _append_upbringing_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the selected Upbringing cost, when one is selected and priced."""
+        if self.selected_origin_template_id is None:
+            return
+        upbringing_cost = self.calculate_upbringing_cost()
+        if not upbringing_cost:
+            return
+        breakdown.append(
+            {
+                "category": "upbringing",
+                "item": self.selected_origin_template.name,
+                "cost": upbringing_cost,
+            }
+        )
+
+    def _append_distinction_costs(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add each priced distinction from the draft data."""
+        for distinction in self.draft_data.get("distinctions", []):
+            cost = distinction.get("cost", 0)
+            if not cost:
+                continue
+            breakdown.append(
+                {
+                    "category": "distinction",
+                    "item": distinction.get("distinction_name", "Unknown"),
+                    "cost": cost,
+                }
+            )
+
+    def _append_enemy_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the negative CG cost for carrying an enemy."""
+        from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+
+        enemy = resolve_enemy(self)
+        if enemy is None or not enemy.price:
+            return
+        from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
+
+        breakdown.append(
+            {
+                "category": "enemy",
+                "item": f"{enemy.name or 'Unplaced enemy'}: {EnemyDegree(enemy.degree).label}",
+                "cost": -enemy.price,
+            }
+        )
+
+    def _append_age_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the underage CG cost when the draft starts below maturity."""
+        if self.age is None or self.age >= MATURATION_UNDERAGE_YEAR:
+            return
+        # The youngest starts buy their youth with a thinner purse (#3635).
+        breakdown.append(
+            {
+                "category": "age",
+                "item": f"Starting under {MATURATION_UNDERAGE_YEAR}",
+                "cost": UNDERAGE_CG_POINT_COST,
+            }
+        )
+
+    def _append_species_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the total gift cost for the selected species."""
+        if self.selected_species_id is None:
+            return
+        from world.species.services import total_species_gift_cost  # noqa: PLC0415
+
+        species_cost = total_species_gift_cost(self.selected_species)
+        if not species_cost:
+            return
+        breakdown.append(
+            {
+                "category": "species",
+                "item": self.selected_species.name,
+                "cost": species_cost,
+            }
+        )
+
     def calculate_cg_points_breakdown(self) -> list[CGPointBreakdownEntry]:
         """
         Build itemized breakdown of CG point costs from actual data sources.
@@ -1286,46 +1760,12 @@ class CharacterDraft(SharedMemoryModel):
             List of typed dicts with category, item, and cost keys.
         """
         breakdown: list[CGPointBreakdownEntry] = []
-        if self.selected_beginnings and self.selected_beginnings.cg_point_cost:
-            breakdown.append(
-                {
-                    "category": "heritage",
-                    "item": self.selected_beginnings.name,
-                    "cost": self.selected_beginnings.cg_point_cost,
-                }
-            )
-        if self.selected_origin_template_id is not None:
-            upbringing_cost = self.calculate_upbringing_cost()
-            if upbringing_cost:
-                breakdown.append(
-                    {
-                        "category": "upbringing",
-                        "item": self.selected_origin_template.name,
-                        "cost": upbringing_cost,
-                    }
-                )
-        for d in self.draft_data.get("distinctions", []):
-            cost = d.get("cost", 0)
-            if cost:
-                breakdown.append(
-                    {
-                        "category": "distinction",
-                        "item": d.get("distinction_name", "Unknown"),
-                        "cost": cost,
-                    }
-                )
-        if self.selected_species_id is not None:
-            from world.species.services import total_species_gift_cost  # noqa: PLC0415
-
-            species_cost = total_species_gift_cost(self.selected_species)
-            if species_cost:
-                breakdown.append(
-                    {
-                        "category": "species",
-                        "item": self.selected_species.name,
-                        "cost": species_cost,
-                    }
-                )
+        self._append_beginnings_cost(breakdown)
+        self._append_upbringing_cost(breakdown)
+        self._append_distinction_costs(breakdown)
+        self._append_enemy_cost(breakdown)
+        self._append_age_cost(breakdown)
+        self._append_species_cost(breakdown)
         return breakdown
 
     def calculate_cg_points_spent(self) -> int:
@@ -1379,7 +1819,11 @@ class CharacterDraft(SharedMemoryModel):
             return {}
 
         distinction_ids = [d["distinction_id"] for d in distinctions_data]
-        ranks_by_id = {d["distinction_id"]: d.get("rank", 1) for d in distinctions_data}
+        # One list of ranks per distinction (#3739): a per-feature distinction is held
+        # once per feature and each holding contributes its own effect value.
+        ranks_by_id: dict[int, list[int]] = defaultdict(list)
+        for d in distinctions_data:
+            ranks_by_id[d["distinction_id"]].append(d.get("rank", 1))
 
         effects = (
             DistinctionEffect.objects.filter(
@@ -1393,10 +1837,10 @@ class CharacterDraft(SharedMemoryModel):
         bonuses: dict[str, int] = {}
         for effect in effects:
             stat_name = effect.target.name
-            rank = ranks_by_id.get(effect.distinction_id, 1)
-            value = effect.get_value_at_rank(rank)
-            display_value = value // STAT_DISPLAY_DIVISOR
-            bonuses[stat_name] = bonuses.get(stat_name, 0) + display_value
+            for rank in ranks_by_id.get(effect.distinction_id, [1]):
+                value = effect.get_value_at_rank(rank)
+                display_value = value // STAT_DISPLAY_DIVISOR
+                bonuses[stat_name] = bonuses.get(stat_name, 0) + display_value
 
         return bonuses
 
@@ -1501,10 +1945,6 @@ class CharacterDraft(SharedMemoryModel):
             specializations.values(), budget.max_specialization_value, "Specialization"
         )
         self._check_specialization_parents(skills, specializations, budget)
-
-    def _is_distinctions_complete(self) -> bool:
-        """Check if distinctions stage is complete."""
-        return not self.get_stage_validation_errors().get(self.Stage.DISTINCTIONS, [])
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""
@@ -1708,3 +2148,363 @@ class CGExplanation(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.key
+
+
+class TraditionStateLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """The standard words for one tradition state, and the drawback it carries (#3675).
+
+    Three rows, one per ``TraditionState``, shared by every Beginning. The price a
+    player sees is the carried distinction's own ``cost_per_rank``; nothing here is
+    typed as a number. Must never name what a character discovers in play.
+    """
+
+    state = models.CharField(max_length=20, choices=TraditionState.choices, unique=True)
+    entry_line = models.CharField(
+        max_length=120,
+        help_text="The line printed on every tradition entry in this state.",
+    )
+    carries = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="carried_by_state_lines",
+        help_text="The drawback picking a tradition in this state carries into the draft.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name = "Tradition state line"
+        verbose_name_plural = "Tradition state lines"
+        ordering = ["state"]
+
+    class NaturalKeyConfig:
+        fields = ["state"]
+
+    def __str__(self) -> str:
+        return self.get_state_display()
+
+    @property
+    def price(self) -> int:
+        return self.carries.cost_per_rank if self.carries_id else 0
+
+
+class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """One line of the standard schooling set under a living tradition (#3675).
+
+    Rank 0 grants nothing; rank N grants ``grants`` at rank N. Price is derived:
+    ``grants.cost_per_rank * rank``. Staff author the three rows on the tradition
+    slate page; read by the tradition serializer to draw the stances under a
+    living tradition and by the offers module to open a Tradition Training offer.
+    """
+
+    rank = models.PositiveSmallIntegerField(unique=True)
+    name = models.CharField(max_length=80, help_text="The stance name the player picks.")
+    player_line = models.CharField(max_length=200, help_text="The line under the name.")
+    grants = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="granted_by_schooling_lines",
+        help_text="The distinction this line grants, at this line's rank.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name = "Schooling line"
+        verbose_name_plural = "Schooling lines"
+        ordering = ["rank"]
+
+    class NaturalKeyConfig:
+        fields = ["rank"]
+
+    def __str__(self) -> str:
+        return f"{self.rank}: {self.name}"
+
+    @property
+    def price(self) -> int:
+        return self.grants.cost_per_rank * self.rank if self.grants_id else 0
+
+
+def _at_most_one_of(unset_values: dict[str, object]) -> models.Q:
+    """A ``Q`` true when at most one of ``unset_values``' fields is set.
+
+    Each key is a field and its value what "unset" looks like (``None`` for an FK,
+    ``""`` for a choice). Every pair of fields must have at least one side unset.
+    """
+    fields = list(unset_values)
+    q = models.Q()
+    for i, a in enumerate(fields):
+        for b in fields[i + 1 :]:
+            q &= models.Q(**{a: unset_values[a]}) | models.Q(**{b: unset_values[b]})
+    return q
+
+
+class DistinctionOffer(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
+    """One line that shows a distinction in one CG chapter (#3675).
+
+    Lets staff say where a distinction is offered, what opens it there, and how
+    it arrives. Read by ``world.character_creation.offers`` for every chapter;
+    a distinction with no active offer is never shown in CG. FK direction per
+    ADR-0010: this row is the specific side.
+    """
+
+    #: Saving or deleting an offer drops its opener's cached properties, which
+    #: is where ``GlimpseTag.offers`` (``world.magic.models.glimpse``) lives.
+    #: A cascade or a ``queryset.delete()`` bypasses ``Model.delete()`` and
+    #: never gets here - ``PrunedCachedProperty``'s own pk check is what covers
+    #: those (ADR-0298, mirroring ``OriginTemplateSlot.related_cache_fields``).
+    #: **Known gap:** this mixin only ever sees an FK's value AT SAVE TIME, so
+    #: reassigning ``glimpse_tag`` (or any opener FK here) to a different row
+    #: clears the NEW opener's cache but never the OLD one's - the old opener
+    #: can keep serving this offer, stale, for the life of the process. Applies
+    #: to this model specifically since it's admin-editable content whose
+    #: opener FKs can be reassigned (Distinction Builder, ``GlimpseTagAdmin``
+    #: inline), unlike most other ``related_cache_fields`` relations in #3816,
+    #: which are created-once/deleted, never re-parented. Not fixed here -
+    #: cross-cutting decision tracked as #3836.
+    related_cache_fields: ClassVar[list[str]] = [
+        "glimpse_tag",
+        "origin_choice",
+        "schooling_line",
+        "enemy_reason",
+        "appearance_section",
+    ]
+
+    distinction = models.ForeignKey(
+        "arxii.Distinction", on_delete=models.PROTECT, related_name="offers"
+    )
+    chapter = models.CharField(max_length=20, choices=OfferChapter.choices)
+    arrives_as = models.CharField(
+        max_length=10, choices=OfferArrival.choices, default=OfferArrival.CHOICE
+    )
+    name = models.CharField(
+        max_length=80, blank=True, help_text="Stance name; blank means the distinction's name."
+    )
+    player_line = models.CharField(max_length=200, blank=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    glimpse_tag = models.ForeignKey(
+        "arxii.GlimpseTag",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Glimpse chapter only: the tag that opens this offer.",
+    )
+    origin_choice = models.ForeignKey(
+        OriginTemplateSlotChoice,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Lineage chapter only: the answer that opens this offer.",
+    )
+    schooling_line = models.ForeignKey(
+        SchoolingLine,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Tradition step only: the schooling line that opens this offer.",
+    )
+    prompt = models.CharField(
+        max_length=10,
+        choices=ActorSheetPrompt.choices,
+        blank=True,
+        help_text="The actor's sheet only: the question this offer sits under (#3709).",
+    )
+    enemy_reason = models.ForeignKey(
+        EnemyReason,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Who wants you to fail only: the reason that opens this offer (#3709).",
+    )
+    enemy_degree = models.CharField(
+        max_length=10,
+        choices=EnemyDegree.choices,
+        blank=True,
+        help_text=(
+            "Who wants you to fail only: the degree (ruined or destroy) that opens this "
+            "offer; the mark a degree bundles (#3709)."
+        ),
+    )
+    appearance_section = models.ForeignKey(
+        AppearanceSection,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Appearance only: the section this offer sits in (#3709).",
+    )
+    #: The Beginnings that pin this line into the few shown at rest (#3709); every
+    #: other line in the block folds under "See N more". Read by ``offers.offers_for``.
+    feature_rows = models.BooleanField(
+        default=False,
+        help_text=(
+            "Appearance only: offered on every trait row and marking rather than under a "
+            "section, for the per-feature distinctions (#3739)."
+        ),
+    )
+    first_look = models.ManyToManyField(
+        Beginnings,
+        through="OfferFirstLook",
+        blank=True,
+        related_name="first_look_offers",
+    )
+
+    objects = NaturalKeyManager()
+
+    #: The ``opener_key`` a feature-rows line reports (#3739). Unlike every other
+    #: opener there is no row to name, because the line is offered on every feature
+    #: the character has; the leaf keys its per-feature mounts off this one word.
+    FEATURE_OPENER_KEY: ClassVar[str] = "feature"
+
+    #: Every opener field, and the chapter each belongs to. An FK opener is set when
+    #: its id is; a choice opener when its value is non-blank.
+    OPENER_FIELDS: ClassVar[tuple[str, ...]] = (
+        "schooling_line",
+        "glimpse_tag",
+        "origin_choice",
+        "prompt",
+        "enemy_reason",
+        "enemy_degree",
+        "appearance_section",
+        "feature_rows",
+    )
+
+    class Meta:
+        verbose_name = "Distinction offer"
+        verbose_name_plural = "Distinction offers"
+        ordering = ["chapter", "sort_order", "id"]
+        constraints = [
+            models.CheckConstraint(
+                # At most one opener set: every pair has at least one side unset.
+                condition=_at_most_one_of(
+                    {
+                        "glimpse_tag": None,
+                        "origin_choice": None,
+                        "schooling_line": None,
+                        "enemy_reason": None,
+                        "appearance_section": None,
+                        "prompt": "",
+                        "enemy_degree": "",
+                        # A boolean opener is unset when False (#3739): a feature-rows
+                        # line is offered on every feature, so it can carry no section.
+                        "feature_rows": False,
+                    }
+                ),
+                name="distinctionoffer_at_most_one_opener",
+            )
+        ]
+
+    class NaturalKeyConfig:
+        fields = [
+            "distinction",
+            "chapter",
+            "glimpse_tag",
+            "origin_choice",
+            "schooling_line",
+            "prompt",
+            "enemy_reason",
+            "enemy_degree",
+            "appearance_section",
+        ]
+        dependencies = ["arxii.Distinction"]
+
+    _OPENERS_FOR_CHAPTER: ClassVar[dict[OfferChapter, tuple[str, ...]]] = {
+        OfferChapter.TRADITION_STEP: ("schooling_line",),
+        OfferChapter.GLIMPSE: ("glimpse_tag",),
+        OfferChapter.LINEAGE: ("origin_choice",),
+        OfferChapter.APPEARANCE: ("appearance_section", "feature_rows"),
+        OfferChapter.ACTORS_SHEET: ("prompt",),
+        OfferChapter.ENEMY: ("enemy_reason", "enemy_degree"),
+    }
+
+    def __str__(self) -> str:
+        return f"{self.distinction} in {self.get_chapter_display()}"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        if not self.name:
+            self.name = self.distinction.name
+        super().save(*args, **kwargs)
+
+    @property
+    def chapter_opener_fields(self) -> tuple[str, ...]:
+        """The opener fields this offer's chapter accepts (exactly one must be set)."""
+        return self._OPENERS_FOR_CHAPTER[OfferChapter(self.chapter)]
+
+    def _opener_is_set(self, field: str) -> bool:
+        if field in ("prompt", "enemy_degree", "feature_rows"):
+            return bool(getattr(self, field))
+        return getattr(self, f"{field}_id") is not None
+
+    @property
+    def set_openers(self) -> list[str]:
+        """The opener fields that carry a value right now."""
+        return [f for f in self.OPENER_FIELDS if self._opener_is_set(f)]
+
+    @property
+    def opener_key(self) -> str:
+        """A stable string naming what opens this offer, for grouping on the leaf (#3709).
+
+        ``prompt:never_do``, ``reason:<id>``, ``degree:ruined``, ``section:<id>``; the
+        opener's own id for the older chapters; ``""`` when nothing is set.
+        """
+        if self.prompt:
+            return f"prompt:{self.prompt}"
+        if self.enemy_reason_id is not None:
+            return f"reason:{self.enemy_reason_id}"
+        if self.enemy_degree:
+            return f"degree:{self.enemy_degree}"
+        if self.appearance_section_id is not None:
+            return f"section:{self.appearance_section_id}"
+        if self.feature_rows:
+            return self.FEATURE_OPENER_KEY
+        if self.glimpse_tag_id is not None:
+            return f"tag:{self.glimpse_tag_id}"
+        if self.origin_choice_id is not None:
+            return f"choice:{self.origin_choice_id}"
+        if self.schooling_line_id is not None:
+            return f"schooling:{self.schooling_line_id}"
+        return ""
+
+    def clean(self) -> None:
+        super().clean()
+        set_openers = self.set_openers
+        if len(set_openers) > 1:
+            at_most_one_opener_message = "An offer is opened by at most one thing."
+            raise ValidationError(at_most_one_opener_message)
+        wanted = self.chapter_opener_fields
+        if set_openers and set_openers[0] not in wanted:
+            raise ValidationError(
+                {set_openers[0]: "This chapter's offers are not opened by this field."}
+            )
+        if not set_openers:
+            raise ValidationError({wanted[0]: "This chapter's offers need an opener."})
+        if self.enemy_degree and self.enemy_degree not in ENEMY_MARKING_DEGREES:
+            raise ValidationError({"enemy_degree": "Only ruined and destroy mark the character."})
+
+
+class OfferFirstLook(SharedMemoryModel):
+    """One Beginning pinning one offer line into its chapter's first look (#3709)."""
+
+    offer = models.ForeignKey(DistinctionOffer, on_delete=models.CASCADE, related_name="pins")
+    beginning = models.ForeignKey(Beginnings, on_delete=models.CASCADE, related_name="offer_pins")
+
+    class Meta:
+        verbose_name = "Offer first look"
+        verbose_name_plural = "Offer first looks"
+        constraints = [
+            models.UniqueConstraint(fields=["offer", "beginning"], name="offerfirstlook_unique")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.offer} first look for {self.beginning}"

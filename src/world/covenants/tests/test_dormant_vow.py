@@ -4,7 +4,7 @@ ruling 2).
 A DISENGAGED-but-active covenant role never buffs its holder (ruling 1's
 stark-power rule, untouched), but slice 3's ruling 2 says that silence must
 be LOUD: the exact moment a disengaged perk's situations would have held, the
-holder is told so directly — ``"your vow lies dormant — {perk.name} would
+holder is told so directly - ``"your vow lies dormant - {perk.name} would
 have answered here"`` — HOLDER-only, never the room.
 
 ``perks.services.dormant_perk_firings`` is the enumeration half (the inverted
@@ -236,7 +236,7 @@ class AnnounceDormantPerksTests(TestCase):
         positional_calls = [c for c in mock_subject_msg.call_args_list if c.args]
         assert len(positional_calls) == 1
         (sent_text,) = positional_calls[0].args
-        assert sent_text == "your vow lies dormant — Last Bulwark would have answered here"
+        assert sent_text == "your vow lies dormant - Last Bulwark would have answered here"
 
     def test_empty_dormant_no_dispatch(self) -> None:
         with mock.patch.object(self.subject_character, "msg") as mock_msg:

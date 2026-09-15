@@ -181,6 +181,74 @@ def get_academy_legend_top_n(*, n: int = 10) -> list[RankingRow]:
     ]
 
 
+def realm_notable_personas(realm):
+    """The personas a realm's boards rank (#3725).
+
+    The PRIMARY persona of every character whose sheet (its true profile) is from
+    ``realm`` and stands on
+    the public Active roster. Read-time only: nothing is stored, so a character moved
+    off the Active shelf leaves the boards on the next read.
+    """
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    return Persona.objects.filter(
+        persona_type=PersonaType.PRIMARY,
+        character_sheet__true_profile__origin_realm=realm,
+        character_sheet__roster_entry__roster__roster_type=RosterType.ACTIVE,
+        character_sheet__roster_entry__roster__is_public=True,
+    )
+
+
+def get_realm_renown_top_n(realm, *, n: int = 10) -> list[RankingRow]:
+    """Top-N of a realm's notable personas by renown (#3725).
+
+    Ordering quantity = ``total_prestige × fame-tier multiplier`` with no society
+    lens (a realm is not a society, so no perception offset applies); labels from
+    the global band set. The value stays internal, as on every board.
+    """
+    scored = sorted(
+        (
+            (p.total_prestige * FAME_TIER_MULTIPLIERS[p.fame_tier], p.name)
+            for p in realm_notable_personas(realm)
+        ),
+        key=lambda pair: (-pair[0], pair[1]),
+    )[:n]
+    bands = band_labels_for(None)
+    return [
+        RankingRow(
+            rank=index,
+            persona_name=name,
+            value=score,
+            band_label=_label_for_rank(index, bands),
+        )
+        for index, (score, name) in enumerate(scored, start=1)
+    ]
+
+
+def get_realm_legend_top_n(realm, *, n: int = 10) -> list[RankingRow]:
+    """Top-N of a realm's notable personas by ``persona_legend`` (#3725).
+
+    Reads the ``PersonaLegendSummary`` MV over the same set the renown board uses.
+    """
+    rows = list(
+        PersonaLegendSummary.objects.filter(persona__in=realm_notable_personas(realm))
+        .select_related("persona")
+        .order_by("-persona_legend", "persona__name")[:n]
+    )
+    bands = band_labels_for(None)
+    return [
+        RankingRow(
+            rank=position,
+            persona_name=row.persona.name,
+            value=row.persona_legend,
+            band_label=_label_for_rank(position, bands),
+        )
+        for position, row in enumerate(rows, start=1)
+    ]
+
+
 def viewer_is_member_of_society(viewer_persona, society) -> bool:
     """True iff ``viewer_persona`` holds any membership in an org in ``society``.
 

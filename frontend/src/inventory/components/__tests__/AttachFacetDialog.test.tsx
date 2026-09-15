@@ -137,11 +137,7 @@ function setupDefaultMocks() {
       {
         id: 7,
         name: 'Spider',
-        full_path: 'Spider',
         description: '',
-        parent: null,
-        parent_name: null,
-        depth: 0,
       },
     ],
     isLoading: false,

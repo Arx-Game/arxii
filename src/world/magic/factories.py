@@ -57,7 +57,6 @@ from world.magic.models import (
     Gift,
     GiftUnlock,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     MagicalAlterationEvent,
@@ -358,14 +357,20 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
     def damage_profile(self, create: bool, extracted: Any, **kwargs):
         """Auto-seed a damage profile from EffectType.base_power when present.
 
-        Pass damage_profile=False to skip. Pass any non-False truthy value
-        to also skip (caller has attached their own profile).
+        Omitted or ``damage_profile=True`` seeds it; ``False`` skips; any other
+        value skips because the caller has attached their own profile.
+
+        ``True`` used to skip as well (#3682), which meant six call sites reading
+        ``TechniqueFactory(damage_profile=True)  # hostile`` got no damage profile
+        at all. They stayed green only because ``is_technique_hostile`` was
+        reading ``EffectType.base_power``; removing that shortcut (ADR-0281)
+        exposed them. ``True`` now means what every one of them meant by it.
         """
         if not create:
             return
         if extracted is False:
             return
-        if extracted is not None:
+        if extracted is not None and extracted is not True:
             return
         if self.effect_type.base_power:
             TechniqueDamageProfileFactory(
@@ -883,7 +888,6 @@ class FacetFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Facet{n}")
     description = factory.LazyAttribute(lambda o: f"The {o.name} facet.")
-    parent = None
 
 
 class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
@@ -1537,15 +1541,6 @@ class CharacterGlimpseTagFactory(factory.django.DjangoModelFactory):
 
     aura = factory.SubFactory(CharacterAuraFactory)
     tag = factory.SubFactory(GlimpseTagFactory)
-
-
-class GlimpseTagDistinctionSuggestionFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = GlimpseTagDistinctionSuggestion
-
-    tag = factory.SubFactory(GlimpseTagFactory)
-    distinction = factory.SubFactory(_DISTINCTION_FACTORY)
-    sort_order = 0
 
 
 # =============================================================================

@@ -7,20 +7,41 @@
  * pressed-row choices. The record rail lists the choices made so far; every
  * explanatory sentence the old layout put under a section heading now lives
  * in the margin instead (Decision 8).
+ *
+ * Right after the height block, `ChapterOffers` mounts this chapter's own
+ * offered distinctions (`chapter="appearance"`, #3675 Task 15) - the
+ * physical/social ones that show, in place of the retired Distinctions
+ * stage. It carries its own heading (folio grammar; no separate `section-h`
+ * above it, matching the demo's Screen 7). A height band's `title` reads its
+ * own `cg_hint` column when staff authored one (fix round 1: an authored
+ * column on the row itself, the #3676 one-to-one designation, not a name
+ * match against a literal "Towering"); otherwise the usual inches range.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ChapterLeaf, ChoiceRow, Field, Marginalia, Note, RecordRail } from '../folio';
+import {
+  ChapterLeaf,
+  ChoiceRow,
+  Field,
+  Marginalia,
+  Note,
+  RecordRail,
+  stageEyebrow,
+} from '../folio';
 import {
   useBuilds,
   useCGExplanations,
+  useDraftOffers,
   useFormOptions,
   useHeightBands,
   useUpdateDraft,
 } from '../queries';
 import { formatHeight } from '../utils';
+import { ChapterOffers } from './offers/ChapterOffers';
+import { FeatureDistinctions } from './offers/FeatureDistinctions';
 import { MarkingsEditor } from './MarkingsEditor';
+import { useDraftDistinctions } from '@/hooks/useDistinctions';
 import { Stage } from '../types';
 import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
 
@@ -34,11 +55,9 @@ interface AppearanceFormValues {
   description: string;
 }
 
-const AGE_MIN = 18;
-const AGE_MAX = 65;
-// Eternal-youth species (elves, vampires) lock their apparent age in the
-// early 20s (#2756) — mirrors the server-side cap.
-const AGE_MAX_ETERNAL_YOUTH = 29;
+// The age range comes from the draft payload (`age_min` / `age_max`, #3663):
+// the server composes the general cap, eternal youth (#2756) and the heritage's
+// first appearance, so the folio never has to know the rule.
 const AGE_DEFAULT = 22;
 
 const MONTH_NAMES = [
@@ -65,6 +84,22 @@ export function AppearanceStage({
 }: AppearanceStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
+  // The chapter's own offers, read once here to know its sections (#3709); each
+  // section's block re-reads the same cached query through `ChapterOffers`.
+  const { data: appearanceOffers } = useDraftOffers(draft.id, 'appearance');
+  const sections = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const offer of appearanceOffers?.offers ?? []) {
+      // A per-feature line (#3739) is not a section: it is offered on every
+      // trait row and marking, and `FeatureDistinctions` mounts it there.
+      if (offer.taken_per_feature) continue;
+      if (offer.opener_key && !seen.has(offer.opener_key)) {
+        seen.set(offer.opener_key, offer.opener_label);
+      }
+    }
+    return Array.from(seen, ([key, label]) => ({ key, label }));
+  }, [appearanceOffers]);
+  const hasClosedAppearance = (appearanceOffers?.closed ?? []).length > 0;
   const { data: heightBands, isLoading: heightBandsLoading } = useHeightBands();
   const { data: builds, isLoading: buildsLoading } = useBuilds();
   const { data: formOptions, isLoading: formOptionsLoading } = useFormOptions(
@@ -72,6 +107,20 @@ export function AppearanceStage({
     draft.id
   );
   const draftData = draft.draft_data;
+  // Which trait rows the draft has paid to make distinctive (#3739). The unlock
+  // is what opens the widened palette and the description field, so the leaf
+  // reads it from the draft's own entries rather than re-deriving the rule.
+  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
+  const openedTraits = useMemo(() => {
+    const opensIds = new Set(
+      (appearanceOffers?.offers ?? []).filter((o) => o.opens_feature).map((o) => o.distinction_id)
+    );
+    return new Set(
+      (draftDistinctions ?? [])
+        .filter((e) => opensIds.has(e.distinction_id) && e.feature_trait)
+        .map((e) => e.feature_trait as string)
+    );
+  }, [appearanceOffers, draftDistinctions]);
 
   // Traits the species offers directly (#2815); a trait id absent from this
   // set but present in `formOptions.inherited` is a stray pinned value (e.g.
@@ -124,8 +173,9 @@ export function AppearanceStage({
   }, [onRegisterBeforeLeave, saveDescription]);
 
   const [localAge, setLocalAge] = useState(String(draft.age ?? AGE_DEFAULT));
-  // Eternal-youth species cap their age input (#2756); server enforces too.
-  const ageMax = draft.selected_species?.eternal_youth ? AGE_MAX_ETERNAL_YOUTH : AGE_MAX;
+  const ageMin = draft.age_min;
+  const ageMax = draft.age_max;
+  const heritage = draft.selected_beginnings?.heritage ?? null;
 
   // Auto-save default age on first visit when unset, so backend sees age != None
   useEffect(() => {
@@ -137,9 +187,7 @@ export function AppearanceStage({
 
   const commitAge = () => {
     const parsed = parseInt(localAge, 10);
-    const clamped = Number.isNaN(parsed)
-      ? AGE_DEFAULT
-      : Math.max(AGE_MIN, Math.min(ageMax, parsed));
+    const clamped = Number.isNaN(parsed) ? AGE_DEFAULT : Math.max(ageMin, Math.min(ageMax, parsed));
     setLocalAge(String(clamped));
     if (clamped !== draft.age) {
       updateDraft.mutate({
@@ -248,10 +296,17 @@ export function AppearanceStage({
     return formTraits?.[traitName] ?? null;
   };
 
-  const heightBandTitle = (band: HeightBand): string =>
-    !band.is_cg_selectable && isStaff
+  // A band's title is its own authored `cg_hint` (#3675 Task 15 fix round
+  // 1) when staff wrote one - what opens a band players cannot normally
+  // take (e.g. Towering needs Giant's Blood). This is a column on the row
+  // itself, not a name match against a literal band name (the #3676
+  // one-to-one designation the never-match-strings ruling asks for).
+  // Absent a hint, the option falls back to the usual inches range.
+  const heightBandTitle = (band: HeightBand): string | undefined =>
+    band.cg_hint ||
+    (!band.is_cg_selectable && isStaff
       ? `${band.min_inches} to ${band.max_inches} inches (not normally offered to players)`
-      : `${band.min_inches} to ${band.max_inches} inches`;
+      : `${band.min_inches} to ${band.max_inches} inches`);
 
   const buildTitle = (build: Build): string | undefined =>
     !build.is_cg_selectable && isStaff ? 'Not normally offered to players' : undefined;
@@ -272,12 +327,18 @@ export function AppearanceStage({
           },
           { label: 'Build', value: draft.build?.display_name },
         ]}
-        ledger="Stage 8 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-appearance">
         {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Age">
-          must be between {AGE_MIN} and {ageMax} years.
+          must be between {ageMin} and {ageMax} years.
+          {heritage?.first_appeared_ic_year != null && (
+            <>
+              {' '}
+              The first {heritage.name} were born in {heritage.first_appeared_ic_year} AS.
+            </>
+          )}
         </Note>
         {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Birthday">
@@ -339,7 +400,7 @@ export function AppearanceStage({
         <input
           id="age"
           type="number"
-          min={AGE_MIN}
+          min={ageMin}
           max={ageMax}
           value={localAge}
           onChange={(e) => setLocalAge(e.target.value)}
@@ -411,6 +472,45 @@ export function AppearanceStage({
         </Field>
       )}
 
+      {/* What shows, in sections (#3709): one offers block per authored Appearance
+          section, in the sections' own order; the closed hint prints once under the
+          last. The chapter heading stays even when only the closed hint remains. */}
+      {(sections.length > 0 || hasClosedAppearance) && (
+        <h2 className="section-h">
+          {copy?.appearance_offers_heading ?? 'What people notice first'}
+          <small>{copy?.appearance_offers_note ?? 'offered here'}</small>
+        </h2>
+      )}
+      {sections.map((section, index) => (
+        <ChapterOffers
+          key={section.key}
+          draft={draft}
+          chapter="appearance"
+          filter={(o) => o.opener_key === section.key}
+          heading={section.label}
+          headingTag={copy?.offers_chip_distinctions ?? 'Distinctions'}
+          showOpener={false}
+          showClosed={index === sections.length - 1}
+          closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
+          syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+          wordBundled={copy?.offers_word_bundled}
+          wordPerRank={copy?.offers_word_per_rank}
+          wordSpent={copy?.offers_word_spent}
+          wordAwards={copy?.offers_word_awards}
+          wordSeeMore={copy?.offers_word_see_more}
+          wordHeld={copy?.offers_word_held}
+          className="conditional"
+        />
+      ))}
+      {sections.length === 0 && hasClosedAppearance && (
+        <ChapterOffers
+          draft={draft}
+          chapter="appearance"
+          filter={() => false}
+          closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
+        />
+      )}
+
       <h2 className="section-h">{copy?.appearance_build_heading ?? 'Build'}</h2>
       {buildsLoading ? (
         <p className="ledger-line" aria-busy="true">
@@ -440,33 +540,58 @@ export function AppearanceStage({
               Loading physical features…
             </p>
           )}
-          {(formOptions?.traits ?? []).map((t) => (
-            <div key={t.trait.id}>
-              <h3 className="section-h" id={`trait-${t.trait.id}`}>
-                {t.trait.display_name}
-                {t.is_required && ' (required)'}
-              </h3>
-              <ChoiceRow
-                labelledBy={`trait-${t.trait.id}`}
-                label={t.trait.display_name}
-                options={[...t.options, ...inheritedOptionsFor(t.trait.id)].map((o) => ({
-                  value: o.id,
-                  label: o.display_name,
-                }))}
-                value={getSelectedOptionId(t.trait.name)}
-                onChange={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
-                clearable={!t.is_required}
-              />
-              <Field id={`desc-${t.trait.id}`} label="In your own words" hint="Optional.">
-                <input
-                  id={`desc-${t.trait.id}`}
-                  type="text"
-                  defaultValue={getTraitDescriptor(t.trait.name)}
-                  onBlur={(e) => handleTraitDescriptorCommit(t.trait.name, e.target.value)}
+          {(formOptions?.traits ?? []).map((t) => {
+            const opened = openedTraits.has(t.trait.name);
+            // Made distinctive, the row reaches past the species palette to
+            // every option the trait carries, the Unnatural umbrella included
+            // (#3739); otherwise it offers the palette and the lineage's own
+            // inherited options, exactly as before.
+            const palette = opened
+              ? (t.all_options ?? t.options)
+              : [...t.options, ...inheritedOptionsFor(t.trait.id)];
+            // Which of those the species does not itself list: drawn apart, so the
+            // point the player spent is visible in the row it opened (#3739).
+            const ownIds = new Set(t.options.map((o) => o.id));
+            return (
+              <div key={t.trait.id}>
+                <h3 className="section-h" id={`trait-${t.trait.id}`}>
+                  {t.trait.display_name}
+                  {t.is_required && ' (required)'}
+                </h3>
+                <ChoiceRow
+                  labelledBy={`trait-${t.trait.id}`}
+                  label={t.trait.display_name}
+                  options={palette.map((o) => ({
+                    value: o.id,
+                    label: o.display_name,
+                    beyond: opened && !ownIds.has(o.id),
+                  }))}
+                  value={getSelectedOptionId(t.trait.name)}
+                  onChange={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
+                  clearable={!t.is_required}
                 />
-              </Field>
-            </div>
-          ))}
+                <FeatureDistinctions
+                  draft={draft}
+                  feature={{ feature_trait: t.trait.name }}
+                  featureLabel={t.trait.display_name}
+                  unlockLabel={copy?.appearance_make_distinctive}
+                  unlockWhy={copy?.appearance_make_distinctive_why}
+                  perTierWord={copy?.appearance_per_tier}
+                />
+                {opened && (
+                  <Field id={`desc-${t.trait.id}`} label="Describe it" hint="Optional.">
+                    <input
+                      id={`desc-${t.trait.id}`}
+                      type="text"
+                      maxLength={120}
+                      defaultValue={getTraitDescriptor(t.trait.name)}
+                      onBlur={(e) => handleTraitDescriptorCommit(t.trait.name, e.target.value)}
+                    />
+                  </Field>
+                )}
+              </div>
+            );
+          })}
           {strayInherited.map((group) => (
             <div key={`${group.trait.id}-${group.source}`}>
               <h3 className="section-h" id={`trait-${group.trait.id}-${group.source}`}>
@@ -481,18 +606,29 @@ export function AppearanceStage({
                 onChange={(optionId) => handleFormTraitChange(group.trait.name, optionId)}
                 clearable
               />
-              <Field
-                id={`desc-${group.trait.id}-${group.source}`}
-                label="In your own words"
-                hint="Optional."
-              >
-                <input
+              <FeatureDistinctions
+                draft={draft}
+                feature={{ feature_trait: group.trait.name }}
+                featureLabel={group.trait.display_name}
+                unlockLabel={copy?.appearance_make_distinctive}
+                unlockWhy={copy?.appearance_make_distinctive_why}
+                perTierWord={copy?.appearance_per_tier}
+              />
+              {openedTraits.has(group.trait.name) && (
+                <Field
                   id={`desc-${group.trait.id}-${group.source}`}
-                  type="text"
-                  defaultValue={getTraitDescriptor(group.trait.name)}
-                  onBlur={(e) => handleTraitDescriptorCommit(group.trait.name, e.target.value)}
-                />
-              </Field>
+                  label="Describe it"
+                  hint="Optional."
+                >
+                  <input
+                    id={`desc-${group.trait.id}-${group.source}`}
+                    type="text"
+                    maxLength={120}
+                    defaultValue={getTraitDescriptor(group.trait.name)}
+                    onBlur={(e) => handleTraitDescriptorCommit(group.trait.name, e.target.value)}
+                  />
+                </Field>
+              )}
             </div>
           ))}
         </>
@@ -506,7 +642,12 @@ export function AppearanceStage({
       </Field>
 
       <h2 className="section-h">{copy?.appearance_markings_heading ?? 'Markings'}</h2>
-      <MarkingsEditor />
+      <MarkingsEditor
+        draft={draft}
+        markingUnlockLabel={copy?.appearance_make_distinctive}
+        markingUnlockWhy={copy?.appearance_marking_distinctive_why}
+        perTierWord={copy?.appearance_per_tier}
+      />
     </ChapterLeaf>
   );
 }

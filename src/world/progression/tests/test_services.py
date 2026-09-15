@@ -13,9 +13,12 @@ from world.classes.factories import CharacterClassLevelFactory
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import (
     CharacterUnlock,
+    CharacterXP,
+    CharacterXPTransaction,
     ExperiencePointsData,
     XPTransaction,
 )
+from world.progression.selectors import character_xp_ledger
 from world.progression.services import (
     award_development_points,
     award_xp,
@@ -60,6 +63,7 @@ class XPServiceTest(TestCase):
             50,
             ProgressionReason.GM_AWARD,
             "Test award",
+            character=None,
         )
 
         # Check XP tracker was updated
@@ -75,7 +79,38 @@ class XPServiceTest(TestCase):
     def test_award_xp_invalid_amount(self):
         """Test XP awarding with invalid amount."""
         with pytest.raises(ValueError):
-            award_xp(self.account, -10)
+            award_xp(self.account, -10, character=None)
+
+    def test_award_xp_credits_the_earning_character(self):
+        """An award naming a character lands on that character's ledger too (#3748)."""
+        sheet = CharacterSheetFactory()
+
+        transaction = award_xp(
+            self.account,
+            40,
+            ProgressionReason.NOMINATION,
+            "Nominated for good RP",
+            character=sheet,
+        )
+
+        assert transaction.character_id == sheet.pk
+        ledger = character_xp_ledger(sheet)
+        assert ledger.earned == 40
+        assert ledger.spent == 0
+        assert CharacterXPTransaction.objects.filter(character=sheet, amount=40).exists()
+
+    def test_award_xp_without_a_character_writes_no_ledger_row(self):
+        """A GM story reward pays the account and attributes to nobody (#3748)."""
+        award_xp(
+            self.account,
+            25,
+            ProgressionReason.GM_STORY_REWARD,
+            "Ran an episode",
+            character=None,
+        )
+
+        assert not CharacterXP.objects.exists()
+        assert not CharacterXPTransaction.objects.exists()
 
 
 class UnlockServiceTest(TestCase):
@@ -165,6 +200,12 @@ class UnlockServiceTest(TestCase):
         assert XPTransaction.objects.filter(
             account=self.account, amount=-100, character=self.sheet
         ).exists()
+
+        # The spend also lands on the character's own ledger (#3748) — this is the
+        # number the death-kudos cap is sized on.
+        ledger = character_xp_ledger(self.sheet)
+        assert ledger.spent == 100
+        assert CharacterXPTransaction.objects.filter(character=self.sheet, amount=-100).exists()
 
     def test_spend_xp_insufficient_funds(self):
         """Test XP spending with insufficient funds."""

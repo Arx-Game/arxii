@@ -2,25 +2,26 @@
  * "Your Characters" band (#3412 slice 2) — the Hall's portrait-forward roster
  * of the account's playable characters. Clicking a card sets the account's
  * durable server-side selection (`useSelectCharacterMutation`); the docked
- * card gets a primary top rule + a "Playing: …" meta line (PLACEHOLDER —
- * presence isn't wired yet, mirrors `SelectedCharacterChip`).
- * "Clear Active Character" lives once, bottom-right of the whole band —
- * disabled (not hidden) when nothing is docked, so the control stays
- * discoverable per the ruling.
+ * card gets a primary top rule + a presence meta line that reads the
+ * character's live session from the store (#3859: "In the world" while the
+ * socket is open, else `dockedStateLabel`, the same fact and the same helper
+ * `SelectedCharacterChip` uses). "Clear Active Character" lives once,
+ * bottom-right of the whole band — disabled (not hidden) when nothing is
+ * docked, so the control stays discoverable per the ruling.
  *
  * Selection is NOT presence (ruled): this band never starts/stops a `/game`
- * session — Enter-the-world stays the header chip's job.
+ * session — Enter-the-world and Leave-the-world stay the header chip's job.
  *
  * Degraded-state meta line (#3412 final review, IMPORTANT-1): a docked
  * character whose `lifecycle_state` is CAPTURED/DEAD/RETIRED/UNKNOWN used to
  * assert "Playing: Currently Offscreen" unconditionally — a factual
  * contradiction with `OffscreenActsPlate`'s death/captivity prose shown right
- * below it on the same screen. The meta line now branches the same way the
- * plate does (mirrors its `ALLOWED_LIFECYCLE_STATES` set: ALIVE and the
- * unwritten COMA member still read "Currently Offscreen"; everything else
- * gets a short PLACEHOLDER state label instead). "Clear Active Character"
- * and card selection stay unaffected — this is a display-only fix, same as
- * the plate's own gate/display split.
+ * below it on the same screen. The meta line branches the same way the plate
+ * does (`ALLOWED_LIFECYCLE_STATES`: ALIVE and the unwritten COMA member read
+ * "Not in the world" when no session is live; everything else gets a short
+ * PLACEHOLDER state label instead). "Clear Active Character" and card
+ * selection stay unaffected — this is a display-only fix, same as the plate's
+ * own gate/display split.
  *
  * The Hall's GM slot (#3478 task 5): `characters` (from
  * `MyRosterEntry.character_type`, Task 3) can carry at most one non-"PC"
@@ -57,6 +58,10 @@ interface CharacterCardProps {
 }
 
 function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
+  // #3859: the meta line states presence from the store, the same fact the
+  // header chip reads. Sockets survive navigation (ADR-0295), so a docked
+  // character can be live in the world while the player reads this page.
+  const live = useAppSelector((state) => Boolean(state.game.sessions[entry.name]?.isConnected));
   return (
     <Plate
       className={cn('relative overflow-hidden p-3', isDocked && 'border-t-2 border-t-primary')}
@@ -80,10 +85,9 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
         <span className="theme-heading text-sm font-semibold [font-variant:small-caps]">
           {entry.name}
         </span>
-        {/* PLACEHOLDER copy — presence state isn't wired yet, mirrors SelectedCharacterChip */}
         {isDocked && (
           <span className="font-body text-xs text-muted-foreground">
-            Playing: {dockedStateLabel(entry.lifecycle_state)}
+            {live ? 'In the world' : dockedStateLabel(entry.lifecycle_state)}
           </span>
         )}
       </button>

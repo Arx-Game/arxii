@@ -9,6 +9,7 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.items.factories import MaterialCategoryFactory
 from world.societies.factories import OrganizationFactory
+from world.societies.houses.models import HouseTemplate
 from world.societies.houses.services import add_holding, create_domain
 
 
@@ -63,3 +64,16 @@ class HoldingMaterialSourceFactory(factory.django.DjangoModelFactory):
 
     holding = factory.SubFactory(DomainHoldingFactory)
     material_category = factory.SubFactory(MaterialCategoryFactory)
+
+
+class HouseTemplateFactory(factory.django.DjangoModelFactory):
+    """A Family Template (#3648). Defaults to a liege-less commoner recipe."""
+
+    class Meta:
+        model = HouseTemplate
+
+    name = factory.Sequence(lambda n: f"Family Template {n}")
+    realm = factory.SubFactory("world.character_creation.factories.RealmFactory")
+    kind = factory.SubFactory("world.roster.factories.FamilyKindFactory")
+    society = factory.SubFactory("world.societies.factories.SocietyFactory")
+    org_type = factory.SubFactory("world.societies.factories.OrganizationTypeFactory")

@@ -9,6 +9,7 @@ import {
   fetchWorldBuilderAreas,
   fetchRoomDetail,
   searchWorldBuilderRooms,
+  fetchUnfiledRooms,
   type AreaListParams,
 } from './api';
 import type { WorldBuilderActionKey } from './types';
@@ -65,6 +66,16 @@ export function useMyGrantsQuery() {
     queryKey: ['world-builder', 'my-grants'],
     queryFn: fetchMyGrants,
     staleTime: 60_000,
+  });
+}
+
+/** The index rail's Unfiled rooms (#3860); staff only, so the caller gates `enabled`. */
+export function useUnfiledRoomsQuery(enabled = true) {
+  return useQuery({
+    queryKey: [...worldBuilderKeys.all, 'unfiled-rooms'] as const,
+    queryFn: fetchUnfiledRooms,
+    enabled,
+    staleTime: 30_000,
   });
 }
 

@@ -23,6 +23,18 @@ from world.roster.models import (
 
 ---
 
+## Staff and GM character minting (#3741)
+
+`world.roster.services.staff_characters.mint_gm_character` and
+`mint_story_npc` create their characters through the shared
+`_mint_character_working_set` helper. The helper resolves the canonical fallback
+room with `world.seeds.character_creation.ensure_canonical_fallback_room` and
+assigns it as both the character's `home` and `location`. This keeps a newly
+minted GM or staff presence playable immediately, even when no character
+creation draft supplied a starting room.
+
+---
+
 ## Applying these migrations
 
 `Roster.roster_type` (#2728) is `null=False` with no default — migration 0011
@@ -274,6 +286,16 @@ The telnet front door itself (connection screen + the characterless post-login m
 `settings.FRONTEND_URL` so a telnet-only player has a path to the web roster/application/chargen
 flow in the first place.
 
+**Login puppets the account's character (#3812, ADR-0294).** `Account.at_post_login` no
+longer renders Evennia's OOC screen and waits for `@ic`; it resolves the durable selection
+(`PlayerData.selected_entry`), else Evennia's `_last_puppet`, else a sole character, and
+puppets it — on telnet and on the web socket alike. Several characters with nothing recorded
+get a one-line list, never a silent first pick. `@ic <name>` remains for switching and is a
+no-op for the session's own puppet (the web client sends it on every socket open). Sessions
+share a character (`MULTISESSION_MODE = 3`, unlimited simultaneous puppets): a second window
+on the same character joins it rather than being refused or kicking the first, and the
+"came online"/"went offline" hooks fire on the first/last session only.
+
 ### FamilyMember
 
 ```python
@@ -350,10 +372,15 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
   set-active endpoint's shape: the entry must be one of `mine`'s own-current-entries
   population, a foreign/unknown id is rejected uniformly, and `entry_id: null` always
   clears. **Selection is NOT presence** — no lifecycle/session/puppeting side effects
-  fire. Sole mutator: `world.roster.services.selection.set_selected_entry`. Response
+  fire. Sole mutator: `world.roster.services.selection.set_selected_entry` — which
+  `Account.puppet_object` also calls, so puppeting records the selection and login
+  puppets it (#3812, ADR-0294; the guarantee runs one way). Response
   mirrors the `/api/user/` payload fragment (`selected_entry_id` + `selected_entry`).
 
-**Filters:** `RosterEntryFilterSet` via DjangoFilterBackend
+**Filters:** `RosterEntryFilterSet` via DjangoFilterBackend — `gender`, `char_class`, `name`,
+`roster`, and `realm` (#3725: a realm slug, matched on the sheet's true profile
+`origin_realm`; an unknown slug matches nothing). The roster page reads `?realm=` and
+offers a realm select; a realm page's Characters section hands off with it.
 
 ### Tenures (`/api/roster/tenures/`)
 - `GET /api/roster/tenures/` - List tenures with search by character name
@@ -388,8 +415,8 @@ command.
   the staff hub badge
 
 All four routes are staff-only, gated by `CanApproveApplications`
-(`PlayerData.can_approve_applications()` - staff today; trust-system integration is
-future work). Distinct from `character_creation`'s DraftApplication review: this
+(`PlayerData.can_approve_applications()` - staff only; #3726 removed the
+trust-evaluation placeholders that used to sit beside it). Distinct from `character_creation`'s DraftApplication review: this
 queue is players applying for staff-authored characters already on the Available
 shelf, not new player-made characters going through CG.
 
@@ -398,7 +425,7 @@ shelf, not new player-made characters going through CG.
 - `GET /api/roster/families/{id}/` - Family detail
 - `GET /api/roster/families/{id}/tree/` - Complete family tree with members
 
-**Query Parameters:** `has_open_positions=true` (filter families with placeholder members)
+**Query Parameters:** `has_open_kin_slots=true` (filter families with placeholder members; renamed from `has_open_positions`, #3648)
 
 ### Family Members (`/api/roster/family-members/`)
 - Full CRUD for family members (creator or staff only for write)
@@ -407,7 +434,11 @@ shelf, not new player-made characters going through CG.
 
 ### Media (`/api/roster/media/`)
 - `GET /api/roster/media/` - List user's media (staff sees all)
-- `POST /api/roster/media/` - Upload image via Cloudinary
+- `POST /api/roster/media/` - Upload image via Cloudinary, validated by `MediaUploadSerializer`
+  (#3164): a 400 with a fixed message on a file over the per-file cap (`image_file`
+  never reaches the service) or on quota exceeded (the service's own check);
+  `multipart/form-data` request body (`image_file`, `media_type`, `title`, `description`,
+  `created_by`)
 - `POST /api/roster/media/{id}/associate_tenure/` - Link media to a tenure/gallery
 - `POST /api/roster/media/{id}/set_profile_picture/` - Set as account profile picture
 
@@ -433,7 +464,8 @@ shelf, not new player-made characters going through CG.
 ## Integration Points
 
 - **PlayerData** (`evennia_extensions.PlayerData`): Extends AccountDB with `player_data` reverse relation; tenures link to PlayerData, not AccountDB directly
-- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability — see ADR-0146); TenureMedia bridges to character tenures
+- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability, see ADR-0146); TenureMedia bridges to character tenures. `file_size_bytes` (nullable, #3164) records the upload backend's reported size for player-uploaded rows; null for pre-#3164 rows and staff-pasted art. `PlayerData.media_quota_bytes` (default `settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES`, per-account editable) caps the sum of a player's owned `Media.file_size_bytes`; `settings.MAX_PLAYER_MEDIA_FILE_BYTES` is the separate per-file cap. Both are enforced in `CloudinaryGalleryService.upload_image` (#3164) before the Cloudinary call: the per-file cap raises first, then the quota check against the sum of the account's existing `Media.file_size_bytes` (a null row counts as 0); `player_data.account.is_staff` skips both checks. A successful upload sets `Media.file_size_bytes` from the upload result's reported byte count.
+- **`MediaUploadSerializer`** (`world.roster.serializers.media`, #3164): validates an upload before `MediaViewSet.create` calls the service. `image_file` is required and `FileExtensionValidator`-checked against the extensions the service's content-type allowlist maps to (jpg, jpeg, png, gif, webp); `media_type` defaults to `photo`; `title`/`description` default to blank; `created_by` is an optional `Artist` id. `validate_image_file` rejects a file over `settings.MAX_PLAYER_MEDIA_FILE_BYTES` with the same fixed message the service raises ("This file is larger than the per-file limit."), so an oversized upload is rejected before the network call; staff bypass this check too, matching the service's staff bypass. The quota check stays service-only (it needs a DB aggregate). The serializer's `create()` calls `CloudinaryGalleryService.upload_image` and translates any `django.core.exceptions.ValidationError` it raises into a DRF 400 carrying the same fixed message ("This upload would exceed your media quota." for the quota case). `MediaViewSet` accepts `multipart/form-data` (and `application/x-www-form-urlencoded`, and JSON) for `create` alongside the project's JSON-only default, since `image_file` travels as a real file upload.
 - **Scenes System**: Personas reference characters via ObjectDB, which have `roster_entry` for identity resolution
 - **Character Creation**: `Family` and `FamilyMember` used during CG for family selection; families filtered by `origin_realm`
 

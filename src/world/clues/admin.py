@@ -39,6 +39,8 @@ class CharacterClueAdmin(admin.ModelAdmin):
 class RoomClueAdmin(admin.ModelAdmin):
     """Authoring surface for placing clues in rooms (data, not code)."""
 
+    autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
+
     list_display = ["clue", "room_profile", "detect_difficulty", "is_active"]
     list_filter = ["is_active", "clue__target_kind"]
     search_fields = ["clue__name"]
@@ -47,6 +49,8 @@ class RoomClueAdmin(admin.ModelAdmin):
 @admin.register(ClueTrigger)
 class ClueTriggerAdmin(admin.ModelAdmin):
     """Authoring surface for passive clue triggers (data, not code)."""
+
+    autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
 
     list_display = ["clue", "room_profile", "is_active"]
     list_filter = ["is_active", "clue__target_kind"]

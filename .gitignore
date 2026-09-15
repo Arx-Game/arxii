@@ -74,6 +74,7 @@ nosetests.xml
 .env
 .env.*_backup
 .devcontainer/dev.env
+.devcontainer/docker-compose.local.yml
 
 # pnpm content-addressable store. pnpm-workspace.yaml in frontend/ makes pnpm
 # default its store path one level above the workspace root — i.e. here — when
@@ -152,3 +153,6 @@ src/schema.json
 # shared across machines.
 tools/skills/workflow-friction-audit/secret-patterns.txt
 .plan.md
+
+# Written by `arx manage squashmigrations arxii` for the PR body (ADR-0276); never committed.
+regeneration-report.md

@@ -595,6 +595,87 @@
          or (app_reload_stamp_read.content | default('') | b64decode | trim)
             != app_checkout.after }}
 
+# --- Reload or restart? (#3863) ---------------------------------------------
+# `evennia reload` restarts only the Server; the Portal keeps the code it
+# booted with, which is what keeps players connected through a reload. So a
+# change to anything the Portal loads (src/server/portal/**, the listener and
+# protocol settings) ships "green" through a reload and does nothing. The
+# #3803 websocket keepalive rode two consecutive stand-ups that way and
+# production kept closing idle sockets at 125.6 s (ADR-0291). Fingerprint the
+# Portal-loaded files in THIS release and compare with the fingerprint stamped
+# at the last provable reload/restart: a difference (or no stamp yet, or the
+# operator's full_restart input) means a full restart, players dropping once.
+# The clone is shallow (depth 1), so this is a content hash, not a git diff.
+- name: Fingerprint the Portal-loaded code in this release (#3863)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      {
+        for p in {{ app_portal_paths | map('quote') | join(' ') }}; do
+          find "$p" -type f -name '*.py' -print0 | sort -z | xargs -0 sha256sum;
+        done;
+        grep -E {{ app_portal_settings_regex | quote }} src/server/conf/settings.py || true;
+      } | sha256sum | cut -d' ' -f1
+    chdir: "{{ app_release_dir }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  # Read-only, and the restart decision below needs its output even on a
+  # --check run, so it is not skipped in check mode.
+  check_mode: false
+  register: app_portal_fingerprint
+
+- name: Read the Portal fingerprint stamped at the last reload/restart
+  ansible.builtin.slurp:
+    src: "{{ app_portal_fingerprint_stamp }}"
+  register: app_portal_fingerprint_read
+  failed_when: false
+
+# `| bool` on every consumer — see the note on app_needs_reload above.
+- name: Decide whether the Portal must be restarted (operator input, changed Portal code, or no stamp yet)
+  ansible.builtin.set_fact:
+    app_needs_restart: >-
+      {{ (app_full_restart | bool)
+         or ((app_needs_reload | bool)
+             and (app_portal_fingerprint_read.content | default('') | b64decode | trim)
+                 != (app_portal_fingerprint.stdout | trim)) }}
+
+- name: Say which path this converge takes
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'full RESTART (Portal-loaded code changed, no fingerprint stamped yet, or full_restart set; players drop once)'
+         if app_needs_restart | bool
+         else ('reload (Portal keeps players connected)' if app_needs_reload | bool
+               else 'nothing to reload: release already live') }}
+
+# Full restart: both daemons stop and start cold, so the Portal loads this
+# release. Same drop-resilience as the reload below (a restart accepted by
+# systemd completes without the caller); the retry is `started`, which is a
+# no-op on a unit the first attempt already brought up.
+- name: Restart Evennia (Portal and Server) so the Portal loads this release
+  when: app_needs_restart | bool
+  block:
+    - name: Restart the game unit (players drop once; the Portal loads the new code)
+      ansible.builtin.systemd_service:
+        name: "{{ app_service }}"
+        state: restarted
+      register: app_restart
+      ignore_unreachable: true
+      async: 900
+      poll: 15
+
+    - name: Reconnect if the SSH channel dropped mid-restart
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+      when: app_restart.unreachable | default(false)
+
+    - name: Make sure the unit is up after a reconnect (idempotent; systemd finishes an accepted job anyway)
+      ansible.builtin.systemd_service:
+        name: "{{ app_service }}"
+        state: started
+      when: app_restart.unreachable | default(false)
+
 # Reload, falling back to a full restart if the reload FAILS. The fallback
 # exists because a reload needs the running Server's cooperation and a
 # wedged Server can withhold it forever: on 2026-08-23 the old Server's
@@ -615,7 +696,7 @@
 # reload is failed by systemd (loudly) before the async limit; 900 s on the
 # restart covers stop-timeout + kill + a slow cold start.
 - name: Reload Evennia, restarting instead if the Server cannot cooperate
-  when: app_needs_reload | bool
+  when: (app_needs_reload | bool) and not (app_needs_restart | bool)
   block:
     - name: Reload Evennia on a code / deps / migration change (Portal keeps players connected)
       ansible.builtin.systemd_service:
@@ -660,7 +741,7 @@
   until: app_reload_health is succeeded
   retries: 60
   delay: 5
-  when: app_needs_reload | bool
+  when: (app_needs_reload | bool) or (app_needs_restart | bool)
 
 - name: Stamp the reloaded release SHA (a re-run re-derives "reload landed" from this)
   ansible.builtin.copy:
@@ -669,7 +750,57 @@
     owner: root
     group: root
     mode: "0644"
-  when: app_needs_reload | bool
+  when: (app_needs_reload | bool) or (app_needs_restart | bool)
+
+# Written only after the health check, like the SHA stamp: a run that dies
+# mid-restart leaves the old fingerprint, so the next press restarts again
+# rather than trusting a Portal that may never have come up on this code.
+- name: Stamp the Portal fingerprint this release was reloaded/restarted into (#3863)
+  ansible.builtin.copy:
+    content: "{{ app_portal_fingerprint.stdout | trim }}"
+    dest: "{{ app_portal_fingerprint_stamp }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: (app_needs_reload | bool) or (app_needs_restart | bool)
+
+# --- Post-deploy websocket probe (#3863) -------------------------------------
+# The health check above proves the Server answers; it says nothing about the
+# Portal, which owns every websocket. Run tools/ws_idle_probe.py from the
+# controller against the PUBLIC hostname (through Cloudflare, the path that
+# closes idle sockets at 125.6 s), and fail the converge when the socket is
+# closed by the peer or no keepalive PING is seen. Both stand-ups that shipped
+# a stale Portal (2026-09-13, 2026-09-14) would have failed here. The probe
+# needs no credentials and no packages beyond python3, which the controller
+# has (standup.sh already requires it).
+- name: Probe the public websocket for the Portal's keepalive (#3863; takes app_ws_probe_seconds)
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../../tools/ws_idle_probe.py"
+      - "{{ caddy_web_fqdn }}"
+      - --seconds
+      - "{{ app_ws_probe_seconds }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  changed_when: false
+  register: app_ws_probe
+  failed_when: >-
+    app_ws_probe.rc != 0
+    or 'closed by peer' in app_ws_probe.stdout
+    or '<- PING' not in app_ws_probe.stdout
+  # Never in the dress rehearsal: its Caddy serves local_certs, which the
+  # probe's TLS verification rejects, and the edge under test (Cloudflare's
+  # idle timer) is not in front of the stage box at all.
+  when: >-
+    (app_ws_probe_enabled | bool)
+    and not (rehearsal_mode | default(false) | bool)
+    and ((app_needs_reload | bool) or (app_needs_restart | bool))
+
+- name: Report the websocket probe
+  ansible.builtin.debug:
+    msg: "{{ app_ws_probe.stdout_lines | default(['probe skipped: nothing reloaded or restarted']) }}"
 
 # --- Portal-crash watchdog ---------------------------------------------------
 # Type=forking + PIDFile=server.pid (arxii.service.j2) only supervises the

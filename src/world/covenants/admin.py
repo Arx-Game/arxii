@@ -3,19 +3,26 @@
 from django.contrib import admin
 
 from world.covenants.models import (
+    CourtGrantConfig,
     Covenant,
     CovenantLevelBonus,
     CovenantLevelThreshold,
     CovenantRite,
+    CovenantRiteRolePackage,
     CovenantRole,
     CovenantRoleActionScaling,
     CovenantRoleBonus,
     CovenantRoleDefenseProfile,
+    CovenantRoleGiftGrant,
     CovenantRoleTechniqueSpecialty,
+    GearArchetypeCompatibility,
+    InsightTableEntry,
+    MentorBondConfig,
     SecondaryVowConfig,
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
+    VowStatScaling,
     WeaknessPoolEntry,
 )
 
@@ -168,3 +175,111 @@ class WeaknessPoolEntryAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("name", "creature_template__name")
     raw_id_fields = ("creature_template", "condition")
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(GearArchetypeCompatibility)
+class GearArchetypeCompatibilityAdmin(admin.ModelAdmin):
+    """#3831 - which covenant roles are compatible with which gear archetypes."""
+
+    list_display = ("covenant_role", "gear_archetype")
+    list_filter = ("gear_archetype",)
+    search_fields = ("covenant_role__name",)
+    autocomplete_fields = ("covenant_role",)
+
+
+@admin.register(VowStatScaling)
+class VowStatScalingAdmin(admin.ModelAdmin):
+    """#3831 - authored vow-driven stat scaling per (covenant_role, modifier_target)."""
+
+    list_display = ("covenant_role", "modifier_target", "bonus_per_level")
+    search_fields = ("covenant_role__name", "modifier_target__name")
+    autocomplete_fields = ("covenant_role", "modifier_target")
+
+
+@admin.register(CovenantRoleGiftGrant)
+class CovenantRoleGiftGrantAdmin(admin.ModelAdmin):
+    """#3831 - the COVENANT_ROLE thread level at which a role's granted gift unlocks."""
+
+    list_display = ("covenant_role", "gift", "unlock_thread_level")
+    search_fields = ("covenant_role__name", "gift__name")
+    autocomplete_fields = ("covenant_role", "gift")
+
+
+@admin.register(CovenantRiteRolePackage)
+class CovenantRiteRolePackageAdmin(admin.ModelAdmin):
+    """#3831 - role- and level-gated stat package granted by a covenant rite."""
+
+    list_display = ("rite", "covenant_role", "min_covenant_level", "condition_template")
+    search_fields = ("covenant_role__name",)
+    autocomplete_fields = ("covenant_role", "condition_template")
+
+
+@admin.register(MentorBondConfig)
+class MentorBondConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton Mentor's Vow bond scaling parameters (#1165)."""
+
+    list_display = (
+        "pk",
+        "band_width",
+        "adjacency_offset",
+        "max_sidekicks_per_mentor",
+        "updated_at",
+    )
+    autocomplete_fields = ["updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not MentorBondConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(CourtGrantConfig)
+class CourtGrantConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton Court grant negotiation tuning knobs (#1718)."""
+
+    list_display = (
+        "pk",
+        "base_headroom",
+        "affection_divisor",
+        "mission_divisor",
+        "updated_at",
+    )
+    autocomplete_fields = [
+        "summons_refusal_escalation_pool",
+        "petition_check_type",
+        "escalation_consequence_pool",
+    ]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not CourtGrantConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(InsightTableEntry)
+class InsightTableEntryAdmin(admin.ModelAdmin):
+    """#3831 - the curated Insight-table entries drawn at random (#2645)."""
+
+    list_display = ("name", "condition", "target_kind", "weight", "is_active")
+    list_filter = ("target_kind", "is_active")
+    search_fields = ("name",)
+    autocomplete_fields = ("condition",)

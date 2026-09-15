@@ -90,6 +90,24 @@ export interface DraftDistinctionEntry {
   rank: number;
   cost: number;
   notes: string;
+  /**
+   * Offer provenance (#3675): one entry per distinction, every contributing
+   * offer. A real `DistinctionOffer` row is a `number`; a tradition-state
+   * drawback with no offer row carries the synthetic `"state:<...>"` string
+   * key instead.
+   */
+  offer_ids: (number | string)[];
+  sources: string[];
+  arrivals: ('choice' | 'bundled' | 'carried')[];
+  /**
+   * The feature this entry is aimed at (#3739): a `FormTrait.name`, or a draft
+   * marking's id, never both. A distinction held per feature appears once per
+   * feature, so entries are told apart by (distinction, feature) rather than by
+   * distinction alone. Empty/zero on everything else, and absent on entries
+   * stored before #3739.
+   */
+  feature_trait?: string;
+  feature_marking?: number;
 }
 
 /**
@@ -121,10 +139,23 @@ export interface SwapDistinctionResponse {
 
 /**
  * Entry in the sync request payload, pairing a distinction ID with its rank.
+ *
+ * `offer_id` (#3675) names the `DistinctionOffer` this CHOICE pick came from;
+ * carried/bundled entries are re-applied server-side by
+ * `reconcile_offer_picks` rather than sent by the client.
  */
 export interface SyncDistinctionEntry {
   id: number;
   rank: number;
+  offer_id: number;
+  /**
+   * Which feature this pick is aimed at (#3739), for a `taken_per_feature`
+   * distinction: a `FormTrait.name` or a draft marking's id, never both. The
+   * server refuses a per-feature pick that names neither, and any other pick
+   * that names one.
+   */
+  feature_trait?: string;
+  feature_marking?: number;
 }
 
 /**

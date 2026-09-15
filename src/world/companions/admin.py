@@ -62,3 +62,18 @@ class CompanionOrderAdmin(admin.ModelAdmin):
     list_filter = ["order_kind"]
     autocomplete_fields = ["companion"]
     readonly_fields = ["created_at"]
+
+
+@admin.register(CompanionAbilityFunctionTag)
+class CompanionAbilityFunctionTagAdmin(admin.ModelAdmin):
+    """#3831 - one TechniqueFunction label carried by a companion ability (#2666).
+
+    Previously only appeared as an inline nested inside another inline
+    (CompanionAbilityInline -> CompanionAbilityFunctionTagInline on
+    CompanionArchetypeAdmin), which stock Django admin does not render.
+    """
+
+    list_display = ["ability", "function"]
+    list_filter = ["function"]
+    search_fields = ["ability__name"]
+    raw_id_fields = ["ability"]

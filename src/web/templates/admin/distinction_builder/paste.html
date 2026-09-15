@@ -1,0 +1,86 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}forms.css: `.form-row`, `.submit-row` and friends (#3667, as on the Builder page).{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:arxii_distinction_changelist' %}">Distinctions</a>
+  &rsaquo; Add from a table
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+<div id="distinction-paste-root">
+  <h1>Add distinctions from a table</h1>
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="module">
+      <h2>Paste rows</h2>
+      <div class="description">One row per line, columns separated by a pipe:
+        <code>{{ columns|join:" | " }}</code>. Effects read <code>+Deception; -Willpower; immune:Intoxication</code>.
+        Offered under reads any of <code>rules</code>, <code>devotions</code>, <code>fears</code>,
+        <code>reason:&lt;reason&gt;</code>, <code>degree:ruined</code>, <code>degree:destroy</code>,
+        <code>appearance:&lt;section&gt;</code>, <code>glimpse:&lt;tag&gt;</code>,
+        <code>lineage:&lt;answer&gt;</code>, <code>schooling:&lt;line&gt;</code>, separated by semicolons.
+        First look for is a comma-separated list of Beginnings. Everything a row names must already
+        exist; nothing is created but the distinction, its effects and its offer lines. A row whose
+        slug already exists is skipped, never updated. Nothing is deleted.</div>
+      <fieldset class="module aligned">
+        <div class="form-row">
+          <div>
+            <label for="id_text">Rows</label>
+            <textarea id="id_text" name="text" rows="10" cols="120" class="vLargeTextField">{{ text }}</textarea>
+          </div>
+        </div>
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" name="action" value="check" class="default">
+      </div>
+    </div>
+
+    {% if rows is not None %}
+    <div class="module">
+      <h2>Preview: {{ rows|length }} row(s) read &middot; {{ counts.create }} to create
+        &middot; {{ counts.skip }} skipped &middot; {{ counts.error }} error(s)</h2>
+      <table class="tuning-table">
+        <thead><tr><th>Line</th><th>Row</th><th>Result</th><th>Will create</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.line_no }}</td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.status }}{% if row.notes %}: {{ row.notes|join:"; " }}{% endif %}</td>
+            <td>{% if row.status == "create" %}{{ row.will_create }}{% else %}nothing{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="description">An error on any row stops the whole paste: nothing is written until every
+        row reads create or skip. The confirm re-checks a digest of this preview and refuses if the
+        table or the database changed in between.</div>
+      <div class="submit-row">
+        <input type="hidden" name="digest" value="{{ digest }}">
+        {% if counts.error == 0 and counts.create > 0 %}
+        <input type="submit" name="action" value="create" class="default">
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

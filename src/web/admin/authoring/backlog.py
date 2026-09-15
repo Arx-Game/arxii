@@ -64,14 +64,20 @@ class BacklogRow:
 
 @dataclass
 class DomainStats:
-    """Per-domain rollup of the backlog rows scanned for that domain."""
+    """Per-domain rollup of the backlog rows scanned for that domain.
+
+    `to_write` and `to_review` use the queue filter's vocabulary (#3828):
+    to write is `written_by` unset, to review is written and `reviewed_by`
+    unset - the same three-way partition the stock changelist's credit filter
+    draws, so the stats panel and the queue never disagree about a row.
+    """
 
     domain: str
     rows: int
-    unwritten: int
-    unreviewed: int
+    to_write: int
+    to_review: int
     words_total: int
-    words_unwritten: int
+    words_to_write: int
 
 
 def _display_column(model: type, field_name: str) -> str:
@@ -159,15 +165,15 @@ def _aggregate(rows: list[BacklogRow]) -> list[DomainStats]:
     for row in rows:
         tally = counts.setdefault(
             row.domain,
-            {"rows": 0, "unwritten": 0, "unreviewed": 0, "words_total": 0, "words_unwritten": 0},
+            {"rows": 0, "to_write": 0, "to_review": 0, "words_total": 0, "words_to_write": 0},
         )
         tally["rows"] += 1
         tally["words_total"] += row.words
         if not row.written:
-            tally["unwritten"] += 1
-            tally["words_unwritten"] += row.words
-        if not row.reviewed:
-            tally["unreviewed"] += 1
+            tally["to_write"] += 1
+            tally["words_to_write"] += row.words
+        elif not row.reviewed:
+            tally["to_review"] += 1
     return sorted(
         (DomainStats(domain=domain, **tally) for domain, tally in counts.items()),
         key=lambda s: s.domain,

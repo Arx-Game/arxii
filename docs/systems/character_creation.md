@@ -12,7 +12,7 @@ Multi-stage character creation flow with draft persistence, CG point budgets, ca
 ```python
 from world.character_creation.constants import (
     Stage,                    # ORIGIN(1) through REVIEW(11)
-    StartingAreaAccessLevel,  # ALL, TRUST_REQUIRED, STAFF_ONLY
+    StartingAreaAccessLevel,  # ALL, STAFF_ONLY
     ApplicationStatus,        # SUBMITTED, IN_REVIEW, REVISIONS_REQUESTED, APPROVED, DENIED, WITHDRAWN
     CommentType,              # MESSAGE, STATUS_CHANGE
 )
@@ -37,11 +37,11 @@ from world.character_creation.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
-| `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level`, `minimum_trust` |
+| `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level` (ALL or STAFF_ONLY) |
 | `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
-| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `trust_required`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `named_family_kind` (FK `FamilyKind`, required when naming is allowed) |
-| `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text` |
-| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `is_active`, `sort_order` |
+| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
+| `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
+| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
 
 **Content vs seeds:** the real, authored `Beginnings` rows (e.g. the Arx trio —
 Caretaker/Sleeper/Misbegotten) are **lore-repo content fixtures**
@@ -57,14 +57,20 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `BeginningTradition` | Maps traditions to beginnings with optional required distinction | `beginning`, `tradition`, `required_distinction`, `sort_order` |
+| `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
+| `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
+| `SchoolingLine` | One stance under a LIVING_MASTERS tradition and what it grants (#3675) | `rank`, `name`, `player_line`, `grants` |
+| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
+| `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
+| `AppearanceSection` | A heading Appearance groups its offers under (#3709); one of the Appearance chapter's two openers | `name`, `player_line`, `sort_order`, credit |
+| `OfferFirstLook` | One Beginning pinning one offer line into the few shown at rest (#3709) | `offer`, `beginning` (unique together) |
 
 ### Draft State (models.Model - per-player)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `selected_origin_template` (FK `OriginTemplate`, the chosen Upbringing, #3617), `family_path` (`FamilyPath`: claimed/named/none, #3617), `family`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
-| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617) |
+| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617), `organization` (FK `Organization`, nullable; a GROUP question's resolved anchor, or the group a PERSON's named figure belongs to, #3660), `figure_name` (the named person, #3660) |
 
 **Note:** Magic selections during CG (gift, techniques, gift resonance, Anima Check stat/skill, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
 
@@ -84,13 +90,12 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 1 | Origin | `selected_area` is set |
 | 2 | Heritage | Beginnings, species, gender selected; family/tarot complete; CG points >= 0; species allowed by beginnings |
 | 3 | Lineage | Upbringing chosen and accessible; family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card); every required prompt on that path answered (`get_lineage_errors`, #3617) |
-| 4 | Distinctions | `traits_complete` flag set; CG points >= 0 |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
 | 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
-| 8 | Appearance | Age, height band, height inches, build all set |
+| 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
-| 10 | Final Touches | Always complete (goals are optional) |
+| 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
 | 11 | Review | Never "complete" -- final submission step |
 
 ---
@@ -114,8 +119,17 @@ from world.character_creation.models import CharacterDraft
 draft.is_expired                        # True if > 60 days inactive (staff exempt)
 draft.get_starting_room()               # Beginnings override -> area default -> canonical
                                          # fallback room (logged loudly) -> None (#2121);
-                                         # see world.seeds.character_creation.
-                                         # ensure_canonical_fallback_room
+                                         # the fallback is services.
+                                         # resolve_fallback_starting_room(), which finds
+                                         # the seeded room by RoomProfile.fixture_key
+                                         # ("arx/fallback-starting-room"), never by name:
+                                         # staff renamed it "City Center" on production
+                                         # and a by-name lookup missed it (#3818). Seeded
+                                         # by world.seeds.character_creation.
+                                         # ensure_canonical_fallback_room, which reuses
+                                         # the renamed room through the same resolver.
+                                         # Character.at_pre_puppet also lands a character
+                                         # with no location and no home there.
 draft.get_stage_completion()            # Dict[int, bool] for all stages
 draft.can_submit()                      # True if all stages (except Review) complete
 draft.calculate_cg_points_remaining()   # starting_budget - total_spent
@@ -154,7 +168,7 @@ from world.character_creation.services import (
     finalize_gm_character,        # GM path: full character + Available RosterEntry (GM_TABLE
                                   #   provenance + created_for_table) + Story/StoryParticipation
     get_accessible_starting_areas,# Filter areas by account access
-    can_create_character,         # Check eligibility (email verification, trust, limits)
+    can_create_character,         # Check eligibility (email verification, limits)
     submit_draft_for_review,      # Create DraftApplication in SUBMITTED
     unsubmit_draft,               # Return to REVISIONS_REQUESTED
     resubmit_draft,               # Re-submit after revisions
@@ -165,24 +179,207 @@ from world.character_creation.services import (
     deny_application,             # Staff: deny with 14-day soft-delete
     add_application_comment,      # Add message to thread
     finalize_magic_data,          # Link the draft's chosen catalog Gift/Techniques to the character
+    age_bounds,                   # AgeBounds(minimum, maximum, heritage_first_year) for a
+                                  #   (species, beginnings, ic_now); the one place the CG age rule lives
+    first_journal_offered,        # Whether a draft is offered the First Journal (an Arx start, #3621)
+)
+from world.character_creation.enemies import (
+    enemy_price,                  # CG points awarded: (kind, reach or power tier, degree) (#3621)
+    enemy_offers,                 # The persons and groups a draft may name (Lineage answers + Beginning offers)
+    resolve_enemy,                # The draft's pick, priced and placed (or pending staff placement)
+    price_tables,                 # Both scales, for the leaf's ledger lines
 )
 ```
 
-**`can_create_character` eligibility gates (#3046):** staff bypass all three
+### Distinction offers (`offers.py`, #3675)
+
+The only reader of `DistinctionOffer` rows. Every chapter's picker (`ChapterOffers`,
+`GlimpseAxes`, the schooling stances, the Upbringing answer block) goes through this
+module, never the model directly.
+
+```python
+from world.character_creation.offers import (
+    offers_for,               # (draft, chapter) -> list[VisibleOffer]: this chapter's
+                               #   priced CHOICE offers the draft can currently see,
+                               #   each with its lock state (mutual exclusion already
+                               #   evaluated against the draft's current picks), its
+                               #   opener_key (the block it belongs in), first_look
+                               #   (the draft's Beginning pinned it), held (the draft
+                               #   has the distinction from another line) and
+                               #   effect_line ("+Deception; -Willpower"); pinned
+                               #   first, then sort_order, Appearance by section (#3709)
+    degree_marks,              # () -> dict[degree, [names]]: the enemy chapter's
+                               #   bundled lines opened by each marking degree (#3709)
+    closed_for,                # (draft, chapter) -> list[ClosedDistinction]: the route's
+                               #   closed_distinctions, scoped to this chapter's own
+                               #   opener labels so a chapter mount prints the closed
+                               #   hint once, under the specific pick that would have
+                               #   opened it
+    reconcile_offer_picks,     # (draft) -> list[str]: applies carried/bundled offers,
+                               #   drops picks whose offer vanished, reprices every
+                               #   survivor; returns the names changed; saves draft_data
+                               #   when anything changed
+    visible_offers,            # (draft) -> dict[offer_id, DistinctionOffer]: every
+                               #   active offer whose opener the draft satisfies, minus
+                               #   closed and species-innate ids -- the gate every add/
+                               #   swap/sync validates offer_id against
+    opener_label,               # (offer, *, draft=None) -> str: the opener's display/
+                               #   source-string name (a GROUP-question anchor's org
+                               #   name appended when draft is given)
+    tradition_is_self_taught,  # (tradition) -> bool: whether tradition is SELF_TAUGHT
+                               #   on any Beginning's slate -- the sanctioned way to ask
+                               #   "is this the tradition-agnostic default", never a
+                               #   name match
+    slate_state,               # (beginning, tradition) -> TraditionState | None
+    self_taught_drawback,      # () -> Distinction | None: the drawback the SELF_TAUGHT
+                               #   TraditionStateLine carries, if any
+    entry_price,                # (entry, distinction) -> int: 0 if any source arrived
+                               #   bundled/carried, else distinction.calculate_total_cost
+    opened_features,           # (draft_data) -> set[(trait name, marking id)]: the
+                               #   features the draft paid to make distinctive (#3739)
+    opened_feature_traits,     # (draft_data) -> set[str]: the same, narrowed to trait
+                               #   rows -- the one reader of "is this feature unlocked?"
+                               #   for the palette check, the descriptor write and the
+                               #   form-options view
+)
+```
+
+**Per-feature picks (#3739).** A `Distinction.taken_per_feature` row is offered on
+every trait row and marking of the Appearance chapter (its offer's opener is
+`feature_rows`, not a section) and can be held once per feature. Draft entries are
+therefore keyed by `world.distinctions.types.feature_key` --
+`(distinction_id, trait name, draft marking id)` -- everywhere they used to be keyed
+by distinction id, and the sync payload carries `feature_trait` / `feature_marking`
+on each row. `reconcile_offer_picks` drops a per-feature pick whose feature is gone
+(a deleted marking) or whose unlock is gone (the axes bought under it), refunding
+both. Anything that is not per-feature keys as `(id, "", 0)` and is unaffected. See
+[distinctions.md](distinctions.md) "Distinctive features".
+
+**Reconcile-on-patch:** `CharacterDraftViewSet.perform_update` calls
+`reconcile_offer_picks(draft)` after every draft save, and `select-tradition` calls it
+after clearing/setting the tradition -- so a Glimpse tag pick, a Lineage answer, or a
+tradition switch immediately applies whatever it opens or closes, without a separate
+"recalculate" step. `world.distinctions.views`' add/swap/sync actions on
+`DraftDistinctionViewSet` call it too, after writing the player's own CHOICE pick.
+
+**Finalize entry preparation:** both `finalize_character` and `finalize_gm_character`
+call `_prepare_draft_entries(draft)` once at their start (`services.py`), which runs
+`reconcile_offer_picks` (a draft built directly -- a staff add, a GM draft, a test
+fixture -- never PATCHed through the view, so its distinctions list could otherwise
+miss what its final answers opened). The enemy's degree mark arrives the same way
+(#3709): it is a bundled `DistinctionOffer` on the enemy chapter opened by the picked
+degree, so the reconcile applies it like any other bundle and no second fold exists. A
+legacy entry with no `offer_ids` key (a pre-#3675 pick) is left untouched by either
+finalize path.
+
+**Offers endpoint:**
+
+- `GET /api/character-creation/drafts/{id}/offers/?chapter=<OfferChapter>` - one
+  chapter's `{"offers": [...], "closed": [...]}` (`OffersResponseSerializer`).
+  `offers` is `VisibleOfferSerializer` (`offer_id`, `distinction_id`, `name`,
+  `player_line`, `chapter`, `arrives_as`, `opener_label`, `cost_per_rank`, `max_rank`,
+  `is_locked`, `lock_reason`, `opener_key`, `first_look`, `held`, `effect_line`, #3709);
+  `closed` is `ClosedDistinctionSerializer` (`distinction_id`, `name`, `reason`,
+  `opener_labels` -- this chapter's own opener labels for the closed distinction, empty
+  when none of its openers are satisfied). An unknown `chapter` value 400s. The leaf
+  (`ChapterOffers`) groups by `opener_key` (one block per prompt, reason or section),
+  shows the pinned lines at rest (or the first three when none is pinned), folds the
+  rest under "See N more" once a block has five or more, prints a held line as held,
+  and reads "Awards N" (green) or a cost (realm ink) with the `+X; -Y` line under the
+  player line (#3709).
+
+## The Actor's Sheet (#3621, ADR-0279)
+
+Chapter 10 (Final Touches) replaced the free-text personality field. Everything on the leaf
+is optional for an original character and nothing blocks finalize; a roster character
+arrives with all of it written by staff through the same leaf on the GM path. Empty items
+do not render on a viewed sheet.
+
+**The three questions.** "What would you never do?", "What would you protect at all
+costs?", "What are you deathly afraid of?" (`ACTOR_SHEET_QUESTIONS`; wording and the
+example lines are CG copy keys `finaltouches_<key>_prompt` / `_example`). Stored in
+`draft_data` as `never_do` / `protect` / `fear`; finalize writes them to
+`Profile.never_do` / `protect` / `fear`, versioned prose fields (`ProfileTextField`) that
+the update-request flow and `ProfileAdmin` route through `update_profile_text`. Cover
+personas answer the same three questions on their guise sheet (`set_persona_profile`).
+
+**Goals.** `draft_data.goals` rows carry `horizon` (`GoalHorizon`: short term, long term);
+finalize numbers them within each horizon in list order (`CharacterGoal.ordinal`), keeps a
+goal with words and no points as a note to yourself, and drops an empty row. Any number of
+goals may share a domain; the domain bonus sums across them (see [goals.md](goals.md)).
+
+**Who wants you to fail.** `draft_data.enemy` is `{kind, organization_id, name, power_tier,
+degree, why, public_line}`. `enemy_offers(draft)` assembles what may be picked: every
+visible answered GROUP question's organization and every PERSON question's figure from the
+Lineage (`source: lineage`), plus the Beginning's `BeginningEnemyOffer` rows (`source:
+beginning`; a group takes its reach from `OrganizationType.reach` unless the offer's
+`reach_override` says it cannot reach where the character plays; a person row fixes a
+power tier). `resolve_enemy(draft)` prices the pick with `enemy_price` (`ENEMY_PRICE_GROUP`
+by reach, `ENEMY_PRICE_PERSON` by `EnemyPowerTier`, both by `EnemyDegree`); a pick with no
+real group and no rated person is `pending` at `ENEMY_PRICE_PENDING` until staff link it in
+`CharacterEnemyAdmin`, whose `save_model` recomputes the price. The purse breakdown carries
+one `enemy` line with a negative cost ("Awards N CG points"). The draft API exposes
+`enemy_offers` (a Lineage offer's gloss is the picked answer's name, or the person question's prompt),
+`enemy_price_tables`, `enemy_degree_grants` (degree -> the Distinction(s) the degree's bundled
+offer lines carry, `offers.degree_marks`, so the leaf's row says "bundles Marked"),
+`enemy_reasons` (the authored `EnemyReason` list, #3709; the leaf filters it by the enemy's
+kind and writes the pick as `draft_data.enemy.reason_id`, validated by `resolve_enemy` against an
+active row whose `fits` matches; a Beginning's offer arrives with its `reason_id` set) and
+`introductions_offered`.
+
+Finalize (`_create_enemy`) writes `CharacterEnemy` (owner, staff and assigned-GM reading;
+everyone else sees `public_line`), seeds the group's opinion through
+`bump_organization_reputation` (`ENEMY_REPUTATION_SEED` by degree), carries the picked
+`reason` (#3709), leaves the degree's mark to the reconcile (it is a bundled offer line on
+`OfferChapter.ENEMY` opened by `enemy_degree`, never a name in code), and, for a society- or
+realm-reach group whose
+`Organization.society` enforces the start room's area (`enforcing_society_for`), accrues
+`PersonaHeat` there (`ENEMY_HEAT_SEED` from ruined upward, pinned `ENEMY_HEAT_PIN_DAYS` at
+destroy).
+
+**The Introductions.** `draft_data.introductions` is `{first_journal: [a1, a2, a3],
+application: [a1, a2, a3], whispers: "one rumor per line"}`. Frames and questions are
+world-level CG copy (`introductions_intro`, `first_journal_*`, `application_*`,
+`whispers_*`; defaults in `constants.py`). The First Journal is offered only when the
+draft's starting area's realm is `ARX_REALM_NAME` (`first_journal_offered`); anyone else
+writes one at the Great Archive in play, a later verb. Finalize (`_write_introductions`)
+assembles answered question-and-answer pairs and writes each as a public `JournalEntry`
+of its `JournalKind` ("<first name>'s First Journal", `APPLICATION_TITLE`, `WHISPERS_TITLE`),
+journal XP as for any entry when the character has an account; each Whispers line also
+becomes a Level-1 `PLAYER_FLAVOR` Secret about the character with a `SecretGossip` row at
+`WHISPERS_SEED_HEAT` in the start region (walked up parent links, not the closure view), so
+it is overhearable at a hub from day one (#1572). The sheet API's `actor_sheet` section
+carries the answers, the enemy's public line (full row when privileged) and the
+Introductions by kind.
+
+**CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
+tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,
+when the chosen Beginnings' `Heritage.first_appeared_ic` is set, to the whole IC years
+elapsed since that date per `get_ic_now()` (floor `AGE_MIN`, 18). The first Misbegotten
+were born in 980 AS, so a Misbegotten is at most 20 at a 1000 AS launch and one year
+older per IC year; an environment with no `GameClock` row applies no heritage ceiling.
+`CharacterDraftSerializer.validate_age` reads the rule (species/Beginnings from the same
+request when it changes them, else the instance) and names the cap that bound; the draft
+payload carries read-only `age_min`/`age_max`, and `BeginningsSerializer` nests read-only
+`heritage: {name, first_appeared_ic_year}` (`HeritageAnchorSerializer`). The Appearance
+stage clamps to the payload and, when the year is present, adds the sentence "The first
+Misbegotten were born in 980 AS." after the range; nothing else is said at the cap. Existing
+characters keep their recorded age; only the CG ceiling moves.
+
+**`can_create_character` eligibility gates (#3046, #3726):** staff bypass both
 checks. (1) Email verification is real: it reuses
 `PlayerData.can_apply_for_characters()` (allauth `EmailAddress`, primary +
 verified), the same check that drives the frontend's `can_create_characters`
 field, rejecting with "Verify your email address to create a character." (2)
-Trust level defaults to 0 until the trust system lands. (3) `max_characters`
-is `settings.CG_MAX_CHARACTERS` (`CG_MAX_CHARACTERS` env var, default 3),
-counted against `account.character_drafts`.
+`max_characters` is `settings.CG_MAX_CHARACTERS` (`CG_MAX_CHARACTERS` env var,
+default 3), counted against `account.character_drafts`. The trust floor that
+used to sit between them is gone — nothing ever set `account.trust`.
 
-**`StartingArea.is_accessible_by` fails closed on `TRUST_REQUIRED`** (#3046):
-non-staff accounts have no `.trust` attribute yet (trust system unimplemented),
-so a `TRUST_REQUIRED` area is simply inaccessible to them rather than raising
-`NotImplementedError` — mirrors `Beginnings.is_accessible_by`'s existing
-fail-closed behavior. `get_accessible_starting_areas` therefore never 500s on
-a `TRUST_REQUIRED` area.
+**`access_level` is the whole gate on a starting area (#3726).**
+`get_accessible_starting_areas` filters the queryset: active rows, minus
+`STAFF_ONLY` ones for a non-staff reader. There is no per-row predicate and no
+`is_accessible` flag on the serializer — an area a reader is served is one they
+may pick. `Beginnings` and `OriginTemplate` are gated by `is_active` alone.
 
 `finalize_magic_data` also creates the CG-finalize Golden Hare Academy obligation
 row (#2428 Task 3, `_finalize_academy_entrance_obligation`): resolves the
@@ -240,14 +437,31 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ### Lookup Data
 - `GET /api/character-creation/starting-areas/` - Starting areas filtered by access level
-- `GET /api/character-creation/beginnings/` - Beginnings filtered by `starting_area` and trust
+- `GET /api/character-creation/beginnings/` - active Beginnings, filtered by `starting_area`
 - `GET /api/character-creation/species/` - Species with parent hierarchy
 - `GET /api/character-creation/families/` - Playable families, filterable by `area_id`
   and `kind=` (one or more `FamilyKind` ids, #3617)
-- `GET /api/character-creation/origin-templates/?beginning=X` - Upbringings for a beginning,
-  trust-filtered; each row carries its `slots` (prefetched) and `claimable_kind_ids`, batched
-  with one flat query grouped in Python and passed through serializer context rather than a
-  per-instance `.claimable_kinds.all()` or a bare `prefetch_related` (ADR-0263; #3617)
+- `GET /api/character-creation/origin-templates/?beginning=X` - active Upbringings for a
+  beginning; each row carries its `slots` and `claimable_kind_ids`. The questions come from
+  `OriginTemplate.questions`, a `PrunedCachedProperty` (ADR-0298) returning a plain
+  `list[OriginTemplateSlot]` - every consumer (this serializer, the questionnaire resolver,
+  the draft validators, the finalize service, the Builder rail) reads `template.questions`
+  directly, no wrapper. `CGOriginTemplateViewSet.get_queryset()` batches the whole page in one
+  query via `Prefetch("slots", ..., to_attr="questions")` - sanctioned onto a genuine
+  `cached_property` with explicit write-side invalidation wired
+  (`OriginTemplateSlot.related_cache_fields = ["template"]`, clearing the property's cache on
+  every slot save/delete), unlike the `UpbringingQuestionsHandler`/`CachedRowsHandler` wrapper
+  this replaced (#3816 Task 10). `claimable_kind_ids` is batched separately, with one flat
+  query grouped in Python and passed through serializer context, rather than a per-instance
+  `.claimable_kinds.all()` (ADR-0263, ADR-0279; #3617, #3673). Each
+  slot (`OriginTemplateSlotSerializer`) carries `kind`, `connection_kind`, `life_stage`,
+  `anchor_source`, `same_anchor_as`, `follow_up_to`, `shown_for_choice_ids`, and `groups` (the
+  offered `Organization`s for a POOL/LISTED slot, batched across the whole template; empty for
+  SAME_AS/SERVED_HOUSE/OWN_FAMILY, which the frontend resolves from the draft instead, #3660
+  ruling D). Each choice (`OriginTemplateSlotChoiceSerializer`) carries `offers` (list of
+  `DistinctionOffer` rows this answer opens, #3675, built per-request in
+  `CGOriginTemplateViewSet.list()`); `reputation_seed` stays server-side, never serialized to
+  the player (#3660 ruling E)
 - `GET /api/character-creation/genders/` - Gender options
 - `GET /api/character-creation/pronouns/` - Pronoun sets
 - `GET /api/character-creation/cg-budgets/` - Active CG point budget
@@ -264,7 +478,12 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ### Draft Management
 - `GET/POST /api/character-creation/drafts/` - List/create drafts
-- `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Read/update/delete draft
+- `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Read/update/delete draft. The draft
+  payload's `bundled_distinctions` (read-only) lists the Distinctions the visible, picked
+  Upbringing answers grant (`CharacterDraft.bundled_distinctions()`, #3660); `draft_data` also
+  carries `origin_anchors` (str slot id -> `Organization` id or null, a GROUP question's pick)
+  and `origin_figures` (str slot id -> a person's name, at most 120 chars, a PERSON question's
+  answer), validated the same shape as the existing `origin_choices`/`origin_slots`
 - `GET /api/character-creation/drafts/{id}/cg-points/` - CG points breakdown
 - `POST /api/character-creation/drafts/{id}/select-tradition/` - Select/clear tradition
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff: finalize directly to roster (STAFF provenance)
@@ -310,20 +529,158 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ## Admin
 
-Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
+Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline` and `BeginningEnemyOfferInline`, #3621), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
+`CharacterOriginSlotAdmin`'s `list_display` also carries `organization` and `figure_name`
+(#3660), and `list_filter` adds `slot__kind`/`organization`.
 
-## Lineage step (#3617)
+**Upbringing Builder (#3660):** an "Open in Upbringing Builder" object tool on
+`OriginTemplateAdmin`'s change form (Character Creation > Upbringings > a row) opens the whole
+route on one page; see `src/web/admin/CLAUDE.md`'s "Upbringing Builder" section for the
+files, URLs, gate, and credit rule.
+
+**Distinction offer builders (#3675, #3709):** four admin surfaces author `DistinctionOffer` rows
+(the Builder's row shows the prompt, reason, degree or section widget its chapter wants and a
+"First look for" column of Beginnings), two plain change lists hold the openers themselves
+(`EnemyReason`, `AppearanceSection`), and the Builder's "Add from a table"
+(`web/admin/distinction_builder/paste.py`) lands scores of new distinctions at once, additions
+only (a row whose slug exists is skipped, never updated; nothing deleted; every referenced row must
+already exist; preview, then one transaction behind a digest-guarded confirm; superuser only):
+one click from the Authoring Workbench's Builders panel and from the row each edits: the
+Distinction Builder (a distinction's own fields, effects, exclusions, and every offer naming
+it), the tradition slate page (the shared `TraditionStateLine`/`SchoolingLine` standard lines
+and one Beginning's `BeginningTradition` slate), the Upbringing Builder's per-answer offers and
+route-level `closed_distinctions`/`closed_reason` module, and a `GlimpseTag` change-form inline.
+See `src/web/admin/CLAUDE.md`'s "Distinction Builder", "Tradition Slate", and "Glimpse Tag Admin
+Offers" sections.
+
+## Lineage step (#3617, #3648)
 
 Per-beginning Upbringings replaced the old single family-known/orphan split: each
-`OriginTemplate` carries its own CG cost, trust gate, and choice of family paths
+`OriginTemplate` carries its own CG cost and choice of family paths
 (claim a staff-authored family, name a new one, or none), with typed prompts
 (`OriginTemplateSlot`) and costed pick-list choices (`OriginTemplateSlotChoice`)
-authored underneath it. Family standing (kind, influence, subordination, patronage,
-culture-specific facts) is expressed through the existing organisation mechanisms
-rather than bespoke fields: see the authoring recipes in
-[family-authoring-recipes.md](family-authoring-recipes.md) and the design record in
-ADR-0268 (family standing uses existing organisation mechanisms; kinds are rows) and
-ADR-0269 (Upbringings price standing as family influence x position).
+authored underneath it. See the authoring recipes in
+[family-authoring-recipes.md](family-authoring-recipes.md), ADR-0268 (family standing
+uses existing organisation mechanisms), ADR-0269 (Upbringings price standing as
+family influence x position), and ADR-0273 (family entry is a Vacancy).
+
+**Page order:** Upbringing picker, `scope: 'any'` prompts, the family block (path
+picker when the Upbringing allows more than one path, then the path body), then
+`scope: 'path'` prompts.
+
+**Name path:** pick a Family Template (`draft.resolve_family_template()`; the sole
+offered template, else `draft_data.family_template_id`), name the family (checked
+against `HouseTemplate.name_pattern`, a full-match regex; a malformed pattern is a
+staff authoring bug and surfaces as a soft "tell staff" error, never an uncaught
+`re.error`), answer the template's aspect picks (`draft_data.family_aspect_picks`,
+fenced by `houses.creator._validate_aspect_picks`), and optionally declare a served
+house from `family_template.served_house_choices`.
+
+**Claim path:** claiming a staff family with an open kin Vacancy requires taking one
+(`_get_vacancy_errors`); the Service panel (a retainer Vacancy) is available on any
+resolved path except when a kin Vacancy is already chosen.
+
+**Vacancies:** `GET /api/character-creation/vacancies/?draft=<id>[&organization=<id>]`
+returns the open, reachable, per-draft-priced `Vacancy` rows (bare list) via
+`vacancy_services.reachable_vacancies`. Validation re-checks an already-selected
+Vacancy with `require_open=False`: openness is enforced only at finalize by
+`take_vacancy`, so a Vacancy filled between pick and staff approval degrades
+through `VacancyExhaustedError` instead of blocking re-validation on approval.
+Pricing adds `vacancy.cost_for(<the Vacancy's family's influence>)` (ADR-0269
+extended to a second consumer).
+
+**Finalize order:** `_materialize_named_family` (name path) before the character is
+named, then `_bind_vacancy` (takes the Vacancy, claims/mints its kin link, joins the
+org) before `_bind_kinship_node`, so a kin Vacancy's node exists when the self-serve
+kinship fallback looks. `finalize_gm_character` mirrors both calls for GM drafts.
+
+### Question kinds and connections (#3660)
+
+An Upbringing prompt (`OriginTemplateSlot`) is one of four `QuestionKind`s: **Write an
+answer** (`text`, a write-in), **Pick one answer** (`pick`, a priced pick-list, both
+already on the app before #3660), **Pick a group** (`group`, ties the answer to a real
+`societies.Organization`), and **Name a person** (`person`, a free-text figure,
+optionally scoped inside a group question). All four kinds, and every rule below, are
+evaluated in exactly one place: `world/character_creation/questionnaire.py`, read by
+`models.py` (`visible_origin_slot_ids`, `calculate_upbringing_cost`,
+`bundled_distinctions`), `validators.py` (`get_lineage_errors`), `serializers.py`
+(the read API), and `services.py` (finalize), so the four never drift apart (#3660
+controller ruling A).
+
+**Group sources (`AnchorSource`, on a `group` question):** "Every group of a type in a
+realm" (`pool`, filtered by `anchor_org_type`/`anchor_society`, `exclude_covert`),
+"Groups I name" (`listed`, `anchor_orgs`), "The same group as an earlier question"
+(`same_as`, `same_anchor_as`; still needs its own `origin_anchors` entry, since the
+frontend auto-fills it, as a SAME_AS question only ever offers the one group), "The
+house the character's family served" (`served_house`) and "The character's own
+family" (`own_family`): the last two need no `origin_anchors` entry at all, since
+`questionnaire.anchor_for` derives the group fresh from the draft every time. The
+frontend has no way to derive either on its own (no house-org id for a claimed
+family, no served-house lookup without the offering Family Template), so
+`CharacterDraftSerializer.derived_anchors` (backed by `questionnaire.derived_anchors`)
+hands back what each such question resolved to, keyed by slot id, or `null` when it
+has nothing to resolve to yet (a claimable family with no house org, or no served
+house picked): the answered-ness check on both sides then agrees (#3660 fix round 2,
+controller ruling L).
+
+**Show-when rules (`is_shown`):** a prompt shows when its `applies_to` matches the
+resolved family path (or is `any`), AND (it has no `follow_up_to`, OR its `follow_up_to`
+target is itself shown and answered AND, when the prompt's `shown_for_choices` is
+non-empty, the target's picked answer is one of them). A hidden prompt's stored answer
+is ignored everywhere (pricing, validation, finalize persistence): the same rule the
+family-path switch has followed since #3617.
+
+**Answers with a grant and a seed:** any pick-list or group answer may open a Lineage
+`DistinctionOffer` (#3675; bundled at no extra cost, never adding to the choice's own
+`cost_for` -- authored as its own row, not a field on the choice) and, on a `group`
+question only, an `OriginTemplateSlotChoice` may set `reputation_seed` (-1000 to 1000;
+seeds `OrganizationReputation` toward the resolved anchor via
+`societies.renown.bump_organization_reputation` at finalize).
+
+**Plain word to code word (the Upbringing Builder's labels):**
+
+| Builder label | Code name |
+|---|---|
+| Question | `prompt` |
+| Kind of question | `kind` |
+| Pick a group | `QuestionKind.GROUP` |
+| Which groups can be picked | `anchor_source` |
+| Groups | `anchor_orgs` |
+| What the tie was | `connection_kind` |
+| When | `life_stage` |
+| Same group as / belongs to | `same_anchor_as` |
+| Shown after | `follow_up_to` |
+| Only for these answers | `shown_for_choices` |
+| Name a person | `QuestionKind.PERSON` / `figure_name` |
+| Group's opinion | `reputation_seed` |
+
+**Finalize order (`_finalize_origin_slots`, `_create_distinctions`,
+`_seed_connection_reputation`):** every visible answered prompt is upserted via
+`set_origin_slot` (assembling `Profile.background`). Bundled Distinctions no longer
+have their own finalize hook (#3675); `reconcile_offer_picks` already folds every
+visible answer's bundled `DistinctionOffer` into `draft.draft_data["distinctions"]`
+at cost 0 whenever a Lineage answer changes, so `_create_distinctions`'s ordinary
+bulk-create/`_create_distinction_modifiers_bulk`/Secret-relocation path covers both a
+hand-picked Distinction and a bundled one. `_connection_asset_names` (`services.py`)
+is the one piece still specific to connections: for each bundled entry whose offer's
+`origin_choice.slot` is a group question with a `person` question anchored to it, it
+resolves the named figure and passes `{distinction_id: name}` into
+`_create_distinction_modifiers_bulk`'s `asset_names`, which
+`world.assets.services.reconcile_distinction_asset_grants` uses to name the granted
+Distinction's spawned `NPCAsset` instead of the staff-authored placeholder. Then each
+picked group answer's non-zero `reputation_seed` bumps that anchor's
+`OrganizationReputation`. `world.character_creation.questionnaire.bundled_distinctions`
+is a separate live-computed read over the same `DistinctionOffer` rows (not
+`draft.draft_data`); `validators.get_distinctions_errors` diffs it against
+`draft.draft_data["distinctions"]`'s picked ids to block a player from also
+hand-picking an already-bundled Distinction. `character_sheets.types.OriginSlotEntry`
+is the sheet read's shape for one answered slot (`kind`, `connection_kind`,
+`life_stage`, `organization_id`/`organization_name`, `figure_name`: blanked for a
+non-owner, non-staff viewer).
+
+See ADR-0277 for why this landed as an authored questionnaire rather than a
+generalised single-anchor/single-mentor model, and Recipes 13-15 in
+[family-authoring-recipes.md](family-authoring-recipes.md) for the authoring walkthrough.
 
 ## Seeded content + Game Setup hub
 
@@ -335,10 +692,10 @@ from world.seeds.character_creation import seed_character_creation_dev
 seed_character_creation_dev()  # idempotent: get_or_create, never overwrites edits
 ```
 
-**`Species`, `Gender`, `HeightBand`/`Build`, `FormTrait`/`FormTraitOption`/`SpeciesFormTrait`, `Distinction`/`DistinctionCategory`/`DistinctionEffect`, and `CGExplanation` are all `CONTENT_MODELS` — content-repo-owned (#2698, ADR-0168).** Each is looked up via `world.seeds.sample_content.authored_or_sample()` and invented only when `SEED_SAMPLE_CONTENT` (`ARXII_SEED_SAMPLE_CONTENT`, default off) is on — a maintainer clone with a real content repo gets nothing from this seeder for these models; a contentless third-party clone gets a sample "Human"/"Khati" `Species`, the four `Gender` rows, an `average_band`/`average_build`, the appearance `FormTrait`/`FormTraitOption`/`SpeciesFormTrait` set, and the seeded `Distinction`s below. `_seed_cg_explanations()` (#2162) is the same shape: most of `CG_EXPLANATION_COPY`'s 28 keys already have an authored counterpart, but the five `*_lore_intro`/`path_lore_durance` keys don't yet — those five are skipped (logged) until authored, or invented under `SEED_SAMPLE_CONTENT`. Unlike the pre-#2698 `update_or_create` shape, a staff edit to an already-seeded `CGExplanation` row now survives a re-run, same as every other content row.
+**`Species`, `Gender`, `HeightBand`/`Build`, `FormTrait`/`FormTraitOption`/`SpeciesFormTrait`, `Distinction`/`DistinctionCategory`/`DistinctionEffect`, and `CGExplanation` are all `CONTENT_MODELS`, content-repo-owned (#2698, ADR-0168).** Each is looked up via `world.seeds.sample_content.authored_or_sample()` and invented only when `SEED_SAMPLE_CONTENT` (`ARXII_SEED_SAMPLE_CONTENT`, default off) is on: a maintainer clone with a real content repo gets nothing from this seeder for these models; a contentless third-party clone gets a sample "Human"/"Khati" `Species`, the four `Gender` rows, an `average_band`/`average_build`, the appearance `FormTrait`/`FormTraitOption`/`SpeciesFormTrait` set, and the seeded `Distinction`s below. `_seed_cg_explanations()` (#2162) is the same shape: most keys in `CG_EXPLANATION_COPY` already have an authored counterpart, but the five `*_lore_intro`/`path_lore_durance` keys don't yet; those five are skipped (logged) until authored, or invented under `SEED_SAMPLE_CONTENT`. Unlike the pre-#2698 `update_or_create` shape, a staff edit to an already-seeded `CGExplanation` row now survives a re-run, same as every other content row.
 
 `Realm`/`StartingArea`/`Beginnings`/`TarotCard`/`Path` are *not* `CONTENT_MODELS`, but are still open-ended world content rather than config — `_seed_sample_cg_world()` and the tail of `seed_character_creation_dev()` gate them behind `SEED_SAMPLE_CONTENT` too (an earlier #2698 slice), for the same reason: seeding a "Commoner"/"Noble"/"Arx City" here is indistinguishable from authored content once `export_to_content_repo` runs. What always seeds unconditionally regardless of the flag: the 12 stat `Trait` rows (content-repo-owned too, `authored_or_sample`'d), and the two `Roster` rows ("Available"/"Active Characters") — genuine config with no content-repo equivalent.
 
-`seed_beginning_traditions()` (#2426 whole-branch-review fix) links every seeded `Beginnings` row to the "Unbound" `Tradition` — real lore-repo content, loaded via `core_management.content_fixtures.load_world_content()` before any `CLUSTER_SEEDERS` entry runs (#2474 Decision 5) — via a `BeginningTradition` row whose `required_distinction` is the "Unbound" drawback `Distinction` seeded by `ensure_unbound_drawback_distinction()` (itself gated behind `SEED_SAMPLE_CONTENT` since #2698) — without it, `TraditionViewSet` and `select_tradition` have nothing to offer and CG's Tradition step is uncompletable on a fresh DB, even the tradition-agnostic Unbound path. `ensure_shroudwatch_academy()` (#2428 Task 3) then seeds the "Shroudwatch Academy" `Organization` (`tradition=None` — deliberate NULL, #2426 ruling; `org_type` "guild"; description/rank titles PLACEHOLDER and content-overridable) that `finalize_magic_data`'s Golden Hare hook resolves by name. `ensure_orphaned_tradition_distinction()` and `seed_metallic_order_tradition()` (#2428 Task 5) then seed the "Orphaned Tradition" drawback `Distinction` (slug `orphaned-tradition`, cost −2, no `DistinctionEffect` — its teeth are trainerlessness, #2440) and the "Metallic Order" example orphaned tradition (starter-gift `TraditionGiftGrant` rows mirroring Unbound's; `BeginningTradition` rows for Arx-realm Beginnings only, each with `required_distinction=orphaned-tradition` — the story-mutable shape staff edit when a recovery quest restores its teachers). Registered last in `CLUSTER_SEEDERS` — after `magic` (which seeds the non-content magic tuning/ritual/thread substrate `finalize_character` depends on) and after the content-repo load itself provides the catalog `Gift`/`Technique`/`Resonance` rows and the Unbound `Tradition` row (#2474 — see `docs/systems/magic.md`'s "CG Starter Gift/Technique Catalog" section). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize + the real Tradition-step gates run on a seeded-only DB), `test_character_creation_magic_seed.py` (`seed_beginning_traditions` idempotency + defensive skip, `EnsureOrphanedTraditionDistinctionTests`, `SeedMetallicOrderTraditionTests`), `test_traditions.py::OrphanedTraditionSelectionTests` (the drawback gate through the real select-tradition endpoint), `test_idempotency.py::test_edited_cg_row_survives_reseed`, and `test_clusters.py::test_cg_explanations_seeded_and_nonempty`.
+`seed_beginning_traditions()` (#2426 whole-branch-review fix) links every seeded `Beginnings` row to the "Unbound" `Tradition` (real lore-repo content, loaded via `core_management.content_fixtures.load_world_content()` before any `CLUSTER_SEEDERS` entry runs, #2474 Decision 5), via a `BeginningTradition` row whose `state=TraditionState.SELF_TAUGHT` (#3675; was a `required_distinction` FK onto the "Unbound" drawback `Distinction` pre-#3675, now the SELF_TAUGHT slate line's own `TraditionStateLine.carries` carries that drawback into the draft, seeded by `ensure_unbound_drawback_distinction()`, itself gated behind `SEED_SAMPLE_CONTENT` since #2698); without it, `TraditionViewSet` and `select_tradition` have nothing to offer and CG's Tradition step is uncompletable on a fresh DB, even the tradition-agnostic Unbound path. `ensure_shroudwatch_academy()` (#2428 Task 3) then seeds the "Shroudwatch Academy" `Organization` (`tradition=None`, deliberate NULL, #2426 ruling; `org_type` "guild"; description/rank titles PLACEHOLDER and content-overridable) that `finalize_magic_data`'s Golden Hare hook resolves by name. `ensure_orphaned_tradition_distinction()` and `seed_metallic_order_tradition()` (#2428 Task 5) then seed the "Orphaned Tradition" drawback `Distinction` (slug `orphaned-tradition`, cost −2, no `DistinctionEffect`; its teeth are trainerlessness, #2440) and the "Metallic Order" example orphaned tradition (starter-gift `TraditionGiftGrant` rows mirroring Unbound's; `BeginningTradition` rows for Arx-realm Beginnings only, each with `state=TraditionState.TEACHERS_GONE` (#3675; was `required_distinction=orphaned-tradition` pre-#3675), the story-mutable shape staff edit when a recovery quest restores its teachers). Registered last in `CLUSTER_SEEDERS`, after `magic` (which seeds the non-content magic tuning/ritual/thread substrate `finalize_character` depends on) and after the content-repo load itself provides the catalog `Gift`/`Technique`/`Resonance` rows and the Unbound `Tradition` row (#2474; see `docs/systems/magic.md`'s "CG Starter Gift/Technique Catalog" section). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize + the real Tradition-step gates run on a seeded-only DB), `test_character_creation_magic_seed.py` (`seed_beginning_traditions` idempotency + defensive skip, `EnsureOrphanedTraditionDistinctionTests`, `SeedMetallicOrderTraditionTests`), `test_traditions.py::OrphanedTraditionSelectionTests` (the drawback gate through the real select-tradition endpoint), `test_idempotency.py::test_edited_cg_row_survives_reseed`, and `test_clusters.py::test_cg_explanations_seeded_and_nonempty`.
 
 The admin **Game Setup** hub (`admin_game_setup` view, `_game_setup/` URL) is a superuser-only landing page for clone hosts: the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. See `src/web/admin/CLAUDE.md`.

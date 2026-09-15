@@ -20,6 +20,13 @@ character may assume as a single shapeshift/identity shift. Stored in
 `forms.AlternateSelf`; the currently assumed one is tracked per-character in
 `forms.ActiveAlternateSelf`. _Avoid_: alt form, shape.
 
+**Unnatural option** (#3739):
+`FormTrait.unnatural_option` — the umbrella `FormTraitOption` for a colour no species
+carries, the off-species sibling of `composite_option`. Never in a CG palette; reached
+only on a feature made distinctive, on the standing assumption that a strange colour
+has a magical explanation. Named "Unnatural", not "otherworldly".
+_Avoid_: custom colour, freeform value, magical colour.
+
 **Marking**:
 A permanent skin feature of a specific body — tattoo, scar, brand, birthmark, or rune
 (`MarkingKind`; RUNE = magical inscription, Apostate's 2026-08-05 ruling replacing the

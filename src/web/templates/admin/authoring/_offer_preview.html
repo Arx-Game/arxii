@@ -1,0 +1,47 @@
+{% comment %}
+Shared "how it reads to a player" preview line for any offer-bearing admin
+page (#3675): the Distinction Builder (one distinction, its first active
+offer across every chapter) and a Glimpse tag's own change form (one tag,
+its first active offer among its own rows) both draw the same three fields
+off different queries - see `web.admin.authoring.offers.preview_from_offers`,
+the one place that pick-and-draw logic lives.
+
+A fragment, not a standalone document - included inside whichever module
+holds the offers it previews. Carries its own `<style>` rather than relying
+on a page's own CSS root (`#distinction-builder-root`, say), since the
+Glimpse tag admin's change form has no such root to scope under.
+
+Takes `preview` (`None`, or a `PreviewLine`-shaped object: `price`, `name`,
+`player_line`).
+{% endcomment %}
+<style>
+  .arx-offer-preview {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--hairline-color, #e5e5e5);
+    border-radius: 4px;
+    background: var(--body-bg, #fff);
+    font-family: Garamond, "EB Garamond", Georgia, serif;
+    font-size: 0.9rem;
+    overflow: hidden;
+  }
+  .arx-offer-preview .arx-offer-preview-price {
+    float: right;
+    font-family: "Cinzel", Georgia, serif;
+    font-size: 0.75rem;
+    color: var(--link-fg, #447e9b);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .arx-offer-preview b { display: block; margin-bottom: 0.25rem; }
+  .arx-offer-preview p { margin: 0; color: var(--body-quiet-color, #666); }
+</style>
+{% if preview %}
+<div class="arx-offer-preview">
+  <span class="arx-offer-preview-price">{{ preview.price }}</span>
+  <b>{{ preview.name }}</b>
+  <p>{{ preview.player_line }}</p>
+</div>
+{% else %}
+<p class="help">Add an active offer to preview the CG line.</p>
+{% endif %}

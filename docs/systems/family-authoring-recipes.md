@@ -10,12 +10,22 @@ recipe is proven by the test of the same number in
 Vocabulary: **Upbringing** (`OriginTemplate` row; the card a player picks in Lineage),
 **Prompt** (`OriginTemplateSlot`), **Choice** (`OriginTemplateSlotChoice`), **Family
 Path** (claim, name, or none), **Family Kind** (`FamilyKind` row), **Influence**
-(`Family.influence`). The code keeps the `OriginTemplate*` names (Decision 4 on #3617).
+(`Family.influence`), **Family Template** (`HouseTemplate` row; the type a named
+family is built from), **Vacancy** (an opening on a staff family's org; see Recipes
+11-12). The code keeps the `OriginTemplate*` and `HouseTemplate` names (Decision 4 on
+#3617; #3648). **Connection**, **Anchor**, **Stance**, **Follow-up**, and **Question
+kind** (Recipes 13-15, #3660) are canonical in `world/roster/AGENT_GLOSSARY.md`; use
+those terms, not the `_Avoid_` synonyms listed there.
 
 ## Recipe 1: an Upbringing for a beginning
-Admin > Character Creation > Upbringings > Add. Set beginning, name, frame text, CG cost
+Admin > Societies > Family Templates > Add: kind, `org_type` (resolves against the
+prerequisite anchors, which now include `commoner_family` alongside `noble_family`),
+society, features, aspect definitions, and served house choices (staff houses this
+family's kind may declare it served; blank = the question is not offered). Then
+Admin > Character Creation > Upbringings > Add: beginning, name, frame text, CG cost
 (0 = free, negative refunds), trust required, the family paths it allows, the kinds it
-offers on the claim path (empty = all), and the kind a named family gets. Then add
+offers on the claim path (empty = all), and, under **Family Templates**, tick the
+templates its name path offers (one auto-picks; more than one shows a picker). Add
 Prompts (each: question, example, required, which path it applies to, whether a
 write-in is allowed) and, on a pick-list prompt, its Choices with flat and
 per-influence costs. Do not: add a column to Beginnings; the old family-known switch is
@@ -52,9 +62,11 @@ stable slug code can check) stamped as `OrganizationFeature`. Both can be set di
 on staff-authored houses. Do not: add a boolean per fact.
 
 ## Recipe 8: servants of a powerful family
-An Upbringing with the claim path, offering the kinds of the great houses, and a
-pick-list prompt on the claim path ("Your place in their household?") whose choices
-carry per-influence costs. The price scales with the claimed family's influence.
+Superseded by Recipes 11 and 12 (#3648): a claim-path role priced by influence is now a
+kin or retainer **Vacancy** on the staff family's org, not a pick-list prompt. See
+those recipes below. A narrative-only acknowledgment of service, with no rank and no
+membership row, is instead a "Pick a group" question tagged **served** (Recipe 13) - a
+real membership still needs a Vacancy.
 
 ## Recipe 9: a new family kind (the Humble, a merchant house, a clan)
 Admin > Roster > Family Kinds > Add. Tick "styles as house" if its orgs should be named
@@ -62,6 +74,127 @@ Admin > Roster > Family Kinds > Add. Tick "styles as house" if its orgs should b
 authored per realm and kind (add one if the realm should mark this kind). Then pick the
 kind on the Upbringings that should offer it. Do not: edit a code list.
 
+## Recipe 10: a Family Template on the name path
+Admin > Societies > Family Templates > Add (as Recipe 1): kind, `org_type`, society,
+aspect definitions and their options, features, served house choices. The template's
+`name_pattern` (default `[A-Z][a-z]{2,19}`, a full-match regex) gates the family name a
+player may pick; the default matches only a single title-case word, so a template
+that wants a multi-word or apostrophized name (e.g. a Caretaker household name with a
+particle) needs a looser pattern, such as `[A-Z][A-Za-z' -]{2,39}`, authored on that
+template. A malformed pattern is a staff error, not a player one: it surfaces to the
+player as "This family template's naming rule is misconfigured; tell staff" rather
+than crashing. Tick the template under an Upbringing's **Family Templates**. Every
+named family of that type comes out shaped the same: same kind, same org type, same
+aspect questions, same served-house options.
+
+## Recipe 11: a kin Vacancy backed by a pool
+On a staff family's Organization admin page, add a Vacancy inline (or via Admin >
+Societies > Vacancies > Add): name, description, link a `KinSlotPool` on that family
+(`kin_pool`), set `importance` (how much the family cares) and `presumed_importance`
+(what outsiders assume), price (`cg_point_cost` flat, `cost_per_influence` per point
+of the family's influence), and `count_remaining` (openings left). A Vacancy with a
+`kin_pool` or `kin_node` set is a **kin** Vacancy (`basis == "kin"`): claiming the
+staff family on the claim path requires taking it when the family offers one, in place
+of the free kin-slot picker. Cost = `cg_point_cost + cost_per_influence * family.influence`.
+
+## Recipe 12: a standing retainer Vacancy
+Same admin path as Recipe 11, but leave `kin_pool`/`kin_node` unset (a **retainer**
+Vacancy, `basis == "retainer"`) and leave `count_remaining` blank: a standing Vacancy
+is always open, never decremented. A retainer Vacancy is reachable from any family
+path (via the Service panel) as long as it is not the draft's own claimed family's
+org, the realm matches, the Upbringing is allowed, and trust is met.
+
+## Recipe 13: a group tie and a person inside it
+Character Creation > Upbringings > a row > "Open in Upbringing Builder". Add a
+question: set **Kind of question** (`kind`) to "Pick a group" (`group`), **What the
+tie was** (`connection_kind`) and **When** (`life_stage`), then **Which groups can be
+picked** (`anchor_source`): "Groups I name" (`listed`) plus **Groups** (`anchor_orgs`)
+to name one or more real Organizations, "Every group of a type in a realm" (`pool`)
+with an org type and/or society, "The same group as an earlier question" (`same_as`)
+pointing **Same group as / belongs to** (`same_anchor_as`) at an earlier "pick a
+group" question, or the two draft-derived sources ("The house the character's family
+served" / "The character's own family"), which need no group named at all - the
+Builder resolves those from the draft. Add its Answers (the group's stances): each an
+**Answer** (name), **Cost** / **Per point of influence** (priced against the resolved
+group's own family, 0 if it has none), and **Group's opinion** (`reputation_seed`,
+-1000 to 1000). Save the page first; a newly added answer has no Offers cell until it
+has been saved and has a row of its own (Recipe 15 covers granting a Distinction from
+a saved answer). Add a second question with
+**Kind of question** "Name a person" (`person`) and **Same group as / belongs to**
+pointing at the group question, so the named figure belongs to it; leave it not
+Required if the tie can stand with no name given. Save. The right rail's Checks
+confirm the group question "has a group source" and flag any placeholder groups a
+pool still matches.
+
+## Recipe 14: a question shown only for certain answers to an earlier one
+On the same page, add a question and set **Shown after** (`follow_up_to`) to the
+earlier question. Leave **Only for these answers** (`shown_for_choices`) empty to
+show it for any answer to that question, or tick the specific answers that should
+reveal it - every ticked answer must belong to the "Shown after" question, enforced
+by the row's own clean rule. The right rail's Checks warn when a question only shows
+for certain answers but has no "Shown after" target set, and confirm when "Shown
+after" / "Same group as / belongs to" each point at an earlier question.
+
+## Recipe 15: an answer that offers a Distinction and sets the group's opinion
+An answer no longer carries a Distinction field of its own (#3675) - it hangs one or
+more `DistinctionOffer` rows off itself instead, authored in the Answer's own **Offers**
+cell once the answer is saved. Click **+ Offer**, pick the **Distinction**, and set
+**Arrives as**: "Bundled free with its opener" grants it the moment the player picks
+this answer, at no extra Cost (the grant never adds to the answer's own priced Cost);
+"A choice, priced" instead lists it as a separate pick the player must make explicitly,
+priced at the Distinction's own cost per rank. Add a second **+ Offer** row on the same
+answer to both bundle one Distinction and separately offer another from the same
+answer - each row is independent. Every offer here is `chapter=lineage`,
+`origin_choice=` this answer, set automatically; "Carried" is not offered, since an
+Upbringing answer is itself a choice, never something else's opener. On a "Pick a
+group" question's Answer, set **Group's opinion** (`reputation_seed`) to seed that
+group's opinion of the character at finalize (positive or negative, -1000 to 1000; 0
+seeds nothing). If a "Name a person" question is anchored to the same group (Recipe
+13), that named figure becomes a bundled Distinction's spawned NPC's display name in
+place of the staff-authored placeholder. A Distinction offered only from this one row
+has no other route onto the sheet unless a different offer names it too. The right
+rail's backlog count shows how many distinct active offers this route uses; the
+Distinction Builder's own Checks (`src/web/admin/CLAUDE.md`) flag a LINEAGE offer whose
+answer has since gone inactive.
+
 ## Pricing at a glance
 Cost of an Upbringing = its flat cost + for each picked choice (flat + per-influence x
-the claimed family's influence; influence is 0 on the name and none paths).
+the claimed family's influence; influence is 0 on the name and none paths) + the
+selected Vacancy's cost (flat + per-influence x the **Vacancy's** family's influence,
+ADR-0269 extended by ADR-0273). A "pick a group" question's per-influence instead
+multiplies the *chosen group's own* family's influence (0 when that group has no
+Family) - which family that is need not be the claimed one (ADR-0277). An answer's
+Bundled Distinction offer adds nothing to that answer's own cost; a Choice offer on the
+same answer prices separately, at the Distinction's own cost per rank (#3675, Recipe
+15).
+
+## Worked examples (illustrative names; not shipped content)
+
+**Caretaker (Arx).** Family Template "Caretaker Household": kind Commoner, `org_type`
+`commoner_family`, society Arx, no liege, no served house choices; aspect definition
+"What did your family keep?" (granaries, aqueducts, watch rolls, archive, gates,
+bridges). Upbringing "Raised to a Charge": name path only, offers Caretaker Household.
+No Vacancies; the family's identity lives entirely on the org aspects.
+
+**A crime family in Salvation.** Staff family "the Marrow" (Recipe 4: kind Crime,
+influence 5, org type gang) with a "House Vice" `OrganizationAspect` (Recipe 7).
+Vacancies: "Low thug" (retainer, importance 1/presumed 1, cost 0, standing); "Enforcer"
+(retainer, 3/2, 2 + 1 per influence, count 3); "The Matriarch's niece" (kin via a
+pool, 2/5, 1 + 1 per influence, count 1); "Counsel" (retainer, 5/1, 3 + 2 per
+influence, count 1, `allowed_upbringings` restricted to a schooled Upbringing).
+
+**Infernal Nobility.** The house org already carries its House Quiddity (Recipe 7).
+Vacancies: "Third daughter" (kin via a pool, 1/5, 1 + 1 per influence); "Heir
+presumptive" (kin via a named appable node, 5/5, 5 + 3 per influence, count 1, trust
+2); "Master-at-arms" (retainer, 4/3, 2 + 1 per influence, count 1); "Household guard"
+(retainer, 1/1, cost 0, standing). Founding a house behind a set-aside title is the
+unchanged noble title-claim path (#1884 Phase D); Vacancies only cover joining an
+existing house.
+
+**Reavers.** Family Kind "Crew" (Recipe 9). Family Template "Reaver Crew": kind Crew,
+org type gang (or an authored crew type), society Inferna, served house choices set to
+the staff-authored captains' orgs; aspect definition "What does your crew take?".
+Upbringing "Raised on the Deck": name path, offers Reaver Crew. A player names the
+crew, answers the aspect, declares which captain it served (fealty via the served
+house), and may take a standing retainer Vacancy "Deckhand" (1/1, cost 0) on that
+captain's org: the served-house-plus-retainer combination.

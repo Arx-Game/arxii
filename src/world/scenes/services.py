@@ -214,17 +214,19 @@ class GuiseProfileError(ValueError):
     user_message = "You can't give your true face a cover bio — edit your real sheet instead."
 
 
-def set_persona_profile(
+def set_persona_profile(  # noqa: PLR0913 - keyword-only; one argument per guise field
     persona: Persona,
     *,
     concept: str | None = None,
     quote: str | None = None,
-    personality: str | None = None,
+    never_do: str | None = None,
+    protect: str | None = None,
+    fear: str | None = None,
     background: str | None = None,
 ) -> Profile:
     """Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).
 
-    A cover/established persona needs its OWN concept/quote/personality/background so the *absence*
+    A cover/established persona needs its OWN concept/quote/answers/background so the *absence*
     of a bio doesn't instantly out it as fake. This is the **sole mutator** of ``Persona.profile``:
     it attaches a fresh ``Profile`` the first time the persona is given a bio, then updates only the
     fields passed (``None`` leaves a field untouched, so callers can edit one field at a time).
@@ -248,7 +250,9 @@ def set_persona_profile(
     updates = {
         "concept": concept,
         "quote": quote,
-        "personality": personality,
+        "never_do": never_do,
+        "protect": protect,
+        "fear": fear,
         "background": background,
     }
     for field_name, value in updates.items():

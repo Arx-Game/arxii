@@ -14,7 +14,7 @@ from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -25,8 +25,8 @@ from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
 from world.character_creation.constants import (
-    UNBOUND_DRAWBACK_DISTINCTION_SLUG,
     ApplicationStatus,
+    OfferChapter,
 )
 from world.character_creation.filters import (
     CGGiftOptionFilter,
@@ -44,12 +44,15 @@ from world.character_creation.models import (
     BeginningTradition,
     CGPointBudget,
     CharacterDraft,
+    DistinctionOffer,
     DraftApplication,
     DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
     StartingArea,
+    TraditionStateLine,
 )
+from world.character_creation.offers import closed_for, offers_for, reconcile_offer_picks
 from world.character_creation.serializers import (
     BeginningsSerializer,
     CGExplanationsSerializer,
@@ -58,6 +61,7 @@ from world.character_creation.serializers import (
     CGOriginTemplateSerializer,
     CGPointBudgetSerializer,
     CGTechniqueOptionSerializer,
+    CGVacancySerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
     ClaimableTitleSerializer,
@@ -67,12 +71,14 @@ from world.character_creation.serializers import (
     DraftMarkingSerializer,
     GenderSerializer,
     HouseClaimStatusSerializer,
+    OffersResponseSerializer,
     PathSerializer,
     PerspectiveEntrySerializer,
     PronounsSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
     TraditionSerializer,
+    schooling_rows,
 )
 from world.character_creation.services import (
     CharacterCreationError,
@@ -100,13 +106,17 @@ from world.magic.exceptions import GiftResonanceUnresolvable
 from world.magic.models import (
     Gift,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     Technique,
     Tradition,
 )
-from world.magic.services.cg_catalog import get_gift_options, get_technique_options
+from world.magic.services.cg_catalog import (
+    get_gift_options,
+    get_species_technique_options,
+    get_technique_options,
+)
 from world.magic.types.cg_catalog import TechniqueOptions
 from world.roster.models import FamilyKind
+from world.societies.models import Vacancy
 from world.species.models import Language, Species, SpeciesStatBonus
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -135,6 +145,25 @@ def _claimable_kind_ids_by_template(templates: list[OriginTemplate]) -> dict[int
     return grouping
 
 
+def _offers_by_choice(templates: list[OriginTemplate]) -> dict[int, list[DistinctionOffer]]:
+    """One flat query for every Lineage ``DistinctionOffer`` across ``templates`` (#3675).
+
+    Grouped by ``OriginTemplateSlotChoice`` id in Python, mirroring
+    ``_claimable_kind_ids_by_template``. Bounded to exactly one query regardless of
+    how many templates are being listed - see ``CGOriginTemplateViewSet.list()``.
+    """
+    grouping: dict[int, list[DistinctionOffer]] = defaultdict(list)
+    if not templates:
+        return grouping
+    rows = DistinctionOffer.objects.filter(
+        origin_choice__slot__template__in=[t.pk for t in templates],
+        is_active=True,
+    ).select_related("distinction")
+    for offer in rows:
+        grouping[offer.origin_choice_id].append(offer)
+    return grouping
+
+
 class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for listing starting areas."""
 
@@ -148,8 +177,8 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = StartingAreaSerializer
     # Public shop-window read (#3305): landing page realm/Beginnings pitches.
-    # Anonymous-safe by construction: get_accessible_starting_areas /
-    # trust filtering in get_queryset gate content, not this permission.
+    # Anonymous-safe by construction: get_queryset gates content (staff-only
+    # areas, inactive rows), not this permission.
     permission_classes = [AllowAny]
 
     def get_queryset(self) -> QuerySet:
@@ -162,22 +191,21 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for listing Beginnings options.
 
     Filter by starting_area to get options available for a specific starting area.
-    Results are filtered by user trust level.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = BeginningsSerializer
     # Public shop-window read (#3305): landing page realm/Beginnings pitches.
-    # Anonymous-safe by construction: get_accessible_starting_areas /
-    # trust filtering in get_queryset gate content, not this permission.
+    # Anonymous-safe by construction: get_queryset gates content (staff-only
+    # areas, inactive rows), not this permission.
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["starting_area"]
 
     def get_queryset(self) -> QuerySet[Beginnings]:
-        """Return beginnings filtered by availability and access."""
-        queryset = (
+        """Return every active Beginnings, with the list read's prefetches."""
+        return (
             Beginnings.objects.filter(is_active=True)
             .select_related("starting_area")
             .prefetch_related(
@@ -198,18 +226,6 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
             )
         )
-
-        # Filter by trust level
-        user = self.request.user
-        if not user.is_staff:
-            try:
-                user_trust = user.trust
-                queryset = queryset.filter(trust_required__lte=user_trust)
-            except (AttributeError, NotImplementedError):
-                # Trust not implemented yet, show all with trust_required=0
-                queryset = queryset.filter(trust_required=0)
-
-        return queryset
 
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))
     @action(
@@ -432,6 +448,13 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             if beginning is not None
             else {}
         )
+        # The three standard state lines and the standard schooling stances are
+        # shared by every tradition row in this response (#3675), one query each,
+        # not one per row.
+        context["state_lines"] = {
+            sl.state: sl for sl in TraditionStateLine.objects.select_related("carries")
+        }
+        context["schooling"] = schooling_rows()
         return context
 
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))
@@ -572,8 +595,13 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
                 draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
                 if draft.selected_tradition_id is not None and draft.selected_path_id is not None:
                     gift = get_object_or_404(Gift, pk=gift_id)
-                    options = get_technique_options(
+                    base_options = get_technique_options(
                         draft.selected_path, gift, draft.selected_tradition
+                    )
+                    options = TechniqueOptions(
+                        pool=base_options.pool,
+                        tradition=base_options.tradition,
+                        species=get_species_technique_options(draft.selected_species),
                     )
 
         return options
@@ -584,7 +612,7 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         if options is None:
             return Technique.objects.none()
 
-        technique_ids = {t.id for t in [*options.pool, *options.tradition]}
+        technique_ids = {t.id for t in [*options.pool, *options.tradition, *options.species]}
         return Technique.objects.filter(id__in=technique_ids).select_related("effect_type")
 
     def get_serializer_context(self) -> dict[str, Any]:
@@ -592,6 +620,9 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         options = self._resolve_options()
         context["tradition_technique_ids"] = (
             {t.id for t in options.tradition} if options is not None else set()
+        )
+        context["species_technique_ids"] = (
+            {t.id for t in options.species} if options is not None else set()
         )
         return context
 
@@ -611,11 +642,22 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GlimpseTagFilter
 
     def get_queryset(self) -> QuerySet[GlimpseTag]:
+        """One batched offers query for the whole page, not one per row (ADR-0298).
+
+        ``GlimpseTag.offers`` is a ``PrunedCachedProperty`` (ADR-0298): a ``Prefetch``
+        targeting it by ``to_attr`` is sanctioned because write-side invalidation is
+        wired explicitly (``DistinctionOffer.related_cache_fields``), unlike the bare
+        wrapper this endpoint used until #3816 (``GlimpseTagOffersHandler.prime()``).
+        No custom ``list()`` override is needed - the default pagination-free list
+        already serializes this queryset directly.
+        """
         return GlimpseTag.objects.filter(is_active=True).prefetch_related(
             Prefetch(
-                "distinction_suggestions",
-                queryset=GlimpseTagDistinctionSuggestion.objects.select_related("distinction"),
-                to_attr="cached_distinction_suggestions",
+                "distinction_offers",
+                queryset=DistinctionOffer.objects.filter(is_active=True)
+                .select_related("distinction")
+                .order_by("sort_order", "id"),
+                to_attr="offers",
             )
         )
 
@@ -624,8 +666,6 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """List active origin-story templates for the CG guided flow (#2478, #3617).
 
     Filter by ``beginning`` to get templates available for a specific beginning.
-    Trust-gated: staff see every active row, everyone else only rows whose
-    ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
     """
 
     pagination_class = None  # ADR-0138: opt out of default paginator
@@ -635,7 +675,7 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["beginning"]
 
     def get_queryset(self) -> QuerySet[OriginTemplate]:
-        """Return active, trust-accessible templates with prefetched slots, ordered.
+        """Return active templates with prefetched slots, ordered.
 
         ``claimable_kinds`` and slot choices are both resolved by ``list()``/the
         serializer via a flat query grouped in Python, never a per-instance
@@ -646,46 +686,79 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         intervening ORM-level M2M write happens on the same cached instance -
         the same staleness class ADR-0263 documents for ``to_attr``, just via
         ``instance._prefetched_objects_cache`` instead of a bare attribute name.
-        The existing ``cached_slots`` prefetch below is the one already-shipped
-        ``to_attr`` exception, kept as-is rather than touched by this task.
+
+        ``OriginTemplate.questions`` is a ``PrunedCachedProperty`` (ADR-0298): a
+        ``Prefetch`` targeting it by ``to_attr`` is sanctioned because write-side
+        invalidation is wired explicitly (``OriginTemplateSlot.related_cache_fields``),
+        unlike the bare attribute this view used to reach past it with (a
+        ``to_attr``-targeting ``Prefetch`` naming ``"cached_slots"``, which shipped a
+        production bug: a plain attribute is not a data descriptor, so Django
+        skipped a prefetch that already had one and the identity map handed the
+        same instance to the next request, serving a first GET's questions -
+        including ones deleted in between, with ``"id": null`` - to a second one,
+        #3673, ADR-0263) and the bare wrapper this endpoint used until #3816
+        (``UpbringingQuestionsHandler.prime()``).
         """
-        user = self.request.user
-        qs = OriginTemplate.objects.filter(is_active=True)
-        if not user.is_staff:
-            try:
-                trust = user.trust
-            except AttributeError:
-                trust = 0
-            qs = qs.filter(trust_required__lte=trust)
         return (
-            qs.select_related("named_family_kind")
+            OriginTemplate.objects.filter(is_active=True)
             .prefetch_related(
+                # PREFETCH_STRING (see roster/services/kinship.py:913): plain-string
+                # prefetch, no ``to_attr`` - the nested serializer reads
+                # ``obj.family_templates.all()`` straight off the prefetch cache.
+                "family_templates__aspect_definitions__options",  # noqa: PREFETCH_STRING
+                "family_templates__features",  # noqa: PREFETCH_STRING
+                "family_templates__served_house_choices",  # noqa: PREFETCH_STRING
                 Prefetch(
                     "slots",
-                    queryset=OriginTemplateSlot.objects.order_by("sort_order"),
-                    to_attr="cached_slots",
-                )
+                    queryset=OriginTemplateSlot.objects.order_by("sort_order", "id"),
+                    to_attr="questions",
+                ),
             )
             .order_by("sort_order", "name")
         )
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """Serialize with one batched ``claimable_kind_ids`` query, not one per row.
+        """Serialize with one batched ``claimable_kind_ids`` + offers query, not one per row.
 
         Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
         so there is no ``page`` branch to preserve) but materializes the
-        queryset once and passes a template-id -> kind-id grouping into the
-        serializer context (no per-request memo on ``self`` - ADR-0260; the
-        grouping is a plain argument, not state stashed on the view or
-        serializer instance).
+        queryset once and passes a template-id -> kind-id grouping and a
+        choice-id -> offers grouping into the serializer context (no per-request
+        memo on ``self`` - ADR-0260; each grouping is a plain argument, not state
+        stashed on the view or serializer instance).
         """
         templates = list(self.filter_queryset(self.get_queryset()))
         context = {
             **self.get_serializer_context(),
             "claimable_kind_ids_by_template": _claimable_kind_ids_by_template(templates),
+            "offers_by_choice": _offers_by_choice(templates),
         }
         serializer = self.get_serializer_class()(templates, many=True, context=context)
         return Response(serializer.data)
+
+
+class CGVacancyViewSet(viewsets.ReadOnlyModelViewSet):
+    """Openings the draft may take, priced for it (#3648). ``?draft=`` is required."""
+
+    serializer_class = CGVacancySerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # ADR-0138: opt out of default paginator
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["organization"]
+
+    def get_queryset(self) -> QuerySet[Vacancy]:
+        from world.societies.vacancy_services import reachable_vacancies  # noqa: PLC0415
+
+        draft_id = self.request.query_params.get("draft")  # noqa: USE_FILTERSET
+        if not draft_id:
+            return Vacancy.objects.none()
+        drafts = CharacterDraft.objects.filter(pk=draft_id)
+        if not self.request.user.is_staff:
+            drafts = drafts.filter(account=self.request.user)
+        draft = drafts.first()
+        if draft is None:
+            return Vacancy.objects.none()
+        return reachable_vacancies(draft)
 
 
 class CanCreateCharacterView(APIView):
@@ -734,6 +807,19 @@ class DraftMarkingViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "You have no character draft in progress."})
         serializer.save(draft=draft)
 
+    def perform_destroy(self, instance: DraftMarking) -> None:
+        """Delete the marking, then refund whatever was bought on it (#3739).
+
+        A marking is a feature, so a player can have made it distinctive and
+        bought presence axes on it. Removing the marking removes the thing those
+        picks name, and ``reconcile_offer_picks`` is what drops them and gives the
+        points back — without this the refund would wait for the player's next
+        distinction sync, and the CG budget would read wrong until then.
+        """
+        draft = instance.draft
+        super().perform_destroy(instance)
+        reconcile_offer_picks(draft)
+
 
 class CharacterDraftViewSet(viewsets.ModelViewSet):
     """
@@ -761,8 +847,9 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         return CharacterDraftSerializer
 
     def perform_update(self, serializer: BaseSerializer[Any]) -> None:
-        """Save the draft."""
-        serializer.save()
+        """Save the draft, then reconcile which offers its new state carries or drops."""
+        super().perform_update(serializer)
+        reconcile_offer_picks(cast("CharacterDraft", serializer.instance))
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new draft, checking eligibility first."""
@@ -950,34 +1037,22 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="select-tradition")
     def select_tradition(self, request: Request, pk: int | None = None) -> Response:
-        """Select a tradition for the draft.
+        """Select (or clear) the draft's tradition; reconcile what the pick carries (#3675).
 
-        Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
-        that requires formal training may only be selected once the draft already
-        holds that distinction (added via the distinctions app). There is no
-        general auto-attach — `world.distinctions.views` only *clears* the selected
-        tradition when its required distinction is later removed
-        (`_clear_tradition_if_required_distinction_removed`); it never adds one.
-
-        **One deliberate exception (#2442):** the "Unbound" drawback distinction
-        (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``) IS auto-added when missing, instead
-        of rejecting the request. Unbound is CG's tradition-agnostic default (#2426)
-        — unlike Orphaned Tradition (a deliberate story pick, #2428 Task 5), a
-        player must not be forced to already know about this one specific drawback
-        before CG can complete; see
-        ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
-        .test_tradition_step_completable_for_every_seeded_beginning`` for the
-        "CG must remain completable via the Unbound path with zero manual steps"
-        regression proof #2426 shipped, which this exception preserves.
+        There is no gate here: every tradition a Beginning's slate offers is
+        selectable outright. What the pick carries is decided by the slate line's
+        state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
+        to that state may name a drawback distinction the pick carries for free,
+        applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
+        removes whatever it carried the same way.
         """
-        from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
-
         draft = self.get_object()
         tradition_id = request.data.get("tradition_id")
 
         if tradition_id is None:
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
+            reconcile_offer_picks(draft)
             return Response({"status": "tradition cleared"})
 
         if not draft.selected_beginnings:
@@ -991,31 +1066,29 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 {"detail": "This tradition is not available for the selected beginning."}
             )
 
-        update_fields = ["selected_tradition"]
-        if bt.required_distinction_id:
-            distinctions = draft.draft_data.get("distinctions", [])
-            held_distinction_ids = {entry.get("distinction_id") for entry in distinctions}
-            if bt.required_distinction_id not in held_distinction_ids:
-                if bt.required_distinction.slug == UNBOUND_DRAWBACK_DISTINCTION_SLUG:
-                    distinctions.append(build_distinction_entry(bt.required_distinction, rank=1))
-                    draft.draft_data["distinctions"] = distinctions
-                    update_fields.append("draft_data")
-                else:
-                    raise ValidationError(
-                        {
-                            "detail": (
-                                "This tradition requires formal training "
-                                "(take its distinction first)."
-                            )
-                        }
-                    )
-
         tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
         draft.selected_tradition = tradition
-        draft.save(update_fields=update_fields)
+        draft.save(update_fields=["selected_tradition"])
+        reconcile_offer_picks(draft)
 
         serializer = self.get_serializer(draft)
         return Response(serializer.data)
+
+    @extend_schema(
+        parameters=[OpenApiParameter("chapter", str, required=True)],
+        responses=OffersResponseSerializer,
+    )
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def offers(self, request: Request, pk: int | None = None) -> Response:
+        """The distinctions this draft can pick in one chapter, and what its route closed."""
+        draft = self.get_object()
+        raw = request.query_params.get("chapter", "")  # noqa: USE_FILTERSET
+        try:
+            chapter = OfferChapter(raw)
+        except ValueError as exc:
+            raise ValidationError({"chapter": "Unknown chapter."}) from exc
+        payload = {"offers": offers_for(draft, chapter), "closed": closed_for(draft, chapter)}
+        return Response(OffersResponseSerializer(payload).data)
 
     @extend_schema(responses=HouseClaimStatusSerializer)
     @action(detail=True, methods=[HTTPMethod.GET, HTTPMethod.POST], url_path="house-claim")
@@ -1268,6 +1341,7 @@ class FormOptionsView(APIView):
             ).values_list("trait_id", flat=True)
         )
 
+        all_options = self._all_options_payload(form_options)
         result = []
         for trait, options in form_options.items():
             result.append(
@@ -1275,6 +1349,12 @@ class FormOptionsView(APIView):
                     "trait": self._trait_payload(trait),
                     "is_required": trait.id in required_trait_ids,
                     "options": [self._option_payload(opt) for opt in options],
+                    # Every option the trait carries, palette or not (#3739). The leaf
+                    # offers these in place of ``options`` on a feature the draft has
+                    # made distinctive; ``validators._get_form_trait_errors`` is the
+                    # gate that decides whether a pick from here is actually legal, so
+                    # sending the full list is never itself permission to use it.
+                    "all_options": all_options.get(trait.id, []),
                 }
             )
 
@@ -1282,6 +1362,23 @@ class FormOptionsView(APIView):
         if draft is not None:
             payload["inherited"] = self._inherited_payload(draft, species)
         return Response(payload)
+
+    def _all_options_payload(self, form_options: dict) -> dict[int, list[dict]]:
+        """Every option of every offered trait, in one query (#3739).
+
+        Called by ``get``. The species palette narrows what a trait normally offers;
+        a feature made distinctive reaches past it to anything the trait carries,
+        the Unnatural umbrella included, so the leaf needs both lists at once.
+        """
+        if not form_options:
+            return {}
+        rows = FormTraitOption.objects.filter(trait_id__in=[t.id for t in form_options]).order_by(
+            "sort_order", "display_name"
+        )
+        out: dict[int, list[dict]] = defaultdict(list)
+        for opt in rows:
+            out[opt.trait_id].append(self._option_payload(opt))
+        return out
 
 
 class IsStaffPermission(permissions.BasePermission):

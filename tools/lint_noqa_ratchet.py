@@ -37,12 +37,25 @@ PATTERNS: dict[str, str] = {
     # tick, CLI/request boundary) that logs with exc_info. New ones need the
     # same classification — or a narrower catch.
     "BROAD_EXCEPT": r"except Exception\b",
+    # A `to_attr` prefetch onto an identity-mapped instance (#3673, ADR-0263):
+    # Django skips a prefetch whose target already looks set, and the identity
+    # map hands the same instance to the next request, so the second request
+    # re-serves the first one's rows - deleted ones included, arriving with a
+    # null id. As of #3816, `to_attr` is sanctioned only onto a
+    # `PrunedCachedProperty` (evennia_extensions/cached_property.py);
+    # `lint_prefetch_to_attr.py` enforces that narrower rule within its scope.
+    # This raw-string count stays broader on purpose (it has no way to tell a
+    # sanctioned target from an unsanctioned one) - it is the outer net for
+    # every site outside that hook's scope, and each site converted to
+    # `PrunedCachedProperty` (or, rarely, the narrower `CachedRowsHandler`)
+    # lowers this number.
+    "PREFETCH_TO_ATTR": r"to_attr=",
 }
 
 # Pattern tokens whose count should skip test files (tests legitimately use
 # broad catches and bare fixtures the production rule forbids... except where
 # another token explicitly covers tests, like BARE_OBJECTDB_CREATE).
-PATTERNS_EXCLUDE_TESTS = {"BROAD_EXCEPT"}
+PATTERNS_EXCLUDE_TESTS = {"BROAD_EXCEPT", "PREFETCH_TO_ATTR"}
 
 _TEST_PATH_RE = re.compile(r"(^|/)tests?(/|\.py$)|(^|/)test_[^/]*\.py$")
 

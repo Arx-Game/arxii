@@ -7,11 +7,14 @@ instead of auto-tagging, so a GM still confirms/dismisses before resonance + ren
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from django.db import models
 from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import SuggestionStatus
 from world.societies.renown_config import RenownAwardConfig
@@ -85,8 +88,10 @@ class DramaticMomentType(NaturalKeyMixin, CreditedContent, RenownAwardConfig):
         return self.label
 
 
-class DramaticMomentTag(SharedMemoryModel):
+class DramaticMomentTag(RelatedCacheClearingMixin, SharedMemoryModel):
     """Record of a staff member tagging a character's dramatic moment in a scene."""
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     moment_type = models.ForeignKey(
         DramaticMomentType,
@@ -142,17 +147,21 @@ class DramaticMomentTag(SharedMemoryModel):
         )
 
 
-class DramaticMomentSuggestion(SharedMemoryModel):
+class DramaticMomentSuggestion(RelatedCacheClearingMixin, SharedMemoryModel):
     """GM-facing PENDING suggestion surfaced by a high-success technique entrance (#2183).
 
     Bridges the technique-entrance deferral markers (originated_as_entrance /
     from_entrance, built in Tasks 1-2) to the existing DramaticMomentTag machinery:
     rather than auto-tagging, a qualifying cast creates a suggestion here that a GM
     later confirms (minting a real DramaticMomentTag via ``create_dramatic_moment_tag``)
-    or dismisses. Nothing calls the surfacing/resolution services yet — see
-    ``services/gain.py``'s ``maybe_suggest_dramatic_moments`` /
-    ``resolve_dramatic_moment_suggestion``.
+    or dismisses. Surfaced by ``actions/definitions/social.py`` and
+    ``world/combat/services.py`` (both call ``services/gain.py``'s
+    ``maybe_suggest_dramatic_moments``); resolved via
+    ``actions/definitions/dramatic_moments.py`` (calls
+    ``resolve_dramatic_moment_suggestion``).
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     moment_type = models.ForeignKey(
         DramaticMomentType,

@@ -11,7 +11,7 @@ service — ADR-0097's viewer-aware gating must survive the view/serializer.
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -260,3 +260,202 @@ class FamilySerializerParticleTests(APITestCase):
         data = FamilySerializer(family).data
         self.assertEqual(data["born_particle"], "")
         self.assertEqual(data["taken_in_particle"], "")
+
+
+class FamilyListInheritedQueryCountTests(APITestCase):
+    """The families list batches the ``inherited`` lookup (#3648).
+
+    ``FamilySerializer.get_inherited`` used to call ``house_for_family`` (a
+    fresh query per row) plus three more (``fealty``, ``aspects``,
+    ``features``) whenever a house existed - up to 4N queries for N housed
+    families. ``FamilyViewSet.list()`` now passes a batched grouping through
+    serializer context instead, computed by
+    ``world.roster.views.family_views._inherited_by_family`` in four flat
+    queries regardless of page size.
+
+    The query-count assertion targets ``_inherited_by_family`` directly
+    rather than the full ``GET /api/roster/families/`` response:
+    ``FamilySerializer.born_particle``/``taken_in_particle``
+    (``resolve_particle``, pre-existing #3261 code, untouched by this fix)
+    carry their own separate per-row N+1 - a house/title lookup plus a
+    ``NobiliaryParticle`` query, run twice per row - that would make a full
+    endpoint-level equality assertion conflate two different defects. A
+    second test below checks content correctness through the real endpoint.
+    """
+
+    def _housed_family(self, name: str, *, kind) -> Family:
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.models import (
+            FealtyEdge,
+            HouseAspectDefinition,
+            HouseAspectOption,
+            HouseFeature,
+            OrganizationAspect,
+            OrganizationFeature,
+        )
+
+        family = FamilyFactory(name=name, kind=kind)
+        org = OrganizationFactory(name=f"House {name}", family=family)
+        definition = HouseAspectDefinition.objects.create(
+            name=f"Virtue {name}", prompt="Which virtue did your house cling to?"
+        )
+        option = HouseAspectOption.objects.create(definition=definition, name=f"Option {name}")
+        OrganizationAspect.objects.create(organization=org, definition=definition, option=option)
+        feature = HouseFeature.objects.create(
+            name=f"Feature {name}",
+            slug=f"feature-{name.lower()}",
+            description="A cultural feature.",
+        )
+        OrganizationFeature.objects.create(organization=org, feature=feature)
+        liege_org = OrganizationFactory(name=f"Liege of {name}")
+        FealtyEdge.objects.create(vassal=org, liege=liege_org)
+        return family
+
+    def test_query_count_does_not_grow_with_family_count(self) -> None:
+        """One housed family costs the same query count as three."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.roster.factories import FamilyKindFactory
+        from world.roster.views.family_views import _inherited_by_family
+
+        one_kind = FamilyKindFactory(name="Onefolk")
+        one_family = self._housed_family("Onehouse", kind=one_kind)
+
+        three_kind = FamilyKindFactory(name="Threefolk")
+        three_families = [self._housed_family(f"Threehouse{i}", kind=three_kind) for i in range(3)]
+
+        with CaptureQueriesContext(connection) as ctx_one:
+            grouping_one = _inherited_by_family([one_family])
+        with CaptureQueriesContext(connection) as ctx_three:
+            grouping_three = _inherited_by_family(three_families)
+
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_three.captured_queries))
+        # Sanity: the batched grouping actually carries content, not empty stubs.
+        self.assertEqual(len(grouping_one[one_family.pk]["aspects"]), 1)
+        self.assertEqual(grouping_three[three_families[0].pk]["liege_name"], "Liege of Threehouse0")
+        self.assertEqual(grouping_three[three_families[2].pk]["liege_name"], "Liege of Threehouse2")
+
+    def test_inherited_renders_through_the_families_endpoint(self) -> None:
+        """Content correctness through the real endpoint for the batched path."""
+        from world.roster.factories import FamilyKindFactory
+
+        kind = FamilyKindFactory(name="Contentfolk")
+        self._housed_family("Contenthouse", kind=kind)
+        client = APIClient()
+        client.force_authenticate(AccountFactory())
+        res = client.get(f"/api/roster/families/?kind={kind.id}")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        row = res.json()[0]
+        self.assertEqual(row["inherited"]["aspects"][0]["definition"], "Virtue Contenthouse")
+        self.assertEqual(row["inherited"]["features"][0]["name"], "Feature Contenthouse")
+        self.assertEqual(row["inherited"]["liege_name"], "Liege of Contenthouse")
+
+
+class FamilyListParticleQueryCountTests(APITestCase):
+    """The families list batches the particle pair too (#3654).
+
+    ``FamilySerializer.born_particle``/``taken_in_particle`` each called
+    ``resolve_particle`` per row - a house lookup, its realm, its titles and
+    the realm's ``NobiliaryParticle`` rows, about six queries per housed
+    family and the defect #3648's helper-level assertion was written around.
+    ``FamilyViewSet.list()`` now also passes
+    ``houses.services.particles_for_families``' grouping through context, so
+    this asserts at the endpoint level, which is what a player pays.
+    """
+
+    def _housed_family(self, name: str, *, kind, society, tier: str = ""):
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.models import Title
+
+        family = FamilyFactory(name=name, kind=kind)
+        org = OrganizationFactory(name=f"House {name}", family=family, society=society)
+        if tier:
+            Title.objects.create(name=f"Seat of {name}", tier=tier, realm=society.realm, house=org)
+        return family
+
+    def test_endpoint_query_count_does_not_grow_with_family_count(self) -> None:
+        """One housed family costs the same query count as three."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.factories import SocietyFactory
+        from world.societies.houses.models import NobiliaryParticle
+
+        one_kind = FamilyKindFactory(name="Onefolk")
+        one_society = SocietyFactory(name="Onesociety")
+        self._housed_family("Onehouse", kind=one_kind, society=one_society)
+        NobiliaryParticle.objects.create(
+            realm=one_society.realm, kind=one_kind, particle="ka", taken_in_particle="kas"
+        )
+
+        three_kind = FamilyKindFactory(name="Threefolk")
+        three_society = SocietyFactory(name="Threesociety")
+        for i in range(3):
+            self._housed_family(f"Threehouse{i}", kind=three_kind, society=three_society)
+        NobiliaryParticle.objects.create(
+            realm=three_society.realm, kind=three_kind, particle="va", taken_in_particle="vas"
+        )
+
+        client = APIClient()
+        client.force_authenticate(AccountFactory())
+        # Warm the request-level caches (content types, permissions) so the
+        # measured pair differs only by how many families each response holds.
+        client.get(f"/api/roster/families/?kind={one_kind.id}")
+
+        with CaptureQueriesContext(connection) as ctx_one:
+            res_one = client.get(f"/api/roster/families/?kind={one_kind.id}")
+        with CaptureQueriesContext(connection) as ctx_three:
+            res_three = client.get(f"/api/roster/families/?kind={three_kind.id}")
+
+        self.assertEqual(res_one.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_one.json()), 1)
+        self.assertEqual(len(res_three.json()), 3)
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_three.captured_queries))
+        # Sanity: the batched path is the one that answered, with content.
+        self.assertEqual(res_three.json()[0]["born_particle"], "va")
+        self.assertEqual(res_three.json()[0]["taken_in_particle"], "vas")
+
+    def test_batched_pair_matches_the_per_family_resolution(self) -> None:
+        """Band, taken-in fallback and the unhoused blank agree with resolve_particle."""
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.factories import SocietyFactory
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import NobiliaryParticle
+        from world.societies.houses.services import resolve_particle
+
+        kind = FamilyKindFactory(name="Bandfolk")
+        society = SocietyFactory(name="Bandsociety")
+        # Two bands: the realm default, and a duchy-floor row with no
+        # taken-in form of its own (so the taken-in falls back to the born).
+        NobiliaryParticle.objects.create(
+            realm=society.realm, kind=kind, particle="D'", taken_in_particle="dau"
+        )
+        NobiliaryParticle.objects.create(
+            realm=society.realm,
+            kind=kind,
+            tier_floor=TitleTier.DUCHY,
+            particle="du",
+        )
+        titled = self._housed_family("Ducalhouse", kind=kind, society=society, tier=TitleTier.DUCHY)
+        untitled = self._housed_family("Minorhouse", kind=kind, society=society)
+        unhoused = FamilyFactory(name="Driftkin", kind=kind)
+
+        client = APIClient()
+        client.force_authenticate(AccountFactory())
+        res = client.get(f"/api/roster/families/?kind={kind.id}")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        rows = {row["name"]: row for row in res.json()}
+
+        for family in (titled, untitled, unhoused):
+            row = rows[family.name]
+            self.assertEqual(row["born_particle"], resolve_particle(family))
+            self.assertEqual(row["taken_in_particle"], resolve_particle(family, taken_in=True))
+        # The bands actually differ, so the agreement above is not vacuous.
+        self.assertEqual(rows["Ducalhouse"]["born_particle"], "du")
+        self.assertEqual(rows["Ducalhouse"]["taken_in_particle"], "du")
+        self.assertEqual(rows["Minorhouse"]["born_particle"], "D'")
+        self.assertEqual(rows["Minorhouse"]["taken_in_particle"], "dau")
+        self.assertEqual(rows["Driftkin"]["born_particle"], "")
+        self.assertEqual(rows["Driftkin"]["taken_in_particle"], "")

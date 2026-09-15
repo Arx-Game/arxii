@@ -66,6 +66,36 @@ class CGOriginTemplateAPITest(TestCase):
         response = anon_client.get(url, {"beginning": self.beginning.id})
         assert response.status_code in (401, 403)
 
+    def test_slots_not_cross_contaminated_between_templates(self) -> None:
+        """Two templates' slots, fetched in one batched-Prefetch request, land on
+        their OWN template only - not merged and not swapped (#3816 Task 10 fix round).
+
+        A query-count assertion alone can't catch cross-contamination: it would
+        stay green even if every template were served every other template's slots,
+        since the total row/query count is unchanged either way.
+        """
+        other_template = OriginTemplate.objects.create(
+            beginning=self.beginning,
+            name="Second Route",
+            frame_narrative="A different frame.",
+            allows_no_family=True,
+        )
+        OriginTemplateSlot.objects.create(
+            template=other_template,
+            name="Who wronged you?",
+            prompt="Who left the deepest mark?",
+        )
+
+        url = "/api/character-creation/origin-templates/"
+        response = self.client.get(url, {"beginning": self.beginning.id})
+
+        assert response.status_code == 200
+        data = response.json()
+        row_escape = next(t for t in data if t["name"] == "Escape")
+        row_second = next(t for t in data if t["name"] == "Second Route")
+        assert [s["prompt"] for s in row_escape["slots"]] == ["Who aided your flight?"]
+        assert [s["prompt"] for s in row_second["slots"]] == ["Who left the deepest mark?"]
+
 
 class PostCGOriginSlotAPITest(TestCase):
     """POST set-origin-slot / clear-origin-slot on the sheet (#2478)."""
@@ -278,3 +308,51 @@ class PostCGOriginSlotAPITest(TestCase):
         )
         assert response.status_code == 200
         assert not CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()
+
+    def test_text_edit_preserves_organization_and_figure_name(self) -> None:
+        """A value-only edit via the API keeps an existing tie/named figure (#3660 fix round 1).
+
+        The post-CG write-in editor (this endpoint) never sends ``organization``/
+        ``figure_name`` at all - ``set_origin_slot`` must not wipe them just
+        because the caller didn't mention them.
+        """
+        from world.character_creation.factories import OriginTemplateSlotFactory
+        from world.character_creation.models import CharacterOriginSlot
+        from world.character_creation.services import set_origin_slot
+        from world.societies.factories import OrganizationFactory
+
+        slot = OriginTemplateSlotFactory()
+        org = OrganizationFactory()
+        set_origin_slot(self.sheet, slot, "Original text.", organization=org, figure_name="Mira")
+
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+        assert response.status_code == 200
+        row = CharacterOriginSlot.objects.get(sheet=self.sheet, slot=slot)
+        assert row.value == "A fuller account."
+        assert row.organization == org
+        assert row.figure_name == "Mira"
+
+    def test_explicit_none_organization_clears_the_tie(self) -> None:
+        """Passing ``organization=None``/``figure_name=""`` explicitly still clears them.
+
+        The ``_KEEP`` sentinel must only swallow an *omitted* kwarg, never a
+        deliberate clear (#3660 fix round 1).
+        """
+        from world.character_creation.factories import OriginTemplateSlotFactory
+        from world.character_creation.models import CharacterOriginSlot
+        from world.character_creation.services import set_origin_slot
+        from world.societies.factories import OrganizationFactory
+
+        slot = OriginTemplateSlotFactory()
+        org = OrganizationFactory()
+        set_origin_slot(self.sheet, slot, "Some text.", organization=org, figure_name="Mira")
+
+        set_origin_slot(self.sheet, slot, "Some text.", organization=None, figure_name="")
+
+        row = CharacterOriginSlot.objects.get(sheet=self.sheet, slot=slot)
+        assert row.organization is None
+        assert row.figure_name == ""

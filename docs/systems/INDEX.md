@@ -160,12 +160,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Technique effect summary (#2898):** the one block every technique surface
     shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
     (`services/technique_effects.py`, types in `types/technique_effects.py`)
-    reads the four payload tables — `TechniqueCapabilityGrant` /
+    reads the five payload tables — `TechniqueCapabilityGrant` /
     `TechniqueAppliedCondition` / `TechniqueDamageProfile` /
-    `TechniqueRemovedCondition` — none of which reached any display surface
+    `TechniqueRemovedCondition` / `TechniqueTreatment` (the fifth joined in
+    #3682) — none of which reached any display surface
     before, and renders both structured data and a plain-words line ("Cast on an
     ally, anywhere in the room, in the physical arena. Costs 5 anima. Applies
-    Guarded."). It **composes** `is_technique_hostile` and
+    Guarded."). A capability grant reads "Knowing it grants X" — standing
+    possession, never something the cast does (ADR-0248). It **composes** `is_technique_hostile` and
     `derive_target_relationship` rather than restating them; no model field is
     added (`Technique.target_type`'s help text forbids a stored relationship).
     Cached on the row as `Technique.cached_effect_summary`; drop it with
@@ -182,7 +184,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `target_kind`, so the derived relationship is a guess) and
     `technique_is_underspecified` (nothing authored at all), collected by
     `technique_effect_authoring_gaps()` and surfaced on `TechniqueAdmin` as
-    columns + a filter. See magic.md "Technique effect summary".
+    columns + a filter. `technique_is_not_castable_standalone` (#3682) reports a
+    third state — no `action_template`, so the cast gate refuses it and the cast
+    list hides it while CG still offers it as a pick. It is a fact about the cast
+    linkage, not a verdict: it stays out of `technique_effect_authoring_gaps()`
+    (every authored technique lacks a template today) and filters in SQL on the
+    admin instead. See magic.md "Technique effect summary".
   - **Per-caster technique forms (#2901):** the effect summary above describes
     the *authored* technique, which is the whole story for the two catalog
     surfaces (CG, the magic API) but not for the two per-character ones. A
@@ -391,10 +398,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
     natural key, `description`, `example`, `sort_order`, `is_active`),
     `CharacterGlimpseTag` (instance data, never exported; `aura` FK
-    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`),
-    `GlimpseTagDistinctionSuggestion` (content model — `magic.glimpsetagdistinctionsuggestion`
-    — `tag`/`distinction` FKs, specific→general per ADR-0010, grants nothing, purely a
-    suggestion surface). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
+    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`).
+    A tag's suggested distinctions are `character_creation.DistinctionOffer` rows
+    (`chapter=glimpse`, `glimpse_tag=<tag>`; #3675, retired the tag's own
+    `GlimpseTagDistinctionSuggestion` pairing table). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
     (`constants.py`) — five axes (TRIGGER single-select, what caused the
     awakening [#2611]; TONE single-select; CONSEQUENCE, WITNESS, SENSORY
     multi-select, SENSORY renders as prose prompts) and the NOT_STARTED/TAGS_ONLY/
@@ -408,11 +415,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     axis)`, `set_glimpse_prose(aura, text)`, `link_distinction_to_glimpse(character_distinction,
     aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
     (`world.character_creation.services.finalize_magic_data`) consumes
-    `draft_data["glimpse_tag_ids"/"glimpse_story"/"glimpse_linked_distinction_ids"]`
-    through these services. API: CG catalog `GET
+    `draft_data["glimpse_tag_ids"/"glimpse_story"]` through these services;
+    `link_distinction_to_glimpse` is now called per picked distinction whose
+    `offer_ids` name a `DistinctionOffer` with `glimpse_tag` set, not a separate
+    `glimpse_linked_distinction_ids` draft_data key (#3675, see
+    `docs/systems/magic.md`'s Glimpse section). API: CG catalog `GET
     /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, filterable
     by `?axis=` and `?path_id=<N>` [#2611], embeds
-    `suggested_distinctions`) + four `CharacterAuraViewSet` actions
+    `offers` (its own active `DistinctionOffer` rows, #3675)) + four `CharacterAuraViewSet` actions
     (`set-glimpse-tags` / `set-glimpse-prose` / `link-glimpse-distinction` /
     `unlink-glimpse-distinction`). Sheet payload: `AuraData.glimpse_story` /
     `.glimpse_state` / `.glimpse_tags` / `.can_finish_glimpse` (privileged-only);
@@ -466,7 +476,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     Phase Guard/Communion — ALLY SINGLE/FILTERED_GROUP Technique variants of the three reactive
     wards above (no new ConditionTemplates); reactive fire (`_try_spend_reactive`) and upkeep
     (`drain_reactive_upkeep`) both debit `ConditionInstance.source_character`, falling back to
-    the bearer, so an ally ward strains its caster. See magic.md §"Ally + party ward variants".
+    the bearer, so an ally ward strains its caster; an unpaid fire narrates via
+    `_narrate_reactive_fizzle` (#3574). See magic.md §"Ally + party ward variants".
   - Technique authoring draft workbench (#1496):
     `get_or_start_draft(character) -> TechniqueDraft`,
     `discard_draft(character)`,
@@ -495,7 +506,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     casts roll the same personal check.
   - Technique targeting (#1321):
     `derive_target_relationship(technique) -> ConditionTargetKind` (`world/magic/services/targeting.py`)
-    — ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF.
+    — ENEMY if hostile; ALLY if any applied, removed or treatment row has
+    `target_kind=ALLY`; ENEMY if a treatment row targets an enemy; else SELF.
+    Hostility itself reads the payload rows only — `EffectType.base_power` is a
+    magnitude knob and is NOT consulted (ADR-0281, #3682): it used to be, which
+    made all 54 authored Defense techniques classify as hostile.
     `technique_alters_behavior(technique) -> bool` — True if any applied condition's
     `category.alters_behavior` is True (compulsion, charm, fear).
     `cast_requires_consent(technique) -> bool` — True iff `technique_alters_behavior`; **behavior
@@ -605,7 +620,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **API endpoints (guided Glimpse story — #2427):**
   - `GET /api/character-creation/glimpse-tags/` — active `GlimpseTag` catalog
     (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`); embeds
-    `suggested_distinctions` per tag. Shared by CG and the post-CG "finish later" surface
+    `offers` per tag (its active `DistinctionOffer` rows, #3675). Shared by CG and the
+    post-CG "finish later" surface
   - `POST /api/magic/character-auras/{id}/set-glimpse-tags/` — body `{axis, tag_ids[]}`
   - `POST /api/magic/character-auras/{id}/set-glimpse-prose/` — body `{text}`
   - `POST /api/magic/character-auras/{id}/link-glimpse-distinction/` — body
@@ -668,6 +684,43 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
   penetration contest: [power-derivation.md](../architecture/power-derivation.md)
 
+### Scene Interaction Threads
+Anchored, nestable reply threads for scene, place, and fixed-party whisper interactions,
+plus the reachability rule (#3787).
+
+- **Models:** `scenes.InteractionThread`, anchored at the row it answers
+  (`anchor_interaction` + `anchor_timestamp`, both required, `db_constraint=False` plus a
+  denormalized timestamp because `arxii_interaction` is range-partitioned on a composite
+  key - `InteractionReceiver` is the precedent, see ADR-0293 for why `InteractionAction` is
+  not), with `parent` naming the thread its anchor belongs to and `root` denormalizing the
+  top of the nesting tree; nullable `scenes.Interaction.thread`, which now means "what I am
+  an answer to", not "which pile I am in". The anchor is NOT a member of its own thread,
+  and `unique_thread_per_anchor` makes two answers to the same row one exchange. There is
+  no `InteractionReply` bridge: an edge table was built and removed at review (ADR-0293,
+  decision 4).
+- **Write target:** serializer-only `reply_to` (`id` + RFC3339 `timestamp`).
+- **Read payload:** `thread_id`, `root_thread_id` (the exchange key a nested back-and-forth
+  groups by; null when the row's own thread is the root), `reply_to` (derived from the
+  thread's anchor, gated on the parent's own `visible_to`); existing visibility and
+  delivery rules remain canonical.
+- **Reachability (#3787):** `world.scenes.reachability.persona_can_receive` is the shared
+  predicate behind both the tagging refusal (`UnreachableError`, `create_interaction`) and
+  the reply refusal (`InteractionThreadError`, `assign_interaction_thread`) - a private
+  venue's reply target is refused, never widened, and both refusals preserve the writer's
+  draft. Its rules are also deliberately mirrored client-side, in
+  `frontend/src/scenes/replyReachability.ts` (#3787) and `frontend/src/scenes/tagReachability.ts`
+  (#3810), so the composer can give a pre-emptive refusal before the server's own
+  authoritative check runs; that mirroring is intentional and kept in step with
+  `persona_can_receive`, not eliminated. See ADR-0293.
+- **Targeting vs. grouping (#3787):** `target_persona_ids` drives the involvement mark and
+  `attention.ts`'s `direct` badge tier; it does not drive reader grouping - `getThreadKey`
+  keys `action`/`outcome` mode rows by scene, not by target, so a multi-target combat round
+  stays one reader group. Combat's ACTION/OUTCOME writers now pass `target_personas`
+  through the shared `write_target_personas` helper, unvalidated by reachability (a
+  resolved action's targets are already governed by the encounter's own targeting rules;
+  Battle scenes have no location for `persona_can_receive` to test against). See ADR-0293.
+- **Source:** [`scene-interaction-threads.md`](scene-interaction-threads.md).
+
 ### Traits
 Character statistics and dice rolling mechanics.
 
@@ -721,7 +774,11 @@ allocations that convert AP to development points.
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
 ### Distinctions
-Character advantages and disadvantages (CG Stage 6: Traits).
+Character advantages and disadvantages. No CG stage of its own since #3675: each CG
+chapter offers the distinctions that belong to it via `character_creation.DistinctionOffer`
+rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
+`reconcile_offer_picks`); see the Character Creation section below and
+[distinctions.md](distinctions.md)'s "CG Integration".
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
   (`from_glimpse` nullable FK → `magic.CharacterAura`, SET_NULL, #2427 — FK presence is
@@ -747,6 +804,14 @@ Character advantages and disadvantages (CG Stage 6: Traits).
   potency, #1834; `DistinctionResonanceRankThreshold` — the reverse direction, #2037; both
   sidecar models live in `world.magic` per ADR-0010 — see below and
   [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
+- **Per-feature distinctions (#3739):** `Distinction.taken_per_feature` /
+  `opens_feature` / `requires_feature_opened` / `cg_max_rank` (`cg_ceiling`) make a
+  distinction one a character holds **once per feature** (a `FormTrait` row or a
+  `FormMarking`) rather than once. `CharacterDistinction.feature_trait` /
+  `feature_marking` name it; `world.distinctions.types.feature_key` is the key every
+  draft-entry reader uses in place of the distinction id. See
+  [distinctions.md](distinctions.md) "Distinctive features" and
+  [forms.md](forms.md) "Distinctive features".
 - **Source:** `src/world/distinctions/`
 - **Glossary:** `src/world/distinctions/AGENT_GLOSSARY.md`
 - **Details:** [distinctions.md](distinctions.md)
@@ -762,6 +827,12 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus, level_points, specialization_points, capability_points)
 - **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + level points (`LEVEL_POINTS_PER_LEVEL * class level`, guaranteed on EVERY check — #2707, ADR-0166) + capability points (weighted via authored `CheckTypeCapabilityModifier` as `weight x (effective value − innate_baseline)`, curated gate — #2505, deviation-scored per #2704/ADR-0164) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
 - **Integrates with:** traits (lookup tables), skills (check bonuses), progression (`get_character_path_level` — sole source of a character's class level, #2707), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), combat (opposed difficulty on offense/penetration/NPC-attack defense, and `CombatOpponent.level` fed into the resist path for social verbs), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
+- **Resolution theater (#924, extended #3807 Part B):** `check_outcome_faces(check_result)` /
+  `maybe_emit_resolution_theater` (`world/checks/theater.py`) push a dramatic-reveal wheel to a
+  player's client. A social check schedules one for roller + target via
+  `_schedule_check_outcome_theater` (`world/scenes/action_services.py`); faces come only from
+  the check's own `ResultChart` bands, never rollmod or an outcome guarantee (ADR-0297). See
+  "Resolution theater" in [checks.md](checks.md).
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -977,7 +1048,10 @@ shapeshift lifecycle.
   `knows_style(sheet, option)` / `learn_style(sheet, option)` (#2632),
   `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604),
   `identification_difficulty(viewer_sheet, target_character)` / `attempt_identification(viewer, target, guess_name=None)` (`world/forms/services/identification.py`, #1107 slice 5 — the PC-to-PC "who's really under this mask" check; second `PersonaDiscovery` producer, see [appearance_and_identity.md](appearance_and_identity.md) §"Identification loop (slice 5)"),
-  `grant_marking(sheet, ...)` / `visible_markings_for(character, observer)` (`world/forms/services/markings.py`, #2985 — the marking write seam + the observer-filtered read behind look's "Markings:" line and `GET /api/items/visible-markings/`)
+  `grant_marking(sheet, ...)` / `visible_markings_for(character, observer)` (`world/forms/services/markings.py`, #2985 — the marking write seam + the observer-filtered read behind look's "Markings:" line and `GET /api/items/visible-markings/`),
+  `get_cg_form_options(species)` (the CG palette: species `allowed_options`, minus each
+  trait's `unnatural_option` — the off-species umbrella a distinctive feature reaches
+  past it to, #3739; see forms.md "Distinctive features")
 - **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`,
   `TraitNotBlendableError`, `StyleNotKnownError` (#2632; items-side wrappers
   `BlendNotSupported` / `StyleNotKnown` / `StyleChoiceRequired` on `use_item`)
@@ -1032,7 +1106,10 @@ per-class, per-stage health rate authoring and the primary-class level service.
 ### Areas
 Spatial hierarchy for organizing rooms into a nested tree of areas, from individual
 buildings up to entire planes. A `Room` is not its own `Area` level — it hangs off a
-`Building`-level `Area` via `RoomProfile.area`.
+`Building`-level `Area` via `RoomProfile.area`. Staff may mint a one-way exit
+(`StaffLinkRoomsAction` `one_way`, the Atlas exit dialog; #3860, ADR-0301) and reach area-less
+rooms through the Atlas's Unfiled rooms listing (`unfiled-rooms`); owner and story links stay
+symmetric.
 
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
   #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =
@@ -1108,8 +1185,10 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
   staff canvas share one substrate instead of two drifting copies. Forty-three
   REGISTRY actions (`src/actions/definitions/world_builder.py`,
-  `category="world_builder"`, `target_type=SELF`) — `create_area`/`edit_area`/
-  `staff_dig_room`/`staff_edit_room`/
+  `category="world_builder"`, `target_type=SELF`) — `create_area` (takes
+  parent-local `grid_x`/`grid_y`; answers with `data.area_id`)/`edit_area`/
+  `staff_dig_room` (answers with `data.room_id`, so the Atlas chains a link or a
+  first-room dig without waiting for a refetch)/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
   `staff_publish_room`/`staff_remove_room`/`staff_remove_area`/`staff_move_room`/
   `promote_room`/`promote_area` + the six #2451 discovery/portal verbs + the #3269
@@ -1329,6 +1408,12 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   `onPickPosition` cast-targeting hook; `SceneTacticalMap`/`CombatTacticalMap` both grew a
   "Place" toggle + target picker over the room's co-located participants/opponents/personas
   when a `gm_place_in_position` `PlayerAction` is available.
+  **#3557:** while an encounter is active `SceneDetailPage` unmounts `SceneTacticalMap`
+  and `CombatTacticalMap` is the page's only map; it takes `sceneId`, reads the page's
+  cached scene detail, and draws non-combatant personas as dimmed bystanders
+  (`OccupantSummary.bystander`). `CombatRail` gained a GM tab (`CombatGMTab`: encounter
+  controls + the combat `GMAdjudicationPanel` tabs), and the idle header panels fold
+  behind a "Scene tools" accordion (ADR-0274).
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
@@ -1356,10 +1441,13 @@ Temporary instanced rooms spawned on demand for missions, GM events, and tutoria
 - **Source:** `src/world/instances/`
 - **Details:** [instances.md](instances.md)
 ### Realms
-Game world realms (Arx, Luxan, etc.) for geographical/political organization.
+Game world realms (Arx, Luxen, etc.) for geographical/political organization, and the
+public realm pages (#3725): the Realms hub and each realm's page (testament, societies,
+houses and organizations, the two boards, the roster).
 
-- **Models:** `Realm`
-- **Integrates with:** societies (Society.realm FK), character_creation (StartingArea)
+- **Models:** `Realm`, `RealmTestamentSection`
+- **API:** `/api/realms/` (hub), `/api/realms/<slug>/` (+ `organizations/`, `notables/`); `realm_by_slug`
+- **Integrates with:** societies (Society.realm FK; shop-window and realm boards), character_creation (StartingArea; `realm_slug`), roster (`?realm=` filter), character_sheets (Profile.origin_realm)
 - **Source:** `src/world/realms/`
 - **Details:** [realms.md](realms.md)
 ### Weather (Climate baseline + transient weather — #1522)
@@ -1383,6 +1471,21 @@ Social structures, organizations, reputation, and legend tracking.
 - **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`, `LegendHonor` (#3466 — paid testimony that
   raises a deed's `base_value`), `LegendLevelCalibration` (#3466 — per-level honor Hare
   cost/value-added/title-threshold dials)
+- **`Vacancy` model (#3648, ADR-0273):** an opening on a staff-minted family's org
+  (`organization`, `name`, `description`, `importance`/`presumed_importance`,
+  `cg_point_cost`/`cost_per_influence` priced via `cost_for(influence)`, `rank`,
+  `kin_pool`/`kin_node` (at most one; sets `basis` to `kin`, else `retainer`),
+  `count_remaining` (blank = standing, always open), `allowed_upbringings`,
+  `is_active`). `NaturalKeyMixin` + `CreditedContent` (visible
+  in the Authoring Workbench) but not in `CONTENT_MODELS`: it belongs to one
+  installation's family, not the corpus. `OrganizationMembership.vacancy` FK records
+  which Vacancy a membership was taken through.
+- **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`,
+  open (unless `require_open=False`, used by CG draft validation re-checking an
+  already-selected Vacancy), realm-matched, Upbringing-gated CG offer;
+  `take_vacancy(vacancy_id)`, locks and claims one opening inside the caller's
+  `transaction.atomic()`, raising `VacancyExhaustedError` if closed. Consumed by
+  `character_creation.services._bind_vacancy` at finalize.
 - **Office services** (`office_services.py`, #2239): `appoint_office` / `vacate_office` / `office_holder` / `holds_office`
 - **Obligation services** (`obligation_services.py`, #2428): `settle_obligation(obligation, token)` (redeems the Hare via `currency.redeem_favor_token`, flips `OWED` → `SETTLED`, stamps `settled_at`/`settled_by_token`; raises `ObligationNotOwedError` if not `OWED`) / `has_open_obligation(sheet, org)` (read-only gate for training/entrance flows)
 - **Standing declarations** (`standing_services.py`, #3290): `declare_standing(*, organization, target_persona, declared_by_persona, direction, citation)` — rank-gates on `can_declare_standing`, gates DISFAVOR through the #2170 antagonism-consent seam (the `hostile` `SocialConsentCategory`, the same one `world.secrets.services.accusation_permitted` consults for frame-job denounce), rate-limits to one declaration per (organization, target_persona) per IC `GameWeek`, applies the PLACEHOLDER `STANDING_DECLARATION_FAVOR_DELTA`/`STANDING_DECLARATION_DISFAVOR_DELTA` (`constants.py`) via the existing `bump_organization_reputation` (never a parallel writer), and mints the `StandingDeclaration` audit row. Typed errors: `NotAuthorizedToDeclareStandingError`, `InvalidStandingTargetError`, `StandingConsentBlockedError`, `StandingRateLimitedError`.
@@ -1482,13 +1585,21 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   for family standing, subordination, patronage, and culture-specific facts through this
   layer: [family-authoring-recipes.md](family-authoring-recipes.md) (recipes 4-7 and 9
   use the houses layer); design record: ADR-0268, ADR-0269.
-- **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239, the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`). **Garrison (#696 gap 5):** `effective_defenses(domain)` = `Domain.defenses` + `garrison_term(domain)` (a seam returning 0 until TehomCD's military side wires a real garrison bonus off `DomainGarrisonPost` units); `assign_garrison`/`relieve_garrison` (gated on `can_administer_domain`, unit's `owner_org` must match) are reachable via `AssignGarrisonAction`/`RelieveGarrisonAction` (`actions/definitions/domains.py`, registry keys `assign_garrison`/`relieve_garrison`).
+- **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` (+ `particles_for_families`, the batched form the families list uses, #3654) / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`). **Garrison (#696 gap 5):** `effective_defenses(domain)` = `Domain.defenses` + `garrison_term(domain)` (a seam returning 0 until TehomCD's military side wires a real garrison bonus off `DomainGarrisonPost` units); `assign_garrison`/`relieve_garrison` (gated on `can_administer_domain`, unit's `owner_org` must match) are reachable via `AssignGarrisonAction`/`RelieveGarrisonAction` (`actions/definitions/domains.py`, registry keys `assign_garrison`/`relieve_garrison`).
 - **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0246) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
 - **Threat/opportunity loop (#2837, ADR-0177):** `DomainCrisisType` gains `valence` (threat/opportunity) + `audience` (domain/org/criminal-org); `DomainCrisis` gains a nullable `org` leg (exactly-one-of), `surfaces_at` (generated crises spawn covert for `COVERT_WINDOW_DAYS`; hidden even from their target until surfaced or swept), and `CrisisIntel` (org × crisis early knowledge, minted by spy sweeps). `crisis_generation_tick` (weekly rollover processor) ambient-spawns per domain and per eligible org (active income streams or covert org type); opportunities expire after `OPPORTUNITY_LIFETIME_DAYS`; org-target threats skim stream accrual (`org_crisis_income_factor` in `accrue_income_stream`); MISSION options now actually mint (`choose_crisis_option` → `staff_assign_mission`); `apply_crisis_boon` pays seizure (owner: prosperity; anyone else: treasury coppers). Catalog seeded by the `crisis_types` cluster (`world/seeds/crisis_types.py`). Spy counterplay: `reveal_schemes` / `crisis_severity_delta` / `exploit_crisis` route payouts + `TaskTargetKind.CRISIS` (see tasking).
 - **Civ-stats drive gameplay (#2238):** `Domain.income_multiplier` (prosperity / `DOMAIN_PROSPERITY_BASELINE`) scales a holding's gross in `currency.accrue_income_stream` — prosperity now drives income, not just display. `unrest_crisis_chance` / `maybe_open_unrest_crisis` roll a `DomainCrisis` when unrest is high (called from the weekly `domain_consumption_tick`). Unrest also skims food collection (`agriculture._apply_unrest_skim`) and a well-fed week recovers prosperity/unrest toward equilibrium (`agriculture` recovery drift). Still deferred (own PR): unrest→justice-heat *suppression* + crackdown loop (unrest makes a domain heat-safe until a crackdown spikes heat)
 - **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
 - **Web:** `/orgs/:id` house section + House Tidings; **Telnet:** `sheet/house`
-- **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
+- **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization, now built on the shared `build_family_org`); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
+- **The charter catalog is lore-repo content (#2875):** `SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all carry `NaturalKeyMixin` (`name`) + `CreditedContent` and sit in `CONTENT_MODELS`, the same shape #2868 already gave `HouseAspectDefinition`/`HouseAspectOption` below. `world/seeds/houses.py` looks all four up via `authored_or_sample()` (#2875 Task 2) rather than inventing them with `get_or_create()`; the Crown organization and its Society (plain seeder-owned config, not `CONTENT_MODELS`) moved to `world.seeds.config_prerequisites._house_charter_anchors`, run before the content load so a content-repo row can FK them by name (ADR-0171). `SuccessionLaw` also carries a `description` field now (the writer's field, how the law shapes inheritance), and all four models have a registered `ModelAdmin` so the Workbench change link and backlog queue reach them. Authoring guide (what a charter holds, the Workbench/admin authoring path per ADR-0238, the liege/society code prerequisites, and what founding copies): "Authoring a realm's charter" in [houses.md](houses.md).
+- **`HouseTemplate` generalized past nobles (#3648, ADR-0273):** verbose name "Family
+  Template". `liege`/`default_succession_law` are now nullable (only a title-path
+  template needs them) and `org_type` (FK `OrganizationType`, required) and
+  `served_house_choices` (M2M `Organization`, blank, installation-specific:
+  `EXPORT_FIELD_EXCLUSIONS["societies.housetemplate"]`) are new. The Caretaker/crime
+  family/crew cases in [family-authoring-recipes.md](family-authoring-recipes.md)
+  use the same model as a noble charter.
 - **Regional flavor (#2079):** `HouseAspectDefinition`/`HouseAspectOption` (required catalog-only choices per template, ADR-0101), `HouseFeature` (slug-anchored cultural facts), `HouseClaimAspect` picks → `OrganizationAspect`/`OrganizationFeature` facets at materialization; `Organization.words/colors/sigil_description` stylings (all org types); `Domain.description` lands writeup. **The aspect catalog is lore-repo content (#2868)** — both aspect models carry `NaturalKeyMixin` and sit in `CONTENT_MODELS`; `HouseAspectOption.codex_entry` binds an option to its lore write-up (Inferna's House Quiddities), surfaced to CG as `codex_entry_id`
 - **House Stature (#3091, ADR-0209/0210):** perceived-vs-true deterrence for landed orgs. Models: `StatureBand` (authored percentile tiers; `threat_multiplier` scales ambient predation; headline templates), `HouseStature` (components renown/military/economic/allied, `crisis_penalty`, true/perceived totals, band + trend, `prestige_rank`, stored realm rank), `StatureShift` (why-it-moved ledger → tidings), `PrestigeRankBand` (rank-relative benefits → prosperity drift), `OrgPrestigeRank` (unlanded orgs). Services in `stature_services.py`: `recompute_stature` (renown channels: members, head's COURT covenant, kin via `Kinsperson.gifted_rating`, union partners — marriage both-ways full, consorts half/senior-only/landed-title-gated/capped, paramours zero), `converge_perceived`, `apply_death_shock` (vitals seam), `apply_pact_shift`, `crisis_stature_shift` (covert threats hit perceived only after surfacing), `apply_whisper`, `assign_bands`/`assign_realm_ranks`/`recompute_org_prestige_ranks`, `apply_prestige_prosperity_drift` (zero-open-threats gate; ~3x income ceiling via prosperity clamp), `weekly_stature_tick` (rollover processor before crisis generation), `gifted_power_rating` (first live `MOST_POWERFUL_GIFTED` rater), `award_marriage_tier_prestige`. Six-step `TitleTier` (empire/kingdom/duchy/march/county/barony). Surfaces: org API `house.stature` panel, `domain stature` telnet, `FeedItemKind.STATURE` tidings, spy `_stature_lines` + `whisper_stature_delta` payout. Seeds: cluster `stature` (bands, rank bands, consort/paramour `UnionKind` rows — Luxen's non-recognition = no row)
 - **Predator ecology (#3093, ADR-0211):** named NPC antagonists in `world/predators/` (thin dedicated models, never Organizations): `PredatorKind` (authored vocabulary), `PredatorBand` (strength/loot/prey/home region + `MenaceStage` ladder: rumors → lawlessness → robbery → raids → terror, ~10 weekly crons rumor→raid, advancing only while unanswered), `MenaceEvent` (tidings source), `AfflictionSign` (the dread week before an outbreak). Services: `weekly_menace_tick` (spawn/stalk/pressure/escalate; prey = weakest-perceived landed org honoring consort regional peace), `strike_band`/`sabotage_band` (counterplay: burn, knockdown, dormancy, disband; wired into `resolve_crisis` for attributed raids), `weekly_affliction_tick` (SIGNS → deterrence-blind outbreak → capped one-hop spread; `DomainCrisisType.ignores_stature`/`affliction_spreads`, `DomainCrisis.aggressor_band`/`spread_count`, `CrisisOrigin.PREDATOR`/`AFFLICTION`). Espionage: `TaskTargetKind.PREDATOR` + `scout_predator`/`sabotage_predator` payouts. `FeedItemKind.MENACE` tidings. Grand displays: `apply_grand_display` (event PROVISION quality → bounded upward perceived-stature bluff, seamed at `complete_event`). **Defenses resist predation (#696 gap 5):** LAWLESSNESS's unrest tick and ROBBERY's skim percentage are each reduced by `houses.services.effective_defenses(domain) // PLACEHOLDER_DEFENSE_STEP`, floored at 0; `_ensure_raid_crisis` targets the prey's lowest-`effective_defenses` domain, not its lowest-prosperity one. Seeds: cluster `predators`. Details: [predators.md](predators.md)
@@ -1501,7 +1612,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 ### Goals
 Goal domain allocation and journal-based XP progression.
 
-- **Models:** `CharacterGoal`, `GoalJournal`, `GoalRevision`
+- **Models:** `CharacterGoal` (with `horizon` + `ordinal`, #3621: any number per domain, numbered within short and long term, bonus summed), `GoalJournal`, `GoalRevision`
 - **Goal Domains:** Stored as `ModifierTarget(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
 - **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`
@@ -1549,6 +1660,9 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
   by a reveal); a bequest recipient browses the deceased's non-sealed private corpus via
   `GET /api/journals/entries/?deceased=<sheet_id>`; `GET/PATCH /api/journals/entries/disposition/`
   reads/sets the caller's sheet-level default.
+- **Kinds (#3621):** `JournalEntry.kind` (`JournalKind`: entry, first_journal, application,
+  whispers) marks the three CG Introductions so the sheet and, later, an institution's reading
+  room can find them; `create_journal_entry(kind=...)`.
 - **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
   `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
@@ -1574,8 +1688,11 @@ Time/effort resource economy with regeneration via cron. The most complete gate 
 ### Codex
 Lore storage and character knowledge tracking.
 
-- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`
-- **Key Methods:** Character learning from starting choices or teaching
+- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`,
+  `CodexEntryFiling` (secondary cross-listing of an entry under a second subject;
+  ADR-0275)
+- **Key Methods:** Character learning from starting choices or teaching; `services.
+  file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing
 - **Visibility (ADR-0221):** entries are the only unit of secrecy; categories/subjects
   with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
   is the union across the account's characters (`?character=` narrows; `known_by`
@@ -1585,6 +1702,11 @@ Lore storage and character knowledge tracking.
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.
+- **Quote (#3776 Task 10):** `CodexEntry.quote` — optional `CharField` (max 300, blank
+  hides it), an italic intro line meant atop any entry's page; general-purpose (not
+  worship-specific) so `worship.WorshippedBeing.codex_entry` (below) can reuse it.
+  Not yet exposed by `CodexEntryListSerializer`/`CodexEntryDetailSerializer` — model
+  and admin only today.
 - **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge), evennia_extensions (`Media`, art)
 - **Source:** `src/world/codex/`
 - **Details:** [codex.md](codex.md)
@@ -1986,7 +2108,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
+  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
 
   **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). Both writers stamp `traits.CharacterTraitChange` rows (`source=LEVEL_STAT_POINT`, #3055). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
@@ -2005,7 +2127,10 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
   - `ExperiencePointsData.can_spend(amount) -> bool`
-  - `CharacterXP.can_spend(amount) -> bool`
+  - `CharacterXP.can_spend(amount) -> bool` — a locked (CG) pool only; a `transferable=True` row is an attribution ledger, not a pool (#3748)
+  - `award_xp(account, amount, ..., *, character) -> XPTransaction` (`services.awards`) — `character` is keyword-only with no default; `None` only for an award no character earned (#3748)
+  - `spend_xp_for_character(sheet, amount, description, *, reason, gm) -> XPTransaction | None` (`services.xp_ledger`) — **the seam every XP purchase debits through** (class levels, skill breakthroughs, gift and thread-weaving unlocks, distinction sheet changes); raises `InsufficientXPError` / `NoAccountForCharacterError` (#3748, ADR-0288)
+  - `character_xp_ledger(sheet) -> CharacterXPLedger` (`selectors.py`, #3748) — lifetime `earned`/`spent`/`locked` for one character; read by the sheet panel, the admin, and the death-kudos cap (ADR-0131)
   - `current_path_for_character(character) -> Path | None` (`selectors.py`) — returns the character's most-recent `CharacterPathHistory` path
   - `next_path_options(character) -> list[Path]` (`selectors.py`) — returns active child paths of the current path (or all top-level paths if no current path); used by `PathOptionsView`
   - `eligible_advanced_paths_for(sheet) -> list[Path]` (`selectors.py`, #1700) — active child paths at the next level's stage (for the semi-crossing resolver); empty when not at a stage boundary
@@ -2019,6 +2144,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `POST /api/progression/unlocks/purchase/` — buy a `class_level`, `thread_xp_lock`, or `skill_breakthrough` unlock with XP; dispatches `PurchaseUnlockAction`
   - `GET /api/progression/durance/status/` — Durance readiness hub for the played character; mirrors telnet `durance status` exactly (#3045)
   - `POST /api/progression/durance/convene/` — open a site-convened Durance session at the played character's room; calls `convene_durance_at_site` directly, not a dispatch seam (#3045)
+  - `GET /api/character-sheets/{id}/xp-ledger/` — what this character earned and what was spent on them (`{earned, spent, locked}`); owner-only. On the sheet viewset, not `/api/progression/`, because the question is per-character (#3748)
   - `GET`/`POST`/`PATCH`/`DELETE /api/skills/training-allocations/` — deliberate skill training allocations (`world.skills`, `TrainingAllocationViewSet`); dispatches `ManageTrainingAction`
 - **Web Advancement tab (#3045):** `frontend/src/progression/components/advancement/` —
   `AdvancementTab` (mounted on `CharacterSheetPage`, own-sheet + active-puppet gated) hosts
@@ -2028,20 +2154,27 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   match telnet's `ritual join` — see `docs/systems/progression.md`). Closed the "every SPEND
   path was telnet-only" gap; `RandomScenePanel` (earn-path, previously built-but-orphaned) now
   mounts on `XpKudosPage` instead.
+- **Nominations (#3738, ADR-0286):** `Nomination` (`models/nominations.py`) replaced `WeeklyVote`/`WeeklyVoteBudget`:
+  an OOC act by the account off a pose or public journal from the current week the nominator could
+  see; one per account per nominee per week however many pieces cited; no budget; invisible to the
+  nominee. `services/nominations.py` (`nominate`, `withdraw_nomination`, `nominations_by_account`,
+  `has_nominated`), `services/nomination_processing.py` (`stepped_xp`, `process_weekly_nominations`,
+  `weekly_nomination_processing_task` on the weekly rollover: four paths, one stepped curve),
+  `NominationViewSet` at `/api/progression/nominations/`. Frontend `NominateButton` + `NominationsPanel`.
 - **Actions:**
   - `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) — shared unlock purchase path for web and telnet
   - `ClaimKudosAction` (`registry_key="claim_kudos"`) — kudos→XP conversion; shared by web and telnet (#1348)
-  - `CastVoteAction` / `RemoveVoteAction` (`"cast_vote"` / `"remove_vote"`) — weekly vote budget management (#1348)
+  - `NominateAction` / `WithdrawNominationAction` (`"nominate"` / `"withdraw_nomination"`) — nominating a character for good RP off a pose or journal (#1348 seam, #3738 replaced the vote budget)
   - `ClaimRandomSceneAction` / `RerollRandomSceneAction` (`"claim_random_scene"` / `"reroll_random_scene"`) — weekly random-scene bounty claims/rerolls (#1348)
   - `SetPathIntentAction` / `ClearPathIntentAction` (`"set_path_intent"` / `"clear_path_intent"`) — declare/clear preferred next path for Audere Majora (#1348)
 - **New service module (#1348):** `world.progression.services.path_intent` — `set_path_intent(sheet, path)` / `clear_path_intent(sheet)`; single seam for `PathIntentViewSet` + `CmdPathIntent`
 - **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`);
-  `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348);
+  `kudos`, `nominate`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348, #3738);
   `durance [status|intent|convene]` (in `commands/durance.py`, #1700)
 - **`award_kudos` real-time push + privacy guard (#2161):** every `award_kudos` call
   schedules `notify_kudos_received` via `transaction.on_commit`, pushing a `kudos_received`
   WS frame (amount/source_category/description) to the recipient's connected sessions —
-  central to the service, not per-caller, so vote settlement, GM awards, writeup kudos, and
+  central to the service, not per-caller, so GM awards, writeup kudos, and
   the social-engagement roll below all get the toast for free. `KudosTransactionSerializer`
   no longer exposes `awarded_by`/`awarded_by_name` to the recipient (ADR-0033 structural
   guard — the awarder's identity never leaks to the person they kudos'd).
@@ -2064,12 +2197,15 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
-- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270), `ProfileTextVersion`
+- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
   (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
   personality): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG
   original on the first post-CG write; admin edits route through it via
-  `ProfileAdmin.save_model`), `Heritage`, `Gender`, `Pronouns`, `MoodOption`
+  `ProfileAdmin.save_model`), `Heritage` (`first_appeared_ic`, #3663: nullable IC date
+  the first of a heritage were born; `character_creation.services.age_bounds` caps CG
+  age at the whole IC years since, floor 18 — Misbegotten 980 AS; `HeritageAdmin` sets
+  it on production), `Gender`, `Pronouns`, `MoodOption`
 - **Mood (#2994):** `CharacterSheet.current_mood` — a sticky, nullable, INTERNAL declared
   state (`feel <state>` telnet / `SetMoodAction`, key `set_mood`). Silent by design: no room
   echo, no scene Interaction row, no look/appearance rendering, no mechanical effect. Owner/
@@ -2152,12 +2288,71 @@ Multi-stage character creation flow with draft system.
   without subclassing `RosterEmailService` itself, whose approve/deny methods take a
   roster-specific `tenure` arg). See [character_creation.md](character_creation.md#email-notifications-2162).
 - **Lineage stage: Upbringings (#3617):** the Lineage stage offers per-beginning
-  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost, a trust
-  gate, and a family path (claim a staff-authored family, name a new one, or
-  none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
+  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost and a
+  family path (claim a staff-authored family, name a new one, or none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
   new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
   the design decisions: ADR-0268, ADR-0269.
+- **Lineage stage: Family Templates and Vacancies (#3648, ADR-0273):**
+  `OriginTemplate.family_templates` (M2M `HouseTemplate`, related_name
+  `upbringings`) names which Family Template(s) the name path offers;
+  `named_family_kind` is retired. `CharacterDraft.selected_vacancy`,
+  `served_house`, and `resolve_family_template()` back the family block; the
+  `GET .../vacancies/?draft=` endpoint (`vacancy_services.reachable_vacancies`)
+  serves the open, priced Vacancy rows; `_bind_vacancy` (in
+  `character_creation.services`) takes the Vacancy at finalize, before
+  `_bind_kinship_node`. See [character_creation.md](character_creation.md)'s
+  Lineage step section and [family-authoring-recipes.md](family-authoring-recipes.md)
+  recipes 10-12.
+- **Lineage stage: formative connections (#3660, ADR-0277):** an Upbringing
+  prompt now has one of four `QuestionKind`s (text, pick, "pick a group", "name a
+  person"); a group question ties the answer to a real `societies.Organization`
+  (five `AnchorSource` rules: a pool, a named list, the same group as an earlier
+  question, the served house, or the character's own family), tags when and what
+  kind of tie it was, and may show only after an earlier question or only for one
+  of its answers; an answer may grant a Distinction bundled free and seed the
+  group's opinion at finalize. Staff author a whole route on one page, the
+  Upbringing Builder (`src/web/admin/upbringing_builder/`); the character sheet's
+  Origins panel (`OriginsSection.tsx`) shows the resulting ties, entity-linked and
+  life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
+  kinds and connections" subsection and ADR-0277.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
+- **Actor's Sheet (#3621, ADR-0279):** Final Touches replaced personality with three questions
+  (`Profile.never_do`/`protect`/`fear`), goals with a horizon and number, one priced enemy
+  (`character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;
+  `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation and heat
+  seeds and, since #3709, the picked `EnemyReason`; the degree's mark is a bundled offer line
+  on `OfferChapter.ENEMY`) and The Introductions (white journals by `JournalKind`; Whispers
+  lines as Level-1 secrets with gossip heat). See character_creation.md's "The Actor's Sheet".
+- **Offers hang off the question and the reason (#3709, ADR-0282):** every chapter's offer line
+  names its opener (`ActorSheetPrompt` on the Actor's Sheet; an `EnemyReason` row or a marking
+  degree on the enemy chapter; an `AppearanceSection` row on Appearance), the Beginning pins a
+  first look (`OfferFirstLook`), `offers_for` returns `opener_key`/`first_look`/`held`/
+  `effect_line`, `degree_marks` replaces the retired `ENEMY_DEGREE_DISTINCTION_NAMES`, and the
+  Distinction Builder's "Add from a table" (`web/admin/distinction_builder/paste.py`) lands new
+  rows in bulk, additions only.
+- **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
+  Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
+  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet],
+  `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, exactly one opener
+  of its chapter's kind [`schooling_line`/`glimpse_tag`/`origin_choice`/`prompt`/`enemy_reason`/
+  `enemy_degree`/`appearance_section`, #3709], `first_look` [M2M `Beginnings` through
+  `OfferFirstLook`, #3709]) is the one row that says where a distinction is shown, what opens
+  it there and how it arrives, read by `world.character_creation
+  .offers` (`offers_for`, `closed_for`, `reconcile_offer_picks`, `visible_offers`). A
+  tradition's slate line (`BeginningTradition.state`, `TraditionState`:
+  SELF_TAUGHT/TEACHERS_GONE/LIVING_MASTERS) prints one of three staff-authored standard lines
+  (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
+  LIVING_MASTERS, offers the standard schooling set (`SchoolingLine`, rank 0-2, each granting a
+  distinction at its rank, priced `grants.cost_per_rank * rank`). `OriginTemplate
+  .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
+  chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
+  `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every
+  draft PATCH, `select-tradition`, and once at the start of every finalize path. Four staff
+  admin builders author this surface (Distinction Builder, tradition slate, the Upbringing
+  Builder's per-answer offers + route closes, a `GlimpseTag` change-form inline), reachable
+  from a Builders panel on the Authoring Workbench dashboard; see `src/web/admin/CLAUDE.md`.
+  See [character_creation.md](character_creation.md)'s "Distinction offers" section and
+  [distinctions.md](distinctions.md)'s "CG Integration".
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
 ### Market (#2066, standing gating #2995)
@@ -2286,9 +2481,10 @@ Character lifecycle management with web-first applications and player anonymity.
   telnet mail command exists or is planned. PlayerMail is OOC between players; IC missives
   are #3289's separate system (ADR-0226).
 - **Game invites (#2483):** `GameInvite` model + `GameInviteViewSet` for
-  player-to-friend contextual invites. Trust-gated via `PlayerTrust` (new
-  `INVITE` `TrustCategory`, `BASIC` minimum, seeded via the Big Button
-  "roster" cluster). Token-in-URL flow: inviter creates invite with a message
+  player-to-friend contextual invites. Any authenticated player may send one;
+  `registration_open` is the only gate (#3182, #3726 — the `PlayerTrust`
+  threshold that used to sit beside it refused every player, since nothing ever
+  granted a trust level). Token-in-URL flow: inviter creates invite with a message
   → friend registers via `/register?invite=TOKEN` → claims on first login
   → invite annotates their first `DraftApplication.invited_via` FK → inviter
   gets a websocket push on submission. Services use the `game_invite` prefix
@@ -2975,7 +3171,12 @@ must all pass before `--execute` touches a row; defaults to a dry-run.
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
-action consent flow, and a three-mode non-combat round framework.
+action consent flow, and a three-mode non-combat round framework. Every pose and say line is rendered
+with its actor at display time by `line_rendering.render_line` (#3858, ADR-0299; `line` on the
+WebSocket payload and `InteractionListSerializer`).
+Who is in a scene is read off its log
+(`participation.py`, #3867, ADR-0300): the first room-heard line is the entrance, a present character
+without one stands at the threshold (marked in the Here panel, not addressable room-heard).
 
 - **Models:** `Scene` (incl. `running_beat` FK → `stories.Beat`, nullable, #3425 — the beat this
   scene is currently running, set by `RunBeatAction`/cleared by `finish_scene_full`; see
@@ -3085,6 +3286,9 @@ action consent flow, and a three-mode non-combat round framework.
   - `ensure_scene_participation(scene, character)` (`interaction_services.py`) — create a
     `SceneParticipation` for the character's account in the scene if one does not already exist.
     Public API consumed by combat to record fighters as first-class scene participants.
+  - `narrate_privately(character, text)` (`interaction_services.py`): Narrator whisper to ONE
+    character on both channels (#3574); extracted from `announce_dormant_perks`, reused by
+    combat/magic fizzle and lapse narration.
   - **Round framework (`round_services.py`, #1351):**
     - `get_scene_round_defaults_config() -> SceneRoundDefaultsConfig` (`models.py`) — get-or-create the singleton config.
     - `active_round_for_room(room) -> SceneRound | None` — public service; returns the active
@@ -3167,10 +3371,10 @@ action consent flow, and a three-mode non-combat round framework.
     and `SceneViewSet.highlight_reel`.
   - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, the combat
     encounter read gate, and the interaction/reel read gates all consume these forms.
-- **Highlight reel (#1241; re-ranked #2161):** `GET /api/scenes/{id}/highlight-reel/` — a
-  fully-sealed featured moment + ranked index, carrying `vote_count`/`reaction_count` per pose.
-  Ranked by all-time `WeeklyVote` count first (survives weekly settlement, unlike the weekly
-  `Interaction.vote_count` counter), `InteractionReaction` count as tie-break, recency last;
+- **Highlight reel (#1241; re-ranked #2161; nominations #3738):** `GET /api/scenes/{id}/highlight-reel/` — a
+  fully-sealed featured moment + ranked index, carrying `reaction_count` per pose only.
+  Ranked by all-time `Nomination` count first (survives weekly settlement; never counted out
+  loud, a nomination is invisible), `InteractionReaction` count as tie-break, recency last;
   GM-tagged poses headline. Filtered through `Interaction.objects.visible_to`. Frontend:
   `HighlightReel` (`frontend/src/scenes/components/`) — direct-mounted (no extra Accordion
   wrapper, it's already self-collapsing) in the `/game` right sidebar's Room tab via
@@ -3226,6 +3430,49 @@ action consent flow, and a three-mode non-combat round framework.
   perceive-the-real mechanic resolves through; ADR-0033 boundary: reveals wrongness,
   never identity. See [scenes.md](scenes.md) §"Perception & altered reality" for the
   full taxonomy and decision checklist.
+- **Reliable pose delivery — idempotent submission + safe drafts (#3760):** `PoseSubmission`
+  (`persona`/`client_request_id`/`interaction` nullable, `UniqueConstraint` on
+  `(persona, client_request_id)`) is the idempotency ledger `idempotent_record_interaction`
+  (`interaction_services.py`) writes on acceptance, in the same transaction as the
+  `Interaction` it points to; a retried `client_request_id` with matching
+  `comparison_fields` replays (no re-roll, no duplicate row, no second broadcast), a
+  mismatched replay is a `payload_conflict`, and a race between two retries resolves via
+  the `IntegrityError`-catch-and-reread path. `record_fn` (default `record_interaction`)
+  lets a caller substitute a differently-shaped recorder — `WhisperAction` passes
+  `record_whisper_interaction` so its ephemeral-scene branch keeps whisper delivery
+  receiver-scoped instead of leaking to the whole scene, a real privacy-preserving
+  generalization found during implementation. Writer-only lookup: `GET
+  /api/play/submissions/{client_request_id}/` (`PoseSubmissionDetailView`,
+  `play_views.py`, a plain `APIView` under the existing `/api/play/` convention, not a
+  `/api/scenes/...` ViewSet) — 404s for a non-owner rather than 403ing. Cleanup:
+  `pose_submission_cleanup_task` (`tasks.py`, alongside the pre-existing
+  `block_finalize_task`) prunes rows older than 24h, registered hourly via
+  `world.game_clock.task_registry`. `_resolve_pose_place` (`actions/definitions/
+  communication.py`) requires a genuine `PlacePresence` before trusting a
+  client-asserted place id for tabletalk sends. Frontend: `useDraftStore`
+  (`frontend/src/game/useDraftStore.ts`) persists one draft per account/persona/
+  conversation to `sessionStorage` — the composer's single source of truth for its own
+  text since #3784 (`draft.content` is the textarea's value; no parallel local string) —
+  preserving the original send `mode` across an
+  unmodified retry (never re-derived from whatever mode is live at retry time — closes
+  a real privacy leak where a stranded whisper draft could redispatch as a public
+  say/pose) and re-capturing it fresh only on a genuine content edit;
+  `reconcileStoredDrafts` (called from `useGameSocket.ts`'s reconnect handler) resolves
+  stranded drafts against the lookup endpoint; a per-character connection-generation
+  counter discards belated frames/callbacks from a superseded connection; and the
+  room-anchor composer's `draftScope` is keyed on the character's actual physical room
+  id (`GamePage`'s `roomData?.id`), not a constant string, so walking through an exit no
+  longer carries unsent text into the wrong room's composer — with the entry-time
+  placeholder (`room:unknown`, before the first `room_state`) declared provisional
+  (#3784) so a draft typed during "Entering world" moves into the room once it is
+  identified instead of being stranded under the placeholder. See
+  [scenes.md](scenes.md) §"Reliable Pose Delivery — Idempotent Submission & Safe
+  Drafts" for the full contract.
+- **Outcome delivery (#3807):** a resolved social-check result, treatment outcome, or cast
+  outcome pose is delivered live, on commit, via `deliver_outcome_interaction`
+  (`interaction_services.py`): no persisted row goes undelivered. `push_interaction` gained
+  an optional `location` kwarg for Narrator-authored rows (the Narrator's character is never
+  physically placed). See "Result delivery" in [scenes.md](scenes.md) and ADR-0297.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),
@@ -3233,6 +3480,19 @@ action consent flow, and a three-mode non-combat round framework.
   `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
+- **Play API (narrative reader, #3759):** `/api/play/*` reader contracts (`play_views.py`) —
+  conversations, threads, poses, a cursor-paged context window, and bounded search all ride the
+  same `InteractionQuerySet.visible_to` authorization the scene feed uses. The sixth endpoint, a
+  read-marking POST, is the exception — it doesn't gate reads at all, it privately records the
+  calling account's own read state and is never serialized to any other viewer. See scenes.md's
+  "Play API (narrative reader)" section.
+- **Cross-device attention counting (#3774):** `account_attention(*, account, entries) ->
+  AccountAttention` (`world/scenes/attention_services.py`) answers what is waiting for each of an
+  account's characters, in five queries total, none per character/row; it deliberately never calls
+  `InteractionQuerySet.visible_to`, since that queryset's staff/player branches return far more than
+  one account's own waiting attention. An open scene attributes to a character by pose authorship OR
+  physical presence in its room (Finding 1, #3774 final review). See scenes.md's "Cross-device
+  attention counting" section.
 - **Speaker Queue (#2356):** Room-scoped turn-order utility for structured RP gatherings (court, sermons, Q&A). Does NOT gate actions — players can pose/say/react freely.
   - **Models** (`speaker_queue_models.py`): `SpeakerQueue` (one active per room, UniqueConstraint on `is_active=True`; FK room PROTECT, scene SET_NULL for auto-clear, opened_by persona), `SpeakerQueueEntry` (ordered membership; FK queue CASCADE + persona CASCADE; position 1=current speaker; unique per queue+persona).
   - **Services** (`speaker_queue_services.py`): `open_queue`, `close_queue`, `join_queue`, `leave_queue`, `advance_queue`, `skip_speaker`, `get_active_queue`, `queue_entries`, `clear_queue_on_scene_finish`, `remove_persona_from_room_queues`.
@@ -3244,7 +3504,7 @@ action consent flow, and a three-mode non-combat round framework.
 ### Stories
 Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
-- **Models:** `Story` (incl. `summary` - player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat` (incl. `outcome_key`, denormalised from `BeatCompletion.outcome_key`, #3565), `BeatCompletion` (incl. `outcome_key`), `EpisodeResolution`, `TransitionRequiredOutcome` (incl. `required_outcome_key`, #3565), `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 - see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`, `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 - see below), `BeatStagedBattle`/`BeatStagedBattleUnit` (a whole pre-staged battle on an ENCOUNTER beat, O2O + child rows, mutually exclusive with `BeatOpponentLine`, #3569 - see below), `StoryScenario` (`story` FK + `template` O2O onto `missions.MissionTemplate`, `related_name="story_scenario"`; the ownership link that makes the mission scenario graph a story beat's body, #3565 - see below and Missions & Living Grid)
+- **Models:** `Story` (incl. `summary` - player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat` (incl. `outcome_key`, denormalised from `BeatCompletion.outcome_key`, #3565), `BeatCompletion` (incl. `outcome_key`), `EpisodeResolution`, `TransitionRequiredOutcome` (incl. `required_outcome_key`, #3565), `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 - see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `TrustCategory` (a feedback-rating dimension, not a gate — #3726), `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 - see below), `BeatStagedBattle`/`BeatStagedBattleUnit` (a whole pre-staged battle on an ENCOUNTER beat, O2O + child rows, mutually exclusive with `BeatOpponentLine`, #3569 - see below), `StoryScenario` (`story` FK + `template` O2O onto `missions.MissionTemplate`, `related_name="story_scenario"`; the ownership link that makes the mission scenario graph a story beat's body, #3565 - see below and Missions & Living Grid)
 - **The scenario graph is a beat's body, not a second option engine (#3565):** a `Beat` (SITUATION or TASK kind) points at a `missions.MissionTemplate` via `required_mission`; when that template is `StoryScenario`-owned, the story's Lead GM authored it under the trust ladder rather than staff. `Transition.mode`/`TransitionMode`/`AmbiguousTransitionError` are retired: routing is fully automatic, the lowest `(order, pk)` eligible outbound transition fires, and `services/routing.py`'s `routing_report`/`RoutingReport` (surfaced as `routing_problems` on the episode payloads and `EpisodeDetailSerializer.routing_ambiguous`, #3563) warns the author tree when two transitions could both be eligible at once, or when a beat/stake outcome has no accepting transition. `Beat.predicate_type` defaults to `OUTCOME_TIER` (was `GM_MARKED`) - a beat resolves from its graph, an encounter, a battle, or a decisive check by default; GM-marked is now the exception, authored only for an out-of-band fact a machine grader cannot see. See stories.md's "StoryScenario" section and Missions & Living Grid below.
 - **Session prep + Run Beat (#3425, #3569):** a GM authors `BeatOpponentLine` (creature × count × position hint) on an ENCOUNTER beat, `BeatStagedTemplate` (situation XOR challenge template) on a SITUATION beat, or - mutually exclusive with `BeatOpponentLine` - a whole `BeatStagedBattle` (blueprint/region/name/party side + `BeatStagedBattleUnit` lines) on an ENCOUNTER beat, #3569 - nested read-write on `BeatSerializer`, including the id-based-diff update path for the child lists and an omitted-vs-null convention for the single nested `staged_battle`. `RunBeatAction` (`run_beat`)/`GMListRunnableBeatsAction` (`gm_list_runnable_beats`, `actions/definitions/gm_story.py`) instantiate the authored prep into the GM's live scene in one call: for ENCOUNTER, creates a `CombatEncounter`/spawns opponents, or - when a `BeatStagedBattle` exists - stages a `Battle` from its blueprint instead (`Battle.story_beat=beat`, units spawned by side/place, the running scene's present party enlisted on the declared side, idempotent re-run); for SITUATION, instantiates situations/challenges; and sets `scenes.Scene.running_beat` (the first-class "scene is running this beat" pointer, cleared by `finish_scene_full`). Web: `BeatFormDialog`'s kind-gated repeatable rows (plus an Opponents/Battle toggle for ENCOUNTER, mounting `BattlePrepEditor` in Battle mode) + `GMAdjudicationPanel`'s Run Beat tab ("Start siege" for a staged-battle row, navigates to `/scenes/{battle_scene_id}/battle`). See stories.md's "Session prep"/"Run Beat" sections and scenes.md's "Session prep: Run Beat".
 - **Scene clock (#3567; ADR-0264):** `Beat.clock_size` (0 = no clock) authors a countdown that
@@ -3269,6 +3529,12 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
   → the scene's PENDING `DecisiveCheckMarker.beat.risk` → `null`; `RenownRisk.NONE` also renders
   nothing. Web: `SceneHeader.tsx`'s `DeclaredRiskBadge`, beside the "In Combat" badge. See
   scenes.md's "Declared-risk badge" section.
+- **Room art backdrop (#3556):** `SceneDetailSerializer.art_url` - the scene room's resolved art
+  (`world.locations.services.resolve_area_art`: room thumbnail, then the nearest ancestor area's
+  art, #3477 cascade); `null` when nothing designates art anywhere. No new authoring surface.
+  Web (render-or-vanish, never a card): `SceneHeader.tsx` as a scrimmed banner behind the title,
+  and `TacticalMap.tsx`'s optional `artUrl` prop (wired only from `SceneTacticalMap.tsx`) as a
+  dimmed backdrop behind the position-node graph. See scenes.md's "Room art backdrop" section.
 - **Authoring backbone enums:** `StoryScope.UNASSIGNED` (new default), `StoryMaturity` (PITCH/OUTLINE/PLOT — per-node authoring completeness on Story/Chapter/Episode), `BeatKind` (SITUATION/ENCOUNTER/TASK/REQUIREMENT), `ProgressStatus` (ACTIVE/WAITING_FOR_GM/RESTING/COMPLETED on the three Progress models; **not currently exposed to the frontend** — see stories.md follow-ups)
 - **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
 - **`BeatPredicateType.NPC_REGARD_AT_LEAST` (#3570):** a Beat gates on a named NPC's `NpcRegard` for the character, using `Beat.required_npc_sheet` (the NPC, FK → CharacterSheet, SET_NULL) + `required_standing` (shared with the faction predicate above); evaluator `_evaluate_npc_regard_at_least` reads `NpcRegard` from the NPC's primary persona toward the character's primary persona (missing row = 0, never `NPCStanding.affection` or the relationships affection track). Read-side complement to the Stakes Contract Engine's `NPC_FATE` `npc_regard_delta` writer and the structured-consequence `SHIFT_NPC_REGARD` pool effect (below); GROUP/GLOBAL scopes fall through to UNSATISFIED like the faction sibling (neither is in the ANY-member predicate set)
@@ -3999,18 +4265,20 @@ register as additional kinds.
   tradition)` was dropped (a character may rejoin a tradition they previously left,
   creating a second historical row for the same pair). `world.magic.services.
   tradition_membership`: `join_tradition(sheet, tradition, *, via_membership=None)` —
-  ends the active row (`left_at`), creates a new one, and — when the joined tradition
+  ends the active row (`left_at`), creates a new one, and, when the joined tradition
   is not orphaned (`_tradition_is_orphaned`, reading `character_creation.
-  BeginningTradition.required_distinction__slug="orphaned-tradition"`, the only place
-  "no living teachers" is recorded in the schema, per Task 5/#2428) — deletes any held
+  BeginningTradition.state == TraditionState.TEACHERS_GONE` as of #3675, was a
+  tag-matched `required_distinction` FK pre-#3675, the only place "no living
+  teachers" is recorded in the schema), deletes any held
   `unbound`/`orphaned-tradition` drawback `CharacterDistinction` row (direct queryset
   delete; `grant_distinction` has no removal counterpart, see
   `world/distinctions/CLAUDE.md`). Raises `AlreadyInTraditionError` on a no-op re-join.
   `leave_tradition(sheet)` — `left_at` only, no replacement row; re-applies the
-  `unbound` drawback via `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)`
-  (defensive no-op, logged, if the "unbound" `Distinction` isn't seeded yet — Task 9
-  ships it), catching `DistinctionExclusionError`. Raises `NoActiveTraditionError` if
-  already traditionless. **Wired trigger:** `societies.membership_services.
+  self-taught drawback (`world.character_creation.offers.self_taught_drawback()`, the
+  SELF_TAUGHT `TraditionStateLine.carries` FK, #3675) via
+  `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)` (defensive no-op, logged, if
+  no SELF_TAUGHT line carries a drawback yet), catching `DistinctionExclusionError`.
+  Raises `NoActiveTraditionError` if already traditionless. **Wired trigger:** `societies.membership_services.
   _maybe_join_tradition`, called from both `accept_invitation` and `accept_application`
   when `organization.tradition_id` is set (ruling 1 on #2441 — a tradition is joined
   through its teaching org's membership-offer accept flow); swallows
@@ -4034,13 +4302,15 @@ register as additional kinds.
   helper) and scales AP: `ceil(ap_cost × (100 + surcharge%) / 100)`, applied identically to
   both `charge_and_learn` front doors (accept + TRAIN). TIME, not power — resonance
   earning/spending is untouched (a corrected-in-review alternative: taxing resonance would
-  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row now
-  carries `required_distinction=<Unbound drawback>` (was `None` pre-#2442); unlike Orphaned
-  Tradition's deliberate "must already hold it" gate, `select_tradition`
-  (`character_creation.views`) auto-adds the Unbound drawback to the draft when missing — a
-  one-off exception preserving CG completability now that Unbound (CG's tradition-agnostic
-  default) carries a gate. Shed by `join_tradition`/re-applied by `leave_tradition` above —
-  the `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row reads
+  `state=TraditionState.SELF_TAUGHT` (#3675, was a `required_distinction=<Unbound drawback>`
+  FK pre-#3675); the SELF_TAUGHT `TraditionStateLine` carries the drawback, and
+  `select_tradition` (`character_creation.views`) applies it to the draft through the
+  generic `reconcile_offer_picks` call every tradition pick runs, no name-matched special
+  case, and no gate the player must already hold something to clear (Orphaned
+  Tradition/Metallic Order carry theirs the identical way, via TEACHERS_GONE). Shed by
+  `join_tradition`/re-applied by `leave_tradition` above; the `CharacterModifier` row
+  cascade-deletes with the `CharacterDistinction` row
   (`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge
   disappears automatically, no separate cleanup.
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
@@ -4673,7 +4943,9 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
 ### Predicates (shared rule engine)
 Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions
 (`MissionTemplate.availability_rule`, `MissionOption.rule_json`), npc_services
-(`NPCServiceOffer.eligibility_rule`), distinctions (`DistinctionPrerequisite.rule_json`).
+(`NPCServiceOffer.eligibility_rule`). (`distinctions.DistinctionPrerequisite`, an
+earlier consumer, was retired #3675 -- distinctions are offered by CG chapter now,
+never gated by a prerequisite rule tree.)
 
 - **Module:** `src/world/predicates/predicates.py` (no models — pure Python)
 - **Key entry points:** `evaluate(rule: dict, ctx: PredicateContext) -> bool`,
@@ -5133,6 +5405,21 @@ companion. Full detail: [companions.md](companions.md).
   CompanionArchetypeViewSet}` — read endpoints are read-only; write endpoints
   (`bind`/`release`/`fight`/`deploy`/`order`/`emote`) converge on
   `action.run()` via `PuppetActorMixin`, mounted at `/api/companions/`.
+- **Defeat resolution (#3652, #1873 Decision 4):** `resolve_companion_defeat`
+  is now called at both completion seams - `_resolve_companion_defeats`
+  (`world.combat.services`, inside `complete_encounter`) and
+  `apply_companion_battle_outcome` (`world.companions.battle_wiring`, on the
+  battle-conclusion hook registry). At EXTREME/LETHAL risk it draws from the
+  authored `companion_defeat` `ConsequencePool` (seeded by
+  `world.seeds.clusters._seed_companions` for a fresh database, staff-tunable
+  in admin) between three outcomes: no effect, the **Savaged** condition
+  (blocks `companion fight`/`companion deploy` via
+  `CompanionFitToFightPrerequisite` for 72 IC hours, then self-expires), or
+  `release_companion`. A death is narrated publicly
+  (`narrate_companion_loss`) and named in the owner's private aftermath
+  digest. `resolve_bonded_companion(opponent)` is the shared "is this ALLY
+  opponent someone's living companion" resolver, also used by the #3575
+  surge. Full detail: [companions.md](companions.md#bond-with-the-owner-3575-adr-0272).
 - **Cross-app dependencies:** `world.character_sheets`, `world.magic`
   (Gift/Thread/ThreadPullEffect), `world.checks` (`perform_check`).
 - **Source:** `src/world/companions/`
@@ -5925,7 +6212,10 @@ holder is never notified a claim exists.
     override; see `world.combat.stat_mapping`), `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
   - `ItemFacet` (Spec D §4.2) — through-model linking `ItemInstance` ↔ `Facet` with
-    `attachment_quality_tier`; unique per (item_instance, facet)
+    `attachment_quality_tier`; unique per (item_instance, facet). `is_inherent` (#3776
+    Task 4, default `False`) marks a row auto-stamped from `ItemTemplate.inherent_facets`
+    rather than a crafter's `attach_facet_to_item` call — excluded from
+    `assert_facet_attachable`'s `facet_capacity` count
   - `ItemStyle` — through-model linking `ItemInstance` ↔ `Style` with
     `attachment_quality_tier`; unique per (item_instance, style)
   - `Style.audacity` (#2029) — `StyleAudacity` tier (UNDERSTATED/EXPRESSIVE/BOLD/
@@ -6122,6 +6412,12 @@ holder is never notified a claim exists.
   haul amasses uncollected per ADR-0081; only an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
+- **New field on `ItemTemplate` (`inherent_facets`, #3776 Task 4):** M2M to `magic.Facet`
+  (`related_name="inherent_on_templates"`) — facets this archetype always carries (a
+  "Scythe" template always carries the Scythe facet). Auto-stamped onto every new
+  `ItemInstance` by `ItemInstance.save()` (`is_new` branch, deferred import to avoid a
+  circular import with `services/facets.py`) via `stamp_inherent_facets`; does not
+  consume the instance's own `facet_capacity`.
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
   — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
   by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
@@ -6174,6 +6470,11 @@ holder is never notified a claim exists.
   - `attach_facet_to_item(*, crafter, item_instance, facet, attachment_quality_tier) -> ItemFacet`
     — raises `FacetAlreadyAttached` / `FacetCapacityExceeded`
   - `remove_facet_from_item(*, item_facet) -> None`
+  - `stamp_inherent_facets(item_instance) -> None` (#3776 Task 4) — idempotent; creates an
+    `ItemFacet(is_inherent=True)` row for every facet on `item_instance.template
+    .inherent_facets` not already attached. Resolves `attachment_quality_tier` (a required
+    FK with no schema default) via `QualityTier.for_score(0)` rather than a crafted value,
+    since inherent facets are never crafted. Called from `ItemInstance.save()` on creation.
   - `use_item(item_instance, user, target=None) -> UseItemResult` — applies on-use pool effects;
     consumables spend a charge and are destroyed at 0 (soft- or hard-delete); non-consumable
     usable items are reusable (no charge spent, `ACTIVATED` event logged). Raises `ItemNotUsable`
@@ -6852,6 +7153,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     depletable resolve pool mirroring war-scale `BattleUnit.morale`. Derived state via
     `morale_state_for` (STEADY/FALTER/BREAK) drives `select_npc_actions` (falter weakens,
     break → FLED). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
+  - **Boss state on the opponent payload (#3552):** `OpponentSerializer` serves GM-only
+    (`_is_gm_or_staff`, `null` otherwise) `phase_count` (BOSS tier), `damage_multiplier`,
+    `break_bar_current` / `break_bar_threshold` / `vulnerability_rounds_remaining`,
+    `morale` / `max_morale` / `morale_state`; public `is_enraged` (phase > 1 and
+    multiplier > 1) and `is_wall_broken` (window open). `current_phase` was already public.
   - `ThreatPoolEntry.requires_steady` (bool, default False, #2015) — skipped when the
     opponent is faltering; lets designers author "weakened" entries.
   - `CombatOpponent.status` gains `OpponentStatus.REMOVED` (#3382) — a GM pull, distinct
@@ -6975,8 +7281,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
-  subject_phase_number=None)` (`world/combat/escalation.py`) — the one write
-  path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
+  subject_phase_number=None, subject_companion=None)` (`world/combat/escalation.py`) - the
+  one write path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
   GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK). `reason` (#3387) persists onto the
   record as GM-stated provenance for a manual trigger only — every automatic leg leaves it
@@ -6995,7 +7301,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   / `apply_boss_break_surge`, `world/combat/escalation.py` - fire from
   `check_and_advance_boss_phase` and `_assess_boss_break_bar`, magnitudes authored on
   `EscalationCurve.boss_{phase,enrage,break}_spike_intensity_amount`, deduped per boss per
-  phase (ADR-0250).
+  phase (ADR-0250). A companion-backed ALLY opponent's defeat emits
+  `CHARACTER_INCAPACITATED` from `apply_damage_to_opponent` (`_emit_companion_fall`, #3575)
+  and `apply_relationship_escalation_spike` qualifies the owner on `target_companion`;
+  `DramaticSurgeRecord.subject_companion` is the dedup subject. The peril leg never fires
+  for a companion (no opponent peril band).
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
@@ -7015,7 +7325,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `apply_damage_to_participant` shields a PC — see the Key Services list below.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
-    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060. **Consented upkeep
+    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060; a lapse narrates to payer,
+    bearer and room via `_narrate_upkeep_lapse` (#3574). **Consented upkeep
     (#3573):** unaffordable upkeep on an instance with `ConditionInstance.soulfray_consented`
     debits into deficit (via `_debit_ally_paid_upkeep`/`_pay_upkeep`) instead of lapsing the
     condition, and accrues Soulfray; a deficit fire narrates "bleeds soul to keep the ward on
@@ -7194,6 +7505,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     ACTIVE participant's round action is `is_ready=True`, calls `resolve_round` immediately
     instead of waiting for the TIMED game-clock sweep. Called from `ReadyAction.execute`
     after `toggle_action_ready`, only when the toggle landed on ready=True.
+  - `update_encounter_settings(..., escalation_curve=_UNSET)` (#3552) - tri-state curve
+    write (omitted / `None` clears + `remove_escalation_room_triggers` / curve sets); web
+    `PATCH /api/combat/{id}/settings/` and telnet `encounter curve <name|none>` converge here.
+  - `GET /api/combat/escalation-curves/` (`EscalationCurveViewSet`, `IsGMOrStaff`) - curve
+    catalog for the settings picker.
+  - `_narrate_phase_transition` / `_narrate_held_back` (`services.py`) - room lines for a
+    boss phase shift (authored `BossPhase.description` or generic; enrage line) and for a
+    PC skipped with no declaration under TIMED/MANUAL. Both `_dual_dispatch_combat_narration`.
 - **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
   `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
   rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
@@ -7263,6 +7582,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
     falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
     bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
+  - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0272): authored OUTCOME
+    head for an NPC attack, `{actor}`/`{target}` required, spliced by
+    `render_action_outcome_narration(hit_text=, miss_text=)` from the NPC resolution path
+    in `combat/services.py`; blank = default sentence.
   - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
     shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
     model is single-round out-of-combat; this one is multi-round, combat-native, with its
@@ -7345,6 +7668,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     default 0) / `RitualCheckConfig.sustained_rounds` (`world/magic/models/
     ritual_check_config.py`, same shape) — authored data; 0 is today's
     resolve-immediately behavior, unchanged for every existing row.
+  - `Technique.hit_narration` / `miss_narration` (#3554, ADR-0272): authored OUTCOME
+    head for a technique, `{actor}`/`{target}` required, spliced by
+    `render_action_outcome_narration(hit_text=, miss_text=)` from the PC resolution path
+    (`_record_and_broadcast_pc_action`); blank = default sentence.
   - **Declaration (technique):** `_validate_no_pending_sustained` (`world/combat/
     services.py`) raises `ValueError` in `declare_action` when the participant is still
     holding a not-yet-matured commitment (`resolves_round__gte round_number` — a row
@@ -7439,6 +7766,45 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     consumed components bought nothing. `PendingOpponentAttack` (the NPC mirror) has
     the same pre-existing gap, deliberately NOT fixed here — out of scope, no
     consumed-cost consequence.
+  - **Aftermath digest (#3551):** `deliver_aftermath_digests`, the last step
+    `complete_encounter` runs, sends one private Narrator OUTCOME interaction
+    (`PERCEIVED_ONLY`, pushed only to that character's persona) plus a `character.msg`
+    telnet line to every ACTIVE or FLED participant; REMOVED participants get nothing,
+    but an ABANDONED encounter still delivers (only the aftermath rules/pools/counters
+    step is skipped for ABANDONED, not delivery). `build_aftermath_digest`
+    (`world/combat/aftermath.py`) assembles the digest by reading, not writing: the
+    aftermath `ConsequenceOutcome` row, conditions still held that were applied during
+    the encounter (a condition cleared mid-fight leaves no row and is not reported,
+    since the pose log already narrated it), any `LegendEntry` rows created in the
+    window, and a `BeatCompletion` for the running story beat (skipped entirely when
+    the encounter carries a `scenario_deed`, since a scenario ENCOUNTER route has no
+    beat line). The consequence, legend and beat rows are scoped to `aftermath_window`,
+    `[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`; the conditions
+    lookup is scoped to `[encounter.created_at, completed_at +
+    AFTERMATH_ATTRIBUTION_WINDOW)`, so the window's upper edge also keeps a later
+    fight's condition out of an earlier digest at read time. `render_aftermath_digest`
+    turns the digest into player text; the legend line ("Deed remembered: ...") only
+    ever reports an authored deed row, since legend settles at a story's end from its
+    outcomes, never per fight. `ParticipantSerializer.aftermath`
+    (`world/combat/serializers.py`) exposes the same digest over the API: null unless
+    the encounter is COMPLETED with a `completed_at` and the viewer passes
+    `_can_view_vitals` (owner, scene GM, or staff); the `beat` entry is additionally
+    null for a SECRET beat unless the viewer is GM or staff. `AftermathDigest
+    .companions_lost` (#3652) names any companion the sheet lost in the
+    encounter's `aftermath_window`, read from `Companion.released_at`;
+    `render_aftermath_digest` emits one line when the list is non-empty. See
+    "Companion defeat resolution" below for what wrote that release.
+  - **Companion defeat resolution (#3652, #1873 Decision 4):**
+    `_resolve_companion_defeats(encounter)` runs inside `complete_encounter`'s
+    `outcome != ABANDONED` branch, right after `_apply_opponent_aftermath_pools`
+    and before `cleanup_completed_encounter` (the `die` outcome deletes the
+    companion's `ObjectDB`, so the deletion must run after cleanup's own
+    sweeps have read it). It resolves each DEFEATED ALLY `CombatOpponent` with
+    `summoned_by` set to a live `Companion` via
+    `resolve_bonded_companion(opponent)` (`world.companions.services`) and
+    calls `resolve_companion_defeat`; see the Companions section above for the
+    three outcomes and the battle-scale twin
+    (`apply_companion_battle_outcome`).
   - **The declaring round is skipped**, not resolved: `resolve_round` collects
     `SustainedAction.objects.filter(declared_round=round_number)`'s participant ids and
     excludes them from that round's PC resolution loop — that round's
@@ -7990,8 +8356,26 @@ Gods as authorable data with worship economies, and ceremonies (funerals first) 
 lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decision ADR-0132.
 
 - **Worship models** (`world/worship`): `WorshipTradition` (name, `rites_specialization` FK →
-  skills.Specialization), `WorshippedBeing` (tradition FK, `resonance_pool` + `lifetime_worship`
-  BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`), `WorshipGrant` (audit ledger),
+  skills.Specialization), `WorshippedBeing` (tradition FK, `domains` free-text spheres (#3776, no
+  lookup table — no mechanical matching need confirmed), `resonance_pool` + `lifetime_worship`
+  BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`, `tarot_cards` M2M → `tarot.TarotCard`
+  (#3776 Task 9, blank, no cap, `related_name="represented_beings"`), nullable `codex_entry` FK →
+  `codex.CodexEntry` (#3776 Task 11, `PROTECT`, `related_name="worshipped_beings"` — mirrors
+  `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`; visibility reads
+  entirely through the linked entry's `is_public` tier)), `BeingFacet` (favored
+  aesthetic Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
+  being+name; `societies.Organization.patron_nickname` reaches the being transitively through
+  it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
+  FAVORED/ASSOCIATED), unique per being+resonance — FAVORED pays double on future worship-rite
+  reward calculation, #3777), `BeingRelationship` (#3776: `being_a`/`being_b` FKs +
+  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `public_story`; NO
+  hidden-truth field, a real hidden truth is a separately-authored `CodexEntry` reached
+  via a `Clue`; `save()` sorts being_a/being_b into pk-ascending order, DB-enforced, so
+  a caller can't record the same undirected pair twice under swapped args),
+  `WorshipFeastDay` (#3776 Task 9: `being` FK + `ic_month`/`ic_day` (no year, mirrors
+  `weather.FeastDay`'s shape) + `name`/`lore`, unique per being+date — worship gets its own
+  model rather than reusing weather's; feeds a future universal worship-rite multiplier, #3777),
+  `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
   BooleanField default True, #2361 — the heart-vs-lip-service inward truth, private,
@@ -8001,7 +8385,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,
   is_sincere=True)` (#2361 — the single write path for a post-CG public conversion; get-or-
   creates the declaration, repoints `public_being`, stores `public_is_sincere`; never touches
-  `DevotionStanding` or the secret side). CG: `CharacterDraft.public_worship`/
+  `DevotionStanding` or the secret side); `is_birth_favored_by(sheet, being, *, today=None)`
+  (#3776 Task 9 — pure query: True iff `sheet.tarot_card` is one of `being.tarot_cards` AND
+  `today` is `sheet`'s birthday; `today` defaults to `game_clock.get_ic_now()`, not the wall
+  clock; read by #3777's reward calc, grants nothing itself). CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
@@ -8248,7 +8635,9 @@ Track-based character-to-character regard, conditions, situational modifier gati
 writeup kudos/complaint feedback.
 
 - **Models:** `RelationshipCondition`, `RelationshipTrack` (+ `RelationshipTier`,
-  `HybridRelationshipType`), `CharacterRelationship`, `RelationshipTrackProgress`,
+  `HybridRelationshipType`), `CharacterRelationship` (#3575: `target` nullable +
+  `target_companion` FK to `Companion`, exactly one set; `target_name` property;
+  owner-only, active from creation via `companion_target_error`), `RelationshipTrackProgress`,
   `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
   (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
   `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429),
@@ -8266,8 +8655,11 @@ writeup kudos/complaint feedback.
   `world.magic`'s fraught pull term, see ADR-0110)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
-- **Services:** `create_first_impression`, `create_development`, `create_capstone`,
+- **Services:** `create_first_impression(*, source, target=None, target_companion=None, ...)`,
+  `create_development`, `create_capstone`,
   `redistribute_points` (`services.py`) — the four positive relationship-building verbs;
+  `companion_target_error(source, companion) -> str` (#3575) - why `source` may not hold a
+  relationship toward `companion`, else `""`;
   `apply_relationship_bump(*, source, target, interaction, valence, source_emoji=None)`
   (#1699) — permanent ungated `BUMP_POINTS` (±1) onto the Regard/Friction system track
   (capstone write-shape: capacity + developed together), deduped per interaction;
@@ -8289,7 +8681,9 @@ writeup kudos/complaint feedback.
   `action.run()` (ADR-0001). Read serializers expose `kudos_count` + `viewer_has_kudosed`
   on every writeup row. No consent gate — these describe the caller's regard, they do not
   compel the target's behavior (ADR-0024). FK direction: feedback lives in relationships,
-  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014).
+  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014). Both
+  surfaces accept a bonded companion as the target (#3575): web `target_companion_id`
+  (exactly one of it and `target_persona_id`), telnet by the companion's room-present name.
 - **Ambient bumps (#1699):** telnet `relationship plus|neg <name>` (aliases `rel/plus`,
   `rel/neg`) backfill-anchor to the target's most recent unacknowledged visible pose in
   the active scene; web valenced `ReactionEmoji` reactions bump the pose's author
@@ -8475,7 +8869,26 @@ Extensions to Evennia models for additional data storage.
   pipeline (see ADR-0146). `PageBackground` (`slot: PageBackgroundSlot` — HOMEPAGE /
   ROSTER / CG_STAGE / GAME_CLIENT, unique — → `art: Media | None`, `SET_NULL`) maps
   a named page slot to a background `Media` row; read via `GET /api/backgrounds/`.
+- **Bound player media uploads (#3164):** `Media.file_size_bytes` (nullable
+  `PositiveBigIntegerField`) records the upload backend's reported size;
+  `PlayerData.media_quota_bytes` (`PositiveBigIntegerField`, default
+  `settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES` via a module-level callable so the
+  migration carries no literal) caps a player's total stored bytes across owned
+  `Media` rows. `settings.MAX_PLAYER_MEDIA_FILE_BYTES` is a separate per-file cap.
+  `CloudinaryGalleryService.upload_image` enforces both before calling Cloudinary
+  (per-file cap first, then the quota check against the sum of the account's
+  existing `Media.file_size_bytes`, a null row counting as 0);
+  `player_data.account.is_staff` bypasses both. A successful upload sets
+  `Media.file_size_bytes` from the upload result's reported byte count.
+  `world.roster.serializers.media.MediaUploadSerializer` mirrors the per-file
+  check (same fixed message) so `POST /api/roster/media/` rejects an oversized
+  file before the service call; `MediaViewSet.create` validates through it and
+  maps the service's quota `ValidationError` to a 400 with its fixed message.
 - **Pattern:** Extend Evennia models without modifying library code
+- **`PrunedCachedProperty`** (`evennia_extensions.cached_property`) — the sanctioned
+  `to_attr` target for `Prefetch(to_attr=...)` onto an identity-mapped
+  (`SharedMemoryModel`) model; see `evennia_extensions/CACHED_PROPERTY_STANDARD.md`
+  and ADR-0298.
 - **Integrates with:** accounts, characters, Evennia core, codex (`CodexEntry.art`),
   character_creation (`StartingArea.crest_art`, `Beginnings.art`)
 - **Source:** `src/evennia_extensions/`
@@ -8511,7 +8924,12 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `build_technique_panel`, over
   `world.magic.services.technique_power_eval.evaluate_all_with_reference(EvalContext) ->
   (list[TechniquePowerReport], ReferenceFrame)`; types in
-  `world/magic/types/technique_power.py`), and a capability DE-per-point league table
+  `world/magic/types/technique_power.py`), plus a starting-kit pricer and a per-pool floor
+  scan on that same panel (#3716: `build_starting_kit_report` prices one
+  character-creation combination as the picks a new character actually gets, at level 1
+  and gift thread level 0, not the panel's own level/thread knobs; `build_pool_scan`
+  judges every `PathGiftGrant` starter pool against the same combat floor in one cached
+  evaluation), and a capability DE-per-point league table
   (#3390: `capability_power_analytics.py` — `build_capability_power_panel`, over
   `world.magic.services.capability_power_eval.evaluate_all_capabilities_with_reference`).
   The evaluator prices every technique payload family in expected damage-equivalent per
@@ -8541,7 +8959,9 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   sentinel panel (`required_content.py`, #3444) - `_declarations()` is the single place
   a new content dependency (a code path's hard dependency on a specific authored
   database row) gets registered, and `collect_required_content()` probes the live
-  database for each one, since no repo artifact can answer the question (ADR-0238). See
+  database for each one, since no repo artifact can answer the question (ADR-0238).
+  Each row links to the admin changelist where its rows are authored
+  (`links.admin_changelist_url`, #3831). See
   `docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
@@ -8714,7 +9134,12 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `core.app_domains.credited_content_models()` model, a prose-only row editor
   with a guided first-run contributor setup gate, a related-entries/prose-
   mentions pane, and reference search over the database plus opt-in staff-
-  docs/Arx I file corpora. See the "Authoring Workbench" section in
+  docs/Arx I file corpora. #3828 made it a writing pass: the queue opens on
+  To write (`DEFAULT_BACKLOG_STATUS`) with a headline count of the filtered
+  list, To review means written-and-not-reviewed, filters survive a credit
+  (the form re-submits itself) and a reload (`HX-Replace-Url`), the editor
+  sits above the queue with prose first and a position-based Next control
+  (`_queue_nav`, `?queue=&pos=`). See the "Authoring Workbench" section in
   `src/web/admin/CLAUDE.md`.
 - **Stock-admin credit complement (#3020):** every registered credited-model admin
   gets a `credit_status` changelist filter and linked column

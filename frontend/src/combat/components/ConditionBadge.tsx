@@ -17,7 +17,7 @@ export interface ConditionBadgeProps {
   condition: ConditionInstance;
 }
 
-/** Build the tooltip text: name plus stage/stacks when present. */
+/** Build the tooltip text: name plus stage/stacks, then the source note on its own line. */
 function buildTooltip(condition: ConditionInstance): string {
   const parts: string[] = [condition.name];
   if (condition.stage_name) {
@@ -26,7 +26,8 @@ function buildTooltip(condition: ConditionInstance): string {
   if (typeof condition.stacks === 'number' && condition.stacks > 1) {
     parts.push(`x${condition.stacks}`);
   }
-  return parts.join(' ');
+  const head = parts.join(' ');
+  return condition.source_description ? `${head}\n${condition.source_description}` : head;
 }
 
 export function ConditionBadge({ condition }: ConditionBadgeProps) {

@@ -303,6 +303,12 @@ def _seed_governance() -> None:
     seed_governance_check_content()
 
 
+def _seed_distinctive_features() -> None:
+    from world.seeds.distinctive_features import seed_distinctive_features  # noqa: PLC0415
+
+    seed_distinctive_features()
+
+
 def _seed_scandal_archetypes() -> None:
     from world.seeds.scandal_archetypes import seed_scandal_archetypes  # noqa: PLC0415
 
@@ -439,6 +445,18 @@ def _seed_survivability() -> None:
     seed_survivability_content()
 
 
+def _seed_companions() -> None:
+    from world.companions.defeat_content import (  # noqa: PLC0415
+        ensure_companion_defeat_conditions,
+    )
+    from world.companions.factories_combat import (  # noqa: PLC0415
+        create_companion_defeat_pool,
+    )
+
+    create_companion_defeat_pool()
+    ensure_companion_defeat_conditions()
+
+
 def _seed_ceremonies() -> None:
     from world.ceremonies.seeds import seed_ceremony_types  # noqa: PLC0415
 
@@ -486,7 +504,6 @@ def _seed_roster() -> None:
         ensure_family_kinds,
         ensure_rosters,
         ensure_starter_npc_presets,
-        seed_invite_trust_category,
     )
 
     # ensure_rosters() is idempotent (#2728) — seed it here too so the roster cluster
@@ -496,7 +513,6 @@ def _seed_roster() -> None:
     # Canonical FamilyKind rows (#3617): idempotent get_or_create, matching
     # migration 0219's backfill data, so a clone-bootstrap/E2E DB gets them too.
     ensure_family_kinds()
-    seed_invite_trust_category()
     # Starter Story-NPC statline presets (#3427). Runs last in this cluster,
     # after "character_creation" (stat Traits) and the check-family clusters
     # (skill Traits/Skills) have already seeded the rows these presets
@@ -624,6 +640,12 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
     # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
     "governance": _seed_governance,
+    # Distinctive physical features (#3739): "Make It Distinctive" plus the three
+    # presence axes, each offered on every trait row and marking of the Appearance
+    # chapter. After "social_relationships" (allure), "crafting_materials"
+    # (menace/regal) and "governance" (the Command check regal binds to), so every
+    # effect finds its ModifierTarget on the first pass.
+    "distinctive_features": _seed_distinctive_features,
     # Dev domain slice: PLACEHOLDER house/streams/steward offers/scandal archetypes
     # so the books + scandal loops are walkable on a dev DB (#930/#1464). After
     # governance (its CheckTypes) and character_creation (the Arx realm).
@@ -704,6 +726,12 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # After "kudos" (shares the KudosSourceCategory model) and "checks" (the
     # outcome spine); both idempotent either way.
     "survivability": _seed_survivability,
+    # Companions: the companion_defeat ConsequencePool the encounter/battle
+    # completion seams draw from at EXTREME/LETHAL risk (#3652). Without this
+    # cluster a defeated companion never dies, is never savaged, and lethal
+    # stakes are silently a no-op for companion owners. After "survivability"
+    # (shares the ConsequencePool/CheckOutcome spine); idempotent either way.
+    "companions": _seed_companions,
     # Ceremony types: Funeral/Blessing/Sermon/Seance CeremonyType rows (#2289/#2393).
     # Without this cluster, opening ANY ceremony fails with "not recognized" on a
     # fresh database — no other seed or migration ever creates these rows.
@@ -745,8 +773,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # PROJECT_CONTRIBUTION GainSource (#2038 — "projects to add gifts to
     # organizations"). No dependencies on any other cluster.
     "project_resonance": _seed_project_resonance,
-    # Roster: the INVITE TrustCategory for game-invite eligibility (#2483).
-    # No dependencies on any other cluster.
+    # Roster: the seven shelves, the canonical FamilyKind rows and the starter
+    # Story-NPC statline presets. No dependencies on any other cluster.
     "roster": _seed_roster,
     # Traits: no-op — see _seed_traits docstring. Registered so the Game Setup
     # inventory can show a Trait row count for the #944 content-pipeline domain,
@@ -994,6 +1022,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
         # "checks"); appears as a seeded cluster with no standalone content model (#930).
         "governance": [],
+        # Distinctive features seeds Distinction + DistinctionOffer rows (#3739),
+        # counted under the distinction catalogue rather than a model of its own.
+        "distinctive_features": [],
         # Dev domain slice: PLACEHOLDER house + steward offers (#930/#1464).
         # Scandal vocabulary: the authored archetype categories (#1464/#1806).
         "scandal": [],
@@ -1039,6 +1070,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # staged condition + foundational CapabilityTypes + dream room (#2287).
         # Represented by ConsequencePool (the tier pools).
         "survivability": [ConsequencePool],
+        # Companions: the companion_defeat ConsequencePool (#3652).
+        "companions": [ConsequencePool],
         # Ceremony types: the four authored CeremonyType rows (#2289/#2393).
         "ceremonies": [CeremonyType],
         # Market: the PLACEHOLDER capital square (#2066).
@@ -1068,8 +1101,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
         # (#2038).
         "project_resonance": [ProjectKindResonanceAward],
-        # Roster: the INVITE TrustCategory for game-invite eligibility (#2483) +
-        # the starter Story-NPC statline preset catalog (#3427).
+        # Roster: the game-invite rows (#2483) + the starter Story-NPC
+        # statline preset catalog (#3427).
         "roster": [GameInvite, NPCStatlinePreset],
         # Agriculture: Field + Granary RoomFeatureKinds + starter CropTypes (#1864).
         "agriculture": [CropType, RoomFeatureKind],

@@ -2,16 +2,17 @@
 
 The reel features one sealed "top moment" + a ranked index of the rest:
 - Featured = the highest-ranked GM-tagged pose; a tagged pose headlines even with zero
-  votes/reactions (storyteller curation has primacy). With no tags, falls back to the
+  nominations/reactions (storyteller curation has primacy). With no tags, falls back to the
   single most-ranked pose.
-- Ranking (#2161) is all-time ``WeeklyVote`` count first (persistent rows, not the
-  weekly-reset ``Interaction.vote_count`` counter), reaction count as tie-break, and
+- Ranking (#2161, nominations since #3738) is all-time ``Nomination`` count first
+  (persistent rows), reaction count as tie-break, and
   recency last.
-- Index = remaining poses with >= 1 vote or reaction, ranked as above, capped at 10,
+- Index = remaining poses with >= 1 nomination or reaction, ranked as above, capped at 10,
   with the featured pose excluded.
 - Source set is filtered through ``Interaction.visible_to`` so a pose the viewer cannot
   see never appears — not even as a sealed slot.
-- Payload carries interaction ids + ``vote_count``/``reaction_count`` (the featured card
+- Payload carries interaction ids + ``reaction_count`` only; nominations rank but are
+  never counted out loud, since a nomination is invisible (the featured card
   stays otherwise sealed; the frontend reveals a pose via the existing
   interaction-detail endpoint).
 """
@@ -23,8 +24,8 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from world.game_clock.week_services import advance_game_week, get_current_game_week
 from world.magic.factories import DramaticMomentTagFactory
-from world.progression.constants import VoteTargetType
-from world.progression.models.voting import WeeklyVote
+from world.progression.constants import NominationTargetType
+from world.progression.models import Nomination
 from world.scenes.constants import InteractionVisibility, ScenePrivacyMode
 from world.scenes.factories import (
     InteractionFactory,
@@ -41,14 +42,14 @@ class HighlightReelTestMixin:
         for _ in range(n):
             InteractionReactionFactory(interaction=interaction)
 
-    def _vote(self, interaction, game_week, *, processed=False):
-        """Cast one all-time ``WeeklyVote`` on ``interaction`` from a fresh voter."""
-        return WeeklyVote.objects.create(
-            voter=AccountFactory(),
+    def _nominate(self, interaction, game_week, *, processed=False):
+        """One all-time ``Nomination`` of ``interaction`` from a fresh nominator (#3738)."""
+        return Nomination.objects.create(
+            nominator=AccountFactory(),
             game_week=game_week,
-            target_type=VoteTargetType.INTERACTION,
+            nominee=interaction.persona.character_sheet,
+            target_type=NominationTargetType.INTERACTION,
             target_id=interaction.pk,
-            author_account=AccountFactory(),
             processed=processed,
         )
 
@@ -197,26 +198,28 @@ class HighlightReelVisibilityTest(HighlightReelTestMixin, APITestCase):
         self.assertEqual(self._index_ids(writer_data), [public_pose.pk])
 
 
-class HighlightReelVoteRankingTest(HighlightReelTestMixin, APITestCase):
-    """#2161 — all-time ``WeeklyVote`` counts dominate ranking; reactions tie-break.
+class HighlightReelNominationRankingTest(HighlightReelTestMixin, APITestCase):
+    """#2161 (votes), #3738 (nominations): all-time nomination counts dominate ranking;
+    reactions tie-break.
 
-    ``WeeklyVote`` rows are the persistent, all-time signal (they survive as
-    ``processed=True`` after weekly settlement), unlike ``Interaction.vote_count``, a
-    weekly counter reset to 0 at settlement. The reel ranks on the persistent rows.
+    ``Nomination`` rows are the persistent, all-time signal (they survive as
+    ``processed=True`` after weekly settlement). The reel ranks on them but never
+    shows them: a nomination is invisible to its nominee, so the payload carries
+    only ``reaction_count``.
     """
 
     def setUp(self):
         self.viewer = AccountFactory()
         self.scene = SceneFactory()
 
-    def test_votes_across_weeks_outrank_higher_reaction_count(self):
+    def test_nominations_across_weeks_outrank_higher_reaction_count(self):
         week1 = get_current_game_week()
         week2 = advance_game_week()
 
         voted = InteractionFactory(scene=self.scene)
-        self._vote(voted, week1, processed=True)
-        self._vote(voted, week1, processed=True)
-        self._vote(voted, week2)
+        self._nominate(voted, week1, processed=True)
+        self._nominate(voted, week1, processed=True)
+        self._nominate(voted, week2)
         self._react(voted, 1)
 
         loud = InteractionFactory(scene=self.scene)
@@ -224,36 +227,35 @@ class HighlightReelVoteRankingTest(HighlightReelTestMixin, APITestCase):
 
         data = self._reel(self.viewer, self.scene)
 
-        # 3 all-time votes (spanning two weeks, two of them already processed) beat 5
-        # raw reactions on the untouched pose.
+        # 3 all-time nominations (spanning two weeks, two of them already processed) beat
+        # 5 raw reactions on the untouched pose, and the payload never says how many.
         self.assertEqual(data["featured"]["interaction_id"], voted.pk)
-        self.assertEqual(data["featured"]["vote_count"], 3)
+        self.assertNotIn("vote_count", data["featured"])
+        self.assertNotIn("nomination_count", data["featured"])
         self.assertEqual(data["featured"]["reaction_count"], 1)
         self.assertEqual(self._index_ids(data), [loud.pk])
-        self.assertEqual(data["index"][0]["vote_count"], 0)
         self.assertEqual(data["index"][0]["reaction_count"], 5)
 
-    def test_reaction_count_breaks_vote_ties(self):
+    def test_reaction_count_breaks_nomination_ties(self):
         week = get_current_game_week()
 
         higher_reacted = InteractionFactory(scene=self.scene)
-        self._vote(higher_reacted, week)
-        self._vote(higher_reacted, week)
+        self._nominate(higher_reacted, week)
+        self._nominate(higher_reacted, week)
         self._react(higher_reacted, 4)
 
         lower_reacted = InteractionFactory(scene=self.scene)
-        self._vote(lower_reacted, week)
-        self._vote(lower_reacted, week)
+        self._nominate(lower_reacted, week)
+        self._nominate(lower_reacted, week)
         self._react(lower_reacted, 1)
 
         data = self._reel(self.viewer, self.scene)
 
-        # Equal vote counts (2 each) -- reaction count breaks the tie.
+        # Equal nomination counts (2 each) -- reaction count breaks the tie.
         self.assertEqual(data["featured"]["interaction_id"], higher_reacted.pk)
-        self.assertEqual(data["featured"]["vote_count"], 2)
         self.assertEqual(self._index_ids(data), [lower_reacted.pk])
 
-    def test_zero_votes_keeps_reaction_ranked_fallback(self):
+    def test_zero_nominations_keeps_reaction_ranked_fallback(self):
         top = InteractionFactory(scene=self.scene)
         self._react(top, 3)
         second = InteractionFactory(scene=self.scene)
@@ -261,47 +263,45 @@ class HighlightReelVoteRankingTest(HighlightReelTestMixin, APITestCase):
 
         data = self._reel(self.viewer, self.scene)
 
-        # No WeeklyVote rows anywhere -- pre-feature reaction-ranked fallback holds.
+        # No Nomination rows anywhere -- pre-feature reaction-ranked fallback holds.
         self.assertEqual(data["featured"]["interaction_id"], top.pk)
-        self.assertEqual(data["featured"]["vote_count"], 0)
         self.assertEqual(data["featured"]["reaction_count"], 3)
         self.assertEqual(self._index_ids(data), [second.pk])
-        self.assertEqual(data["index"][0]["vote_count"], 0)
         self.assertEqual(data["index"][0]["reaction_count"], 1)
 
-    def test_gm_tagged_featured_logic_unchanged_by_votes(self):
+    def test_gm_tagged_featured_logic_unchanged_by_nominations(self):
         week = get_current_game_week()
 
-        tagged = InteractionFactory(scene=self.scene)  # 0 votes, 0 reactions
+        tagged = InteractionFactory(scene=self.scene)  # 0 nominations, 0 reactions
         self._tag(tagged)
-        heavily_voted = InteractionFactory(scene=self.scene)
-        self._vote(heavily_voted, week)
-        self._vote(heavily_voted, week)
-        self._vote(heavily_voted, week)
+        heavily_nominated = InteractionFactory(scene=self.scene)
+        self._nominate(heavily_nominated, week)
+        self._nominate(heavily_nominated, week)
+        self._nominate(heavily_nominated, week)
 
         data = self._reel(self.viewer, self.scene)
 
-        # Curation primacy holds even against a pose with real all-time votes.
+        # Curation primacy holds even against a pose with real all-time nominations.
         self.assertEqual(data["featured"]["interaction_id"], tagged.pk)
-        self.assertEqual(self._index_ids(data), [heavily_voted.pk])
+        self.assertEqual(self._index_ids(data), [heavily_nominated.pk])
 
-    def test_reel_entries_expose_vote_and_reaction_counts(self):
+    def test_reel_entries_expose_reaction_counts_and_never_nominations(self):
         week = get_current_game_week()
 
         pose = InteractionFactory(scene=self.scene)
-        self._vote(pose, week)
-        self._vote(pose, week)
+        self._nominate(pose, week)
+        self._nominate(pose, week)
         self._react(pose, 4)
         other = InteractionFactory(scene=self.scene)
         self._react(other, 1)
 
         data = self._reel(self.viewer, self.scene)
 
-        self.assertIn("vote_count", data["featured"])
+        # Nominations rank the featured pose but are invisible: no count on the wire.
+        self.assertNotIn("vote_count", data["featured"])
+        self.assertNotIn("nomination_count", data["featured"])
         self.assertIn("reaction_count", data["featured"])
-        self.assertEqual(data["featured"]["vote_count"], 2)
         self.assertEqual(data["featured"]["reaction_count"], 4)
         entry = data["index"][0]
         self.assertEqual(entry["interaction_id"], other.pk)
-        self.assertEqual(entry["vote_count"], 0)
         self.assertEqual(entry["reaction_count"], 1)

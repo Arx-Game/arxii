@@ -9,11 +9,12 @@ repos:
       - id: end-of-file-fixer
       - id: check-ast
       - id: check-added-large-files
-        # world/migrations/0001_initial.py is the single collapsed-app initial
-        # migration (#2906): one CreateModel per model across every former
-        # world.* sub-app, ~2.8MB by construction. It is the only migration
-        # that will ever be this size — later migrations are incremental.
-        exclude: ^src/world/migrations/0001_initial\.py$
+      # SKILL.md runs these scripts directly, and the main checkout has
+      # core.fileMode=false, so a script created there commits as 100644 and
+      # fails "permission denied" in every fresh worktree. This reads the mode
+      # from the git index, so it catches that even where chmod is ignored.
+      - id: check-shebang-scripts-are-executable
+        files: ^tools/(skills/.+\.sh|githooks/.+)$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
@@ -97,6 +98,19 @@ repos:
         # objectdb-param: the whole codebase already passes, so there is no debt
         # to phase in, and the failure mode is silent in both directions.
         # Suppress a genuine external key with `# noqa: IDENT_DASH` plus a reason.
+      # str-exc-response: django_notes.md's ViewSet standards say never put
+      # str(exc) in a response, and CodeQL flags the same shape as
+      # py/stack-trace-exposure. Nothing enforced it until #3787 shipped one to
+      # the point of enqueue. Scoped to world's API surface, which passes clean;
+      # web/admin/ carries 15 pre-existing instances on staff-only surfaces and
+      # is the next scope expansion, same phase-in pattern as objectdb-param.
+      - id: str-exc-response
+        name: Reject str(exc) on a caught exception in views and serializers
+        entry: uv run python tools/lint_str_exc_response.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/world/.*(views|serializers)\.py$
       - id: objectdb-param
         name: Reject ObjectDB-typed args and model FKs
         entry: uv run python tools/lint_objectdb_param.py
@@ -162,6 +176,69 @@ repos:
         # identity map loads once. See ADR-0261 and django_notes.md. Suppress
         # with `# noqa: IDMAPPER_ONLY` plus a reason, only for a model that is
         # not a SharedMemoryModel.
+      - id: prefetch-to-attr
+        name: Reject to_attr prefetches unless PrunedCachedProperty-backed
+        entry: uv run python tools/lint_prefetch_to_attr.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/(evennia_extensions|web/admin/upbringing_builder)/.*\.py$
+        # #3673 / ADR-0263, narrowed by #3816: `Prefetch(..., to_attr=...)` writes
+        # a plain attribute, and Django skips a prefetch that already has one -
+        # correct only for a genuine data descriptor, silently wrong for a bare
+        # attribute or plain `@property`/`cached_property`, which always look
+        # "already set". Under the identity map that makes the second request
+        # re-serve the first request's rows - deleted ones included, arriving
+        # with a null id. `PrunedCachedProperty` (evennia_extensions/cached_property.py)
+        # is the sanctioned target: a real data descriptor that also self-heals
+        # against pk-nulled zombie rows on every read (ADR-0296). The hook allows
+        # `to_attr` only onto a same-file `PrunedCachedProperty`-decorated property
+        # of the matching name; everything else still fails. `CachedRowsHandler`
+        # (evennia_extensions/handlers.py) is reserved for the one remaining case
+        # `PrunedCachedProperty` can't cover - rows parameterized per-parent that
+        # need their own cache key - and today has exactly one consumer,
+        # `CompanionOrderHandler`.
+        #
+        # THIS SCOPE HAS ZERO ENFORCEMENT FOOTPRINT TODAY: neither
+        # evennia_extensions/ nor web/admin/upbringing_builder/ contains a single
+        # `to_attr` call site (only prose mentions), so a clean run here is not
+        # evidence the rewritten check works against real code - it is only
+        # evidence it doesn't false-positive on these two directories.
+        #
+        # SCOPE WIDENS ONE APP AT A TIME, and this regex lists only the surfaces
+        # that are actually clean under the rule above. #3816's plan converted
+        # specific named properties in world/scenes, world/journals,
+        # world/character_sheets, world/character_creation, world/magic and
+        # world/combat, but `--all-files` against those six trees under the new
+        # logic finds 106 unsanctioned `to_attr` sites, split two ways (counted
+        # by cross-referencing every flagged `to_attr` string against every
+        # `PrunedCachedProperty`-decorated name repo-wide, see #3835):
+        #   - ~84 are genuinely unconverted - out of this plan's scope entirely,
+        #     e.g. `ComboDefinition.cached_slots` in world/combat/services.py has
+        #     no backing descriptor at all; `cached_codex_grants` in
+        #     world/character_creation/models.py is a deliberate plain
+        #     `cached_property` for negligible-staleness authored content, not a
+        #     bug.
+        #   - ~22 are FALSE POSITIVES from this hook's own same-file heuristic -
+        #     a genuine `PrunedCachedProperty` exists, but in a different file
+        #     than the `Prefetch` call, which the heuristic cannot see across.
+        #     This includes all 14 flags in world/scenes/interaction_views.py -
+        #     this plan's own flagship conversion, already correct - because the
+        #     descriptors live in world/scenes/models.py. Splitting the
+        #     `Prefetch` call from the property definition across files is the
+        #     DOMINANT, correct layout in this codebase, not an edge case.
+        # Converting the ~84 genuine sites alone would never turn this hook green
+        # against those six trees - the ~22 cross-file false positives need
+        # EITHER a per-site `# noqa: PREFETCH_TO_ATTR` suppression, OR a genuine
+        # cross-file resolution enhancement to this hook. Widening now would
+        # break pre-commit for the next unrelated edit to any of those files.
+        # Everywhere outside this regex is held by the repo-wide
+        # `pattern:PREFETCH_TO_ATTR` ratchet in tools/noqa_ratchet_baseline.txt
+        # (count may only go down), so a NEW to_attr fails anywhere in src/
+        # regardless - this hook is the one that also says what to build
+        # instead. #3835 is the filed home for auditing the ~84 genuine sites
+        # and deciding the false-positive fix; an app joins this regex once
+        # that audit lands, not before.
       - id: view-memo
         name: Reject per-request memos on views and serializers
         entry: uv run python tools/lint_view_memo.py
@@ -176,6 +253,27 @@ repos:
         # typeclass; request data is an explicit argument (serializer `context=`,
         # or `validated_data`) or middleware. Suppress with `# noqa: VIEW_MEMO`
         # plus a reason, only for constant configuration that defaults to None.
+      - id: undelivered-interaction
+        name: Reject a persisted Interaction with no live delivery seam
+        entry: uv run python tools/lint_undelivered_interaction.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*\.py$
+        exclude: (/tests/|/migrations/)
+        # #3807 (2026-09-13): three production writers persisted an Interaction row,
+        # wrote its target rows, and returned - no WebSocket push, no telnet line, to
+        # anybody, ever (`_create_result_interaction` / `_resolve_treatment_request` in
+        # `world/scenes/action_services.py`, `create_cast_outcome_pose` in
+        # `world/scenes/cast_services.py`). Every other production
+        # `create_interaction` caller delivers its row through a push seam
+        # (`push_interaction`, `deliver_outcome_interaction`,
+        # `push_ephemeral_interaction`, `_send_to_objects`, `_broadcast_to_location`)
+        # in the same or an enclosing function; this hook enforces that pairing.
+        # Suppress with `# noqa: UNDELIVERED` plus a reason - the only one found in
+        # this codebase is that the function returns the row to a caller that
+        # delivers it itself (`world/magic/audere_majora.py`'s `_post_declaration`,
+        # whose row `cross_threshold` pushes after finishing the crossing).
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
@@ -209,6 +307,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(src/world/scenes/(models\.py|sql/partition_interaction_.*\.sql))$
+      - id: lint-migration-generations
+        name: No migration reuses or depends on an earlier generation's name (ADR-0276)
+        entry: uv run python tools/lint_migration_generations.py
+        language: system
+        pass_filenames: false
+        files: ^src/world/migrations/.*\.py$
       - id: standalone-sql-wiring
         name: Enforce standalone SQL is wired into both schema paths
         entry: uv run python tools/check_standalone_sql_wiring.py
@@ -218,7 +322,7 @@ repos:
       # reach it and nothing else in CI ran it - the unit tests guarding
       # compare_schemas.py, check_standalone_sql_wiring.py and the sonarcloud
       # helpers were inert (found while fixing #3544, whose own regression pins
-      # live there). Whole suite is ~0.5s, so it runs on every commit.
+      # live there). Whole suite is ~6s, so it runs on every commit.
       - id: tools-tests
         name: Unit tests for tools/ helper scripts
         entry: uv run pytest tools/tests -q
@@ -242,10 +346,10 @@ repos:
         pass_filenames: true
         files: ^frontend/.*\.test\.(ts|tsx)$
       - id: shellcheck-skills
-        name: shellcheck tools/skills bash scripts
+        name: shellcheck tools/skills and tools/githooks bash scripts
         entry: shellcheck
         language: system
-        files: ^tools/skills/.+\.sh$
+        files: ^tools/(skills/.+\.sh|githooks/.+)$
         pass_filenames: true
   - repo: local
     hooks:
@@ -274,6 +378,12 @@ repos:
             pnpm typecheck
         language: system
         files: ^frontend/.*\.(ts|tsx)$
+        # A whole-project check that never reads the filenames it is handed. Without
+        # these two lines pre-commit splits a long staged list into batches and runs
+        # the hook once per batch, concurrently: five `tsc -b --noEmit` at ~1.3 GB
+        # each on a 4 GiB devcontainer, killed at exit 137 (#3707).
+        pass_filenames: false
+        require_serial: true
       - id: prettier
         name: Prettier
         entry: bash

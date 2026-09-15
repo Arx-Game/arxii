@@ -9,6 +9,12 @@ live in `AGENT_GLOSSARY_MAP.md`.
   tab) plus a `JournalTab` quick-compose in the in-scene sidebar; telnet: `journal
   write|respond|edit`. _Avoid:_ **the journal** unqualified when another app's homonym is in
   scope — see Disambiguation below.
+- **Introductions** — the three white journals character generation writes in the
+  character's own voice (#3621), found by `JournalEntry.kind` (`JournalKind`): the **First
+  Journal** (to the Great Archive of Vellichor; offered on an Arx start, otherwise written at
+  the Archive in play), **An Application to Shroudwatch Academy**, and **The Whispers**
+  (rumors of deeds and misdeeds, one per line, each also a Level-1 flavor Secret with gossip
+  heat). _Avoid:_ papers, backstory journals.
 - **Praise** — a `JournalEntry` with `response_type=praise`, a self-FK response to another
   entry (via `parent`). Affirms the parent entry; awards weekly XP to both the giver and the
   receiver.

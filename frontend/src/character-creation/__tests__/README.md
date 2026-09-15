@@ -7,7 +7,7 @@ This directory contains comprehensive tests for the character creation feature.
 ```
 __tests__/
 ├── fixtures.ts           # Mock data for tests
-├── mocks.ts              # Mock utilities (trust, accounts, API responses)
+├── mocks.ts              # Mock utilities (accounts, API responses)
 ├── testUtils.tsx         # Test rendering utilities
 ├── queries.test.tsx      # React Query hooks tests
 ├── CharacterCreationPage.test.tsx  # Main page integration tests
@@ -33,25 +33,6 @@ pnpm test --coverage
 ```
 
 ## Mock Philosophy
-
-### Trust System
-
-The trust system is mocked with a simple integer-based structure designed for future expansion.
-**Note:** Trust system is not yet implemented - these mocks are forward-looking scaffolding.
-
-```typescript
-interface MockTrust {
-  level: number;
-  // Future: areas?: Record<string, number>;
-}
-```
-
-Current trust levels:
-
-- `TRUST_NONE (0)` - Basic player
-- `TRUST_LOW (1)` - Verified player
-- `TRUST_HIGH (5)` - Trusted builder/helper
-- `TRUST_STAFF (10)` - Staff member
 
 ### API Mocking
 

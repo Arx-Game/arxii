@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 
 import { type Segment, parseFormattedContent } from '@/lib/formatParser';
+import { cn } from '@/lib/utils';
 
 /*
  * The index IS the identity of a segment here, not a fallback key.
@@ -9,6 +10,13 @@ import { type Segment, parseFormattedContent } from '@/lib/formatParser';
  * rebuilt whenever that string changes, so a segment cannot move relative to its
  * neighbours and none of them holds state. A key built from the segment text
  * would be strictly worse: repeated words would collide.
+ *
+ * Wrapping lives here, once (#3862). Every reader that renders a message body
+ * (PoseUnit, ExplorationReader, SceneMessages) goes through this wrapper, so an
+ * unbroken run of characters breaks at the column's edge in all of them
+ * instead of widening the feed sideways. `overflow-wrap: anywhere` rather than
+ * `break-word`: only `anywhere` lets the run shrink a flex child's min-content
+ * width, and the feed column is a flex child.
  */
 
 interface FormattedContentProps {
@@ -22,7 +30,7 @@ export const FormattedContent = React.memo(function FormattedContent({
 }: FormattedContentProps) {
   const segments = useMemo(() => parseFormattedContent(content), [content]);
   return (
-    <span className={className}>
+    <span className={cn('[overflow-wrap:anywhere]', className)}>
       {segments.map((segment: Segment, i: number) => {
         switch (segment.type) {
           case 'bold':

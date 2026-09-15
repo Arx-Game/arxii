@@ -84,7 +84,7 @@ class CmdGrantItemTests(TestCase):
         )
         cmd.func()
 
-        self.staff_character.msg.assert_called_with("That is not a character.")
+        self.staff_character.msg.assert_called_with(("That is not a character.", {"type": "error"}))
         assert not ItemInstance.objects.filter(template=self.template).exists()
 
     def test_missing_equals_reports_usage(self) -> None:
@@ -94,7 +94,7 @@ class CmdGrantItemTests(TestCase):
         # ArxCommand's default func() (now used, since action is no longer None)
         # sends both the plain-text message and a structured command_error payload.
         self.staff_character.msg.assert_any_call(
-            "Usage: grant_item <character>=<item template name>"
+            ("Usage: grant_item <character>=<item template name>", {"type": "error"})
         )
 
     def test_search_none_does_not_message_twice(self) -> None:
@@ -138,7 +138,7 @@ class CmdGrantItemGMTrustTests(TestCase):
         cmd = _build_cmd(caller, f"{self.target_character.key}=Hand of the Betrayer")
         cmd.func()
 
-        caller.msg.assert_called_with("Requires Junior GM or higher.")
+        caller.msg.assert_called_with(("Requires Junior GM or higher.", {"type": "error"}))
         assert not ItemInstance.objects.filter(holder_character_sheet=self.target_sheet).exists()
 
     def test_missing_gm_profile_is_blocked(self) -> None:
@@ -148,5 +148,5 @@ class CmdGrantItemGMTrustTests(TestCase):
         cmd = _build_cmd(caller, f"{self.target_character.key}=Hand of the Betrayer")
         cmd.func()
 
-        caller.msg.assert_called_with("GM trust required.")
+        caller.msg.assert_called_with(("GM trust required.", {"type": "error"}))
         assert not ItemInstance.objects.filter(holder_character_sheet=self.target_sheet).exists()

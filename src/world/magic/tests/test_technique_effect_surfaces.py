@@ -33,6 +33,7 @@ EXPECTED_KEYS = {
     "applies",
     "removes",
     "damage",
+    "treatments",
     "grants",
     "summary",
     "is_underspecified",

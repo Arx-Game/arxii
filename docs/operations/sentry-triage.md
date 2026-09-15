@@ -31,6 +31,30 @@ Two paths feed the project:
   come from the game loop, not a view. A traceback that precedes an API 500 (the
   ARX2-8 shape) shows up here.
 
+**One logical error log call is one Sentry event.** Evennia's `_log`
+(`evennia/utils/logger.py`) splits any string it is handed on newlines and calls
+the log function once per line, so a traceback reaches the observer as N separate
+error events. When a live exception is in flight that is harmless — the observer
+calls `capture_exception()` and sentry_sdk's DedupeIntegration collapses the
+repeats. A traceback **relayed across the AMP boundary** is only text on the
+receiving side, though (`amp.py:489`'s `"AMP Error from {info}: {trcbck} {err}"`
+is the common one), so `sys.exc_info()` is empty, every line took the
+`capture_message` branch as a distinct message, and Sentry grouped each line as
+its own issue. `sentry_twisted._TracebackBurst` now reassembles those lines into
+one event, titled by the exception line rather than the shared `Traceback (most
+recent call last):` header. Without it, one broken login became eleven issues:
+on 2026-09-09 that turned 517 failed logins into 5,740 events and consumed the
+entire 5,000-event monthly quota in 19 hours, after which Sentry rate-limited
+and dropped real errors for the rest of the month.
+
+**Quota is the reason this matters.** The developer plan is 5,000 error events a
+month and the whole of August spent 101. An error on a per-request or
+per-reconnect path, multiplied by a fan-out, exhausts the budget in a day — and a
+rate-limited project is a blind one. When triaging a spike, check the *event*
+count against the issue count before assuming volume means severity:
+`/organizations/arx2/stats_v2/?field=sum(quantity)&groupBy=category&groupBy=outcome`
+separates accepted from `rate_limited`.
+
 What deliberately does **not** reach Sentry is twistd's captured standard IO
 (events carrying `log_io`). twistd redirects the daemons' streams into Twisted's
 log as `[("stdout", info), ("stderr", error)]`, so the console log handler turns

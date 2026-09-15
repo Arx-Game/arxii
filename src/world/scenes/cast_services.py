@@ -56,7 +56,11 @@ from world.scenes.action_constants import (
 )
 from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
 from world.scenes.constants import InteractionMode, InteractionVisibility
-from world.scenes.interaction_services import create_interaction
+from world.scenes.interaction_services import (
+    create_interaction,
+    deliver_outcome_interaction,
+    write_target_personas,
+)
 from world.scenes.narrator import get_or_create_narrator_persona
 from world.scenes.types import CastResult, EnhancedSceneActionResult
 
@@ -104,11 +108,8 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
     ``castable_techniques_for_sheet``; callers wanting both read this once and
     derive, rather than paying for the same rows twice.
     """
-    from world.magic.models.techniques import (  # noqa: PLC0415
-        TechniqueAppliedCondition,
-        TechniqueCapabilityGrant,
-        TechniqueDamageProfile,
-        TechniqueRemovedCondition,
+    from world.magic.services.technique_effects import (  # noqa: PLC0415
+        technique_payload_prefetches,
     )
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
@@ -119,26 +120,10 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
         )
         .select_related("technique", "technique__action_template", "technique__effect_type")
         .prefetch_related(
-            Prefetch(
-                "technique__condition_applications",
-                queryset=TechniqueAppliedCondition.objects.select_related("condition"),
-                to_attr="cached_condition_applications",
-            ),
-            Prefetch(
-                "technique__removed_conditions",
-                queryset=TechniqueRemovedCondition.objects.select_related("condition"),
-                to_attr="cached_removed_conditions",
-            ),
-            Prefetch(
-                "technique__damage_profiles",
-                queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
-                to_attr="cached_damage_profiles",
-            ),
-            Prefetch(
-                "technique__capability_grants",
-                queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
-                to_attr="cached_capability_grants",
-            ),
+            # Every payload table the effect summary reads, in one shared
+            # definition (#3682) — a surface that misses one pays a query per
+            # technique for it.
+            *technique_payload_prefetches(prefix="technique__"),
             # #2901: the caster's form list walks each technique's variants.
             # select_related("resonance") because the resonance name is the token
             # a player passes to `cast ... variant=<resonance>`.
@@ -315,6 +300,20 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     about you" surfacing, and naming the target alongside an unattributed line re-opens
     the attribution the lower tiers exist to withhold.
 
+    Those target rows are attached with ``write_target_personas`` AFTER the pose is
+    created, never through ``create_interaction``'s own validated ``target_personas``
+    kwarg. ADR-0293 decision 3: a system-authored row records what happened, and only a
+    player-authored row that addresses someone is governed by reachability. This is a
+    Narrator-authored OUTCOME record of a resolved cast, the exact sibling of combat's
+    ``broadcast_action_outcome`` (``world/combat/interaction_services.py``), which routes
+    its own targets the same way and for the same reason. Concretely, the validated kwarg
+    would refuse on both branches here: the unconcealed pose is room-heard and anchored on
+    the WRITER's location, and the Narrator's character is never physically placed, so
+    there is no room to test presence against; and the concealed pose's ``receivers`` are
+    ``audience.full``, which is who could attribute the CASTER -- a hostile target who
+    failed the detection roll lands in ``effect_only`` instead and would be refused every
+    time concealment works as designed.
+
     Args:
         audience: Who perceived this cast, from ``resolve_cast_audience``. When
             ``audience.concealed`` is False, behavior is byte-identical to before
@@ -324,6 +323,10 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         technique_name: Optional display name override. When provided (e.g. a
             gift-technique's unlocked-variant name from #1581), uses this in the
             narration instead of ``technique.name``.
+
+    Every row this function creates -- the unconcealed pose, the concealed
+    attributed pose, and each lower attribution tier from ``_emit_tier`` -- is
+    delivered live on commit (#3807) via ``deliver_outcome_interaction``.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
@@ -349,14 +352,23 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         signature_snippet=signature_snippet,
     )
 
+    # #3807: every row this function creates was persisted and delivered to
+    # nobody live. Location comes from the scene, not the writer -- the Narrator
+    # persona is never physically placed (a receiver-scoped row below still
+    # reaches its receivers regardless; only a room-heard row needs this).
+    location = scene.location
+
     if not audience.concealed:
-        return create_interaction(
+        unconcealed_pose = create_interaction(
             persona=get_or_create_narrator_persona(),
             content=narration,
             mode=InteractionMode.OUTCOME,
             scene=scene,
-            target_personas=[target_persona] if target_persona is not None else None,
         )
+        if target_persona is not None:
+            write_target_personas(unconcealed_pose, [target_persona])
+        deliver_outcome_interaction(unconcealed_pose, location=location)
+        return unconcealed_pose
 
     from world.magic.narration import (  # noqa: PLC0415
         render_unattributed_cast_narration,
@@ -369,9 +381,11 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         mode=InteractionMode.OUTCOME,
         scene=scene,
         receivers=audience.full,
-        target_personas=[target_persona] if target_persona is not None else None,
         visibility=InteractionVisibility.PERCEIVED_ONLY,
     )
+    if target_persona is not None:
+        write_target_personas(pose, [target_persona])
+    deliver_outcome_interaction(pose, location=location)
 
     # Empty when the technique has no perceptible effect, which is also exactly when
     # resolve_cast_audience leaves effect_only empty — the two agree by construction.
@@ -382,7 +396,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     def _emit_tier(recipients: list[Persona], content: str) -> None:
         if not recipients or not content:
             return
-        create_interaction(
+        tier_interaction = create_interaction(
             persona=get_or_create_narrator_persona(),
             content=content,
             mode=InteractionMode.OUTCOME,
@@ -390,6 +404,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
             receivers=recipients,
             visibility=InteractionVisibility.PERCEIVED_ONLY,
         )
+        deliver_outcome_interaction(tier_interaction, location=location)
 
     _emit_tier(audience.vague, render_vague_cast_narration(unattributed))
     _emit_tier(audience.effect_only, unattributed)

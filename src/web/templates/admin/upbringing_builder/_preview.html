@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Preview: {{ template.name }}</title>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=EB+Garamond&display=swap">
+<style>
+  /* A minimal echo of the CG leaf's paper/ink/Cinzel-Garamond treatment
+     (frontend/src/character-creation/cg.css) for a read-only, no-JS preview -
+     never the full CG stylesheet, which is scoped to the React app. */
+  body {
+    background: #ece3d0;
+    color: #2a231a;
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.6;
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  h1, h2 {
+    font-family: 'Cinzel', Georgia, serif;
+    font-weight: 600;
+  }
+  h2 {
+    font-size: 1.1rem;
+  }
+  .cg-label {
+    font-family: 'Cinzel', Georgia, serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.8rem;
+    color: #6b5a3d;
+    margin: 0 0 0.25rem;
+  }
+  .cg-frame {
+    font-style: italic;
+    border-left: 3px solid #b89f6c;
+    padding-left: 1rem;
+    margin: 1.5rem 0;
+  }
+  .cg-question {
+    border-top: 1px solid #cbbf9e;
+    padding: 1.25rem 0;
+  }
+  .cg-entry-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.35rem 0;
+  }
+  .cg-stance-row {
+    border: 1px solid #cbbf9e;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin: 0.4rem 0;
+  }
+</style>
+</head>
+<body>
+  <p class="cg-label">Preview, read only</p>
+  <h1>{{ template.name }}</h1>
+  <p class="cg-frame">{{ template.frame_narrative }}</p>
+
+  {% for slot in origin.slots %}
+  <section class="cg-question">
+    <p class="cg-label">Question {{ forloop.counter }}</p>
+    <h2>{{ slot.prompt }}</h2>
+    {% if slot.example %}<p><em>{{ slot.example }}</em></p>{% endif %}
+
+    {% if slot.kind == "group" %}
+      {% with first_group=slot.groups.0 %}
+      {% if first_group %}
+      <div class="cg-entry-row">
+        <strong>{{ first_group.name }}</strong>
+        {% if first_group.influence is not None %}
+        <span>Influence {{ first_group.influence }}</span>
+        {% endif %}
+      </div>
+      {% if first_group.gloss %}<p>{{ first_group.gloss }}</p>{% endif %}
+      {% else %}
+      <p>No groups offered yet.</p>
+      {% endif %}
+      {% endwith %}
+    {% endif %}
+
+    {% if slot.kind == "pick" or slot.kind == "group" %}
+      {% for choice in slot.choices %}
+      <div class="cg-stance-row">
+        <div class="cg-entry-row">
+          <strong>{{ choice.name }}</strong>
+          <span>{{ choice.cg_point_cost }} pts</span>
+        </div>
+        {% if choice.description %}<p>{{ choice.description }}</p>{% endif %}
+      </div>
+      {% empty %}
+      <p>No answers authored yet.</p>
+      {% endfor %}
+    {% elif slot.kind == "text" %}
+      <p class="cg-label">Write-in answer</p>
+    {% elif slot.kind == "person" %}
+      <p class="cg-label">Names someone of their own</p>
+    {% endif %}
+  </section>
+  {% empty %}
+  <p>No questions authored yet.</p>
+  {% endfor %}
+</body>
+</html>

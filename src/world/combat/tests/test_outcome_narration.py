@@ -1,5 +1,6 @@
 """Unit tests for outcome-narration render helpers — deterministic, no DB."""
 
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 
 from world.combat.interaction_services import (
@@ -7,6 +8,7 @@ from world.combat.interaction_services import (
     render_clash_outcome_narration,
 )
 from world.combat.types import ActionOutcome, OpponentDamageResult
+from world.magic.narration import fill_narration_placeholders, validate_outcome_narration
 from world.scenes.interaction_services import render_challenge_outcome_narration
 
 
@@ -188,3 +190,92 @@ class ClashOutcomeNarrationTest(SimpleTestCase):
             "consequence_label": "Stagger",
         }
         assert render_clash_outcome_narration(**kwargs) == render_clash_outcome_narration(**kwargs)
+
+
+class AuthoredOutcomeNarrationTest(SimpleTestCase):
+    """#3554: authored hit/miss text replaces the head, never the ledger."""
+
+    def _hit(self, damage: int = 24) -> ActionOutcome:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Kira")
+        outcome.damage_results.append(_opp_dmg(damage_dealt=damage))
+        return outcome
+
+    def test_hit_text_replaces_head_and_keeps_damage_figure(self) -> None:
+        text = render_action_outcome_narration(
+            actor_label="Kira",
+            technique_name="Frost Bolt",
+            target_label="the Pyromancer",
+            outcome=self._hit(),
+            hit_text="{actor} hurls a spear of rime at {target}",
+        )
+        assert text == "Kira hurls a spear of rime at the Pyromancer for 24 damage."
+
+    def test_hit_text_keeps_tail_clauses(self) -> None:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Kira")
+        outcome.damage_results.append(_opp_dmg(damage_dealt=40, defeated=True))
+        text = render_action_outcome_narration(
+            actor_label="Kira",
+            technique_name="Frost Bolt",
+            target_label="the Pyromancer",
+            outcome=outcome,
+            hit_text="{actor} hurls a spear of rime at {target}",
+        )
+        assert text == (
+            "Kira hurls a spear of rime at the Pyromancer for 40 damage, defeating them."
+        )
+
+    def test_miss_text_replaces_miss_head(self) -> None:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Kira")
+        outcome.damage_results.append(_opp_dmg(damage_dealt=0))
+        text = render_action_outcome_narration(
+            actor_label="Kira",
+            technique_name="Frost Bolt",
+            target_label="the Pyromancer",
+            outcome=outcome,
+            hit_text="{actor} hurls a spear of rime at {target}",
+            miss_text="{actor}'s rime shatters short of {target}",
+        )
+        assert text == "Kira's rime shatters short of the Pyromancer."
+
+    def test_blank_text_falls_back_to_default_sentence(self) -> None:
+        plain = render_action_outcome_narration(
+            actor_label="Kira",
+            technique_name="Frost Bolt",
+            target_label="the Pyromancer",
+            outcome=self._hit(),
+        )
+        with_blank = render_action_outcome_narration(
+            actor_label="Kira",
+            technique_name="Frost Bolt",
+            target_label="the Pyromancer",
+            outcome=self._hit(),
+            hit_text="",
+            miss_text="",
+        )
+        assert with_blank == plain
+        assert "Frost Bolt" in plain
+
+    def test_hit_text_is_ignored_for_untargeted_action(self) -> None:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Garruk")
+        text = render_action_outcome_narration(
+            actor_label="Garruk",
+            technique_name="Guard Stance",
+            target_label=None,
+            outcome=outcome,
+            hit_text="{actor} braces against {target}",
+        )
+        assert text == "Garruk uses Guard Stance."
+
+    def test_stray_braces_survive_substitution(self) -> None:
+        assert (
+            fill_narration_placeholders("{actor} says {hi} to {target}", actor="A", target="B")
+            == "A says {hi} to B"
+        )
+
+    def test_validator_requires_both_placeholders(self) -> None:
+        validate_outcome_narration("", "hit_narration")
+        validate_outcome_narration("{actor} strikes {target}", "hit_narration")
+        with self.assertRaises(ValidationError):
+            validate_outcome_narration("{actor} strikes", "hit_narration")
+        with self.assertRaises(ValidationError):
+            validate_outcome_narration("strikes {target}", "hit_narration")

@@ -115,8 +115,8 @@ player accept step). Review pool: staff or any GM whose table the persona sits a
 REST API + web UI (sheet Updates tab, GM queue, owner/staff-only version timeline).
 
 ### Pre-Phase-1 Foundation
-- **Trust system:** TrustCategory, PlayerTrust, PlayerTrustLevel, StoryTrustRequirement — fully built, orthogonal to the episode engine
-- **Feedback models:** StoryFeedback, TrustCategoryFeedbackRating — fully built
+- **Trust system:** removed (#3726). `PlayerTrust`, `PlayerTrustLevel` and `StoryTrustRequirement` are gone; nothing ever granted a trust level, so every gate refused everyone. GM authority is `GMProfile.level` (ADR-0097); per-story authority is `StoryParticipation.trusted_by_owner`
+- **Feedback models:** StoryFeedback, TrustCategoryFeedbackRating, TrustCategory — fully built. `TrustCategory` survives as the dimension a rating is filed under, feeding the GM evidence view and GM Story Reward XP (#2123)
 - **StoryParticipation** — character involvement tracking, fully built
 - **Legacy APIs:** Full viewsets and serializers for the pre-Phase-1 Story/Chapter/Episode shape
 - **Tests:** Model tests, view permission tests

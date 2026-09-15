@@ -208,7 +208,7 @@ class CmdWeaveThread(ArxCommand):
         token split on the first ``/``. Partner-name ambiguity is reported via
         ``search_or_raise`` — the same Evennia ``search()``
         found/not-found/numbered-disambiguation convention every other
-        command uses (e.g. ``CmdRelationship._resolve_target_sheet``).
+        command uses (e.g. ``CmdRelationship._resolve_target``).
         """
         from world.magic.constants import TargetKind  # noqa: PLC0415
         from world.relationships.models import RelationshipTrackProgress  # noqa: PLC0415
@@ -223,7 +223,7 @@ class CmdWeaveThread(ArxCommand):
         partner = self.search_or_raise(
             partner_token, not_found_msg=f"Could not find '{partner_token}'."
         )
-        # Same shape as CmdRelationship._resolve_target_sheet: non-character
+        # Same shape as CmdRelationship._resolve_target: non-character
         # objects have no sheet_data attribute / row.
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 

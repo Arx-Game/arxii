@@ -74,8 +74,7 @@ class RosterPolicyService:
                 },
             )
 
-        # TODO: Add more policy checks when trust system is ready:
-        # - Character requires higher trust level
+        # TODO: Add more policy checks:
         # - Player involved in conflicting storylines
         # - Player not allowed to apply to this roster type
         # - Too many pending applications

@@ -642,7 +642,7 @@ def _build_starting_area_fixture(entry: ContentEntry) -> dict:
       guarantee, so it round-trips even though it is a FK.
 
     Genuinely admin-owned placement columns (``sort_order``, ``access_level``,
-    ``minimum_trust``, ``grants_residence_tenancy``, ``is_active``) stay out.
+    ``grants_residence_tenancy``, ``is_active``) stay out.
     """
     from world.character_creation.models import StartingArea  # noqa: PLC0415
 

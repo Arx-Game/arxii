@@ -24,10 +24,10 @@ export function Door() {
         ❦
       </div>
       <h2>How One Enters</h2>
-      {/* PLACEHOLDER: Apostate rewrite */}
+      {/* Apostate's prose, verbatim (#3723). */}
       <p>
-        The city takes no measure of you at the gate. Make a free account, then take up a life:
-        begin your own, or claim one from the roster. The game teaches the rest as you go.
+        Register an account, then start a character's story by either choosing one from the roster
+        or designing your own. The game teaches the rest as you go.
       </p>
       {isOpen ? (
         <>

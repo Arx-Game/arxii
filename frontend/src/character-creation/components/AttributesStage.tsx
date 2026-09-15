@@ -15,6 +15,7 @@ import {
   Marginalia,
   RecordRail,
   StatRow,
+  stageEyebrow,
 } from '../folio';
 import { useCGExplanations, useStatDefinitions, useUpdateDraft } from '../queries';
 import { getDefaultStats, Stage } from '../types';
@@ -88,7 +89,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
           { label: 'Tradition', value: draft.selected_tradition?.name },
           { label: 'Statistics', value: `${spent} of ${budget} spent` },
         ]}
-        ledger="Stage 7 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-why">
         <span className="note" id="why-note" role="status">

@@ -5,9 +5,16 @@
  * screen-reader-only), Cancel in the footer, primary button reads "Add" —
  * never "Make It Real" (areas/rooms modes) or "Link it"/"Dig it" (exit mode).
  *
- * Areas mode hides the connection rows entirely (an area has no exits) and
- * hands back `{kind:'area', name}`; the caller (`Lattice`) dispatches
- * `create_area`. Rooms mode shows Entrance-from/Exit-to — each a room picker
+ * Areas mode asks what the square becomes (2026-09-09, the reviewer plotting
+ * Arx: the city center is an open-air room of its neighborhood, and buildings
+ * stand beside it, so a map above BUILDING holds both): an area at any level
+ * that fits under this one (`areaLevelOptions`, the next level down first) or
+ * a room right here. An area hands back `{kind:'area', name, level, entrance}`
+ * — `entrance` names the room on this map it opens from, the exit words each
+ * way and the new area's first room, so a building gets its door the moment
+ * it exists; the caller (`Lattice`) dispatches `create_area` and chains the
+ * dig and the link. A room here takes rooms mode's shape below. Rooms mode
+ * shows Entrance-from/Exit-to — each a room picker
  * + a free-text exit-name input, auto-filled from `defaultNeighbor` (the
  * plotted cell's one adjacent realized room, computed by `Lattice` from grid
  * position — `null` when the plot is free-standing) and independently
@@ -15,6 +22,13 @@
  * only *assembles* the payload — it never dispatches `staff_link_rooms`
  * itself, since the new room's id doesn't exist until the dig lands; the
  * caller resolves the link once the tile appears (see `Lattice.tsx`).
+ *
+ * Rooms mode has the same implicit fork for a room that already exists in this
+ * area but sits nowhere on the grid (dug from an exit, or seeded): typing its
+ * name exactly (case-insensitively, against `unplacedOptions`) means "place that
+ * room on this square" — the caller dispatches `staff_place_room`; any other
+ * name digs a new room. Before this the only way onto the grid was a fresh dig,
+ * so an unplaced room could never be placed from the Atlas at all.
  *
  * Exit mode (#3477 Task 6, `RoomDocument`'s "⊕ dig or link an exit…") is the
  * prototype's implicit dig/link fork: one "Leads to" field, no mode toggle to
@@ -59,11 +73,35 @@ export interface AddDialogConnection {
   exitName: string;
 }
 
+export interface AddDialogAreaEntrance {
+  /** The room on this map the new area opens from. */
+  roomId: number;
+  /** The exit word from that room into the new area's first room. */
+  exitName: string;
+  /** The exit word back out. */
+  exitBack: string;
+  /** The new area's first room, dug at its origin and linked to `roomId`. */
+  firstRoomName: string;
+}
+
+export interface AddDialogLevelOption {
+  value: number;
+  label: string;
+}
+
 export type AddDialogRealizePayload =
-  | { kind: 'area'; name: string }
+  | {
+      kind: 'area';
+      name: string;
+      /** The chosen level; absent when the caller offered no `areaLevelOptions` (its default applies). */
+      level?: number;
+      entrance: AddDialogAreaEntrance | null;
+    }
   | {
       kind: 'room';
       name: string;
+      /** Set when `name` exactly (case-insensitively) matched an `unplacedOptions` entry: place it, don't dig. */
+      matchedRoomId: number | null;
       entrance: AddDialogConnection | null;
       exit: AddDialogConnection | null;
     }
@@ -75,6 +113,8 @@ export type AddDialogRealizePayload =
       matchedRoomId: number | null;
       exitThere: string;
       exitBack: string;
+      /** One way (#3860): only the exit there is made and `exitBack` is empty. */
+      oneWay: boolean;
     };
 
 /**
@@ -111,6 +151,15 @@ export interface AddDialogProps {
   onConfirm: (payload: AddDialogRealizePayload) => void;
   /** Rooms mode: pick targets for the connection rows. Exit mode: the dig/link match pool. */
   roomOptions?: AddDialogRoomOption[];
+  /** Areas mode: the label of the level a plotted square becomes ("Ward"), so the dialog says which it is. */
+  childLevelLabel?: string;
+  /**
+   * Areas mode: every level a plotted square may become, the default first.
+   * With this set the dialog also offers "a room here" (rooms sit at any level).
+   */
+  areaLevelOptions?: AddDialogLevelOption[];
+  /** Rooms mode: this area's rooms with no grid position yet — a name match places one instead of digging. */
+  unplacedOptions?: AddDialogRoomOption[];
   /** Rooms mode only — the plotted cell's one adjacent realized room, if any. */
   defaultNeighbor?: AddDialogNeighbor | null;
   /** Exit mode only — fires as "Leads to" changes, so the caller can live-search room names. */
@@ -118,17 +167,36 @@ export interface AddDialogProps {
 }
 
 /** What the exit field is about to do, in the player's terms. */
-function exitNote(trimmedDestination: string, matched: AddDialogRoomOption | null): string {
+function exitNote(
+  trimmedDestination: string,
+  matched: AddDialogRoomOption | null,
+  oneWay: boolean
+): string {
   if (trimmedDestination === '') return 'name the room this exit leads to';
-  if (matched) return 'joins two rooms that already exist — nothing new is made';
-  return 'dug as a placeholder for the writing pass — you stay here';
+  if (matched) {
+    // Both rooms exist, so the note says what will and will not lead back (#3860).
+    return oneWay
+      ? `links to ${matched.name}; nothing leads back to here`
+      : `links to ${matched.name}, and ${matched.name} back to here`;
+  }
+  return oneWay
+    ? 'dug as a placeholder for the writing pass — nothing leads back to here'
+    : 'dug as a placeholder for the writing pass — you stay here';
 }
 
-/** Exit mode forks on whether the destination already exists; every other mode just adds. */
-function submitLabel(mode: AddDialogProps['mode'], matched: AddDialogRoomOption | null): string {
+/** Exit mode forks on whether the destination already exists; a room square on an unplaced match; areas just add. */
+function submitLabel(
+  mode: AddDialogProps['mode'],
+  matched: AddDialogRoomOption | null,
+  matchedUnplaced: AddDialogRoomOption | null = null
+): string {
+  if (mode === 'rooms') return matchedUnplaced ? 'Place' : 'Add';
   if (mode !== 'exit') return 'Add';
   return matched ? 'Link it' : 'Dig it';
 }
+
+/** The value the "This square becomes" select uses for a room, beside the numeric area levels. */
+const ROOM_HERE = 'room';
 
 interface RowState {
   removed: boolean;
@@ -140,16 +208,109 @@ function initialRow(roomId: number | null, exitName: string): RowState {
   return { removed: roomId == null, roomId, exitName };
 }
 
+interface SubmitDialogArgs {
+  mode: AddDialogProps['mode'];
+  name: string;
+  roomShape: boolean;
+  areaEntranceOffered: boolean;
+  areaEntrance: RowState;
+  areaExitBack: string;
+  firstRoomName: string;
+  chosenLevel: number | null;
+  matched: AddDialogRoomOption | null;
+  matchedUnplaced: AddDialogRoomOption | null;
+  entrance: RowState;
+  exit: RowState;
+  exitThere: string;
+  exitBack: string;
+  oneWay: boolean;
+  onConfirm: (payload: AddDialogRealizePayload) => void;
+}
+
+/** Assemble the mode-specific payload without adding branching to the view. */
+function submitDialog({
+  mode,
+  name,
+  roomShape,
+  areaEntranceOffered,
+  areaEntrance,
+  areaExitBack,
+  firstRoomName,
+  chosenLevel,
+  matched,
+  matchedUnplaced,
+  entrance,
+  exit,
+  exitThere,
+  exitBack,
+  oneWay,
+  onConfirm,
+}: SubmitDialogArgs): void {
+  const trimmedName = name.trim();
+  if (mode === 'areas' && !roomShape) {
+    const entranceFrom =
+      areaEntranceOffered && !areaEntrance.removed && areaEntrance.roomId != null
+        ? {
+            roomId: areaEntrance.roomId,
+            exitName: areaEntrance.exitName.trim() || trimmedName,
+            exitBack: areaExitBack.trim() || 'out',
+            firstRoomName: firstRoomName.trim() || 'Entry',
+          }
+        : null;
+    onConfirm({
+      kind: 'area',
+      name: trimmedName,
+      ...(chosenLevel != null ? { level: chosenLevel } : {}),
+      entrance: entranceFrom,
+    });
+    return;
+  }
+  if (mode === 'exit') {
+    onConfirm({
+      kind: 'exit',
+      name: trimmedName,
+      matchedRoomId: matched?.id ?? null,
+      exitThere: exitThere.trim(),
+      exitBack: oneWay ? '' : exitBack.trim(),
+      oneWay,
+    });
+    return;
+  }
+  const connection = (row: RowState, fallback: string): AddDialogConnection | null =>
+    !row.removed && row.roomId != null
+      ? { roomId: row.roomId, exitName: row.exitName.trim() || fallback }
+      : null;
+  onConfirm({
+    kind: 'room',
+    name: trimmedName,
+    matchedRoomId: matchedUnplaced?.id ?? null,
+    entrance: connection(entrance, 'in'),
+    exit: connection(exit, 'out'),
+  });
+}
+
 export function AddDialog({
   mode,
   open,
   onOpenChange,
   onConfirm,
   roomOptions = [],
+  unplacedOptions = [],
+  childLevelLabel,
+  areaLevelOptions = [],
   defaultNeighbor = null,
   onDestinationInput,
 }: AddDialogProps) {
   const [name, setName] = useState('');
+  // Areas mode's fork: which level the square becomes, or a room right here.
+  const [becomes, setBecomes] = useState<string>(
+    areaLevelOptions[0] ? String(areaLevelOptions[0].value) : ''
+  );
+  const [areaEntrance, setAreaEntrance] = useState<RowState>(() =>
+    initialRow(defaultNeighbor?.roomId ?? null, '')
+  );
+  const [areaExitBack, setAreaExitBack] = useState('out');
+  const [firstRoomName, setFirstRoomName] = useState('Entry');
   const [entrance, setEntrance] = useState<RowState>(() =>
     initialRow(defaultNeighbor?.roomId ?? null, defaultNeighbor?.intoName ?? 'in')
   );
@@ -158,6 +319,8 @@ export function AddDialog({
   );
   const [exitThere, setExitThere] = useState('');
   const [exitBack, setExitBack] = useState('');
+  // #3860 — both ways is the default; one way is the staff's deliberate choice.
+  const [oneWay, setOneWay] = useState(false);
 
   // Reset ONLY on the closed→open transition. `defaultNeighbor` is read
   // through a ref because both callers rebuild it every render — with it in
@@ -166,19 +329,36 @@ export function AddDialog({
   // #3477 fix round 2).
   const defaultNeighborRef = useRef(defaultNeighbor);
   defaultNeighborRef.current = defaultNeighbor;
+  const areaLevelOptionsRef = useRef(areaLevelOptions);
+  areaLevelOptionsRef.current = areaLevelOptions;
   useEffect(() => {
     if (!open) return;
     const neighbor = defaultNeighborRef.current;
+    const firstLevel = areaLevelOptionsRef.current[0];
     setName('');
     setEntrance(initialRow(neighbor?.roomId ?? null, neighbor?.intoName ?? 'in'));
     setExit(initialRow(neighbor?.roomId ?? null, neighbor?.outName ?? 'out'));
     setExitThere('');
     setExitBack('');
+    setOneWay(false);
+    setBecomes(firstLevel ? String(firstLevel.value) : '');
+    setAreaEntrance(initialRow(neighbor?.roomId ?? null, ''));
+    setAreaExitBack('out');
+    setFirstRoomName('Entry');
   }, [open]);
+
+  const offersFork = mode === 'areas' && areaLevelOptions.length > 0;
+  const chosenLevel = offersFork && becomes !== ROOM_HERE ? Number(becomes) : null;
+  const chosenLevelLabel =
+    areaLevelOptions.find((choice) => choice.value === chosenLevel)?.label ?? childLevelLabel;
+  /** Rooms mode, or an areas-mode square that becomes a room: the dig shape. */
+  const roomShape = mode === 'rooms' || (offersFork && becomes === ROOM_HERE);
+  /** An areas-mode square that becomes an area, with rooms on this map to open from. */
+  const areaEntranceOffered = mode === 'areas' && !roomShape && roomOptions.length > 0;
 
   const canSubmit =
     mode === 'exit' ? name.trim() !== '' && exitThere.trim() !== '' : name.trim() !== '';
-  const freeStanding = mode === 'rooms' && entrance.removed && exit.removed;
+  const freeStanding = roomShape && entrance.removed && exit.removed;
 
   // Exit mode's implicit fork — an exact (case-insensitive) name match means
   // "link to that room," anything else means "dig a new one by that name."
@@ -196,44 +376,78 @@ export function AddDialog({
           .slice(0, 4)
       : [];
 
+  // Rooms mode's fork — a name that exactly matches an unplaced room of this
+  // area means "place that room here," anything else means "dig a new one."
+  const matchedUnplaced = roomShape
+    ? (unplacedOptions.find(
+        (option) => option.name.toLowerCase() === trimmedDestination.toLowerCase()
+      ) ?? null)
+    : null;
+  const unplacedSuggestions =
+    roomShape && trimmedDestination !== ''
+      ? unplacedOptions
+          .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
+          .slice(0, 4)
+      : [];
+
   const submit = () => {
-    const trimmedName = name.trim();
-    if (mode === 'areas') {
-      onConfirm({ kind: 'area', name: trimmedName });
-    } else if (mode === 'exit') {
-      onConfirm({
-        kind: 'exit',
-        name: trimmedName,
-        matchedRoomId: matched?.id ?? null,
-        exitThere: exitThere.trim(),
-        exitBack: exitBack.trim(),
-      });
-    } else {
-      const entranceConnection: AddDialogConnection | null =
-        !entrance.removed && entrance.roomId != null
-          ? { roomId: entrance.roomId, exitName: entrance.exitName.trim() || 'in' }
-          : null;
-      const exitConnection: AddDialogConnection | null =
-        !exit.removed && exit.roomId != null
-          ? { roomId: exit.roomId, exitName: exit.exitName.trim() || 'out' }
-          : null;
-      onConfirm({
-        kind: 'room',
-        name: trimmedName,
-        entrance: entranceConnection,
-        exit: exitConnection,
-      });
-    }
+    submitDialog({
+      mode,
+      name,
+      roomShape,
+      areaEntranceOffered,
+      areaEntrance,
+      areaExitBack,
+      firstRoomName,
+      chosenLevel,
+      matched,
+      matchedUnplaced,
+      entrance,
+      exit,
+      exitThere,
+      exitBack,
+      oneWay,
+      onConfirm,
+    });
     onOpenChange(false);
   };
 
-  const copy = MODE_COPY[mode];
+  let copy = MODE_COPY[mode];
+  if (roomShape && mode === 'areas') {
+    copy = { ...MODE_COPY.rooms, placeholder: 'The City Center' };
+  } else if (mode === 'areas' && chosenLevelLabel) {
+    copy = {
+      title: `New ${chosenLevelLabel.toLowerCase()}`,
+      nameLabel: `${chosenLevelLabel} name`,
+      placeholder: MODE_COPY.areas.placeholder,
+    };
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogTitle className="sr-only">{copy.title}</DialogTitle>
         <div className="flex flex-col gap-3">
+          {offersFork && (
+            <div className="flex items-baseline gap-2" data-testid="add-dialog-becomes-row">
+              <Label className="min-w-[6.5rem] shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+                This square is
+              </Label>
+              <Select value={becomes} onValueChange={setBecomes}>
+                <SelectTrigger className="flex-1" data-testid="add-dialog-becomes">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {areaLevelOptions.map((choice) => (
+                    <SelectItem key={choice.value} value={String(choice.value)}>
+                      a {choice.label.toLowerCase()}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={ROOM_HERE}>a room here (open air)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="add-dialog-name">{copy.nameLabel}</Label>
             <Input
@@ -268,6 +482,28 @@ export function AddDialog({
 
           {mode === 'exit' && (
             <>
+              <div className="flex items-center gap-2" data-testid="add-dialog-direction">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={oneWay ? 'outline' : 'default'}
+                  aria-pressed={!oneWay}
+                  onClick={() => setOneWay(false)}
+                  data-testid="add-dialog-both-ways"
+                >
+                  Both ways
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={oneWay ? 'default' : 'outline'}
+                  aria-pressed={oneWay}
+                  onClick={() => setOneWay(true)}
+                  data-testid="add-dialog-one-way"
+                >
+                  One way
+                </Button>
+              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="add-dialog-exit-there">Exit there</Label>
                 <Input
@@ -278,27 +514,100 @@ export function AddDialog({
                   data-testid="add-dialog-exit-there"
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="add-dialog-exit-back">Exit back</Label>
-                <Input
-                  id="add-dialog-exit-back"
-                  value={exitBack}
-                  onChange={(event) => setExitBack(event.target.value)}
-                  placeholder="east"
-                  data-testid="add-dialog-exit-back"
-                />
-              </div>
+              {!oneWay && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="add-dialog-exit-back">Exit back</Label>
+                  <Input
+                    id="add-dialog-exit-back"
+                    value={exitBack}
+                    onChange={(event) => setExitBack(event.target.value)}
+                    placeholder="east"
+                    data-testid="add-dialog-exit-back"
+                  />
+                </div>
+              )}
               <p
                 className="font-body text-xs italic text-muted-foreground"
                 data-testid="add-dialog-exit-note"
               >
-                {exitNote(trimmedDestination, matched)}
+                {exitNote(trimmedDestination, matched, oneWay)}
               </p>
             </>
           )}
 
-          {mode === 'rooms' && (
+          {areaEntranceOffered && (
             <>
+              <ConnectionRow
+                label="Entrance from"
+                testId="area-entrance"
+                row={areaEntrance}
+                setRow={setAreaEntrance}
+                roomOptions={roomOptions}
+                exitNamePlaceholder={name.trim() || 'its name'}
+              />
+              {!areaEntrance.removed && (
+                <div className="flex items-baseline gap-2" data-testid="add-dialog-area-door-row">
+                  <Label className="min-w-[6.5rem] shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+                    First room
+                  </Label>
+                  <Input
+                    value={firstRoomName}
+                    onChange={(event) => setFirstRoomName(event.target.value)}
+                    className="flex-1"
+                    aria-label="First room name"
+                    data-testid="add-dialog-first-room"
+                  />
+                  <Input
+                    value={areaExitBack}
+                    onChange={(event) => setAreaExitBack(event.target.value)}
+                    placeholder="out"
+                    className="w-28"
+                    aria-label="Exit back name"
+                    data-testid="add-dialog-area-exit-back"
+                  />
+                </div>
+              )}
+              {!areaEntrance.removed && areaEntrance.roomId != null && (
+                <p
+                  className="font-body text-xs italic text-muted-foreground"
+                  data-testid="add-dialog-area-entrance-note"
+                >
+                  its first room is dug at its origin and linked from{' '}
+                  {roomOptions.find((option) => option.id === areaEntrance.roomId)?.name ??
+                    'that room'}
+                  ; the rest of its map is plotted from inside
+                </p>
+              )}
+            </>
+          )}
+
+          {roomShape && unplacedSuggestions.length > 0 && (
+            <div className="grid gap-1" data-testid="add-dialog-place-suggestions">
+              {unplacedSuggestions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="text-left text-sm text-muted-foreground hover:text-primary"
+                  onClick={() => setName(option.name)}
+                  data-testid="add-dialog-place-suggestion"
+                >
+                  ⌖ place {option.name} here
+                </button>
+              ))}
+            </div>
+          )}
+
+          {roomShape && (
+            <>
+              {matchedUnplaced && (
+                <p
+                  className="font-body text-xs italic text-muted-foreground"
+                  data-testid="add-dialog-place-note"
+                >
+                  {matchedUnplaced.name} already exists here without a place on the grid; Add puts
+                  it on this square instead of digging another
+                </p>
+              )}
               <ConnectionRow
                 label="Entrance from"
                 testId="entrance"
@@ -330,7 +639,7 @@ export function AddDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSubmit} data-testid="add-dialog-submit">
-            {submitLabel(mode, matched)}
+            {submitLabel(mode, matched, matchedUnplaced)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -344,9 +653,17 @@ interface ConnectionRowProps {
   row: RowState;
   setRow: (updater: (prev: RowState) => RowState) => void;
   roomOptions: AddDialogRoomOption[];
+  exitNamePlaceholder?: string;
 }
 
-function ConnectionRow({ label, testId, row, setRow, roomOptions }: ConnectionRowProps) {
+function ConnectionRow({
+  label,
+  testId,
+  row,
+  setRow,
+  roomOptions,
+  exitNamePlaceholder = 'exit name',
+}: ConnectionRowProps) {
   if (row.removed) {
     return (
       <p
@@ -381,7 +698,7 @@ function ConnectionRow({ label, testId, row, setRow, roomOptions }: ConnectionRo
       <Input
         value={row.exitName}
         onChange={(event) => setRow((prev) => ({ ...prev, exitName: event.target.value }))}
-        placeholder="exit name"
+        placeholder={exitNamePlaceholder}
         className="w-28"
         aria-label={`${label} exit name`}
         data-testid={`add-dialog-${testId}-name`}

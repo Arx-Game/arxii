@@ -37,6 +37,22 @@ class FormTraitSeedTests(TestCase):
         skin = FormTrait.objects.get(name="skin_tone")
         self.assertGreaterEqual(skin.options.count(), 4)
 
+    def test_unnatural_option_is_seeded_and_wired_but_out_of_the_palette(self):
+        """The off-species umbrella exists, is pointed at, and is not offered (#3739)."""
+        from world.forms.services import get_cg_form_options
+        from world.species.models import Species
+
+        seed_character_creation_dev()
+        for name in ("hair_color", "eye_color", "skin_tone"):
+            trait = FormTrait.objects.get(name=name)
+            assert trait.unnatural_option is not None
+            assert trait.unnatural_option.name == "unnatural"
+        species = Species.objects.first()
+        if species is not None:
+            palette = get_cg_form_options(species)
+            for trait, options in palette.items():
+                assert trait.unnatural_option_id not in {o.pk for o in options}
+
     def test_species_form_trait_links_all_species(self):
         """SpeciesFormTrait links both Human and Khati to all FormTraits."""
         seed_character_creation_dev()
@@ -53,7 +69,7 @@ class FormTraitSeedTests(TestCase):
         seed_character_creation_dev()
         self.assertEqual(FormTrait.objects.filter(name="hair_color").count(), 1)
         # 7 natural + 5 chromatic dye colors + multihued + prismatic (#2632).
-        self.assertEqual(FormTraitOption.objects.filter(trait__name="hair_color").count(), 14)
+        self.assertEqual(FormTraitOption.objects.filter(trait__name="hair_color").count(), 15)
         for species_name in ["Human", "Khati"]:
             sp = Species.objects.get(name=species_name)
             self.assertEqual(

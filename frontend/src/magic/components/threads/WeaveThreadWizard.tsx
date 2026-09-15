@@ -38,6 +38,7 @@ import { useCharacterResonances, useWeaveThread } from '../../queries';
 import type { CharacterResonance, TargetKind, ThreadHubSummary } from '../../types';
 import { apiFetch } from '@/evennia_replacements/api';
 import { getMyOutboundRelationships, getRelationshipDetail } from '@/relationships/api';
+import type { CharacterRelationshipList } from '@/relationships/api';
 
 // ---------------------------------------------------------------------------
 // Local anchor-picker data types
@@ -104,10 +105,13 @@ const ALL_KINDS: TargetKind[] = [
 // ---------------------------------------------------------------------------
 
 async function fetchFacetOptions(): Promise<AnchorOption[]> {
+  // Facets are a flat, staff-curated vocabulary (#3776 Task 1 dropped the
+  // Category>Subcategory>Specific hierarchy and the `tree` endpoint with it) —
+  // fetch the whole small list once and let the picker filter it client-side.
   const res = await apiFetch('/api/magic/facets/');
   if (!res.ok) throw new Error('Failed to load facets');
-  const data = (await res.json()) as Array<{ id: number; full_path: string; name: string }>;
-  return data.map((f) => ({ id: f.id, label: f.full_path || f.name }));
+  const data = (await res.json()) as Array<{ id: number; name: string; description: string }>;
+  return data.map((f) => ({ id: f.id, label: f.name, sublabel: f.description || undefined }));
 }
 
 async function fetchCovenantRoleOptions(): Promise<AnchorOption[]> {
@@ -200,9 +204,11 @@ async function resolvePrimaryPersonaId(characterSheetId: number): Promise<number
  * `track_progress` row among `weavable_relationship_track_ids` — the only
  * relationships that could possibly anchor a RELATIONSHIP_TRACK thread.
  * `track_progress` only exists on the detail retrieve (the list serializer
- * omits it), so this fetches one detail per outbound relationship. A partner
- * whose CharacterSheet has no resolvable Persona is dropped — there would be
- * no legal `target_persona_id` to submit for them.
+ * omits it), so this fetches one detail per outbound relationship. Companion-
+ * targeted relationships (#3575) are filtered out up front, since a companion
+ * has no persona to weave a thread with; a partner whose CharacterSheet has
+ * no resolvable Persona is dropped too, since there would be no legal
+ * `target_persona_id` to submit for them.
  */
 async function fetchRelationshipPartnerOptions(
   characterSheetId: number,
@@ -212,8 +218,12 @@ async function fetchRelationshipPartnerOptions(
   if (allowedTrackIds.size === 0) return [];
 
   const relationships = await getMyOutboundRelationships(characterSheetId);
+  // Companion bonds (#3575) have no persona to weave with; only character targets are partners.
+  const characterTargeted = relationships.filter(
+    (rel): rel is CharacterRelationshipList & { target: number } => rel.target != null
+  );
   const withQualifyingTracks = await Promise.all(
-    relationships.map(async (rel) => {
+    characterTargeted.map(async (rel) => {
       const detail = await getRelationshipDetail(rel.id);
       const qualifyingTracks = detail.track_progress
         .filter((tp) => allowedTrackIds.has(tp.track))
@@ -364,6 +374,10 @@ export function WeaveThreadWizard({
   // RELATIONSHIP_TRACK only (#2159): partner candidates for the "with whom"
   // step, fetched once per kind selection (see selectKind below).
   const [partnerOptions, setPartnerOptions] = useState<PartnerOption[]>([]);
+  // FACET only (#3776 Task 2): client-side filter text over the already-fetched
+  // flat facet list — the vocabulary is small and fully browsable (no
+  // pagination server-side), so there is no need to round-trip `?search=`.
+  const [facetFilter, setFacetFilter] = useState('');
 
   // Derived eligibility from summary
   const eligibility = summary?.weaving_eligibility ?? {};
@@ -377,6 +391,7 @@ export function WeaveThreadWizard({
     setAnchorOptions([]);
     setAnchorError(null);
     setPartnerOptions([]);
+    setFacetFilter('');
     onOpenChange(false);
   }
 
@@ -405,6 +420,7 @@ export function WeaveThreadWizard({
     setAnchorOptions([]);
     setAnchorError(null);
     setPartnerOptions([]);
+    setFacetFilter('');
 
     const meta = KIND_META[kind];
     if (!meta?.supported) return;
@@ -579,11 +595,33 @@ export function WeaveThreadWizard({
       return renderRelationshipTrackStep2();
     }
 
+    // FACET is a flat, staff-curated vocabulary (#3776) that can run larger
+    // than the other anchor kinds' lists — filter the already-fetched options
+    // by a client-side search box rather than paging/scrolling through all of
+    // them.
+    const isFacet = kind === 'FACET';
+    const visibleOptions =
+      isFacet && facetFilter.trim()
+        ? anchorOptions.filter((opt) =>
+            opt.label.toLowerCase().includes(facetFilter.trim().toLowerCase())
+          )
+        : anchorOptions;
+
     return (
       <div className="space-y-3" data-testid="wizard-step-2">
         <p className="text-sm text-muted-foreground">
           Select the {meta.label} to anchor your Thread to.
         </p>
+
+        {isFacet && !anchorLoading && anchorOptions.length > 0 && (
+          <Input
+            type="text"
+            value={facetFilter}
+            onChange={(e) => setFacetFilter(e.target.value)}
+            placeholder="Search facets…"
+            data-testid="facet-search-input"
+          />
+        )}
 
         {anchorLoading && (
           <div className="space-y-2">
@@ -605,9 +643,15 @@ export function WeaveThreadWizard({
           </p>
         )}
 
-        {!anchorLoading && anchorOptions.length > 0 && (
+        {!anchorLoading && anchorOptions.length > 0 && visibleOptions.length === 0 && (
+          <p className="text-sm text-muted-foreground" data-testid="anchor-search-empty">
+            No facets match “{facetFilter.trim()}”.
+          </p>
+        )}
+
+        {!anchorLoading && visibleOptions.length > 0 && (
           <div className="max-h-72 space-y-1 overflow-y-auto" data-testid="anchor-list">
-            {anchorOptions.map((opt) => (
+            {visibleOptions.map((opt) => (
               <button
                 key={opt.id}
                 type="button"

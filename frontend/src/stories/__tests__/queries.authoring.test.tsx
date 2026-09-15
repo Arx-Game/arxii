@@ -75,7 +75,6 @@ const mockStory = {
   scope: 'character' as const,
   owners: ['player1'],
   active_gms: [],
-  trust_requirements: '',
   character_sheet: 42,
   tenure_id: null,
   chapters_count: 2,

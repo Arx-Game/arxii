@@ -4,7 +4,8 @@ from django.db import IntegrityError
 from django.test import TestCase
 import pytest
 
-from world.character_creation.factories import BeginningTraditionFactory
+from world.character_creation.constants import TraditionState
+from world.character_creation.factories import BeginningTraditionFactory, TraditionStateLineFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.distinctions.models import CharacterDistinction
@@ -26,26 +27,24 @@ class JoinTraditionTests(TestCase):
         self.caretakers = TraditionFactory(name="The Caretakers")
 
     @staticmethod
-    def _tag_traditionless_distinctions() -> None:
-        """Tag unbound + orphaned-tradition distinctions for tag-based queries (#2752)."""
+    def _tag_traditionless_distinctions() -> tuple:
+        """Tag unbound + orphaned-tradition distinctions with the shed-on-join tag (#2752, #3675).
+
+        The SELF_TAUGHT/TEACHERS_GONE identification itself now runs through
+        ``BeginningTradition.state`` / ``TraditionStateLine`` (#3675), not a tag; only
+        the shed-on-joining-a-living-tradition behavior is still tag-driven.
+        """
         from world.distinctions.models import DistinctionTag
 
         drawback_tag, _ = DistinctionTag.objects.get_or_create(
             slug="traditionless-drawback",
             defaults={"name": "Traditionless Drawback"},
         )
-        default_tag, _ = DistinctionTag.objects.get_or_create(
-            slug="traditionless-default",
-            defaults={"name": "Traditionless Default"},
-        )
-        marker_tag, _ = DistinctionTag.objects.get_or_create(
-            slug="orphaned-tradition-marker",
-            defaults={"name": "Orphaned Tradition Marker"},
-        )
         unbound = DistinctionFactory(slug="unbound", cost_per_rank=-2)
         orphaned = DistinctionFactory(slug="orphaned-tradition", cost_per_rank=-2)
-        unbound.tags.add(drawback_tag, default_tag)
-        orphaned.tags.add(drawback_tag, marker_tag)
+        unbound.tags.add(drawback_tag)
+        orphaned.tags.add(drawback_tag)
+        return unbound, orphaned
 
     def test_first_join_creates_active_row(self) -> None:
         row = join_tradition(self.sheet, self.unbound)
@@ -119,7 +118,7 @@ class JoinTraditionTests(TestCase):
         metallic_order = TraditionFactory(name="Metallic Order")
         BeginningTraditionFactory(
             tradition=metallic_order,
-            required_distinction=orphaned_drawback,
+            state=TraditionState.TEACHERS_GONE,
         )
         CharacterTraditionFactory(character=self.sheet, tradition=self.unbound)
         CharacterDistinctionFactory(
@@ -183,14 +182,8 @@ class LeaveTraditionTests(TestCase):
             leave_tradition(self.sheet)
 
     def test_leave_reapplies_unbound_when_seeded(self) -> None:
-        from world.distinctions.models import DistinctionTag
-
         unbound = DistinctionFactory(slug="unbound", cost_per_rank=-2)
-        default_tag, _ = DistinctionTag.objects.get_or_create(
-            slug="traditionless-default",
-            defaults={"name": "Traditionless Default"},
-        )
-        unbound.tags.add(default_tag)
+        TraditionStateLineFactory(state=TraditionState.SELF_TAUGHT, carries=unbound)
         CharacterTraditionFactory(character=self.sheet, tradition=self.tradition)
 
         leave_tradition(self.sheet)

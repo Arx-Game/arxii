@@ -1004,15 +1004,51 @@ function MountedManeuvers({
   );
 }
 
+/**
+ * Standing warning that the guardian cannot pay their protective technique's
+ * next fire (#3574): the guard will fizzle (no roll, no charge, ally takes the
+ * hit) unless they hold the line into Soulfray. Rendered from the anima and
+ * fee the panel already has; hidden once consent is given.
+ */
+function GuardUnaffordableHint({
+  technique,
+  animaCurrent,
+  soulfrayAccepted,
+}: {
+  technique: PlayerAction | undefined;
+  animaCurrent: number | null;
+  soulfrayAccepted: boolean;
+}) {
+  const fee = technique?.reactive_anima_cost ?? null;
+  if (fee == null || animaCurrent == null || animaCurrent >= fee || soulfrayAccepted) {
+    return null;
+  }
+  return (
+    <p
+      className="rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs text-amber-200"
+      data-testid="guard-unaffordable-hint"
+    >
+      You cannot pay this technique's next fire (anima {animaCurrent}, fee {fee}). It will fizzle
+      unless you hold the line into Soulfray.
+    </p>
+  );
+}
+
 /** What this round's already-declared maneuver is, when there is one. */
 function DeclaredManeuverBadge({
   declaredManeuver,
   coveredAllyName,
   guardedAllyName,
+  guardTechnique,
+  animaCurrent,
+  guardSoulfrayAccepted,
 }: {
   declaredManeuver: string | null;
   coveredAllyName: string | null | undefined;
   guardedAllyName: string | null | undefined;
+  guardTechnique: PlayerAction | undefined;
+  animaCurrent: number | null;
+  guardSoulfrayAccepted: boolean;
 }) {
   if (declaredManeuver === 'flee') {
     return (
@@ -1036,11 +1072,18 @@ function DeclaredManeuverBadge({
   }
   if (declaredManeuver === 'interpose') {
     return (
-      <div
-        className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
-        data-testid="guard-declared-badge"
-      >
-        Guarding {guardedAllyName ?? 'any ally hit this round'}
+      <div className="space-y-1.5">
+        <div
+          className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
+          data-testid="guard-declared-badge"
+        >
+          Guarding {guardedAllyName ?? 'any ally hit this round'}
+        </div>
+        <GuardUnaffordableHint
+          technique={guardTechnique}
+          animaCurrent={animaCurrent}
+          soulfrayAccepted={guardSoulfrayAccepted}
+        />
       </div>
     );
   }
@@ -1238,6 +1281,12 @@ function GuardControl({
         </label>
       )}
 
+      <GuardUnaffordableHint
+        technique={selectedGuardTechnique}
+        animaCurrent={animaCurrent}
+        soulfrayAccepted={guardSoulfrayAccepted}
+      />
+
       {isRedirectGuardTechnique && (
         <Select
           value={guardDestination}
@@ -1287,6 +1336,431 @@ function GuardControl({
       </button>
     </div>
   );
+}
+
+interface SubmitDeclarationsProps {
+  isLocked: boolean;
+  dispatchPending: boolean;
+  soulfrayWarning: SoulfrayWarningData | null;
+  soulfrayAccepted: boolean;
+  furyOverCap: boolean;
+  positionRequirementMet: boolean;
+  submitError: string | null;
+  handleSubmit: () => Promise<void>;
+  renderDispatch: () => string;
+}
+
+function SubmitDeclarations({
+  isLocked,
+  dispatchPending,
+  soulfrayWarning,
+  soulfrayAccepted,
+  furyOverCap,
+  positionRequirementMet,
+  submitError,
+  handleSubmit,
+  renderDispatch,
+}: SubmitDeclarationsProps) {
+  return (
+    <>
+      <button
+        type="button"
+        disabled={
+          isLocked ||
+          dispatchPending ||
+          (soulfrayWarning !== null && !soulfrayAccepted) ||
+          furyOverCap ||
+          !positionRequirementMet
+        }
+        onClick={() => {
+          handleSubmit().catch(() => {});
+        }}
+        data-testid="submit-declarations-btn"
+        className={cn(
+          'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          isLocked
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+        )}
+      >
+        {renderDispatch()}
+      </button>
+      {/* Inline submit error — shown when a dispatch rejects */}
+      {submitError !== null && (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {submitError}
+        </p>
+      )}{' '}
+    </>
+  );
+}
+
+interface ThreadPullSectionProps {
+  characterSheetId: number;
+  pullDialogOpen: boolean;
+  selectedPull: PullSelection | null;
+  isLocked: boolean;
+  setPullDialogOpen: (value: boolean) => void;
+  setSelectedPull: (value: PullSelection | null) => void;
+}
+
+function ThreadPullSection({
+  characterSheetId,
+  pullDialogOpen,
+  selectedPull,
+  isLocked,
+  setPullDialogOpen,
+  setSelectedPull,
+}: ThreadPullSectionProps) {
+  return (
+    <>
+      <div
+        className="space-y-1 rounded border border-primary/20 bg-primary/5 px-3 py-2"
+        data-testid="thread-pull-row"
+      >
+        <div className="flex items-center justify-between">
+          <span
+            className="text-xs font-semibold text-primary/80"
+            title="Draw on a bonded Thread to empower this round's action."
+          >
+            ✦ Thread Pull
+          </span>
+          <div className="flex gap-2">
+            {selectedPull !== null && (
+              <button
+                type="button"
+                onClick={() => setSelectedPull(null)}
+                disabled={isLocked}
+                data-testid="clear-pull-btn"
+                className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setPullDialogOpen(true)}
+              disabled={isLocked}
+              data-testid="open-pull-dialog-btn"
+              className="rounded border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {selectedPull === null ? 'Pull Threads' : 'Change Pull'}
+            </button>
+          </div>
+        </div>
+        {selectedPull !== null && (
+          <p className="text-[10px] text-primary/70" data-testid="selected-pull-summary">
+            Tier {selectedPull.tier} pull: {selectedPull.thread_ids.length} thread
+            {selectedPull.thread_ids.length === 1 ? '' : 's'} selected
+          </p>
+        )}
+      </div>
+
+      <ThreadPullDialog
+        characterSheetId={characterSheetId}
+        open={pullDialogOpen}
+        onClose={() => setPullDialogOpen(false)}
+        onSelect={(selection) => {
+          setSelectedPull(selection);
+          setPullDialogOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+interface ManeuverDeclarationSectionProps {
+  encounter: EncounterDetail;
+  declaredManeuver: string | null;
+  coveredAllyName: string | null | undefined;
+  guardedAllyName: string | null | undefined;
+  selectedGuardTechnique: PlayerAction | undefined;
+  coverableAllies: Participant[];
+  protectiveTechniques: PlayerAction[];
+  isRedirectGuardTechnique: boolean;
+  guardControlRef: React.RefObject<HTMLDivElement>;
+  guardAllyId: string;
+  guardTechniqueId: string;
+  guardDestination: string;
+  guardSoulfrayAccepted: boolean;
+  animaCurrent: number | null;
+  coverAllyId: string;
+  rallyAllyId: string;
+  succorAllyId: string;
+  guardPending: boolean;
+  coverPending: boolean;
+  fleePending: boolean;
+  maneuverDispatchPending: boolean;
+  isLocked: boolean;
+  isDeclaringPhase: boolean;
+  maneuverError: string | null;
+  setCoverAllyId: (value: string) => void;
+  setGuardAllyId: (value: string) => void;
+  setGuardTechniqueId: (value: string) => void;
+  setGuardDestination: (value: string) => void;
+  setGuardSoulfrayAccepted: (value: boolean) => void;
+  setRallyAllyId: (value: string) => void;
+  setSuccorAllyId: (value: string) => void;
+  handleFlee: () => void;
+  handleCover: () => void;
+  handleGuard: () => void;
+  handleRally: () => Promise<void>;
+  handleSuccor: () => Promise<void>;
+}
+
+function ManeuverDeclarationSection({
+  encounter,
+  declaredManeuver,
+  coveredAllyName,
+  guardedAllyName,
+  selectedGuardTechnique,
+  coverableAllies,
+  protectiveTechniques,
+  isRedirectGuardTechnique,
+  guardControlRef,
+  guardAllyId,
+  guardTechniqueId,
+  guardDestination,
+  guardSoulfrayAccepted,
+  animaCurrent,
+  coverAllyId,
+  rallyAllyId,
+  succorAllyId,
+  guardPending,
+  coverPending,
+  fleePending,
+  maneuverDispatchPending,
+  isLocked,
+  isDeclaringPhase,
+  maneuverError,
+  setCoverAllyId,
+  setGuardAllyId,
+  setGuardTechniqueId,
+  setGuardDestination,
+  setGuardSoulfrayAccepted,
+  setRallyAllyId,
+  setSuccorAllyId,
+  handleFlee,
+  handleCover,
+  handleGuard,
+  handleRally,
+  handleSuccor,
+}: ManeuverDeclarationSectionProps) {
+  return (
+    <div className="space-y-2" data-testid="maneuver-declaration-section">
+      <p
+        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        title="Flee the encounter, Cover an ally, or Guard an ally with your body or a protective technique, instead of declaring an offensive or defensive action."
+      >
+        Maneuvers
+      </p>
+
+      <DeclaredManeuverBadge
+        declaredManeuver={declaredManeuver}
+        coveredAllyName={coveredAllyName}
+        guardedAllyName={guardedAllyName}
+        guardTechnique={selectedGuardTechnique}
+        animaCurrent={animaCurrent}
+        guardSoulfrayAccepted={guardSoulfrayAccepted}
+      />
+
+      {/* Flee button — only when not already declared a flee maneuver */}
+      {declaredManeuver !== 'flee' && (
+        <button
+          type="button"
+          disabled={isLocked || !isDeclaringPhase || fleePending}
+          onClick={handleFlee}
+          data-testid="flee-btn"
+          className={cn(
+            'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            isLocked || !isDeclaringPhase
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20'
+          )}
+        >
+          {fleePending ? 'Declaring flee…' : 'Flee'}
+        </button>
+      )}
+
+      <CoverControl
+        declaredManeuver={declaredManeuver}
+        coverableAllies={coverableAllies}
+        coverAllyId={coverAllyId}
+        coverPending={coverPending}
+        isLocked={isLocked}
+        isDeclaringPhase={isDeclaringPhase}
+        setCoverAllyId={setCoverAllyId}
+        handleCover={handleCover}
+      />
+
+      {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
+      <GuardControl
+        declaredManeuver={declaredManeuver}
+        encounter={encounter}
+        guardControlRef={guardControlRef}
+        coverableAllies={coverableAllies}
+        protectiveTechniques={protectiveTechniques}
+        selectedGuardTechnique={selectedGuardTechnique}
+        isRedirectGuardTechnique={isRedirectGuardTechnique}
+        guardAllyId={guardAllyId}
+        guardTechniqueId={guardTechniqueId}
+        guardDestination={guardDestination}
+        guardSoulfrayAccepted={guardSoulfrayAccepted}
+        animaCurrent={animaCurrent}
+        guardPending={guardPending}
+        isLocked={isLocked}
+        isDeclaringPhase={isDeclaringPhase}
+        setGuardAllyId={setGuardAllyId}
+        setGuardTechniqueId={setGuardTechniqueId}
+        setGuardDestination={setGuardDestination}
+        setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
+        handleGuard={handleGuard}
+      />
+
+      {/* Rally control — ally picker + confirm button (#3381) */}
+      <div className="space-y-1.5" data-testid="rally-control">
+        <Select
+          value={rallyAllyId}
+          onValueChange={setRallyAllyId}
+          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+        >
+          <SelectTrigger data-testid="rally-ally-select" className="h-8 text-xs">
+            <SelectValue placeholder="Rally an ally…" />
+          </SelectTrigger>
+          <SelectContent>
+            {coverableAllies.map((ally) => (
+              <SelectItem key={ally.id} value={String(ally.id)}>
+                {ally.character_name}
+              </SelectItem>
+            ))}
+            {coverableAllies.length === 0 && (
+              <SelectItem value="__none__" disabled>
+                No allies available
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        <button
+          type="button"
+          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending || rallyAllyId === ''}
+          onClick={() => {
+            handleRally().catch(() => {});
+          }}
+          data-testid="rally-confirm-btn"
+          className={cn(
+            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            isLocked || !isDeclaringPhase || rallyAllyId === ''
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+          )}
+        >
+          {maneuverDispatchPending ? 'Declaring rally…' : 'Rally'}
+        </button>
+      </div>
+
+      {/* Succor control — shelter an ally from an environmental hazard (#3381, #1744) */}
+      <div className="space-y-1.5" data-testid="succor-control">
+        <Select
+          value={succorAllyId}
+          onValueChange={setSuccorAllyId}
+          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+        >
+          <SelectTrigger data-testid="succor-ally-select" className="h-8 text-xs">
+            <SelectValue placeholder="Shelter an ally…" />
+          </SelectTrigger>
+          <SelectContent>
+            {coverableAllies.map((ally) => (
+              <SelectItem key={ally.id} value={String(ally.id)}>
+                {ally.character_name}
+              </SelectItem>
+            ))}
+            {coverableAllies.length === 0 && (
+              <SelectItem value="__none__" disabled>
+                No allies available
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        <button
+          type="button"
+          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending || succorAllyId === ''}
+          onClick={() => {
+            handleSuccor().catch(() => {});
+          }}
+          data-testid="succor-confirm-btn"
+          className={cn(
+            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            isLocked || !isDeclaringPhase || succorAllyId === ''
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
+          )}
+        >
+          {maneuverDispatchPending ? 'Declaring succor…' : 'Succor'}
+        </button>
+      </div>
+
+      {/* Maneuver error display */}
+      {maneuverError !== null && (
+        <p role="alert" className="text-sm text-destructive" data-testid="maneuver-error">
+          {maneuverError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function turnIsLocked(readOnly: boolean, submitted: boolean, serverReady: boolean): boolean {
+  return readOnly || submitted || serverReady;
+}
+
+function ReadyBadge({ submitted, serverReady }: { submitted: boolean; serverReady: boolean }) {
+  if (!submitted && !serverReady) return null;
+  return (
+    <div
+      className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-center text-sm font-medium text-emerald-300"
+      data-testid="ready-badge"
+    >
+      Ready: waiting for round to advance
+    </div>
+  );
+}
+
+function isPositionRequirementMet(shape: PositionTargetShape, castPosition: CastPosition): boolean {
+  if (shape === 'none') return true;
+  if (shape === 'single') return castPosition.destinationId !== undefined;
+  return castPosition.pairA !== undefined && castPosition.pairB !== undefined;
+}
+
+function furySelectionOverCap(
+  tiers: NonNullable<PlayerAction['available_fury_tiers']>,
+  anchors: NonNullable<PlayerAction['eligible_fury_anchors']>,
+  tierId: number | null,
+  anchorId: number | null
+): boolean {
+  if (tierId === null || anchorId === null) return false;
+  const tierDepth = tiers.find((tier) => tier.id === tierId)?.depth ?? 0;
+  const anchorCap = anchors.find((anchor) => anchor.id === anchorId)?.provocation_cap ?? 0;
+  return tierDepth > anchorCap;
+}
+
+function participantForId(
+  participants: Participant[],
+  participantId: number | null
+): Participant | null {
+  if (participantId === null) return null;
+  return participants.find((participant) => participant.id === participantId) ?? null;
+}
+
+function focusedActionFor(
+  context: ActionContext,
+  availableActions: PlayerAction[]
+): PlayerAction | null {
+  if (context.techniqueId === undefined) return null;
+  return availableActions.find((action) => action.ref.technique_id === context.techniqueId) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1522,10 +1996,7 @@ export function YourTurn({
 
   // The viewer's own participant row — shared by actorPositionId below and the
   // Mounted-condition gate for the Charge/Joust mini-panel (#3381).
-  const myParticipantSelf: Participant | null =
-    myParticipantId === null
-      ? null
-      : ((encounter?.participants ?? []).find((p) => p.id === myParticipantId) ?? null);
+  const myParticipantSelf = participantForId(participants, myParticipantId);
 
   // Actor's position — the viewer's own participant's current_position.
   const actorPositionId: number | null = myParticipantSelf?.current_position?.id ?? null;
@@ -1568,10 +2039,7 @@ export function YourTurn({
   // The selected focused technique's action descriptor — one lookup shared by
   // the reach constraint (#532), the position-targeting shape (#2206), and the
   // soulfray/fury descriptor (#1543) below.
-  const focusedCastDescriptor =
-    focusedContext.techniqueId === undefined
-      ? null
-      : (availableActions.find((a) => a.ref.technique_id === focusedContext.techniqueId) ?? null);
+  const focusedCastDescriptor = focusedActionFor(focusedContext, availableActions);
 
   // Reach constraint for the currently selected focused technique (#532).
   const focusedTechniqueReach: string | null = focusedCastDescriptor?.reach ?? null;
@@ -1593,12 +2061,10 @@ export function YourTurn({
 
   // Blocks Ready/submit while a required position slot is empty (#2206,
   // mirrors the fury/soulfray required-declaration gating below).
-  const positionRequirementMet =
-    focusedTechniquePositionShape === 'none' ||
-    (focusedTechniquePositionShape === 'single' && castPosition.destinationId !== undefined) ||
-    (focusedTechniquePositionShape === 'pair' &&
-      castPosition.pairA !== undefined &&
-      castPosition.pairB !== undefined);
+  const positionRequirementMet = isPositionRequirementMet(
+    focusedTechniquePositionShape,
+    castPosition
+  );
 
   // Soulfray + fury descriptor for the currently selected focused cast (#1543).
   const soulfrayWarning = focusedCastDescriptor?.soulfray_warning ?? null;
@@ -1610,11 +2076,7 @@ export function YourTurn({
   const isWardBearingCast = focusedCastDescriptor?.reactive_anima_cost != null;
   const furyTiers = focusedCastDescriptor?.available_fury_tiers ?? [];
   const furyAnchors = focusedCastDescriptor?.eligible_fury_anchors ?? [];
-  const furyOverCap =
-    furyTierId !== null &&
-    furyAnchorId !== null &&
-    (furyTiers.find((t) => t.id === furyTierId)?.depth ?? 0) >
-      (furyAnchors.find((a) => a.id === furyAnchorId)?.provocation_cap ?? 0);
+  const furyOverCap = furySelectionOverCap(furyTiers, furyAnchors, furyTierId, furyAnchorId);
 
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
@@ -1999,7 +2461,7 @@ export function YourTurn({
   // Render
   // ---------------------------------------------------------------------------
 
-  const isLocked = readOnly || submitted || serverReady;
+  const isLocked = turnIsLocked(readOnly, submitted, serverReady);
 
   const renderDispatch = () => {
     if (dispatchPending) {
@@ -2021,14 +2483,7 @@ export function YourTurn({
       />
 
       {/* Submitted / ready badge */}
-      {(submitted || serverReady) && (
-        <div
-          className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-center text-sm font-medium text-emerald-300"
-          data-testid="ready-badge"
-        >
-          Ready: waiting for round to advance
-        </div>
-      )}
+      <ReadyBadge submitted={submitted} serverReady={serverReady} />
 
       {/* Focused slot */}
       <div>
@@ -2260,257 +2715,67 @@ export function YourTurn({
         />
       )}
 
-      {/* Thread Pull row — inline pull selection for combat cast/clash dispatch */}
-      <div
-        className="space-y-1 rounded border border-primary/20 bg-primary/5 px-3 py-2"
-        data-testid="thread-pull-row"
-      >
-        <div className="flex items-center justify-between">
-          <span
-            className="text-xs font-semibold text-primary/80"
-            title="Draw on a bonded Thread to empower this round's action."
-          >
-            ✦ Thread Pull
-          </span>
-          <div className="flex gap-2">
-            {selectedPull !== null && (
-              <button
-                type="button"
-                onClick={() => setSelectedPull(null)}
-                disabled={isLocked}
-                data-testid="clear-pull-btn"
-                className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Clear
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setPullDialogOpen(true)}
-              disabled={isLocked}
-              data-testid="open-pull-dialog-btn"
-              className="rounded border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {selectedPull === null ? 'Pull Threads' : 'Change Pull'}
-            </button>
-          </div>
-        </div>
-        {selectedPull !== null && (
-          <p className="text-[10px] text-primary/70" data-testid="selected-pull-summary">
-            Tier {selectedPull.tier} pull: {selectedPull.thread_ids.length} thread
-            {selectedPull.thread_ids.length === 1 ? '' : 's'} selected
-          </p>
-        )}
-      </div>
-
-      <ThreadPullDialog
+      <ThreadPullSection
         characterSheetId={characterSheetId}
-        open={pullDialogOpen}
-        onClose={() => setPullDialogOpen(false)}
-        onSelect={(selection) => {
-          setSelectedPull(selection);
-          setPullDialogOpen(false);
-        }}
+        pullDialogOpen={pullDialogOpen}
+        selectedPull={selectedPull}
+        isLocked={isLocked}
+        setPullDialogOpen={setPullDialogOpen}
+        setSelectedPull={setSelectedPull}
       />
 
-      {/* Flee / Cover declaration cluster — always rendered when encounter is non-null; controls disabled outside the declaring phase */}
       {encounter != null && (
-        <div className="space-y-2" data-testid="maneuver-declaration-section">
-          <p
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Flee the encounter, Cover an ally, or Guard an ally with your body or a protective technique, instead of declaring an offensive or defensive action."
-          >
-            Maneuvers
-          </p>
-
-          <DeclaredManeuverBadge
-            declaredManeuver={declaredManeuver}
-            coveredAllyName={coveredAllyName}
-            guardedAllyName={guardedAllyName}
-          />
-
-          {/* Flee button — only when not already declared a flee maneuver */}
-          {declaredManeuver !== 'flee' && (
-            <button
-              type="button"
-              disabled={isLocked || !isDeclaringPhase || fleePending}
-              onClick={handleFlee}
-              data-testid="flee-btn"
-              className={cn(
-                'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
-                'disabled:cursor-not-allowed disabled:opacity-50',
-                isLocked || !isDeclaringPhase
-                  ? 'border-border bg-muted text-muted-foreground'
-                  : 'border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20'
-              )}
-            >
-              {fleePending ? 'Declaring flee…' : 'Flee'}
-            </button>
-          )}
-
-          <CoverControl
-            declaredManeuver={declaredManeuver}
-            coverableAllies={coverableAllies}
-            coverAllyId={coverAllyId}
-            coverPending={coverPending}
-            isLocked={isLocked}
-            isDeclaringPhase={isDeclaringPhase}
-            setCoverAllyId={setCoverAllyId}
-            handleCover={handleCover}
-          />
-
-          {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
-          <GuardControl
-            declaredManeuver={declaredManeuver}
-            encounter={encounter}
-            guardControlRef={guardControlRef}
-            coverableAllies={coverableAllies}
-            protectiveTechniques={protectiveTechniques}
-            selectedGuardTechnique={selectedGuardTechnique}
-            isRedirectGuardTechnique={isRedirectGuardTechnique}
-            guardAllyId={guardAllyId}
-            guardTechniqueId={guardTechniqueId}
-            guardDestination={guardDestination}
-            guardSoulfrayAccepted={guardSoulfrayAccepted}
-            animaCurrent={animaCurrent}
-            guardPending={guardPending}
-            isLocked={isLocked}
-            isDeclaringPhase={isDeclaringPhase}
-            setGuardAllyId={setGuardAllyId}
-            setGuardTechniqueId={setGuardTechniqueId}
-            setGuardDestination={setGuardDestination}
-            setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
-            handleGuard={handleGuard}
-          />
-
-          {/* Rally control — ally picker + confirm button (#3381) */}
-          <div className="space-y-1.5" data-testid="rally-control">
-            <Select
-              value={rallyAllyId}
-              onValueChange={setRallyAllyId}
-              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-            >
-              <SelectTrigger data-testid="rally-ally-select" className="h-8 text-xs">
-                <SelectValue placeholder="Rally an ally…" />
-              </SelectTrigger>
-              <SelectContent>
-                {coverableAllies.map((ally) => (
-                  <SelectItem key={ally.id} value={String(ally.id)}>
-                    {ally.character_name}
-                  </SelectItem>
-                ))}
-                {coverableAllies.length === 0 && (
-                  <SelectItem value="__none__" disabled>
-                    No allies available
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <button
-              type="button"
-              disabled={
-                isLocked || !isDeclaringPhase || maneuverDispatchPending || rallyAllyId === ''
-              }
-              onClick={() => {
-                handleRally().catch(() => {});
-              }}
-              data-testid="rally-confirm-btn"
-              className={cn(
-                'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                'disabled:cursor-not-allowed disabled:opacity-50',
-                isLocked || !isDeclaringPhase || rallyAllyId === ''
-                  ? 'border-border bg-muted text-muted-foreground'
-                  : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-              )}
-            >
-              {maneuverDispatchPending ? 'Declaring rally…' : 'Rally'}
-            </button>
-          </div>
-
-          {/* Succor control — shelter an ally from an environmental hazard (#3381, #1744) */}
-          <div className="space-y-1.5" data-testid="succor-control">
-            <Select
-              value={succorAllyId}
-              onValueChange={setSuccorAllyId}
-              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-            >
-              <SelectTrigger data-testid="succor-ally-select" className="h-8 text-xs">
-                <SelectValue placeholder="Shelter an ally…" />
-              </SelectTrigger>
-              <SelectContent>
-                {coverableAllies.map((ally) => (
-                  <SelectItem key={ally.id} value={String(ally.id)}>
-                    {ally.character_name}
-                  </SelectItem>
-                ))}
-                {coverableAllies.length === 0 && (
-                  <SelectItem value="__none__" disabled>
-                    No allies available
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <button
-              type="button"
-              disabled={
-                isLocked || !isDeclaringPhase || maneuverDispatchPending || succorAllyId === ''
-              }
-              onClick={() => {
-                handleSuccor().catch(() => {});
-              }}
-              data-testid="succor-confirm-btn"
-              className={cn(
-                'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                'disabled:cursor-not-allowed disabled:opacity-50',
-                isLocked || !isDeclaringPhase || succorAllyId === ''
-                  ? 'border-border bg-muted text-muted-foreground'
-                  : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
-              )}
-            >
-              {maneuverDispatchPending ? 'Declaring succor…' : 'Succor'}
-            </button>
-          </div>
-
-          {/* Maneuver error display */}
-          {maneuverError !== null && (
-            <p role="alert" className="text-sm text-destructive" data-testid="maneuver-error">
-              {maneuverError}
-            </p>
-          )}
-        </div>
+        <ManeuverDeclarationSection
+          encounter={encounter}
+          declaredManeuver={declaredManeuver}
+          coveredAllyName={coveredAllyName}
+          guardedAllyName={guardedAllyName}
+          selectedGuardTechnique={selectedGuardTechnique}
+          coverableAllies={coverableAllies}
+          protectiveTechniques={protectiveTechniques}
+          isRedirectGuardTechnique={isRedirectGuardTechnique}
+          guardControlRef={guardControlRef}
+          guardAllyId={guardAllyId}
+          guardTechniqueId={guardTechniqueId}
+          guardDestination={guardDestination}
+          guardSoulfrayAccepted={guardSoulfrayAccepted}
+          animaCurrent={animaCurrent}
+          coverAllyId={coverAllyId}
+          rallyAllyId={rallyAllyId}
+          succorAllyId={succorAllyId}
+          guardPending={guardPending}
+          coverPending={coverPending}
+          fleePending={fleePending}
+          maneuverDispatchPending={maneuverDispatchPending}
+          isLocked={isLocked}
+          isDeclaringPhase={isDeclaringPhase}
+          maneuverError={maneuverError}
+          setCoverAllyId={setCoverAllyId}
+          setGuardAllyId={setGuardAllyId}
+          setGuardTechniqueId={setGuardTechniqueId}
+          setGuardDestination={setGuardDestination}
+          setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
+          setRallyAllyId={setRallyAllyId}
+          setSuccorAllyId={setSuccorAllyId}
+          handleFlee={handleFlee}
+          handleCover={handleCover}
+          handleGuard={handleGuard}
+          handleRally={handleRally}
+          handleSuccor={handleSuccor}
+        />
       )}
 
-      {/* Submit declarations button */}
-      <button
-        type="button"
-        disabled={
-          isLocked ||
-          dispatchPending ||
-          (soulfrayWarning !== null && !soulfrayAccepted) ||
-          furyOverCap ||
-          !positionRequirementMet
-        }
-        onClick={() => {
-          handleSubmit().catch(() => {});
-        }}
-        data-testid="submit-declarations-btn"
-        className={cn(
-          'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
-          'disabled:cursor-not-allowed disabled:opacity-50',
-          isLocked
-            ? 'border-border bg-muted text-muted-foreground'
-            : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
-        )}
-      >
-        {renderDispatch()}
-      </button>
-
-      {/* Inline submit error — shown when a dispatch rejects */}
-      {submitError !== null && (
-        <p role="alert" className="mt-2 text-sm text-destructive">
-          {submitError}
-        </p>
-      )}
+      <SubmitDeclarations
+        isLocked={isLocked}
+        dispatchPending={dispatchPending}
+        soulfrayWarning={soulfrayWarning}
+        soulfrayAccepted={soulfrayAccepted}
+        furyOverCap={furyOverCap}
+        positionRequirementMet={positionRequirementMet}
+        submitError={submitError}
+        handleSubmit={handleSubmit}
+        renderDispatch={renderDispatch}
+      />
     </div>
   );
 }

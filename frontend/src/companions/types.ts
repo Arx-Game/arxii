@@ -17,6 +17,8 @@ export interface CompanionSummary {
   archetype: CompanionArchetypeSummary;
   bonded_at: string;
   released_at: string | null;
+  /** ObjectDB pk used to match a deployed companion to its combat opponent row. */
+  objectdb_id: number | null;
   /** True when the companion's live object shares the actor's current room (#3294) —
    * gates the composer's "as <companion>" emote toggle. */
   is_present: boolean;

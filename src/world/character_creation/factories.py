@@ -5,17 +5,33 @@ Factory definitions for character creation system tests.
 import factory
 import factory.django as factory_django
 
-from world.character_creation.constants import ApplicationStatus, CommentType
+from world.character_creation.constants import (
+    AnchorSource,
+    ApplicationStatus,
+    CommentType,
+    ConnectionKind,
+    LifeStage,
+    OfferArrival,
+    OfferChapter,
+    QuestionKind,
+    TraditionState,
+)
 from world.character_creation.models import (
+    AppearanceSection,
     Beginnings,
     BeginningTradition,
     CharacterDraft,
+    DistinctionOffer,
     DraftApplication,
     DraftApplicationComment,
+    EnemyReason,
+    OfferFirstLook,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
+    SchoolingLine,
     StartingArea,
+    TraditionStateLine,
 )
 from world.realms.models import Realm
 from world.roster.constants import COMMONER_KIND_NAME
@@ -45,7 +61,6 @@ class StartingAreaFactory(factory_django.DjangoModelFactory):
     realm = factory.SubFactory(RealmFactory)
     is_active = True
     access_level = StartingArea.AccessLevel.ALL
-    minimum_trust = 0
 
 
 class BeginningsFactory(factory_django.DjangoModelFactory):
@@ -58,7 +73,6 @@ class BeginningsFactory(factory_django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda obj: f"Description of {obj.name}")
     starting_area = factory.SubFactory(StartingAreaFactory)
     is_active = True
-    trust_required = 0
     grants_species_languages = True
     sort_order = 0
     cg_point_cost = 0
@@ -129,7 +143,23 @@ class OriginTemplateFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Upbringing {n}")
     frame_narrative = "You were raised somewhere, by someone."
     allows_name_family = True
-    named_family_kind = factory.SubFactory(FamilyKindFactory, name=COMMONER_KIND_NAME)
+
+    @factory.post_generation
+    def family_templates(self, create, extracted, **kwargs):
+        if not create:
+            return
+        if extracted:
+            self.family_templates.set(extracted)
+            return
+        if self.allows_name_family:
+            from world.societies.houses.factories import HouseTemplateFactory
+
+            self.family_templates.add(
+                HouseTemplateFactory(
+                    kind=FamilyKindFactory(name=COMMONER_KIND_NAME),
+                    realm=self.beginning.starting_area.realm,
+                )
+            )
 
 
 class OriginTemplateSlotFactory(factory_django.DjangoModelFactory):
@@ -146,9 +176,19 @@ class OriginTemplateSlotChoiceFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = OriginTemplateSlotChoice
 
-    slot = factory.SubFactory(OriginTemplateSlotFactory, allows_text=False)
+    slot = factory.SubFactory(OriginTemplateSlotFactory, allows_text=False, kind=QuestionKind.PICK)
     name = factory.Sequence(lambda n: f"Choice {n}")
     sort_order = factory.Sequence(lambda n: n)
+
+
+class GroupPromptFactory(OriginTemplateSlotFactory):
+    """A 'pick a group' question on a LISTED source with no groups yet (#3660)."""
+
+    kind = QuestionKind.GROUP
+    anchor_source = AnchorSource.LISTED
+    connection_kind = ConnectionKind.RAISED_BY
+    life_stage = LifeStage.CHILDHOOD
+    allows_text = False
 
 
 def make_unknown_upbringing(beginning: Beginnings) -> OriginTemplate:
@@ -158,6 +198,79 @@ def make_unknown_upbringing(beginning: Beginnings) -> OriginTemplate:
         name="Unknown",
         frame_narrative="You have no past you can speak of.",
         allows_name_family=False,
-        named_family_kind=None,
         allows_no_family=True,
     )
+
+
+class TraditionStateLineFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = TraditionStateLine
+        django_get_or_create = ("state",)
+
+    state = TraditionState.LIVING_MASTERS
+    entry_line = factory.LazyAttribute(lambda o: f"{o.state} line")
+
+
+class SchoolingLineFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SchoolingLine
+        django_get_or_create = ("rank",)
+
+    rank = 0
+    name = factory.LazyAttribute(lambda o: f"Schooling {o.rank}")
+    player_line = "A line."
+
+
+class EnemyReasonFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = EnemyReason
+
+    name = factory.Sequence(lambda n: f"You know what they did {n}")
+    player_line = "And they know that you know."
+
+
+class AppearanceSectionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = AppearanceSection
+
+    name = factory.Sequence(lambda n: f"Frame {n}")
+
+
+class DistinctionOfferFactory(factory_django.DjangoModelFactory):
+    """An offer line with the opener its chapter wants already set (#3709).
+
+    An Appearance line gets a section and an actor's-sheet line the never-do prompt
+    unless the test passes its own, so every chapter's offer is valid out of the box;
+    the older chapters' openers (tag, answer, schooling line) are the test's to pass.
+    """
+
+    class Meta:
+        model = DistinctionOffer
+
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    chapter = OfferChapter.APPEARANCE
+    arrives_as = OfferArrival.CHOICE
+    #: Declared so ``appearance_section``'s Maybe can read it (#3739); a test that
+    #: wants the feature-rows opener passes ``feature_rows=True``.
+    feature_rows = False
+    appearance_section = factory.Maybe(
+        # An Appearance line is opened by exactly one thing (#3739): a section, or
+        # the feature rows. A test that asks for ``feature_rows=True`` gets no
+        # section, so the model's own at-most-one-opener rule still holds.
+        factory.LazyAttribute(
+            lambda o: o.chapter == OfferChapter.APPEARANCE and not o.feature_rows
+        ),
+        yes_declaration=factory.SubFactory(AppearanceSectionFactory),
+        no_declaration=None,
+    )
+    prompt = factory.LazyAttribute(
+        lambda o: "never_do" if o.chapter == OfferChapter.ACTORS_SHEET else ""
+    )
+
+
+class OfferFirstLookFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = OfferFirstLook
+
+    offer = factory.SubFactory(DistinctionOfferFactory)
+    beginning = factory.SubFactory(BeginningsFactory)

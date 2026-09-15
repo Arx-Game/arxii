@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from actions.types import ActionResult
 from commands.exceptions import CommandError
+from commands.tests.message_capture import message_text
 from commands.traps import CmdDisarm
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -31,7 +32,9 @@ class CmdDisarmTests(TestCase):
         self.sheet = CharacterSheetFactory(character=self.caller)
 
         self.messages: list[str] = []
-        self.caller.msg = lambda *a, **kw: self.messages.append(a[0] if a else "")  # noqa: ARG005
+        self.caller.msg = lambda *a, **kw: self.messages.append(  # noqa: ARG005
+            message_text(a[0]) if a else ""
+        )
 
     def _run(self, args: str) -> None:
         cmd = _make_cmd(self.caller, args)

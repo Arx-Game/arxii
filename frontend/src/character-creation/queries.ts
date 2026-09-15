@@ -25,11 +25,11 @@ import {
   getDraft,
   getDraftApplication,
   getDraftCGPoints,
+  getDraftOffers,
   getEffectTypes,
   getFacets,
-  getFacetTree,
   getFamilies,
-  getFamiliesWithOpenPositions,
+  getFamiliesWithOpenKinSlots,
   getClaimableTitles,
   getFamilySlots,
   getHouseClaim,
@@ -55,6 +55,7 @@ import {
   getTechniqueStyles,
   getTraditionPerspectives,
   getTraditions,
+  getVacancies,
   getWorshippedBeings,
   resubmitDraft,
   selectTradition,
@@ -65,7 +66,7 @@ import {
   withdrawDraft,
 } from './api';
 import type { FinalizeForTablePayload } from './api';
-import type { CharacterDraft, CharacterDraftUpdate } from './types';
+import type { CharacterDraft, CharacterDraftUpdate, OfferChapter } from './types';
 
 export const characterCreationKeys = {
   all: ['character-creation'] as const,
@@ -79,8 +80,11 @@ export const characterCreationKeys = {
   cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
+  // Distinctions are offered by CG chapter, not a standalone stage (#3675).
+  draftOffers: (draftId: number, chapter: OfferChapter) =>
+    [...characterCreationKeys.all, 'draft-offers', draftId, chapter] as const,
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
-  familiesWithOpenPositions: (areaId?: number) =>
+  familiesWithOpenKinSlots: (areaId?: number) =>
     [...characterCreationKeys.all, 'families-open', areaId] as const,
   draft: () => [...characterCreationKeys.all, 'draft'] as const,
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
@@ -96,14 +100,23 @@ export const characterCreationKeys = {
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
   // CG gift/technique options (GiftStage funnel, #2426 Task 10)
   cgGifts: (draftId: number) => [...characterCreationKeys.all, 'cg-gifts', draftId] as const,
-  cgTechniqueOptions: (draftId: number, giftId: number) =>
-    [...characterCreationKeys.all, 'cg-technique-options', draftId, giftId] as const,
+  cgTechniqueOptions: (draftId: number, giftId: number, speciesId?: number | null) =>
+    [
+      ...characterCreationKeys.all,
+      'cg-technique-options',
+      draftId,
+      giftId,
+      speciesId ?? null,
+    ] as const,
   // Glimpse tag catalog (guided Glimpse flow, #2427)
   glimpseTags: (pathId?: number) =>
     [...characterCreationKeys.all, 'glimpse-tags', pathId ?? null] as const,
   // Origin template catalog (guided origin-story flow, #2478)
   originTemplates: (beginningId: number) =>
     [...characterCreationKeys.all, 'origin-templates', beginningId] as const,
+  // Vacancies reachable from the draft, priced for it (#3648)
+  vacancies: (draftId: number, organizationId?: number) =>
+    [...characterCreationKeys.all, 'vacancies', draftId, organizationId ?? null] as const,
   // Perspective entries (CG wizard perspective panels, #3281)
   beginningsPerspectives: (beginningId: number) =>
     [...characterCreationKeys.all, 'beginnings-perspectives', beginningId] as const,
@@ -125,7 +138,6 @@ export const characterCreationKeys = {
     [...characterCreationKeys.all, 'path-skill-suggestions', pathId] as const,
   // Facet keys
   facets: () => [...characterCreationKeys.all, 'facets'] as const,
-  facetTree: () => [...characterCreationKeys.all, 'facet-tree'] as const,
   // Tradition keys
   traditions: (beginningId: number) =>
     [...characterCreationKeys.all, 'traditions', beginningId] as const,
@@ -332,11 +344,28 @@ export function useDraftCGPoints(draftId: number | undefined) {
   });
 }
 
-// NEW: Family Tree hooks
-export function useFamiliesWithOpenPositions(areaId?: number) {
+/**
+ * A CG chapter's visible/closed distinction offers (#3675). Every chapter
+ * mount (Path/Tradition, Glimpse, Lineage, Appearance, the Actor's Sheet)
+ * calls this with its own `chapter` rather than reading a Distinctions stage.
+ */
+export function useDraftOffers(
+  draftId: number | undefined,
+  chapter: OfferChapter,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
-    queryKey: characterCreationKeys.familiesWithOpenPositions(areaId),
-    queryFn: () => getFamiliesWithOpenPositions(areaId),
+    queryKey: characterCreationKeys.draftOffers(draftId!, chapter),
+    queryFn: () => getDraftOffers(draftId!, chapter),
+    enabled: !!draftId && (options?.enabled ?? true),
+  });
+}
+
+// NEW: Family Tree hooks
+export function useFamiliesWithOpenKinSlots(areaId?: number) {
+  return useQuery({
+    queryKey: characterCreationKeys.familiesWithOpenKinSlots(areaId),
+    queryFn: () => getFamiliesWithOpenKinSlots(areaId),
   });
 }
 
@@ -425,12 +454,16 @@ export function useCGGifts(draftId: number | undefined) {
 }
 
 /**
- * Technique options (pool ∪ signature) for a draft's (path, gift, tradition) pick
+ * Technique options (pool ∪ signature ∪ species gift) for a draft pick
  * (GiftStage funnel, #2426).
  */
-export function useCGTechniqueOptions(draftId: number | undefined, giftId: number | undefined) {
+export function useCGTechniqueOptions(
+  draftId: number | undefined,
+  giftId: number | undefined,
+  speciesId?: number | null
+) {
   return useQuery({
-    queryKey: characterCreationKeys.cgTechniqueOptions(draftId!, giftId!),
+    queryKey: characterCreationKeys.cgTechniqueOptions(draftId!, giftId!, speciesId),
     queryFn: () => getCGTechniqueOptions(draftId!, giftId!),
     enabled: !!draftId && !!giftId,
   });
@@ -455,6 +488,14 @@ export function useOriginTemplates(beginningId: number | null | undefined) {
     queryFn: () => getOriginTemplates(beginningId!),
     enabled: !!beginningId,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useVacancies(draftId: number | undefined, organizationId?: number) {
+  return useQuery({
+    queryKey: characterCreationKeys.vacancies(draftId ?? 0, organizationId),
+    queryFn: () => getVacancies(draftId as number, organizationId),
+    enabled: draftId !== undefined,
   });
 }
 
@@ -612,13 +653,6 @@ export function useFacets() {
   return useQuery({
     queryKey: characterCreationKeys.facets(),
     queryFn: getFacets,
-  });
-}
-
-export function useFacetTree() {
-  return useQuery({
-    queryKey: characterCreationKeys.facetTree(),
-    queryFn: getFacetTree,
   });
 }
 

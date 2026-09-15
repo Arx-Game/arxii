@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from world.justice.models import AreaLaw, CrimeKind, DeedCrimeTag, HeatSource, PersonaHeat
+from world.justice.models import (
+    AreaLaw,
+    CrimeKind,
+    DeedCrimeTag,
+    HeatSource,
+    PersonaHeat,
+    SentenceLadderRung,
+)
 
 
 @admin.register(CrimeKind)
@@ -33,3 +40,17 @@ class PersonaHeatAdmin(admin.ModelAdmin):
 class HeatSourceAdmin(admin.ModelAdmin):
     list_display = ("heat", "deed", "amount", "created_date")
     raw_id_fields = ("heat", "deed")
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(SentenceLadderRung)
+class SentenceLadderRungAdmin(admin.ModelAdmin):
+    """#3831 - one society's escalation step in its sentencing ladder (#2378)."""
+
+    list_display = ("society", "level", "sentence_kind", "flavor")
+    list_filter = ("sentence_kind",)
+    raw_id_fields = ("society",)

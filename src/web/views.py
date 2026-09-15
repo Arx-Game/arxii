@@ -1,12 +1,51 @@
 """Custom web views for serving the React app."""
 
+from datetime import UTC, datetime, timedelta
 import logging
 from pathlib import Path
 
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.views import View
 
 logger = logging.getLogger(__name__)
+
+
+class PasswordChangeDiscoveryView(View):
+    """Point password managers at the authenticated password-change form."""
+
+    http_method_names = ["get", "head"]
+
+    def get(self, request, *args, **kwargs):
+        """Redirect to the existing password-change page."""
+        return HttpResponseRedirect("/profile/account")
+
+    head = get
+
+
+class SecurityTxtView(View):
+    """Publish vulnerability-disclosure metadata at the RFC 9116 endpoint."""
+
+    http_method_names = ["get", "head"]
+
+    def get(self, request, *args, **kwargs):
+        """Return contact information for reporting security vulnerabilities."""
+        expires = (
+            (datetime.now(UTC) + timedelta(days=365))
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        body = "\n".join(
+            (
+                "Contact: https://github.com/Arx-Game/arxii/security/advisories/new",
+                f"Expires: {expires}",
+                "Preferred-Languages: en",
+                "",
+            )
+        )
+        return HttpResponse(body, content_type="text/plain")
+
+    head = get
 
 
 class FrontendAppView(View):

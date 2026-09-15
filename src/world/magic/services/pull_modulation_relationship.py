@@ -68,13 +68,16 @@ def _relationship_pull_would_trigger(x_sheet: CharacterSheet, y_sheet: Character
     return hostile is not None and hostile.affection < 0
 
 
-def _thread_relationship_target(thread: Thread) -> CharacterSheet:
+def _thread_relationship_target(thread: Thread) -> CharacterSheet | None:
     """Resolve the threaded person from either RELATIONSHIP_TRACK or CAPSTONE FK.
 
     RELATIONSHIP_TRACK threads store the relationship via
     ``target_relationship_track.relationship``; RELATIONSHIP_CAPSTONE threads
     store it via ``target_capstone.relationship``. Both point at the same
     ``CharacterRelationship`` — only the FK access path differs (#2021).
+
+    None when the bond targets a Companion (#3575): a companion is not a
+    threadable person, so the bond terms below do not apply.
     """
     if thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
         return thread.target_capstone.relationship.target
@@ -123,6 +126,9 @@ def relationship_bond_modulation(
         return base_scaled
 
     y_sheet = _thread_relationship_target(thread)
+
+    if y_sheet is None:
+        return base_scaled
 
     if not _relationship_pull_would_trigger(x_sheet, y_sheet):
         return base_scaled

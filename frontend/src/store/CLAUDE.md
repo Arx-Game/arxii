@@ -13,6 +13,18 @@ Redux Toolkit store for global client state management. Minimal use of Redux - o
 
 - **`authSlice.ts`**: User authentication state management
 - **`gameSlice.ts`**: Game session management (messages, connections, character sessions).
+  Each `Session` carries `notes: FeedNote[]` (#3856): every `text` frame the socket
+  receives becomes one, kind from its `kwargs.type` (`addFeedNote`, id assigned in the
+  reducer, bounded at 200, counts `unread` like a message; `clearFeedNotes`). Notes
+  survive a room change on purpose: the feed is the character's own history. The
+  older `messages` array is still written by the three non-text legacy frames
+  (login, VN, reaction) but has had no reader since `SystemLane` went.
+  `consoleLines` (#3857) holds the staff console's lines (`addConsoleLine`, bounded
+  at 500, never counted as unread; `clearConsoleLines`).
+  `minimizedFeed` / `dismissedFeed` (#3856 PR 2) hold the `feedItemKey`s of blocks
+  this viewer folded or removed from their own view (`minimizeFeedItem`,
+  `restoreFeedItem`, `dismissFeedItem`); in memory only, nothing is deleted for
+  anyone else, and a dismissed block never badges.
   Each per-character `Session` also carries the **conversation-tab state** (#2165):
   `openThreadTabs` (ordered thread keys with an open tab; never contains `'room'`,
   which is always the anchor) and `activeThreadTab` (the focused tab's key, or

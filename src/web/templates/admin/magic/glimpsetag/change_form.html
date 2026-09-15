@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+Extends the site's own `admin/change_form.html` override (the one that adds
+the "Open in X Builder"/"Export to content repo" object tools), which itself
+extends Django's stock template - so this page keeps every one of those
+behind-the-scenes additions "for free" and only adds one thing of its own:
+the "how it reads to a player" preview line, right after the inline formsets
+(#3675). A stock admin change form, extended - not a new builder page.
+{% endcomment %}
+{% block after_related_objects %}
+{{ block.super }}
+{% include "admin/authoring/_offer_preview.html" with preview=offer_preview %}
+{% endblock %}

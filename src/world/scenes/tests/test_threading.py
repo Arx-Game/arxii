@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from datetime import timedelta
+from unittest.mock import MagicMock, Mock, patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
-from world.scenes.constants import InteractionMode
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.scenes.constants import InteractionMode, ScenePrivacyMode
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
@@ -16,10 +23,22 @@ from world.scenes.factories import (
     PersonaFactory,
     PlaceFactory,
     PlacePresenceFactory,
+    SceneFactory,
 )
-from world.scenes.interaction_serializers import InteractionListSerializer
-from world.scenes.interaction_services import push_interaction
+from world.scenes.interaction_serializers import (
+    InteractionListSerializer,
+    ReplyTargetSerializer,
+)
+from world.scenes.interaction_services import create_interaction, push_interaction
+from world.scenes.models import Interaction, InteractionThread
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.thread_services import (
+    InteractionThreadError,
+    ReplyTarget,
+    assign_interaction_thread,
+    thread_anchor_id,
+    thread_root_id,
+)
 
 
 class TestSerializerNewFields(TestCase):
@@ -64,6 +83,22 @@ class TestSerializerNewFields(TestCase):
     def test_target_persona_ids(self) -> None:
         data = InteractionListSerializer(self.interaction).data
         assert self.target_persona.pk in data["target_persona_ids"]
+
+    def test_thread_id_is_serialized(self) -> None:
+        thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=11,
+            scene_id=11,
+        )
+        self.interaction.thread = thread
+        self.interaction.save(update_fields=["thread"])
+
+        data = InteractionListSerializer(self.interaction).data
+
+        assert data["thread_id"] == str(thread.pk)
+        # This row is its thread's only member, so it IS the anchor: the opening
+        # pose of a root thread, which answers nothing.
+        assert data["reply_to"] is None
 
     def test_no_place_returns_none(self) -> None:
         interaction = InteractionFactory(persona=self.writer_persona)
@@ -170,7 +205,6 @@ class TestPoseActionWithTargets(TestCase):
 
     def test_pose_with_place_creates_place_interaction(self) -> None:
         from actions.definitions.communication import PoseAction
-        from world.scenes.models import Interaction
 
         room = ObjectDBFactory(
             db_key="Hall",
@@ -187,6 +221,223 @@ class TestPoseActionWithTargets(TestCase):
         interaction = Interaction.objects.order_by("-pk").first()
         assert interaction is not None
         assert interaction.place_id == place.pk
+
+
+class TestPoseActionReplyFromPlaceTelnetParity(TestCase):
+    """Telnet parity (#3787 Task 8; behavior corrected #3811/ADR-0293): a
+    Place-held draft answering a Scene-held target in the same scene.
+
+    Telnet reaches ``assign_interaction_thread`` through ``record_interaction``
+    without ever passing through the DRF view (`interaction_views.submit_pose`),
+    so the reachability rule must be enforced identically at the shared
+    service seam whichever channel a reply arrives through.
+    """
+
+    def setUp(self) -> None:
+        patcher = patch("world.scenes.interaction_services.push_interaction")
+        self.mock_push = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_pose_replying_from_a_place_to_a_scene_target_in_the_same_scene_succeeds(
+        self,
+    ) -> None:
+        """#3811: a player at a Place can still answer a room-wide (or combat
+        OUTCOME) row -- a Place declutters, it does not isolate. The reply
+        threads under the target's own Scene holder, never the writer's Place.
+        """
+        from actions.definitions.communication import PoseAction
+        from world.scenes.thread_services import ReplyTarget
+
+        room = ObjectDBFactory(db_key="War Room", db_typeclass_path="typeclasses.rooms.Room")
+        room_profile = RoomProfileFactory(objectdb=room)
+        place = PlaceFactory(room=room_profile, name="the war room table")
+        scene = SceneFactory(location=room)
+
+        char = CharacterFactory(db_key="Alice", location=room)
+        roster_entry = RosterEntryFactory(character_sheet__character=char)
+        player_data = PlayerDataFactory()
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+        identity = CharacterSheetFactory(character=char)
+        PlacePresenceFactory(place=place, persona=identity.primary_persona)
+
+        # The pre-existing row this pose answers -- Scene-held (a room-wide
+        # pose, or a combat OUTCOME), same account so it's visible to the
+        # reply's own writer.
+        target = InteractionFactory(scene=scene, writer_account=player_data.account)
+
+        action = PoseAction()
+        with patch("actions.definitions.communication.message_location"):
+            result = action.run(
+                actor=char,
+                text="glances at the map.",
+                place=place,
+                reply_to=ReplyTarget(target.pk, target.timestamp),
+            )
+
+        assert result.success is True
+
+        reply = Interaction.objects.get(content="glances at the map.")
+        # The reply keeps the venue the writer actually chose (still a table
+        # aside, visible only there) -- reachability doesn't promote it.
+        assert reply.place_id == place.pk
+        # But it threads under the TARGET's own Scene holder, not the writer's
+        # Place, matching every other reply (`_thread_for_target` always
+        # derives holder kwargs from the target's signature).
+        target.refresh_from_db()
+        assert reply.thread_id is not None
+        assert reply.thread_id == target.thread_id
+        thread = InteractionThread.objects.get(pk=reply.thread_id)
+        assert thread.holder_kind == InteractionThread.HolderKind.SCENE
+        assert thread.scene_id == scene.pk
+
+
+class TestInvolvementMarkTelnetParity(TestCase):
+    """Telnet parity for the involvement mark (#3787 Task 8).
+
+    Spec decision 7 puts the mark on the parity side (only the parent chip is
+    web-only): a telnet client must get an explicit signal that a targeted row
+    was about them. Drives the real ``CmdPose`` grammar (``@Name`` targeting,
+    ``commands/parsing.py``'s ``parse_targets_from_text``) so this proves a
+    scenario an actual player command produces, not a synthetic kwarg shape.
+
+    Fix round 2, Finding 1: the plain-text mark must reach only sessions that
+    do NOT already get the structured ``interaction=`` payload -- a web
+    session renders its own ``InvolvementFlag`` chip off ``target_persona_ids``
+    (#3787 Task 7) and would otherwise see the raw line a second time in its
+    System lane. ``ObjectSessionHandler.all`` (the real method
+    ``_non_web_sessions`` calls via ``obj.sessions.all()``) is patched per
+    character to return a fake session stamped with the ``protocol_key`` a
+    real telnet or webclient connection would carry (mirroring
+    ``web/tests/test_text_inputfunc.py``'s ``_session()`` helper, the
+    established pattern for faking a session's protocol in this repo) --
+    this is the cleanest boundary the test harness can assert on, since there
+    is no lighter-weight way to distinguish "a session" without a live
+    connection.
+    """
+
+    def test_telnet_session_gets_the_mark_web_session_does_not(self) -> None:
+        from evennia.objects.objects import ObjectSessionHandler
+
+        from actions.definitions.communication import PoseAction
+        from commands.evennia_overrides.communication import CmdPose
+
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        alice = CharacterFactory(db_key="Alice", location=room)
+        bob = CharacterFactory(db_key="Bob", location=room)  # telnet-style target
+        dave = CharacterFactory(db_key="Dave", location=room)  # web-style target
+        carol = CharacterFactory(db_key="Carol", location=room)  # untargeted bystander
+        CharacterSheetFactory(character=alice)
+        CharacterSheetFactory(character=bob)
+        CharacterSheetFactory(character=dave)
+        CharacterSheetFactory(character=carol)
+
+        bob_messages: list[object] = []
+        dave_messages: list[object] = []
+        carol_messages: list[object] = []
+        bob.msg = lambda *args, **kwargs: bob_messages.append((args, kwargs))
+        dave.msg = lambda *args, **kwargs: dave_messages.append((args, kwargs))
+        carol.msg = lambda *args, **kwargs: carol_messages.append((args, kwargs))
+
+        telnet_session = MagicMock()
+        telnet_session.protocol_key = "telnet"
+        web_session = MagicMock()
+        web_session.protocol_key = "webclient/websocket"
+        sessions_by_pk = {bob.pk: [telnet_session], dave.pk: [web_session]}
+
+        def _fake_all(handler: ObjectSessionHandler) -> list[object]:
+            return sessions_by_pk.get(handler.obj.pk, [])
+
+        cmd = CmdPose()
+        cmd.caller = alice
+        cmd.action = PoseAction()
+        cmd.args = " @Bob,@Dave waves warmly."
+        cmd.raw_string = "pose @Bob,@Dave waves warmly."
+        cmd.cmdset = None
+        cmd.cmdset_providers = {}
+        cmd.session = None
+        cmd.account = None
+        cmd.obj = None
+        with patch.object(ObjectSessionHandler, "all", _fake_all):
+            cmd.func()
+
+        bob_texts = [str(args[0]) for args, kwargs in bob_messages if args]
+        dave_texts = [str(args[0]) for args, kwargs in dave_messages if args]
+        carol_texts = [str(args[0]) for args, kwargs in carol_messages if args]
+
+        assert any("This happened to you." in text for text in bob_texts), bob_messages
+        assert not any("This happened to you." in text for text in dave_texts), dave_messages
+        assert not any("This happened to you." in text for text in carol_texts), carol_messages
+
+        # Dave still gets the structured payload his web session already
+        # renders its own chip from -- this proves the mark was scoped away
+        # from him, not that delivery to him broke outright.
+        assert any("interaction" in kwargs for args, kwargs in dave_messages), dave_messages
+
+    def test_mixed_session_character_gets_mark_on_telnet_only_no_leak(self) -> None:
+        """A character connected on telnet AND web at once (#3787 review finding).
+
+        ``_non_web_sessions`` (``world/scenes/interaction_services.py``) filters
+        per SESSION, not per character, so a character holding both protocols at
+        once is the case neither existing test exercises: `test_telnet_session_
+        gets_the_mark_web_session_does_not` gives Bob a telnet-only session and
+        Dave a web-only one. Here Eve holds both simultaneously. Correct-by-
+        construction behavior is that ``_send_involvement_mark`` scopes its
+        ``obj.msg(..., session=non_web)`` call to just her telnet session -- her
+        web session still gets the structured ``interaction=`` payload it
+        already renders its own chip from, and must never also receive the raw
+        text line (no leak toward web) while the telnet session must not be
+        silently dropped just because a web session is also present (no leak
+        away from telnet).
+        """
+        from evennia.objects.objects import ObjectSessionHandler
+
+        from actions.definitions.communication import PoseAction
+        from commands.evennia_overrides.communication import CmdPose
+
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        alice = CharacterFactory(db_key="Alice", location=room)
+        eve = CharacterFactory(db_key="Eve", location=room)  # mixed telnet + web sessions
+        CharacterSheetFactory(character=alice)
+        CharacterSheetFactory(character=eve)
+
+        eve_messages: list[object] = []
+        eve.msg = lambda *args, **kwargs: eve_messages.append((args, kwargs))
+
+        telnet_session = MagicMock()
+        telnet_session.protocol_key = "telnet"
+        web_session = MagicMock()
+        web_session.protocol_key = "webclient/websocket"
+        sessions_by_pk = {eve.pk: [telnet_session, web_session]}
+
+        def _fake_all(handler: ObjectSessionHandler) -> list[object]:
+            return sessions_by_pk.get(handler.obj.pk, [])
+
+        cmd = CmdPose()
+        cmd.caller = alice
+        cmd.action = PoseAction()
+        cmd.args = " @Eve waves warmly."
+        cmd.raw_string = "pose @Eve waves warmly."
+        cmd.cmdset = None
+        cmd.cmdset_providers = {}
+        cmd.session = None
+        cmd.account = None
+        cmd.obj = None
+        with patch.object(ObjectSessionHandler, "all", _fake_all):
+            cmd.func()
+
+        mark_calls = [
+            (args, kwargs)
+            for args, kwargs in eve_messages
+            if args and "This happened to you." in str(args[0])
+        ]
+        payload_calls = [(args, kwargs) for args, kwargs in eve_messages if "interaction" in kwargs]
+
+        # No leak away from telnet: the mark was sent, exactly once.
+        assert len(mark_calls) == 1, eve_messages
+        # No leak toward web: it was scoped to the telnet session only.
+        assert mark_calls[0][1].get("session") == [telnet_session], mark_calls
+        # The structured payload (the web session's own chip source) still went out.
+        assert payload_calls, eve_messages
 
 
 class TestTabletalkCommand(TestCase):
@@ -277,3 +528,332 @@ class TestTabletalkCommand(TestCase):
         cmd.func()
 
         assert any("Tabletalk what?" in str(m) for m in messages)
+
+
+class TestInteractionThreadModel(TestCase):
+    """Interaction threads always name the row they answer, and nothing else."""
+
+    def test_interaction_thread_membership_and_set_null(self) -> None:
+        interaction = InteractionFactory()
+        thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=7,
+            scene_id=7,
+        )
+        interaction.thread = thread
+        interaction.save(update_fields=["thread"])
+
+        interaction.refresh_from_db()
+        assert interaction.thread_id == thread.pk
+
+        thread.delete()
+        thread_id = (
+            Interaction.objects.filter(pk=interaction.pk).values_list("thread_id", flat=True).get()
+        )
+        assert thread_id is None
+
+    def test_thread_parent_is_optional(self) -> None:
+        """A root thread has no parent and no root."""
+        thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.WHISPER,
+            party_key="3,7",
+        )
+
+        assert thread.parent_id is None
+        assert thread.pk is not None
+        # The top of the tree is derived, not stored: a parentless thread is its
+        # own root, so `thread_root_id` reports none above it.
+        assert thread_root_id(thread.pk) is None
+
+
+class TestInteractionThreadAssignment(TestCase):
+    """Reply targets create and reuse the thread anchored at the answered row."""
+
+    def test_scene_target_creates_and_reuses_thread(self) -> None:
+        account = AccountFactory()
+        scene = SceneFactory()
+        target = InteractionFactory(scene=scene, writer_account=account)
+        first_reply = InteractionFactory(scene=scene, writer_account=account)
+
+        thread = assign_interaction_thread(
+            interaction=first_reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        # The answered row is a MEMBER, and being the first member makes it the
+        # thread's anchor (#3787).
+        target.refresh_from_db()
+        assert thread_anchor_id(thread.pk) == target.pk
+        assert target.thread_id == thread.pk
+        assert first_reply.thread_id == thread.pk
+        assert thread.parent_id is None
+        assert thread_root_id(thread.pk) is None
+
+        second_reply = InteractionFactory(scene=scene, writer_account=account)
+        reused = assign_interaction_thread(
+            interaction=second_reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        assert reused.pk == thread.pk
+        assert second_reply.thread_id == thread.pk
+
+    def test_a_stale_cached_thread_does_not_re_root_a_live_exchange(self) -> None:
+        """The identity map can answer ``target.thread`` from a stale cache (#3787).
+
+        Evennia's idmapper metaclass returns the process-cached instance and
+        DISCARDS the freshly loaded column values
+        (``evennia/utils/idmapper/models.py``), so ``select_for_update().get()``
+        takes the row lock but can still hand back an instance whose ``thread_id``
+        is whatever this process last saw.
+
+        The hazard is same-process and needs no second process to reach: a
+        queryset-level write (``.update()``, ``bulk_update``) changes the row in
+        the database without touching any cached instance, so an instance already
+        held in this process keeps the old value indefinitely. That is what the
+        ``.update()`` below does, and it is a path this codebase uses today.
+
+        That is not a missed optimisation here. The move decision hangs off this
+        read: a stale ``None`` makes the service conclude the target belongs to no
+        thread, so it opens a NEW one and moves the target out of the real
+        exchange, re-rooting it and re-pointing every chip in it.
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        target = InteractionFactory(scene=scene, writer_account=account)
+        reply = InteractionFactory(scene=scene, writer_account=account)
+
+        # A queryset-level write puts the target in a thread. It never touches the
+        # cached instance, which still believes it belongs to none.
+        live_thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=scene.pk,
+            scene_id=scene.pk,
+        )
+        Interaction.objects.filter(pk=target.pk).update(thread=live_thread)
+        assert target.thread_id is None, "the cached instance must still be stale"
+
+        thread = assign_interaction_thread(
+            interaction=reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        # The reply must join the live exchange, not split a second one off it.
+        assert thread.pk == live_thread.pk
+        assert reply.thread_id == live_thread.pk
+        assert InteractionThread.objects.count() == 1
+        assert (
+            Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).get()
+            == live_thread.pk
+        )
+
+    def test_a_target_newer_than_the_reply_is_unavailable(self) -> None:
+        """Strict ordering: nothing may answer a row written after it.
+
+        A reply that predates what it answers is not a real reply, and without this
+        the anchor (min id over the members) could end up being the answer rather
+        than the answered.
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        reply = InteractionFactory(scene=scene, writer_account=account)
+        target = InteractionFactory(
+            scene=scene,
+            writer_account=account,
+            timestamp=reply.timestamp + timedelta(minutes=1),
+        )
+
+        thread_count = InteractionThread.objects.count()
+        with self.assertRaises(InteractionThreadError) as error:
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+        assert error.exception.code == "reply_target_unavailable"
+        assert InteractionThread.objects.count() == thread_count
+        reply.refresh_from_db()
+        assert reply.thread_id is None
+
+    def test_a_target_at_the_same_instant_as_the_reply_is_unavailable(self) -> None:
+        """The comparison is `>=`, so an equal timestamp is refused too."""
+        account = AccountFactory()
+        scene = SceneFactory()
+        reply = InteractionFactory(scene=scene, writer_account=account)
+        target = InteractionFactory(scene=scene, writer_account=account, timestamp=reply.timestamp)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+    def test_mismatched_scene_is_unavailable(self) -> None:
+        account = AccountFactory()
+        target = InteractionFactory(scene=SceneFactory(), writer_account=account)
+        reply = InteractionFactory(scene=SceneFactory(), writer_account=account)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+    def test_inaccessible_target_is_unavailable(self) -> None:
+        writer = AccountFactory()
+        viewer = AccountFactory()
+        private_scene = SceneFactory(
+            privacy_mode=ScenePrivacyMode.PRIVATE,
+            participants=[writer],
+        )
+        target = InteractionFactory(scene=private_scene, writer_account=writer)
+        reply = InteractionFactory(scene=private_scene, writer_account=viewer)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=viewer.pk,
+            )
+
+    def test_scene_less_target_is_unavailable(self) -> None:
+        account = AccountFactory()
+        target = InteractionFactory(writer_account=account)
+        reply = InteractionFactory(writer_account=account)
+
+        with self.assertRaises(InteractionThreadError) as error:
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+        assert error.exception.code == "reply_target_unavailable"
+
+    def test_place_reply_to_scene_target_in_same_scene_is_allowed(self) -> None:
+        """#3811 / ADR-0293 decision 1 correction: a Place-held draft CAN answer a
+        Scene-held target in the same scene.
+
+        A Place declutters room chat, it does not isolate its occupants from it -
+        a player seated at a table already saw the room-wide pose (or combat
+        OUTCOME) they're answering, so replying to it is not an audience widening.
+        The reply threads under the target's Scene holder (`_thread_for_target`
+        always derives holder kwargs from the target's own signature).
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        room = RoomProfileFactory()
+        place = PlaceFactory(room=room, name="the war room table")
+        target = InteractionFactory(scene=scene, writer_account=account)
+        reply = InteractionFactory(scene=scene, place=place, writer_account=account)
+
+        thread = assign_interaction_thread(
+            interaction=reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        assert thread.holder_kind == InteractionThread.HolderKind.SCENE
+        assert thread.scene_id == scene.pk
+        reply.refresh_from_db()
+        target.refresh_from_db()
+        assert reply.thread_id == thread.pk
+        assert target.thread_id == thread.pk
+
+    def test_place_reply_to_scene_target_in_a_different_scene_is_unavailable(self) -> None:
+        """The Place-to-Scene allowance requires the SAME scene - the writer must
+        actually be present where the target's row was posed, not merely at any
+        Place anywhere.
+        """
+        account = AccountFactory()
+        room = RoomProfileFactory()
+        place = PlaceFactory(room=room, name="the war room table")
+        target = InteractionFactory(scene=SceneFactory(), writer_account=account)
+        reply = InteractionFactory(scene=SceneFactory(), place=place, writer_account=account)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+    def test_scene_reply_to_place_target_stays_refused(self) -> None:
+        """The reverse direction stays refused: a room-drafted reply cannot answer
+        table talk it was never able to see outside the table (#3811 keeps this
+        half of decision 1 unchanged).
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        room = RoomProfileFactory()
+        place = PlaceFactory(room=room, name="the war room table")
+        target = InteractionFactory(scene=scene, place=place, writer_account=account)
+        reply = InteractionFactory(scene=scene, writer_account=account)
+
+        with self.assertRaises(InteractionThreadError) as error:
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+        assert error.exception.code == "reply_target_unavailable"
+
+    def test_create_interaction_assigns_thread_atomically(self) -> None:
+        account = AccountFactory()
+        scene = SceneFactory()
+        persona = PersonaFactory()
+
+        with patch(
+            "world.scenes.interaction_services._get_account_for_persona",
+            return_value=account.pk,
+        ):
+            target = create_interaction(
+                persona=persona,
+                content="root",
+                mode=InteractionMode.POSE,
+                scene=scene,
+            )
+            reply = create_interaction(
+                persona=persona,
+                content="reply",
+                mode=InteractionMode.POSE,
+                scene=scene,
+                reply_to=ReplyTarget(target.pk, target.timestamp),
+            )
+
+        assert reply.thread_id is not None
+        assert thread_anchor_id(reply.thread_id) == target.pk
+        # The target joined the thread it is the anchor of.
+        assert (
+            Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).get()
+            == reply.thread_id
+        )
+
+
+class TestReplyTargetSerializer(TestCase):
+    """Reply targets are write-only serializer references."""
+
+    def test_accepts_timezone_aware_reference(self) -> None:
+        serializer = ReplyTargetSerializer(data={"id": 4, "timestamp": "2026-09-10T12:00:00Z"})
+
+        assert serializer.is_valid(), serializer.errors
+        assert serializer.validated_data["id"] == 4
+
+    def test_rejects_unknown_fields(self) -> None:
+        serializer = ReplyTargetSerializer(
+            data={"id": 4, "timestamp": "2026-09-10T12:00:00Z", "thread_id": "x"}
+        )
+
+        assert not serializer.is_valid()
+
+    def test_rejects_naive_timestamp(self) -> None:
+        serializer = ReplyTargetSerializer(data={"id": 4, "timestamp": "2026-09-10T12:00:00"})
+
+        assert not serializer.is_valid()

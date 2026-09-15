@@ -12,6 +12,7 @@ from world.journals.constants import (
     PRAISE_RECEIVED_XP,
     RETORT_GIVEN_XP,
     RETORT_RECEIVED_XP,
+    JournalKind,
     ResponseType,
 )
 from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
@@ -70,6 +71,9 @@ class CreateJournalEntryTest(TestCase):
             account=self.account,
             amount=JOURNAL_POST_XP[0],
             description="Journal post: First",
+            # The author's sheet is credited with the earn (#3748) — the account holds
+            # the balance, the character holds the record of having earned it.
+            character=self.author,
         )
 
     def test_second_post_awards_2_xp(
@@ -94,6 +98,9 @@ class CreateJournalEntryTest(TestCase):
             account=self.account,
             amount=JOURNAL_POST_XP[1],
             description="Journal post: Second",
+            # The author's sheet is credited with the earn (#3748) — the account holds
+            # the balance, the character holds the record of having earned it.
+            character=self.author,
         )
 
     def test_third_post_awards_1_xp(
@@ -118,6 +125,9 @@ class CreateJournalEntryTest(TestCase):
             account=self.account,
             amount=JOURNAL_POST_XP[2],
             description="Journal post: Third",
+            # The author's sheet is credited with the earn (#3748) — the account holds
+            # the balance, the character holds the record of having earned it.
+            character=self.author,
         )
 
     def test_fourth_post_no_xp(
@@ -201,6 +211,41 @@ class CreateJournalEntryTest(TestCase):
             is_public=True,
         )
         self.assertEqual(JournalTag.objects.filter(entry=entry).count(), 0)
+
+    def test_create_journal_entry_updates_introductions_cache(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        """A non-ENTRY kind is appended into an already-warm ``introductions`` cache
+        directly, with no re-query (#3816: PrunedCachedProperty write-site mutation)."""
+        _ = self.author.introductions  # warm the cache
+        entry = create_journal_entry(
+            author=self.author,
+            title="First Journal",
+            body="Body",
+            is_public=True,
+            kind=JournalKind.FIRST_JOURNAL,
+        )
+        with self.assertNumQueries(0):
+            introductions = self.author.introductions
+        self.assertEqual(introductions, [entry])
+
+    def test_create_journal_entry_does_not_warm_a_cold_introductions_cache(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        """No cache warmed yet: the write site must not read (and thus load) it."""
+        entry = create_journal_entry(
+            author=self.author,
+            title="First Journal",
+            body="Body",
+            is_public=True,
+            kind=JournalKind.FIRST_JOURNAL,
+        )
+        self.assertNotIn("introductions", self.author.__dict__)
+        self.assertEqual(self.author.introductions, [entry])
 
 
 @patch("world.journals.services.increment_stat")

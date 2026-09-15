@@ -3,12 +3,10 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.distinctions.factories import DistinctionFactory
 from world.magic.constants import GlimpseState, GlimpseTagAxis
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterGlimpseTagFactory,
-    GlimpseTagDistinctionSuggestionFactory,
     GlimpseTagFactory,
 )
 from world.magic.models import CharacterGlimpseTag, GlimpseTag
@@ -38,19 +36,6 @@ class CharacterGlimpseTagModelTests(TestCase):
     def test_aura_defaults_to_not_started(self):
         aura = CharacterAuraFactory()
         assert aura.glimpse_state == GlimpseState.NOT_STARTED
-
-
-class GlimpseSuggestionModelTests(TestCase):
-    def test_natural_key_round_trip(self):
-        suggestion = GlimpseTagDistinctionSuggestionFactory(
-            tag__slug="killed-someone", distinction=DistinctionFactory(slug="haunted")
-        )
-        # NaturalKeyMixin flattens FK natural keys into the tuple (each FK's
-        # own 1-tuple natural key contributes its bare value, not a nested
-        # tuple) — observed behavior of core.natural_keys.NaturalKeyMixin.
-        assert suggestion.natural_key() == ("killed-someone", "haunted")
-        fetched = suggestion.__class__.objects.get_by_natural_key("killed-someone", "haunted")
-        assert fetched.pk == suggestion.pk
 
 
 class CharacterDistinctionFromGlimpseTests(TestCase):

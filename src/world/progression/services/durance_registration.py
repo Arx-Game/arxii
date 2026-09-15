@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 from django.utils import timezone
 
-_UNBOUND_TRADITION_NAME = "Unbound"
 _DURANCE_ANTIPHON_SPONSORED = "durance_antiphon_sponsored"
 _DURANCE_ANTIPHON_UNSponsored = "durance_antiphon_unsponsored"
 
@@ -111,18 +110,20 @@ def _record_witnesses(
 def _fire_enrollment_antiphon(inductee: CharacterSheet, scene: Scene | None) -> None:
     """Emit the enrollment antiphon as a room message.
 
-    Sponsored = tradition != Unbound; unsponsored = Unbound. Actual text is
-    authored in the lore repo and delivered via the content pipeline. This
-    machinery only dispatches the emit with a content key.
+    Sponsored = tradition is not SELF_TAUGHT on its slate; unsponsored = SELF_TAUGHT
+    (#3675, was a name match against "Unbound"). Actual text is authored in the lore
+    repo and delivered via the content pipeline. This machinery only dispatches the
+    emit with a content key.
     """
     if scene is None or scene.location is None:
         return
 
+    from world.character_creation.offers import tradition_is_self_taught
     from world.magic.models import CharacterTradition
 
     try:
         tradition = CharacterTradition.objects.get(character_sheet=inductee)
-        sponsored = tradition.tradition.name != _UNBOUND_TRADITION_NAME
+        sponsored = not tradition_is_self_taught(tradition.tradition)
     except CharacterTradition.DoesNotExist:
         sponsored = False
 

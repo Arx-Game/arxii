@@ -10,6 +10,7 @@ canvas (epic #2436).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.utils import timezone
@@ -128,6 +129,45 @@ def _create_exit(
     return exit_obj
 
 
+def create_exit(
+    *, name: str, aliases: tuple[str, ...], source: DefaultObject, destination: DefaultObject
+) -> ObjectDB:
+    """Create one exit, ``source`` to ``destination``, with no return (#3860).
+
+    The staff surfaces' deliberate one-way link (``StaffLinkRoomsAction`` with
+    ``one_way``); the owner's building link and a GM's story link keep minting
+    symmetric pairs through ``create_exit_pair`` (ADR-0301).
+    """
+    return _create_exit(name=name, aliases=aliases, source=source, destination=destination)
+
+
+def one_way_exit_ids(exits: Iterable[ObjectDB]) -> set[int]:
+    """The ids among ``exits`` with no exit leading back the other way (#3860).
+
+    One query for the whole list: the return of a cross-area exit lives in
+    another area's rooms, so the list itself cannot answer.
+    """
+    from evennia.objects.models import ObjectDB as _ObjectDB  # noqa: PLC0415
+
+    exits = list(exits)
+    if not exits:
+        return set()
+    location_ids = {e.db_location_id for e in exits if e.db_location_id is not None}
+    destination_ids = {e.db_destination_id for e in exits if e.db_destination_id is not None}
+    returning = set(
+        _ObjectDB.objects.filter(
+            db_typeclass_path=_EXIT_TYPECLASS,
+            db_location_id__in=destination_ids,
+            db_destination_id__in=location_ids,
+        ).values_list("db_location_id", "db_destination_id")
+    )
+    return {
+        e.pk
+        for e in exits
+        if e.db_destination_id is None or (e.db_destination_id, e.db_location_id) not in returning
+    }
+
+
 def create_exit_pair(  # noqa: PLR0913 — a symmetric pair needs both directions' name+aliases
     *,
     name: str,
@@ -148,23 +188,6 @@ def create_exit_pair(  # noqa: PLR0913 — a symmetric pair needs both direction
         name=reverse_name, aliases=reverse_aliases, source=room_b, destination=room_a
     )
     return forward, backward
-
-
-def create_one_way_exit(
-    *,
-    name: str,
-    aliases: tuple[str, ...] = (),
-    source: DefaultObject,
-    destination: DefaultObject,
-) -> ObjectDB:
-    """Create a single exit from ``source`` to ``destination`` (no reverse).
-
-    The one-direction sibling of :func:`create_exit_pair`, for doorways that
-    deliberately have no way back - e.g. temporary instance entrances (#696
-    gap 7), where leaving happens via ``complete_instanced_room`` relocation
-    rather than a return exit. Same cross-area latitude as the pair helper.
-    """
-    return _create_exit(name=name, aliases=aliases, source=source, destination=destination)
 
 
 def cell_occupied(area: Area, x: int, y: int, floor: int) -> bool:

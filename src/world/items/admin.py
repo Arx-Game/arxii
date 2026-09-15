@@ -3,7 +3,16 @@
 from django.contrib import admin
 
 from world.contributors.admin import CREDIT_FIELDSET
-from world.items.crafting.models import AccentArchetypeAllowance, AccentExclusion, ItemAccent
+from world.items.crafting.models import (
+    AccentArchetypeAllowance,
+    AccentExclusion,
+    CraftingMaterialRequirement,
+    CraftingRecipe,
+    CraftingRecipeConsequence,
+    CraftingRecipeModifier,
+    CraftingSkillCap,
+    ItemAccent,
+)
 from world.items.models import (
     AccentLevel,
     Adornment,
@@ -23,6 +32,8 @@ from world.items.models import (
     ItemTemplate,
     ItemTemplateAppearanceEffect,
     ItemTemplateProperty,
+    Mantle,
+    MantleLevelDefinition,
     MaterialBucket,
     MaterialCategory,
     OrgMaterialLedgerEntry,
@@ -463,6 +474,121 @@ class AudacityTuningAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+class CraftingMaterialRequirementInline(admin.TabularInline):
+    model = CraftingMaterialRequirement
+    extra = 1
+    autocomplete_fields = ["item_template", "material_category"]
+
+
+class CraftingRecipeConsequenceInline(admin.TabularInline):
+    model = CraftingRecipeConsequence
+    extra = 1
+    autocomplete_fields = ["consequence"]
+
+
+class CraftingRecipeModifierInline(admin.TabularInline):
+    model = CraftingRecipeModifier
+    extra = 1
+    autocomplete_fields = ["target"]
+
+
+@admin.register(CraftingRecipe)
+class CraftingRecipeAdmin(admin.ModelAdmin):
+    """#3831 - the top-level authored recipe driving a crafting workflow."""
+
+    list_display = [
+        "name",
+        "kind",
+        "check_type",
+        "requires_station",
+        "requires_knowledge",
+    ]
+    list_filter = ["kind", "requires_station", "requires_knowledge", "default_cost_consumption"]
+    search_fields = ["name"]
+    list_select_related = ["check_type"]
+    autocomplete_fields = [
+        "check_type",
+        "skill_trait",
+        "specialization",
+        "required_feature_kind",
+        "output_item_template",
+    ]
+    inlines = [
+        CraftingMaterialRequirementInline,
+        CraftingRecipeConsequenceInline,
+        CraftingRecipeModifierInline,
+    ]
+
+
+@admin.register(CraftingMaterialRequirement)
+class CraftingMaterialRequirementAdmin(admin.ModelAdmin):
+    """#3831 - one ingredient requirement for a crafting recipe."""
+
+    list_display = ["recipe", "item_template", "material_category", "quantity"]
+    list_filter = ["material_category"]
+    search_fields = ["recipe__name", "item_template__name"]
+    autocomplete_fields = ["recipe", "item_template", "material_category"]
+
+
+@admin.register(CraftingSkillCap)
+class CraftingSkillCapAdmin(admin.ModelAdmin):
+    """#3831 - the minimum-skill-to-max-quality-tier ladder for a recipe."""
+
+    list_display = ["recipe", "min_skill_value", "max_quality_tier"]
+    search_fields = ["recipe__name"]
+    autocomplete_fields = ["recipe"]
+
+
+@admin.register(CraftingRecipeConsequence)
+class CraftingRecipeConsequenceAdmin(admin.ModelAdmin):
+    """#3831 - a weighted consequence pool entry for a crafting recipe."""
+
+    list_display = ["recipe", "consequence", "weight_override", "cost_consumption"]
+    list_filter = ["cost_consumption"]
+    search_fields = ["recipe__name", "consequence__label"]
+    autocomplete_fields = ["recipe", "consequence"]
+
+
+@admin.register(CraftingRecipeModifier)
+class CraftingRecipeModifierAdmin(admin.ModelAdmin):
+    """#3831 - a modifier outcome a crafting recipe grants on the output item."""
+
+    list_display = ["recipe", "target", "base_value", "quality_scale_factor"]
+    search_fields = ["recipe__name", "target__name"]
+    autocomplete_fields = ["recipe", "target"]
+
+
+class MantleLevelDefinitionInline(admin.TabularInline):
+    model = MantleLevelDefinition
+    extra = 1
+    autocomplete_fields = ["codex_entry_required"]
+
+
+@admin.register(Mantle)
+class MantleAdmin(admin.ModelAdmin):
+    """#3831 - an attunable artifact and its authored attunement levels."""
+
+    list_display = ["name", "item_instance", "is_active", "max_level"]
+    list_filter = ["is_active"]
+    search_fields = ["name"]
+    raw_id_fields = ["item_instance"]
+    inlines = [MantleLevelDefinitionInline]
+
+
+@admin.register(MantleLevelDefinition)
+class MantleLevelDefinitionAdmin(admin.ModelAdmin):
+    """#3831 - one authored mantle attunement level and its research gate."""
+
+    list_display = ["mantle", "level", "codex_entry_required"]
+    search_fields = ["mantle__name"]
+    autocomplete_fields = ["mantle", "codex_entry_required"]
 
 
 # The market submodule keeps its own admin next to its models; Django only

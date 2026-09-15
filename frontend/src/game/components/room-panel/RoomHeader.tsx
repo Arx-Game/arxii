@@ -36,7 +36,12 @@ export function RoomHeader({
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{name}</h3>
         {canEdit && onEditRoom && (
-          <Button variant="ghost" size="sm" className="h-5 px-1 text-xs" onClick={onEditRoom}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-11 px-2 text-xs text-foreground"
+            onClick={onEditRoom}
+          >
             Edit
           </Button>
         )}
@@ -49,15 +54,9 @@ export function RoomHeader({
             </Badge>
           </Link>
           {hasActiveEncounter && (
-            <Link to={`/scenes/${scene.id}`}>
-              <Badge
-                variant="destructive"
-                className="text-xs"
-                data-testid="room-header-combat-badge"
-              >
-                In Combat
-              </Badge>
-            </Link>
+            <Badge variant="destructive" className="text-xs" data-testid="room-header-combat-badge">
+              In Combat
+            </Badge>
           )}
           {hasActiveBattle && (
             <Link to={`/scenes/${scene.id}/battle`}>
@@ -79,7 +78,7 @@ export function RoomHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 px-1 text-xs text-destructive"
+              className="min-h-11 px-2 text-xs text-destructive"
               onClick={onEndScene}
               disabled={isEndPending}
             >
@@ -91,7 +90,7 @@ export function RoomHeader({
         <Button
           variant="ghost"
           size="sm"
-          className="mt-1 h-6 px-2 text-xs"
+          className="mt-1 min-h-11 px-2 text-xs text-foreground"
           onClick={onStartScene}
           disabled={isStartPending}
         >

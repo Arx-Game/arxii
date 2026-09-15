@@ -1,5 +1,10 @@
 from django.contrib import admin
 
+from world.admin_utils import describe_reverse_relations
+from world.conditions.inspection import (
+    condition_template_prefetches,
+    inspect_condition_template,
+)
 from world.conditions.models import (
     CapabilityType,
     ConditionCapabilityEffect,
@@ -9,11 +14,16 @@ from world.conditions.models import (
     ConditionDamageInteraction,
     ConditionDamageOverTime,
     ConditionInstance,
+    ConditionModifierEffect,
     ConditionResistanceModifier,
     ConditionStage,
+    ConditionStageOnEntry,
     ConditionTemplate,
+    DamageSuccessLevelMultiplier,
     DamageType,
     HazardResponseState,
+    PenetrationOutcomeFactor,
+    TreatmentTemplate,
 )
 from world.contributors.admin import CREDIT_FIELDSET
 
@@ -31,8 +41,17 @@ class ConditionCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(CapabilityType)
 class CapabilityTypeAdmin(admin.ModelAdmin):
+    """Consumed by ``battles``, ``checks``, ``combat``, ``covenants``, ``magic``,
+    ``military``, ``missions``, ``mechanics`` and ``conditions`` itself — see
+    ``get_connections`` (#3679)."""
+
     list_display = ["name"]
     search_fields = ["name"]
+    readonly_fields = ["get_connections"]
+
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj)
 
 
 @admin.register(DamageType)
@@ -41,6 +60,11 @@ class DamageTypeAdmin(admin.ModelAdmin):
     list_filter = ["resonance"]
     search_fields = ["name"]
     autocomplete_fields = ["wound_pool", "death_pool"]
+    readonly_fields = ["get_connections"]
+
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj)
 
 
 # =============================================================================
@@ -58,6 +82,25 @@ class ConditionCapabilityEffectInline(admin.TabularInline):
     model = ConditionCapabilityEffect
     extra = 0
     autocomplete_fields = ["capability", "stage"]
+
+
+class ConditionModifierEffectInline(admin.TabularInline):
+    """Stat-modifier channel for a condition (#3682).
+
+    ``ConditionModifierEffect`` is the row every stat reader folds in
+    (``get_condition_modifier_total`` / ``get_condition_modifier_sources``,
+    ``world/conditions/services.py``), and the DE evaluator prices a condition
+    on whether it carries one at all. Until now it was authorable only through
+    a fixture or a shell: a condition authored in the admin as "Guarded" or
+    "Inspired" got a name, a description and no mechanical effect whatsoever,
+    and the technique applying it advertised a change that never arrived.
+    """
+
+    model = ConditionModifierEffect
+    extra = 0
+    autocomplete_fields = ["modifier_target", "stage"]
+    verbose_name = "Stat Modifier"
+    verbose_name_plural = "Stat Modifiers"
 
 
 class ConditionCheckModifierInline(admin.TabularInline):
@@ -118,9 +161,13 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
     ]
     search_fields = ["name", "description"]
     filter_horizontal = ["reactive_triggers"]
+    readonly_fields = ["get_mechanics_diagnostic"]
 
     fieldsets = [
-        (None, {"fields": ["name", "category", "description"]}),
+        (
+            None,
+            {"fields": ["name", "category", "description", "get_mechanics_diagnostic"]},
+        ),
         (
             "Player Descriptions",
             {
@@ -191,8 +238,25 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         CREDIT_FIELDSET,
     ]
 
+    def get_queryset(self, request):
+        """Prefetch every channel shown by the mechanics diagnostic."""
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("category")
+            .prefetch_related(*condition_template_prefetches())
+        )
+
+    @admin.display(description="Mechanics diagnostic")
+    def get_mechanics_diagnostic(self, obj: ConditionTemplate) -> str:
+        """Show recognized wiring, or explicitly request manual verification."""
+        if not obj.pk:
+            return "Save the condition before inspecting mechanics."
+        return inspect_condition_template(obj).as_text()
+
     inlines = [
         ConditionStageInline,
+        ConditionModifierEffectInline,
         ConditionCapabilityEffectInline,
         ConditionCheckModifierInline,
         ConditionResistanceModifierInline,
@@ -200,6 +264,28 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         ConditionDamageInteractionInline,
         ConditionConditionInteractionInline,
     ]
+
+    def save_related(self, request, form, formsets, change):
+        """Bump the technique catalog revision after a delivery-channel edit (#3712).
+
+        A condition's mechanical effect rows are an input to what every technique
+        that applies it is worth, and the tuning panel caches the evaluated
+        corpus for 24 hours keyed on that revision. #3683 wired the bump into
+        every technique-side authoring write; the condition side was never in its
+        scope, so changing a ``ConditionModifierEffect``'s value left staff
+        tuning against the pre-edit number with no way to tell.
+
+        This is the whole-catalog revision only. The per-technique ``cached_*``
+        payload lists are lists of the technique's own rows and are unaffected by
+        editing the condition those rows point at, so there is nothing
+        per-instance to drop here.
+        """
+        super().save_related(request, form, formsets, change)
+        from world.magic.services.technique_effects import (  # noqa: PLC0415
+            bump_technique_catalog_revision,
+        )
+
+        bump_technique_catalog_revision()
 
 
 @admin.register(ConditionStage)
@@ -342,3 +428,52 @@ class HazardResponseStateAdmin(admin.ModelAdmin):
     ]
     raw_id_fields = ["condition_instance"]
     readonly_fields = ["prompted_at"]
+
+
+# =============================================================================
+# #3831
+# =============================================================================
+
+
+@admin.register(DamageSuccessLevelMultiplier)
+class DamageSuccessLevelMultiplierAdmin(admin.ModelAdmin):
+    """#3831 - the tunable success_level -> damage multiplier lookup."""
+
+    list_display = ["min_success_level", "multiplier", "label"]
+    search_fields = ["label"]
+
+
+@admin.register(PenetrationOutcomeFactor)
+class PenetrationOutcomeFactorAdmin(admin.ModelAdmin):
+    """#3831 - the authored success-level -> power factor for the penetration contest (#639)."""
+
+    list_display = ["min_success_level", "factor", "label"]
+    search_fields = ["label"]
+
+
+@admin.register(TreatmentTemplate)
+class TreatmentTemplateAdmin(admin.ModelAdmin):
+    """#3831 - an authorable recipe for treating a condition or pending alteration."""
+
+    list_display = [
+        "name",
+        "key",
+        "target_condition",
+        "target_kind",
+        "check_type",
+        "requires_bond",
+    ]
+    list_filter = ["target_kind", "requires_bond", "scene_required"]
+    search_fields = ["name", "key", "target_condition__name"]
+    list_select_related = ["target_condition", "check_type", "backlash_target_condition"]
+    autocomplete_fields = ["target_condition", "check_type", "backlash_target_condition"]
+
+
+@admin.register(ConditionStageOnEntry)
+class ConditionStageOnEntryAdmin(admin.ModelAdmin):
+    """#3831 - a condition applied when a target enters a ConditionStage (Scope 6 par:4.1)."""
+
+    list_display = ["stage", "condition", "severity"]
+    search_fields = ["stage__name", "condition__name"]
+    list_select_related = ["stage", "condition"]
+    autocomplete_fields = ["stage", "condition"]

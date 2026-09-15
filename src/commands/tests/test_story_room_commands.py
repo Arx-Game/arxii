@@ -11,6 +11,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom
+from commands.tests.message_capture import message_text
 from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
@@ -26,7 +27,7 @@ def _run(cmd_cls: type, args: str, caller: object) -> list[str]:
     cmd.args = args
     cmd.caller = caller
     messages: list[str] = []
-    caller.msg = lambda *a, **_k: messages.append(a[0] if a else "")
+    caller.msg = lambda *a, **_k: messages.append(message_text(a[0]) if a else "")
     cmd.func()
     return messages
 

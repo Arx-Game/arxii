@@ -25,14 +25,33 @@ class PersonaPayload(TypedDict):
     thumbnail_url: str
 
 
+class ReplyParentPayload(TypedDict):
+    """The row a reply answered, as the parent chip needs it.
+
+    Exactly the shape ``InteractionSerializer.get_reply_to`` returns over REST (a
+    stringified id and an ISO timestamp), so the frontend reads one type on both
+    channels: the id plus the parent's timestamp is a thread selector, never the
+    parent's content or author.
+    """
+
+    id: str
+    timestamp: str
+
+
 class InteractionPayload(TypedDict):
     """Structured interaction payload for WebSocket delivery."""
 
     id: int
     persona: PersonaPayload
     content: str
+    # The whole sentence for this viewer (#3858): the actor in the line, rendered
+    # at display time by ``line_rendering.render_line`` from ``content``, the
+    # display name and ``mode``. Readers show this; everything else reads ``content``.
+    line: str
     mode: str
     timestamp: str
+    thread_id: str | None
+    root_thread_id: str | None
     scene_id: int | None
     place_id: int | None
     place_name: str | None
@@ -42,6 +61,7 @@ class InteractionPayload(TypedDict):
     language_name: str | None
     attributed_companion_id: int | None
     attributed_companion_name: str | None
+    reply_to: ReplyParentPayload | None
 
 
 class ReactionAggregation(TypedDict):
@@ -100,3 +120,32 @@ class CastResult:
     power_ledger: PowerLedger | None = None
     soulfray_warning: SoulfrayWarning | None = None
     combat_seated: bool = False
+
+
+@dataclass(frozen=True)
+class CharacterAttention:
+    """What is waiting for one character (#3774).
+
+    `direct` is a count of poses aimed at this character's personas and not yet
+    read. `ambient` is whether a scene this character is still in has moved
+    without them. Two tiers rather than one number because the badge answers
+    two different questions: did someone speak to me, or did something happen
+    near me.
+    """
+
+    direct: int
+    ambient: bool
+
+
+@dataclass(frozen=True)
+class AccountAttention:
+    """One account's attention across all of its characters (#3774).
+
+    `by_character` is keyed by `character_sheet_id`. `as_of_id` is the largest
+    `Interaction.id` the service considered; the client drops session
+    interactions at or below it so a live WebSocket delta and this server
+    baseline cannot count the same pose twice.
+    """
+
+    by_character: dict[int, CharacterAttention]
+    as_of_id: int

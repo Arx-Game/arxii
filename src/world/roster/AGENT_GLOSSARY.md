@@ -68,7 +68,7 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   `KinSlotPool` ("8 children among these parents") minting nodes on claim.
   CG claims bind the new sheet at finalization. _Avoid:_ placeholder (the
   retired member_type).
-- **Deferred definition** — a CG choice to leave kin positions (e.g.
+- **Deferred definition** - a CG choice to leave kin slots (e.g.
   parents) deliberately undefined, recorded via `deferred_definer`; filling
   them later is holder-only and review-gated ("would everyone have already
   known this" is a human judgment). _Avoid:_ retcon slot.
@@ -95,26 +95,61 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   Stature, #3091, is a live computed org-level deterrence score; influence
   is a staff-set, CG-pricing-only number on the family itself).
 - **Upbringing** (#3617): `OriginTemplate`, the authored card a player picks
-  in the Lineage stage within a Beginning: a CG point cost, a trust gate,
-  and which Family Paths it allows. The code keeps the `OriginTemplate*`
+  in the Lineage stage within a Beginning: a CG point cost and which Family
+  Paths it allows. The code keeps the `OriginTemplate*`
   class names (Decision 4 on #3617); "Upbringing" is the player- and
   staff-facing word. _Avoid:_ origin option, household.
-- **Family Path** (#3617): `FamilyPath`, the shape an Upbringing gives a
+- **Family Path** (#3617, #3648): `FamilyPath`, the shape an Upbringing gives a
   character's family record: claimed (a staff-authored family of an offered
-  Family Kind), named (a new family with no authority, influence 0), or none
-  (the tarot surname ritual). Resolved per-draft by
-  `CharacterDraft.resolve_family_path()`. _Avoid:_ family-known flag (the
-  retired `Beginnings.family_known`; the job is now the Upbringing's paths).
-- **Prompt (Upbringing)** (#2478, #3617): `OriginTemplateSlot`, an authored
-  question scoped to a Family Path (`applies_to`) or shown on every path
-  (`any`); `allows_text` controls whether a free-text write-in is offered
-  alongside any pick-list Choices. _Avoid:_ slot alone outside kinship
-  app-in context (that word already names the appable-slot mountain here).
+  Family Kind, entered through a Vacancy when one is offered), named (a new
+  family built from a Family Template, influence 0), or none (the tarot
+  surname ritual). Resolved per-draft by `CharacterDraft.resolve_family_path()`.
+  The Lineage page order is Upbringing picker, any-scoped Prompts, the family
+  block (path picker when more than one path is allowed, then the path body),
+  path-scoped Prompts. _Avoid:_ family-known flag (the retired
+  `Beginnings.family_known`; the job is now the Upbringing's paths).
+- **Prompt (Upbringing)** (#2478, #3617, #3648): `OriginTemplateSlot`, an
+  authored question scoped to a Family Path (`applies_to`) or shown on every
+  path (`any`); `allows_text` controls whether a free-text write-in is offered
+  alongside any pick-list Choices. Rendered as `any`-scoped prompts above the
+  family block and path-scoped prompts below it (#3648's page-order change).
+  _Avoid:_ slot alone outside kinship app-in context (that word already names
+  the appable-slot mountain here).
 - **Choice (Upbringing)** (#3617): `OriginTemplateSlotChoice`, one authored
   pick-list answer on a Prompt, priced `cg_point_cost + cost_per_influence x
   influence` (`cost_for()`); influence is 0 on the name and none Family
   Paths. _Avoid:_ option (reserved for `HouseAspectOption`/`FormTraitOption`
   elsewhere in this codebase).
+- **Family Template** (#3648): `HouseTemplate`, the type a named family is
+  built from: kind, org type, society, aspect questions, served house
+  choices, and (title path only) a liege and succession law. An Upbringing's
+  `family_templates` M2M names which template(s) its name path offers; one
+  auto-picks, more than one shows a picker. See
+  `docs/systems/family-authoring-recipes.md`. _Avoid:_ house template as the
+  general term (the model stays named `HouseTemplate` in code, but every kind
+  of family uses it, not only houses); charter for a non-noble kind (charter
+  stays the noble-title-founding term).
+- **Vacancy** (#3648): `societies.Vacancy`, a staff-authored opening on a
+  staff-minted family's org: what the holder does, two authored importance
+  axes (below), and a price. Kin when it links the kinship tree (a
+  `KinSlotPool` or an appable `Kinsperson`), retainer otherwise; a blank
+  capacity (`count_remaining`) is a standing vacancy, always open. Taken at CG
+  finalize via `take_vacancy`, which stamps `OrganizationMembership.vacancy`.
+  _Avoid:_ position, appointment, seat, station, role, slot (each already
+  means something else in this codebase; see ADR-0273).
+- **Importance / Presumed importance** (#3648): the two authored axes on a
+  Vacancy: `importance` (how much the family truly cares about the holder,
+  visible only to the holder and staff) and `presumed_importance` (what
+  outsiders assume, the public-facing number). Descriptors with no consumer
+  yet as of #3648. _Avoid:_ standing (`StandingDeclaration` is a live
+  reputation nudge), regard (`NpcRegard`, an NPC's opinion), stature
+  (`HouseStature`, an org-level computed deterrence score).
+- **Served house** (#3648): the staff `Organization` a name-path family swore
+  fealty to, from `HouseTemplate.served_house_choices`; recorded on
+  `CharacterDraft.served_house` and, at materialization, as the org's fealty
+  edge. _Avoid:_ patron (an `OrgPact` between two organizations is the
+  patronage relationship; served house is a fealty declaration on a
+  brand-new family).
 - **Mail (PlayerMail)** - a `PlayerMail` row: private, OOC, tenure-to-tenure
   correspondence between players (`sender_tenure` -> `recipient_tenure`,
   threaded via `in_reply_to`), routed by `RosterTenure` rather than
@@ -148,9 +183,12 @@ browsing as (state 2.5 in the four-state model: logged out / logged in-no-select
 / selected / puppeting) — `PlayerData.selected_entry`, mutated only through
 `world.roster.services.selection.set_selected_entry`, mirrored client-side by
 `gameSlice` (#3412). Selection is a fact, not an action: it carries zero
-lifecycle, session, or puppeting side effects — see ADR-0241. Player-facing
-state label ratified by Apostate (refined 2026-08-28): **Playing: Currently
-Offscreen** (see below).
+lifecycle, session, or puppeting side effects — see ADR-0241. The relation runs
+the other way too (#3812, ADR-0294): puppeting a character *records* it as the
+selection through `set_selected_entry`, and login puppets the selection — it is
+the presence step, so no protocol shows a "now pick a character" screen.
+Player-facing state label ratified by Apostate (refined 2026-08-28):
+**Playing: Currently Offscreen** (see below).
 _Avoid_: active character (ambiguous with puppeting/session state); current
 character (same ambiguity); taken up (retired working label); Playing: Not In
 World (first-pass label, refined same session — "offscreen" is the established
@@ -226,3 +264,161 @@ Naming is deliberately unfinished — Apostate's to finalize; don't treat "the
 Hall" as a canon term to build further copy/UI around until ratified.
 _Avoid_: treating the name as final; "home page" (loses the in-fiction voice
 the rest of the frontend maintains).
+
+**Connection** (#3660):
+The tie a "pick a group" Upbringing prompt records: which real
+`societies.Organization` it names (its Anchor), what kind of tie it was
+(`ConnectionKind`, a tag: raised by, taught by, served, sailed with, owes,
+sworn to, hunted by), when it formed (`LifeStage`: childhood, youth, at the
+Glimpse, since the Glimpse), and the player's Stance toward it. Stored as a
+`character_creation.CharacterOriginSlot` row with `organization` set;
+evaluated everywhere through `questionnaire.py`, never re-derived per caller.
+_Avoid:_ tie, bond, mentor, patron, position, seat, station, role, standing,
+regard; "pool" for anything but the POOL anchor source below.
+
+**Anchor** (#3660):
+The Organization a Connection resolves to. Which groups a "pick a group"
+question offers comes from its authored source rule (`AnchorSource`): a pool
+of every active org matching a type/society filter, a named list, the same
+group an earlier group question resolved to, the house the character's
+family served, or the character's own family. The last two need no stored
+pick at all: `questionnaire.anchor_for` derives the Anchor fresh from the
+draft every time, so a family-path switch can never leave a stale one behind.
+_Avoid:_ tie, bond, mentor, patron, position, seat, station, role, standing,
+regard; "pool" for anything but the POOL source specifically.
+
+**Stance** (#3660):
+An answer (`OriginTemplateSlotChoice`) on a Connection's "pick a group"
+prompt: it may carry a price (against the resolved Anchor's own family
+influence, 0 when that group has no Family), grant a Distinction bundled at
+no extra cost, and seed the Anchor's opinion of the character
+(`reputation_seed`, applied through `bump_organization_reputation` at
+finalize). Distinct from a plain "pick one answer" Choice, which carries a
+price and grant but never a seed. _Avoid:_ tie, bond, mentor, patron,
+position, seat, station, role, standing, regard.
+
+**Follow-up** (#3660):
+An Upbringing prompt shown only once an earlier one is answered
+(`OriginTemplateSlot.follow_up_to`), optionally narrowed to specific answers
+on that earlier prompt (`shown_for_choices`; empty means any answer reveals
+it). A hidden prompt's stored answer is ignored everywhere: pricing,
+validation, and finalize persistence. _Avoid:_ branch as the field name (the
+field is `follow_up_to`); treating a follow-up with no `shown_for_choices` as
+unconditional in a different sense than "shown after any answer".
+
+**Question kind** (#3660):
+`OriginTemplateSlot.kind` (`QuestionKind`): TEXT (a write-in), PICK (a priced
+pick-list, both pre-#3660), GROUP (a Connection to an Anchor), or PERSON (a
+named figure, optionally scoped inside a GROUP question via
+`same_anchor_as`). _Avoid:_ tie, bond, mentor, patron, position, seat,
+station, role, standing, regard.
+
+**Offer** (#3675):
+One `character_creation.DistinctionOffer` row: says which chapter shows a
+distinction, what opens it there, and how it arrives. The only surface a CG
+picker reads or a player's pick validates against (`offer_id`) - there is no
+plain "add this distinction" path left in CG. Authored on the Distinction
+Builder, the tradition slate page, an Upbringing answer, or a Glimpse tag's own
+change form; any of the four may add one for the same distinction. _Avoid:_
+grant, unlock, requirement - an offer only says where a distinction is shown
+and priced, never that the player already holds it.
+
+**Opener** (#3675, #3709):
+The thing an offer line hangs off, which both gates it and groups it on the leaf: a
+chosen Glimpse tag (`glimpse_tag`), a picked Upbringing answer (`origin_choice`), a
+living tradition's schooling stance (`schooling_line`), the question it answers on the
+Actor's Sheet (`prompt`, `ActorSheetPrompt`), the enemy's picked reason (`enemy_reason`)
+or marking degree (`enemy_degree`, ruined or destroy) on the enemy chapter, or the
+section it sits in on Appearance (`appearance_section`). Every chapter's offers have
+one; `DistinctionOffer.chapter_opener_fields` names the kinds a chapter accepts (the enemy
+chapter accepts two), a row sets exactly one, and `opener_key` is the stable string
+(`prompt:fear`, `reason:<id>`, `degree:ruined`, `section:<id>`) the leaf groups by.
+_Avoid_: trigger, gate, tag (the Glimpse's tag is one kind of opener, not the word for all)
+
+**Enemy reason** (#3709):
+One row of the shared, authored list of why a person or group wants the character to
+fail (`character_creation.EnemyReason`: `name`, `player_line`, `fits` person/group/
+either). Picked on the Actor's Sheet before the character's own words; pinned per
+Beginning enemy offer (`BeginningEnemyOffer.reason`); carried on `CharacterEnemy.reason`;
+the enemy chapter's opener. Never seeded, always authored.
+_Avoid_: motive, grudge, why (the free-text box is "in your own words", not the reason)
+
+**Appearance section** (#3709):
+An authored heading the Appearance chapter groups its offers under
+(`character_creation.AppearanceSection`: `name`, `player_line`, `sort_order`); the
+Appearance chapter's opener. Three or four rows for the whole game.
+_Avoid_: category (the catalogue's own `DistinctionCategory` is a different axis), group
+
+**First look** (#3709):
+The few offer lines a block shows at rest. A Beginning pins a line into its first look
+(`DistinctionOffer.first_look`, M2M through `OfferFirstLook`); a Beginning that pinned
+nothing sees the first three by `sort_order`. The rest fold under "See N more"
+(`ChapterOffers`); a block under five lines never folds.
+_Avoid_: featured, recommended, suggested (the game never speaks for the player)
+
+**Held** (#3709):
+An offer line whose distinction the draft already has from a different line
+(`VisibleOffer.held`); the leaf prints it pressed with the held word and no toggle,
+never offers it twice. Distinct from a locked line (mutual exclusion).
+_Avoid_: taken, owned, duplicate
+
+**Awards** (#3709):
+The price word for a negative cost, "Awards N": what the world owes the character for
+carrying the trait, printed green; a cost prints in the realm ink. Every offer line,
+tradition entry, Upbringing card and rail line uses it.
+_Avoid_: refunds, reimburses, rebate
+
+**Add from a table** (#3709):
+The Distinction Builder's additions-only bulk entry (`web/admin/distinction_builder/
+paste.py`): pasted rows resolved against existing rows, previewed (create / skip / error),
+created in one transaction behind a digest-guarded confirm. Never updates, deletes or
+creates a referenced row.
+_Avoid_: import, load, bulk edit (there is no edit mode)
+
+**Arrives as** (#3675):
+`DistinctionOffer.arrives_as` (`OfferArrival`): CHOICE (a priced pick a player
+must make explicitly), BUNDLED (free the moment its opener is satisfied,
+alongside the opener - a group answer's own distinction), or CARRIED (free the
+moment a tradition-state pick is made - a tradition-step drawback with no
+`DistinctionOffer` row of its own, keyed by the synthetic
+`"state:<TraditionState value>"` source). _Avoid:_ auto-add, auto-grant - both
+BUNDLED and CARRIED still go through `reconcile_offer_picks`, never a bespoke
+grant path.
+
+**Chapter** (#3675):
+`DistinctionOffer.chapter` (`OfferChapter`): which CG section shows the offer -
+the Gift tradition step, the Glimpse, a Lineage answer, Appearance, or the
+Actor's Sheet. Not a CG stage: several offer chapters can live inside one CG
+stage (Gift holds both the tradition step and the Glimpse), and a stage may
+hold no offers at all.
+
+**Tradition state** (#3675):
+`BeginningTradition.state` (`TraditionState`): SELF_TAUGHT, TEACHERS_GONE, or
+LIVING_MASTERS - which standard line a Beginning's tradition-step entry prints
+and which drawback, if any, picking it carries into the draft
+(`world.character_creation.offers.tradition_is_self_taught`/`slate_state`,
+never a name match against a tradition's own name). Replaces the pre-#3675
+`required_distinction` FK.
+
+**Standard lines** (#3675):
+The shared, staff-authored wording every Beginning's tradition-step entries
+draw from, so no CG line is ever written per-Beginning by accident:
+`TraditionStateLine` (one row per Tradition state, its `entry_line` and the
+drawback it `carries`) and `SchoolingLine` (the shared schooling set under a
+living tradition). A Beginning may override a state line's words with its own
+`own_wording`, never its own price - the price always reads through to the
+carried/granted `Distinction`.
+
+**Schooling line** (#3675):
+One `SchoolingLine` row (rank 0-2): the standard stance a player picks under a
+LIVING_MASTERS tradition, what it grants at that rank, and the derived price
+(`grants.cost_per_rank * rank`). Shared by every Beginning; a schooling line's
+own `DistinctionOffer` (chapter TRADITION_STEP) is kept in sync with it by the
+tradition slate page's save, never authored separately.
+
+**Closed by route** (#3675):
+An Upbringing's `closed_distinctions` M2M (with its own `closed_reason` line):
+distinctions this route never offers, in any chapter, regardless of whether
+some other opener would otherwise satisfy it. Read by
+`world.character_creation.offers.closed_for` for every chapter alike; a route
+closes by field on `OriginTemplate`, never by matching a distinction's name.

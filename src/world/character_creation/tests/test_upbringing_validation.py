@@ -3,7 +3,7 @@
 from django.test import TestCase
 from rest_framework import serializers
 
-from world.character_creation.constants import FamilyPath, Stage
+from world.character_creation.constants import FamilyPath, QuestionKind, Stage
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
@@ -47,12 +47,14 @@ class LineagePathValidationTest(TestCase):
     def test_named_path_needs_a_name(self):
         draft = _draft_for(OriginTemplateFactory())  # name-only path
         assert get_lineage_errors(draft) == ["Name your family"]
-        draft.draft_data["new_family_name"] = "The Cisternwrights"
+        # A single capitalized word - the default Family Template's name_pattern
+        # (#3648) fullmatches ``[A-Z][a-z]{2,19}``.
+        draft.draft_data["new_family_name"] = "Cisternwrights"
         assert get_lineage_errors(draft) == []
 
     def test_named_path_rejects_a_taken_name(self):
-        FamilyFactory(name="The Millers")
-        draft = _draft_for(OriginTemplateFactory(), draft_data={"new_family_name": "the millers"})
+        FamilyFactory(name="millers")
+        draft = _draft_for(OriginTemplateFactory(), draft_data={"new_family_name": "Millers"})
         assert get_lineage_errors(draft) == ["A family by that name already exists"]
 
     def test_none_path_needs_a_tarot_card(self):
@@ -64,9 +66,7 @@ class LineagePathValidationTest(TestCase):
     def test_claim_path_checks_kind_and_realm(self):
         crime = FamilyKindFactory(name=CRIME_KIND_NAME)
         noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
-        template = OriginTemplateFactory(
-            allows_name_family=False, named_family_kind=None, allows_claim_family=True
-        )
+        template = OriginTemplateFactory(allows_name_family=False, allows_claim_family=True)
         template.claimable_kinds.add(crime)
         realm = template.beginning.starting_area.realm
         draft = _draft_for(template)
@@ -81,16 +81,14 @@ class LineagePathValidationTest(TestCase):
 
     def test_claim_path_rejects_a_non_playable_family(self):
         crime = FamilyKindFactory(name=CRIME_KIND_NAME)
-        template = OriginTemplateFactory(
-            allows_name_family=False, named_family_kind=None, allows_claim_family=True
-        )
+        template = OriginTemplateFactory(allows_name_family=False, allows_claim_family=True)
         realm = template.beginning.starting_area.realm
         draft = _draft_for(template)
         draft.family = FamilyFactory(kind=crime, origin_realm=realm, is_playable=False)
         assert get_lineage_errors(draft) == ["That family is not open to this upbringing"]
 
-    def test_trust_gated_upbringing_is_rejected(self):
-        template = OriginTemplateFactory(trust_required=5)
+    def test_inactive_upbringing_is_rejected(self):
+        template = OriginTemplateFactory(is_active=False)
         draft = _draft_for(template, draft_data={"new_family_name": "Vale"})
         assert "That upbringing is not available to you" in get_lineage_errors(draft)
 
@@ -127,7 +125,9 @@ class PromptValidationTest(TestCase):
 
     def test_pick_list_accepts_a_choice_and_rejects_a_foreign_one(self):
         template = OriginTemplateFactory()
-        slot = OriginTemplateSlotFactory(template=template, name="Role", allows_text=False)
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Role", kind=QuestionKind.PICK, allows_text=False
+        )
         mine = OriginTemplateSlotChoiceFactory(slot=slot)
         foreign = OriginTemplateSlotChoiceFactory()
         draft = _draft_for(template, draft_data={"new_family_name": "Vale"})
@@ -138,7 +138,9 @@ class PromptValidationTest(TestCase):
 
     def test_pick_list_without_text_rejects_a_text_only_answer(self):
         template = OriginTemplateFactory()
-        slot = OriginTemplateSlotFactory(template=template, name="Role", allows_text=False)
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Role", kind=QuestionKind.PICK, allows_text=False
+        )
         OriginTemplateSlotChoiceFactory(slot=slot)
         draft = _draft_for(template, draft_data={"new_family_name": "Vale"})
         draft.draft_data["origin_slots"] = {str(slot.id): "Something else"}
@@ -151,9 +153,7 @@ class UpbringingPricingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.crime = FamilyKindFactory(name=CRIME_KIND_NAME)
-        cls.template = OriginTemplateFactory(
-            allows_name_family=False, named_family_kind=None, allows_claim_family=True
-        )
+        cls.template = OriginTemplateFactory(allows_name_family=False, allows_claim_family=True)
         cls.slot = OriginTemplateSlotFactory(template=cls.template, name="Role", allows_text=False)
         cls.head = OriginTemplateSlotChoiceFactory(slot=cls.slot, cost_per_influence=3)
         cls.lieutenant = OriginTemplateSlotChoiceFactory(slot=cls.slot, cost_per_influence=1)

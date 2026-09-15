@@ -1,5 +1,6 @@
 from datetime import timedelta
 from unittest.mock import patch
+import uuid
 
 from django.urls import reverse
 from django.utils import timezone
@@ -11,10 +12,12 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory, Objec
 from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
+    CharacterResonanceFactory,
     PoseEndorsementFactory,
     ResonanceFactory,
     SceneEntryEndorsementFactory,
 )
+from world.magic.services.gain import create_pose_endorsement
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import (
     InteractionMode,
@@ -24,6 +27,7 @@ from world.scenes.constants import (
 )
 from world.scenes.factories import (
     InteractionFactory,
+    InteractionReactionFactory,
     InteractionReceiverFactory,
     PlaceFactory,
     SceneFactory,
@@ -33,8 +37,14 @@ from world.scenes.models import (
     InteractionAction,
     InteractionFavorite,
     InteractionTargetPersona,
+    InteractionThread,
     SceneParticipation,
 )
+from world.scenes.reaction_toggle_services import (
+    toggle_interaction_favorite,
+    toggle_interaction_reaction,
+)
+from world.scenes.thread_services import thread_anchor_id
 
 
 class InteractionViewSetTestCase(APITestCase):
@@ -408,7 +418,11 @@ class PoseSubmitViewTests(APITestCase):
 
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
 
@@ -429,6 +443,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "A pose with explicit link.",
                 "action_link_ids": [action_a.pk],
@@ -449,6 +464,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "A pose that opts out of linking.",
                 "action_link_ids": [],
@@ -470,6 +486,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "A pose.",
                 "action_link_ids": [pose_interaction.pk],
@@ -483,7 +500,11 @@ class PoseSubmitViewTests(APITestCase):
         """action_link_ids referencing another persona's actions is rejected 400."""
         response = self.client.post(
             self.url,
-            {"persona_id": self.other_persona.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.other_persona.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -503,7 +524,11 @@ class PoseSubmitViewTests(APITestCase):
 
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A pose while masked."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A pose while masked.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -514,7 +539,11 @@ class PoseSubmitViewTests(APITestCase):
         """With no active face set, authorship stays the primary persona."""
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A bare-faced pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A bare-faced pose.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -527,6 +556,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A posed action in a scene.",
@@ -546,6 +576,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A pose from the wrong room.",
@@ -561,6 +592,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A pose from the right room.",
@@ -575,6 +607,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A pose in a scene-less location.",
@@ -593,6 +626,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "sweeps into the hall, cloak billowing.",
@@ -606,14 +640,68 @@ class PoseSubmitViewTests(APITestCase):
         window = ReactionWindow.objects.get(interaction=interaction)
         assert window.kind == ReactionWindowKind.ENTRANCE
         assert window.is_open
+        # #3816 Task 5: _seed_fresh_pose_caches `del`s (rather than stamps `[]`)
+        # cached_reaction_windows for exactly this reason -- the window opened
+        # above by `_on_created` must still show up in THIS response's reactable
+        # strip, not just in the database.
+        assert response.data["reaction_windows"], (
+            "ENTRY pose response must carry its reactable strip"
+        )
 
-    def test_submit_standard_pose_opens_no_window(self) -> None:
+    def test_the_first_standard_pose_is_the_entrance(self) -> None:
+        """The server owns ENTRY (#3867): a first line is one whatever the client sent."""
+        from world.scenes.constants import PoseKind, ReactionWindowKind
+        from world.scenes.models import Interaction
         from world.scenes.reaction_models import ReactionWindow
 
         scene = SceneFactory()
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "steps in from the rain.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        interaction = Interaction.objects.get(pk=response.data["id"])
+        assert interaction.pose_kind == PoseKind.ENTRY
+        assert (
+            ReactionWindow.objects.get(interaction=interaction).kind == ReactionWindowKind.ENTRANCE
+        )
+        assert response.data["reaction_windows"]
+
+    def test_a_second_entrance_is_refused(self) -> None:
+        from world.scenes.constants import PoseKind
+
+        scene = SceneFactory()
+        InteractionFactory(persona=self.persona, scene=scene, content="is here.")
+        response = self.client.post(
+            self.url,
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "sweeps in again.",
+                "pose_kind": PoseKind.ENTRY.value,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "You have already made your entrance in this scene."
+
+    def test_submit_standard_pose_opens_no_window(self) -> None:
+        from world.scenes.reaction_models import ReactionWindow
+
+        scene = SceneFactory()
+        # Already in the scene (#3867): only the first line is an entrance.
+        InteractionFactory(persona=self.persona, scene=scene, content="is here.")
+        response = self.client.post(
+            self.url,
+            {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "nods along.",
@@ -622,13 +710,20 @@ class PoseSubmitViewTests(APITestCase):
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert not ReactionWindow.objects.filter(interaction_id=response.data["id"]).exists()
+        # Negative twin of test_submit_entry_pose_opens_reaction_window's assertion
+        # above -- pins the branch distinction itself, not just the positive case.
+        assert response.data["reaction_windows"] == []
 
     def test_unauthenticated_request_is_rejected(self) -> None:
         """Unauthenticated requests are rejected with 401 or 403."""
         self.client.force_authenticate(user=None)
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
         assert response.status_code in {
@@ -647,7 +742,11 @@ class PoseSubmitViewTests(APITestCase):
         """
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A fully serialized pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A fully serialized pose.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -672,7 +771,12 @@ class PoseSubmitViewTests(APITestCase):
         scene = SceneFactory()
         resp = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "scene_id": scene.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
         assert resp.status_code == 201
@@ -685,7 +789,9 @@ class PoseSubmitViewTests(APITestCase):
     @patch("world.scenes.interaction_services._broadcast_to_location")
     def test_submit_pose_no_broadcast_on_validation_error(self, mock_broadcast) -> None:
         resp = self.client.post(
-            self.url, {"persona_id": self.persona.pk, "content": ""}, format="json"
+            self.url,
+            {"client_request_id": str(uuid.uuid4()), "persona_id": self.persona.pk, "content": ""},
+            format="json",
         )
         assert resp.status_code == 400
         mock_broadcast.assert_not_called()
@@ -693,7 +799,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_blank_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "   "},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "   ",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -702,7 +812,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_oversized_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "a" * 10_001},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "a" * 10_001,
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -711,7 +825,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_null_bytes_in_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "hello\x00world"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "hello\x00world",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -720,7 +838,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_javascript_link_in_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "[click](javascript:void(0))"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "[click](javascript:void(0))",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -729,7 +851,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_accepts_markdown_link_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "[my site](https://example.com)"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "[my site](https://example.com)",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -737,7 +863,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_accepts_mention_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "@Alice waves hello"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "@Alice waves hello",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -751,13 +881,43 @@ class PoseSubmitViewTests(APITestCase):
         """
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "waves at the room."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "waves at the room.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert mock_message_location.call_count == 1
         _caller_state, text = mock_message_location.call_args.args
         assert text == "waves at the room."
+
+    @patch("world.scenes.interaction_views.message_location")
+    def test_submit_pose_retry_broadcasts_via_message_location_only_once(
+        self, mock_message_location
+    ) -> None:
+        """A retry of a normal (persisted) pose must not double-broadcast (#3760).
+
+        The primary-case sibling of test_submit_pose_retry_in_ephemeral_scene_
+        replays_not_conflicts: the telnet broadcast is gated on `not
+        result.replayed`, so a same-payload retry must not repeat it even though
+        the Interaction itself is correctly deduped to one row.
+        """
+        payload = {
+            "client_request_id": str(uuid.uuid4()),
+            "persona_id": self.persona.pk,
+            "content": "waves at the room.",
+        }
+
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+        assert mock_message_location.call_count == 1
 
     def test_submit_pose_creates_scene_participation_for_latecomer(self) -> None:
         """A web pose into a scene the poser has no SceneParticipation row in yet
@@ -770,7 +930,12 @@ class PoseSubmitViewTests(APITestCase):
 
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "scene_id": scene.pk, "content": "arrives late."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "arrives late.",
+            },
             format="json",
         )
 
@@ -785,6 +950,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "a pose that must not be written to the log.",
@@ -793,9 +959,40 @@ class PoseSubmitViewTests(APITestCase):
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data == {"ephemeral": True}
+        assert response.data == {"ephemeral": True, "replayed": False}
         assert not Interaction.objects.filter(scene=scene).exists()
         assert mock_broadcast.call_count == 1
+
+    @patch("world.scenes.interaction_views.message_location")
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_submit_pose_retry_in_ephemeral_scene_replays_not_conflicts(
+        self, mock_broadcast, mock_message_location
+    ) -> None:
+        """A retried request id against an ephemeral scene is a clean replay (#3760).
+
+        `idempotent_record_interaction` has nothing stored to compare against for
+        an ephemeral acceptance (`record_interaction` returns None, nothing is
+        persisted) - it must treat the retry as `replayed=True`, never a conflict,
+        and the telnet/WS broadcasts must not repeat on the retry.
+        """
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
+        payload = {
+            "client_request_id": str(uuid.uuid4()),
+            "persona_id": self.persona.pk,
+            "scene_id": scene.pk,
+            "content": "a pose that must not be written to the log.",
+        }
+
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert first.data == {"ephemeral": True, "replayed": False}
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data == {"ephemeral": True, "replayed": True}
+        assert not Interaction.objects.filter(scene=scene).exists()
+        assert mock_broadcast.call_count == 1
+        assert mock_message_location.call_count == 1
 
     def test_submit_pose_with_target_names_creates_target_rows(self) -> None:
         """target_names resolves co-located characters into InteractionTargetPersona
@@ -809,6 +1006,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "waves.",
                 "target_names": ["Bob"],
@@ -833,6 +1031,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "confronts.",
                 "target_names": ["Carol"],
@@ -852,6 +1051,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "waves at nobody.",
                 "target_names": ["Nobody"],
@@ -861,6 +1061,218 @@ class PoseSubmitViewTests(APITestCase):
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["target_persona_ids"] == []
+
+    def test_submit_pose_reply_creates_and_returns_thread(self) -> None:
+        scene = SceneFactory(participants=[self.account])
+        target = InteractionFactory(
+            persona=self.persona,
+            writer_account=self.account,
+            scene=scene,
+            content="A root pose.",
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A reply pose.",
+                "reply_to": {
+                    "id": target.pk,
+                    "timestamp": target.timestamp.isoformat(),
+                },
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        # Both rows are members; the target is first, so it is the anchor (#3787).
+        target.refresh_from_db()
+        thread = InteractionThread.objects.get(pk=response.data["thread_id"])
+        assert target.thread_id == thread.pk
+        assert thread_anchor_id(thread.pk) == target.pk
+        assert response.data["reply_to"] == {
+            "id": str(target.pk),
+            "timestamp": target.timestamp.isoformat(),
+        }
+
+    def test_submit_pose_with_same_request_id_and_content_is_idempotent(self) -> None:
+        """A retried submission with the same id/content replays, never duplicates (#3760)."""
+        payload = {
+            "persona_id": self.persona.pk,
+            "content": "Silas nods.",
+            "client_request_id": "33333333-3333-3333-3333-333333333333",
+        }
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert first.data["replayed"] is False
+        assert second.data["replayed"] is True
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_different_content_is_a_conflict(self) -> None:
+        """Reusing a request id for genuinely different content is a 409, not a replay (#3760)."""
+        base = {
+            "persona_id": self.persona.pk,
+            "client_request_id": "44444444-4444-4444-4444-444444444444",
+        }
+        self.client.post(self.url, {**base, "content": "Silas nods."}, format="json")
+        response = self.client.post(self.url, {**base, "content": "Silas waves."}, format="json")
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_different_target_is_a_conflict(self) -> None:
+        """Finding 3 (#3760 final review): a content-only idempotency comparison
+        silently misclassified "same text, different target" as a legitimate
+        replay -- nothing (re-)delivered to the new intended audience, caller
+        told it succeeded. Mirrors the fix already applied to
+        PoseAction/WhisperAction (commit 64d7ce3e1,
+        actions/tests/test_actions.py) for this REST sibling.
+        """
+        target_character = CharacterFactory(db_key="Dana", location=self.room)
+        CharacterSheetFactory(character=target_character)
+        base = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "55555555-5555-5555-5555-555555555555",
+        }
+        first = self.client.post(self.url, base, format="json")
+        second = self.client.post(self.url, {**base, "target_names": ["Dana"]}, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_same_target_twice_is_still_a_replay(self) -> None:
+        """The "same" direction of Finding 3's fix: reusing a client_request_id
+        against the SAME target twice must remain a clean replay -- the new
+        target-identity comparison must not false-positive on a match."""
+        target_character = CharacterFactory(db_key="Elin", location=self.room)
+        CharacterSheetFactory(character=target_character)
+        payload = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "66666666-6666-6666-6666-666666666666",
+            "target_names": ["Elin"],
+        }
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert second.data["replayed"] is True
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_different_scene_is_a_conflict(self) -> None:
+        """Finding 3 (#3760 final review): scene identity is also part of the
+        comparison -- reusing a client_request_id against a DIFFERENT scene
+        with the same text must be a conflict, not a silent replay.
+
+        Both requests pass `scene_id` explicitly (rather than relying on one
+        of them auto-resolving the room's active scene via
+        `record_interaction`'s `get_active_scene` fallback) so the two really
+        do target two distinct Scene rows.
+        """
+        scene_a = SceneFactory(location=self.room)
+        scene_b = SceneFactory(location=self.room)
+        base = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "77777777-7777-7777-7777-777777777777",
+        }
+        first = self.client.post(self.url, {**base, "scene_id": scene_a.pk}, format="json")
+        second = self.client.post(self.url, {**base, "scene_id": scene_b.pk}, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_replay_preserves_data_accumulated_since_the_original_submission(self) -> None:
+        """A REPLAYED resubmit must not wipe cached_* data seen since the original (#3816).
+
+        Reproduces the exact "permanent lie" bug ``_seed_fresh_pose_caches`` guards
+        against: unconditionally stamping ``[]`` on a REPLAYED interaction would
+        silently zero every ``cached_*`` list for every later read of this
+        identity-mapped instance in this worker process, even though the DB still
+        holds the real rows -- `PrunedCachedProperty` treats an assigned value
+        (``[]`` included) as already fetched, forever.
+
+        Covers all five lists ``_seed_fresh_pose_caches`` branches on
+        replayed/non-replayed: ``cached_receivers``, ``cached_favorites``,
+        ``cached_reactions``, ``cached_action_links`` (Task 2), and
+        ``cached_endorsements`` (this task, #3816 Task 4).
+        """
+        scene = SceneFactory(location=self.room, participants=[self.account, self.other_account])
+        payload = {
+            "persona_id": self.persona.pk,
+            "scene_id": scene.pk,
+            "content": "Silas studies the map.",
+            "client_request_id": "88888888-8888-8888-8888-888888888888",
+        }
+
+        first = self.client.post(self.url, payload, format="json")
+        assert first.status_code == status.HTTP_201_CREATED, first.data
+        pose_id = first.data["id"]
+        interaction = Interaction.objects.get(pk=pose_id)
+
+        # --- Accumulate real data on the pose via each sibling's real write
+        # path, as if from other requests made between the original submission
+        # and the retry below.
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=self.identity, resonance=resonance)
+        create_pose_endorsement(self.other_identity, interaction, resonance)
+        toggle_interaction_favorite(interaction=interaction, roster_entry=self.roster_entry)
+        toggle_interaction_reaction(interaction=interaction, account=self.other_account, emoji="👍")
+        InteractionReceiverFactory(interaction=interaction, persona=self.other_persona)
+        action = self._make_action(offset_seconds=1)
+        InteractionAction.objects.create(pose=interaction, action_interaction=action, ordering=0)
+
+        # A GET warms every cached_* attribute on this SAME identity-mapped
+        # instance with real, current DB data via the view's own Prefetch
+        # pipeline -- mirroring another request having already read this pose
+        # before the retry below arrives.
+        list_url = reverse("interaction-list")
+        warmed = self.client.get(list_url, {"scene": scene.pk})
+        assert warmed.status_code == status.HTTP_200_OK
+        warmed_row = next(r for r in warmed.data["results"] if r["id"] == pose_id)
+        assert len(warmed_row["pose_endorsers"]) == 1
+        assert warmed_row["is_favorited"] is True
+        assert warmed_row["reactions"] == [{"emoji": "👍", "count": 1, "reacted": False}]
+        assert warmed_row["receiver_persona_ids"] == [self.other_persona.pk]
+        assert len(warmed_row["action_links"]) == 1
+
+        # --- Resubmit the IDENTICAL payload: hits the replay path.
+        second = self.client.post(self.url, payload, format="json")
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data["replayed"] is True
+        assert second.data["id"] == pose_id
+
+        # The immediate replay response must still show every accumulated row --
+        # a buggy unconditional `= []` stamp would zero all five right here.
+        assert len(second.data["pose_endorsers"]) == 1
+        assert second.data["pose_endorsers"][0]["resonance_id"] == resonance.pk
+        assert second.data["is_favorited"] is True
+        assert second.data["reactions"] == [{"emoji": "👍", "count": 1, "reacted": False}]
+        assert second.data["receiver_persona_ids"] == [self.other_persona.pk]
+        assert len(second.data["action_links"]) == 1
+
+        # The "permanent lie" half: a FOLLOWING read of this identity-mapped
+        # instance must still see the real data too, not a value the seed step
+        # permanently stamped to zero for this worker process.
+        following = self.client.get(list_url, {"scene": scene.pk})
+        assert following.status_code == status.HTTP_200_OK
+        following_row = next(r for r in following.data["results"] if r["id"] == pose_id)
+        assert len(following_row["pose_endorsers"]) == 1
+        assert following_row["is_favorited"] is True
+        assert following_row["reactions"] == [{"emoji": "👍", "count": 1, "reacted": False}]
+        assert following_row["receiver_persona_ids"] == [self.other_persona.pk]
+        assert len(following_row["action_links"]) == 1
 
 
 class ActionLinksSerializerTests(APITestCase):
@@ -1130,21 +1542,22 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(51):  # 47 + #1278 block/mute-gate loads + #2183 (below)
-            # #2183 adds exactly 2 flat (not per-row) queries: the
-            # dramatic_moment_suggestions Prefetch itself, and the one
-            # SceneParticipation.exists() query that resolves viewer_can_gm for
-            # the ?scene= filter (see InteractionViewSet.get_serializer_context).
-            # Both are bounded by "one query per request", never by row count.
-            # #3597 dropped this from 53 to 51: get_account_roster_entries and
-            # get_account_personas now read Account.cached_roster_entries /
-            # cached_persona_ids (cached_property on the Account instance) instead
-            # of running their own PlayerData lookup and a fresh Persona query per
-            # call. get_queryset() and get_serializer_context() each call both
-            # helpers, so the old request-scoped memo still paid for one roster
-            # query plus one persona query per call; the process-lifetime Account
-            # cache pays for one of each, total, no matter how many call sites hit
-            # it in this request.
+        with self.assertNumQueries(27):  # dropped from 52 by #3816 (see below)
+            # #3816 dropped this from 52 to 27: Interaction.cached_receivers /
+            # cached_target_personas / cached_favorites / cached_reactions /
+            # cached_action_links were plain @property/@x.setter pairs backed by
+            # a mangled ``_cached_x`` attribute. Django's Prefetch(to_attr=)
+            # freshness check is `X in instance.__dict__` for a genuine
+            # cached_property target, but falls back to `hasattr(instance, X)`
+            # for anything else — and the old property never raised
+            # AttributeError, so hasattr was always True and the batched
+            # Prefetch queries never actually ran; each cold instance instead
+            # fell through to a live per-row query for each of the 5 relations.
+            # Converting the 5 properties to PrunedCachedProperty (a real
+            # cached_property subclass) let the batched Prefetch queries engage
+            # correctly for the first time, replacing 5 × N per-row queries
+            # with 5 flat ones — the query count no longer scales with the
+            # number of interactions on the page.
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -1224,17 +1637,172 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(51):  # 47 + #1278 block/mute-gate loads + #2183 (below)
-            # #2183 adds exactly 2 flat (not per-row) queries: the
-            # dramatic_moment_suggestions Prefetch itself, and the one
-            # SceneParticipation.exists() query that resolves viewer_can_gm for
-            # the ?scene= filter (see InteractionViewSet.get_serializer_context).
-            # Both are bounded by "one query per request", never by row count.
-            # #3597 dropped this from 53 to 51 (see the sibling test above for the
-            # full explanation): Account.cached_roster_entries / cached_persona_ids
-            # replace the old request-scoped memo, so get_queryset() and
-            # get_serializer_context() share one roster query and one persona
-            # query for the whole request instead of paying for each call site.
+        with self.assertNumQueries(27):  # dropped from 52 by #3816 — see the sibling test above
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset
+
+    def test_query_budget_does_not_scale_with_action_link_count(self) -> None:
+        """Regression guard, not a fix.
+
+        #3816 Task 12's own investigation found the nested action-interaction
+        N+1 the issue's original profiling flagged ("doubled Persona queries
+        from the nested action-interaction fetch") was already resolved before
+        this whole SDD plan began: `db6cc0a4f8` (2026-05-24) gave
+        `cached_action_links`'s own Prefetch `select_related("action_interaction")`,
+        so the FK itself is one query for the whole page, not one per row. A
+        repo-wide grep additionally found no production code anywhere reads
+        `action_interaction.persona` -- `InlineActionInteractionSerializer`
+        only ever reads plain scalars (id/content/mode/timestamp) off the
+        already-fetched row. So GET /api/interactions/?scene=<id> was already
+        query-flat as action-link count grows; this test pins that
+        ALREADY-correct behavior at the existing 27-query budget instead of
+        adding a batch fetch for a relation nothing reads (a batch-fetch
+        commit was reverted in favor of this test).
+
+        Each linked ACTION interaction lives in its OWN scene, never
+        `dense_scene`, so it never surfaces as a top-level row of this page in
+        its own right -- otherwise the idmapper identity map would silently warm
+        it via the page's own top-level `select_related`, passing this test
+        for the wrong reason.
+        """
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        dense_scene = SceneFactory()
+        for _ in range(3):
+            action = InteractionFactory(scene=SceneFactory(), mode=InteractionMode.ACTION)
+            pose = InteractionFactory(scene=dense_scene, mode=InteractionMode.POSE)
+            InteractionAction.objects.create(pose=pose, action_interaction=action, ordering=0)
+
+        # Flush again: the fixtures above (`action`, the `InteractionAction`
+        # rows) are still resident with their relations set directly in Python
+        # from construction, which would make a later re-fetch of the SAME pk
+        # return those already-warm instances regardless of query shape
+        # (SharedMemoryModel's identity map).
+        idmapper_models.flush_cache()
+
+        url = reverse("interaction-list")
+        with self.assertNumQueries(27):  # unchanged from the sibling tests above
+            response = self.client.get(url, {"scene": dense_scene.pk})
+        assert response.status_code == 200
+        results = response.data["results"]
+        assert len(results) == 3
+        for row in results:
+            assert len(row["action_links"]) == 1
+            link = row["action_links"][0]
+            assert link["action_interaction"]["mode"] == "action"
+
+    def test_query_budget_second_request_against_same_page_is_cheaper(self) -> None:
+        """Proves Django's own prefetch machinery skips already-warm instances --
+        the whole point of fixing Defect A via `PrunedCachedProperty` instead of a
+        page-scoped cache that would requery every time. See the sibling test in
+        `PlayPosesQueryBudgetTests` (`test_play_views.py`) for the full mechanism
+        explanation; this pins the same behavior for `GET /api/interactions/`.
+
+        7 is the measured floor here (vs. that endpoint's 8): (1) session, (2)
+        `Block` list, (3) the outer paginated `Interaction` select, (4) the
+        `SceneEntryEndorsement` batch for this scene's ENTRY poses, (5) the
+        GM/owner-participation check that gates PENDING dramatic-moment
+        suggestions, (6) the read-receipt batch, (7) the mute-list batch. None of the 5
+        `cached_*` satellite-relation Prefetch queries this plan converted to
+        `PrunedCachedProperty` ran a second time -- verified directly against
+        the captured query log.
+
+        The 7-vs-8 delta is NOT explained by "this endpoint is missing 3
+        batches" -- and neither of the two sides of it is really a fixed
+        endpoint difference; both are shared code that happens to no-op for a
+        different reason on each side.
+
+        `_thread_roots`, `_thread_anchors`, and `_visible_parents` are methods
+        on the ONE `InteractionListSerializer` both endpoints use, not
+        per-endpoint logic, and they cost 0 queries here only because THIS
+        fixture has no threaded replies -- `thread_anchor_ids`/`thread_roots`
+        both short-circuit on an empty thread-id set, and `_visible_parents`
+        guards on `if parent_ids`. Add one threaded reply to this fixture and
+        `/api/interactions/?scene=` would pay for all 3 of those batches too:
+        pure fixture-shape coincidence, not an endpoint capability gap.
+
+        Both the `SceneEntryEndorsement` batch and the GM/owner check are
+        populated by the same `if scene_id:` block in the shared
+        `InteractionViewSet.get_serializer_context`
+        (`interaction_views.py:236-270`) -- so `/api/interactions/?scene=`
+        pays both on EVERY request, cold and warm (items (4) and (5) above),
+        and `/api/play/poses/?conversation=scene:<id>` pays neither. They
+        differ only in what happens when that context is empty: `_entry_rows`
+        finds an empty dict and the field renders empty, while
+        `_viewer_can_gm_scene` (`interaction_serializers.py:813`) falls
+        through to `scene.is_gm()`/`is_owner()` -- one `SceneParticipation`
+        query on play's cold request, zero warm, since those read
+        `participations_cached`, a `@cached_property` on the same
+        idmapper-resident `Scene` the first request already warmed. Neither
+        half is endpoint-structural; both track the query-param spelling.
+        `/api/play/poses/?scene=<id>` is a real production call shape
+        (`InteractionFilter.scene`, `interaction_filters.py:24`;
+        `frontend/src/game/playQueries.ts:52`, `GamePage.tsx:621`), and
+        issuing it would make play pay both batches on every request, exactly
+        like this endpoint.
+
+        For the same reason, don't read anything structural into the two
+        endpoints' matching COLD budgets (27 and 27, pinned here and in
+        `PlayPosesQueryBudgetTests`) -- that match is a coincidence of two
+        genuinely different pages (3 interactions / 2+2 endorsements here vs.
+        6 interactions / 0 endorsements there) landing on the same total by
+        chance, not evidence the two endpoints share a query floor or the
+        same batch composition. The warm counts (7 and 8) already prove they
+        don't, and for two different reasons: swap in a fixture with threaded
+        replies and this endpoint's warm floor climbs PAST
+        `/api/play/poses/`'s -- 7 (this endpoint's own 2 scene-gated batches,
+        unaffected) + 3 (the reply-chip batches, fixture-shape) = 10, not an
+        approach toward 8. Separately, calling `/api/play/poses/?scene=<id>`
+        instead of `?conversation=scene:<id>` would add both scene-gated
+        batches to play's warm floor as well -- request-shape, not a
+        structural property of either endpoint.
+        """
+        url = reverse("interaction-list")
+        first = self.client.get(url, {"scene": self.scene.pk})
+        assert first.status_code == 200
+        with self.assertNumQueries(7):
+            second = self.client.get(url, {"scene": self.scene.pk})
+        assert second.status_code == 200
+        assert len(second.data["results"]) == 3
+
+    def test_reaction_added_after_first_load_is_visible_on_next_request(self) -> None:
+        """This is the test that would have caught Defect B before #3816.
+
+        Defect B: the old `Interaction.cached_reactions` fallback getter never
+        raised `AttributeError`, so once an instance was resident in the
+        idmapper identity map with a (possibly empty) reaction list already
+        computed, a write made through a DIFFERENT request/process was
+        invisible to any later read of that same warm instance -- the batch
+        never re-ran. `PrunedCachedProperty` alone doesn't fix this; it's the
+        write-site `related_cache_fields` invalidation (wired in prior tasks)
+        that clears the cached attribute off the idmapper-resident instance so
+        the next request's Prefetch actually re-fetches it.
+
+        Deliberately re-fetches ``entry_pose`` through the ORM (rather than
+        reusing ``self.entry_pose``, the ``setUpTestData`` class attribute)
+        before attaching the reaction: ``setUpTestData``'s Python object is a
+        stale reference that predates this test method's own idmapper
+        identity map (cleared fresh in ``setUp``), so assigning it directly
+        as the reaction's FK would invalidate a python instance that is NOT
+        the one the first request actually warmed and the second request
+        would re-fetch -- exercising a test-fixture identity-map footgun
+        (see the `sharedmemory-model` skill), not the production write path.
+        A real write site fetches the row it mutates fresh, same as this does.
+        """
+        url = reverse("interaction-list")
+        first = self.client.get(url, {"scene": self.scene.pk})
+        assert first.status_code == 200
+
+        other_account = AccountFactory()
+        warm_entry_pose = Interaction.objects.get(pk=self.entry_pose.pk)
+        InteractionReactionFactory(interaction=warm_entry_pose, account=other_account)
+
+        second = self.client.get(url, {"scene": self.scene.pk})
+        assert second.status_code == 200
+        reactions = next(
+            row["reactions"] for row in second.data["results"] if row["id"] == self.entry_pose.pk
+        )
+        assert len(reactions) == 1

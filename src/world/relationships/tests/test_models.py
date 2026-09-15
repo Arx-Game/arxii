@@ -97,9 +97,9 @@ class CharacterRelationshipTests(TestCase):
         cls.sheet2 = CharacterSheetFactory()
 
     def test_relationship_str(self):
-        """Test __str__ returns source -> target format."""
+        """Test __str__ returns source -> target_name format (#3575)."""
         relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
-        expected = f"{self.sheet1} -> {self.sheet2}"
+        expected = f"{self.sheet1} -> {self.sheet2.character.db_key}"
         self.assertEqual(str(relationship), expected)
 
     def test_unique_together_constraint(self):

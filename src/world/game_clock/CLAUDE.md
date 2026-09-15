@@ -91,6 +91,7 @@ money bands rather than being one task.
 | Condition expiration cleanup | hourly | conditions |
 | Relationship temp-condition cleanup (Very Attracted drop-off) | hourly | relationships (#1697) |
 | Block finalize (lifted-block clear) | hourly | scenes (#1278) |
+| PoseSubmission ledger cleanup (`scenes.pose_submission_cleanup`) | hourly, `CLEANUP` | scenes (#3760) |
 | Weather roll + echo | 2h real (≈6 IC h) | weather (#1522) |
 | Gossip heat decay | 24h real | secrets (#1572) |
 | Persona pursuit-heat decay | 24h real | justice (#1765) |

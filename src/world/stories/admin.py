@@ -20,7 +20,6 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     GroupStoryRequest,
-    PlayerTrustLevel,
     RiskCalibration,
     SessionRequest,
     Stake,
@@ -33,7 +32,6 @@ from world.stories.models import (
     StoryParticipation,
     StoryProgress,
     StoryProtectedSubject,
-    StoryTrustRequirement,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -386,95 +384,6 @@ class TrustCategoryAdmin(admin.ModelAdmin):
             {"fields": ("created_by", "created_at"), "classes": ("collapse",)},
         ),
     )
-
-
-@admin.register(PlayerTrustLevel)
-class PlayerTrustLevelAdmin(admin.ModelAdmin):
-    list_display = [
-        "player_trust",
-        "trust_category",
-        "trust_level_display",
-        "feedback_summary",
-        "updated_at",
-    ]
-    list_filter = ["trust_level", "trust_category", "updated_at"]
-    search_fields = ["player_trust__account__username", "trust_category__name", "notes"]
-    readonly_fields = ["created_at", "updated_at"]
-
-    fieldsets = (
-        (None, {"fields": ("player_trust", "trust_category", "trust_level")}),
-        (
-            "Feedback Tracking",
-            {"fields": ("positive_feedback_count", "negative_feedback_count")},
-        ),
-        (
-            "Metadata",
-            {
-                "fields": ("notes", "created_at", "updated_at"),
-                "classes": ("collapse",),
-            },
-        ),
-    )
-
-    def trust_level_display(self, obj):
-        colors = {
-            0: "#dc3545",  # Red - Untrusted
-            1: "#ffc107",  # Yellow - Basic
-            2: "#17a2b8",  # Light blue - Intermediate
-            3: "#28a745",  # Green - Advanced
-            4: "#007bff",  # Blue - Expert
-        }
-        return format_html(
-            '<span style="color: {};">{}</span>',
-            colors.get(obj.trust_level, "#6c757d"),
-            obj.get_trust_level_display(),
-        )
-
-    trust_level_display.short_description = "Trust Level"
-
-    def feedback_summary(self, obj):
-        return f"+{obj.positive_feedback_count}/-{obj.negative_feedback_count}"
-
-    feedback_summary.short_description = "Feedback"
-
-
-@admin.register(StoryTrustRequirement)
-class StoryTrustRequirementAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["created_by"]
-    list_display = [
-        "story",
-        "trust_category",
-        "minimum_trust_level_display",
-        "created_by",
-        "created_at",
-    ]
-    list_filter = ["minimum_trust_level", "trust_category", "created_at"]
-    search_fields = ["story__title", "trust_category__name", "notes"]
-    readonly_fields = ["created_at"]
-
-    fieldsets = (
-        (None, {"fields": ("story", "trust_category", "minimum_trust_level")}),
-        (
-            "Metadata",
-            {"fields": ("created_by", "notes", "created_at"), "classes": ("collapse",)},
-        ),
-    )
-
-    def minimum_trust_level_display(self, obj):
-        colors = {
-            0: "#dc3545",  # Red - Untrusted
-            1: "#ffc107",  # Yellow - Basic
-            2: "#17a2b8",  # Light blue - Intermediate
-            3: "#28a745",  # Green - Advanced
-            4: "#007bff",  # Blue - Expert
-        }
-        return format_html(
-            '<span style="color: {};">{}</span>',
-            colors.get(obj.minimum_trust_level, "#6c757d"),
-            obj.get_minimum_trust_level_display(),
-        )
-
-    minimum_trust_level_display.short_description = "Min Trust Level"
 
 
 @admin.register(Era)

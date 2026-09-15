@@ -59,9 +59,10 @@ Usage:
 
 Self-referential FKs (ForeignKey("self")) are handled specially:
     # Instead of flattening (which would require infinite args for variable
-    # tree depth), self-referential FK values are nested as a single arg:
-    #   facet.natural_key() -> ("Wolf", ["Mammals", ["Creatures", None]])
-    #   Root facet: ("Creatures", None)
+    # tree depth), self-referential FK values are nested as a single arg. E.g.
+    # world.codex.models.CodexSubject (fields = ["category", "parent", "name"]):
+    #   mammals.natural_key() -> ("Lore", ["Lore", None, "Creatures"], "Mammals")
+    #   Root subject: ("Lore", None, "Creatures")
 """
 
 from __future__ import annotations
@@ -120,8 +121,8 @@ def _index_key(values: Iterable[Any]) -> tuple[Any, ...]:
     Two normalizations, both required:
 
     * nested lists -> tuples. Self-referential FK natural keys nest their value
-      as a list (``("Wolf", ["Mammals", ["Creatures", None]])``), and lists are
-      unhashable.
+      as a list (``("Lore", ["Lore", None, "Creatures"], "Mammals")``), and lists
+      are unhashable.
     * ``str`` -> ``str.casefold()``. Natural-key lookups are case-insensitive
       (#2687): there is no case in which a natural key should match
       case-sensitively. ``casefold()`` rather than ``lower()`` — it is the

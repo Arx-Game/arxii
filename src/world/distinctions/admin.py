@@ -2,7 +2,7 @@
 Django admin interface for the distinctions system.
 
 Provides administrative interfaces for managing distinction definitions,
-effects, prerequisites, and character distinction grants.
+effects, and character distinction grants.
 """
 
 from django.contrib import admin
@@ -15,7 +15,6 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
-    DistinctionPrerequisite,
     DistinctionTag,
     SheetUpdateRequest,
 )
@@ -54,12 +53,6 @@ class DistinctionEffectInline(admin.TabularInline):
     autocomplete_fields = ["target"]
 
 
-class DistinctionPrerequisiteInline(admin.TabularInline):
-    model = DistinctionPrerequisite
-    extra = 0
-    fields = ["rule_json", "description"]
-
-
 class DistinctionCodexGrantInline(admin.TabularInline):
     model = DistinctionCodexGrant
     extra = 1
@@ -75,15 +68,15 @@ class DistinctionAdmin(admin.ModelAdmin):
         "cost_per_rank",
         "max_rank",
         "has_variants",
-        "has_trust_requirement",
         "is_active",
     ]
     list_filter = ["category", "is_active"]
     search_fields = ["name", "slug", "description"]
     prepopulated_fields = {"slug": ("name",)}
-    autocomplete_fields = ["category", "parent_distinction", "trust_category"]
+    autocomplete_fields = ["category", "parent_distinction"]
     filter_horizontal = ["tags", "mutually_exclusive_with"]
-    inlines = [DistinctionEffectInline, DistinctionPrerequisiteInline, DistinctionCodexGrantInline]
+    inlines = [DistinctionEffectInline, DistinctionCodexGrantInline]
+    readonly_fields = ["get_resonance_grants"]
 
     fieldsets = (
         (None, {"fields": ("name", "slug", "description", "category")}),
@@ -107,13 +100,6 @@ class DistinctionAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Trust Gating",
-            {
-                "fields": ("trust_value", "trust_category"),
-                "classes": ("collapse",),
-            },
-        ),
-        (
             "Automatic Distinctions",
             {
                 "fields": ("is_automatic", "requires_slot_filled"),
@@ -121,6 +107,18 @@ class DistinctionAdmin(admin.ModelAdmin):
             },
         ),
         ("Status", {"fields": ("is_active",)}),
+        (
+            "Resonance Wiring",
+            {
+                "fields": ("get_resonance_grants",),
+                "description": (
+                    "Authored in world.magic (ADR-0010: the general Resonance primitive "
+                    "must not import back into distinctions), so this app can't see it "
+                    "without an explicit summary."
+                ),
+                "classes": ("collapse",),
+            },
+        ),
         CREDIT_FIELDSET,
     )
 
@@ -128,9 +126,24 @@ class DistinctionAdmin(admin.ModelAdmin):
     def has_variants(self, obj):
         return obj.is_variant_parent
 
-    @admin.display(boolean=True, description="Trust Required")
-    def has_trust_requirement(self, obj):
-        return obj.trust_required
+    @admin.display(description="Resonance grants/thresholds")
+    def get_resonance_grants(self, obj: Distinction) -> str:
+        if not obj.pk:
+            return "-"
+        grants = ", ".join(
+            f"{g.resonance.name} (+{g.flat_amount_per_rank}/rank)"
+            for g in obj.resonance_grants.select_related("resonance")
+        )
+        thresholds = ", ".join(
+            f"{t.resonance.name} @rank{t.rank}"
+            for t in obj.resonance_rank_thresholds.select_related("resonance")
+        )
+        parts = []
+        if grants:
+            parts.append(f"Grants: {grants}")
+        if thresholds:
+            parts.append(f"Rank thresholds: {thresholds}")
+        return "; ".join(parts) or "None"
 
 
 @admin.register(DistinctionEffect)

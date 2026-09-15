@@ -47,18 +47,22 @@ DATABASES = {
     "default": env.db(),
 }
 
+# ORDER IS LOAD-BEARING (#2885, #3812). Django's get_commands() walks
+# `reversed(apps.get_app_configs())` calling dict.update(), so for a command
+# several apps ship, the app listed EARLIEST in INSTALLED_APPS wins. Three of
+# ours ride on that: `makemigrations` (the phantom-Evennia-migration filter,
+# over django_linear_migrations'), `migrate` (the generation guard), and
+# `createsuperuser` (heals the row Django's version leaves without first-save
+# setup — #3812; Django's own lives in django.contrib.auth, which Evennia's
+# defaults list first, so core_management has to go in front of the whole
+# list, not merely ahead of django_linear_migrations). Every generated
+# migration depended on a phantom Evennia migration for months while our
+# makemigrations silently lost this race. `core_management.tests
+# .test_command_resolution` and `.test_createsuperuser` pin it — don't reorder
+# without reading them.
+INSTALLED_APPS = ["core_management", *INSTALLED_APPS]
+
 INSTALLED_APPS += [
-    # ORDER IS LOAD-BEARING between these two (#2885). Both apps ship a
-    # `makemigrations` command, and Django's get_commands() walks
-    # `reversed(apps.get_app_configs())` calling dict.update() — so the app
-    # listed EARLIEST here wins, not the latest. core_management must therefore
-    # come first for its phantom-Evennia-migration filter to run at all; it
-    # subclasses django_linear_migrations' command, so the #991 sentinel below
-    # still applies. Listed the other way round, the filter is silently inert
-    # and every generated migration depends on a phantom Evennia migration that
-    # exists only in the venv that made it. `core_management.tests
-    # .test_command_resolution` pins this — don't reorder without reading it.
-    "core_management",  # Add our management app for custom commands
     # Enforces one migration leaf per app via a per-app max_migration.txt
     # sentinel (#991). Two parallel branches that each add a migration both
     # bump that file, so the second surfaces as a git conflict at PR time
@@ -90,9 +94,22 @@ INSTALLED_APPS += [
 
 # This is the name of your game. Make it catchy!
 SERVERNAME = "Arx"
+# Our ServerSession subclass (server/conf/serversession.py): tags the output of
+# a staff console line so the web client keeps it out of the column (#3857).
+SERVER_SESSION_CLASS = "server.conf.serversession.ServerSession"
 EVENNIA_ADMIN = False
-MULTISESSION_MODE = 2
+# Sessions share a character (#3812, ADR-0294): a phone and a laptop on the same
+# character are two windows onto one object, and it does not matter which one
+# you type in. Mode 2 kicked the older session; mode 3 fans output to all of
+# them. Simultaneous puppets are unlimited because the web client already opens
+# one socket per character, and `who` blurs idle so alts cannot be correlated.
+MULTISESSION_MODE = 3
+MAX_NR_SIMULTANEOUS_PUPPETS = None
 AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
+# Login puppets the account's own character (durable selection, then last
+# puppet, then a sole character) in Account.at_post_login. Evennia's flag
+# stays off because its version puppets `_last_puppet` blindly and raises
+# "The Character does not exist." when there is none.
 AUTO_PUPPET_ON_LOGIN = False
 IN_GAME_ERRORS = DEBUG
 
@@ -130,6 +147,16 @@ WEBCLIENT_ENABLED = True
 # Custom WebSocket client that reads session from cookies instead of URL parameters
 WEBSOCKET_PROTOCOL_CLASS = "server.portal.secure_websocket.SecureWebSocketClient"
 
+# Websocket keepalive (#3745, ADR-0277). An idle wss:// connection to the game
+# is closed by the public edge at a measured 125.6s, with a bare TCP FIN and no
+# close frame, and nothing in our chain keeps it warm on its own: autobahn's
+# auto-ping defaults to off, Evennia's IDLE_TIMEOUT is -1, and Caddy sets no
+# proxy timeouts. 45s puts two pings inside that window, so one lost ping does
+# not cost the connection; 25s is how long a pong may take before we treat the
+# link as dead and drop it ourselves. Both are seconds.
+WEBSOCKET_AUTOPING_INTERVAL = 45
+WEBSOCKET_AUTOPING_TIMEOUT = 25
+
 ######################################################################
 # Third-party integrations
 ######################################################################
@@ -144,6 +171,17 @@ cloudinary.config(
     api_key=env("CLOUDINARY_API_KEY", default=""),
     api_secret=env("CLOUDINARY_API_SECRET", default=""),
 )
+
+# Bound player media uploads (#3164). DEFAULT_PLAYER_MEDIA_QUOTA_BYTES seeds
+# PlayerData.media_quota_bytes for newly created rows (via a callable default,
+# so existing rows keep whatever quota they were given even if this setting
+# changes later). MAX_PLAYER_MEDIA_FILE_BYTES is a separate per-file cap
+# enforced independently of the account's remaining quota. Both are read by
+# CloudinaryGalleryService.upload_image; staff accounts bypass both checks.
+DEFAULT_PLAYER_MEDIA_QUOTA_BYTES = env.int(
+    "DEFAULT_PLAYER_MEDIA_QUOTA_BYTES", default=200 * 1024 * 1024
+)
+MAX_PLAYER_MEDIA_FILE_BYTES = env.int("MAX_PLAYER_MEDIA_FILE_BYTES", default=10 * 1024 * 1024)
 
 # Email configuration
 #

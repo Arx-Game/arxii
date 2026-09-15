@@ -25,11 +25,10 @@ export function Cover() {
     >
       <div className="gatefold-cover-inner">
         <h1 className="font-display">ARX</h1>
-        {/* PLACEHOLDER: Apostate rewrite */}
+        {/* Apostate's prose, verbatim (#3723). */}
         <p className="gatefold-hero-prose">
-          For a thousand years the Shroud stood over the city, a grey veil no army and no messenger
-          ever crossed. The songs outside call it the City of Heroes.{' '}
-          <em>Now the Shroud has fallen, and every portal in the world opens onto Arx.</em>
+          For a thousand years, the Shroud sealed the great Necropolis, protecting the city as the
+          world was shattered. <em>Now the Shroud has fallen, and no one knows why.</em>
         </p>
         {/* Live count, not copy — computed from useMonthlySceneCount(); hidden when 0/undefined. */}
         {!!monthlySceneCount && (

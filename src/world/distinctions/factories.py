@@ -9,7 +9,6 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
-    DistinctionPrerequisite,
     DistinctionTag,
     SheetUpdateRequest,
 )
@@ -71,17 +70,6 @@ class DistinctionEffectFactory(DjangoModelFactory):
     distinction = factory.SubFactory(DistinctionFactory)
     target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
     value_per_rank = 5
-    description = factory.Faker("sentence")
-
-
-class DistinctionPrerequisiteFactory(DjangoModelFactory):
-    """Factory for creating DistinctionPrerequisite instances."""
-
-    class Meta:
-        model = DistinctionPrerequisite
-
-    distinction = factory.SubFactory(DistinctionFactory)
-    rule_json = {"type": "species", "operator": "is", "value": "human"}
     description = factory.Faker("sentence")
 
 

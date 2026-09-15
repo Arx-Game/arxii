@@ -30,9 +30,10 @@ import { Plate, PlateHead } from '@/components/folio';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
-import { useAreaManagerQuery, useWorldBuilderAreasQuery } from '../queries';
+import { useAreaManagerQuery, useUnfiledRoomsQuery, useWorldBuilderAreasQuery } from '../queries';
 import type { WorldBuilderArea, WorldBuilderGrant } from '../types';
-import { areaViewKind, BUILDING_LEVEL } from './constants';
+import { AREA_LEVELS } from '../types';
+import { areaViewKind, BUILDING_LEVEL, childLevelOf } from './constants';
 import type { AtlasHistoryEntry, AtlasView } from './useAtlasState';
 
 export interface IndexRailProps {
@@ -107,6 +108,7 @@ export function IndexRail({ current, onSelect, pinned, recents, grants = [] }: I
         </div>
 
         <UnpublishedJump current={current} onSelect={onSelect} />
+        <UnfiledRooms current={current} onSelect={onSelect} />
         <IndexSection
           title="Pinned"
           testId="index-pinned"
@@ -136,13 +138,28 @@ interface TreeNodeProps {
 function TreeNode({ area, depth, current, onSelect }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const isLeaf = area.level === BUILDING_LEVEL;
-  const { data: childAreasPage } = useWorldBuilderAreasQuery(
+  const { data: childAreasPage, isLoading: childrenLoading } = useWorldBuilderAreasQuery(
     { parent: area.id },
     expanded && !isLeaf
   );
-  const { data: manager } = useAreaManagerQuery(expanded && isLeaf ? area.id : null);
+  // Rooms sit at any level (a city square is a direct room of the city), so the
+  // manager is read for every expanded node, not only buildings (2026-09-09).
+  const { data: manager, isLoading: managerLoading } = useAreaManagerQuery(
+    expanded ? area.id : null
+  );
   const childAreas = childAreasPage?.results ?? [];
   const rooms = manager?.rooms ?? [];
+  const nothingHere =
+    expanded &&
+    !childrenLoading &&
+    !managerLoading &&
+    childAreas.length === 0 &&
+    rooms.length === 0;
+  const childLevelLabel = isLeaf
+    ? 'room'
+    : (
+        AREA_LEVELS.find((choice) => choice.value === childLevelOf(area.level))?.label ?? 'area'
+      ).toLowerCase();
   const isCurrent =
     current != null &&
     current.id === area.id &&
@@ -181,6 +198,16 @@ function TreeNode({ area, depth, current, onSelect }: TreeNodeProps) {
       </div>
       {expanded && (
         <div>
+          {nothingHere && (
+            <p
+              className="py-0.5 pr-2 font-body text-xs italic text-muted-foreground"
+              style={{ paddingLeft: 8 + (depth + 1) * 14 }}
+              data-testid="index-empty-node"
+            >
+              nothing here yet: plan a square on {area.name}&apos;s map to add a {childLevelLabel}
+              {isLeaf ? '' : ' or a room'}
+            </p>
+          )}
           {childAreas.map((child) => (
             <TreeNode
               key={child.id}
@@ -242,6 +269,46 @@ function UnpublishedJump({ current, onSelect }: UnpublishedJumpProps) {
           className="block w-full truncate px-2 py-1 text-left text-sm hover:bg-accent"
           onClick={() => onSelect({ kind: 'roomdoc', id: room.id }, room.name)}
           data-testid="index-unpublished-room"
+        >
+          {room.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface UnfiledRoomsProps {
+  current: AtlasView | null;
+  onSelect: (view: AtlasView, name: string) => void;
+}
+
+/**
+ * Rooms that belong to no area (#3860): Limbo, and anything minted outside the
+ * builder. They sit on no grid, so this is how a staffer reaches one without
+ * knowing to search. Staff only (a warrant covers areas, never an area-less
+ * room), and absent when there are none.
+ */
+function UnfiledRooms({ current, onSelect }: UnfiledRoomsProps) {
+  const account = useAccount();
+  const isStaff = Boolean(account?.is_staff);
+  const { data: rooms } = useUnfiledRoomsQuery(isStaff);
+  if (!isStaff || !rooms || rooms.length === 0) return null;
+
+  return (
+    <div className="border-t px-2 py-2" data-testid="index-unfiled">
+      <PlateHead as="div" className="px-2">
+        Unfiled rooms — {rooms.length}
+      </PlateHead>
+      {rooms.map((room) => (
+        <button
+          key={room.id}
+          type="button"
+          className={cn(
+            'block w-full truncate px-2 py-1 text-left text-sm hover:bg-accent',
+            current?.kind === 'roomdoc' && current.id === room.id && 'bg-background'
+          )}
+          onClick={() => onSelect({ kind: 'roomdoc', id: room.id }, room.name)}
+          data-testid="index-unfiled-room"
         >
           {room.name}
         </button>

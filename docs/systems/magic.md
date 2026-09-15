@@ -68,7 +68,7 @@ and the 5-axis Thread model no longer exist.
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
-| `Facet` | Hierarchical imagery/symbolism (Category > Subcategory > Specific) | `name`, `parent` (self-FK), `description` |
+| `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. | `name` (unique), `description` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
 | `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne |
@@ -143,6 +143,14 @@ separate casting handler. When intensity exceeds control at runtime, effects bec
 unpredictable and anima cost spikes. If anima cost exceeds the character's pool, the
 excess deals damage to the caster.
 
+- **Authored outcome lines (#3554, ADR-0270):** `hit_narration` / `miss_narration`
+  (`TextField`, blank = default sentence). `{actor}` and `{target}` are required and are
+  filled by literal replacement. The authored text becomes the HEAD of the Narrator OUTCOME
+  line; the damage figure, tail clauses and suffix clauses stay machine-appended
+  (`render_action_outcome_narration(hit_text=, miss_text=)`). Admin-only authoring: the
+  player builder (`TechniqueDesignSerializer`) does not accept them. Validated by
+  `Technique.clean()` via `world.magic.narration.validate_outcome_narration`.
+
 ### Gift lineage — one thread reaches its ancestors' techniques (#2891, ADR-0192) [BUILT & WIRED]
 
 `Gift.parent` (self-FK, `on_delete=PROTECT`, `related_name="children"`) hangs a gift
@@ -199,6 +207,18 @@ drift apart.
   `TraditionGiftGrant.special_techniques` / `PathGiftGrant.starter_techniques` rows at
   *technique* granularity, never from `gift.techniques`, so a child gift whose pool is
   authored inherited techniques is already included.
+
+**An empty path pool is missing content, not a design case** (ruled on #3682, ADR-0283).
+A gift becomes pickable if *either* the path's `starter_techniques` or the tradition's
+`special_techniques` is non-empty, so a tradition special can carry a gift onto a path
+that offers nothing for it. That union stays; there will never be a gift a path offers
+nothing for, so the empty pool is an authoring gap. The `path-gift-starter-pools`
+required-content sentinel (`web/admin/tuning/required_content.py`, #3712) reports each
+such `(path, gift)` pair and names the traditions it leaks through — 8 pairs across 17
+combinations at the time it was added. A `TraditionGiftGrant` carrying no specials is
+deliberately never reported: that is a legitimate authored state meaning "this tradition
+teaches this gift and adds no extras of its own", it creates no availability of its own,
+and 39 of 69 authored rows are in it.
 - `CharacterTechniqueHandler._state` (`handlers.py`) — reads explicit `CharacterTechnique`
   rows. Once an inherited technique is learned the row exists. Inheritance is an
   acquisition-eligibility concern, not an inventory one.
@@ -299,8 +319,33 @@ The Glimpse is the narrative of a character's first magical awakening
 (`CharacterAura.glimpse_story`, prose). #2427 replaced the old always-visible
 freeform textarea with a guided, tag-driven flow: pick authored tags across
 five narrative axes, then write (or keep writing) the prose, with curated
-distinction suggestions surfaced along the way. #2611 added the TRIGGER axis
-(what *caused* the awakening) and path-gated tag filtering.
+distinction offers surfaced along the way. #2611 added the TRIGGER axis
+(what *caused* the awakening) and path-gated tag filtering. #3675 retired the
+tag's own `GlimpseTagDistinctionSuggestion` pairing table: a tag's distinctions are
+now `world.character_creation.models.DistinctionOffer` rows (`chapter=glimpse`,
+`glimpse_tag=<this tag>`), authored and read the same way every other CG chapter's
+offers are (`world.character_creation.offers`, `docs/systems/character_creation.md`).
+
+**A tag's offers are a self-healing cached property, fed cold via Prefetch, cleared
+via related_cache_fields (ADR-0298).** `GlimpseTag.offers` is a `PrunedCachedProperty`
+(`evennia_extensions/cached_property.py`, `models/glimpse.py`) returning a plain
+`list[DistinctionOffer]` — active rows for the tag, ordered `sort_order, id`,
+`select_related("distinction")`. Every reader (the CG API serializer's `get_offers`,
+`GlimpseTagAdmin`'s change-form preview) reads `tag.offers` directly, no wrapper.
+`CGGlimpseTagViewSet.get_queryset()` batches the whole page in one query via
+`Prefetch("distinction_offers", ..., to_attr="offers")` — sanctioned onto a genuine
+`cached_property` with explicit write-side invalidation wired (ADR-0298), unlike the
+`GlimpseTagOffersHandler`/`CachedRowsHandler` wrapper this replaced (#3816 Task 9).
+`DistinctionOffer.related_cache_fields = ["glimpse_tag", "origin_choice",
+"schooling_line", "enemy_reason", "appearance_section"]` clears the property's cache
+on every offer save/delete, for the offer's *current* `glimpse_tag` only. **Known
+limitation:** reassigning an offer's `glimpse_tag` FK (moving it between tags via the
+Distinction Builder or the `GlimpseTagAdmin` inline) clears the *new* tag's cache but
+not the *old* one's — the moved offer can keep serving under its old tag for the life
+of the process. This is a property of the shared `RelatedCacheClearingMixin` itself
+(it only ever sees the FK's current value at save time), not specific to
+this relation; fixing it is tracked as #3836 (a cross-cutting mixin
+change), not addressed per-relation here.
 
 **Models** (`models/glimpse.py`):
 
@@ -308,7 +353,6 @@ distinction suggestions surfaced along the way. #2611 added the TRIGGER axis
 |-------|---------|------------|
 | `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active`, `paths` (M2M to `classes.Path`, empty = all paths; #2611) |
 | `CharacterGlimpseTag` | A character's chosen tag. Instance data — never exported | `aura` FK (`CharacterAura`, `related_name="glimpse_tags"`), `tag` FK (PROTECT); unique per `(aura, tag)` |
-| `GlimpseTagDistinctionSuggestion` | Curated tag→distinction suggestion. Content model (`magic.glimpsetagdistinctionsuggestion`) — grants nothing, purely a CG-flow suggestion surface. FK points *into* `distinctions.Distinction` (specific→general, ADR-0010) | `tag` FK (CASCADE), `distinction` FK (CASCADE), `sort_order`; unique per `(tag, distinction)` |
 
 **Enums + config** (`constants.py`):
 
@@ -352,27 +396,34 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
   — clears `from_glimpse`.
 
 **CG finalize wiring** (`world/character_creation/services.py`,
-`finalize_magic_data`) — after creating `CharacterAura`, three `draft_data`
-keys are consumed through
-the glimpse services above (never written directly to the aura/tag rows):
-`glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis and passed to
-`set_glimpse_tags` per axis), `glimpse_story` (passed to `set_glimpse_prose`,
-defaults to `""`), `glimpse_linked_distinction_ids` (catalog `Distinction`
-ids — resolved to the character's own `CharacterDistinction` rows by
-`distinction_id__in=`, then passed to `link_distinction_to_glimpse`).
+`finalize_magic_data`), after creating `CharacterAura`, two `draft_data` keys
+are consumed through the glimpse services above (never written directly to the
+aura/tag rows): `glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis
+and passed to `set_glimpse_tags` per axis), `glimpse_story` (passed to
+`set_glimpse_prose`, defaults to `""`). Distinction-to-Glimpse provenance is no
+longer read from a separate `glimpse_linked_distinction_ids` list (#3675): every
+picked distinction whose `offer_ids` name a `DistinctionOffer` with
+`glimpse_tag` set gets `link_distinction_to_glimpse` called on it, via one query
+over `DistinctionOffer.objects.filter(pk__in=<picked offer ids>,
+glimpse_tag__isnull=False)`. **Frontend note:** `GlimpseSection.tsx` never writes
+`draft_data.glimpse_linked_distinction_ids` -- that key and its manual-link fallback
+are retired; a Glimpse-chapter distinction pick syncs immediately through
+`useSyncDistinctions` (see `ChapterOffers`/`GlimpseAxes`,
+`frontend/src/character-creation/CLAUDE.md`), so `offer_ids` always carries the
+`DistinctionOffer` provenance this backend read depends on.
 
 **API surfaces:**
 
 - **CG catalog** — `GET /api/character-creation/glimpse-tags/`
-  (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=` and
-  `?path_id=<N>`). The `path_id` filter (#2611) excludes tags whose `paths`
-  M2M is non-empty and does not contain the given path — used by the CG flow
-  to hide path-restricted trigger tags (e.g. "Patron Chose You" is Path of
-  the Chosen only). Omitting `path_id` returns all tags (post-CG editor mode).
-  Global authored catalog, not draft-dependent, so the same endpoint also
-  backs the post-CG "finish your glimpse later" surface. Each row embeds its
-  `suggested_distinctions` (prefetched `GlimpseTagDistinctionSuggestion` rows,
-  ordered) via `CGGlimpseTagSerializer`.
+  (`CGGlimpseTagViewSet`, `world.character_creation.views`, read-only,
+  unpaginated, filterable by `?axis=` and `?path_id=<N>`). The `path_id` filter
+  (#2611) excludes tags whose `paths` M2M is non-empty and does not contain the
+  given path, used by the CG flow to hide path-restricted trigger tags (e.g.
+  "Patron Chose You" is Path of the Chosen only). Omitting `path_id` returns all
+  tags (post-CG editor mode). Global authored catalog, not draft-dependent, so
+  the same endpoint also backs the post-CG "finish your glimpse later" surface.
+  Each row embeds its `offers` (prefetched `DistinctionOffer` rows opened by
+  this tag, #3675) via `CGGlimpseTagSerializer`.
 - **Aura actions** — four `@action`s on `CharacterAuraViewSet`
   (`world/magic/views.py`): `POST .../set-glimpse-tags/` (body
   `{axis, tag_ids[]}`, validates tags exist/are active before calling
@@ -389,19 +440,28 @@ when the requester may edit this aura and `glimpse_state != COMPLETE`).
 `DistinctionEntry` gained `is_from_glimpse` (`from_glimpse_id is not None`) so
 the sheet can badge/link distinctions born in the Glimpse.
 
-**Frontend** — one shared, purely presentational guided flow with two mounts
-(see `frontend/src/magic/CLAUDE.md` for the full contract):
+**Frontend** - one shared, purely presentational guided flow, and a folio-grammar CG
+mount that no longer shares its markup (#3675 fix round 1; see
+`frontend/src/magic/CLAUDE.md` and `frontend/src/character-creation/CLAUDE.md` for the
+full contract):
 
 - `GlimpseFlow` (`frontend/src/magic/components/glimpse/GlimpseFlow.tsx` +
-  `glimpseTypes.ts`) — accordion of axis steps (TONE single-select,
+  `glimpseTypes.ts`) - accordion of axis steps (TONE single-select,
   CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags don't render a
-  step), SENSORY as toggle chips inside the always-visible story textarea, a
-  deduped suggestion panel, and a manual distinction-link fallback. No
-  queries/mutations inside — purely props-in/callbacks-out.
+  step), SENSORY as toggle chips inside the always-visible story textarea, and a
+  manual link fallback for a character's *existing* `CharacterDistinction` rows
+  (`GlimpseEditorDialog`'s own linking, unrelated to CG offer picks). No
+  queries/mutations inside, purely props-in/callbacks-out. This is now the sheet's
+  live-editor mount only; the CG mount stopped using it (#3675 fix round 1, a
+  demo-fidelity defect: the single-open accordion hid two axes at a time).
 - `GlimpseSection` (`frontend/src/character-creation/components/gift/GlimpseSection.tsx`)
-  — the CG mount, binding `GlimpseFlow` to `draft_data.glimpse_tag_ids` /
-  `glimpse_linked_distinction_ids` (prose stays on `GiftStage`'s
-  `register('glimpse_story')`).
+  - the CG mount, a thin state binder: draft reads, `updateDraft` writes
+  `draft_data.glimpse_tag_ids`, the "skip for now" deferral, and the copy query.
+  Renders `GlimpseAxes` (`frontend/src/character-creation/components/gift/GlimpseAxes.tsx`),
+  the folio-grammar per-axis layout (every axis visible at once, one `ChapterOffers`
+  sub-block per chosen tag), which owns the distinction picks itself; they sync
+  immediately through `useSyncDistinctions`, never through a `draft_data` list.
+  Prose stays on `GiftStage`'s `register('glimpse_story')`.
 - `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)
   — the "finish later" editor on the own-character sheet, opened from
   `SpellbookTab`'s aura card, gated on `isMyCharacter && aura.can_finish_glimpse`.
@@ -410,7 +470,7 @@ the sheet can badge/link distinctions born in the Glimpse.
 **Out of scope (verified against code, not deferred by accident):** no
 mechanics hooks off tag picks, no LLM involvement anywhere in the flow, no new
 privacy axis beyond the existing WITNESS tags, and no authored `GlimpseTag`/
-`GlimpseTagDistinctionSuggestion` rows ship with this repo (lore-repo content,
+glimpse-chapter `DistinctionOffer` rows ship with this repo (lore-repo content,
 authored later) — the flow renders gracefully with an empty catalog (axes with
 no tags simply don't render a step).
 
@@ -721,7 +781,7 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 
 | Function | Purpose |
 |----------|---------|
-| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess — see `technique_relationship_is_ambiguous` below. |
+| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any applied, removed or **treatment** row has `target_kind=ALLY`; ENEMY if a treatment row targets an enemy (stabilising a downed foe is aimed at an adversary without being hostile); else SELF. Treatments joined in #3682 — a technique whose only payload was an ALLY treatment derived SELF, and the SELF branch of `_check_relationship` then refused to let the authored heal name its ally. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess — see `technique_relationship_is_ambiguous` below. |
 | `technique_alters_behavior(technique) -> bool` | True if any applied condition's `category.alters_behavior` is True |
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
@@ -813,17 +873,28 @@ differentiation lives, since the authored catalog is near-uniform on `level`,
 **The derivation** — `summarize_technique_effects(technique) -> TechniqueEffectPayload`
 (`world/magic/services/technique_effects.py`; wire shapes in
 `world/magic/types/technique_effects.py`). It reads `cached_capability_grants` /
-`cached_condition_applications` / `cached_damage_profiles` / `cached_removed_conditions`
+`cached_condition_applications` / `cached_damage_profiles` / `cached_removed_conditions` /
+`cached_treatments` (the fifth joined in #3682 — see below)
 and **composes the two derivations that already existed** — `is_technique_hostile`
 (`services/hostility.py`) and `derive_target_relationship` (`services/targeting.py`) —
 rather than restating them. No model field is added: `Technique.target_type`'s own help
 text records that relationship is derived, never stored.
 
 The payload carries `relationship` / `hostile` / `target_type` / `reach` / `reach_hops` /
-`arena` (`action_category`) / `anima_cost`, the four effect lists, `is_underspecified`,
+`arena` (`action_category`) / `anima_cost`, the five effect lists, `is_underspecified`,
 and `summary` — the plain-words line, e.g. *"Cast on an ally, anywhere in the room, in the
 physical arena. Costs 5 anima. Applies Guarded."* The sentence is authored server-side and
 is byte-identical on the web and over telnet; clients render it, never re-derive it.
+
+**Treatments and grants say what they are (#3682).** `TechniqueTreatment` was authorable
+from #2668 and read by no display surface, no relationship derivation and no gap check, so
+a technique whose only authored effect was a treatment described itself as having none —
+it is the fifth list (`treatments`) and its own clause, *"Treats Bleeding."* A capability
+grant is **standing possession**, not a cast effect (ADR-0248): knowing the technique is
+what confers it, and the cast deliberately does nothing extra with the row. The clause
+reads *"Knowing it grants flight."* and the frontend chip is labelled `Known:` — before
+#3682 both sat unqualified among the cast clauses and told the player a lie about when the
+capability arrives.
 
 **Ordering is authoring order.** The four payload models carry `Meta.ordering = ["pk"]`, so
 a multi-condition clause reads in the order staff attached the rows — "Applies Burning,
@@ -866,15 +937,30 @@ while authoring #2764). Authored data carries no signal separating the point of 
 from a side effect, so an override would mean the stored field this system rules out, and a
 heuristic would be a second silent guess. Instead:
 
-- `technique_relationship_is_ambiguous(technique)` — the applied + removed rows carry more
-  than one distinct `target_kind`, so the single derived relationship is a guess.
+- `technique_relationship_is_ambiguous(technique)` — the applied + removed + treatment
+  rows carry more than one distinct `target_kind`, so the single derived relationship is a
+  guess.
 - `technique_is_underspecified(technique)` — no condition, no removal, no damage profile,
-  so relationship isn't derivable at all. Display renders this as "effects not yet
-  catalogued" rather than a blank; 86 of 272 authored techniques were in this state.
+  no treatment, so relationship isn't derivable at all. Display renders this as "effects
+  not yet catalogued" rather than a blank; 86 of 272 authored techniques were in this
+  state. Capability grants deliberately do **not** clear the flag: a grant is standing
+  possession (ADR-0248), so a grant-only technique genuinely does nothing on cast.
+- `technique_is_not_castable_standalone(technique)` (#3682) — the technique carries no
+  `action_template`, so `request_technique_cast` refuses it ("not castable standalone")
+  and `castable_technique_links_for_sheet` filters it out of both the web and telnet cast
+  lists, while `get_technique_options` still offers it as a valid CG pick and
+  `compute_magic_errors` still accepts it. **A fact, not a verdict** — whether a technique
+  is meant to be castable at all is an authoring decision, and no readiness policy is
+  enforced off the back of it. All 306 authored techniques were in this state when it was
+  added, which is exactly why it is *not* a `TechniqueAuthoringGap` member: folding it in
+  would make gap membership mean "every technique" and bury the two gaps that are about
+  unreadable authored data. `TechniqueAdmin` filters it in SQL
+  (`action_template__isnull=True`) and shows it in the `Gap` column.
 
-`technique_effect_authoring_gaps()` collects both; `TechniqueAdmin` surfaces them as the
-`Targets` / `Gap` columns and an "authoring gap" filter. `derive_target_relationship`'s own
-answers are deliberately unchanged — it gates live cast targeting.
+`technique_effect_authoring_gaps()` collects the first two; `TechniqueAdmin` surfaces all
+three as the `Targets` / `Gap` columns and an "authoring gap" filter.
+`derive_target_relationship`'s own answers are deliberately unchanged — it gates live cast
+targeting.
 
 **Shared condition application** (`world/magic/services/condition_application.py`):
 `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character, applied_condition_rows=None)`
@@ -912,11 +998,15 @@ magic checks at all is an open design question (#1363).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Motif` | Character-level magical aesthetic | `character`, `name`, `description` |
-| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to ModifierTarget) |
-| `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
+| `Motif` | Character-level magical aesthetic; one per character, shared across all Gifts | `character` (O2O CharacterSheet), `description` |
+| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to `Resonance`), `is_from_gift` |
+| `MotifResonanceAssociation` | Links resonances to facets in a motif (cap 5 per resonance, `MotifResonanceLink.clean()`-enforced) | `motif_resonance`, `facet` |
 | `MotifResonanceStyle` | Player binding of a `Style` to one of the character's motif resonances (cap 3 per resonance, `MotifResonanceLink.clean()`-enforced) | `motif_resonance`, `style` (FK to `items.Style`) |
-| `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
+
+`CharacterFacet` **[ABSENT]** — this table used to list it as "links characters to facets".
+No such model or table exists; it was dropped in favour of Thread-on-Facet (see
+`docs/architecture/items-fashion-mantles.md`), and a character's facets are reached through
+`Motif → MotifResonance → MotifResonanceAssociation`. Verified against code 2026-09-11.
 
 **Player-facing style binding (#2030) [BUILT & WIRED]:** binding a `Style` to a
 claimed resonance is a normal player action, not admin-only. Service
@@ -1659,7 +1749,7 @@ consequence of Path membership per ADR-0050, not an XP purchase).
 
 | Surface | Role | Notes |
 |---|---|---|
-| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). A path may grant the character's *existing* gift (new techniques of it) AND a new gift. `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. |
+| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). A path may grant the character's *existing* gift (new techniques of it) AND a new gift. `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. **Authorable since #3712**: a standalone `PathGiftGrantAdmin` (`filter_horizontal` on `starter_techniques`, which is where a pool is composed) plus a `PathAdmin` inline as the way in from the path. Until then only the tradition half of the CG menu had a page, so the 76 authored path pools were fixture-loaded and uneditable. |
 | `grant_path_magic(sheet, path) -> PathMagicGrantResult` (`services/path_magic.py`) | Idempotent grant | Mints `CharacterGift` + latent GIFT thread (via the shared `grant_gift_to_character` primitive) + `CharacterTechnique` rows; announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`). Already-owned gifts/techniques are skipped (kept), so the character retains everything and only *gains*. |
 | Path-change seam `cross_into_path(sheet, path)` (`world/progression/services/advancement.py`) | Wiring | Writes `CharacterPathHistory` + fires `grant_path_magic`. Used by **both** `cross_threshold` (Audere Majora, levels 5/10/15/20 → PUISSANT+) **and** the **Ritual of the Durance** when it advances into the POTENTIAL stage (level 3 — the "semi-crossing", no Audere Majora). So *which* levels grant is authored data; the level-3 rite reuses the identical grant machinery with no crossing ceremony. |
 
@@ -1743,16 +1833,19 @@ only slower. The "Unbound" drawback `Distinction` (slug `unbound`, seeded by
 source today: a +50 `DistinctionEffect` on the `magic_learning_ap_cost` `ModifierTarget`
 (category `magic`, seeded by `wire_magic_learning_ap_cost_target`). Applies identically to
 both `charge_and_learn` front doors (accept + TRAIN) — one read, no duplication. Every seeded
-Unbound `BeginningTradition` row now carries `required_distinction=<Unbound drawback>`
-(`seed_beginning_traditions`, was `None` pre-#2442); `select_tradition`
-(`world.character_creation.views`) auto-adds the drawback to the draft when selecting Unbound
-without it already held — a one-off exception to #2426's normal "must already hold it" gate,
-needed because Unbound is CG's tradition-agnostic default (Orphaned Tradition/Metallic Order
-keep the un-auto-added behavior — that gate is a deliberate story pick, #2428 Task 5). Shed
-automatically via `world.magic.services.tradition_membership.join_tradition` and re-applied by
-`leave_tradition` (#2441 Task 8/9) — the underlying `CharacterModifier` row cascade-deletes with
-the `CharacterDistinction` row (`ModifierSource.character_distinction` is `on_delete=CASCADE`),
-so the surcharge disappears the moment the drawback is shed, no separate cleanup needed.
+Unbound `BeginningTradition` row reads `state=TraditionState.SELF_TAUGHT`
+(`seed_beginning_traditions`, #3675; was a `required_distinction=<Unbound drawback>` FK
+pre-#3675); the SELF_TAUGHT `TraditionStateLine` carries the drawback (`carries` FK,
+`world.character_creation.offers.self_taught_drawback()`), and `select_tradition`
+(`world.character_creation.views`) applies it to the draft via the generic
+`reconcile_offer_picks` call every tradition pick already runs, not a name-matched special
+case (Orphaned Tradition/Metallic Order carry theirs the same way, via TEACHERS_GONE). Shed
+automatically via `world.magic.services.tradition_membership.join_tradition` (checks
+`_tradition_is_orphaned`, now a `BeginningTradition.state == TEACHERS_GONE` read) and
+re-applied by `leave_tradition` (`self_taught_drawback()`, #2441 Task 8/9, #3675); the
+underlying `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+(`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge disappears
+the moment the drawback is shed, no separate cleanup needed.
 
 ### Acquisition provenance — `CharacterTechnique.origin` / `CharacterGift.origin` (#3055) [BUILT & WIRED]
 
@@ -1852,6 +1945,9 @@ on the web endpoint below. No player-facing string carries an em-dash.
 This closes the same "built but unreachable" gap the acquisition surface above
 closed for `spend_xp_on_gift_unlock`/`accept_technique_offer` — `resolve_training_check`
 now has exactly one production caller, shared by both client surfaces.
+
+The entrance itself (which pose is the entry pose, the threshold before it, the acclaim
+window opened on it) is described in `docs/systems/scenes.md`'s "The entrance" (#3867).
 
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
@@ -2875,7 +2971,9 @@ value = round(base * 2 ** (sensitivity * power / power_per_doubling))
 ```
 
 Gated on the `CapabilityPowerConfig` singleton (pk=1, `power_per_doubling` — power
-required to double the value, default 10) existing at all — no row means every consumer
+required to double the value, default 10) existing at all (registered in the admin,
+singleton-guarded, in #3712; before that the required-content dashboard reported the
+row missing and there was no page on which to create it) — no row means every consumer
 returns its pre-#2708 number unchanged, so the migration that ships the model is inert
 on landing. `intensity_multiplier` (technique grants) / `thread_level_multiplier(level)`
 (thread grants) is the curve's exponent sensitivity, not an additive term — a grant
@@ -3161,7 +3259,7 @@ All endpoints require authentication. Base URL: `/api/magic/`
 | `/styles/` | GET | List technique styles (the catalog a `Path` points at) |
 | `/effect-types/` | GET | List effect types |
 | `/restrictions/` | GET | List restrictions |
-| `/facets/` | GET | List facets (hierarchical) |
+| `/facets/` | GET | List facets (flat vocabulary, #3776) |
 | `/gifts/` | GET | List all gifts |
 | `/gifts/{id}/` | GET | Gift detail with nested techniques |
 

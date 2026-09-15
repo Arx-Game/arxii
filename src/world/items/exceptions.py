@@ -29,7 +29,13 @@ class ItemError(Exception):
 
 
 class CraftingNotConfigured(Exception):
-    """Raised when crafting is attempted before a CheckType is configured."""
+    """Raised when a crafting-adjacent operation needs configuration that isn't seeded.
+
+    Covers "no CheckType is wired for this recipe" and "no QualityTier rows exist
+    in this database" — the latter also covers stamp_inherent_facets
+    (services/facets.py), which resolves a baseline QualityTier for its
+    auto-stamped rows even though stamping itself isn't a crafting action.
+    """
 
     user_message = "Crafting is not available yet."
 
@@ -81,6 +87,22 @@ class FacetAlreadyAttached(ItemError):
     user_message = "That facet is already attached to this item."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {"That facet is already attached to this item."},
+    )
+
+
+class InherentFacetNotRemovable(ItemError):
+    """That facet is the template's own identity, not a crafter's addition (#3776).
+
+    ``ItemTemplate.inherent_facets`` rows are auto-stamped by
+    ``stamp_inherent_facets`` at instance creation and are never re-stampable
+    afterwards (stamping only ever runs on a brand-new instance), so a detach
+    would strip a Scythe of its Scythe facet permanently. Detach is for the
+    crafter-attached "decorated BY the thing" case only.
+    """
+
+    user_message = "That facet is part of what this item is, and cannot be removed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That facet is part of what this item is, and cannot be removed."},
     )
 
 

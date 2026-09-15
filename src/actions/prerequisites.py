@@ -1084,6 +1084,42 @@ class CompanionPresentPrerequisite(Prerequisite):
 
 
 @dataclass
+class CompanionFitToFightPrerequisite(Prerequisite):
+    """Companion (kwarg ``companion_id``) must not be Savaged (#3652).
+
+    Layered on the owner/active/objectdb standard ``_resolve_owned_companion``
+    already enforces, so this class checks only the injury. Applied to the two
+    verbs that commit a companion to violence (``companion fight``,
+    ``companion deploy``) and to nothing else: a savaged companion is still
+    present, still poseable, still rideable.
+    """
+
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
+        from world.companions.defeat_content import SAVAGED_CONDITION_NAME  # noqa: PLC0415
+        from world.companions.models import Companion  # noqa: PLC0415
+        from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+        from world.conditions.services import has_condition  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        companion_id = kwargs.get("companion_id")
+        if not companion_id:
+            return True, ""  # the action's own resolver reports a missing id
+
+        companion = Companion.objects.filter(pk=companion_id).first()
+        if companion is None or companion.objectdb is None:
+            return True, ""  # likewise not this prerequisite's failure to report
+
+        try:
+            savaged = ConditionTemplate.get_by_name(SAVAGED_CONDITION_NAME)
+        except ConditionTemplate.DoesNotExist:
+            return True, ""
+
+        if has_condition(companion.objectdb, savaged):
+            return False, f"{companion.name} is in no shape to fight."
+        return True, ""
+
+
+@dataclass
 class GhostWindowPrerequisite(Prerequisite):
     """Bound a dead character's emit/pose to recognized containers (#2287).
 

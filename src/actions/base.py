@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.prerequisites import Prerequisite
 from actions.types import ActionAvailability, ActionContext, ActionResult, TargetType
+from world.scenes.reachability import UnreachableError
+from world.scenes.thread_services import InteractionThreadError
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -419,7 +421,23 @@ class Action:
                 return self._emit_result(actor, context, cost_failure)
 
         # Execute with potentially modified kwargs
-        context.result = self.execute(actor, context=context, **context.kwargs)
+        try:
+            context.result = self.execute(actor, context=context, **context.kwargs)
+        except (InteractionThreadError, UnreachableError) as error:
+            # UnreachableError (#3787 Task 4) is the telnet sibling of the REST
+            # submit_pose 400: create_interaction/record_interaction refuse a
+            # tagged persona who cannot receive the row before anything is
+            # written. str(error) is the player-facing detail; venue_hint is
+            # the actionable half (spec decision 4) -- the REST refusal ships
+            # it as a separate `hint` field, so append it here to give telnet
+            # the same direction (#3787 Task 8). Guarded against duplication:
+            # a caller that omits `message` gets venue_hint back as str(error)
+            # too, so only append when the two actually differ.
+            message = str(error)
+            hint = error.venue_hint
+            if hint and hint != message:
+                message = f"{message} {hint}"
+            context.result = ActionResult(success=False, message=message)
 
         # Run post-effects
         for effect in context.post_effects:

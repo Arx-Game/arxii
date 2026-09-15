@@ -133,6 +133,15 @@ export function Marginalia({
               {exit.name}
               {exit.kind === 'window' && ' ⊞'}
               {!exit.is_open && ' ⊘'}
+              {exit.one_way && (
+                <span
+                  className="ml-1 text-[0.6rem] uppercase tracking-wide text-primary"
+                  title="No exit leads back"
+                  data-testid="exit-chip-one-way"
+                >
+                  one way
+                </span>
+              )}
             </button>
           ))}
         </div>

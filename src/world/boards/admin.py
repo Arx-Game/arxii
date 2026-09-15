@@ -15,10 +15,11 @@ class BoardPostInline(admin.TabularInline):
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
     list_display = ["name", "room_profile", "organization", "max_active_posts", "created_at"]
     list_filter = ["created_at"]
     search_fields = ["name"]
-    raw_id_fields = ["room_profile", "organization"]
+    raw_id_fields = ["organization"]
     inlines = [BoardPostInline]
 
 

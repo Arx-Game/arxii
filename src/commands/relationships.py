@@ -46,6 +46,7 @@ from commands.exceptions import CommandError
 if TYPE_CHECKING:
     from actions.base import Action
     from world.character_sheets.models import CharacterSheet
+    from world.companions.models import Companion
     from world.relationships.constants import FirstImpressionColoring, UpdateVisibility
     from world.relationships.models import CharacterRelationship, RelationshipTrack
 
@@ -140,6 +141,11 @@ def _parse_name_and_kwargs(rest: str) -> tuple[str, dict[str, str]]:
     return name, _parse_kwargs_tokens(tokens[idx:])
 
 
+def _active_companion_of(obj: Any) -> Companion | None:
+    """The unreleased Companion whose live object is ``obj``, else None (#3575)."""
+    return obj.companion_rows.filter(released_at__isnull=True).first()
+
+
 def _require_int(value: str | None, name: str) -> int:
     """Return *value* as an int, or raise CommandError."""
     if value is None or value == "":
@@ -232,7 +238,7 @@ class CmdRelationship(ArxCommand):
         if not name:
             msg = f"Usage: relationship {subverb} <name>"
             raise CommandError(msg)
-        target_sheet = self._resolve_target_sheet(self.caller, name)
+        target_sheet, _companion = self._resolve_target(self.caller, name)
         valence = 1 if subverb == _SUBVERB_PLUS else -1
         result = RelationshipBumpAction().run(
             actor=self.caller, target_sheet=target_sheet, valence=valence
@@ -250,8 +256,10 @@ class CmdRelationship(ArxCommand):
             raise CommandError(msg)
         actor = self.caller
         sheet = self._actor_sheet(actor)
-        target_sheet = self._resolve_target_sheet(actor, name)
-        action, run_kwargs = self._build_write_kwargs(subverb, sheet, target_sheet, kwargs)
+        target_sheet, target_companion = self._resolve_target(actor, name)
+        action, run_kwargs = self._build_write_kwargs(
+            subverb, sheet, target_sheet, target_companion, kwargs
+        )
         result = action.run(actor=actor, **run_kwargs)
         if result.message:
             self.msg(result.message)
@@ -260,7 +268,8 @@ class CmdRelationship(ArxCommand):
         self,
         subverb: str,
         sheet: CharacterSheet,
-        target_sheet: CharacterSheet,
+        target_sheet: CharacterSheet | None,
+        target_companion: Companion | None,
         kwargs: dict[str, str],
     ) -> tuple[Action, dict[str, Any]]:
         """Translate parsed telnet kwargs into the Action's run() kwargs."""
@@ -273,6 +282,7 @@ class CmdRelationship(ArxCommand):
 
         common: dict[str, Any] = {
             "target_sheet": target_sheet,
+            "target_companion": target_companion,
             "points": _require_int(kwargs.get(_KEY_POINTS), _KEY_POINTS),
             "title": kwargs.get(_KEY_TITLE, ""),
             "writeup": kwargs.get(_KEY_WRITEUP, ""),
@@ -373,7 +383,7 @@ class CmdRelationship(ArxCommand):
         sheet = self._actor_sheet(self.caller)
         qs = (
             CharacterRelationship.objects.filter(source=sheet)
-            .select_related("target", "target__character")
+            .select_related("target", "target__character", "target_companion")
             .order_by("-updated_at")
         )
         relationships = list(qs)
@@ -409,14 +419,19 @@ class CmdRelationship(ArxCommand):
             raise CommandError(msg)
         return sheet
 
-    def _resolve_target_sheet(self, caller: Any, name: str) -> CharacterSheet:
-        """Resolve a target character name (caller.search) to its CharacterSheet."""
+    def _resolve_target(
+        self, caller: Any, name: str
+    ) -> tuple[CharacterSheet | None, Companion | None]:
+        """Resolve a target name (caller.search) to a sheet or a bonded companion (#3575)."""
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
         target = caller.search(name)
         if not target:
             msg = f"Could not find '{name}'."
             raise CommandError(msg)
+        companion = _active_companion_of(target)
+        if companion is not None:
+            return None, companion
         try:
             target_sheet = target.sheet_data
         except (AttributeError, ObjectDoesNotExist) as exc:
@@ -425,7 +440,7 @@ class CmdRelationship(ArxCommand):
         if target_sheet is None:
             msg = f"'{name}' has no character sheet."
             raise CommandError(msg)
-        return target_sheet
+        return target_sheet, None
 
     def _resolve_track(self, value: str | None, *, label: str = "track") -> RelationshipTrack:
         """Resolve a RelationshipTrack by name (iexact) or numeric id."""
@@ -455,7 +470,7 @@ class CmdRelationship(ArxCommand):
         ref = ref.strip().removeprefix("#")
         qs = (
             CharacterRelationship.objects.filter(source=sheet)
-            .select_related("target", "target__character")
+            .select_related("target", "target__character", "target_companion")
             .prefetch_related(
                 Prefetch(
                     "track_progress",
@@ -471,7 +486,11 @@ class CmdRelationship(ArxCommand):
             if not target:
                 msg = f"Could not find '{ref}'."
                 raise CommandError(msg)
-            relationship = qs.filter(target=target.sheet_data).first()
+            companion = _active_companion_of(target)
+            if companion is not None:
+                relationship = qs.filter(target_companion=companion).first()
+            else:
+                relationship = qs.filter(target=target.sheet_data).first()
         if relationship is None:
             msg = f"No relationship #{ref} found."
             raise CommandError(msg)
@@ -505,7 +524,7 @@ class CmdRelationship(ArxCommand):
 
     def _render_list_row(self, rel: CharacterRelationship) -> str:
         """One summary line for a relationship in the list view."""
-        target_name = rel.target.character.db_key
+        target_name = rel.target_name
         status = "pending" if rel.is_pending else "active"
         flags: list[str] = []
         if rel.is_deceitful:
@@ -527,7 +546,7 @@ class CmdRelationship(ArxCommand):
             RelationshipUpdate,
         )
 
-        target_name = rel.target.character.db_key
+        target_name = rel.target_name
         status = "pending" if rel.is_pending else "active"
         lines = [
             f"|wRelationship #{rel.pk} with {target_name}|n — {status}",

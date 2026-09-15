@@ -79,10 +79,12 @@ def _create_entrance(*, anchor_room: ObjectDB, room: ObjectDB) -> ExitProfile:
         BehaviorPackageDefinition,
         BehaviorPackageInstance,
     )
-    from world.areas.grid_services import create_one_way_exit  # noqa: PLC0415
+    from world.areas.grid_services import create_exit  # noqa: PLC0415
 
-    exit_obj = create_one_way_exit(
+    # main's one-way helper (#3860); an entrance deliberately has no way back.
+    exit_obj = create_exit(
         name=room.db_key or "entrance",
+        aliases=(),
         source=anchor_room,
         destination=room,
     )

@@ -189,9 +189,8 @@ class MissionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     # SANCTIONED DYNAMIC JSON: the Phase-0 predicate tree consumed by
     # ``world.missions.predicates.evaluate``. Same rationale as
-    # ``MissionOption.visibility_rule`` and
-    # ``distinctions.DistinctionPrerequisite.rule_json`` — this is the one
-    # approved JSONField in the missions app. Empty ``{}`` = no gate
+    # ``MissionOption.visibility_rule``: an AND/OR/NOT rule tree, and this is
+    # the one approved JSONField in the missions app. Empty ``{}`` = no gate
     # (template is available to any predicate-eligible character).
     availability_rule = models.JSONField(
         default=dict,
@@ -578,10 +577,9 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         choices=OptionSource.choices,
     )
     # SANCTIONED DYNAMIC JSON: this is the design §4 predicate tree consumed
-    # by the Phase 0 ``evaluate`` engine. It is the one approved JSONField in
-    # this app, exactly mirroring ``distinctions.DistinctionPrerequisite.
-    # rule_json`` — see world/missions/types.py for the rationale. No other
-    # JSONField is permitted in missions.
+    # by the Phase 0 ``evaluate`` engine: an AND/OR/NOT rule tree. It is the
+    # one approved JSONField in this app -- see world/missions/types.py for
+    # the rationale. No other JSONField is permitted in missions.
     visibility_rule = models.JSONField(
         default=dict,
         blank=True,

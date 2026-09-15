@@ -195,6 +195,9 @@ def _relationship_pull_would_have_effect(thread: Thread, target_persona_id: int)
 
     y_sheet = thread.target_relationship_track.relationship.target
 
+    if y_sheet is None:
+        return False  # a companion bond has no threaded person to have a stake in (#3575)
+
     if x_sheet.pk != y_sheet.pk:
         requester_character = thread.owner.character
         if not can_perceive(requester_character, target_character):

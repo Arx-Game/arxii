@@ -129,7 +129,6 @@ from world.magic.models.gifts import (
 from world.magic.models.glimpse import (
     CharacterGlimpseTag,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
 )
 from world.magic.models.grant import ResonanceGrant
 from world.magic.models.grants import (
@@ -345,7 +344,6 @@ __all__ = [
     "GiftUnlock",
     # Glimpse guided flow (#2427)
     "GlimpseTag",
-    "GlimpseTagDistinctionSuggestion",
     # rituals
     "ImbuingProseTemplate",
     "IntensityTier",

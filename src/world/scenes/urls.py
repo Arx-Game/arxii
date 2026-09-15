@@ -10,6 +10,15 @@ from world.scenes.interaction_views import (
     ReactionEmojiViewSet,
 )
 from world.scenes.place_views import PlaceViewSet
+from world.scenes.play_views import (
+    PlayContextView,
+    PlayConversationsView,
+    PlayPosesView,
+    PlayReadView,
+    PlaySearchView,
+    PlayThreadsView,
+    PoseSubmissionDetailView,
+)
 from world.scenes.precapture_views import PrecaptureConsentRequestViewSet
 from world.scenes.reaction_views import ReactionWindowViewSet
 from world.scenes.social_control_views import BlockViewSet, MuteViewSet
@@ -72,5 +81,16 @@ router.register(r"friends", FriendshipViewSet, basename="friend")
 router.register(r"rivals", RivalryViewSet, basename="rival")
 
 urlpatterns = [
+    path("api/play/conversations/", PlayConversationsView.as_view(), name="play-conversations"),
+    path("api/play/poses/", PlayPosesView.as_view(), name="play-poses"),
+    path("api/play/context/", PlayContextView.as_view(), name="play-context"),
+    path("api/play/search/", PlaySearchView.as_view(), name="play-search"),
+    path("api/play/threads/", PlayThreadsView.as_view(), name="play-threads"),
+    path("api/play/read/", PlayReadView.as_view(), name="play-read"),
+    path(
+        "api/play/submissions/<uuid:client_request_id>/",
+        PoseSubmissionDetailView.as_view(),
+        name="pose-submission",
+    ),
     path("api/", include(router.urls)),
 ]

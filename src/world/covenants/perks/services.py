@@ -335,30 +335,9 @@ def announce_dormant_perks(dormant: list[FiredPerk], *, subject: CharacterSheet)
     Task 7, ruling 2): a disengaged vow says so out loud, at the exact moment
     it would have answered, instead of silently doing nothing.
 
-    Exact line: ``"your vow lies dormant — {perk.name} would have answered
-    here"`` — delivered to the HOLDER (= ``subject``) ONLY, never the room
-    (unlike ``announce_fired_perks``, which broadcasts). Dual dispatch, single
-    recipient:
-
-    - A narrator-authored WHISPER-mode ``Interaction``, receiver-scoped to the
-      subject's PRIMARY persona — mirrors ``record_whisper_interaction``'s
-      receiver/target-persona shape (``receivers=[subject_persona],
-      target_personas=[subject_persona]``), but is NOT built by calling
-      ``record_whisper_interaction`` directly: that function derives its
-      AUTHOR persona from a ``character`` argument (the whisperer), which
-      would wrongly attribute the line to the subject narrating to
-      themselves rather than to the system Narrator. This function instead
-      calls ``create_interaction`` directly with ``persona=narrator``.
-    - The WS payload is sent ONLY to ``subject.character`` via
-      ``_send_to_objects`` — deliberately NOT via ``push_interaction``, which
-      would resolve the broadcast location from the WRITER persona's
-      (narrator's) own — usually unset — character location, the exact
-      "resolve delivery off the wrong object" bug class ``announce_fired_perks``'s
-      docstring documents for ``message_location``. Sending directly to
-      ``[subject.character]`` sidesteps location resolution entirely — there
-      is nowhere to broadcast to; this is a single addressed message.
-    - A direct ``subject.character.msg(text)`` telnet companion, mirroring
-      ``announce_fired_perks``'s own dual-dispatch discipline.
+    Exact line: ``"your vow lies dormant - {perk.name} would have answered
+    here"``. Delivered to the HOLDER only through
+    ``world.scenes.interaction_services.narrate_privately``, never the room.
 
     No-op (no query, no dispatch) when ``dormant`` is empty, ``subject`` has
     no character, or the character has no primary persona.
@@ -370,48 +349,13 @@ def announce_dormant_perks(dormant: list[FiredPerk], *, subject: CharacterSheet)
     if subject_character is None:
         return
 
-    try:
-        subject_persona = subject.primary_persona
-    except ObjectDoesNotExist:
-        return
-
-    from world.scenes.constants import InteractionMode  # noqa: PLC0415
-    from world.scenes.interaction_services import (  # noqa: PLC0415
-        _build_interaction_payload,
-        _send_to_objects,
-        create_interaction,
-        get_active_scene,
-    )
-    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
-
-    narrator = get_or_create_narrator_persona()
-    scene = get_active_scene(subject_character.location)
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
     for firing in dormant:
-        text = f"your vow lies dormant — {firing.perk.name} would have answered here"
-
-        interaction = create_interaction(
-            persona=narrator,
-            content=text,
-            mode=InteractionMode.WHISPER,
-            scene=scene,
-            receivers=[subject_persona],
-            target_personas=[subject_persona],
+        narrate_privately(
+            subject_character,
+            f"your vow lies dormant - {firing.perk.name} would have answered here",
         )
-        payload = _build_interaction_payload(
-            interaction_id=interaction.pk,
-            persona=narrator,
-            content=interaction.content,
-            mode=interaction.mode,
-            timestamp=interaction.timestamp.isoformat(),
-            scene_id=interaction.scene_id,
-            receiver_persona_ids=[subject_persona.pk],
-            target_persona_ids=[subject_persona.pk],
-        )
-        _send_to_objects([subject_character], payload)
-        # Telnet companion (mirrors announce_fired_perks's dual-dispatch
-        # discipline) — addressed directly, HOLDER-only, never the room.
-        subject_character.msg(text)
 
 
 def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:

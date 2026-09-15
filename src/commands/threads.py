@@ -66,7 +66,9 @@ class CmdThreads(ArxCommand):
             "target_mantle",
             "target_relationship_track__track",
             "target_relationship_track__relationship__target__character",
+            "target_relationship_track__relationship__target_companion",
             "target_capstone__relationship__target__character",
+            "target_capstone__relationship__target_companion",
             "target_sanctum_details__feature_instance__room_profile__objectdb",
         )
         if not threads:
@@ -95,7 +97,9 @@ class CmdThreads(ArxCommand):
             "thread__target_mantle",
             "thread__target_relationship_track__track",
             "thread__target_relationship_track__relationship__target__character",
+            "thread__target_relationship_track__relationship__target_companion",
             "thread__target_capstone__relationship__target__character",
+            "thread__target_capstone__relationship__target_companion",
             "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
         )
         if not offers:

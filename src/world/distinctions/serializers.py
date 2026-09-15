@@ -202,7 +202,6 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
     tags = DistinctionTagSerializer(source="cached_tags", many=True, read_only=True)
     effects = DistinctionEffectSerializer(source="cached_effects", many=True, read_only=True)
     variants = serializers.SerializerMethodField()
-    prerequisite_description = serializers.SerializerMethodField()
     codex_entry_ids = serializers.SerializerMethodField()
 
     class Meta:
@@ -220,7 +219,6 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
             "tags",
             "effects",
             "variants",
-            "prerequisite_description",
             "codex_entry_ids",
         ]
         read_only_fields = fields
@@ -239,19 +237,6 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
             many=True,
             context=self.context,
         ).data
-
-    def get_prerequisite_description(self, obj: Distinction) -> str | None:
-        """Return a human-readable description of prerequisites."""
-        prerequisites = obj.prerequisites.all()
-        if not prerequisites:
-            return None
-
-        # Combine all prerequisite descriptions
-        descriptions = [p.description for p in prerequisites if p.description]
-        if not descriptions:
-            return None
-
-        return "; ".join(descriptions)
 
 
 # =============================================================================
@@ -329,7 +314,18 @@ class CharacterDistinctionOtherSerializer(serializers.ModelSerializer):
 
 
 class DraftDistinctionEntrySerializer(serializers.Serializer):
-    """Read shape of one distinction entry stored in draft_data."""
+    """Read shape of one distinction entry stored in draft_data.
+
+    ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
+    ``DistinctionOffer`` rows, their display labels, and how each arrived
+    (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
+    carries them on every offer-tracked entry. ``required=False`` mirrors runtime
+    reality: a legacy entry saved before the offers system landed (0106) has no
+    ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+    has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
+    row) and ``str`` (a tradition-state-carried drawback's synthetic
+    ``"state:<TraditionState>"`` key).
+    """
 
     distinction_id = serializers.IntegerField()
     distinction_name = serializers.CharField()
@@ -338,30 +334,61 @@ class DraftDistinctionEntrySerializer(serializers.Serializer):
     rank = serializers.IntegerField()
     cost = serializers.IntegerField()
     notes = serializers.CharField(allow_blank=True)
+    offer_ids = serializers.ListField(required=False)
+    sources = serializers.ListField(child=serializers.CharField(), required=False)
+    arrivals = serializers.ListField(child=serializers.CharField(), required=False)
+    #: The feature this entry is aimed at (#3739). Empty/zero on everything that is
+    #: not ``taken_per_feature``, and on entries stored before #3739 landed.
+    feature_trait = serializers.CharField(required=False, allow_blank=True, default="")
+    feature_marking = serializers.IntegerField(required=False, default=0)
 
 
 class DraftDistinctionCreateSerializer(serializers.Serializer):
-    """Request body for adding a distinction to a draft (create)."""
+    """Request body for adding a distinction to a draft (create).
+
+    ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from, every
+    add must resolve to an offer the draft earned.
+    """
 
     distinction_id = serializers.IntegerField()
+    offer_id = serializers.IntegerField()
     rank = serializers.IntegerField(required=False, default=1)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class DraftDistinctionSwapSerializer(serializers.Serializer):
-    """Request body for swapping mutually-exclusive distinctions."""
+    """Request body for swapping mutually-exclusive distinctions.
+
+    ``offer_id`` (#3675) names the ``DistinctionOffer`` the added distinction
+    came from, the same offer rule ``create`` enforces.
+    """
 
     remove_id = serializers.IntegerField()
     add_id = serializers.IntegerField()
+    offer_id = serializers.IntegerField()
     rank = serializers.IntegerField(required=False, default=1)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class DraftDistinctionSyncItemSerializer(serializers.Serializer):
-    """One ``{id, rank}`` pair in the sync request list."""
+    """One ``{id, rank, offer_id}`` entry in the sync request list.
+
+    ``offer_id`` (#3675) names the ``DistinctionOffer`` this CHOICE pick came
+    from; required, since carried/bundled entries are re-applied by
+    ``reconcile_offer_picks`` rather than sent by the client.
+
+    ``feature_trait``/``feature_marking`` (#3739) name the one feature a
+    ``taken_per_feature`` pick is aimed at -- a ``FormTrait.name`` or a
+    ``DraftMarking`` pk, never both, and neither on any other distinction. The
+    view rejects the wrong combination rather than silently ignoring it, because
+    the feature is the only thing that keeps two picks of one distinction apart.
+    """
 
     id = serializers.IntegerField()
     rank = serializers.IntegerField(required=False, default=1)
+    offer_id = serializers.IntegerField()
+    feature_trait = serializers.CharField(required=False, allow_blank=True, default="")
+    feature_marking = serializers.IntegerField(required=False, default=0)
 
 
 class DraftDistinctionSyncSerializer(serializers.Serializer):

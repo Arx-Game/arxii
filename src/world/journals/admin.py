@@ -15,13 +15,14 @@ class JournalEntryAdmin(admin.ModelAdmin):
     list_display = [
         "title",
         "author",
+        "kind",
         "is_public",
         "response_type",
         "posthumous_override",
         "revealed_at",
         "created_at",
     ]
-    list_filter = ["is_public", "response_type", "posthumous_override", "created_at"]
+    list_filter = ["kind", "is_public", "response_type", "posthumous_override", "created_at"]
     search_fields = ["title", "body", "author__character__db_key"]
     date_hierarchy = "created_at"
     raw_id_fields = ["author", "parent", "revealed_by_settlement"]

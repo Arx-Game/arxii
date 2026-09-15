@@ -59,17 +59,33 @@ from server.conf.mush_markup import normalize_mush_markup
 
 
 def text(session, *args, **kwargs):
-    """Telnet input adapter: convert MUSH ``%r``/``%t`` markup before handling.
+    """Telnet input adapter, and the staff console's tag (#3857).
 
     Telnet is line-oriented, so ``%r`` is how MU* players embed a newline into a
     single line of input. Only telnet-family sessions are rewritten; websocket /
     ajax sessions (the React frontend, which sends real newlines and dispatches
     via ``execute_action``) pass through untouched. We then delegate to Evennia's
     default ``text`` handler rather than re-implementing command handling.
+
+    A line the web client sends from its staff Commands mode carries
+    ``console=True`` (#3857). While Evennia runs that line, the session is
+    marked so ``ServerSession.data_out`` tags every ``text`` frame it sends
+    ``{"console": True}``; the client routes those to its console sheet and
+    never to the column. Command execution is synchronous for the commands
+    this exists for; output a command schedules for later is not tagged and
+    lands where it always did.
     """
+    console = bool(kwargs.pop("console", False))
     if args and str(session.protocol_key or "").startswith("telnet"):
         args = (normalize_mush_markup(args[0]), *args[1:])
-    _evennia_text(session, *args, **kwargs)
+    if not console:
+        _evennia_text(session, *args, **kwargs)
+        return
+    session.ndb.console_capture = True
+    try:
+        _evennia_text(session, *args, **kwargs)
+    finally:
+        session.ndb.console_capture = False
 
 
 def _build_action_ref(kwargs: dict) -> object:
@@ -209,17 +225,32 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001
     Outbound: ``session.msg`` with
         ``type=WebsocketMessageType.ACTION_RESULT.value`` and a kwargs
         payload of ``{"success": bool, "message": str | None,
-        "data": dict | None}``.
+        "data": dict | None, "client_request_id": str | None}``. The
+        ``client_request_id`` is echoed back unchanged from the inbound
+        ``kwargs.client_request_id`` (when the caller supplied one) so a
+        dispatching client can correlate this event with its own send
+        instead of assuming "the next ``action_result`` on the bus is
+        mine" (#3781).
     """
     from actions.errors import ActionDispatchError  # noqa: PLC0415
     from actions.player_interface import dispatch_player_action  # noqa: PLC0415
     from actions.types import ActionInterrupted  # noqa: PLC0415
     from web.webclient.message_types import WebsocketMessageType  # noqa: PLC0415
 
+    raw_kwargs: dict = kwargs.get("kwargs") or {}
+    client_request_id = raw_kwargs.get("client_request_id")
+    if not isinstance(client_request_id, str):
+        client_request_id = None
+
     def _send(success: bool, message: str | None = None, data: object = None) -> None:
         session.msg(
             type=WebsocketMessageType.ACTION_RESULT.value,
-            kwargs={"success": success, "message": message, "data": data},
+            kwargs={
+                "success": success,
+                "message": message,
+                "data": data,
+                "client_request_id": client_request_id,
+            },
         )
 
     actor = session.puppet
@@ -233,7 +264,6 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001
         return
     ref = ref_or_err
 
-    raw_kwargs: dict = kwargs.get("kwargs") or {}
     resolved_or_err = _resolve_registry_kwargs(ref, raw_kwargs, actor)
     if isinstance(resolved_or_err, str):
         _send(False, resolved_or_err)

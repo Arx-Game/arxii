@@ -111,6 +111,7 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "org_crises__chosen_option",  # noqa: PREFETCH_STRING
             "fealty__liege",  # noqa: PREFETCH_STRING  — this org's liege edge (get_house)
             "vassal_edges__vassal",  # noqa: PREFETCH_STRING  — its direct vassals
+            "vacancies",  # noqa: PREFETCH_STRING - open openings (#3648, get_house)
         )
         .order_by("id")
     )

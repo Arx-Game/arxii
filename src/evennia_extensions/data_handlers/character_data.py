@@ -182,10 +182,22 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         return sheet.quote or ""
 
     @property
-    def personality(self) -> str:
-        """Character's personality from sheet data."""
+    def never_do(self) -> str:
+        """The Actor's Sheet: what the character would never do (#3621)."""
         sheet = self._get_sheet()
-        return sheet.personality or ""
+        return sheet.never_do or ""
+
+    @property
+    def protect(self) -> str:
+        """The Actor's Sheet: what the character would protect at all costs (#3621)."""
+        sheet = self._get_sheet()
+        return sheet.protect or ""
+
+    @property
+    def fear(self) -> str:
+        """The Actor's Sheet: what the character is deathly afraid of (#3621)."""
+        sheet = self._get_sheet()
+        return sheet.fear or ""
 
     @property
     def obituary(self) -> str:

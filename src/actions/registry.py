@@ -377,14 +377,14 @@ from actions.definitions.positioning import (
 )
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
 from actions.definitions.progression_rewards import (
-    CastVoteAction,
     ClaimKudosAction,
     ClaimRandomSceneAction,
     ClearPathIntentAction,
-    RemoveVoteAction,
+    NominateAction,
     RerollRandomSceneAction,
     SelectPathAction,
     SetPathIntentAction,
+    WithdrawNominationAction,
 )
 from actions.definitions.projects import (
     CheckContributeAction,
@@ -854,8 +854,8 @@ _ALL_ACTIONS: list[Action] = [
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     ClaimKudosAction(),
-    CastVoteAction(),
-    RemoveVoteAction(),
+    NominateAction(),
+    WithdrawNominationAction(),
     ClaimRandomSceneAction(),
     RerollRandomSceneAction(),
     SetPathIntentAction(),

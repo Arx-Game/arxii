@@ -128,14 +128,18 @@ When skipping, go straight to Implementation (claim `status:implementing`).
 
 Otherwise, claim the draft lane (`status:spec-draft`; pickup sets this) and
 invoke the **ported `brainstorming` skill** (`tools/skills/brainstorming/`). It
-handles the full design dialogue and writes the spec into the issue body. Two
-points it already bakes in (from the port):
+handles the full design dialogue and writes the spec into the issue body.
+Points it already bakes in (from the port):
 - **Spec destination:** the issue body, between `<!-- spec:start -->` and
   `<!-- spec:end -->` markers (`gh issue edit <N> --body-file`), using
   `docs/spec-template.md`'s section layout. No committed spec file.
 - **Mandatory `verify-against-code` pass:** before the spec is finalized, run
   `tools/skills/verify-against-code/` and embed the anti-reinvention ledger as a
   section of the spec.
+- **Mandatory `schema-shape` pass:** whenever the design proposes a new
+  model, table, FK, column, or primary-key choice, run
+  `tools/skills/schema-shape/` and embed its six-question answers in the
+  spec.
 - **Spec-review dispatch:** when the brainstorming skill reaches spec review,
   dispatch with the prompt at
   `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md`.
@@ -190,34 +194,46 @@ conflicts, then continue (`git rebase --continue` / `git merge --continue`).
 ### 5. Push & open PR
 
 **PR creation is automatic — do not ask the operator for approval.** Once
-implementation is complete, tests pass, and docs are updated, push the branch
-and open the PR immediately. The operator has pre-approved this step; the
-human review gate is on the PR itself (code review + CI), not on opening it.
+implementation is complete, tests pass, docs are updated, and the committed
+review evidence report validates against the reviewed code revision (the parent of the evidence commit), push the branch and open the PR.
+`open-pr.sh` is a hard pre-PR gate: it requires provenance, the ordinary user
+path, visual screenshots when a design/demo exists, one verdict per mandatory
+criterion, and no unresolved findings. A green build is not acceptance evidence.
+`open-pr.sh` closes the issue by default (`Closes`); set `PR_KEEP_OPEN=1` only
+when this PR is a deliberate partial step toward a multi-PR umbrella spec with
+more PRs still planned against the same issue.
 
-Compose the PR body's substitution values. For each deferred follow-up, call
+Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict. Set `PR_EVIDENCE_FILE` to a local report (a repository or scratch path), or set `PR_EVIDENCE_URL` to the GitHub issue/PR comment where the reviewer posted it. Compose the PR body's substitution
+values. For each deferred follow-up, call
 `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before opening
 the PR) and collect the issue numbers. **Before filing each follow-up, run the
 `verify-against-code` pass on its premise** — drop it if already built; file
 design-open items as `needs-design` questions, not asserted work.
 
 ```bash
+PR_EVIDENCE_FILE="a scratch review report" \
 PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```
 
-The PR body references the approved spec via `Closes #<issue>`.
+The PR body links the committed report and uses `Closes #<issue>` by default.
+Only a deliberately partial step toward a multi-PR umbrella spec opts into
+`PR_KEEP_OPEN=1`; the ordinary case (this PR is the whole fix) closes.
 
 **Do NOT run `uv run pre-commit run --all-files` (or whole-repo test suites) as a
 pre-push precheck — it can crash this devcontainer.** The per-file hooks already
 ran at commit; CI's `pre-commit` job is the gate. Only if the branch used
 `--no-verify` commits, scope the catch-up to the diff (never `--all-files`):
-`uv run pre-commit run --from-ref origin/main --to-ref HEAD`.
+`uv run pre-commit run --from-ref origin/main --to-ref HEAD`. That form clears the
+worktree while hooks run (#3814), so run it only when no other agent has
+uncommitted work in the worktree.
 
 ### 6. CI watch
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
-- `OK` (exit 0): enqueue for the merge queue with `scripts/enqueue-pr.sh <pr-N>`,
-  post a brief status comment, exit the session. **Do NOT re-sync or merge by
+- `OK` (exit 0): run `scripts/enqueue-pr.sh <pr-N>`. It revalidates the
+  committed report against the reviewed code revision before arming auto-merge. Then post a
+  brief status comment and exit the session. **Do NOT re-sync or merge by
   hand** — the merge queue re-tests and merges once a human approves.
 - `FAIL <check-name>` (exit 5): enter the CI-fix phase.
 - timeout (exit 6): post a diagnostic, exit.

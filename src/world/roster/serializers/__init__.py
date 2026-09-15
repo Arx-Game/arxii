@@ -41,6 +41,7 @@ from world.roster.serializers.mail import PlayerMailSerializer, UnreadMailCountS
 from world.roster.serializers.media import (
     ArtistSerializer,
     MediaSerializer,
+    MediaUploadSerializer,
     TenureGallerySerializer,
     TenureMediaSerializer,
 )
@@ -79,6 +80,7 @@ __all__ = [
     "KinSlotPoolSerializer",
     "KinSlotSerializer",
     "MediaSerializer",
+    "MediaUploadSerializer",
     "MyRosterEntrySerializer",
     "NPCPresetSkillLineSerializer",
     "NPCPresetTraitLineSerializer",
