@@ -23924,6 +23924,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/world-builder/areas/unfiled-rooms/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/world-builder/areas/unfiled-rooms/ — rooms that belong to no area (#3860).
+     *
+     *     Limbo, and any room minted outside the builder: the index rail lists them so
+     *     reaching one never depends on knowing to search. Staff only in effect: a
+     *     warrant covers areas, and an area-less room lies under no warrant, so a
+     *     grant holder gets an empty list rather than a 403.
+     */
+    get: operations['world_builder_areas_unfiled_rooms_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/beings/': {
     parameters: {
       query?: never;
@@ -47153,6 +47177,7 @@ export interface components {
       from_room_id: number;
       to_room_id: number | null;
       to_room_name: string | null;
+      one_way: boolean;
       to_area_id: number | null;
     };
     /** @description One outgoing exit with its profile detail (#3269 room-detail endpoint). */
@@ -47163,6 +47188,7 @@ export interface components {
       kind: string;
       is_open: boolean;
       aliases: string[];
+      one_way: boolean;
     };
     /** @description One of the caller's own AreaBuildGrants, with its budget usage (#3534). */
     WorldBuilderGrant: {
@@ -80299,6 +80325,30 @@ export interface operations {
     };
   };
   world_builder_areas_room_search_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorldBuilderRoomHitList'];
+        };
+      };
+    };
+  };
+  world_builder_areas_unfiled_rooms_list: {
     parameters: {
       query?: {
         /** @description A page number within the paginated result set. */

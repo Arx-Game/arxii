@@ -293,6 +293,7 @@ describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
       matchedRoomId: null,
       exitThere: 'down',
       exitBack: 'up',
+      oneWay: false,
     });
   });
 
@@ -302,7 +303,7 @@ describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
     await userEvent.type(screen.getByTestId('add-dialog-name'), 'the kitchen');
     expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Link it');
     expect(screen.getByTestId('add-dialog-exit-note')).toHaveTextContent(
-      'joins two rooms that already exist'
+      'links to The Kitchen, and The Kitchen back to here'
     );
 
     await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'north');
@@ -315,6 +316,29 @@ describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
       matchedRoomId: 6,
       exitThere: 'north',
       exitBack: 'south',
+      oneWay: false,
+    });
+  });
+
+  it('one way hides the exit back and sends oneWay with no return name (#3860)', async () => {
+    const { onConfirm } = renderDialog({ mode: 'exit', roomOptions: ROOM_OPTIONS });
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'the kitchen');
+    expect(screen.getByTestId('add-dialog-both-ways')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByTestId('add-dialog-one-way'));
+    expect(screen.queryByTestId('add-dialog-exit-back')).toBeNull();
+    expect(screen.getByTestId('add-dialog-exit-note')).toHaveTextContent('nothing leads back');
+
+    await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'down');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'exit',
+      name: 'the kitchen',
+      matchedRoomId: 6,
+      exitThere: 'down',
+      exitBack: '',
+      oneWay: true,
     });
   });
 

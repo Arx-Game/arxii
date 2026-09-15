@@ -33,7 +33,7 @@ from rest_framework.response import Response
 from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.areas.constants import UNFINISHED_ROOM_DESC
 from world.areas.filters import AreaFilter
-from world.areas.grid_services import exits_from_rooms
+from world.areas.grid_services import exits_from_rooms, one_way_exit_ids
 from world.areas.models import Area, AreaClosure
 from world.areas.serializers import (
     WorldBuilderAreaManagerSerializer,
@@ -410,6 +410,7 @@ def area_manager_payload(area: Area) -> dict:
     rooms_data = _room_rows(profiles)
 
     exits = list(exits_from_rooms(set(room_ids)).select_related("db_destination"))
+    one_way = one_way_exit_ids(exits)
     destination_ids = {e.db_destination_id for e in exits if e.db_destination_id is not None}
     destination_areas = dict(
         RoomProfile.objects.filter(objectdb_id__in=destination_ids).values_list(
@@ -446,6 +447,7 @@ def area_manager_payload(area: Area) -> dict:
                     e.db_destination.db_key if e.db_destination_id is not None else None
                 ),
                 "to_area_id": destination_areas.get(e.db_destination_id),
+                "one_way": e.pk in one_way,
             }
             for e in exits
         ],
@@ -552,6 +554,36 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
         ]
         return Response(WorldBuilderRoomHitSerializer(payload, many=True).data)
 
+    @extend_schema(responses={200: WorldBuilderRoomHitSerializer(many=True)})
+    @action(detail=False, methods=["get"], url_path="unfiled-rooms")
+    def unfiled_rooms(self, request: Request) -> Response:
+        """GET /api/world-builder/areas/unfiled-rooms/ — rooms that belong to no area (#3860).
+
+        Limbo, and any room minted outside the builder: the index rail lists them so
+        reaching one never depends on knowing to search. Staff only in effect: a
+        warrant covers areas, and an area-less room lies under no warrant, so a
+        grant holder gets an empty list rather than a 403.
+        """
+        if _covered_area_ids(request) is not None:
+            return Response([])
+        profiles = (
+            RoomProfile.objects.filter(area__isnull=True)
+            .select_related("objectdb")
+            .order_by("objectdb__db_key")
+        )
+        payload = [
+            {
+                "id": p.objectdb_id,
+                "name": p.objectdb.db_key,
+                "area_id": None,
+                "area_name": None,
+                "floor": p.floor,
+                "fixture_key": p.fixture_key,
+            }
+            for p in profiles
+        ]
+        return Response(WorldBuilderRoomHitSerializer(payload, many=True).data)
+
     @extend_schema(responses={200: WorldBuilderRoomDetailSerializer})
     @action(detail=False, methods=["get"], url_path="room-detail")
     def room_detail(self, request: Request) -> Response:
@@ -580,9 +612,11 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
 
         room_obj = profile.objectdb
         exits = []
-        for exit_obj in exits_from_rooms({profile.objectdb_id}).select_related(
-            "db_destination", "exit_profile"
-        ):
+        outgoing = list(
+            exits_from_rooms({profile.objectdb_id}).select_related("db_destination", "exit_profile")
+        )
+        one_way = one_way_exit_ids(outgoing)
+        for exit_obj in outgoing:
             from evennia_extensions.models import ExitProfile  # noqa: PLC0415
 
             try:
@@ -597,6 +631,7 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
                     "kind": exit_profile.exit_kind if exit_profile else "door",
                     "is_open": exit_profile.is_open if exit_profile else False,
                     "aliases": sorted(exit_obj.aliases.all()),
+                    "one_way": exit_obj.pk in one_way,
                 }
             )
         from django.db import DatabaseError, transaction  # noqa: PLC0415

@@ -224,6 +224,7 @@ export function RoomDetailPanel({
               )}
               <span className="whitespace-nowrap text-xs text-muted-foreground">
                 → {exit.to_room_name ?? 'elsewhere'}
+                {exit.one_way && ' · one way'}
               </span>
               {!isStory && (
                 <Button

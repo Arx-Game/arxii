@@ -38785,6 +38785,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
           description: ''
+  /api/world-builder/areas/unfiled-rooms/:
+    get:
+      operationId: world_builder_areas_unfiled_rooms_list
+      description: |-
+        GET /api/world-builder/areas/unfiled-rooms/ — rooms that belong to no area (#3860).
+
+        Limbo, and any room minted outside the builder: the index rail lists them so
+        reaching one never depends on knowing to search. Staff only in effect: a
+        warrant covers areas, and an area-less room lies under no warrant, so a
+        grant holder gets an empty list rather than a 403.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
+          description: ''
   /api/worship/beings/:
     get:
       operationId: worship_beings_list
@@ -84169,6 +84203,8 @@ components:
         to_room_name:
           type: string
           nullable: true
+        one_way:
+          type: boolean
         to_area_id:
           type: integer
           nullable: true
@@ -84176,6 +84212,7 @@ components:
       - from_room_id
       - id
       - name
+      - one_way
       - to_area_id
       - to_room_id
       - to_room_name
@@ -84198,12 +84235,15 @@ components:
           type: array
           items:
             type: string
+        one_way:
+          type: boolean
       required:
       - aliases
       - id
       - is_open
       - kind
       - name
+      - one_way
       - to_room_id
     WorldBuilderGrant:
       type: object

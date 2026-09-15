@@ -113,6 +113,8 @@ export type AddDialogRealizePayload =
       matchedRoomId: number | null;
       exitThere: string;
       exitBack: string;
+      /** One way (#3860): only the exit there is made and `exitBack` is empty. */
+      oneWay: boolean;
     };
 
 /**
@@ -165,10 +167,21 @@ export interface AddDialogProps {
 }
 
 /** What the exit field is about to do, in the player's terms. */
-function exitNote(trimmedDestination: string, matched: AddDialogRoomOption | null): string {
+function exitNote(
+  trimmedDestination: string,
+  matched: AddDialogRoomOption | null,
+  oneWay: boolean
+): string {
   if (trimmedDestination === '') return 'name the room this exit leads to';
-  if (matched) return 'joins two rooms that already exist — nothing new is made';
-  return 'dug as a placeholder for the writing pass — you stay here';
+  if (matched) {
+    // Both rooms exist, so the note says what will and will not lead back (#3860).
+    return oneWay
+      ? `links to ${matched.name}; nothing leads back to here`
+      : `links to ${matched.name}, and ${matched.name} back to here`;
+  }
+  return oneWay
+    ? 'dug as a placeholder for the writing pass — nothing leads back to here'
+    : 'dug as a placeholder for the writing pass — you stay here';
 }
 
 /** Exit mode forks on whether the destination already exists; a room square on an unplaced match; areas just add. */
@@ -210,6 +223,7 @@ interface SubmitDialogArgs {
   exit: RowState;
   exitThere: string;
   exitBack: string;
+  oneWay: boolean;
   onConfirm: (payload: AddDialogRealizePayload) => void;
 }
 
@@ -229,6 +243,7 @@ function submitDialog({
   exit,
   exitThere,
   exitBack,
+  oneWay,
   onConfirm,
 }: SubmitDialogArgs): void {
   const trimmedName = name.trim();
@@ -256,7 +271,8 @@ function submitDialog({
       name: trimmedName,
       matchedRoomId: matched?.id ?? null,
       exitThere: exitThere.trim(),
-      exitBack: exitBack.trim(),
+      exitBack: oneWay ? '' : exitBack.trim(),
+      oneWay,
     });
     return;
   }
@@ -303,6 +319,8 @@ export function AddDialog({
   );
   const [exitThere, setExitThere] = useState('');
   const [exitBack, setExitBack] = useState('');
+  // #3860 — both ways is the default; one way is the staff's deliberate choice.
+  const [oneWay, setOneWay] = useState(false);
 
   // Reset ONLY on the closed→open transition. `defaultNeighbor` is read
   // through a ref because both callers rebuild it every render — with it in
@@ -322,6 +340,7 @@ export function AddDialog({
     setExit(initialRow(neighbor?.roomId ?? null, neighbor?.outName ?? 'out'));
     setExitThere('');
     setExitBack('');
+    setOneWay(false);
     setBecomes(firstLevel ? String(firstLevel.value) : '');
     setAreaEntrance(initialRow(neighbor?.roomId ?? null, ''));
     setAreaExitBack('out');
@@ -387,6 +406,7 @@ export function AddDialog({
       exit,
       exitThere,
       exitBack,
+      oneWay,
       onConfirm,
     });
     onOpenChange(false);
@@ -462,6 +482,28 @@ export function AddDialog({
 
           {mode === 'exit' && (
             <>
+              <div className="flex items-center gap-2" data-testid="add-dialog-direction">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={oneWay ? 'outline' : 'default'}
+                  aria-pressed={!oneWay}
+                  onClick={() => setOneWay(false)}
+                  data-testid="add-dialog-both-ways"
+                >
+                  Both ways
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={oneWay ? 'default' : 'outline'}
+                  aria-pressed={oneWay}
+                  onClick={() => setOneWay(true)}
+                  data-testid="add-dialog-one-way"
+                >
+                  One way
+                </Button>
+              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="add-dialog-exit-there">Exit there</Label>
                 <Input
@@ -472,21 +514,23 @@ export function AddDialog({
                   data-testid="add-dialog-exit-there"
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="add-dialog-exit-back">Exit back</Label>
-                <Input
-                  id="add-dialog-exit-back"
-                  value={exitBack}
-                  onChange={(event) => setExitBack(event.target.value)}
-                  placeholder="east"
-                  data-testid="add-dialog-exit-back"
-                />
-              </div>
+              {!oneWay && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="add-dialog-exit-back">Exit back</Label>
+                  <Input
+                    id="add-dialog-exit-back"
+                    value={exitBack}
+                    onChange={(event) => setExitBack(event.target.value)}
+                    placeholder="east"
+                    data-testid="add-dialog-exit-back"
+                  />
+                </div>
+              )}
               <p
                 className="font-body text-xs italic text-muted-foreground"
                 data-testid="add-dialog-exit-note"
               >
-                {exitNote(trimmedDestination, matched)}
+                {exitNote(trimmedDestination, matched, oneWay)}
               </p>
             </>
           )}

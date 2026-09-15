@@ -883,7 +883,9 @@ class StaffPublishRoomAction(_WorldBuilderAction):
 class StaffLinkRoomsAction(_WorldBuilderAction):
     """Link two world rooms with a named exit pair — cross-area allowed.
 
-    Kwargs: ``room_a_id``, ``room_b_id``, ``name_ab``, ``name_ba``.
+    Kwargs: ``room_a_id``, ``room_b_id``, ``name_ab``, ``name_ba``, and ``one_way``
+    (#3860): with it, only the exit from A to B is made and ``name_ba`` is not
+    needed. Two-way stays the default; one-way is the staff's deliberate choice.
     """
 
     key: str = "staff_link_rooms"
@@ -900,7 +902,7 @@ class StaffLinkRoomsAction(_WorldBuilderAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.areas.grid_services import create_exit_pair  # noqa: PLC0415
+        from world.areas.grid_services import create_exit, create_exit_pair  # noqa: PLC0415
 
         room_a = _resolve_room_profile(kwargs.get("room_a_id"))
         room_b = _resolve_room_profile(kwargs.get("room_b_id"))
@@ -908,6 +910,17 @@ class StaffLinkRoomsAction(_WorldBuilderAction):
             return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         name_ab = (kwargs.get("name_ab") or "").strip()
         name_ba = (kwargs.get("name_ba") or "").strip()
+        one_way = bool(kwargs.get("one_way", False))
+        if one_way:
+            if not name_ab:
+                return ActionResult(success=False, message="The exit needs a name.")
+            create_exit(
+                name=name_ab, aliases=(), source=room_a.objectdb, destination=room_b.objectdb
+            )
+            return ActionResult(
+                success=True,
+                message=(f"Linked {room_a.objectdb.db_key} -> {room_b.objectdb.db_key} (one way)."),
+            )
         if not name_ab or not name_ba:
             return ActionResult(
                 success=False, message="Both exit names are needed (one for each direction)."
