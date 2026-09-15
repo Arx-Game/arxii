@@ -23,6 +23,43 @@ describe('playPreferences', () => {
     expect(prefs.density).toBe('compact');
   });
 
+  it('defaults the feed chips to the demo layout with All on (#3856)', () => {
+    const prefs = loadPlayPreferences();
+    expect(prefs.feedChips.map((chip) => chip.label)).toEqual([
+      'Roleplay',
+      'Whispers',
+      'Movement',
+      'Ambience',
+      'System',
+    ]);
+    expect(prefs.feedAll).toBe(true);
+  });
+
+  it('round-trips an edited chip layout per account and repairs a broken one', () => {
+    const edited = {
+      ...DEFAULT_PLAY_PREFERENCES,
+      feedChips: [
+        { id: 'c1', label: 'Mine', kinds: ['say', 'nope'], on: true, wake: true, custom: true },
+      ],
+      feedAll: false,
+    };
+    localStorage.setItem('arx:play-preferences:v2:account:7', JSON.stringify(edited));
+
+    const prefs = loadPlayPreferences(7);
+    expect(prefs.feedChips).toEqual([
+      { id: 'c1', label: 'Mine', kinds: ['say'], on: true, wake: true, custom: true },
+    ]);
+    expect(prefs.feedAll).toBe(false);
+    // Another account's layout is untouched by this one.
+    expect(loadPlayPreferences(8).feedChips.map((chip) => chip.id)).toEqual([
+      'rp',
+      'wh',
+      'mv',
+      'am',
+      'sy',
+    ]);
+  });
+
   it('round-trips a conversation anchor', () => {
     saveConversationAnchor('scene:1', {
       anchors: {

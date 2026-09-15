@@ -17,6 +17,7 @@ import {
   setSessionRoom,
   setSessionScene,
   addSceneInteraction,
+  addFeedNote,
   addSessionMessage,
   setSceneBaseline,
   clearSceneInteractions,
@@ -862,6 +863,78 @@ describe('GamePage', () => {
   // tab strip (rendered when 2+ sessions are open) badges the SAME two-tier
   // `sessionAttention` result as GameTopBar's alt-character avatars.
   // ---------------------------------------------------------------------------
+
+  describe('feed filter chips (#3856)', () => {
+    it('shows the strip above the scene feed; All switches the column off, a chip brings one kind back', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      const strip = screen.getByRole('toolbar', { name: 'Feed filters' });
+      expect(within(strip).getByRole('button', { name: 'Roleplay' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      fireEvent.click(within(strip).getByRole('button', { name: 'All' }));
+      expect(screen.getByTestId('feed-all-off')).toHaveTextContent(
+        'Everything is switched off. Press a chip to bring one kind back.'
+      );
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+
+      fireEvent.click(within(strip).getByRole('button', { name: 'Roleplay' }));
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      expect(within(strip).getByRole('button', { name: 'Whispers' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      );
+    });
+
+    it('pressing Roleplay hides the poses while a note keeps showing, and the layout persists per account', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(
+        addFeedNote({
+          character: ACTIVE_NAME,
+          note: {
+            kind: 'look',
+            content: 'Rain rests on the stones.',
+            timestamp: '2026-01-01T00:00:30.000Z',
+          },
+        })
+      );
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Roleplay' }));
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+      expect(screen.getByText('Rain rests on the stones.')).toBeInTheDocument();
+      const stored = JSON.parse(
+        localStorage.getItem(`arx:play-preferences:v2:account:${mockAccount.id}`) ?? '{}'
+      ) as { feedChips: Array<{ id: string; on: boolean }> };
+      expect(stored.feedChips.find((chip) => chip.id === 'rp')?.on).toBe(false);
+    });
+
+    it('minimises a pose to a stub, reopens it, and dismisses it from this view only', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Minimise' }));
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${ACTIVE_NAME} · `) }));
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+      // Nothing was deleted: the interaction is still in the session and on the server.
+      expect(store.getState().game.sessions[ACTIVE_NAME].sceneInteractions).toHaveLength(1);
+    });
+  });
 
   describe('puppet tab bar attention badge (#2166)', () => {
     it('badges a background puppet tab with a numeric direct count on an unseen whisper', async () => {

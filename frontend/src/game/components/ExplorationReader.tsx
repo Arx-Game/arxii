@@ -4,6 +4,8 @@ import type { GameLifecycleState } from '@/store/gameSlice';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { ActorLine } from '@/scenes/components/ActorLine';
 import { FeedNoteBlock } from './FeedNoteBlock';
+import { FeedBlockFrame } from './FeedBlockFrame';
+import { feedItemKey } from '../feedChips';
 import { interleaveNotes } from '../feedRows';
 import type { RoomData } from './RoomPanel';
 
@@ -155,31 +157,36 @@ export function ExplorationReader({
                       key={`${row.item.id}:${row.item.timestamp}`}
                       data-feed-row={`interaction:${row.item.id}`}
                     >
-                      <article className="border-b pb-3 last:border-b-0">
-                        <header className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                          <PersonaAvatar
-                            source={{
-                              name: row.item.persona.name,
-                              thumbnailUrl: row.item.persona.thumbnail_url,
-                            }}
-                            size="sm"
+                      <FeedBlockFrame
+                        itemKey={feedItemKey('interaction', row.item.id)}
+                        stub={`${row.item.persona.name} · ${new Date(row.item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                      >
+                        <article className="border-b pb-3 last:border-b-0">
+                          <header className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                            <PersonaAvatar
+                              source={{
+                                name: row.item.persona.name,
+                                thumbnailUrl: row.item.persona.thumbnail_url,
+                              }}
+                              size="sm"
+                            />
+                            <span className="font-medium text-foreground">
+                              {row.item.persona.name}
+                            </span>
+                            <time dateTime={row.item.timestamp}>
+                              {new Date(row.item.timestamp).toLocaleTimeString([], {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </time>
+                          </header>
+                          <ActorLine
+                            line={row.item.line}
+                            content={row.item.content}
+                            actorName={row.item.attributed_companion_name ?? row.item.persona.name}
                           />
-                          <span className="font-medium text-foreground">
-                            {row.item.persona.name}
-                          </span>
-                          <time dateTime={row.item.timestamp}>
-                            {new Date(row.item.timestamp).toLocaleTimeString([], {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
-                          </time>
-                        </header>
-                        <ActorLine
-                          line={row.item.line}
-                          content={row.item.content}
-                          actorName={row.item.attributed_companion_name ?? row.item.persona.name}
-                        />
-                      </article>
+                        </article>
+                      </FeedBlockFrame>
                     </li>
                   )
                 )}

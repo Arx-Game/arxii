@@ -15,6 +15,9 @@ import {
   clearSessionMessages,
   addFeedNote,
   clearFeedNotes,
+  minimizeFeedItem,
+  restoreFeedItem,
+  dismissFeedItem,
   setSessionCommands,
   setSessionRoom,
   setSessionScene,
@@ -59,6 +62,8 @@ interface Session {
   isConnected: boolean;
   messages: Array<GameMessage & { id: string }>;
   notes: FeedNote[];
+  minimizedFeed: string[];
+  dismissedFeed: string[];
   unread: number;
   commands: CommandSpec[];
   room: RoomData | null;
@@ -80,6 +85,8 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   isConnected: false,
   messages: [],
   notes: [],
+  minimizedFeed: [],
+  dismissedFeed: [],
   unread: 0,
   commands: [],
   room: null,
@@ -235,6 +242,8 @@ describe('gameSlice', () => {
           isConnected: false,
           messages: [],
           notes: [],
+          minimizedFeed: [],
+          dismissedFeed: [],
           unread: 0,
           commands: [],
           room: null,
@@ -803,6 +812,30 @@ describe('gameSlice', () => {
     });
   });
 
+  describe('minimise and dismiss (#3856)', () => {
+    it('minimises a block once, restores it, and dismissing drops the minimised mark', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'i:5' }));
+      state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'i:5' }));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual(['i:5']);
+
+      state = reducer(state, restoreFeedItem({ character: 'TestCharacter', key: 'i:5' }));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual([]);
+
+      state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'n:n1' }));
+      state = reducer(state, dismissFeedItem({ character: 'TestCharacter', key: 'n:n1' }));
+      state = reducer(state, dismissFeedItem({ character: 'TestCharacter', key: 'n:n1' }));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual([]);
+      expect(state.sessions['TestCharacter'].dismissedFeed).toEqual(['n:n1']);
+    });
+
+    it('ignores a session that does not exist', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      const result = reducer(initialState, dismissFeedItem({ character: 'Nobody', key: 'i:1' }));
+      expect(result).toEqual(initialState);
+    });
+  });
+
   describe('clearFeedNotes (#3856)', () => {
     it('empties the notes and leaves the messages alone', () => {
       const initialState = createStateWithSession('TestCharacter', {
@@ -1274,6 +1307,8 @@ describe('gameSlice', () => {
               { ...createGameMessage('Msg 2'), id: '2' },
             ],
             notes: [],
+            minimizedFeed: [],
+            dismissedFeed: [],
             unread: 10,
             commands: [createCommandSpec('attack', 'Attack')],
             room: createRoomData(
