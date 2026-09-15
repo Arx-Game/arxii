@@ -100,6 +100,27 @@ rooms = get_rooms_in_area(city_area)
 
 ---
 
+### One-way exits and unfiled rooms (#3860, ADR-0301)
+
+Every exit-minting surface makes a symmetric pair through `grid_services.create_exit_pair`,
+except the two staff tools that may leave the return out on purpose:
+`StaffLinkRoomsAction` with `one_way=True` (through the public `grid_services.create_exit`,
+one direction, no `name_ba` needed; the message reads `Linked A -> B (one way).`) and the
+Atlas's exit dialog (`atlas/AddDialog.tsx` exit mode, and the canvas's `LinkRoomsDialog`),
+where "Both ways" is pressed by default and "One way" hides the return name and says
+nothing leads back. The owner's building `link_rooms` and a GM's `story_link_rooms` stay
+two-way. Exit rows in the area manager (`WorldBuilderExitSerializer`) and the room detail
+(`WorldBuilderExitDetailSerializer`) carry `one_way`, from `grid_services.one_way_exit_ids`
+(one query per payload); the room document's exit chip tags it, and
+`StaffUnlinkRoomsAction` already removes an exit with no sibling.
+
+Rooms with no `Area` (Limbo, and anything minted outside the builder) sit on no grid.
+`GET /api/world-builder/areas/unfiled-rooms/` lists them (`WorldBuilderRoomHitSerializer`
+rows; staff only in effect, since a warrant covers areas and an area-less room lies under
+none, so a grant holder gets `[]`), and the Atlas's index rail shows them under "Unfiled
+rooms" (`atlas/IndexRail.tsx`), each opening the room's document. The room search already
+found them by name; the rail is how a staffer reaches one without knowing to search.
+
 ## AreaClosure Materialized View
 
 The `AreaClosure` model is backed by a Postgres materialized view that stores every ancestor-descendant pair with depth. This enables efficient ancestry and descendant queries without recursive CTEs at query time.

@@ -59,6 +59,8 @@ export function LinkRoomsDialog({
   const [targetRoomId, setTargetRoomId] = useState('');
   const [nameAB, setNameAB] = useState('');
   const [nameBA, setNameBA] = useState('');
+  // #3860 — both ways is the default; one way is the staff's deliberate choice.
+  const [oneWay, setOneWay] = useState(false);
 
   const { data: areasData } = useWorldBuilderAreasQuery({}, !isStory && crossArea);
   const areaOptions = areasData?.results ?? [];
@@ -70,7 +72,7 @@ export function LinkRoomsDialog({
       ? (crossManager?.rooms ?? []).map((room) => ({ value: String(room.id), label: room.name }))
       : sameAreaRooms.map((room) => ({ value: String(room.id), label: room.name }));
 
-  const canSubmit = targetRoomId !== '' && nameAB.trim() !== '' && nameBA.trim() !== '';
+  const canSubmit = targetRoomId !== '' && nameAB.trim() !== '' && (oneWay || nameBA.trim() !== '');
 
   const reset = () => {
     setCrossArea(false);
@@ -78,6 +80,7 @@ export function LinkRoomsDialog({
     setTargetRoomId('');
     setNameAB('');
     setNameBA('');
+    setOneWay(false);
   };
 
   const submit = () => {
@@ -92,7 +95,7 @@ export function LinkRoomsDialog({
           room_a_id: fromRoom.id,
           room_b_id: Number(targetRoomId),
           name_ab: nameAB.trim(),
-          name_ba: nameBA.trim(),
+          ...(oneWay ? { one_way: true } : { name_ba: nameBA.trim() }),
         };
     runAction(isStory ? 'story_link_rooms' : 'staff_link_rooms', kwargs);
     reset();
@@ -163,16 +166,41 @@ export function LinkRoomsDialog({
               disabled={crossArea && !pickedAreaId}
             />
           </div>
+          {!isStory && (
+            <div className="flex items-center gap-2" data-testid="link-rooms-direction">
+              <Button
+                type="button"
+                size="sm"
+                variant={oneWay ? 'outline' : 'default'}
+                aria-pressed={!oneWay}
+                onClick={() => setOneWay(false)}
+              >
+                Both ways
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={oneWay ? 'default' : 'outline'}
+                aria-pressed={oneWay}
+                onClick={() => setOneWay(true)}
+                data-testid="link-rooms-one-way"
+              >
+                One way
+              </Button>
+            </div>
+          )}
           <Input
             value={nameAB}
             onChange={(event) => setNameAB(event.target.value)}
             placeholder="Exit name from here"
           />
-          <Input
-            value={nameBA}
-            onChange={(event) => setNameBA(event.target.value)}
-            placeholder="Exit name coming back"
-          />
+          {!oneWay && (
+            <Input
+              value={nameBA}
+              onChange={(event) => setNameBA(event.target.value)}
+              placeholder="Exit name coming back"
+            />
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

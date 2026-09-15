@@ -42,7 +42,15 @@ const room: WorldBuilderRoom = {
 };
 
 const exits: WorldBuilderExit[] = [
-  { id: 9, name: 'north', from_room_id: 5, to_room_id: 6, to_room_name: 'Foyer', to_area_id: 1 },
+  {
+    id: 9,
+    name: 'north',
+    from_room_id: 5,
+    to_room_id: 6,
+    to_room_name: 'Foyer',
+    to_area_id: 1,
+    one_way: false,
+  },
 ];
 
 function renderPanel(overrides: Partial<Parameters<typeof RoomDetailPanel>[0]> = {}) {

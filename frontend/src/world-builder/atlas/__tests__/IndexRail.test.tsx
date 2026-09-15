@@ -24,9 +24,12 @@ vi.mock('@/store/hooks', async (importOriginal) => {
 vi.mock('../../queries', () => ({
   useWorldBuilderAreasQuery: vi.fn(),
   useAreaManagerQuery: vi.fn(),
+  useUnfiledRoomsQuery: vi.fn(),
 }));
 
-const { useWorldBuilderAreasQuery, useAreaManagerQuery } = await import('../../queries');
+const { useWorldBuilderAreasQuery, useAreaManagerQuery, useUnfiledRoomsQuery } = await import(
+  '../../queries'
+);
 
 function makeArea(overrides: Partial<WorldBuilderArea> = {}): WorldBuilderArea {
   return {
@@ -153,6 +156,7 @@ const wardSquare = makeRoom({
 const emptyWard = makeArea({ id: 3, name: 'Eastern Ward', level: 30, children_count: 0 });
 
 function mockQueries() {
+  vi.mocked(useUnfiledRoomsQuery).mockReturnValue({ data: [] } as never);
   vi.mocked(useWorldBuilderAreasQuery).mockImplementation((params = {}, enabled) => {
     if (params.hasParent === false) {
       return { data: { results: [ward, emptyWard], count: 2 }, isLoading: false } as never;
@@ -184,6 +188,34 @@ describe('IndexRail', () => {
     vi.clearAllMocks();
     mockAccount = { is_staff: true, is_gm: false };
     mockQueries();
+  });
+
+  it('lists unfiled rooms for staff and opens one as its document (#3860)', async () => {
+    vi.mocked(useUnfiledRoomsQuery).mockReturnValue({
+      data: [
+        { id: 900, name: 'Limbo', area_id: null, area_name: null, floor: 0, fixture_key: null },
+      ],
+    } as never);
+    const onSelect = vi.fn();
+    renderWithProviders(<IndexRail current={null} onSelect={onSelect} pinned={[]} recents={[]} />);
+
+    expect(screen.getByTestId('index-unfiled')).toHaveTextContent('Unfiled rooms — 1');
+    await userEvent.click(screen.getByTestId('index-unfiled-room'));
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'roomdoc', id: 900 }, 'Limbo');
+  });
+
+  it('shows no unfiled section when there are none, and never to a non-staff warrant (#3860)', () => {
+    renderWithProviders(<IndexRail current={null} onSelect={vi.fn()} pinned={[]} recents={[]} />);
+    expect(screen.queryByTestId('index-unfiled')).toBeNull();
+
+    mockAccount = { is_staff: false, is_gm: true };
+    vi.mocked(useUnfiledRoomsQuery).mockReturnValue({
+      data: [
+        { id: 900, name: 'Limbo', area_id: null, area_name: null, floor: 0, fixture_key: null },
+      ],
+    } as never);
+    renderWithProviders(<IndexRail current={null} onSelect={vi.fn()} pinned={[]} recents={[]} />);
+    expect(screen.queryByTestId('index-unfiled')).toBeNull();
   });
 
   it('renders the warrant-scoped tree, expanding a building to show unpublished rooms', async () => {

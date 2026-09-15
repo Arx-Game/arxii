@@ -53,6 +53,7 @@ const EXIT: WorldBuilderExitDetail = {
   kind: 'door',
   is_open: true,
   aliases: ['n'],
+  one_way: false,
 };
 
 function renderMarginalia(overrides: Partial<Parameters<typeof Marginalia>[0]> = {}) {
@@ -91,10 +92,45 @@ describe('Marginalia', () => {
   it('marks a closed exit and a window exit distinctly', () => {
     renderMarginalia({
       exits: [
-        { id: 11, name: 'window', to_room_id: null, kind: 'window', is_open: false, aliases: [] },
+        {
+          id: 11,
+          name: 'window',
+          to_room_id: null,
+          kind: 'window',
+          is_open: false,
+          aliases: [],
+          one_way: false,
+        },
       ],
     });
     expect(screen.getByTestId('exit-chip-11')).toHaveTextContent('window ⊞ ⊘');
+  });
+
+  it('tags a one-way exit on its chip (#3860)', () => {
+    renderMarginalia({
+      exits: [
+        {
+          id: 10,
+          name: 'north',
+          to_room_id: 2,
+          kind: 'door',
+          is_open: true,
+          aliases: [],
+          one_way: false,
+        },
+        {
+          id: 12,
+          name: 'down',
+          to_room_id: 3,
+          kind: 'door',
+          is_open: true,
+          aliases: [],
+          one_way: true,
+        },
+      ],
+    });
+    expect(screen.getByTestId('exit-chip-12')).toHaveTextContent('one way');
+    expect(screen.getByTestId('exit-chip-10')).not.toHaveTextContent('one way');
   });
 
   it('the ⊕ affordance fires onAddExit', async () => {

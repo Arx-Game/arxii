@@ -1106,7 +1106,10 @@ per-class, per-stage health rate authoring and the primary-class level service.
 ### Areas
 Spatial hierarchy for organizing rooms into a nested tree of areas, from individual
 buildings up to entire planes. A `Room` is not its own `Area` level — it hangs off a
-`Building`-level `Area` via `RoomProfile.area`.
+`Building`-level `Area` via `RoomProfile.area`. Staff may mint a one-way exit
+(`StaffLinkRoomsAction` `one_way`, the Atlas exit dialog; #3860, ADR-0301) and reach area-less
+rooms through the Atlas's Unfiled rooms listing (`unfiled-rooms`); owner and story links stay
+symmetric.
 
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
   #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =

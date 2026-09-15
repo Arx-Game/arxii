@@ -56,6 +56,7 @@ const EXIT: WorldBuilderExitDetail = {
   kind: 'door',
   is_open: true,
   aliases: ['n'],
+  one_way: false,
 };
 
 function renderDialog(overrides: Partial<Parameters<typeof ExitEditorDialog>[0]> = {}) {

@@ -51,6 +51,11 @@ export function fetchRoomDetail(roomId: number): Promise<WorldBuilderRoomDetail>
   return getJson(`/api/world-builder/areas/room-detail/?${qs}`, 'Failed to load room detail.');
 }
 
+/** Rooms that belong to no area (#3860): Limbo, and anything minted outside the builder. */
+export function fetchUnfiledRooms(): Promise<WorldBuilderRoomHit[]> {
+  return getJson('/api/world-builder/areas/unfiled-rooms/', 'Failed to load unfiled rooms.');
+}
+
 /** Cross-area room search (#3269): matches room key or fixture key, capped at 50. */
 export function searchWorldBuilderRooms(term: string): Promise<WorldBuilderRoomHit[]> {
   const qs = new URLSearchParams({ search: term }).toString();
