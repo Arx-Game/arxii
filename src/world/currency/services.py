@@ -621,20 +621,15 @@ def _collection_target_difficulty(streams: list[OrgIncomeStream]) -> int:
     PLACEHOLDER tuning: point-for-point shift and worst-stop-wins are first
     guesses — revisit with real turf-war stat magnitudes.
     """
-    from world.locations.constants import StatKey  # noqa: PLC0415
-    from world.locations.services import area_stat_total  # noqa: PLC0415
-    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+    from world.locations.services import area_order_difficulty  # noqa: PLC0415
 
-    base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
-    pressures = [
-        area_stat_total(stream.area, StatKey.CRIME) - area_stat_total(stream.area, StatKey.ORDER)
-        for stream in streams
-        if stream.area_id is not None
+    # area_order_difficulty clamps monotonically, so the worst stop's difficulty
+    # is the max of the per-stop difficulties; a run with no located stop is a
+    # quiet run at NORMAL (#696 gap 8 factored the derivation out).
+    difficulties = [
+        area_order_difficulty(stream.area) for stream in streams if stream.area_id is not None
     ]
-    worst = max(pressures, default=0)
-    low = DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
-    high = DIFFICULTY_VALUES[DifficultyChoice.HARROWING]
-    return max(low, min(high, base + worst))
+    return max(difficulties, default=area_order_difficulty(None))
 
 
 @transaction.atomic
@@ -880,19 +875,25 @@ def auto_sell_excess_materials(*, organization: Organization) -> int:
     has no use for rather than let it accumulate unbounded, since nothing else in the game
     currently spends from an org's stock besides the materials allowance leg. Called at the
     END of ``collect_and_distribute`` (rides the piloted collection event, not the cron).
-    For each category over threshold, ``excess = value - MATERIAL_AUTO_SELL_THRESHOLD`` sells
-    at the market's ``MATERIAL_SALE_RATE_PCT`` (imported from its market home — one rate
-    constant, no duplicate) into the treasury. Rows read/debited under
-    ``select_for_update`` — the same locking discipline the materials allowance leg uses,
-    since both debit the same stock table and must not race each other negative. A category
-    whose excess is too small for the rate to round up to a single copper is left alone
-    (never debit stock for zero coppers, mirroring the allowance leg's own zero-guard); a
-    stock at or under the threshold never sells anything. Each category liquidates
-    independently — a tiny excess in one never blocks another's sale. Returns the total
-    coppers minted to the treasury (0 when nothing sold).
+    For each category over threshold, ``excess = value - MATERIAL_AUTO_SELL_THRESHOLD``
+    sells at the stock row's own house-set ``asking_price_pct`` (#696 gap 6 - this is
+    the ONE liquidation path, and the asking price is its rate; the row defaults to the
+    old fixed rate, so an unpriced stock liquidates exactly as before) into the
+    treasury, writing one ``OrgMaterialLedgerEntry`` SALE row per category sold. Rows
+    read/debited under ``select_for_update`` - the same locking discipline the materials
+    allowance leg uses, since both debit the same stock table and must not race each
+    other negative. A category whose excess is too small for its rate to round up to a
+    single copper is left alone (never debit stock for zero coppers, mirroring the
+    allowance leg's own zero-guard) - an asking price of 0 therefore means "never
+    sell"; a stock at or under the threshold never sells anything. Each category
+    liquidates independently - a tiny excess in one never blocks another's sale.
+    Returns the total coppers minted to the treasury (0 when nothing sold).
     """
-    from world.items.market.services import MATERIAL_SALE_RATE_PCT  # noqa: PLC0415
-    from world.items.materials_models import OrgMaterialStock  # noqa: PLC0415
+    from world.items.constants import OrgMaterialLedgerKind  # noqa: PLC0415
+    from world.items.materials_models import (  # noqa: PLC0415
+        OrgMaterialLedgerEntry,
+        OrgMaterialStock,
+    )
 
     treasury = get_or_create_treasury(organization)
     total_coins = 0
@@ -901,7 +902,7 @@ def auto_sell_excess_materials(*, organization: Organization) -> int:
     )
     for stock in stocks:
         excess = stock.value - MATERIAL_AUTO_SELL_THRESHOLD
-        coins = excess * MATERIAL_SALE_RATE_PCT // 100
+        coins = excess * stock.asking_price_pct // 100
         if coins <= 0:
             continue
         stock.value -= excess
@@ -910,6 +911,12 @@ def auto_sell_excess_materials(*, organization: Organization) -> int:
             amount=coins,
             reason=f"auto-sold surplus: {stock.material_category.name}",
             to_treasury=treasury,
+        )
+        OrgMaterialLedgerEntry.objects.create(
+            organization=organization,
+            material_category=stock.material_category,
+            kind=OrgMaterialLedgerKind.SALE,
+            value=excess,
         )
         total_coins += coins
     return total_coins

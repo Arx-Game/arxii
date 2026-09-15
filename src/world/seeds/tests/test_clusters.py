@@ -23,6 +23,7 @@ class TestClusterRegistry(TestCase):
                 "fashion",
                 "weather",
                 "justice_laws",
+                "area_elevation",
                 "underworld",
                 "social_combat",
                 "magic",

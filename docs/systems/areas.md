@@ -22,6 +22,7 @@ from world.areas.constants import AreaLevel
 |-------|---------|------------|
 | `Area` (SharedMemoryModel) | A spatial hierarchy node at a specific level | `name`, `level` (AreaLevel), `parent` (self-FK), `realm` (FK to `realms.Realm`), `description`, `grid_x`/`grid_y` (nullable, parent-local rendering coordinates, #2223) |
 | `AreaClosure` | Read-only materialized view for transitive closure | `ancestor` (FK), `descendant` (FK), `depth` |
+| `AreaElevationRequirement` | Authored config: what a declarer must hold/pay to elevate an area to `to_level` (#696 gap 3) | `to_level` (unique AreaLevel), `min_held_buildings`, `min_order_stat`, `cost_coppers` (all PLACEHOLDER) |
 
 ---
 
@@ -147,6 +148,68 @@ refresh_area_closure()
 ## Admin
 
 - `AreaAdmin` - List with name, level, parent, realm; filterable by level and realm; autocomplete for parent and realm
+- `AreaElevationRequirementAdmin` - List with to_level, min_held_buildings, min_order_stat, cost_coppers; filterable by to_level
+
+---
+
+## Elevation (`elevation_services.py`, #696 gap 3)
+
+The **earned, player-declared** path to raise an `Area`'s `level` one rung, distinct
+from the staff/GM-warrant-gated `EditAreaAction` level edit
+(`actions/definitions/world_builder.py`), which can still set `area.level` directly
+regardless of these thresholds. "Elevation" is the canonical term for this earned
+path; "promotion" already means origin promotion (`GridOrigin` PLAYER/STORY ->
+AUTHORED) elsewhere in this app, so the two never overlap.
+
+```python
+from world.areas.elevation_services import (
+    declare_elevation,
+    elevation_eligibility,
+    held_building_count,
+    next_level,
+)
+
+next_level(area)  # -> the AreaLevel value one rung above area.level, or None at PLANE
+
+result = elevation_eligibility(area, declarer=persona)
+# ElevationEligibility(eligible, held_buildings, order_stat, requirement, reasons)
+
+area = declare_elevation(area, declarer=persona, treasury_or_purse=purse_or_treasury)
+# Re-checks eligibility inside a transaction, sinks cost_coppers via
+# currency.services.transfer (no destination - a pure coin sink), writes
+# area.level, raises ValidationError (carrying `reasons`) when ineligible.
+```
+
+`elevation_eligibility` checks two thresholds from the `AreaElevationRequirement` row
+keyed on `next_level(area)`:
+
+- **Held buildings** - how many of the area's BUILDING-level descendants the declarer
+  effectively holds. "Effectively holds" reuses Task 1's
+  `locations.services.effective_owner_for_area`: the declarer's own persona, or an
+  organization they lead (`houses.services.is_org_leader`) - not
+  `can_administer_domain`, which also accepts the `domain-steward` office but requires
+  a `Domain` instance, and a BUILDING-level area's owner need not be a `Domain` at all.
+  BUILDING is `AreaLevel`'s floor (no level exists below it), so a BUILDING-level area
+  is always a leaf and can never itself have BUILDING descendants - the held-buildings
+  threshold only bites at NEIGHBORHOOD+ areas elevating into WARD+.
+- **Area order** - `locations.services.area_stat_total(area, StatKey.ORDER)`, summed
+  across the area's own + ancestor `LocationValueModifier` rows.
+  `locations.services.area_order_difficulty(area)` turns order versus crime into a
+  check difficulty (NORMAL shifted by CRIME minus ORDER, clamped to the authored
+  bands): the collection run and a task's issue-time check both read it (#696).
+
+`DeclareElevationAction` (`actions/definitions/areas.py`, REGISTRY key
+`declare_elevation`) is the in-play entry point: it gates on the declarer's active
+persona being the AREA's own effective owner (not just its buildings'), resolves an
+optional `organization_id` kwarg to spend from that org's treasury instead of the
+declarer's own purse (mirrors `events._resolve_grandeur_source`, gated on
+`can_spend_treasury`), then defers to `declare_elevation`'s own re-check.
+
+Only one `AreaElevationRequirement` row is seeded (`world.areas.seeds.
+ensure_area_elevation_content`): `to_level=NEIGHBORHOOD` with `min_held_buildings=0`
+(BUILDING areas can never hold BUILDING descendants, so this threshold is a no-op at
+the first rung) and PLACEHOLDER `min_order_stat`/`cost_coppers`. Higher tiers (WARD+,
+where held buildings become meaningful) are unseeded pending a staff authoring pass.
 
 ---
 

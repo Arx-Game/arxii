@@ -44,6 +44,7 @@ from world.societies.houses.constants import (
 from world.societies.houses.models import (
     Domain,
     DomainCrisis,
+    DomainGarrisonPost,
     DomainHolding,
     FealtyEdge,
     HoldingKind,
@@ -59,6 +60,7 @@ from world.societies.models import Organization
 if TYPE_CHECKING:
     from world.areas.models import Area
     from world.currency.models import OrgObligation
+    from world.military.models import MilitaryUnit
     from world.realms.models import Realm
     from world.roster.models import ParentageEdge
 
@@ -844,19 +846,69 @@ def is_org_leader(persona, organization: Organization) -> bool:
     ).exists()
 
 
-def can_administer_domain(persona, domain: Domain) -> bool:
-    """Whether ``persona`` may run ``domain`` in play (#2239).
+def can_steward_org(persona, organization) -> bool:
+    """Whether ``persona`` holds domain-stewardship standing over ``organization``.
 
-    Two paths: an org leader (a ``can_manage_ranks`` rank) always may; the holder
-    of the ``domain-steward`` office may too. The office is the delegation payoff —
-    a head can hand day-to-day domain running to a Minister without granting rank
-    authority over the whole house.
+    The org-level half of ``can_administer_domain`` (#696 gap 6 factored it out for
+    org-scoped stewardship acts like material grants, which have no single Domain to
+    hand that predicate): an org leader (a ``can_manage_ranks`` rank), or the holder
+    of the ``domain-steward`` office. The office is the delegation payoff - a head
+    can hand day-to-day running to a Minister without granting rank authority over
+    the whole house.
     """
     from world.societies.houses.constants import DOMAIN_STEWARD_OFFICE  # noqa: PLC0415
     from world.societies.office_services import holds_office  # noqa: PLC0415
 
-    org = domain.owner_org
-    return is_org_leader(persona, org) or holds_office(persona, org, DOMAIN_STEWARD_OFFICE)
+    return is_org_leader(persona, organization) or holds_office(
+        persona, organization, DOMAIN_STEWARD_OFFICE
+    )
+
+
+def can_administer_domain(persona, domain: Domain) -> bool:
+    """Whether ``persona`` may run ``domain`` in play (#2239).
+
+    Delegates to ``can_steward_org`` over the domain's owning org - same two paths
+    (org leader OR ``domain-steward`` office holder), anchored on a Domain.
+    """
+    return can_steward_org(persona, domain.owner_org)
+
+
+def garrison_term(domain: Domain) -> int:  # noqa: ARG001 - the seam's future param
+    """Seam: a domain's garrison contribution to its effective defenses.
+
+    Returns 0 until TehomCD's military side computes a real bonus from the
+    domain's ``DomainGarrisonPost`` units (strength, quality, capabilities) -
+    no combat math lands here (#696 gap 5). Wiring the real formula is a
+    military-side call, not this app's; the parameter stays so callers never
+    need to change once it does.
+    """
+    return 0
+
+
+def effective_defenses(domain: Domain) -> int:
+    """A domain's stored ``defenses`` stat plus its (stubbed) garrison term."""
+    return domain.defenses + garrison_term(domain)
+
+
+def assign_garrison(*, domain: Domain, unit: MilitaryUnit) -> DomainGarrisonPost:
+    """Post ``unit`` to garrison ``domain`` (#696 gap 5).
+
+    The unit must belong to the same org that owns the domain, and a unit
+    already posted somewhere must be relieved first (one post per unit).
+    """
+    if unit.owner_org_id != domain.owner_org_id:
+        msg = f"unit {unit.pk} is not owned by domain {domain.pk}'s house"
+        raise HousesServiceError(msg, user_message="That unit doesn't belong to this house.")
+    if DomainGarrisonPost.objects.filter(unit=unit).exists():
+        msg = f"unit {unit.pk} is already garrisoned"
+        raise HousesServiceError(msg, user_message="That unit is already garrisoning a domain.")
+    return DomainGarrisonPost.objects.create(domain=domain, unit=unit)
+
+
+def relieve_garrison(*, unit: MilitaryUnit) -> bool:
+    """Pull ``unit`` off garrison duty. Returns whether a post existed."""
+    deleted, _ = DomainGarrisonPost.objects.filter(unit=unit).delete()
+    return deleted > 0
 
 
 def add_holding(*, domain: Domain, kind: HoldingKind, name: str = "") -> DomainHolding:

@@ -43,7 +43,10 @@ Database-driven workflow engine that replaces hardcoded command logic. All game 
 ### `service_functions/serializers/`
 - **`commands.py`**: command metadata for frontend
 - **`communication.py`**: message formatting and character data
-- **`room_state.py`**: room state for web client
+- **`room_state.py`**: room state for web client. Exit visibility mirrors `ExitState.can_traverse`'s
+  refusals (not just unenterable, invisible): an exit to an unpublished room is omitted for anyone
+  but a story-runner (#3477), and an instance entrance is omitted for any looker the
+  `instance_entrance` package would refuse, story-runner or not (#696 gap 7).
 
 ### Core Engine
 - **`flow_execution.py`**: `FlowExecution` - orchestrates flow step execution

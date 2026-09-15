@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.areas.models import Area
+from world.areas.models import Area, AreaElevationRequirement
 from world.areas.positioning.models import (
     BlueprintEdge,
     BlueprintPosition,
@@ -17,6 +17,12 @@ class AreaAdmin(admin.ModelAdmin):
     list_filter = ["level", "realm"]
     search_fields = ["name"]
     autocomplete_fields = ["parent", "realm", "exile_destination"]
+
+
+@admin.register(AreaElevationRequirement)
+class AreaElevationRequirementAdmin(admin.ModelAdmin):
+    list_display = ["to_level", "min_held_buildings", "min_order_stat", "cost_coppers"]
+    list_filter = ["to_level"]
 
 
 # ---------------------------------------------------------------------------

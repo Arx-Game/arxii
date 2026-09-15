@@ -6,7 +6,7 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.models import LocationOwnership
-from world.locations.services import effective_owner
+from world.locations.services import effective_owner, effective_owner_for_area
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory
 
@@ -129,3 +129,95 @@ class EffectiveOwnerEdgeCaseTests(TestCase):
             holder_persona=PersonaFactory(),
         )
         self.assertEqual(effective_owner(profile.objectdb), row)
+
+
+class EffectiveOwnerForAreaTests(TestCase):
+    """#696 gap 4: ownership implies downward for callers holding an Area.
+
+    Walks ``parent`` FKs directly (no ``AreaClosure``), so these are
+    SQLite-fast-tier-safe unlike the room-cascade tests above.
+    """
+
+    def setUp(self) -> None:
+        self.region = AreaFactory(level=AreaLevel.REGION)
+        self.city = AreaFactory(level=AreaLevel.CITY, parent=self.region)
+        self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
+
+    def test_no_row_anywhere_returns_none(self) -> None:
+        self.assertIsNone(effective_owner_for_area(self.ward))
+
+    def test_own_row_wins(self) -> None:
+        ward_persona = PersonaFactory()
+        region_persona = PersonaFactory()
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.region,
+            holder_type=HolderType.PERSONA,
+            holder_persona=region_persona,
+        )
+        ward_row = LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.ward,
+            holder_type=HolderType.PERSONA,
+            holder_persona=ward_persona,
+        )
+        self.assertEqual(effective_owner_for_area(self.ward), ward_row)
+
+    def test_nearest_ancestor_row_wins_when_none_on_self(self) -> None:
+        org_region = OrganizationFactory()
+        org_city = OrganizationFactory()
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.region,
+            holder_type=HolderType.ORGANIZATION,
+            holder_organization=org_region,
+        )
+        city_row = LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            holder_type=HolderType.ORGANIZATION,
+            holder_organization=org_city,
+        )
+        # self.ward has no row of its own; nearest ancestor (city) wins over
+        # the more distant region row.
+        self.assertEqual(effective_owner_for_area(self.ward), city_row)
+
+    def test_descendant_row_overrides_ancestor_row(self) -> None:
+        """An explicit row on a descendant area beats an ancestor's row when
+        resolving *from* that descendant - self still wins even though the
+        ancestor was created first.
+        """
+        org_region = OrganizationFactory()
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.region,
+            holder_type=HolderType.ORGANIZATION,
+            holder_organization=org_region,
+        )
+        org_ward = OrganizationFactory()
+        ward_row = LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.ward,
+            holder_type=HolderType.ORGANIZATION,
+            holder_organization=org_ward,
+        )
+        self.assertEqual(effective_owner_for_area(self.ward), ward_row)
+        # Resolving from the ancestor never sees the descendant's row.
+        self.assertNotEqual(effective_owner_for_area(self.region), ward_row)
+
+    def test_historical_row_ignored(self) -> None:
+        old_row = LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.ward,
+            holder_type=HolderType.PERSONA,
+            holder_persona=PersonaFactory(),
+        )
+        old_row.ended_at = timezone.now()
+        old_row.save()
+        self.assertIsNone(effective_owner_for_area(self.ward))
+
+    def test_none_area_returns_none(self) -> None:
+        self.assertIsNone(effective_owner_for_area(None))
+
+    def test_root_area_with_no_parent_and_no_row_returns_none(self) -> None:
+        self.assertIsNone(effective_owner_for_area(self.region))

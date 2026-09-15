@@ -296,6 +296,19 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         related_name="org_tasks",
         help_text="The issuing organization.",
     )
+    # #696 gap 8: the target difficulty a PC run of this task rolls against,
+    # set once at issue from the local order (CRIME minus ORDER at the target's
+    # area) shifted by the steward's own check. Only the number survives; the
+    # roll is never stored. Null means the mission template's risk tier applies.
+    derived_difficulty = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Target difficulty for a PC run of this task, set at issue from the local "
+            "order and the steward's check (#696 gap 8). Null: the mission template's "
+            "risk tier applies."
+        ),
+    )
     issued_by = models.ForeignKey(
         _PERSONA_FK,
         on_delete=models.PROTECT,

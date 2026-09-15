@@ -44,7 +44,9 @@ _MATERIALS = (
     ("Ornaments", "Precious Metal", 1250, 18),
 )
 
-_CATEGORY_ORDER = ("Metal", "Textiles", "Leather", "Wood", "Ornaments")
+# "Stone" carries no ladder of its own yet: it exists so a domain's quarry
+# (#696 gap 8, world/seeds/houses.py) has a category to yield into.
+_CATEGORY_ORDER = ("Metal", "Textiles", "Leather", "Wood", "Ornaments", "Stone")
 
 
 def seed_crafting_materials() -> None:

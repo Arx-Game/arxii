@@ -489,6 +489,8 @@
   - ancestor -> areas.Area [FK]
   - descendant -> areas.Area [FK]
 
+### AreaElevationRequirement
+
 ### AreaQuality
 **Foreign Keys:**
   - area -> areas.Area [OneToOne]
@@ -1203,7 +1205,7 @@
 - `rescue_captive(captive: 'CharacterSheet') -> 'bool' - Free a captive via rescue (#931 Phase 4) — a rescue run's terminal verb.`
 - `resolve_captivity(captivity: 'Captivity', *, status: 'str') -> 'None' - End a captivity and free the captive.`
 - `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty: 'int | None' = None) -> 'CaptureSetup' - Resolve one capture's loops + cell flavor: per-capture override, else default.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None, anchor_room: evennia.objects.models.ObjectDB | None = None, area: world.areas.models.Area | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.ceremonies
@@ -1702,6 +1704,7 @@
   - recipe_knowledge <- items.CharacterRecipeKnowledge
   - expulsion_bars <- npc_services.ExpulsionBar
   - material_buckets <- items.MaterialBucket
+  - material_grants_received <- items.OrgMaterialLedgerEntry
   - vault_transits <- items.VaultTransit
   - trade_sessions_initiated <- items.TradeSession
   - trade_sessions_received <- items.TradeSession
@@ -4286,12 +4289,13 @@
   - owner -> character_sheets.CharacterSheet [FK] (nullable)
   - gm_owner -> gm.GMProfile [FK] (nullable)
   - return_location -> evennia.ObjectDB [FK] (nullable)
+  - entrance_exit -> evennia_extensions.ExitProfile [FK] (nullable)
 **Pointed to by:**
   - captivities <- captivity.Captivity
 
 ### Service Functions
 - `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None - Mark room completed, relocate occupants, delete if no history.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None, anchor_room: evennia.objects.models.ObjectDB | None = None, area: world.areas.models.Area | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.items
@@ -4648,6 +4652,12 @@
 **Pointed to by:**
   - templates <- items.ItemTemplate
   - material_buckets <- items.MaterialBucket
+
+### OrgMaterialLedgerEntry
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - material_category -> items.MaterialCategory [FK]
+  - counterparty_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### OrgMaterialStock
 **Foreign Keys:**
@@ -5044,6 +5054,7 @@
 
 ### Service Functions
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' - The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
+- `area_order_difficulty(area: 'Area | None') -> 'int' - Check difficulty implied by an area's order versus crime (#696 items 1 and 8).`
 - `area_stat_total(area: 'Area | None', stat_key: 'str') -> 'int' - Summed area-level modifier rows for *stat_key* on *area* + ancestors (#2862).`
 - `assign_room_tenant(*, persona: 'Persona', room: 'DefaultObject', tenant_persona: 'Persona', ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' - Owner-gated grant of a room tenancy (#670) — the player seam over grant_tenancy.`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' - Delete LocationValueModifier rows whose current_value() has`
@@ -5056,6 +5067,7 @@
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' - Return all currently-active tenancies that apply to a room.`
 - `effective_enclosure_for_room(room_obj: 'ObjectDB') -> 'RoomEnclosure' - Return the room's effective enclosure, treating open windows as a breach.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' - Cascade-resolve the most-specific active owner of a room.`
+- `effective_owner_for_area(area: 'Area | None') -> 'LocationOwnership | None' - Cascade-resolve the most-specific active owner of an area itself (#696).`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' - Bulk-resolve owners for many rooms in one pass.`
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' - Bulk-resolve stats for many rooms in one pass.`
 - `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None, damage_type: 'DamageType | None' = None) -> 'int' - Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.`
@@ -6535,6 +6547,7 @@
   - capabilities -> conditions.CapabilityType [M2M]
 **Pointed to by:**
   - battle_units <- battles.BattleUnit
+  - garrison_post <- societies.DomainGarrisonPost
   - capability_values <- military.MilitaryUnitCapability
   - armies <- military.Army
   - army_memberships <- military.ArmyMembership
@@ -6684,6 +6697,7 @@
   - authored_check_type -> checks.CheckType [FK] (nullable)
   - branch_target -> missions.MissionNode [FK] (nullable)
   - challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - instance_area -> areas.Area [FK] (nullable)
   - opposition_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - opposition_check_type -> checks.CheckType [FK] (nullable)
   - locations -> evennia_extensions.RoomProfile [M2M]
@@ -8898,6 +8912,7 @@
   - food_transfers_out <- agriculture.FoodTransfer
   - food_transfers_in <- agriculture.FoodTransfer
   - seat_of <- societies.Title
+  - garrison_posts <- societies.DomainGarrisonPost
   - holdings <- societies.DomainHolding
   - improvement_details <- societies.DomainImprovementDetails
   - edicts <- societies.DomainEdict
@@ -8935,6 +8950,11 @@
   - kind -> societies.EdictKind [FK]
   - proclamation -> societies.Proclamation [FK] (nullable)
   - enacted_by -> scenes.Persona [FK]
+
+### DomainGarrisonPost
+**Foreign Keys:**
+  - domain -> societies.Domain [FK]
+  - unit -> military.MilitaryUnit [OneToOne]
 
 ### DomainHolding
 **Foreign Keys:**
@@ -9254,6 +9274,7 @@
   - regards_as_target <- npc_services.NpcRegard
   - hosted_stalls <- items.MarketStall
   - material_stocks <- items.OrgMaterialStock
+  - material_ledger_entries <- items.OrgMaterialLedgerEntry
   - item_vault <- items.OrganizationVault
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy

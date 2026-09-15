@@ -11,6 +11,8 @@ from django.test import TestCase
 from world.areas.factories import AreaFactory
 from world.predators.constants import (
     DORMANCY_FLOOR,
+    LAWLESSNESS_UNREST_TICK,
+    PLACEHOLDER_DEFENSE_STEP,
     ROBBERY_SKIM_PCT,
     STAGE_WEEKS,
     MenaceStage,
@@ -153,6 +155,87 @@ class MenaceLadderTests(TestCase):
         expected_cut = 1_000 * ROBBERY_SKIM_PCT // 100
         self.assertEqual(stream.uncollected_pool, 1_000 - expected_cut)
         self.assertEqual(band.loot_stash, expected_cut)
+
+    def test_robbery_skim_reduced_by_domain_defenses(self):
+        # #696 gap 5: defenses blunt the robbery skim on a domain-linked stream.
+        from world.currency.models import OrgIncomeStream
+
+        self._band(stage=MenaceStage.ROBBERY)
+        domain = self.prey.domains.first()
+        domain.defenses = 3 * PLACEHOLDER_DEFENSE_STEP
+        domain.save(update_fields=["defenses"])
+        stream = OrgIncomeStream.objects.create(
+            organization=self.prey,
+            name="Defended Farms",
+            kind="domain_tax",
+            gross_amount=1_000,
+            uncollected_pool=1_000,
+            area=domain.area,
+        )
+        weekly_menace_tick(rng=_NoSpawnRandom())
+        stream.refresh_from_db()
+        expected_pct = max(0, ROBBERY_SKIM_PCT - 3)
+        expected_cut = 1_000 * expected_pct // 100
+        self.assertLess(expected_pct, ROBBERY_SKIM_PCT)
+        self.assertEqual(stream.uncollected_pool, 1_000 - expected_cut)
+
+    def test_robbery_skim_never_goes_negative(self):
+        # Overwhelming defenses floor the skim at 0, never a negative cut.
+        from world.currency.models import OrgIncomeStream
+
+        band = self._band(stage=MenaceStage.ROBBERY)
+        domain = self.prey.domains.first()
+        domain.defenses = 100
+        domain.save(update_fields=["defenses"])
+        stream = OrgIncomeStream.objects.create(
+            organization=self.prey,
+            name="Fortified Farms",
+            kind="domain_tax",
+            gross_amount=1_000,
+            uncollected_pool=1_000,
+            area=domain.area,
+        )
+        weekly_menace_tick(rng=_NoSpawnRandom())
+        stream.refresh_from_db()
+        band.refresh_from_db()
+        self.assertEqual(stream.uncollected_pool, 1_000)
+        self.assertEqual(band.loot_stash, 0)
+
+    def test_lawlessness_tick_floored_at_zero_by_defenses(self):
+        # LAWLESSNESS_UNREST_TICK is only 1, so any nonzero reduction floors it.
+        self._band(stage=MenaceStage.LAWLESSNESS)
+        domain = self.prey.domains.first()
+        domain.defenses = PLACEHOLDER_DEFENSE_STEP
+        unrest_before = 10
+        domain.unrest = unrest_before
+        domain.save(update_fields=["defenses", "unrest"])
+        self.assertGreaterEqual(LAWLESSNESS_UNREST_TICK, 1)
+        weekly_menace_tick(rng=_NoSpawnRandom())
+        domain.refresh_from_db()
+        self.assertEqual(domain.unrest, unrest_before)
+
+    def test_raid_targets_the_domain_with_lowest_effective_defenses(self):
+        # #696 gap 5: the weakest-DEFENDED domain is targeted, not the poorest.
+        from world.societies.houses.services import create_domain
+
+        weak_defenses = create_domain(
+            area=AreaFactory(),
+            name="Prey Weak Defenses",
+            owner_org=self.prey,
+        )
+        weak_defenses.prosperity = 90
+        weak_defenses.defenses = 0
+        weak_defenses.save(update_fields=["prosperity", "defenses"])
+
+        strong_defenses = self.prey.domains.exclude(pk=weak_defenses.pk).first()
+        strong_defenses.prosperity = 10
+        strong_defenses.defenses = 90
+        strong_defenses.save(update_fields=["prosperity", "defenses"])
+
+        band = self._band(stage=MenaceStage.RAIDS)
+        weekly_menace_tick(rng=_NoSpawnRandom())
+        crisis = DomainCrisis.objects.get(aggressor_band=band)
+        self.assertEqual(crisis.domain, weak_defenses)
 
     def test_strike_knocks_down_and_dormancy_below_floor(self):
         band = self._band(stage=MenaceStage.RAIDS, strength=DORMANCY_FLOOR + 20)

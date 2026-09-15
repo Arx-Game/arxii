@@ -45,24 +45,19 @@ them to learn both sides; resolving the file first (with `git checkout --theirs`
 or by hand) makes it exit with *"arxii's max_migration.txt does not seem to
 contain a merge conflict."*
 
-**It renames whichever migration is written AFTER the `=======` line.** That has
-to be YOURS, and which side that is depends on how you synced:
-
-| sync | `<<<<<<< HEAD` side | after `=======` | orientation |
-|---|---|---|---|
-| `git rebase origin/main` | main's tip | your commit | correct as-is |
-| `git merge origin/main` (what `sync-with-main.sh` does once the branch is pushed) | YOURS | main's tip | **reversed - swap before running** |
-
-Get that backwards and the tool renames *main's* migration to itself and
-rewrites *main's* dependency to point at yours, which is a dependency cycle.
-The `check-migrations` hook catches it (Django's `MigrationLoader` raises
-`CircularDependencyError`), so it cannot reach main - but you will be debugging
-a cycle you did not write, in a file you did not touch.
+**It renames YOUR migration on either sync.** `django-linear-migrations` (2.19+)
+checks for `MERGE_HEAD` to tell a merge from a rebase and swaps the two sides
+itself, so the orientation is right as-is whether you rebased (main's tip on the
+`<<<<<<< HEAD` side, yours after `=======`) or merged (yours on the HEAD side,
+main's after). **Never swap the sides by hand**: on 2026-09-15 a hand swap on a
+merge double-flipped it and the tool renamed *main's* migration and pointed it at
+ours (the `check-migrations` hook catches the resulting cycle, but you then restore
+main's file from `origin/main`, rewrite the markers and run the tool again).
 
 ```bash
 git fetch origin main && git rebase origin/main    # conflict lands in max_migration.txt
-# Do NOT resolve the file. If you merged rather than rebased, swap the two sides
-# first so YOUR migration sits after the ======= line.
+# Do NOT resolve the file and do NOT swap its sides: the tool handles both
+# rebase and merge orientation itself.
 uv run arx manage rebase_migration arxii           # renumbers YOUR migration after main's tip,
                                                    # rewrites its dependencies + max_migration.txt
 git diff origin/main -- src/world/migrations       # confirm ONLY your migration moved

@@ -2524,6 +2524,7 @@ from world.items.market.models import (  # noqa: E402,F401
 # ---------------------------------------------------------------------------
 from world.items.materials_models import (  # noqa: E402,F401
     MaterialBucket,
+    OrgMaterialLedgerEntry,
     OrgMaterialStock,
     StreamMaterialPool,
 )

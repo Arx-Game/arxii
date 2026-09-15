@@ -277,6 +277,37 @@ class InsufficientMaterialStock(ItemError):
     )
 
 
+class MaterialStewardshipRequired(ItemError):
+    """Raised when an org-materials act needs stewardship standing the actor lacks (#696 gap 6).
+
+    The gate is ``houses.services.can_steward_org`` - an org leader or the
+    ``domain-steward`` office holder.
+    """
+
+    user_message = "You don't have standing to manage this house's materials."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You don't have standing to manage this house's materials."},
+    )
+
+
+class GrantRecipientNotMember(ItemError):
+    """Raised when a material grant names a recipient with no active membership (#696 gap 6)."""
+
+    user_message = "That character is not an active member of this house."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That character is not an active member of this house."},
+    )
+
+
+class AskingPriceOutOfBounds(ItemError):
+    """Raised when ``set_asking_price`` gets a pct outside 0..MAX_ASKING_PRICE_PCT (#696 gap 6)."""
+
+    user_message = "PLACEHOLDER: The asking price must be between 0 and 100 percent."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"PLACEHOLDER: The asking price must be between 0 and 100 percent."},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------

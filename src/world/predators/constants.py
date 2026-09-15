@@ -41,6 +41,13 @@ LAWLESSNESS_UNREST_TICK = 1
 # Percent of the prey's uncollected income pools skimmed weekly at ROBBERY+.
 ROBBERY_SKIM_PCT = 5
 
+# PLACEHOLDER: every this-many points of a domain's effective_defenses
+# (houses.services.effective_defenses) knocks one point off the weekly
+# lawlessness/robbery severity step, floored at 0 - defenses blunt predation,
+# never reverse it outright. A domain's default 10 defenses stays under this
+# step, so an undefended domain sees no change from the pre-#696 numbers.
+PLACEHOLDER_DEFENSE_STEP = 20
+
 # Raid crises open at these severities per stage.
 RAID_SEVERITY_BY_STAGE: dict[str, str] = {
     MenaceStage.RAIDS: "crisis",

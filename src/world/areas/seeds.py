@@ -83,3 +83,31 @@ def ensure_cleanup_content():
 
     logger.info("CLEANUP seed content ensured.")
     return resonance
+
+
+def ensure_area_elevation_content():
+    """Seed one PLACEHOLDER ``AreaElevationRequirement`` row for NEIGHBORHOOD (#696 gap 3).
+
+    Mechanical config, not authored content - magnitudes are staff-tunable, not
+    canon lore, so this is a plain ``update_or_create`` (no ``authored_or_sample``
+    gate). ``min_held_buildings=0`` on purpose: BUILDING is ``AreaLevel``'s floor, so
+    a BUILDING-level area (the only area that elevates *into* NEIGHBORHOOD) can never
+    itself have BUILDING-level descendants to hold - the held-buildings threshold only
+    becomes meaningful at higher tiers (WARD+), which are unseeded PLACEHOLDER rows
+    for a later authoring pass.
+
+    Idempotent - safe to call multiple times.
+    """
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.areas.models import AreaElevationRequirement  # noqa: PLC0415
+
+    row, _ = AreaElevationRequirement.objects.update_or_create(
+        to_level=AreaLevel.NEIGHBORHOOD,
+        defaults={
+            "min_held_buildings": 0,
+            "min_order_stat": 0,
+            "cost_coppers": 1000,
+        },
+    )
+    logger.info("Area elevation requirement for NEIGHBORHOOD ensured.")
+    return row

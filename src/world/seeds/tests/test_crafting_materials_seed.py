@@ -13,7 +13,7 @@ class CraftingMaterialsSeedTests(TestCase):
     def test_seed_is_idempotent_and_graded(self) -> None:
         seed_crafting_materials()
         seed_crafting_materials()  # idempotent upsert
-        self.assertEqual(MaterialCategory.objects.count(), 5)
+        self.assertEqual(MaterialCategory.objects.count(), 6)
         self.assertEqual(ItemTemplate.objects.filter(material_category__isnull=False).count(), 21)
         silk = ItemTemplate.objects.get(name="Silk")
         self.assertEqual(silk.material_grade, 15)

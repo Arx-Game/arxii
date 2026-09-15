@@ -39,9 +39,17 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   empire/kingdom/duchy/march/county/barony — #3091's six-step ladder), realm,
   house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots),
   authorable holder styles (`holder_style_male/female/neutral`, #3261).
-- **`Domain`** — decorates an `Area` (seeds use `AreaLevel.REGION`; no DOMAIN
+- **`Domain`** - decorates an `Area` (seeds use `AreaLevel.REGION`; no DOMAIN
   level exists) (OneToOne PK): owner org + PLACEHOLDER civ stats
-  (population/prosperity/unrest). Abstract — no room grids yet.
+  (population/prosperity/unrest/defenses). Abstract, no room grids yet.
+- **`DomainGarrisonPost`** (#696 gap 5) - one `MilitaryUnit` posted to garrison a
+  domain (`OneToOneField` on `unit`: a unit garrisons at most one domain at a
+  time). `houses.services.effective_defenses(domain)` reads `Domain.defenses`
+  plus `garrison_term(domain)`, a seam that returns 0 until TehomCD's military
+  side computes a real garrison bonus, no combat math lands here.
+  `assign_garrison`/`relieve_garrison` (gated by `can_administer_domain`, unit's
+  `owner_org` must match the domain's) are the in-play entry points, wired to
+  `AssignGarrisonAction`/`RelieveGarrisonAction`.
 - **`HoldingKind`** / **`DomainHolding`** — authored holding vocabulary; each
   holding materializes an `OrgIncomeStream` (OneToOne) so collection, graft,
   and settlement reuse the audited currency pipeline unchanged. `HoldingKind`

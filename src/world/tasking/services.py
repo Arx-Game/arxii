@@ -19,7 +19,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.assets.constants import AssetStatus
-from world.tasking.constants import DISPATCH_MARGIN_STEP, TaskStatus, TaskTargetKind
+from world.tasking.constants import (
+    DIFFICULTY_STEP_PER_LEVEL,
+    DISPATCH_MARGIN_STEP,
+    TaskStatus,
+    TaskTargetKind,
+)
 from world.tasking.exceptions import (
     AgentUnavailableError,
     ForeignAgentError,
@@ -32,6 +37,7 @@ from world.tasking.exceptions import (
 from world.tasking.models import OrgTask, TaskFulfillment
 
 if TYPE_CHECKING:
+    from world.areas.models import Area
     from world.assets.models import NPCAsset
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
@@ -166,9 +172,63 @@ def create_task(  # noqa: PLR0913 - the five target kwargs are co-equal discrimi
         target_persona=target_persona,
         target_crisis=target_crisis,
     )
+    task.derived_difficulty = _steward_difficulty(task)
     task.full_clean()
     task.save()
     return task
+
+
+def task_difficulty(task: OrgTask) -> int:
+    """The target difficulty every roll on ``task`` uses (#696 gap 8).
+
+    The steward-set ``derived_difficulty`` when it exists, else the template's
+    static ``check_difficulty``: the handler's dispatch check, the agent's
+    resolution check and a PC pickup's AUTHORED CHECKs all read this one
+    number, so a well-briefed job is easier however it is run.
+    """
+    if task.derived_difficulty is not None:
+        return task.derived_difficulty
+    return task.template.check_difficulty
+
+
+def _target_area(task: OrgTask) -> Area | None:
+    """The Area a task's target sits in, for the local-order read (#696 gap 8).
+
+    A room target reads its profile's area, a domain target its domain's; the
+    other target kinds (org, persona, crisis, band, none) have no one place,
+    so they read as a quiet area.
+    """
+    if task.target_room is not None:
+        return task.target_room.area
+    if task.target_domain is not None:
+        return task.target_domain.area
+    return None
+
+
+def _steward_difficulty(task: OrgTask) -> int:
+    """Issue-time difficulty for a PC run of ``task`` (#696 gap 8).
+
+    The local order sets the base (``area_order_difficulty`` at the target's
+    area), then the steward's own check against the template's check type
+    shifts it by ``DIFFICULTY_STEP_PER_LEVEL`` per success level: a
+    well-briefed job is easier, a botched briefing harder. Clamped to the
+    authored band range. The roll is spent here and never stored; only the
+    number survives on ``OrgTask.derived_difficulty``.
+    """
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.locations.services import area_order_difficulty  # noqa: PLC0415
+    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+
+    base = area_order_difficulty(_target_area(task))
+    result = perform_check_with_modifiers(
+        task.issued_by.character_sheet.character,
+        task.template.check_type,
+        target_difficulty=base,
+    )
+    shifted = base - result.success_level * DIFFICULTY_STEP_PER_LEVEL
+    low = DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
+    high = DIFFICULTY_VALUES[DifficultyChoice.HARROWING]
+    return max(low, min(high, shifted))
 
 
 @transaction.atomic
@@ -200,7 +260,7 @@ def assign_agent(task: OrgTask, npc_asset: NPCAsset, handler: Persona) -> TaskFu
     dispatch_result = perform_check_with_modifiers(
         handler_character,
         task.template.check_type,
-        target_difficulty=task.template.check_difficulty,
+        target_difficulty=task_difficulty(task),
     )
     fulfillment = TaskFulfillment(
         task=task,
@@ -387,7 +447,7 @@ def resolve_task(task: OrgTask) -> TaskFulfillment:
     check_result = perform_check(
         agent_character,
         task.template.check_type,
-        task.template.check_difficulty,
+        task_difficulty(task),
         extra_modifiers=(
             fulfillment.handler_margin
             + APTITUDE_STEP * aptitude_band(agent_persona, task.template.category)

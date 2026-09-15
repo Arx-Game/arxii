@@ -25,6 +25,9 @@ _MSG_NOT_AUTHORIZED = "You don't have standing to run this domain."
 _MSG_NOT_LEADER = "Only a house leader may appoint or vacate an office."
 _MSG_NO_HOLDING_KIND = "No such holding kind."
 _MSG_NO_HOLDER = "No such persona to appoint."
+_MSG_NO_UNIT = "No such military unit."
+_MSG_NO_ORG = "No such organization."
+_MSG_NO_MATERIAL_CATEGORY = "No such material category."
 
 
 def _resolve_active_persona(actor: ObjectDB) -> Any:
@@ -50,6 +53,15 @@ def _resolve_domain(domain_id: Any) -> Any:
     if isinstance(domain_id, Domain):
         return domain_id
     return Domain.objects.filter(pk=domain_id).select_related("owner_org").first()
+
+
+def _resolve_unit(unit_id: Any) -> Any:
+    """Resolve a ``MilitaryUnit`` from an int pk (REST) or pass an instance through."""
+    from world.military.models import MilitaryUnit  # noqa: PLC0415
+
+    if isinstance(unit_id, MilitaryUnit):
+        return unit_id
+    return MilitaryUnit.objects.filter(pk=unit_id).first()
 
 
 @dataclass
@@ -233,6 +245,95 @@ class VacateDomainOfficeAction(Action):
 
 
 @dataclass
+class AssignGarrisonAction(Action):
+    """Post a military unit to garrison a domain (#696 gap 5).
+
+    Thin over ``houses.services.assign_garrison`` - gates on
+    ``can_administer_domain``, and the service itself re-checks the unit's
+    ``owner_org`` matches the domain's before creating the post. Combat
+    semantics for what a garrison contributes are TehomCD's; this only wires
+    the domain<->unit link.
+    """
+
+    key: str = "assign_garrison"
+    name: str = "Assign Garrison"
+    icon: str = "shield"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.societies.houses.services import (  # noqa: PLC0415
+            HousesServiceError,
+            assign_garrison,
+            can_administer_domain,
+        )
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        domain = _resolve_domain(kwargs.get("domain_id"))
+        if domain is None:
+            return ActionResult(success=False, message=_MSG_NO_DOMAIN)
+        if not can_administer_domain(persona, domain):
+            return ActionResult(success=False, message=_MSG_NOT_AUTHORIZED)
+        unit = _resolve_unit(kwargs.get("unit_id"))
+        if unit is None:
+            return ActionResult(success=False, message=_MSG_NO_UNIT)
+
+        try:
+            post = assign_garrison(domain=domain, unit=unit)
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"{unit.name} now garrisons {domain.name}.",
+            data={"post_id": post.pk},
+        )
+
+
+@dataclass
+class RelieveGarrisonAction(Action):
+    """Pull a military unit off garrison duty (#696 gap 5).
+
+    Thin over ``houses.services.relieve_garrison`` - gates on
+    ``can_administer_domain`` for the domain the unit currently garrisons.
+    """
+
+    key: str = "relieve_garrison"
+    name: str = "Relieve Garrison"
+    icon: str = "shield-off"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.societies.houses.models import DomainGarrisonPost  # noqa: PLC0415
+        from world.societies.houses.services import (  # noqa: PLC0415
+            can_administer_domain,
+            relieve_garrison,
+        )
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        unit = _resolve_unit(kwargs.get("unit_id"))
+        if unit is None:
+            return ActionResult(success=False, message=_MSG_NO_UNIT)
+        post = DomainGarrisonPost.objects.filter(unit=unit).select_related("domain").first()
+        if post is None:
+            return ActionResult(success=False, message="That unit isn't garrisoning anywhere.")
+        if not can_administer_domain(persona, post.domain):
+            return ActionResult(success=False, message=_MSG_NOT_AUTHORIZED)
+
+        domain_name = post.domain.name
+        relieve_garrison(unit=unit)
+        return ActionResult(
+            success=True,
+            message=f"{unit.name} is relieved from garrisoning {domain_name}.",
+        )
+
+
+@dataclass
 class TransferFoodAction(Action):
     """Transfer food between domains (#2219).
 
@@ -306,3 +407,125 @@ class TransferFoodAction(Action):
         if amount <= 0:
             return ActionResult(success=False, message="Amount must be positive.")
         return None
+
+
+def _resolve_org(organization_id: Any) -> Any:
+    """Resolve an ``Organization`` from an int pk (REST) or pass an instance through."""
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    if isinstance(organization_id, Organization):
+        return organization_id
+    return Organization.objects.filter(pk=organization_id).first()
+
+
+def _resolve_material_category(material_category_id: Any) -> Any:
+    """Resolve a ``MaterialCategory`` from an int pk (REST) or pass an instance through."""
+    from world.items.models import MaterialCategory  # noqa: PLC0415
+
+    if isinstance(material_category_id, MaterialCategory):
+        return material_category_id
+    return MaterialCategory.objects.filter(pk=material_category_id).first()
+
+
+@dataclass
+class GrantMaterialAction(Action):
+    """Grant house material stock to one chosen member (#696 gap 6).
+
+    The steward's discretionary sibling of the automatic materials allowance -
+    thin over ``items.services.org_materials.grant_material_stock`` (which gates on
+    ``can_steward_org`` and re-checks the recipient's active membership). Kwargs:
+    ``organization_id``, ``material_category_id``, ``amount``, ``recipient_sheet_id``.
+    Copies the shape of the shipped personal ``sell_materials`` action (#2540 slice 2).
+    """
+
+    key: str = "grant_materials"
+    name: str = "Grant Materials"
+    icon: str = "hand-heart"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.items.exceptions import ItemError  # noqa: PLC0415
+        from world.items.services.org_materials import grant_material_stock  # noqa: PLC0415
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        organization = _resolve_org(kwargs.get("organization_id"))
+        if organization is None:
+            return ActionResult(success=False, message=_MSG_NO_ORG)
+        category = _resolve_material_category(kwargs.get("material_category_id"))
+        if category is None:
+            return ActionResult(success=False, message=_MSG_NO_MATERIAL_CATEGORY)
+        amount = kwargs.get("amount")
+        if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
+            return ActionResult(success=False, message="Grant how much?")
+        recipient = CharacterSheet.objects.filter(pk=kwargs.get("recipient_sheet_id")).first()
+        if recipient is None:
+            return ActionResult(success=False, message="No such character to grant to.")
+        try:
+            entry = grant_material_stock(
+                organization=organization,
+                material_category=category,
+                value=amount,
+                to_sheet=recipient,
+                granted_by=persona,
+            )
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"You grant {amount} worth of {category.name} from the house stock.",
+            data={"ledger_entry_id": entry.pk},
+        )
+
+
+@dataclass
+class SetAskingPriceAction(Action):
+    """Set the house's asking price for a material category (#696 gap 6).
+
+    Thin over ``items.services.org_materials.set_asking_price`` (which gates on
+    ``can_steward_org`` and bounds the pct) - the rate the auto-sell liquidates
+    that category's excess at; 0 means never sell. Kwargs: ``organization_id``,
+    ``material_category_id``, ``pct``.
+    """
+
+    key: str = "set_asking_price"
+    name: str = "Set Asking Price"
+    icon: str = "badge-percent"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.items.exceptions import ItemError  # noqa: PLC0415
+        from world.items.services.org_materials import set_asking_price  # noqa: PLC0415
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        organization = _resolve_org(kwargs.get("organization_id"))
+        if organization is None:
+            return ActionResult(success=False, message=_MSG_NO_ORG)
+        category = _resolve_material_category(kwargs.get("material_category_id"))
+        if category is None:
+            return ActionResult(success=False, message=_MSG_NO_MATERIAL_CATEGORY)
+        pct = kwargs.get("pct")
+        if not isinstance(pct, int) or isinstance(pct, bool):
+            return ActionResult(success=False, message="Set the price to what percent?")
+        try:
+            stock = set_asking_price(
+                organization=organization,
+                material_category=category,
+                pct=pct,
+                by=persona,
+            )
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=(
+                f"The house's asking price for {category.name} is now {stock.asking_price_pct}%."
+            ),
+            data={"stock_id": stock.pk},
+        )

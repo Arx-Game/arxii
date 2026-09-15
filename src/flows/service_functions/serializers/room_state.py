@@ -1,10 +1,17 @@
 """Serializers for room state and object data."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from rest_framework import serializers
 
 from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
 from flows.types import RealmInfo, SerializedObjectState
+
+if TYPE_CHECKING:
+    from world.instances.models import InstancedRoom
 
 
 class ObjectStateSerializer(serializers.Serializer):
@@ -189,24 +196,65 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
         return caller, room
 
-    def _exit_hidden_from_looker(self, exit_state: BaseState, caller: BaseState) -> bool:
-        """True when ``exit_state`` leads to an unpublished room ``caller`` can't see.
+    def _exit_hidden_from_looker(
+        self,
+        exit_state: BaseState,
+        caller: BaseState,
+        instance_by_room_id: dict[int, InstancedRoom],
+    ) -> bool:
+        """True when ``exit_state`` leads to a room ``caller`` can't see into.
 
-        #3477 — mirrors ``ExitState.can_traverse``'s publish gate: an
-        unpublished room does not exist in the live world, so its exits are
-        omitted from the room payload for anyone but a story-runner
-        (GM/Staff, ``is_story_runner``) — not just unenterable, invisible.
+        Two independent gates, each mirroring an ``ExitState.can_traverse``
+        refusal (not just unenterable, invisible):
+
+        #3477 — the publish gate: an unpublished room does not exist in the
+        live world, so its exits are omitted from the room payload for anyone
+        but a story-runner (GM/Staff, ``is_story_runner``).
+
+        #696 gap 7 — the instance-entrance gate: a doorway into an instanced
+        room is hidden from any looker the entrance package would refuse
+        (only run participants and the GM owner see it - no story-runner
+        bypass; this gate matches the package exactly). ``instance_by_room_id``
+        is the room's one batched ``InstancedRoom`` lookup (``_serialize_contents``),
+        so an ordinary exit costs no query here.
         """
-        if caller.obj.is_story_runner:
-            return False
         # A dangling one-way exit can have a null destination (nullable FK) —
         # ``.destination`` itself is always a real Exit property (ExitState
         # only ever wraps an Exit typeclass, see typeclasses.exits.Exit).
         destination = exit_state.obj.destination
         if destination is None:
             return False
+        instance = instance_by_room_id.get(destination.pk)
+        if instance is not None:
+            from behaviors.instance_entrance_package import instance_refuses  # noqa: PLC0415
+
+            if instance_refuses(instance, caller.obj):
+                return True
+        if caller.obj.is_story_runner:
+            return False
         profile = destination.room_profile_or_none
         return profile is not None and profile.published_at is None
+
+    def _batched_instances(self, content_states: list[BaseState]) -> dict[int, InstancedRoom]:
+        """The InstancedRoom record behind each exit's destination, keyed by room pk.
+
+        RoomProfile shares ObjectDB's pk, so ``room_id`` is the destination's
+        pk with no profile fetch. Empty when the room has no exits into an
+        instance, which is nearly every room.
+        """
+        from world.instances.models import InstancedRoom  # noqa: PLC0415
+
+        destination_ids = [
+            state.obj.db_destination_id
+            for state in content_states
+            if isinstance(state, ExitState) and state.obj.db_destination_id is not None
+        ]
+        if not destination_ids:
+            return {}
+        return {
+            instance.room_id: instance
+            for instance in InstancedRoom.objects.filter(room_id__in=destination_ids)
+        }
 
     def _is_character(self, state: BaseState) -> bool:
         """Return True if the state wraps a puppeted object (has active sessions)."""
@@ -302,6 +350,10 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
             entered_sheet_ids = _entered(active_scene)
 
+        # #696 gap 7: one InstancedRoom lookup for every exit's destination, so
+        # the entrance gate below never queries per exit (no-queries-in-loops).
+        instance_by_room_id = self._batched_instances(content_states)
+
         for obj in content_states:
             if obj is caller:
                 continue
@@ -312,7 +364,9 @@ class RoomStatePayloadSerializer(serializers.Serializer):
                 # this caller — omit entirely rather than merely masking the name.
                 continue
 
-            if isinstance(obj, ExitState) and self._exit_hidden_from_looker(obj, caller):
+            if isinstance(obj, ExitState) and self._exit_hidden_from_looker(
+                obj, caller, instance_by_room_id
+            ):
                 continue
 
             obj_serializer = ObjectStateSerializer(

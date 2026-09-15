@@ -222,16 +222,22 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
   - **Servant daily-life behaviors** — fetch shipped (#2276); meal/bath prep, message-carrying,
     announcing visitors, guard/doorman duty, and `assign_servant`/`unassign_servant` remain.
     **#2989**.
-  - **Building→neighborhood→domain progression** — #696: `partial`. Items 1-2
-    shipped: collection difficulty from local order/crime (worst-stop
-    `_collection_target_difficulty`) + the "Collect the Levies" PLACEHOLDER
-    worked-example tax-collection mission/task (`world/seeds/domain_tasks.py`).
-    Items 3-8 remain open: Area promotion rules (player-declared vs organic
-    threshold), aggregate area→area ownership resolution, a domain defenses
-    stat, domain gem/material output feeding crafting/construction,
-    domain-anchored temp rooms / mini-grid, and "steward's check sets
-    difficulty" (`TaskTemplate.check_difficulty` is still a static authored
-    integer).
+  - ✅ **Building→neighborhood→domain progression** — #696: built (2026-09-05 run,
+    finished 2026-09-15). Items 1-2 (collection difficulty from local order/crime, the
+    "Collect the Levies" worked example) shipped first; the remaining six gaps in one PR:
+    Area elevation rules (`AreaElevationRequirement`, `DeclareElevationAction`: held
+    buildings, area ORDER and coppers, player-declared), area→area ownership resolution
+    (`effective_owner_for_area`, self-first, most-specific wins), `Domain.defenses` with
+    the garrison seam (`DomainGarrisonPost`, `effective_defenses`; predation reads it),
+    steward material grants and the house-set asking price (`OrgMaterialLedgerEntry`,
+    `grant_material_stock`, `set_asking_price`; auto-sell prices from it), temporary
+    instance entrances with area inheritance (`spawn_instanced_room(anchor_room=,
+    area=)`, the `instance_entrance` package, `MissionOption.instance_area`), and the
+    steward's check setting a PC run's difficulty (`OrgTask.derived_difficulty` from
+    `area_order_difficulty` shifted per success level; the Quarry and Lumber camp
+    holding kinds with `HoldingMaterialSource` rows seed beside the Farmland). Left
+    as seams: the garrison's combat contribution (`garrison_term` returns 0 until
+    TehomCD's military side wires it) and every magnitude marked PLACEHOLDER.
   - ✅ **Room-feature systems** — DONE far beyond Sanctum: Library, Training Room, Lab, Command
     Center, Granary, Siege Deck, Bank, Notice Board, Town Crier, Social Hub, Vault, Brig, Stables,
     Workshop of Iniquity — all registered, seeded, with live effects. (#675/#673 closed.)

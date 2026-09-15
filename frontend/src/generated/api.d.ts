@@ -6966,6 +6966,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/currency/org-books/{id}/material-ledger/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /org-books/{org_id}/material-ledger/ - the material grant/sale trail (#696).
+     *
+     *     Same membership gate and posture as ``vault-events``: visible to any active
+     *     member, since an audit trail gated behind the stewardship authority it
+     *     audits couldn't catch that authority's abuse. Newest first (the model's own
+     *     ``Meta.ordering``), capped at ``_RECENT_ROWS`` like the currency ledger.
+     */
+    get: operations['currency_org_books_material_ledger_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/currency/org-books/{id}/vault-events/': {
     parameters: {
       query?: never;
@@ -34777,6 +34801,30 @@ export interface components {
       recent_shifts: components['schemas']['DossierShift'][];
       consorts: components['schemas']['DossierConsort'][];
     };
+    /**
+     * @description One append-only material-ledger audit row (#696 gap 6) - the ``OrgVaultEvent``
+     *     analogue for the org's bulk material stock. Read-only; GRANT rows name the
+     *     recipient, SALE rows have none (the market bought the excess).
+     *
+     *     ``counterparty_sheet`` is SET_NULL on delete, so the display field falls back
+     *     to None rather than raising - a deleted sheet still leaves a legible audit row.
+     */
+    OrgMaterialLedgerEntry: {
+      readonly id: number;
+      readonly kind: components['schemas']['OrgMaterialLedgerEntryKindEnum'];
+      readonly material_category_name: string;
+      /** @description Material value moved (coppers of material value, not sale proceeds). */
+      readonly value: number;
+      readonly counterparty_name: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `grant` - Grant
+     *     * `sale` - Sale
+     * @enum {string}
+     */
+    OrgMaterialLedgerEntryKindEnum: 'grant' | 'sale';
     /** @description Board row: a live task with its template summary and fulfillment. */
     OrgTask: {
       readonly id: number;
@@ -55987,6 +56035,41 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrgBooks'];
+        };
+      };
+      /** @description Not a member of the organization. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No such organization. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  currency_org_books_material_ledger_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgMaterialLedgerEntry'][];
         };
       };
       /** @description Not a member of the organization. */
