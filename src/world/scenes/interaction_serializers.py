@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from world.scenes.constants import InteractionMode, PoseKind, ScenePrivacyMode
 from world.scenes.interaction_permissions import get_account_personas
+from world.scenes.line_rendering import render_line
 from world.scenes.models import (
     Interaction,
     InteractionAction,
@@ -122,6 +123,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     language_id = serializers.IntegerField(read_only=True, allow_null=True)
     language_name = serializers.SerializerMethodField()
     attributed_companion = serializers.SerializerMethodField()
+    line = serializers.SerializerMethodField()
     # Additive narrative-play contract fields. Unthreaded rows deliberately expose
     # no inferred parent; play readers keep their existing holder fallback.
     thread_id = serializers.SerializerMethodField()
@@ -145,6 +147,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "scene",
             "place",
             "content",
+            "line",
             "mode",
             "visibility",
             "timestamp",
@@ -581,6 +584,24 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
     def get_language_name(self, obj: Interaction) -> str | None:
         return obj.language.name if obj.language_id else None
+
+    def get_line(self, obj: Interaction) -> str:
+        """The whole sentence this viewer reads (#3858): the actor in the line.
+
+        Rendered at display time from the same per-viewer name ``get_persona``
+        resolves (a mask stays a mask, #1109), the same per-viewer content
+        ``get_content`` produces (a muted row stays blank, a comprehension-graded
+        read stays graded), and the mode. A companion pose reads as the companion
+        (#3294). Never stored: ``content`` stays what was typed.
+        """
+        content = self.get_content(obj)
+        if not content:
+            return ""
+        if obj.attributed_companion_id is not None:
+            name = obj.attributed_companion.name
+        else:
+            name = self.get_persona(obj)["name"]
+        return render_line(name, obj.mode, content, language_name=self.get_language_name(obj))
 
     def get_attributed_companion(self, obj: Interaction) -> dict | None:
         """Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.

@@ -257,6 +257,8 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
 - **`ExplorationReader.tsx`**: The no-scene reader. Room facts stay structured
   (name, description); below them one `Activity` list of the room's ambient
   interactions and the session's notes, ordered by time through `feedRows.ts`.
+  An ambient row's body is the server's `line` (#3858) through
+  `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`.
 - **`FeedChipStrip.tsx`**: The strip above the column (#3856 PR 2): one plain label
   per chip (`aria-pressed` = All and on; a "new" pill from `chipUnread`), `+`
   while a custom chip can still be added, All at the right end. Left click

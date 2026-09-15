@@ -255,6 +255,8 @@ export interface InteractionWsPayload {
   id: number;
   persona: { id: number; name: string; thumbnail_url: string };
   content: string;
+  /** The whole sentence for this viewer (#3858), the actor in the line; see `Interaction.line`. */
+  line?: string;
   mode: string;
   timestamp: string;
   scene_id: number | null;

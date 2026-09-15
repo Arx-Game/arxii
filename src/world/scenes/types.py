@@ -44,6 +44,10 @@ class InteractionPayload(TypedDict):
     id: int
     persona: PersonaPayload
     content: str
+    # The whole sentence for this viewer (#3858): the actor in the line, rendered
+    # at display time by ``line_rendering.render_line`` from ``content``, the
+    # display name and ``mode``. Readers show this; everything else reads ``content``.
+    line: str
     mode: str
     timestamp: str
     thread_id: str | None

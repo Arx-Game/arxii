@@ -21,6 +21,7 @@ from flows.service_functions.communication import message_location, send_message
 from world.gm.constants import GMLevel
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import record_interaction, record_whisper_interaction
+from world.scenes.line_rendering import render_line
 from world.scenes.thread_services import (
     InteractionThreadError,
     ReplyTarget,
@@ -376,7 +377,7 @@ def _deliver_mutter(
     receiver_ids = {receiver.pk for receiver in receivers}
     for receiver in receivers:
         receiver_state = sdm.initialize_state_for_object(receiver)
-        send_message(receiver_state, f'{actor.key} mutters, "{text}"')
+        send_message(receiver_state, render_line(actor.key, InteractionMode.MUTTER, text))
     location = actor.location
     if location is None:
         return
@@ -386,7 +387,7 @@ def _deliver_mutter(
         if not hasattr(obj, "msg"):
             continue
         bystander_state = sdm.initialize_state_for_object(obj)
-        send_message(bystander_state, f'{actor.key} mutters, "{fragment}"')
+        send_message(bystander_state, render_line(actor.key, InteractionMode.MUTTER, fragment))
 
 
 @dataclass
@@ -490,7 +491,10 @@ class PoseAction(Action):
         target_personas = _characters_to_active_personas(targets) if targets else None
 
         def _broadcast() -> None:
-            message_location(caller_state, text)
+            # The actor is in the line on telnet too (#3858): ``{caller}`` is
+            # resolved per looker by message_location's mapping, so a disguise
+            # reads as whatever that looker sees.
+            message_location(caller_state, render_line("{caller}", InteractionMode.POSE, text))
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
@@ -741,7 +745,14 @@ class WhisperAction(Action):
             # trust (#2993): the chosen audience always gets the full text, never garbled.
             send_message(
                 target_state,
-                f'{caller_state.get_display_name(looker=target_state)} whispers "{text}"',
+                render_line(
+                    caller_state.get_display_name(looker=target_state),
+                    InteractionMode.WHISPER,
+                    text,
+                    language_name=None
+                    if language is None or language.is_universal
+                    else language.name,
+                ),
             )
 
         client_request_id = kwargs.get("client_request_id")

@@ -553,6 +553,7 @@ class CompanionEmoteAction(Action):
             idempotent_record_interaction,
             record_interaction,
         )
+        from world.scenes.line_rendering import render_line  # noqa: PLC0415
 
         text = kwargs.get("text", "")
         if not text:
@@ -570,9 +571,9 @@ class CompanionEmoteAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
 
         def _broadcast() -> None:
-            # Broadcast raw text, same convention as PoseAction — the player writes
-            # the companion's own name into the pose text.
-            message_location(caller_state, text)
+            # The companion is the actor in the line (#3858); a pose the player
+            # already opened with the companion's name is left alone.
+            message_location(caller_state, render_line(companion.name, InteractionMode.POSE, text))
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
