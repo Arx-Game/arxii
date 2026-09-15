@@ -184,7 +184,7 @@ class EntranceVisibilityTests(TestCase):
         serializer = RoomStatePayloadSerializer(
             None, context={"caller": caller_state, "room": self.room_state}
         )
-        _chars, _objs, exits = serializer._serialize_contents(self.room_state, caller_state)
+        _chars, _objs, exits, _place = serializer._serialize_contents(self.room_state, caller_state)
         return {entry["dbref"] for entry in exits}
 
     def test_participant_sees_entrance(self) -> None:
