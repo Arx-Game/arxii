@@ -626,6 +626,47 @@ class TestRecordWhisperInteraction(TestCase):
         assert result is None
 
 
+class TestPerObjectLine(TestCase):
+    """A comprehension renderer rewrites the content AND the line (#3858)."""
+
+    def test_a_garbled_listener_reads_a_garbled_sentence(self) -> None:
+        from world.scenes.interaction_services import _build_interaction_payload, _send_to_objects
+
+        sheet = CharacterSheetFactory()
+        payload = _build_interaction_payload(
+            interaction_id=1,
+            persona=sheet.primary_persona,
+            content="the gate, at dusk",
+            mode=InteractionMode.SAY,
+            timestamp="2026-09-15T00:00:00",
+            scene_id=None,
+            language_name="Arvani",
+        )
+        name = sheet.primary_persona.name
+        assert payload["line"] == f'{name} says in Arvani, "the gate, at dusk"'
+        listener = Mock()
+        _send_to_objects([listener], payload, render_for=lambda _obj: "th- g-te, -t d-sk")
+        sent = listener.msg.call_args.kwargs["interaction"][1]
+        assert sent["content"] == "th- g-te, -t d-sk"
+        assert sent["line"] == f'{name} says in Arvani, "th- g-te, -t d-sk"'
+
+    def test_a_companion_pose_reads_as_the_companion(self) -> None:
+        from world.scenes.interaction_services import _build_interaction_payload
+
+        sheet = CharacterSheetFactory()
+        payload = _build_interaction_payload(
+            interaction_id=1,
+            persona=sheet.primary_persona,
+            content="lifts his head.",
+            mode=InteractionMode.POSE,
+            timestamp="2026-09-15T00:00:00",
+            scene_id=None,
+            attributed_companion_id=7,
+            attributed_companion_name="Hask",
+        )
+        assert payload["line"] == "Hask lifts his head."
+
+
 class TestPushInteraction(TestCase):
     def _make_room_with_characters(self) -> tuple:
         """Create a room with two characters that have identities and personas."""
@@ -662,6 +703,7 @@ class TestPushInteraction(TestCase):
                 "thumbnail_url": identity_a.primary_persona.thumbnail_url or "",
             },
             "content": "strides in.",
+            "line": f"{identity_a.primary_persona.name} strides in.",
             "mode": InteractionMode.POSE,
             "timestamp": interaction.timestamp.isoformat(),
             "thread_id": None,
@@ -716,6 +758,8 @@ class TestPushInteraction(TestCase):
         assert payload["persona"]["name"] == identity_a.primary_persona.name
         assert "thumbnail_url" in payload["persona"]
         assert payload["content"] == "waves."
+        # The actor is in the line (#3858), rendered from the same fields.
+        assert payload["line"] == f'{identity_a.primary_persona.name} says, "waves."'
         assert payload["mode"] == InteractionMode.SAY
         assert payload["timestamp"] == interaction.timestamp.isoformat()
         assert payload["scene_id"] == scene.pk

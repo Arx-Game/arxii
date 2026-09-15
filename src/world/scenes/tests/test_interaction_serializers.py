@@ -24,7 +24,7 @@ from world.magic.factories import (
     ResonanceFactory,
     SceneEntryEndorsementFactory,
 )
-from world.scenes.constants import PoseKind
+from world.scenes.constants import InteractionMode, PoseKind
 from world.scenes.factories import (
     InteractionFactory,
     PersonaDiscoveryFactory,
@@ -67,6 +67,40 @@ def _set_empty_cached_attrs(interaction) -> None:
     interaction.cached_action_links = []
     interaction.cached_endorsements = []
     interaction.cached_reaction_windows = []
+
+
+class LineTests(TestCase):
+    """``line`` (#3858): the actor in the sentence, from the card's own name."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        idmapper_models.flush_cache()
+        cls.sheet = CharacterSheetFactory()
+        cls.persona = cls.sheet.primary_persona
+        cls.pose = InteractionFactory(persona=cls.persona, content="waves.")
+        cls.say = InteractionFactory(
+            persona=cls.persona, content="Rain again.", mode=InteractionMode.SAY
+        )
+        cls.emit = InteractionFactory(
+            persona=cls.persona, content="The bells go quiet.", mode=InteractionMode.EMIT
+        )
+
+    def setUp(self) -> None:
+        idmapper_models.flush_cache()
+
+    def _row(self, interaction) -> dict:
+        _set_empty_cached_attrs(interaction)
+        return InteractionListSerializer(interaction, context=_make_context()).data
+
+    def test_a_pose_and_a_say_carry_the_actor(self) -> None:
+        pose = self._row(self.pose)
+        assert pose["content"] == "waves."
+        assert pose["line"] == f"{pose['persona']['name']} waves."
+        say = self._row(self.say)
+        assert say["line"] == f'{say["persona"]["name"]} says, "Rain again."'
+
+    def test_an_emit_is_its_own_text(self) -> None:
+        assert self._row(self.emit)["line"] == "The bells go quiet."
 
 
 class Task1PoseKindEndorseeSheetIdTests(TestCase):

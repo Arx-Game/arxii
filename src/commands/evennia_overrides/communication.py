@@ -320,7 +320,7 @@ class CmdTabletalk(ArxCommand):
 
 
 class CmdPose(ArxCommand):
-    """Pose an action to the room (prepends character name).
+    """Pose an action to the room; the actor's name opens the line (#3858).
 
     Traditional MUSH convention: ``emote`` is an alias for pose (name-prefixed).
     Use ``emit`` for raw text with no automatic name prefix.

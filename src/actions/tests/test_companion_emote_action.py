@@ -266,6 +266,8 @@ class CompanionEmoteActionIdempotencyTests(TestCase):
             CompanionEmoteAction().execute(actor=self.sheet.character, context=None, **kwargs)
 
         self.assertEqual(mock_broadcast.call_count, 1)
+        # The companion is the actor in the line (#3858).
+        self.assertEqual(mock_broadcast.call_args.args[1], "Fang grooms itself.")
 
     def test_no_client_request_id_still_records_non_idempotent_pose(self) -> None:
         """Backward compatibility: a caller that omits client_request_id (an
