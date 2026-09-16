@@ -7,6 +7,7 @@ effects, and character distinction grants.
 
 from django.contrib import admin
 
+from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import DistinctionCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
 from world.distinctions.models import (
@@ -60,7 +61,7 @@ class DistinctionCodexGrantInline(admin.TabularInline):
 
 
 @admin.register(Distinction)
-class DistinctionAdmin(admin.ModelAdmin):
+class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_display = [
         "name",
         "slug",

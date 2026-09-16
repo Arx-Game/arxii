@@ -25,6 +25,7 @@ from world.character_creation.models import (
     StartingArea,
     TraditionStateLine,
 )
+from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import BeginningsCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
 
@@ -91,7 +92,7 @@ class BeginningEnemyOfferInline(admin.TabularInline):
 
 
 @admin.register(Beginnings)
-class BeginningsAdmin(admin.ModelAdmin):
+class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     """Admin for Beginnings - worldbuilding paths in character creation."""
 
     autocomplete_fields = ["starting_room_override", "art"]

@@ -135,6 +135,33 @@ class CodexEntryAdminTests(TestCase):
         )
 
 
+class OrganizationGrantAdminTests(TestCase):
+    def test_creating_a_grant_reaches_current_members(self):
+        from world.roster.factories import RosterTenureFactory
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        staff = AccountFactory(username="staffer2", is_staff=True, is_superuser=True)
+        self.client.force_login(staff)
+        organization = OrganizationFactory()
+        # OrganizationMembershipFactory's default PersonaFactory builds a bare
+        # CharacterSheet with no RosterEntry; a member needs one to be reachable,
+        # so build the character through the roster stack instead (#3775).
+        tenure = RosterTenureFactory()
+        roster_entry = tenure.roster_entry
+        persona = roster_entry.character_sheet.primary_persona
+        OrganizationMembershipFactory(organization=organization, persona=persona)
+        entry = CodexEntryFactory(name="Inner doctrine")
+        response = self.client.post(
+            reverse("admin:arxii_organizationcodexgrant_add"),
+            {"organization": organization.pk, "entry": entry.pk},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry, entry=entry).exists()
+        )
+
+
 def _form_data(response) -> dict:
     """Every field of the rendered admin form, as the browser would post it."""
     data = {}

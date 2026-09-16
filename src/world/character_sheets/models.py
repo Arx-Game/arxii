@@ -186,6 +186,10 @@ class Profile(SharedMemoryModel):
     properties on ``CharacterSheet`` so existing ``sheet.<field>`` reads/writes are unchanged.
     """
 
+    #: The CharacterSheet this is the *true* profile of, or None for a cover profile
+    #: that no sheet owns as its real bio (reverse of ``CharacterSheet.true_profile``, #3775).
+    owning_sheet_or_none = ReverseOneToOneOrNone("owning_sheet")
+
     concept = models.CharField(
         max_length=255,
         blank=True,

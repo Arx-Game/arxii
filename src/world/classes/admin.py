@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.classes.models import Aspect, CharacterClass, ClassStageHealthRate, Path, PathAspect
+from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
 from world.magic.models import PathGiftGrant
@@ -72,7 +73,7 @@ class PathGiftGrantInline(admin.TabularInline):
 
 
 @admin.register(Path)
-class PathAdmin(admin.ModelAdmin):
+class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     """Admin for character paths."""
 
     list_display = [

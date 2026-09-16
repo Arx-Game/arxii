@@ -470,3 +470,12 @@ class OrganizationCodexGrantAdmin(admin.ModelAdmin):
     list_display = ("organization", "entry")
     search_fields = ("organization__name", "entry__name")
     autocomplete_fields = ("organization", "entry")
+
+    def save_model(
+        self, request: HttpRequest, obj: OrganizationCodexGrant, form, change: bool
+    ) -> None:
+        """A newly created grant reaches the organization's current members (#3775)."""
+        super().save_model(request, obj, form, change)
+        if not change:
+            learned = grant_to_current_holders(obj)
+            messages.info(request, f"Reached {learned} current member(s).")

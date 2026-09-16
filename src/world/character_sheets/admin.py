@@ -1,6 +1,8 @@
-from typing import Any
+from __future__ import annotations
 
-from django.contrib import admin
+from typing import TYPE_CHECKING, Any
+
+from django.contrib import admin, messages
 from django.http import HttpRequest
 
 from world.character_sheets.models import (
@@ -10,10 +12,75 @@ from world.character_sheets.models import (
     Heritage,
     MoodOption,
     Profile,
+    ProfileBeginnings,
     ProfileTextVersion,
     Pronouns,
 )
 from world.character_sheets.types import ProfileTextField
+
+if TYPE_CHECKING:
+    from world.roster.models import RosterEntry
+
+
+class ProfileBeginningsInline(admin.TabularInline):
+    """Every origin this character holds, and why (#3775)."""
+
+    model = ProfileBeginnings
+    extra = 0
+    fields = ["beginnings", "source", "note", "gained_at"]
+    readonly_fields = ["gained_at"]
+    autocomplete_fields = ["beginnings"]
+    verbose_name_plural = (
+        "Beginnings: every origin this character holds. The wizard adds where play "
+        "began; add a recovered memory or past life here and its entries are granted "
+        "on save."
+    )
+
+
+def _roster_entry_of_profile(profile: Profile) -> RosterEntry | None:
+    """The roster entry playing this profile's owning sheet, if any (#3775).
+
+    A ``Profile`` that is not a sheet's ``true_profile`` (a cover persona's
+    fabricated bio) has no owning sheet at all, and even a true profile's sheet
+    may not be attached to a roster entry yet — both are expected absences, not
+    bugs, so this reads the two reverse one-to-ones through their ``_or_none``
+    descriptors rather than the raw (exception-raising) accessors.
+    """
+    sheet = profile.owning_sheet_or_none
+    if sheet is None:
+        return None
+    return sheet.roster_entry_or_none
+
+
+def apply_new_origin_rows(request: HttpRequest, formsets) -> int:
+    """Grant each newly added origin's codex entries to this one character (#3775).
+
+    Unlike ``GrantReachOnSaveMixin`` (which reaches every character holding a
+    Beginnings when a *grant* row is added), this reaches only the one
+    character whose Profile just gained a *new origin* row — the documented
+    behaviour is that a recovered memory or past life teaches that character
+    what the origin already grants, not that it retroactively reaches anyone
+    else who happens to share the Beginnings.
+    """
+    from world.codex.services import grant_codex_entry  # noqa: PLC0415
+
+    learned = 0
+    for formset in formsets:
+        # save_new_objects (called above, inside super().save_related()) always
+        # sets this on a BaseModelFormSet before returning — same guarantee
+        # GrantReachOnSaveMixin relies on (world/codex/admin.py).
+        for row in formset.new_objects:
+            if not isinstance(row, ProfileBeginnings):
+                continue
+            roster_entry = _roster_entry_of_profile(row.profile)
+            if roster_entry is None:
+                continue
+            for grant in row.beginnings.codex_grants.all():
+                _, created = grant_codex_entry(roster_entry, grant.entry)
+                learned += int(created)
+    if learned:
+        messages.info(request, f"New origin(s) taught this character {learned} entries.")
+    return learned
 
 
 @admin.register(Profile)
@@ -26,6 +93,7 @@ class ProfileAdmin(admin.ModelAdmin):
     list_display = ["__str__", "concept"]
     search_fields = ["concept", "real_concept"]
     raw_id_fields = ("heritage", "origin_realm", "family", "tarot_card")
+    inlines = [ProfileBeginningsInline]
     fields = (
         "concept",
         "real_concept",
@@ -66,6 +134,11 @@ class ProfileAdmin(admin.ModelAdmin):
                 edited_by=request.user,
                 previous_text=previous[field],
             )
+
+    def save_related(self, request: HttpRequest, form: Any, formsets, change: bool) -> None:
+        """After the inlines save, grant any newly added origin's entries (#3775)."""
+        super().save_related(request, form, formsets, change)
+        apply_new_origin_rows(request, formsets)
 
 
 @admin.register(ProfileTextVersion)
