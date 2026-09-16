@@ -24,7 +24,7 @@ repos:
   - repo: local
     hooks:
       - id: image-path
-        name: Reject images outside temporary evidence directories
+        name: Reject images outside approved asset/evidence directories
         entry: uv run python tools/lint_image_paths.py
         language: system
         pass_filenames: true

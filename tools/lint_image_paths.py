@@ -1,9 +1,15 @@
-"""Reject image files outside the temporary evidence staging directories."""
+"""Reject image files outside approved asset and evidence directories."""
 
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 import sys
+
+ALLOWED_DIRECTORY_PARTS = (
+    ("docs", "reviews"),
+    (".github", "issue-evidence"),
+    ("frontend", "public"),
+)
 
 IMAGE_SUFFIXES = frozenset(
     {
@@ -29,14 +35,16 @@ def is_image_path(path: str) -> bool:
 
 
 def is_allowed_image_path(path: str) -> bool:
-    """Return whether an image is in a temporary evidence staging directory."""
+    """Return whether an image is in an approved asset or evidence directory."""
     normalized = path.replace("\\", "/")
     parts = PurePosixPath(normalized).parts
-    return ".." not in parts and parts[:2] in (("docs", "reviews"), (".github", "issue-evidence"))
+    return ".." not in parts and any(
+        parts[: len(prefix)] == prefix for prefix in ALLOWED_DIRECTORY_PARTS
+    )
 
 
 def violations(paths: list[str]) -> list[str]:
-    """Return image paths that are outside the approved evidence directories."""
+    """Return image paths that are outside approved asset or evidence directories."""
     return [path for path in paths if is_image_path(path) and not is_allowed_image_path(path)]
 
 

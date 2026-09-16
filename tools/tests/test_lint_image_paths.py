@@ -5,30 +5,31 @@ from __future__ import annotations
 from lint_image_paths import is_allowed_image_path, violations
 
 
-def test_allows_images_in_workflow_evidence_directories() -> None:
-    """Temporary evidence locations are the only approved image paths."""
+def test_allows_images_in_approved_directories() -> None:
+    """Temporary evidence and production asset locations are approved."""
     assert (
         violations(
             [
                 "docs/reviews/room-state.png",
                 ".github/issue-evidence/3824/screen.webp",
+                "frontend/public/favicon.svg",
             ]
         )
         == []
     )
 
 
-def test_rejects_images_outside_workflow_evidence_directories() -> None:
+def test_rejects_images_outside_approved_directories() -> None:
     """Images in ordinary source or documentation paths must fail pre-commit."""
     assert violations(
         [
             "docs/pr-evidence/room-state.png",
-            "frontend/public/preview.svg",
+            "frontend/src/assets/preview.svg",
             "src/world/assets/icon.jpg",
         ]
     ) == [
         "docs/pr-evidence/room-state.png",
-        "frontend/public/preview.svg",
+        "frontend/src/assets/preview.svg",
         "src/world/assets/icon.jpg",
     ]
 
