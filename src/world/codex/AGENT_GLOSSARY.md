@@ -34,3 +34,12 @@ that fires the shared discovery/achievement ceremony the first time any characte
 sections for the full mechanism — including the player-tenure/staff gate and the CG-catalog
 exclusion, which mean character-creation grants and common-knowledge entries never fire it (#2899).
 _Avoid_: reinventing a codex-local discovery/achievement mechanism.
+
+**Organization codex grant**:
+An `OrganizationCodexGrant` row (#3780): a `CodexEntry` every active member of one
+`Organization` knows. The Deity Editor's "Obscure" visibility tier is exactly this (a being's
+page that is not public, known to one organization), the mechanism Dan confirmed on #3776 and
+that issue deferred to implementation. Applied on `join_organization`
+(`apply_organization_codex_grants`) and to current members when the grant is created
+(`grant_organization_entry_to_members`); a plain grant, never a perspective holder.
+_Avoid_: "org secret", "faction lore".
