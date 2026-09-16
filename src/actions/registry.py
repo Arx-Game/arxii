@@ -608,6 +608,7 @@ from actions.definitions.world_builder import (
     StaffSetTravelHubAction,
     StaffUnlinkRoomsAction,
 )
+from actions.definitions.worship import PerformWorshipRiteAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
@@ -1070,6 +1071,8 @@ _ALL_ACTIONS: list[Action] = [
     DreamwalkAction(),
     RetireCharacterAction(),
     GiveDeathKudosAction(),
+    # #3777: a being's solo worship rite, performed in a live scene.
+    PerformWorshipRiteAction(),
     # #2289 — ceremonies (worship rites over the events/scenes chassis).
     OpenCeremonyAction(),
     CeremonyOfferingAction(),

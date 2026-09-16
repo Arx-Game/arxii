@@ -341,6 +341,8 @@ class GainSource(models.TextChoices):
     COMPROMISE = "COMPROMISE", "Moral compromise"
     PENANCE = "PENANCE", "Atonement resonance conversion"
     FALL_CONVERSION = "FALL_CONVERSION", "Fall/Redemption conversion"
+    # #3777: a worship rite performed in a scene
+    WORSHIP_RITE = "WORSHIP_RITE", "Worship rite"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -377,6 +379,10 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.COMPROMISE,
         GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
+        # #3777: a rite pays off the performer's own roll against an authored
+        # award table; a live scene is its prerequisite, not its witness, and
+        # its resonance is uncapped, so it is never accelerated.
+        GainSource.WORSHIP_RITE,
     }
 )
 

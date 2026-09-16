@@ -3048,6 +3048,7 @@ paths:
           - conversion
           - coronation
           - funeral
+          - rite
           - seance
           - sermon
           - wedding
@@ -3059,6 +3060,7 @@ paths:
           * `wedding` - Wedding
           * `conversion` - Conversion
           * `coronation` - Coronation
+          * `rite` - Rite
       - in: query
         name: location
         schema:
@@ -20054,6 +20056,7 @@ paths:
           - STAFF_GRANT
           - STAKE_REWARD
           - STYLE_PRESENTATION
+          - WORSHIP_RITE
         description: |-
           Discriminator. Identifies which source_* FK is populated.
 
@@ -20077,6 +20080,7 @@ paths:
           * `COMPROMISE` - Moral compromise
           * `PENANCE` - Atonement resonance conversion
           * `FALL_CONVERSION` - Fall/Redemption conversion
+          * `WORSHIP_RITE` - Worship rite
       tags:
       - magic
       security:
@@ -39150,6 +39154,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/Miracle'
           description: ''
+  /api/worship/rites/:
+    get:
+      operationId: worship_rites_list
+      description: 'The rites a being offers (#3777): what a worshipper can perform.'
+      parameters:
+      - in: query
+        name: being
+        schema:
+          type: integer
+      - in: query
+        name: kind__tier
+        schema:
+          type: integer
+          enum:
+          - 1
+          - 2
+          - 3
+        description: |-
+          Sets the AP cost (1 per tier) and the award table row; tier 3 is a Ceremony.
+
+          * `1` - Devotional
+          * `2` - Demanding
+          * `3` - Perilous
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorshipRiteList'
+          description: ''
+  /api/worship/rites/{id}/:
+    get:
+      operationId: worship_rites_retrieve
+      description: 'The rites a being offers (#3777): what a worshipper can perform.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worship rite.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorshipRite'
+          description: ''
 components:
   schemas:
     AcceptSoulTetherRequest:
@@ -43278,6 +43356,11 @@ components:
         offering_count:
           type: integer
           readOnly: true
+        worship_rite_name:
+          type: string
+          nullable: true
+          description: The tier 3 rite a RITE ceremony performs (#3777), else None.
+          readOnly: true
       required:
       - ceremony_type_key
       - ceremony_type_name
@@ -43289,6 +43372,7 @@ components:
       - opened_at
       - presented_being_name
       - speeches
+      - worship_rite_name
     CeremonyHonoree:
       type: object
       properties:
@@ -67166,6 +67250,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderRoomHit'
+    PaginatedWorshipRiteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorshipRite'
     PaginatedWorshippedBeingRefList:
       type: object
       required:
@@ -74271,6 +74378,7 @@ components:
             * `COMPROMISE` - Moral compromise
             * `PENANCE` - Atonement resonance conversion
             * `FALL_CONVERSION` - Fall/Redemption conversion
+            * `WORSHIP_RITE` - Worship rite
         granted_at:
           type: string
           format: date-time
@@ -74324,6 +74432,7 @@ components:
       - COMPROMISE
       - PENANCE
       - FALL_CONVERSION
+      - WORSHIP_RITE
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -74346,6 +74455,7 @@ components:
         * `COMPROMISE` - Moral compromise
         * `PENANCE` - Atonement resonance conversion
         * `FALL_CONVERSION` - Fall/Redemption conversion
+        * `WORSHIP_RITE` - Worship rite
     Response7baEnum:
       enum:
       - pending
@@ -85028,6 +85138,48 @@ components:
       properties:
         status:
           $ref: '#/components/schemas/Status7baEnum'
+    WorshipRite:
+      type: object
+      description: 'A being''s rite as the client shows it (#3777): flavor plus the
+        tier.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        being:
+          type: integer
+          readOnly: true
+        being_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        kind_name:
+          type: string
+          readOnly: true
+        tier:
+          type: integer
+          readOnly: true
+        check_type_name:
+          type: string
+          readOnly: true
+        resonance_name:
+          type: string
+          readOnly: true
+      required:
+      - being
+      - being_name
+      - check_type_name
+      - description
+      - id
+      - kind_name
+      - name
+      - resonance_name
+      - tier
     WorshippedBeingRef:
       type: object
       properties:

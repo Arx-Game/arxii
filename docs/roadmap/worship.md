@@ -29,6 +29,22 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   (secretly serving the officiant's hidden god) leak consent-gated clues. Corpse
   gear routes through steal unless the dead player's friends list trusts the taker.
   Bounded abandonment via the hourly `ceremonies.auto_abandon` sweep.
+- **Worship rites & rewards (#3777, 2026-09-16):** tiered rites over the pantheon
+  foundations (#3776). `RiteKind` (1 Devotional / 2 Demanding / 3 Perilous) is the shared
+  catalog; each being instantiates its own `WorshipRite` (flavor, check type, one of its
+  own `BeingResonance` rows); `WorshipRiteTierAward` pays resonance and favor per (tier,
+  outcome), three tiers tuned once for every god. A tier 1 or 2 rite is a scene act
+  (`perform_worship_rite`, `PerformWorshipRiteAction`): 1 AP per tier plus a little social
+  fatigue, the rite's check with the tradition specialization, then the award; a FAVORED
+  resonance, the being's feast day and birth favor each double it. Devotion from a rite
+  lands once per game week per character, resonance every time, so repeats stay fine for
+  RP. Tier 3 is the existing Ceremony machinery: a RITE `CeremonyType` carries the rite
+  and the officiant's Rites roll pays it at finish; participants earn through
+  dramatic-moment tags. Offerings carrying a facet the being favors are credited at a
+  config multiplier on the pool grant and the devotion bump. `Relic` names a specific
+  sacred `ItemInstance` of a being (dashboard surface in #3780). Every magnitude is
+  PLACEHOLDER; the event/contest mechanics a tier 3 rite might wrap stay out of scope
+  (#3770).
 - **Miracles / divine intervention (#2360):** gods spend `resonance_pool` on authored
   `Miracle` effects that fire automatically for a high-devotion PC in danger, plus
   faith-colored Audere Majora crossing variants.

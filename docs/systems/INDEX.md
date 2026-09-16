@@ -8437,7 +8437,14 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   a caller can't record the same undirected pair twice under swapped args),
   `WorshipFeastDay` (#3776 Task 9: `being` FK + `ic_month`/`ic_day` (no year, mirrors
   `weather.FeastDay`'s shape) + `name`/`lore`, unique per being+date — worship gets its own
-  model rather than reusing weather's; feeds a future universal worship-rite multiplier, #3777),
+  model rather than reusing weather's; doubles a worship-rite award on the day, #3777),
+  `RiteKind` (#3777: pantheon-wide rite catalog, `tier` 1..3 sets AP cost and the award row;
+  tier 3 is a Ceremony), `WorshipRite` (#3777: a being's own instantiation, flavor + `check_type`
+  + one of the being's `BeingResonance` rows; unique per being+name), `WorshipRiteTierAward`
+  (#3777: `resonance_amount`/`favor_amount` per (tier, `CheckOutcome`); every pair seeded, a
+  missing row raises), `WorshipRitePerformance` (#3777: the audit row, the `ResonanceGrant`
+  WORSHIP_RITE source and the weekly favor cap; nullable `scene`, OneToOne `ceremony` for tier
+  3), `Relic` (#3777: OneToOne to a specific `ItemInstance` sacred to a being),
   `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
@@ -8451,24 +8458,34 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `DevotionStanding` or the secret side); `is_birth_favored_by(sheet, being, *, today=None)`
   (#3776 Task 9 — pure query: True iff `sheet.tarot_card` is one of `being.tarot_cards` AND
   `today` is `sheet`'s birthday; `today` defaults to `game_clock.get_ic_now()`, not the wall
-  clock; read by #3777's reward calc, grants nothing itself). CG: `CharacterDraft.public_worship`/
+  clock; read by #3777's reward calc, grants nothing itself). **Rites** (`worship/rite_services.py`,
+  #3777): `perform_worship_rite(sheet, rite, *, scene)` (tier 1-2 scene act: 1 AP per tier +
+  social fatigue, the rite's check with the tradition specialization, then `apply_rite_award`),
+  `apply_rite_award` (the shared payout: (tier, outcome) row × `reward_multiplier_percent`
+  (FAVORED resonance, feast day, birth favor, each ×2 PLACEHOLDER), performance row, resonance
+  grant, devotion capped once per rite per `GameWeek` via `favor_capped_this_week`), action
+  `PerformWorshipRiteAction` (`worship_rite`), `GET /api/worship/rites/`. CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
 - **Ceremony models** (`world/ceremonies`): `CeremonyType`
-  (Funeral/Blessing/Sermon/Seance/Wedding/Conversion/Coronation rows — seeded via the
-  `"ceremonies"` cluster, #2393/#2358/#2361), `Ceremony` (officiant Persona, TRUE
+  (Funeral/Blessing/Sermon/Seance/Wedding/Conversion/Coronation/Rite rows — seeded via the
+  `"ceremonies"` cluster, #2393/#2358/#2361/#3777), `Ceremony` (officiant Persona, TRUE
   `being` vs `presented_being` — player surfaces render
   presented ONLY, one-OPEN-per-location constraint, nullable scene/event/title FKs
-  — `title` is CORONATION-only, `quality_level`),
+  — `title` is CORONATION-only, nullable `worship_rite` FK — RITE-only, the TRUE being's tier
+  3 rite (#3777), `quality_level`),
   `CeremonyHonoree`, `CeremonyOffering` (item destroyed; snapshot), `CeremonySpeech`,
   `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes),
   `WorshipConversionOffer` (#2361, one per PC-officiated Conversion honoree —
   PENDING/ACCEPTED/DECLINED + `is_sincere`, mirrors `SeanceManifestationOffer`).
 - **Ceremony services**: `open_ceremony` (twisted-rite being/presented mapping; validates
   honoree count/liveness per type — CONVERSION needs exactly one, the convert),
-  `record_offering` (pool → TRUE being; devotion follows belief), `record_speech`
-  (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; honoree deeds
+  `record_offering` (pool → TRUE being; devotion follows belief; an item carrying a facet the
+  TRUE being favors is credited at `CeremonyConfig.offering_favored_facet_multiplier_percent`
+  on grant and devotion alike, #3777), `record_speech`
+  (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; a RITE
+  ceremony pays its tier 3 rite award off that roll through `apply_rite_award`, #3777; honoree deeds
   via `create_solo_deed` — `_mint_ceremony_deed` takes optional `archetypes`/`scene` kwargs,
   #2361; officiant cut; funeral → `execute_will` NO-OP seam for #1985; WEDDING
   refuses to solemnize until every `WeddingConsentOffer` is ACCEPTED, then solemnizes the

@@ -49,6 +49,18 @@ class CmdCeremonyRoutingTests(TestCase):
         )
 
     @patch("actions.definitions.ceremonies.OpenCeremonyAction.run")
+    def test_rite_form_names_the_rite_first_then_honorees(self, run) -> None:
+        run.return_value = ActionResult(success=True, message="opened")
+        self._run("The Walk of Ash, Alaric=The Shepherd", switches=["rite"])
+        run.assert_called_once_with(
+            actor=self.caller,
+            type_key="rite",
+            honoree_names=["Alaric"],
+            being_name="The Shepherd",
+            rite_name="The Walk of Ash",
+        )
+
+    @patch("actions.definitions.ceremonies.OpenCeremonyAction.run")
     def test_space_form_routes_too(self, run) -> None:
         run.return_value = ActionResult(success=True, message="opened")
         self._run("funeral Alaric")

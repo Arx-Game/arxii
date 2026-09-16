@@ -5,7 +5,7 @@ Thin dispatch onto the ceremony Actions — no business logic here (ADR-0001).
 
 from commands.command import ArxCommand
 
-_OPEN_SUBVERBS = frozenset({"funeral", "blessing", "sermon", "wedding", "coronation"})
+_OPEN_SUBVERBS = frozenset({"funeral", "blessing", "sermon", "wedding", "coronation", "rite"})
 _SUBVERB_OFFERING = "offering"
 _SUBVERB_SPEECH = "speech"
 _SUBVERB_FINISH = "finish"
@@ -22,6 +22,7 @@ class CmdCeremony(ArxCommand):
         ceremony/sermon [<name>,…][=<being>]           - open a sermon
         ceremony/wedding <spouse1>,<spouse2>[=<being>] - open a wedding (both must consent)
         ceremony/coronation <honoree>=<title>          - solemnize an already-held title
+        ceremony/rite <rite>[,<honoree>…][=<being>]    - hold a tier 3 worship rite
         ceremony/offering <item>[,<item2>…]            - sacrifice items (officiant)
         ceremony/speech <name>[=<honoree>]             - recognize a speaker (officiant)
         ceremony/finish                                - conclude and tally (officiant)
@@ -63,7 +64,9 @@ class CmdCeremony(ArxCommand):
         elif subverb == _SUBVERB_SHOW:
             self._show_current()
         else:
-            self.msg("Usage: ceremony/<funeral|blessing|sermon|offering|speech|finish|abandon>")
+            self.msg(
+                "Usage: ceremony/<funeral|blessing|sermon|rite|offering|speech|finish|abandon>"
+            )
 
     @staticmethod
     def _split_names(text: str) -> list[str]:
@@ -85,6 +88,16 @@ class CmdCeremony(ArxCommand):
                 type_key=type_key,
                 honoree_names=honoree_names,
                 title_name=extra,
+            )
+        elif type_key == CeremonyTypeKey.RITE:
+            # #3777: the first name is the rite, the rest honorees, "=" the being.
+            rite_name, *rite_honorees = honoree_names or [""]
+            result = OpenCeremonyAction().run(
+                actor=self.caller,
+                type_key=type_key,
+                honoree_names=rite_honorees,
+                being_name=extra,
+                rite_name=rite_name,
             )
         else:
             result = OpenCeremonyAction().run(

@@ -8,6 +8,7 @@ this PR): most gods are never played; the rare manifested god links an
 no consumer system (ADR-0010).
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -16,7 +17,12 @@ from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractDamageProfile,
 )
-from world.worship.constants import BeingRelationshipValence, BeingResonanceTier, MiracleTrigger
+from world.worship.constants import (
+    BeingRelationshipValence,
+    BeingResonanceTier,
+    MiracleTrigger,
+    RiteTier,
+)
 
 # Verbose name reused across Meta verbose_name / verbose_name_plural / __str__ (python:S1192).
 CHOSEN_FAVOR_CONFIG_VERBOSE = "Chosen Favor Config"
@@ -596,3 +602,183 @@ class ChosenFavorConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return CHOSEN_FAVOR_CONFIG_VERBOSE
+
+
+class RiteKind(SharedMemoryModel):
+    """A generic kind of worship rite shared by the whole pantheon (#3777).
+
+    Vigil, Sermon, Canticle and Blessing might all be Devotional (tier 1) kinds;
+    a demanding service sits at tier 2 and a dangerous one at tier 3. Many
+    differently named kinds share one tier, and the tier is the only mechanical
+    fact a kind carries: a being's own ``WorshipRite`` rows supply the flavor.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    tier = models.PositiveSmallIntegerField(
+        choices=RiteTier.choices,
+        default=RiteTier.DEVOTIONAL,
+        help_text="Sets the AP cost (1 per tier) and the award table row; tier 3 is a Ceremony.",
+    )
+
+    class Meta:
+        ordering = ["tier", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} (tier {self.tier})"
+
+
+class WorshipRite(SharedMemoryModel):
+    """One being's own instantiation of a RiteKind (#3777).
+
+    The kind supplies the tier and nothing else; this row carries the being's
+    flavor (Fleshreaper's Vigil is "The Long Bleeding Watch"), the check it
+    rolls and which of the being's resonances it channels. No difficulty, cost
+    or reward field lives here: all of that is read from the kind's tier.
+    """
+
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.CASCADE, related_name="rites")
+    kind = models.ForeignKey(RiteKind, on_delete=models.PROTECT, related_name="rites")
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default="")
+    check_type = models.ForeignKey(
+        "arxii.CheckType", on_delete=models.PROTECT, related_name="worship_rites"
+    )
+    resonance = models.ForeignKey(
+        BeingResonance,
+        on_delete=models.PROTECT,
+        related_name="rites",
+        help_text="Which of this being's own resonances the rite channels (must belong to being).",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["being", "kind__tier", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["being", "name"], name="unique_being_rite_name"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.being})"
+
+    @property
+    def tier(self) -> int:
+        return self.kind.tier
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.resonance_id is not None
+            and self.being_id is not None
+            and self.resonance.being_id != self.being_id
+        ):
+            msg = "A rite channels one of its own being's resonances."
+            raise ValidationError({"resonance": msg})
+
+
+class WorshipRiteTierAward(SharedMemoryModel):
+    """The payout of a worship rite, per (tier, outcome) (#3777).
+
+    The same shape as ``AnimaRitualBudgetAward`` (one authored row per canonical
+    CheckOutcome tier), keyed additionally by rite tier, so three tiers are tuned
+    once and every god's every rite reads the same table. Not a subclass of
+    ``OutcomeTierAward``: that base's OneToOne on the outcome allows one row per
+    outcome, and this table needs one per (tier, outcome). Every (tier, outcome)
+    pair must be seeded; a missing row raises rather than paying 0.
+    """
+
+    tier = models.PositiveSmallIntegerField(choices=RiteTier.choices)
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome", on_delete=models.PROTECT, related_name="worship_rite_awards"
+    )
+    resonance_amount = models.PositiveIntegerField(
+        help_text="Resonance granted to the performer for this tier and outcome."
+    )
+    favor_amount = models.PositiveIntegerField(
+        help_text=(
+            "Devotion favor granted (at most once per rite per week) for this tier and outcome."
+        )
+    )
+
+    class Meta:
+        ordering = ["tier", "outcome_tier__success_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tier", "outcome_tier"], name="unique_worship_rite_tier_award"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"tier {self.tier} / {self.outcome_tier}: {self.resonance_amount}r {self.favor_amount}f"
+        )
+
+
+class WorshipRitePerformance(SharedMemoryModel):
+    """One performance of a rite by one character (#3777): the audit row, the
+    ledger source of the resonance it granted, and the weekly devotion cap.
+
+    Devotion is rate-limited per rite: a character gains favor from a given rite
+    at most once per game week (``favor_granted > 0`` on a row in that week);
+    resonance is never capped, so repeating a rite stays fine for RP.
+    """
+
+    character_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL, on_delete=models.CASCADE, related_name="rite_performances"
+    )
+    rite = models.ForeignKey(WorshipRite, on_delete=models.PROTECT, related_name="performances")
+    game_week = models.ForeignKey(
+        "arxii.GameWeek", on_delete=models.PROTECT, related_name="rite_performances"
+    )
+    scene = models.ForeignKey(
+        "arxii.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rite_performances",
+    )
+    ceremony = models.OneToOneField(
+        "arxii.Ceremony",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rite_performance",
+        help_text="Set for a tier 3 rite: the Ceremony whose finish resolved it.",
+    )
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome", on_delete=models.PROTECT, related_name="rite_performances"
+    )
+    resonance_granted = models.PositiveIntegerField(default=0)
+    favor_granted = models.PositiveIntegerField(default=0)
+    performed_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-performed_at"]
+        indexes = [
+            models.Index(
+                fields=["character_sheet", "rite", "game_week"], name="rite_perf_sheet_rite_week"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} performed {self.rite} ({self.outcome_tier})"
+
+
+class Relic(SharedMemoryModel):
+    """A specific sacred item of a being (#3777): one named ItemInstance, not an
+    archetype ("this particular scythe", never "any scythe"). Distinct from the
+    offering facet bonus, which applies to any item carrying a favored facet.
+    Surfaced on the being's tracking dashboard (#3780)."""
+
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.CASCADE, related_name="relics")
+    item_instance = models.OneToOneField(
+        "arxii.ItemInstance", on_delete=models.CASCADE, related_name="relic_of"
+    )
+    lore = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["being", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance} (relic of {self.being})"

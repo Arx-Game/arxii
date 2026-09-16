@@ -3,16 +3,19 @@
 import factory
 
 from world.skills.factories import SpecializationFactory
-from world.worship.constants import BeingRelationshipValence, BeingResonanceTier
+from world.worship.constants import BeingRelationshipValence, BeingResonanceTier, RiteTier
 from world.worship.models import (
     BeingFacet,
     BeingNickname,
     BeingRelationship,
     BeingResonance,
     DevotionStanding,
+    RiteKind,
     WorshipDeclaration,
     WorshipFeastDay,
     WorshippedBeing,
+    WorshipRite,
+    WorshipRiteTierAward,
     WorshipTradition,
 )
 
@@ -192,3 +195,32 @@ def wire_miracle_content() -> None:
                 "narrative_text": "[PLACEHOLDER] A protective light surrounds the faithful.",
             },
         )
+
+
+class RiteKindFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = RiteKind
+
+    name = factory.Sequence(lambda n: f"Rite kind {n}")
+    tier = RiteTier.DEVOTIONAL
+
+
+class WorshipRiteFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = WorshipRite
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    kind = factory.SubFactory(RiteKindFactory)
+    name = factory.Sequence(lambda n: f"Rite {n}")
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    resonance = factory.LazyAttribute(lambda o: BeingResonanceFactory(being=o.being))
+
+
+class WorshipRiteTierAwardFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = WorshipRiteTierAward
+
+    tier = RiteTier.DEVOTIONAL
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    resonance_amount = 4
+    favor_amount = 2

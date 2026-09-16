@@ -81,6 +81,17 @@ class Ceremony(SharedMemoryModel):
         related_name="coronation_ceremonies",
         help_text="CORONATION only: the already-held title being solemnized (#2358).",
     )
+    worship_rite = models.ForeignKey(
+        "arxii.WorshipRite",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ceremonies",
+        help_text=(
+            "A tier 3 rite this ceremony performs (#3777): at finish the officiant's Rites "
+            "roll pays the rite's tier award on top of the ceremony's own honors."
+        ),
+    )
     status = models.CharField(
         max_length=20, choices=CeremonyStatus.choices, default=CeremonyStatus.OPEN
     )
@@ -223,6 +234,13 @@ class CeremonyConfig(SharedMemoryModel):
     )
     devotion_officiant = models.PositiveIntegerField(
         default=10, help_text="Devotion favor the officiant gains at finish."
+    )
+    offering_favored_facet_multiplier_percent = models.PositiveIntegerField(
+        default=200,
+        help_text=(
+            "Percent multiplier on an offering's pool grant and devotion bump when the "
+            "offered item carries a Facet the being favors (BeingFacet), #3777. 100 = no bonus."
+        ),
     )
 
     class Meta:
