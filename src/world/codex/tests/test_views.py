@@ -776,3 +776,39 @@ class CodexEntryFilingQueryCountTests(TestCase):
         names = [e["name"] for e in response.data]
         for entry in self.entries:
             assert entry.name in names
+
+
+class StaffSeesEverythingTests(TestCase):
+    """A staff account reads the whole Codex; a GM without the flag reads as a player (#3775)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.category = CodexCategoryFactory(name="Secret Category")
+        cls.subject = CodexSubjectFactory(category=cls.category, name="Secret Subject")
+        cls.hidden = CodexEntryFactory(
+            subject=cls.subject, name="Hidden Entry", is_public=False, lore_content="The truth."
+        )
+        cls.staff = AccountFactory(username="staffer", is_staff=True)
+        cls.player = AccountFactory(username="player", is_staff=False)
+
+    def _client(self, account) -> APIClient:
+        client = APIClient()
+        client.force_authenticate(user=account)
+        return client
+
+    def test_staff_lists_hidden_entry_with_content(self):
+        client = self._client(self.staff)
+        tree = client.get("/api/codex/categories/tree/")
+        self.assertEqual(tree.status_code, status.HTTP_200_OK)
+        self.assertIn(self.category.name, [c["name"] for c in tree.data])
+        detail = client.get(f"/api/codex/entries/{self.hidden.pk}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["lore_content"], "The truth.")
+        self.assertIsNone(detail.data["knowledge_status"])
+
+    def test_player_without_the_flag_does_not(self):
+        client = self._client(self.player)
+        tree = client.get("/api/codex/categories/tree/")
+        self.assertNotIn(self.category.name, [c["name"] for c in tree.data])
+        detail = client.get(f"/api/codex/entries/{self.hidden.pk}/")
+        self.assertEqual(detail.status_code, status.HTTP_404_NOT_FOUND)
