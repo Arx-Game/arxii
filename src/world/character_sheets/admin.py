@@ -42,7 +42,7 @@ def _roster_entry_of_profile(profile: Profile) -> RosterEntry | None:
 
     A ``Profile`` that is not a sheet's ``true_profile`` (a cover persona's
     fabricated bio) has no owning sheet at all, and even a true profile's sheet
-    may not be attached to a roster entry yet — both are expected absences, not
+    may not be attached to a roster entry yet - both are expected absences, not
     bugs, so this reads the two reverse one-to-ones through their ``_or_none``
     descriptors rather than the raw (exception-raising) accessors.
     """
@@ -57,7 +57,7 @@ def apply_new_origin_rows(request: HttpRequest, formsets) -> int:
 
     Unlike ``GrantReachOnSaveMixin`` (which reaches every character holding a
     Beginnings when a *grant* row is added), this reaches only the one
-    character whose Profile just gained a *new origin* row — the documented
+    character whose Profile just gained a *new origin* row - the documented
     behaviour is that a recovered memory or past life teaches that character
     what the origin already grants, not that it retroactively reaches anyone
     else who happens to share the Beginnings.
@@ -67,7 +67,7 @@ def apply_new_origin_rows(request: HttpRequest, formsets) -> int:
     learned = 0
     for formset in formsets:
         # save_new_objects (called above, inside super().save_related()) always
-        # sets this on a BaseModelFormSet before returning — same guarantee
+        # sets this on a BaseModelFormSet before returning - same guarantee
         # GrantReachOnSaveMixin relies on (world/codex/admin.py).
         for row in formset.new_objects:
             if not isinstance(row, ProfileBeginnings):
