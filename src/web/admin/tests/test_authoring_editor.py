@@ -14,6 +14,8 @@ from world.buildings.factories import BuildingKindFactory
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CodexEntry
 from world.contributors.factories import ContentContributorFactory
+from world.skills.factories import SkillFactory
+from world.traits.models import Trait, TraitCategory, TraitType
 
 
 def _make_account(username: str, *, superuser: bool = True) -> AccountDB:
@@ -224,6 +226,35 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
 
         self.assertIn(f'data-current="codex.CodexEntry:{entry.pk}"', body)
 
+    def test_heading_is_an_editable_name_input_for_a_model_with_a_name_column(self) -> None:
+        """#3890: the row's own name, editable, leads the editor for a credited model with one."""
+        entry = self._entry(name="Old Windmill District")
+        self.client.force_login(self.super)
+
+        body = self.client.get(
+            reverse("admin_authoring_editor"), {"model": "codex.CodexEntry", "pk": entry.pk}
+        ).content.decode()
+
+        self.assertIn(
+            '<input type="text" class="editor-name" name="name" id="id_name"',
+            body,
+        )
+        self.assertIn('value="Old Windmill District"', body)
+        self.assertIn(f"Editing codex.CodexEntry #{entry.pk}", body)
+        self.assertNotIn("<h2>", body)
+
+    def test_model_with_no_name_column_keeps_the_plain_heading(self) -> None:
+        """#3890: `Skill` has no `name` column of its own (its identity is its `Trait`'s)."""
+        skill = SkillFactory()
+        self.client.force_login(self.super)
+
+        body = self.client.get(
+            reverse("admin_authoring_editor"), {"model": "skills.Skill", "pk": skill.pk}
+        ).content.decode()
+
+        self.assertIn(f"<h2>Editing skills.Skill #{skill.pk}</h2>", body)
+        self.assertNotIn('class="editor-name"', body)
+
 
 class TestAuthoringEditorNext(AuthoringEditorTestCase):
     """The Next control: the row after this one in the list the writer is looking at (#3828).
@@ -355,8 +386,11 @@ class TestAuthoringEditorSave(AuthoringEditorTestCase):
         self.assertEqual(resp.status_code, 403)
 
     def test_updates_prose_only_mechanical_field_immune_even_if_smuggled(self) -> None:
+        """`name` is deliberately NOT covered here (#3890 made it a legitimate rename input);
+        `share_cost` still has no display slot at all and stays immune to a smuggled POST key.
+        """
         entry = self._entry(lore_content="Original lore.")
-        original_name = entry.name
+        original_share_cost = entry.share_cost
         self.client.force_login(self.super)
 
         resp = self.client.post(
@@ -366,7 +400,7 @@ class TestAuthoringEditorSave(AuthoringEditorTestCase):
                 "pk": str(entry.pk),
                 "summary": "A fresh summary.",
                 "lore_content": "Rewritten lore.",
-                "name": "Smuggled Name Change",
+                "share_cost": "999",
             },
         )
 
@@ -374,10 +408,12 @@ class TestAuthoringEditorSave(AuthoringEditorTestCase):
         body = resp.content.decode()
         self.assertIn("Saved.", body)
 
-        summary, lore_content, name = _db_values(entry.pk, "summary", "lore_content", "name")
+        summary, lore_content, share_cost = _db_values(
+            entry.pk, "summary", "lore_content", "share_cost"
+        )
         self.assertEqual(summary, "A fresh summary.")
         self.assertEqual(lore_content, "Rewritten lore.")
-        self.assertEqual(name, original_name)
+        self.assertEqual(share_cost, original_share_cost)
 
     def test_validation_error_re_renders_with_error_and_does_not_save(self) -> None:
         entry = self._entry(lore_content="Kept lore.")
@@ -403,11 +439,16 @@ class TestAuthoringEditorSave(AuthoringEditorTestCase):
         self.assertEqual(summary, "")
 
     def test_mechanical_field_validation_error_shows_banner_and_does_not_save(self) -> None:
+        """`share_cost` has no display slot of its own, so its error lands in the general banner.
+
+        (`name` is excluded here since #3890 - it now has its own slot; see
+        `test_name_validation_error_shows_next_to_the_name_input_not_the_banner` below.)
+        """
         entry = self._entry(lore_content="Untouched lore.")
         self.client.force_login(self.super)
 
         with patch.object(
-            CodexEntry, "full_clean", side_effect=ValidationError({"name": ["boom"]})
+            CodexEntry, "full_clean", side_effect=ValidationError({"share_cost": ["boom"]})
         ):
             resp = self.client.post(
                 reverse("admin_authoring_editor_save"),
@@ -426,6 +467,129 @@ class TestAuthoringEditorSave(AuthoringEditorTestCase):
 
         (lore_content,) = _db_values(entry.pk, "lore_content")
         self.assertEqual(lore_content, "Untouched lore.")
+
+    def test_name_validation_error_shows_next_to_the_name_input_not_the_banner(self) -> None:
+        """#3890: a `full_clean()` failure keyed "name" has its own slot now - the identity
+        input's own errornote - so it is excluded from the general "cannot be saved" banner
+        the same way a prose field's own error already is.
+        """
+        entry = self._entry(lore_content="Untouched lore.")
+        self.client.force_login(self.super)
+
+        with patch.object(
+            CodexEntry, "full_clean", side_effect=ValidationError({"name": ["boom"]})
+        ):
+            resp = self.client.post(
+                reverse("admin_authoring_editor_save"),
+                {
+                    "model": "codex.CodexEntry",
+                    "pk": str(entry.pk),
+                    "lore_content": "Attempted new lore.",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertNotIn("This row cannot be saved:", body)
+        self.assertIn("boom", body)
+        self.assertNotIn("Saved.", body)
+
+    def test_rename_saves_the_new_name_and_fires_the_backlog_changed_trigger(self) -> None:
+        entry = self._entry(name="Old Entry Name")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_save"),
+            {"model": "codex.CodexEntry", "pk": str(entry.pk), "name": "New Entry Name"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Saved.", body)
+        self.assertIn('value="New Entry Name"', body)
+        self.assertEqual(resp["HX-Trigger"], "authoring-backlog-changed")
+
+        (name,) = _db_values(entry.pk, "name")
+        self.assertEqual(name, "New Entry Name")
+
+    def test_unchanged_name_on_save_fires_no_backlog_changed_trigger(self) -> None:
+        entry = self._entry(name="Same Name")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_save"),
+            {"model": "codex.CodexEntry", "pk": str(entry.pk), "name": "Same Name"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Saved.", resp.content.decode())
+        self.assertNotIn("HX-Trigger", resp)
+
+    def test_dashed_name_is_refused_and_stores_nothing(self) -> None:
+        entry = self._entry(name="Original Name")
+        self.client.force_login(self.super)
+
+        for dash in ("\u2013", "\u2014"):
+            with self.subTest(dash=dash):
+                resp = self.client.post(
+                    reverse("admin_authoring_editor_save"),
+                    {
+                        "model": "codex.CodexEntry",
+                        "pk": str(entry.pk),
+                        "name": f"New{dash}Name",
+                    },
+                )
+
+                self.assertEqual(resp.status_code, 200)
+                body = resp.content.decode()
+                self.assertNotIn("Saved.", body)
+                self.assertIn("A name cannot contain an em or en dash; use a hyphen.", body)
+                self.assertNotIn("HX-Trigger", resp)
+
+                (name,) = _db_values(entry.pk, "name")
+                self.assertEqual(name, "Original Name")
+
+    def test_blank_name_returns_a_full_clean_error_and_stores_nothing(self) -> None:
+        entry = self._entry(name="Keep Me")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_save"),
+            {"model": "codex.CodexEntry", "pk": str(entry.pk), "name": ""},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertNotIn("Saved.", body)
+        self.assertIn("This field cannot be blank.", body)
+
+        (name,) = _db_values(entry.pk, "name")
+        self.assertEqual(name, "Keep Me")
+
+    def test_duplicate_name_returns_the_uniqueness_error_in_place(self) -> None:
+        """A duplicate name is a real edit attempt, not a hard dash-guard refusal - it reaches
+        `full_clean()` and fails there, the same as a blank name does (Trait.name is unique).
+        """
+        Trait.objects.create(
+            name="Existing Trait", trait_type=TraitType.SKILL, category=TraitCategory.GENERAL
+        )
+        renamed = Trait.objects.create(
+            name="Renamed Trait", trait_type=TraitType.SKILL, category=TraitCategory.GENERAL
+        )
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_save"),
+            {"model": "traits.Trait", "pk": str(renamed.pk), "name": "Existing Trait"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertNotIn("Saved.", body)
+        self.assertIn("already exists", body)
+
+        name = Trait.objects.filter(pk=renamed.pk).values_list("name", flat=True).first()
+        self.assertEqual(name, "Renamed Trait")
 
 
 class TestAuthoringEditorCredit(AuthoringEditorTestCase):
@@ -526,6 +690,44 @@ class TestAuthoringEditorCredit(AuthoringEditorTestCase):
         self.assertEqual(lore_content, "New credited lore.")
         self.assertIsNotNone(written_by_id)
 
+    def test_credit_applies_posted_name_and_prose_together_before_stamping(self) -> None:
+        """#3890: a rename is not a prose edit, but Save and credit still applies it."""
+        entry = self._entry(name="Old Credited Name", lore_content="Old lore.")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_credit"),
+            {
+                "model": "codex.CodexEntry",
+                "pk": str(entry.pk),
+                "name": "New Credited Name",
+                "lore_content": "New credited lore.",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        name, lore_content, written_by_id = _db_values(
+            entry.pk, "name", "lore_content", "written_by_id"
+        )
+        self.assertEqual(name, "New Credited Name")
+        self.assertEqual(lore_content, "New credited lore.")
+        self.assertEqual(written_by_id, self.writer.pk)
+
+    def test_credit_with_name_only_still_stamps_written_by(self) -> None:
+        """#3890, Decision 3: a rename alone still means "the prose was written" for credit."""
+        entry = self._entry(name="Old Name Only")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_credit"),
+            {"model": "codex.CodexEntry", "pk": str(entry.pk), "name": "New Name Only"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        name, written_by_id = _db_values(entry.pk, "name", "written_by_id")
+        self.assertEqual(name, "New Name Only")
+        self.assertEqual(written_by_id, self.writer.pk)
+
     def test_non_exportable_credited_model_shows_sentence_not_handoff_form(self) -> None:
         # BuildingKind is credited (CreditedContent) but is one of the three
         # builder-domain models outside CONTENT_MODELS/MARKDOWN_EXPORT_DOMAINS
@@ -615,6 +817,24 @@ class TestAuthoringEditorReview(AuthoringEditorTestCase):
         self.assertEqual(reviewed_by_id, self.writer.pk)
         self.assertEqual(reviewed_on, timezone.now().date())
         self.assertEqual(written_by_id, self.writer.pk)
+
+    def test_review_ignores_a_posted_name(self) -> None:
+        """#3890, Decision 2: a rename applies through Save and Save and credit, never Review."""
+        entry = self._entry(
+            name="Untouched By Review",
+            written_by=self.writer,
+            written_on=timezone.now().date(),
+        )
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_review"),
+            {"model": "codex.CodexEntry", "pk": str(entry.pk), "name": "Sneaky Rename"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        (name,) = _db_values(entry.pk, "name")
+        self.assertEqual(name, "Untouched By Review")
 
     def test_unlinked_operator_gets_setup_guidance_and_stamps_nothing(self) -> None:
         lonely = _make_account("editorreviewlonely")

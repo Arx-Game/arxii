@@ -6,6 +6,14 @@ THEN the mechanical fields (collapsed), related entries and mentions. The
 writer's cursor starts in the first textarea; nothing sits between the heading
 and the box they came here to fill. `data-current` on the root names this row
 so the dashboard's script can shade it in the queue.
+
+#3890: for a model whose identity is a `name` column (`identity` in context),
+the heading is that name, editable, so a rename happens where the writer is
+already working. The prose `<form>` now opens before `.editor-head` so the
+heading input posts with the rest of the row; a model with no `name` column
+(`identity` is falsy) keeps the plain "Editing <model> #<pk>" h2 instead. The
+freeze sentence and export handoff sit AFTER the form closes - the handoff is
+its own `<form>` and cannot nest inside this one.
 {% endcomment %}
 <style>
   #authoring-editor .editor-head {
@@ -17,6 +25,26 @@ so the dashboard's script can shade it in the queue.
   }
   #authoring-editor .editor-head h2 {
     margin: 0;
+  }
+  #authoring-editor .editor-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  #authoring-editor .editor-name {
+    font-size: 1.5em;
+    font-weight: bold;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+  }
+  #authoring-editor .editor-caption {
+    color: var(--body-quiet-color);
+    font-size: 0.9rem;
   }
   #authoring-editor .editor-pos {
     color: var(--body-quiet-color);
@@ -88,82 +116,10 @@ so the dashboard's script can shade it in the queue.
 </style>
 
 <div data-current="{{ model_label }}:{{ pk }}">
-<div class="editor-head">
-  <h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
-  {% if nav %}
-  {% comment %}
-  Three states (#3828): the row is still in the list ("Row 2 of 212 to write in
-  magic"); a stamp just removed it and a successor exists ("Credited · next is
-  row 2 of 211 to write in magic"); or the row is out of the list with nothing
-  after it, which leaves the bare count.
-  {% endcomment %}
-  <span class="editor-pos">
-    {% if credited %}{% translate "Credited" %} &middot;
-    {% elif reviewed %}{% translate "Reviewed" %} &middot;
-    {% endif %}
-    {% if nav.position %}
-    {% blocktranslate with position=nav.position total=nav.total noun=nav.count_noun scope=nav.scope_label trimmed %}
-    Row {{ position }} of {{ total }} {{ noun }} in {{ scope }}
-    {% endblocktranslate %}
-    {% elif nav.next_position %}
-    {% blocktranslate with position=nav.next_position total=nav.total noun=nav.count_noun scope=nav.scope_label trimmed %}
-    next is row {{ position }} of {{ total }} {{ noun }} in {{ scope }}
-    {% endblocktranslate %}
-    {% else %}
-    {{ nav.total }} {{ nav.count_noun }} in {{ nav.scope_label }}
-    {% endif %}
-  </span>
-  {% endif %}
-</div>
-
 {% if error %}
+<h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
 <p class="errornote">{{ error }}</p>
 {% else %}
-
-{% if needs_setup %}
-<p class="errornote">
-  {% translate "Link your author credit before crediting or reviewing a row." %}
-  <a href="{% url 'admin_authoring' %}">{% translate "Set up your author credit" %}</a>
-</p>
-{% endif %}
-
-{% if saved %}
-<p class="successnote">{% translate "Saved." %}</p>
-{% endif %}
-
-{% if reviewed %}
-<p class="successnote">{% translate "Marked reviewed." %}</p>
-{% endif %}
-
-{% if general_errors %}
-<div class="errornote">
-  <p>{% translate "This row cannot be saved:" %}</p>
-  <ul>
-    {% for message in general_errors %}
-    <li>{{ message }}</li>
-    {% endfor %}
-  </ul>
-</div>
-{% endif %}
-
-{% if credited %}
-<p class="successnote">{{ freeze_sentence }}</p>
-{% if instance|content_exportable %}
-<p>{{ export_sentence }}</p>
-<form method="post" action="{% url 'admin_content_export_row' %}" class="content-export-row-form">
-  {% csrf_token %}
-  <input type="hidden" name="model" value="{{ instance|content_model_label }}">
-  <input type="hidden" name="pk" value="{{ instance.pk }}">
-  <button type="submit" class="content-export-row-btn">
-    {% translate "Export to content repo" %}
-  </button>
-</form>
-{% else %}
-<p>
-  {% translate "This model stays in the database only; the content repo does not carry it." %}
-</p>
-{% endif %}
-{% endif %}
 
 <form method="post">
   {% csrf_token %}
@@ -175,6 +131,74 @@ so the dashboard's script can shade it in the queue.
   {% endcomment %}
   <input type="hidden" name="queue" value="{{ queue_query }}">
   <input type="hidden" name="pos" value="{{ pos }}">
+
+  <div class="editor-head">
+    {% if identity %}
+    <div class="editor-heading">
+      <input type="text" class="editor-name" name="{{ identity.name }}" id="id_{{ identity.name }}"
+             value="{{ identity.value }}">
+      {% if identity.errors %}
+      <span class="errornote">{{ identity.errors|join:" " }}</span>
+      {% endif %}
+      <span class="editor-caption">
+        {% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}
+      </span>
+    </div>
+    {% else %}
+    <h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
+    {% endif %}
+    {% if nav %}
+    {% comment %}
+    Three states (#3828): the row is still in the list ("Row 2 of 212 to write in
+    magic"); a stamp just removed it and a successor exists ("Credited · next is
+    row 2 of 211 to write in magic"); or the row is out of the list with nothing
+    after it, which leaves the bare count.
+    {% endcomment %}
+    <span class="editor-pos">
+      {% if credited %}{% translate "Credited" %} &middot;
+      {% elif reviewed %}{% translate "Reviewed" %} &middot;
+      {% endif %}
+      {% if nav.position %}
+      {% blocktranslate with position=nav.position total=nav.total noun=nav.count_noun scope=nav.scope_label trimmed %}
+      Row {{ position }} of {{ total }} {{ noun }} in {{ scope }}
+      {% endblocktranslate %}
+      {% elif nav.next_position %}
+      {% blocktranslate with position=nav.next_position total=nav.total noun=nav.count_noun scope=nav.scope_label trimmed %}
+      next is row {{ position }} of {{ total }} {{ noun }} in {{ scope }}
+      {% endblocktranslate %}
+      {% else %}
+      {{ nav.total }} {{ nav.count_noun }} in {{ nav.scope_label }}
+      {% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  {% if needs_setup %}
+  <p class="errornote">
+    {% translate "Link your author credit before crediting or reviewing a row." %}
+    <a href="{% url 'admin_authoring' %}">{% translate "Set up your author credit" %}</a>
+  </p>
+  {% endif %}
+
+  {% if saved %}
+  <p class="successnote">{% translate "Saved." %}</p>
+  {% endif %}
+
+  {% if reviewed %}
+  <p class="successnote">{% translate "Marked reviewed." %}</p>
+  {% endif %}
+
+  {% if general_errors %}
+  <div class="errornote">
+    <p>{% translate "This row cannot be saved:" %}</p>
+    <ul>
+      {% for message in general_errors %}
+      <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   {% for field in prose_fields %}
   <div class="prose-field">
     <label for="id_{{ field.name }}">{{ field.name }}</label>
@@ -212,6 +236,25 @@ so the dashboard's script can shade it in the queue.
     {% endif %}
   </div>
 </form>
+
+{% if credited %}
+<p class="successnote">{{ freeze_sentence }}</p>
+{% if instance|content_exportable %}
+<p>{{ export_sentence }}</p>
+<form method="post" action="{% url 'admin_content_export_row' %}" class="content-export-row-form">
+  {% csrf_token %}
+  <input type="hidden" name="model" value="{{ instance|content_model_label }}">
+  <input type="hidden" name="pk" value="{{ instance.pk }}">
+  <button type="submit" class="content-export-row-btn">
+    {% translate "Export to content repo" %}
+  </button>
+</form>
+{% else %}
+<p>
+  {% translate "This model stays in the database only; the content repo does not carry it." %}
+</p>
+{% endif %}
+{% endif %}
 
 <details class="editor-details">
   <summary>{% translate "Mechanical fields and credit" %}</summary>
