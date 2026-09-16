@@ -91,15 +91,14 @@ the unified Persona identity system, and non-combat scene rounds.
   writing; combat's own writers (`world.combat.interaction_services`) skip that check
   deliberately - a resolved action's targets are already governed by the encounter's own
   targeting rules, and Battle scenes have no location for presence to test against.
-- **`InteractionThread`** (#3787): ANCHORED, not a membership bag. `anchor_interaction`
-  (+ the denormalized `anchor_timestamp` the partitioned interaction table's composite PK
-  forces, both NOT NULL) is the row every member answers; the anchor itself is not a
-  member. So a row's `thread` means "what I am an answer to", not "which pile I am in",
-  and a root pose keeps `thread_id` null. Answering a reply NESTS a thread: `parent` is
-  the enclosing thread, `root` the top of the tree, and readers group by `root`.
-  `unique_thread_per_anchor` is what makes two people answering the same blow share one
-  exchange. The parent chip reads the anchor straight off the thread, gated on the
-  parent's own `visible_to`. There is no `InteractionReply` bridge - a flat container
+- **`InteractionThread`** (#3787): ANCHORED, not a membership bag. Its members are the
+  interactions answering one another, and the anchor is derived as the first member
+  (`thread_services.thread_anchor_ids`, `Min("id")`) rather than stored on the thread.
+  The anchor is a member of its thread. A row's `thread` means the thread containing
+  the answer, and an unanswered root pose keeps `thread_id` null. Answering a reply
+  NESTS a thread: `parent` is the enclosing thread, while the top of the tree is
+  derived by walking `parent`; readers group by that derived root. There is no
+  one-thread-per-anchor constraint or `InteractionReply` bridge - a flat container
   plus an edge table was two mechanisms for one topology. See "Scene Interaction Threads"
   in `docs/systems/scene-interaction-threads.md` and ADR-0293.
 - **`SceneSummaryRevision`**: Collaborative summary editing for ephemeral scenes
