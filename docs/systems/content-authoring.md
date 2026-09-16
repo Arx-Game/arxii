@@ -111,27 +111,42 @@ Two doors into the same backlog:
 
 ## Editing, crediting, reviewing
 
-The workbench editor sits at the top of the page, above the queue. Opening a
-row puts its prose textareas first, with the cursor already in the first one;
-the row's mechanical fields and credit columns sit in a collapsed block under
-the form, and cannot be submitted through it at all. A **Next** control beside
-the action buttons opens the row after this one in the queue you are looking
-at (the heading says "Row N of M to write in <domain>"), and keeps pointing at
-that same row after you credit the current one; when a filter runs dry the
-editor says so and offers to widen it. Actions:
+The workbench editor sits at the top of the page, above the queue. For a row
+whose identity is a `name` column (most credited models), the heading itself
+is that name in an editable text input, with "Editing <model> #<pk>" as a
+small caption beside the queue position; a model with no `name` column (a
+handful, like `Skill`, whose identity is its linked `Trait`'s own name) keeps
+the plain heading instead. Opening a row puts its prose textareas next, with
+the cursor already in the first one; the row's mechanical fields and credit
+columns sit in a collapsed block under the form, and cannot be submitted
+through it at all. A **Next** control beside the action buttons opens the row
+after this one in the queue you are looking at (the heading says "Row N of M
+to write in <domain>"), and keeps pointing at that same row after you credit
+the current one; when a filter runs dry the editor says so and offers to
+widen it. Actions:
 
-- **Save** writes the prose.
+- **Save** writes the prose, and a changed name if you renamed the row. A
+  rename goes through the model's own validation the same way a prose edit
+  does - a blank or duplicate name is refused in place with the model's own
+  message - and an em or en dash in the name is refused outright before
+  validation even runs, so a rename can never leave the row unfindable by
+  keyboard (the same identifier rule enforced everywhere else in the
+  codebase). A successful rename refreshes the queue below, the same as a
+  credit or review stamp.
 - **Save and credit me** additionally stamps `written_by`/`written_on`
   from your linked contributor. From that moment the row is frozen against
-  loads (above) until the corpus catches up.
+  loads (above) until the corpus catches up. A posted rename applies here
+  too, before the stamp; a rename by itself is not a prose edit, but a
+  credit stamped alongside one still means "the prose was written."
 - **Mark reviewed** stamps `reviewed_by`/`reviewed_on` and never touches
-  prose or authorship; writing and reviewing are separate acts.
+  prose, a pending rename, or authorship; writing and reviewing are
+  separate acts.
 
 There is no stored status enum anywhere: unwritten / written / reviewed is
 always derived from those two links, so it can never drift.
 
-For mechanical edits, use the ordinary change form; the deep links run in
-both directions.
+For mechanical edits other than the name, use the ordinary change form; the
+deep links run in both directions.
 
 ## Saving back to the content repo
 
