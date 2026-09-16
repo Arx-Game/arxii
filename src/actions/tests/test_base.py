@@ -573,6 +573,7 @@ class ActionRegistryTests(TestCase):
             "retire",
             "death_kudos",
             # #2289 — ceremonies.
+            "worship_rite",
             "ceremony_open",
             "ceremony_offering",
             "ceremony_speech",
