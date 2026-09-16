@@ -85,6 +85,7 @@ class ArxiiConfig(AppConfig):
         import world.ships.apps as ships_apps  # noqa: PLC0415
         import world.societies.apps as societies_apps  # noqa: PLC0415
         import world.tasking.apps as tasking_apps  # noqa: PLC0415
+        import world.worship.apps as worship_apps  # noqa: PLC0415
 
         # INSTALLED_APPS order (world.* slice, captured 2026-08-04) — do not
         # reorder; see the class docstring.
@@ -108,6 +109,7 @@ class ArxiiConfig(AppConfig):
         buildings_apps.ready()
         ships_apps.ready()
         room_features_apps.ready()
+        worship_apps.ready()
         # #3071 — new registration, no ordering dependency on the handshakes above.
         gm_apps.ready()
         # #3417 — new registration, no ordering dependency on the handshakes above.

@@ -83,6 +83,22 @@
   `ItemInstance`, never an archetype. Distinct from a **favored offering**, any
   sacrificed item whose facet the being favors (credited at the config multiplier).
   _Avoid_: "artifact".
+- **Shrine** — a room-level place of worship (`ShrineDetails`, #3778): a SHRINE
+  `RoomFeatureInstance` plus its sidecar (being, founder, consecration points). Founded
+  by the room's holder, dissolved by them; the small, personal case (a house shrine).
+  _Avoid_: "altar" as a model term, "temple" for a single room.
+- **Temple** — a building-level place of worship (`TempleDedication`, #3778): one active
+  dedication per `Building`, every room under it sanctified, one shared consecration
+  total. Dedicated by whoever holds the building. Not a room feature. _Avoid_: "church",
+  "cathedral" as model terms (a cathedral is a temple with a shrine at its altar).
+- **Consecration** — a site's accumulated worship (`consecration_points`, #3778): grows
+  by the tier of each rite of the site's own being performed there, and reads through the
+  authored `ConsecrationTier` ladder as a bonus percent on that being's rite awards.
+  Shrine and temple bonuses add. A plain counter, not resonance. _Avoid_: "sanctity",
+  "holiness" as field names.
+- **Holding a place** — the founding gate for a site (`SiteNotHeld`, #3778): a room's
+  `effective_owner` persona for a shrine; a building's credited `owner_persona`, the holder
+  of its area, or that holder's org leader for a temple. Never a payment.
 - **Feast day** — a being's annually-recurring worship holiday (`WorshipFeastDay`,
   #3776): `ic_month`/`ic_day`, no year, unique per being+date. Its own model rather
   than reusing `weather.FeastDay` — a religious concept shouldn't be owned by the

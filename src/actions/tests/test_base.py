@@ -574,6 +574,10 @@ class ActionRegistryTests(TestCase):
             "death_kudos",
             # #2289 — ceremonies.
             "worship_rite",
+            "shrine_found",
+            "shrine_dissolve",
+            "temple_dedicate",
+            "temple_revoke",
             "ceremony_open",
             "ceremony_offering",
             "ceremony_speech",

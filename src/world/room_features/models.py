@@ -219,6 +219,9 @@ class RoomFeatureInstance(SharedMemoryModel):
     # Reverse-OneToOne safe accessor (#2386): missing row -> None.
     sanctum_details_or_none = ReverseOneToOneOrNone("sanctum_details")
 
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    shrine_details_or_none = ReverseOneToOneOrNone("shrine_details")
+
     room_profile = models.OneToOneField(
         ROOM_PROFILE_MODEL,
         on_delete=models.CASCADE,

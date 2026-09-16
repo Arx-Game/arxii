@@ -20,6 +20,7 @@ from world.magic.models.techniques import (
 from world.worship.constants import (
     BeingRelationshipValence,
     BeingResonanceTier,
+    ConsecrationScope,
     MiracleTrigger,
     RiteTier,
 )
@@ -782,3 +783,100 @@ class Relic(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_instance} (relic of {self.being})"
+
+
+class ShrineDetails(SharedMemoryModel):
+    """The room-level holy site (#3778): a SHRINE ``RoomFeatureInstance``'s sidecar.
+
+    Reuses Sanctum's machinery wholesale (one feature per room, soft-delete via
+    ``dissolved_at``, ``active()`` queryset); this row adds the being and a plain
+    ``consecration_points`` counter that grows when that being's rites are
+    performed in the room. Deliberately not the ``LocationValueModifier``
+    resonance cascade, which is #3771's question.
+    """
+
+    feature_instance = models.OneToOneField(
+        "arxii.RoomFeatureInstance", on_delete=models.CASCADE, related_name="shrine_details"
+    )
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.PROTECT, related_name="shrines")
+    founder_character_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="founded_shrines",
+    )
+    consecration_points = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["being", "-consecration_points"]
+
+    def __str__(self) -> str:
+        return f"Shrine of {self.being} @ room {self.feature_instance.room_profile_id}"
+
+
+class TempleDedication(SharedMemoryModel):
+    """The building-level holy site (#3778): a whole ``Building`` dedicated to a being.
+
+    Not a room feature (those are room-scoped): every room whose area is the
+    Building's node counts as sanctified with no per-room duplication, and one
+    shared ``consecration_points`` total grows from any rite of the being
+    performed anywhere inside. Soft-deleted by ``dissolved_at``; one active
+    dedication per building.
+    """
+
+    building = models.ForeignKey(
+        "arxii.Building", on_delete=models.CASCADE, related_name="temple_dedications"
+    )
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.PROTECT, related_name="temples")
+    founder_character_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="founded_temples",
+    )
+    consecration_points = models.PositiveIntegerField(default=0)
+    dedicated_at = models.DateTimeField(auto_now_add=True)
+    dissolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["being", "-consecration_points"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["building"],
+                condition=models.Q(dissolved_at__isnull=True),
+                name="unique_active_temple_per_building",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Temple of {self.being} @ building {self.building_id}"
+
+
+class ConsecrationTier(SharedMemoryModel):
+    """An authored consecration tier (#3778): from ``min_points`` up, a holy site
+    of this scope adds ``bonus_percent`` to a rite award of its own being.
+    Shrine and Temple have separate, differently sized tables; their bonuses
+    stack by addition, never max()."""
+
+    scope = models.CharField(max_length=10, choices=ConsecrationScope.choices)
+    name = models.CharField(max_length=60)
+    min_points = models.PositiveIntegerField()
+    bonus_percent = models.PositiveIntegerField(
+        help_text="Percent added to a rite award of the site's own being at this tier."
+    )
+
+    class Meta:
+        ordering = ["scope", "min_points"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scope", "min_points"], name="unique_consecration_tier"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.get_scope_display()} {self.name} ({self.min_points}+: +{self.bonus_percent}%)"
+        )

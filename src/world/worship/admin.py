@@ -6,6 +6,7 @@ from world.worship.models import (
     BeingRelationship,
     BeingResonance,
     ChosenFavorConfig,
+    ConsecrationTier,
     DevotionStanding,
     DivineInterventionConfig,
     Miracle,
@@ -14,6 +15,8 @@ from world.worship.models import (
     MiraclePerformance,
     Relic,
     RiteKind,
+    ShrineDetails,
+    TempleDedication,
     WorshipDeclaration,
     WorshipFeastDay,
     WorshipGrant,
@@ -211,3 +214,26 @@ class RelicAdmin(admin.ModelAdmin):
     search_fields = ("being__name", "item_instance__custom_name", "item_instance__template__name")
     autocomplete_fields = ("being",)
     raw_id_fields = ("item_instance",)
+
+
+@admin.register(ShrineDetails)
+class ShrineDetailsAdmin(admin.ModelAdmin):
+    list_display = ("feature_instance", "being", "consecration_points", "created_at")
+    search_fields = ("being__name",)
+    autocomplete_fields = ("being",)
+    raw_id_fields = ("feature_instance", "founder_character_sheet")
+
+
+@admin.register(TempleDedication)
+class TempleDedicationAdmin(admin.ModelAdmin):
+    list_display = ("building", "being", "consecration_points", "dedicated_at", "dissolved_at")
+    list_filter = ("being",)
+    search_fields = ("being__name", "building__area__name")
+    autocomplete_fields = ("being",)
+    raw_id_fields = ("building", "founder_character_sheet")
+
+
+@admin.register(ConsecrationTier)
+class ConsecrationTierAdmin(admin.ModelAdmin):
+    list_display = ("scope", "name", "min_points", "bonus_percent")
+    list_filter = ("scope",)

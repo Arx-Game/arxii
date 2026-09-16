@@ -3,14 +3,22 @@
 import factory
 
 from world.skills.factories import SpecializationFactory
-from world.worship.constants import BeingRelationshipValence, BeingResonanceTier, RiteTier
+from world.worship.constants import (
+    BeingRelationshipValence,
+    BeingResonanceTier,
+    ConsecrationScope,
+    RiteTier,
+)
 from world.worship.models import (
     BeingFacet,
     BeingNickname,
     BeingRelationship,
     BeingResonance,
+    ConsecrationTier,
     DevotionStanding,
     RiteKind,
+    ShrineDetails,
+    TempleDedication,
     WorshipDeclaration,
     WorshipFeastDay,
     WorshippedBeing,
@@ -224,3 +232,33 @@ class WorshipRiteTierAwardFactory(factory.django.DjangoModelFactory):
     outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
     resonance_amount = 4
     favor_amount = 2
+
+
+class ShrineDetailsFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ShrineDetails
+
+    feature_instance = factory.SubFactory(
+        "world.room_features.factories.RoomFeatureInstanceFactory",
+        feature_kind__service_strategy="SHRINE",
+        feature_kind__name="Shrine",
+    )
+    being = factory.SubFactory(WorshippedBeingFactory)
+
+
+class TempleDedicationFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TempleDedication
+
+    building = factory.SubFactory("world.buildings.factories.BuildingFactory")
+    being = factory.SubFactory(WorshippedBeingFactory)
+
+
+class ConsecrationTierFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ConsecrationTier
+
+    scope = ConsecrationScope.SHRINE
+    name = factory.Sequence(lambda n: f"Tier {n}")
+    min_points = 0
+    bonus_percent = 10

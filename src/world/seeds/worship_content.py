@@ -17,6 +17,7 @@ from world.worship.constants import (
     GODS_FAVORITE_CHOSEN,
     GODS_FAVORITE_PRINCE,
     GODS_FAVORITE_PRINCESS,
+    ConsecrationScope,
 )
 
 RITES_SKILL_NAME = "Rites"
@@ -267,6 +268,59 @@ def ensure_rite_kinds_and_awards() -> None:
             )
 
 
+def ensure_shrine_kind():
+    """Get-or-create the Shrine ``RoomFeatureKind`` (#3778): persona-owned,
+    level 1 only, installed in place by ``found_shrine`` (RITUAL mechanism, no
+    project). Idempotent; also called by the service so a fresh database works."""
+    from world.room_features.constants import (  # noqa: PLC0415
+        RoomFeatureInstallMechanism,
+        RoomFeatureOwnerType,
+        RoomFeatureServiceStrategy,
+    )
+    from world.room_features.models import (  # noqa: PLC0415
+        RoomFeatureKind,
+        RoomFeatureKindOwnerType,
+    )
+    from world.worship.constants import SHRINE_KIND_NAME  # noqa: PLC0415
+
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.SHRINE,
+        defaults={
+            "name": SHRINE_KIND_NAME,
+            "description": "PLACEHOLDER: a household shrine to one being, grown by its rites.",
+            "max_level": 1,
+            "install_mechanism": RoomFeatureInstallMechanism.RITUAL,
+        },
+    )
+    RoomFeatureKindOwnerType.objects.get_or_create(
+        feature_kind=kind, owner_type=RoomFeatureOwnerType.PERSONA
+    )
+    return kind
+
+
+# (scope, name, min_points, bonus_percent): PLACEHOLDER tiers, a temple's bigger.
+_CONSECRATION_TIERS = (
+    (ConsecrationScope.SHRINE, "Humble", 0, 5),
+    (ConsecrationScope.SHRINE, "Tended", 25, 10),
+    (ConsecrationScope.SHRINE, "Hallowed", 100, 20),
+    (ConsecrationScope.TEMPLE, "Founded", 0, 10),
+    (ConsecrationScope.TEMPLE, "Consecrated", 100, 25),
+    (ConsecrationScope.TEMPLE, "Great", 500, 50),
+)
+
+
+def ensure_consecration_tiers() -> None:
+    """Seed the shrine and temple consecration tier tables (#3778), idempotently."""
+    from world.worship.models import ConsecrationTier  # noqa: PLC0415
+
+    for scope, name, min_points, bonus_percent in _CONSECRATION_TIERS:
+        ConsecrationTier.objects.get_or_create(
+            scope=scope,
+            min_points=min_points,
+            defaults={"name": name, "bonus_percent": bonus_percent},
+        )
+
+
 def seed_worship_content() -> None:
     """Cluster entry point — idempotent.
 
@@ -278,6 +332,8 @@ def seed_worship_content() -> None:
     ensure_favorite_achievements()
     ensure_traditions_and_beings(seeded["specs"])
     ensure_rite_kinds_and_awards()
+    ensure_shrine_kind()
+    ensure_consecration_tiers()
 
     from world.worship.factories import wire_miracle_content  # noqa: PLC0415
 

@@ -985,6 +985,7 @@
   - mothballed_room_states <- buildings.MothballedRoomState
   - bequests <- estates.Bequest
   - ship_details <- ships.ShipDetails
+  - temple_dedications <- worship.TempleDedication
 
 ### BuildingActivationDetails
 **Foreign Keys:**
@@ -1759,6 +1760,8 @@
   - worship_declaration <- worship.WorshipDeclaration
   - miracle_performances <- worship.MiraclePerformance
   - rite_performances <- worship.WorshipRitePerformance
+  - founded_shrines <- worship.ShrineDetails
+  - founded_temples <- worship.TempleDedication
 
 ### Gender
 **Pointed to by:**
@@ -7838,6 +7841,7 @@
   - vault_details <- room_features.VaultDetails
   - brig_details <- room_features.BrigDetails
   - lab_station_details <- items.LabStationDetails
+  - shrine_details <- worship.ShrineDetails
 
 ### RoomFeatureKind
 **Foreign Keys:**
@@ -10419,6 +10423,8 @@
 
 ### ChosenFavorConfig
 
+### ConsecrationTier
+
 ### DevotionStanding
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -10459,6 +10465,18 @@
 ### RiteKind
 **Pointed to by:**
   - rites <- worship.WorshipRite
+
+### ShrineDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+  - being -> worship.WorshippedBeing [FK]
+  - founder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+
+### TempleDedication
+**Foreign Keys:**
+  - building -> buildings.Building [FK]
+  - being -> worship.WorshippedBeing [FK]
+  - founder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### WorshipDeclaration
 **Foreign Keys:**
@@ -10530,6 +10548,8 @@
   - miracle_performances <- worship.MiraclePerformance
   - rites <- worship.WorshipRite
   - relics <- worship.Relic
+  - shrines <- worship.ShrineDetails
+  - temples <- worship.TempleDedication
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
