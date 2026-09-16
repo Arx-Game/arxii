@@ -96,6 +96,23 @@ issue bodies; the model decision is ADR-0132.
   (`related_name="relics"`), OneToOne `item_instance` → `items.ItemInstance`, `lore`.
   A particular named instance, never an archetype; distinct from the offering facet
   bonus below. Surfaced on the being's dashboard (#3780).
+- `ShrineDetails` (#3778) — the room-level site: OneToOne `feature_instance` →
+  `room_features.RoomFeatureInstance` (`related_name="shrine_details"`, a kind whose
+  `service_strategy` is `SHRINE`), `being` FK (`related_name="shrines"`),
+  `founder_character_sheet`, `consecration_points` (a plain counter), `created_at`.
+  Reuses Sanctum's machinery exactly: one feature per room, soft-deleted through
+  `RoomFeatureInstance.dissolved_at`; a dissolved shrine gives the room's slot back.
+- `TempleDedication` (#3778) — the building-level site: `building` FK →
+  `buildings.Building` (`related_name="temple_dedications"`), `being` FK
+  (`related_name="temples"`), `founder_character_sheet`, one shared
+  `consecration_points` for the whole building, `dedicated_at`, `dissolved_at`
+  (partial unique: one active dedication per building). Every room whose area sits
+  under the building's BUILDING-level `Area` node counts as sanctified, with no
+  per-room duplication.
+- `ConsecrationTier` (#3778) — the authored ladder per `scope` (SHRINE / TEMPLE):
+  `name`, `min_points`, `bonus_percent` (unique per scope+min_points). Seeded
+  PLACEHOLDER: shrine Humble 0 → 5%, Tended 25 → 10%, Hallowed 100 → 20%; temple
+  Founded 0 → 10%, Consecrated 100 → 25%, Great 500 → 50%.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
@@ -187,6 +204,46 @@ anima-recovery ritual's shape.
 - Action: `PerformWorshipRiteAction` (registry key `worship_rite`, `category`
   "worship"): `rite` or `rite_name` (+ `being_name`) kwargs, resolves the scene from
   the actor's room, maps every `WorshipRiteError` to a soft failure.
+
+**Consecration services** (`worship/consecration_services.py`, #3778) — shrines and
+temples are places, not fees: a site of the rite's own being boosts the award, and
+the rite consecrates the site in turn.
+
+- `shrine_at(room_profile)` → the room's active `ShrineDetails` or None;
+  `building_over(room_profile)` walks `Area.parent` up from the room's area to the
+  BUILDING-level node (self first, cycle-safe) and returns its `Building`;
+  `temple_over(room_profile)` → that building's active `TempleDedication` or None.
+- `consecration_bonus_percent(room_profile, being)` — the shrine bonus plus the
+  temple bonus, each only when the site belongs to `being`, each read through
+  `tier_bonus_percent(scope, points)` (the highest `ConsecrationTier` whose
+  `min_points` the site has reached). Stacking is additive: a cathedral's own inner
+  altar is a shrine inside a temple.
+- `apply_rite_award` resolves the room from the scene (or the ceremony's scene),
+  multiplies the tier award by `100 + consecration_bonus_percent` after the
+  FAVORED/feast/birth multipliers, and calls `grow_consecration(room_profile, rite)`
+  in the same transaction: every matching site gains `rite.tier` ×
+  `CONSECRATION_POINTS_PER_RITE_TIER` points. `RiteOutcome.consecration_bonus_percent`
+  reports what applied. A site of another being neither boosts nor grows.
+- Founding gates on holding the place, never on payment: `found_shrine(room_profile,
+  being, founder)` requires the founder's persona to be the room's
+  `effective_owner` (`SiteNotHeld`), refuses a room whose one feature slot is taken
+  by an active feature or a dissolved feature of another kind (`SiteAlreadyTaken`;
+  Sanctum keeps its dissolved rows as history), and creates the `RoomFeatureInstance`
+  through `ensure_shrine_kind()`; `dissolve_shrine(shrine, persona)` soft-deletes it.
+  `dedicate_temple(building, being, founder)` requires the persona to hold the
+  building: its credited `owner_persona`, the holder of the building's area through
+  `effective_owner_for_area`, or a leader of the holding org (`is_org_leader`); one
+  active dedication per building; `revoke_temple(dedication, persona)` closes it.
+  Holding one room inside the building is not holding the building.
+- Actions (`actions/definitions/worship.py`): `FoundShrineAction` (`shrine_found`),
+  `DissolveShrineAction` (`shrine_dissolve`), `DedicateTempleAction`
+  (`temple_dedicate`), `RevokeTempleAction` (`temple_revoke`); each resolves the
+  actor's active persona and current room (`being` or `being_name` kwarg) and maps
+  every `ConsecrationError` to a soft failure.
+- The SHRINE `RoomFeatureServiceStrategy` is registered by `world.worship.apps.ready`
+  (called from `world/apps.py`); its progression handler refuses the generic
+  ROOM_FEATURE_PROGRESSION project path, since a shrine is founded by its holder,
+  never built as a project.
 
 ### Miracles & Divine Intervention (#2360)
 

@@ -45,6 +45,21 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   sacred `ItemInstance` of a being (dashboard surface in #3780). Every magnitude is
   PLACEHOLDER; the event/contest mechanics a tier 3 rite might wrap stay out of scope
   (#3770).
+- **Shrines & temples (#3778, 2026-09-16):** places of worship as sites a rite is
+  performed at, over #3777. A **shrine** is room-level and personal: a new SHRINE
+  `RoomFeatureInstance` kind reusing Sanctum's one-feature-per-room and soft-delete
+  machinery, with a `ShrineDetails` sidecar (being, founder, `consecration_points`);
+  founded by the room's holder (`found_shrine`, action `shrine_found`), never bought or
+  built as a project. A **temple** is building-level and institutional: a
+  `TempleDedication` on the `Building` itself, one active per building, covering every
+  room under the building's area node with no per-room duplication; dedicated by whoever
+  holds the building (credited owner, area holder, or that holder's org leader;
+  `dedicate_temple`, action `temple_dedicate`). A rite of the site's own being is boosted
+  by the site's tier bonus (`ConsecrationTier` ladders per scope, shrine and temple
+  additive, so a cathedral's inner altar stacks) and consecrates the site by its tier in
+  points; a site of another being does neither. Every magnitude is PLACEHOLDER and the
+  ladders are authored rows, reconcilable with a general location-intensity system
+  (#3771) later.
 - **Miracles / divine intervention (#2360):** gods spend `resonance_pool` on authored
   `Miracle` effects that fire automatically for a high-devotion PC in danger, plus
   faith-colored Audere Majora crossing variants.

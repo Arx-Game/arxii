@@ -5576,16 +5576,18 @@ via a strategy enum. Shipped kinds: **SANCTUM** (see Sanctum below),
 **COMMAND_CENTER** (#930), **LAB** (#1234), and the civic-hub readers
 **NOTICE_BOARD** / **TOWN_CRIER** (#1450 — `active_hub_feature(room_profile)`
 resolves a room's hub; crier install places a "Town Crier" `Functionary` via
-`handle_town_crier_progression`), and **SOCIAL_HUB** (#1694 — the
+`handle_town_crier_progression`), **SOCIAL_HUB** (#1694 — the
 owner-upgradeable amplifier on top of `RoomProfile.is_social_hub`; see Social
-Hub below). Future kinds (Library, Training Room, etc. — #675) plug in by
+Hub below), and **SHRINE** (#3778 — founded by the room's holder through
+`worship.consecration_services.found_shrine`, never by a project; the
+`ShrineDetails` sidecar lives in `world.worship`, see Worship & Ceremonies). Future kinds (Library, Training Room, etc. — #675) plug in by
 registering a service strategy + per-kind details model.
 
 - **Models** (`world.room_features.models`):
   - `RoomFeatureKind` — open catalog row. Carries `service_strategy`
     (TextChoices: `SANCTUM`, `LIBRARY`, `TRAINING_ROOM`, `LAB`,
     `COMMAND_CENTER`, `GRANARY`, `SIEGE_DECK`, `CAPTAINS_QUARTERS`,
-    `NOTICE_BOARD`, `TOWN_CRIER`, `SOCIAL_HUB`), `max_level` (cap on
+    `NOTICE_BOARD`, `TOWN_CRIER`, `SOCIAL_HUB`, `SHRINE`), `max_level` (cap on
     `RoomFeatureInstance.level`), display copy, install-cost knobs.
   - `RoomFeatureKindInstallRitual` — M2M-shape: which Rituals can install
     this kind. Lets one kind admit multiple install rites
@@ -8445,7 +8447,12 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   missing row raises), `WorshipRitePerformance` (#3777: the audit row, the `ResonanceGrant`
   WORSHIP_RITE source and the weekly favor cap; nullable `scene`, OneToOne `ceremony` for tier
   3), `Relic` (#3777: OneToOne to a specific `ItemInstance` sacred to a being),
-  `WorshipGrant` (audit ledger),
+  `ShrineDetails` (#3778: the room-level site, OneToOne sidecar on a SHRINE-strategy
+  `RoomFeatureInstance`; `being`, `founder_character_sheet`, `consecration_points`),
+  `TempleDedication` (#3778: the building-level site, FK `Building`, one active per building
+  via `dissolved_at`; one shared `consecration_points` for every room under the building's
+  area node), `ConsecrationTier` (#3778: authored `min_points` → `bonus_percent` ladder per
+  scope SHRINE/TEMPLE), `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
   BooleanField default True, #2361 — the heart-vs-lip-service inward truth, private,
@@ -8464,7 +8471,15 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `apply_rite_award` (the shared payout: (tier, outcome) row × `reward_multiplier_percent`
   (FAVORED resonance, feast day, birth favor, each ×2 PLACEHOLDER), performance row, resonance
   grant, devotion capped once per rite per `GameWeek` via `favor_capped_this_week`), action
-  `PerformWorshipRiteAction` (`worship_rite`), `GET /api/worship/rites/`. CG: `CharacterDraft.public_worship`/
+  `PerformWorshipRiteAction` (`worship_rite`), `GET /api/worship/rites/`. **Consecration**
+  (`worship/consecration_services.py`, #3778): `shrine_at`, `building_over` (walks `Area.parent`
+  to the BUILDING node), `temple_over`, `consecration_bonus_percent(room_profile, being)` (shrine
+  + temple bonuses, additive, only for sites of that being; `apply_rite_award` multiplies the
+  award by it and calls `grow_consecration`, +`tier` points per site), `found_shrine` /
+  `dissolve_shrine` (gate: the room's `effective_owner` persona; one feature slot per room),
+  `dedicate_temple` / `revoke_temple` (gate: `owner_persona`, the area holder, or its org
+  leader), actions `shrine_found`/`shrine_dissolve`/`temple_dedicate`/`temple_revoke`;
+  `ConsecrationError` (`SiteNotHeld`, `SiteAlreadyTaken`, `SiteNotFound`). CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
