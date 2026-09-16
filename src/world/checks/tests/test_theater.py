@@ -4,8 +4,13 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
+from actions.types import WeightedConsequence
 from world.checks.models import Consequence
-from world.checks.theater import build_roulette_payload, maybe_emit_resolution_theater
+from world.checks.theater import (
+    build_roulette_payload,
+    consequence_pool_faces,
+    maybe_emit_resolution_theater,
+)
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -32,6 +37,7 @@ class ResolutionTheaterTests(TestCase):
             title="Slum Heist",
             consequences=[death, prison],
             selected=prison,
+            stage_label="Stage 2 of 2 · Consequence",
         )
         assert payload["template_name"] == "Slum Heist"
         rows = payload["consequences"]
@@ -40,6 +46,38 @@ class ResolutionTheaterTests(TestCase):
         assert rows[1]["is_selected"] is True
         assert rows[1]["weight"] == 3
         assert rows[0]["tier_name"] == "Catastrophe"
+        assert payload["stage_label"] == "Stage 2 of 2 · Consequence"
+
+    def test_consequence_pool_faces_use_effective_weights_and_backend_selection(self) -> None:
+        first = Consequence.objects.create(outcome_tier=self.tier, label="Soften", weight=1)
+        second = Consequence.objects.create(outcome_tier=self.tier, label="Hesitate", weight=1)
+        weighted = [
+            WeightedConsequence(consequence=first, weight=7, character_loss=False),
+            WeightedConsequence(consequence=second, weight=3, character_loss=False),
+        ]
+
+        faces, selected = consequence_pool_faces(
+            consequences=weighted,
+            outcome=self.tier,
+            selected_consequence_id=second.pk,
+        )
+
+        assert [face.label for face in faces] == ["Soften", "Hesitate"]
+        assert [face.weight for face in faces] == [7, 3]
+        assert selected is faces[1]
+
+    def test_consequence_pool_faces_skip_single_candidate_tier(self) -> None:
+        only = Consequence.objects.create(outcome_tier=self.tier, label="Only effect", weight=1)
+        weighted = [WeightedConsequence(consequence=only, weight=1, character_loss=False)]
+
+        faces, selected = consequence_pool_faces(
+            consequences=weighted,
+            outcome=self.tier,
+            selected_consequence_id=only.pk,
+        )
+
+        assert faces == []
+        assert selected is None
 
     def test_no_drama_no_emit(self) -> None:
         character = MagicMock()

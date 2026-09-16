@@ -324,6 +324,16 @@ as Step 8's.
 Each bail writes a structured PR or issue comment with: what was attempted,
 where it stopped, what the human should decide.
 
+## Issue/demo image fallback
+
+When a player-facing spec needs screenshots on the issue before a PR exists and
+interactive Artifact publishing is unavailable, push the branch and run
+`tools/skills/issue-to-merged-pr/scripts/publish-issue-images.sh <issue> <branch> <image>...`.
+It uploads through the GitHub Contents API and posts immutable raw URLs in an
+issue comment. Use `--dry-run` first and verify the comment's `.body_html`
+contains one `<img>` per input. The full sequence, cleanup guidance, and
+privacy warning are in `tools/skills/issue-to-merged-pr/references/evidence-screenshots-not-in-main.md`.
+
 ## Quick reference
 
 | Need | Script |

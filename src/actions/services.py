@@ -277,12 +277,15 @@ def _run_gate(
                 character, check_result, consequences
             )
             applied = apply_resolution(pending_resolution, context)
-            return _build_step_result(f"gate:{gate.gate_role}", pending_resolution, applied)
+            return _build_step_result(
+                f"gate:{gate.gate_role}", pending_resolution, applied, gate.consequence_pool_id
+            )
 
     return _build_step_result(
         f"gate:{gate.gate_role}",
         PendingResolution(check_result=check_result, selected_consequence=None),  # type: ignore[arg-type]
         [],
+        None,
     )
 
 
@@ -310,6 +313,7 @@ def _run_main_step(  # noqa: PLR0913
             "main",
             PendingResolution(check_result=check_result, selected_consequence=None),  # type: ignore[arg-type]
             [],
+            None,
         )
 
     consequences = get_effective_consequences(template.consequence_pool)
@@ -317,12 +321,13 @@ def _run_main_step(  # noqa: PLR0913
     if consequences:
         pending_resolution = select_consequence_from_result(character, check_result, consequences)
         applied = apply_resolution(pending_resolution, context)
-        return _build_step_result("main", pending_resolution, applied)
+        return _build_step_result("main", pending_resolution, applied, template.consequence_pool_id)
 
     return _build_step_result(
         "main",
         PendingResolution(check_result=check_result, selected_consequence=None),  # type: ignore[arg-type]
         [],
+        template.consequence_pool_id,
     )
 
 
@@ -360,6 +365,7 @@ def _run_context_pools(
                 f"context:{ctx_pool.property.name}",
                 pending_resolution,
                 applied,
+                ctx_pool.consequence_pool_id,
             )
         )
 
@@ -376,6 +382,7 @@ def _build_step_result(
     step_label: str,
     pending_resolution: PendingResolution,
     applied_effects: list[AppliedEffect],
+    consequence_pool_id: int | None,
 ) -> StepResult:
     """Build a StepResult from intermediate resolution data."""
     consequence = pending_resolution.selected_consequence
@@ -390,6 +397,7 @@ def _build_step_result(
         step_label=step_label,
         check_result=pending_resolution.check_result,
         consequence_id=consequence_id,
+        consequence_pool_id=consequence_pool_id,
         applied_effect_ids=effect_ids if effect_ids else None,
     )
 

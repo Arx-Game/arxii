@@ -395,6 +395,7 @@ class StepResult:
     step_label: str
     check_result: CheckResult
     consequence_id: int | None  # PK of selected Consequence (None for no-op)
+    consequence_pool_id: int | None = None  # Pool used to select this consequence, if any
     applied_effect_ids: list[int] | None = None  # PKs of created instances, None until applied
     was_rerolled: bool = False
 
