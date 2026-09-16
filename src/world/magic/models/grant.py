@@ -139,6 +139,14 @@ class ResonanceGrant(SharedMemoryModel):
             "does not delete this audit row."
         ),
     )
+    source_worship_rite_performance = models.ForeignKey(
+        "arxii.WorshipRitePerformance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resonance_grants",
+        help_text="Set when source=WORSHIP_RITE (#3777).",
+    )
 
     class Meta:
         indexes = [

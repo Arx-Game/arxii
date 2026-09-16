@@ -12,10 +12,15 @@ from world.worship.models import (
     MiracleAppliedCondition,
     MiracleDamageProfile,
     MiraclePerformance,
+    Relic,
+    RiteKind,
     WorshipDeclaration,
     WorshipFeastDay,
     WorshipGrant,
     WorshippedBeing,
+    WorshipRite,
+    WorshipRitePerformance,
+    WorshipRiteTierAward,
     WorshipTradition,
 )
 
@@ -162,3 +167,47 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
 @admin.register(ChosenFavorConfig)
 class ChosenFavorConfigAdmin(admin.ModelAdmin):
     list_display = ("id", "anima_recovery_threshold", "anima_recovery_bonus")
+
+
+@admin.register(RiteKind)
+class RiteKindAdmin(admin.ModelAdmin):
+    list_display = ("name", "tier")
+    list_filter = ("tier",)
+    search_fields = ("name",)
+
+
+@admin.register(WorshipRite)
+class WorshipRiteAdmin(admin.ModelAdmin):
+    list_display = ("name", "being", "kind", "check_type", "resonance", "is_active")
+    list_filter = ("kind__tier", "is_active")
+    search_fields = ("name", "being__name")
+    autocomplete_fields = ("being", "check_type")
+    raw_id_fields = ("resonance",)
+
+
+@admin.register(WorshipRiteTierAward)
+class WorshipRiteTierAwardAdmin(admin.ModelAdmin):
+    list_display = ("tier", "outcome_tier", "resonance_amount", "favor_amount")
+    list_filter = ("tier",)
+
+
+@admin.register(WorshipRitePerformance)
+class WorshipRitePerformanceAdmin(admin.ModelAdmin):
+    list_display = (
+        "character_sheet",
+        "rite",
+        "outcome_tier",
+        "resonance_granted",
+        "favor_granted",
+        "performed_at",
+    )
+    list_filter = ("rite__kind__tier",)
+    raw_id_fields = ("character_sheet", "rite", "game_week", "scene", "ceremony")
+
+
+@admin.register(Relic)
+class RelicAdmin(admin.ModelAdmin):
+    list_display = ("item_instance", "being", "created_at")
+    search_fields = ("being__name", "item_instance__name")
+    autocomplete_fields = ("being",)
+    raw_id_fields = ("item_instance",)

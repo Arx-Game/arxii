@@ -341,6 +341,8 @@ class GainSource(models.TextChoices):
     COMPROMISE = "COMPROMISE", "Moral compromise"
     PENANCE = "PENANCE", "Atonement resonance conversion"
     FALL_CONVERSION = "FALL_CONVERSION", "Fall/Redemption conversion"
+    # #3777 — a worship rite performed in a scene
+    WORSHIP_RITE = "WORSHIP_RITE", "Worship rite"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -359,6 +361,7 @@ ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.STYLE_PRESENTATION,
         GainSource.OUTFIT_TRICKLE,
         GainSource.ROOM_RESIDENCE,
+        GainSource.WORSHIP_RITE,
     }
 )
 

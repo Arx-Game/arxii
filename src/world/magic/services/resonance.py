@@ -71,6 +71,7 @@ if TYPE_CHECKING:
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
     from world.relationships.models import RelationshipCapstone, RelationshipTrackProgress
+    from world.worship.models import WorshipRitePerformance
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,7 @@ def grant_resonance(  # noqa: PLR0913
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
     source_character_distinction: CharacterDistinction | None = None,
+    worship_rite_performance: WorshipRitePerformance | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -126,6 +128,7 @@ def grant_resonance(  # noqa: PLR0913
         style_presentation_endorsement: Required for STYLE_PRESENTATION source.
         mission_deed_reward_line: Required for MISSION_REWARD source (#1737).
         source_character_distinction: Required for DISTINCTION source (#1834).
+        worship_rite_performance: Required for WORSHIP_RITE source (#3777).
 
     Returns:
         The updated CharacterResonance instance.
@@ -151,6 +154,7 @@ def grant_resonance(  # noqa: PLR0913
         style_presentation_endorsement=style_presentation_endorsement,
         mission_deed_reward_line=mission_deed_reward_line,
         source_character_distinction=source_character_distinction,
+        worship_rite_performance=worship_rite_performance,
     )
 
     if source in ACCELERATED_GAIN_SOURCES:
@@ -204,6 +208,7 @@ def grant_resonance(  # noqa: PLR0913
         source_style_presentation_endorsement=style_presentation_endorsement,
         source_mission_deed_reward_line=mission_deed_reward_line,
         source_character_distinction=source_character_distinction,
+        source_worship_rite_performance=worship_rite_performance,
     )
 
     from world.magic.services.aura import (  # noqa: PLC0415
@@ -263,6 +268,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
     source_character_distinction: CharacterDistinction | None = None,
+    worship_rite_performance: WorshipRitePerformance | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -284,6 +290,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             style_presentation_endorsement=style_presentation_endorsement,
             mission_deed_reward_line=mission_deed_reward_line,
             source_character_distinction=source_character_distinction,
+            worship_rite_performance=worship_rite_performance,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -329,6 +336,10 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     GainSource.DISTINCTION: lambda **kw: (
         kw["source_character_distinction"],
         "source_character_distinction",
+    ),
+    GainSource.WORSHIP_RITE: lambda **kw: (
+        kw["worship_rite_performance"],
+        "worship_rite_performance",
     ),
 }
 
