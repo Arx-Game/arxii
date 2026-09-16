@@ -37,16 +37,22 @@ flash-in-fragment error line instead of the form. `Save` writes only
 `prose_fields_for(model)` keys present in the POST (a mechanical field
 smuggled into the POST body is never assigned, even under the same key
 name), then `full_clean()` + `save()` - a validation failure re-renders the
-fragment with the error and saves nothing. `Save and credit` runs that same
-prose save first (only if the POST actually carries prose keys), then stamps
-`written_by`/`written_on` from the operator's own `ContentContributor` (see
-`current_contributor`); an operator with no linked contributor gets the
-setup-gate guidance instead of a stamp - the same defensive read the
-dashboard gate uses, since this editor is reachable by direct URL and isn't
-itself behind that gate. `Mark reviewed` only ever stamps
-`reviewed_by`/`reviewed_on` - it never touches authorship, and never applies
-pending prose edits, so a reviewer can confirm review without accidentally
-overwriting someone else's in-flight prose edit sitting in the textarea.
+fragment with the error and saves nothing. #3890 carves out one exception:
+a model whose identity is a `name` column (`identity_field_for`) also
+accepts a posted `name` the same way - the editor heading is that column,
+editable - refused outright with a field error (nothing reaches
+`full_clean()`) when the posted value carries an em or en dash, since the
+admin change form has no such guard either. `Save and credit` runs that same
+prose-and-name save first (only if the POST actually carries prose or name
+keys), then stamps `written_by`/`written_on` from the operator's own
+`ContentContributor` (see `current_contributor`); an operator with no linked
+contributor gets the setup-gate guidance instead of a stamp - the same
+defensive read the dashboard gate uses, since this editor is reachable by
+direct URL and isn't itself behind that gate. `Mark reviewed` only ever
+stamps `reviewed_by`/`reviewed_on` - it never touches authorship, and never
+applies pending prose or name edits, so a reviewer can confirm review
+without accidentally overwriting someone else's in-flight edit sitting in
+the form.
 
 Task 6 (`authoring_related_fragment` + `authoring_mentions_fragment`) adds two
 read-only panels below the editor, both driven by `web.admin.authoring
@@ -80,7 +86,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.contrib import messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import FieldDoesNotExist, ValidationError
+from django.db.models import CharField
 from django.http import HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -125,6 +132,39 @@ _EXPORT_SENTENCE = "Export it to the content repo to close the loop."
 #: from:body"`) so a credit or review stamp refreshes them without a full
 #: page reload (#3019 review, Minor 5).
 _BACKLOG_CHANGED_EVENT = "authoring-backlog-changed"
+
+#: En dash and em dash (#3890) - the same identifier rule
+#: `tools/lint_identifier_dashes.py` enforces on Python identifier strings and
+#: fixture identity fields at commit time, applied here at runtime since a
+#: rename through this editor never touches a linted source file. Named by
+#: code point, not written literally, so this source file itself carries none.
+_DASH_CHARACTERS = ("\u2013", "\u2014")
+_DASH_ERROR = "A name cannot contain an em or en dash; use a hyphen."
+
+#: The one column `identity_field_for` currently recognizes (#3890, Decision
+#: 1: "the identity is a `name` column"). A module-level constant rather than
+#: a literal in the function body below, per the repo's bare-string-identifier
+#: rule (`tools/lint_string_literal.py`).
+_IDENTITY_FIELD_NAME = "name"
+
+
+def identity_field_for(model: type) -> str | None:
+    """The column that is this model's writer-facing identity, if it has one (#3890).
+
+    ``"name"`` when the model carries a concrete ``CharField`` named
+    ``"name"`` with no choices - the same shape ``prose_fields_for`` checks
+    each of its own candidate fields against - else ``None``. A model with no
+    such column (``Skill``, whose identity is its linked ``Trait``'s name;
+    ``MissionNode``; the guide and line tables) keeps the plain
+    "Editing <model> #<pk>" heading instead of trying to expose a substitute.
+    """
+    try:
+        field = model._meta.get_field(_IDENTITY_FIELD_NAME)  # noqa: SLF001
+    except FieldDoesNotExist:
+        return None
+    if isinstance(field, CharField) and not field.choices:
+        return _IDENTITY_FIELD_NAME
+    return None
 
 
 def _setup_required(request: HttpRequest) -> bool:
@@ -411,7 +451,11 @@ def _mechanical_fields(model: type, instance: object, prose_names: list[str]) ->
     An FK-typed field's value here is the related model instance, not its
     id - the template drops it straight into `{{ field.value }}`, and Django's
     template engine calls `str()` on any object it renders, so an FK shows
-    its natural display string for free.
+    its natural display string for free. A model's `name` column (#3890)
+    still shows up here even when `identity_field_for` also renders it as an
+    editable heading input - it is still a fact about the row, and this table
+    is the one place every mechanical field appears regardless of whether it
+    also has a dedicated spot elsewhere in the fragment.
     """
     prose_set = set(prose_names)
     fields = []
@@ -570,17 +614,33 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags, params: Qu
         context["mechanical_fields"] = _mechanical_fields(
             target.model, target.instance, prose_names
         )
+        # The heading input, when this model has one (#3890) - its own error
+        # (an em/en dash refusal, or a full_clean() failure keyed "name")
+        # renders next to it rather than in the general-errors banner below,
+        # the same idiom a prose field's own textarea already uses.
+        identity_field = identity_field_for(target.model)
+        context["identity"] = (
+            {
+                "name": identity_field,
+                "value": getattr(target.instance, identity_field) or "",
+                "errors": field_errors.get(identity_field),
+            }
+            if identity_field is not None
+            else None
+        )
         # A full_clean() failure keyed on a mechanical field (or Django's own
         # "__all__" non-field-error key) has no textarea to show it next to -
         # without this, that failure mode re-renders with every input
         # looking untouched and no visible sign anything went wrong (#3019
-        # review). Collected here, not in `_apply_prose_edits`, so both the
-        # save and credit views get it for free through the same context
-        # builder.
+        # review). Collected here, not in `_apply_edits`, so both the save
+        # and credit views get it for free through the same context builder.
+        # The identity field (when this model has one) is excluded the same
+        # way a prose field already is - it has its own display slot above.
+        excluded_from_general = prose_set | ({identity_field} if identity_field else set())
         context["general_errors"] = [
             f"{field}: {message}"
             for field, messages in field_errors.items()
-            if field not in prose_set
+            if field not in excluded_from_general
             for message in messages
         ]
     return context
@@ -596,25 +656,50 @@ def _render_editor_fragment(
     return render(request, "admin/authoring/_editor_panel.html", context)
 
 
-def _apply_prose_edits(
+def _apply_edits(
     instance: object, model: type, post_data: QueryDict
-) -> dict[str, list[str]] | None:
-    """Assign posted `prose_fields_for(model)` keys, `full_clean()`, `save()`.
+) -> tuple[dict[str, list[str]] | None, bool]:
+    """Assign posted `prose_fields_for(model)` keys and, for a model with one, its name.
 
-    Any POST key outside that set - a mechanical field smuggled in under its
-    own name - is never read here at all, so it can't reach `setattr` no
-    matter what the request body carries. Returns `full_clean()`'s
-    `message_dict` on failure (nothing saved) or `None` on success.
+    Prose keys are read exactly as this always has (#3019): any POST key
+    outside `prose_fields_for(model)` - a mechanical field smuggled in under
+    its own name - is never read here at all, so it can't reach `setattr` no
+    matter what the request body carries.
+
+    #3890: when `identity_field_for(model)` names a column and the POST
+    carries it, the posted value is stripped and checked for an em or en
+    dash FIRST, before it ever reaches the instance - a dashed name is
+    refused outright (the row's current, true name is what renders; nothing
+    the operator typed survives the refusal) rather than treated as a failed
+    edit attempt. A blank or duplicate name IS a failed edit attempt: it
+    reaches the instance and fails `full_clean()` the ordinary way, so the
+    rejected value renders back for the writer to fix, the same as a
+    rejected prose field already does.
+
+    Returns `full_clean()`'s `message_dict` on failure (nothing saved) or
+    `None` on success, alongside whether the name actually changed - the
+    caller uses that to decide whether to fire the backlog-refresh event.
     """
     for name in prose_fields_for(model):
         if name in post_data:
             setattr(instance, name, post_data[name])
+
+    name_changed = False
+    identity_field = identity_field_for(model)
+    if identity_field is not None and identity_field in post_data:
+        posted_name = post_data[identity_field].strip()
+        if any(dash in posted_name for dash in _DASH_CHARACTERS):
+            return {identity_field: [_DASH_ERROR]}, False
+        if posted_name != getattr(instance, identity_field):
+            setattr(instance, identity_field, posted_name)
+            name_changed = True
+
     try:
         instance.full_clean()
     except ValidationError as exc:
-        return exc.message_dict
+        return exc.message_dict, False
     instance.save()
-    return None
+    return None, name_changed
 
 
 @superuser_required
@@ -627,14 +712,21 @@ def authoring_editor(request: HttpRequest) -> HttpResponse:
 @superuser_required
 @require_POST
 def authoring_editor_save(request: HttpRequest) -> HttpResponse:
-    """Save this row's prose fields only, re-rendering with a saved notice or errors."""
+    """Save this row's prose fields and, when posted, its name (#3890); a notice or errors."""
     target = _resolve_target(request.POST.get("model", ""), request.POST.get("pk", ""))
     if target.error:
         return _render_editor_fragment(request, target)
 
-    field_errors = _apply_prose_edits(target.instance, target.model, request.POST)
+    field_errors, name_changed = _apply_edits(target.instance, target.model, request.POST)
     flags = _EditorFlags(saved=field_errors is None, field_errors=field_errors)
-    return _render_editor_fragment(request, target, flags)
+    response = _render_editor_fragment(request, target, flags)
+    # A rename changes what the queue's identity column shows for this row -
+    # refresh it the same way a credit or review stamp does (#3890). A save
+    # that touched no name, or one whose name ended up unchanged, is not
+    # worth a queue re-scan.
+    if field_errors is None and name_changed:
+        response["HX-Trigger"] = _BACKLOG_CHANGED_EVENT
+    return response
 
 
 @superuser_required
@@ -655,9 +747,16 @@ def authoring_editor_credit(request: HttpRequest) -> HttpResponse:
     if contributor is None:
         return _render_editor_fragment(request, target, _EditorFlags(needs_setup=True))
 
+    # A rename is not a prose edit and never changes the meaning of "written
+    # by" (#3890, Decision 3) - it just has to apply before the stamp the
+    # same way posted prose already does, so a name-only credit still
+    # stamps (Decision 2: a rename applies through Save and Save and credit,
+    # never through Mark reviewed).
+    identity_field = identity_field_for(target.model)
+    name_posted = identity_field is not None and identity_field in request.POST
     prose_posted = any(name in request.POST for name in prose_fields_for(target.model))
-    if prose_posted:
-        field_errors = _apply_prose_edits(target.instance, target.model, request.POST)
+    if prose_posted or name_posted:
+        field_errors, _name_changed = _apply_edits(target.instance, target.model, request.POST)
         if field_errors is not None:
             return _render_editor_fragment(request, target, _EditorFlags(field_errors=field_errors))
 
