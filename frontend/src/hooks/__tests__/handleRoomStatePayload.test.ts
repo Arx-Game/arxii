@@ -719,4 +719,40 @@ describe('handleRoomStatePayload', () => {
       });
     });
   });
+
+  describe('validation and revision metadata (#3824)', () => {
+    it('rejects malformed room frames without dispatching state', () => {
+      const payload = {
+        room: { dbref: 'room-12', name: 'Unsafe' },
+        characters: [],
+        objects: [],
+        exits: [],
+      } as unknown as RoomStatePayload;
+
+      expect(handleRoomStatePayload('Character', payload, mockDispatch)).toBe(false);
+      expect(mockDispatch).not.toHaveBeenCalled();
+    });
+
+    it('applies a revisioned snapshot atomically to room and scene state', () => {
+      const payload: RoomStatePayload = {
+        room: createRoomStateObject('#12', 'Room'),
+        characters: [],
+        objects: [],
+        exits: [],
+        scene: createSceneSummary(7, 'Scene'),
+        state_epoch: 'epoch',
+        state_sequence: 3,
+        resync_request_id: '550e8400-e29b-41d4-a716-446655440000',
+      };
+
+      expect(handleRoomStatePayload('Character', payload, mockDispatch)).toBe(true);
+      expect(setSessionRoom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          revision: { epoch: 'epoch', sequence: 3 },
+          scene: payload.scene,
+        })
+      );
+      expect(setSessionScene).not.toHaveBeenCalled();
+    });
+  });
 });

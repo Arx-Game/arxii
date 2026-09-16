@@ -3,7 +3,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { startScene, finishScene } from '@/scenes/queries';
-import { useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setSessionScene } from '@/store/gameSlice';
 import type { HubTidings, NpcGiver, RoomStateObject, SceneSummary } from '@/hooks/types';
 import { Button } from '@/components/ui/button';
@@ -90,8 +90,15 @@ export function RoomPanel({
   viewerPersonaId = null,
   viewerThumbnailUrl = null,
 }: RoomPanelProps) {
-  const { send } = useGameSocket();
+  const { send, requestRoomState } = useGameSocket();
   const dispatch = useAppDispatch();
+  const roomStateResyncStatus = useAppSelector(
+    (state) =>
+      (character ? state.game.sessions[character]?.roomStateResyncStatus : undefined) ?? 'idle'
+  );
+  const roomStateResyncError = useAppSelector((state) =>
+    character ? state.game.sessions[character]?.roomStateResyncError : undefined
+  );
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -206,6 +213,9 @@ export function RoomPanel({
         onEditRoom={() => setEditOpen(true)}
         hasActiveEncounter={hasActiveEncounter}
         hasActiveBattle={hasActiveBattle}
+        onRefreshRoomState={() => requestRoomState(character)}
+        roomStateResyncStatus={roomStateResyncStatus}
+        roomStateResyncError={roomStateResyncError}
       />
 
       {scene && <RitualProposedChip sceneId={scene.id} />}

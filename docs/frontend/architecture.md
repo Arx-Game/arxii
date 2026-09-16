@@ -46,3 +46,24 @@ roster, character sheets) have no guard at all, a mounted guard never re-renders
 on a cache clear, and a guard's own redirect goes to `/login`, which is the wrong
 destination for a deliberate logout. Logging out from any page lands on the
 logged-out home view.
+
+
+## Same-connection room-state recovery (#3824)
+
+Room recovery stays on the existing authenticated websocket. The client sends
+`request_room_state` with a canonical UUID; the server resolves the current
+puppet and location, serializes the same viewer-relative `room_state` used by
+ordinary pushes, and sends it only to the requesting Session. A
+`state_resync` acknowledgement follows the snapshot. `state_epoch` plus
+per-character `state_sequence` lets Redux reject lower or equal stale frames.
+
+The browser keeps recovery records by character, socket generation, and UUID.
+It coalesces clicks, times out after six seconds, and reports a missing
+acknowledgement after an accepted snapshot as partial success. Socket close
+cannot settle a newer generation. Recovery does not reload, reconnect, emit
+prose, clear feeds/drafts/interactions, or broadcast to another session.
+
+Acknowledgement metadata drives exact viewer-scoped React Query invalidation:
+`['scene-interactions', sceneId, characterName]` and, for an active scene,
+`['scene-places', roomId, characterName]`. `/game` PlaceBar is controlled by
+Redux `viewer_place_id`; the legacy SceneDetailPage keeps its historical key.

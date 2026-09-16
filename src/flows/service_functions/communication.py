@@ -11,6 +11,7 @@ from flows.service_functions.perception_registry import (
     resolve_broadcast_exclusions,
 )
 from flows.service_functions.serializers.room_state import build_room_state_payload
+from typeclasses.characters import Character
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -158,6 +159,13 @@ def send_room_state(
             the caller's location is looked up via SceneDataManager.
     """
     if caller.obj.location is None:
+        return
+
+    # Character.send_room_state is the single revision-aware seam. It also
+    # preserves dreamside and multi-session behavior. Keep the generic path
+    # only for non-Character flow objects that cannot expose that method.
+    if isinstance(caller.obj, Character):
+        caller.obj.send_room_state(room_state=room_state)
         return
 
     if room_state is None:

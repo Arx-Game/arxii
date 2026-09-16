@@ -12,6 +12,8 @@ import type {
 import type { MyRosterEntry } from '@/roster/types';
 import type { CommandSpec } from '@/game/types';
 
+export type RoomStateResyncStatus = 'idle' | 'pending' | 'success' | 'partial' | 'failure';
+
 export type GameLifecycleState =
   | 'entry-idle'
   | 'entering'
@@ -95,6 +97,12 @@ export interface Session {
   openThreadTabs: string[];
   /** Active conversation tab's thread key; null = the room anchor tab (#2165). */
   activeThreadTab: string | null;
+  /** Server revision of the latest accepted room snapshot. */
+  stateEpoch?: string;
+  stateSequence?: number;
+  /** Character-scoped same-connection room-state recovery status. */
+  roomStateResyncStatus?: RoomStateResyncStatus;
+  roomStateResyncError?: string;
 }
 
 interface GameState {
@@ -203,6 +211,29 @@ export const gameSlice = createSlice({
       const session = state.sessions[action.payload.character];
       if (session) session.lifecycleState = action.payload.lifecycleState;
     },
+    resetSessionRoomRevision: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name'] }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) {
+        session.stateEpoch = undefined;
+        session.stateSequence = undefined;
+      }
+    },
+    setRoomStateResyncStatus: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        status: RoomStateResyncStatus;
+        error?: string;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      session.roomStateResyncStatus = action.payload.status;
+      session.roomStateResyncError = action.payload.error;
+    },
     addSessionMessage: (
       state,
       action: PayloadAction<{ character: MyRosterEntry['name']; message: GameMessage }>
@@ -238,11 +269,28 @@ export const gameSlice = createSlice({
     },
     setSessionRoom: (
       state,
-      action: PayloadAction<{ character: MyRosterEntry['name']; room: RoomData | null }>
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        room: RoomData | null;
+        revision?: { epoch: string; sequence: number };
+        scene?: SceneSummary | null;
+      }>
     ) => {
-      const { character, room } = action.payload;
+      const { character, room, revision } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        // Same-epoch frames are ordered by the server sequence. Once a
+        // revisioned frame is accepted, legacy unrevisioned frames cannot
+        // overwrite it.
+        if (
+          (revision === undefined && session.stateEpoch !== undefined) ||
+          (revision !== undefined &&
+            session.stateEpoch === revision.epoch &&
+            session.stateSequence !== undefined &&
+            revision.sequence <= session.stateSequence)
+        ) {
+          return;
+        }
         const previousRoomId = session.room?.id ?? null;
         const nextRoomId = room?.id ?? null;
         if (previousRoomId !== nextRoomId) {
@@ -253,6 +301,21 @@ export const gameSlice = createSlice({
           session.ambientRoomEnteredAt = Date.now();
         }
         session.room = room;
+        if (revision !== undefined) {
+          session.stateEpoch = revision.epoch;
+          session.stateSequence = revision.sequence;
+          if (action.payload.scene !== undefined) {
+            const previousId = session.scene?.id ?? null;
+            const nextId = action.payload.scene?.id ?? null;
+            if (previousId !== nextId) {
+              session.sceneBaselineId = null;
+              session.openThreadTabs = [];
+              session.activeThreadTab = null;
+              session.sceneInteractions = [];
+            }
+            session.scene = action.payload.scene;
+          }
+        }
       }
     },
     addAmbientInteraction: (
@@ -373,11 +436,23 @@ export const gameSlice = createSlice({
     },
     setSessionScene: (
       state,
-      action: PayloadAction<{ character: MyRosterEntry['name']; scene: SceneSummary | null }>
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        scene: SceneSummary | null;
+        revision?: { epoch: string; sequence: number };
+      }>
     ) => {
-      const { character, scene } = action.payload;
+      const { character, scene, revision } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        if (
+          revision !== undefined &&
+          session.stateEpoch === revision.epoch &&
+          session.stateSequence !== undefined &&
+          revision.sequence <= session.stateSequence
+        ) {
+          return;
+        }
         // A scene change (including a brand-new scene at the same room)
         // invalidates any previous scene's baseline — the baseline effect
         // must re-run for the new scene id (#2156 review fix).
@@ -398,6 +473,10 @@ export const gameSlice = createSlice({
           session.sceneInteractions = [];
         }
         session.scene = scene;
+        if (revision !== undefined) {
+          session.stateEpoch = revision.epoch;
+          session.stateSequence = revision.sequence;
+        }
       }
     },
     addSceneInteraction: (
@@ -572,6 +651,8 @@ export const {
   setActiveSession,
   setSessionConnectionStatus,
   setSessionLifecycle,
+  resetSessionRoomRevision,
+  setRoomStateResyncStatus,
   addSessionMessage,
   clearSessionMessages,
   setSessionCommands,

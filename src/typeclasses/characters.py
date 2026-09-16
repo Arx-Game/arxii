@@ -10,6 +10,7 @@ creation commands.
 
 import contextlib
 import logging
+import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -22,6 +23,7 @@ from flows.emit import emit_event
 from flows.events.payloads import AttackLandedPayload, MovedPayload, MovePreDepartPayload
 from flows.object_states.character_state import CharacterState
 from flows.service_functions.serializers import build_room_state_payload
+from flows.types import RoomStateSendResult
 from typeclasses.mixins import ObjectParent
 from world.magic.services.resonance_environment import (
     clear_resonance_alignment,
@@ -30,6 +32,8 @@ from world.magic.services.resonance_environment import (
 from world.roster.models import RosterEntry
 
 logger = logging.getLogger(__name__)
+# Process epoch distinguishes revision counters after a server restart.
+ROOM_STATE_EPOCH = uuid.uuid4().hex
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -550,24 +554,38 @@ class Character(ObjectParent, DefaultCharacter):
         kwargs["move_type"] = "arrive"
         super().announce_move_to(source_location, msg=msg, mapping=mapping, **kwargs)
 
-    def send_room_state(self, session=None):
-        """Send current room state to this character's frontend.
+    def send_room_state(  # noqa: C901
+        self,
+        session=None,
+        room_state=None,
+        resync_request_id=None,
+    ) -> RoomStateSendResult:
+        """Send current room state and return the queued snapshot metadata.
 
-        ``session`` narrows the send to one window (the one that just joined,
-        #3812); ``None`` fans out to every session on the character, which is
-        what a move wants.
+        Args:
+            session: Optional exact session to target. ``None`` fans out to all
+                sessions on this character for ordinary broadcasts.
+            room_state: Optional pre-resolved room state used by flow helpers.
+            resync_request_id: Optional validated client request id to correlate.
 
-        Uses the scene_state properties to get current state information.
-        Falls back to executing 'look' command if state retrieval fails.
+        Returns:
+            Metadata describing the queued snapshot, or a stable failure code.
 
-        #2287/#2290: while Unconscious or Sleeping, perception relocates to the
-        dream space — the frontend renders the dream side, not the waking room.
-        #3003: honours an active dreamwalk — a walker's room state follows the
-        host's dreamspace, not their own vacant one.
+        The targeted path is synchronous. It captures and rechecks the exact
+        session-to-character binding before queueing, so a rebound session never
+        receives a stale viewer-relative payload. Dreamside viewers fail closed
+        when their viewer-relative dreamspace cannot be resolved.
         """
-        if not (self.has_account and self.location):
-            return
-        room = self.location
+        if session is not None and (
+            session.puppet is not self or session not in self.sessions.all()
+        ):
+            return RoomStateSendResult(sent=False, code="session_rebound")
+        if not self.has_account:
+            return RoomStateSendResult(sent=False, code="not_authenticated")
+        if self.location is None:
+            return RoomStateSendResult(sent=False, code="no_location")
+
+        room = room_state.obj if room_state is not None else self.location
         from world.dreams.services import dreamspace_for
         from world.vitals.services import perceives_dreamside
 
@@ -576,12 +594,52 @@ class Character(ObjectParent, DefaultCharacter):
         except ObjectDoesNotExist:
             sheet = None
         if perceives_dreamside(sheet):
-            room = dreamspace_for(sheet) or room
-        caller_state = self.scene_state
-        room_state = room.scene_state
-        if caller_state and room_state:
-            payload = build_room_state_payload(caller_state, room_state)
-            self.msg(room_state=((), payload), session=session)
+            dream_room = dreamspace_for(sheet)
+            if dream_room is None:
+                return RoomStateSendResult(sent=False, code="dreamspace_unavailable")
+            room = dream_room
+        try:
+            caller_state = self.scene_state
+            resolved_room_state = room.scene_state
+            payload = build_room_state_payload(caller_state, resolved_room_state)
+        except (AttributeError, TypeError, ValueError, ObjectDoesNotExist):
+            return RoomStateSendResult(sent=False, code="state_unavailable")
+        if not payload.get("room"):
+            return RoomStateSendResult(sent=False, code="state_unavailable")
+
+        state_sequence = (self.ndb.room_state_sequence or 0) + 1
+        self.ndb.room_state_sequence = state_sequence
+        state_epoch = ROOM_STATE_EPOCH
+        payload["state_epoch"] = state_epoch
+        payload["state_sequence"] = state_sequence
+        if resync_request_id is not None:
+            payload["resync_request_id"] = resync_request_id
+
+        # Recheck immediately before queueing. No await or deferred callback may
+        # occur between this check and the targeted send.
+        if session is not None and (
+            session.puppet is not self or session not in self.sessions.all()
+        ):
+            return RoomStateSendResult(sent=False, code="session_rebound")
+        self.msg(room_state=((), payload), session=session)
+        room_payload = payload["room"]
+        room_dbref = room_payload.get("dbref") if isinstance(room_payload, dict) else None
+        room_id = None
+        if isinstance(room_dbref, str) and room_dbref.startswith("#"):
+            try:
+                room_id = int(room_dbref[1:])
+            except ValueError:
+                room_id = None
+        scene = payload.get("scene")
+        scene_id = scene.get("id") if isinstance(scene, dict) else None
+        return RoomStateSendResult(
+            sent=True,
+            room_dbref=room_dbref if isinstance(room_dbref, str) else None,
+            room_id=room_id,
+            scene_id=scene_id if isinstance(scene_id, int) else None,
+            state_epoch=state_epoch,
+            state_sequence=state_sequence,
+        )
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
         """Handle actions after moving to a new location.

@@ -22,6 +22,9 @@ class WebsocketMessageType(str, Enum):
     KUDOS_RECEIVED = "kudos_received"
     MAIL_ARRIVED = "mail_arrived"
     HAZARD_PROMPT = "hazard_prompt"
+    REQUEST_ROOM_STATE = "request_room_state"
+    STATE_RESYNC = "state_resync"
+    STATE_RESYNC_ERROR = "state_resync_error"
 
 
 @dataclass
