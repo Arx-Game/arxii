@@ -323,9 +323,8 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
             msg = "A featured entry must also be public (is_public=True)."
             raise ValidationError({"is_featured": msg})
         if self.is_public and self.pk is not None:
-            clue_slugs = list(
-                self.clues.order_by("slug").values_list("slug", flat=True)  # type: ignore[attr-defined]
-            )
+            clue_qs = self.clues.order_by("slug")
+            clue_slugs = list(clue_qs.values_list("slug", flat=True))
             if clue_slugs:
                 names = ", ".join(slug or "(unnamed clue)" for slug in clue_slugs)
                 msg = (
