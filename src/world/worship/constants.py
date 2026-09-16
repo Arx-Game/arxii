@@ -92,3 +92,18 @@ PRAYER_TEXT_MAX_LENGTH = 2000
 PRAYER_SITE_DEVOTION_AMOUNT = 1  # the weekly holy-site prayer, below a tier 1 rite
 VISION_RESONANCE_POOL_COST = 10  # what a being spends to send one vision
 PRAYER_INTERVENTION_EVENT_PREFIX = "prayer_"  # MiraclePerformance.trigger_event
+
+
+class BeingVisibility(models.TextChoices):
+    """The Deity Editor's read of a being's Codex tier (#3780): PUBLIC when the
+    entry is public, OBSCURE when an organization's membership is granted it,
+    SECRET when only a Clue reaches it (or no entry exists yet)."""
+
+    PUBLIC = "public", "Public"
+    OBSCURE = "obscure", "Obscure"
+    SECRET = "secret", "Secret"
+
+
+# Where the editor files a being's Codex page when it has to create one (#3780).
+PANTHEON_CODEX_CATEGORY_NAME = "The World"
+PANTHEON_CODEX_SUBJECT_NAME = "The Pantheon"

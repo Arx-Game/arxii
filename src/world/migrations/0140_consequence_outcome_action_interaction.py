@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0138_prayer_vision"),
+        ("arxii", "0139_worshippedbeing_gm_notes_organizationcodexgrant"),
     ]
 
     operations = [

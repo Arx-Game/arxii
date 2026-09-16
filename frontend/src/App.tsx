@@ -51,6 +51,9 @@ import { BugReportPage } from './submissions/pages/BugReportPage';
 import { PetitionPage } from './submissions/pages/PetitionPage';
 import { PlayerReportPage } from './submissions/pages/PlayerReportPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
+import { PantheonListPage } from './pantheon/pages/PantheonListPage';
+import { BeingEditPage } from './pantheon/pages/BeingEditPage';
+import { BeingDashboardPage } from './pantheon/pages/BeingDashboardPage';
 const MissionBrowserPage = lazy(() =>
   import('@/missions/pages/MissionBrowserPage').then((m) => ({
     default: m.MissionBrowserPage,
@@ -577,6 +580,38 @@ function App() {
             element={
               <StaffRoute>
                 <StaffHubPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/pantheon"
+            element={
+              <StaffRoute>
+                <PantheonListPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/pantheon/new"
+            element={
+              <StaffRoute>
+                <BeingEditPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/pantheon/:id/edit"
+            element={
+              <StaffRoute>
+                <BeingEditPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/pantheon/:id"
+            element={
+              <StaffRoute>
+                <BeingDashboardPage />
               </StaffRoute>
             }
           />

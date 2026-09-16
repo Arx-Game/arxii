@@ -39036,6 +39036,309 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
           description: ''
+  /api/worship/admin/beings/:
+    get:
+      operationId: worship_admin_beings_list
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: tradition
+        schema:
+          type: integer
+      - in: query
+        name: visibility
+        schema:
+          type: string
+          enum:
+          - obscure
+          - public
+          - secret
+        description: |-
+          * `public` - Public
+          * `obscure` - Obscure
+          * `secret` - Secret
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStaffBeingListList'
+          description: ''
+    post:
+      operationId: worship_admin_beings_create
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffBeingPageRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/:
+    get:
+      operationId: worship_admin_beings_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+    put:
+      operationId: worship_admin_beings_update
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffBeingPageRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/codex/:
+    get:
+      operationId: worship_admin_beings_codex_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/overview/:
+    get:
+      operationId: worship_admin_beings_overview_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/prayers/:
+    get:
+      operationId: worship_admin_beings_prayers_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/relics/:
+    get:
+      operationId: worship_admin_beings_relics_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/sites/:
+    get:
+      operationId: worship_admin_beings_sites_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/visions/:
+    get:
+      operationId: worship_admin_beings_visions_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/{id}/worship/:
+    get:
+      operationId: worship_admin_beings_worship_retrieve
+      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
+        list shows them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
+  /api/worship/admin/beings/options/:
+    get:
+      operationId: worship_admin_beings_options_retrieve
+      description: Handler method for HTTP 'OPTIONS' request.
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
   /api/worship/beings/:
     get:
       operationId: worship_beings_list
@@ -51983,6 +52286,49 @@ components:
       - current
       - percentage
       - zone
+    FeastDayLine:
+      type: object
+      properties:
+        ic_month:
+          type: integer
+          maximum: 12
+          minimum: 1
+        ic_day:
+          type: integer
+          maximum: 31
+          minimum: 1
+        name:
+          type: string
+          maxLength: 100
+        lore:
+          type: string
+          default: ''
+      required:
+      - ic_day
+      - ic_month
+      - name
+    FeastDayLineRequest:
+      type: object
+      properties:
+        ic_month:
+          type: integer
+          maximum: 12
+          minimum: 1
+        ic_day:
+          type: integer
+          maximum: 31
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lore:
+          type: string
+          default: ''
+      required:
+      - ic_day
+      - ic_month
+      - name
     FieldEnum:
       enum:
       - background
@@ -66534,6 +66880,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SpreadableDeed'
+    PaginatedStaffBeingListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffBeingList'
     PaginatedStaffingProfileLineList:
       type: object
       required:
@@ -73594,7 +73963,7 @@ components:
           maxLength: 32
         valence:
           allOf:
-          - $ref: '#/components/schemas/ValenceEnum'
+          - $ref: '#/components/schemas/ReactionEmojiValenceEnum'
           description: |-
             +1 fires a positive relationship bump, -1 negative, 0 cosmetic only
 
@@ -73609,6 +73978,16 @@ components:
           minimum: 0
       required:
       - emoji
+    ReactionEmojiValenceEnum:
+      enum:
+      - 1
+      - 0
+      - -1
+      type: integer
+      description: |-
+        * `1` - Positive
+        * `0` - Neutral
+        * `-1` - Negative
     RealmBoards:
       type: object
       description: The realm's two boards. Rows carry a name and a phrase; no numeric
@@ -74047,6 +74426,44 @@ components:
       - display_order
       - id
       - name
+    RelationshipLine:
+      type: object
+      properties:
+        other_being:
+          type: integer
+        valence:
+          $ref: '#/components/schemas/RelationshipLineValenceEnum'
+        public_story:
+          type: string
+          default: ''
+      required:
+      - other_being
+      - valence
+    RelationshipLineRequest:
+      type: object
+      properties:
+        other_being:
+          type: integer
+        valence:
+          $ref: '#/components/schemas/RelationshipLineValenceEnum'
+        public_story:
+          type: string
+          default: ''
+      required:
+      - other_being
+      - valence
+    RelationshipLineValenceEnum:
+      enum:
+      - ally
+      - rival
+      - feud
+      - unknown
+      type: string
+      description: |-
+        * `ally` - Ally
+        * `rival` - Rival
+        * `feud` - Feud
+        * `unknown` - Unclear
     RelationshipTier:
       type: object
       description: Serializer for RelationshipTier.
@@ -74682,6 +75099,34 @@ components:
         * `PENANCE` - Atonement resonance conversion
         * `FALL_CONVERSION` - Fall/Redemption conversion
         * `WORSHIP_RITE` - Worship rite
+    ResonanceLine:
+      type: object
+      properties:
+        resonance:
+          type: integer
+        tier:
+          $ref: '#/components/schemas/ResonanceLineTierEnum'
+      required:
+      - resonance
+      - tier
+    ResonanceLineRequest:
+      type: object
+      properties:
+        resonance:
+          type: integer
+        tier:
+          $ref: '#/components/schemas/ResonanceLineTierEnum'
+      required:
+      - resonance
+      - tier
+    ResonanceLineTierEnum:
+      enum:
+      - favored
+      - associated
+      type: string
+      description: |-
+        * `favored` - Favored
+        * `associated` - Associated
     Response7baEnum:
       enum:
       - pending
@@ -78189,6 +78634,202 @@ components:
       - created_at
       - id
       - title
+    StaffBeingList:
+      type: object
+      description: A tile on the god list.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        tradition_name:
+          type: string
+          readOnly: true
+        nickname:
+          type: string
+          readOnly: true
+        domain_chips:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        resonance_pool:
+          type: integer
+          readOnly: true
+          description: 'Spendable accumulated worship (miracles draw here, #2360).'
+        lifetime_worship:
+          type: integer
+          readOnly: true
+          description: Monotonic total worship ever received (audit).
+        visibility:
+          type: string
+          readOnly: true
+        organization_name:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - domain_chips
+      - id
+      - is_active
+      - lifetime_worship
+      - name
+      - nickname
+      - organization_name
+      - resonance_pool
+      - tradition_name
+      - visibility
+    StaffBeingPage:
+      type: object
+      description: 'The edit page, both directions: what staff read and what they
+        save.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          default: ''
+        domains:
+          type: string
+          default: ''
+        tradition:
+          type: integer
+        is_active:
+          type: boolean
+          default: true
+        quote:
+          type: string
+          default: ''
+          maxLength: 300
+        nicknames:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResonanceLine'
+        facets:
+          type: array
+          items:
+            type: integer
+        feast_days:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeastDayLine'
+        tarot_cards:
+          type: array
+          items:
+            type: integer
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationshipLine'
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/StaffBeingPageVisibilityEnum'
+          default: secret
+        organization:
+          type: integer
+          nullable: true
+        gm_notes:
+          type: string
+          default: ''
+        resonance_pool:
+          type: integer
+          readOnly: true
+        codex_entry:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - codex_entry
+      - id
+      - name
+      - resonance_pool
+      - tradition
+    StaffBeingPageRequest:
+      type: object
+      description: 'The edit page, both directions: what staff read and what they
+        save.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          default: ''
+        domains:
+          type: string
+          default: ''
+        tradition:
+          type: integer
+        is_active:
+          type: boolean
+          default: true
+        quote:
+          type: string
+          default: ''
+          maxLength: 300
+        nicknames:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResonanceLineRequest'
+        facets:
+          type: array
+          items:
+            type: integer
+        feast_days:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeastDayLineRequest'
+        tarot_cards:
+          type: array
+          items:
+            type: integer
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationshipLineRequest'
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/StaffBeingPageVisibilityEnum'
+          default: secret
+        organization:
+          type: integer
+          nullable: true
+        gm_notes:
+          type: string
+          default: ''
+      required:
+      - name
+      - tradition
+    StaffBeingPageVisibilityEnum:
+      enum:
+      - public
+      - obscure
+      - secret
+      type: string
+      description: |-
+        * `public` - Public
+        * `obscure` - Obscure
+        * `secret` - Secret
     StaffingProfile:
       type: object
       description: 'Staff authoring: a building kind''s baseline crew (#2827 phase
@@ -84043,16 +84684,6 @@ components:
       - id
       - name
       - presumed_importance
-    ValenceEnum:
-      enum:
-      - 1
-      - 0
-      - -1
-      type: integer
-      description: |-
-        * `1` - Positive
-        * `0` - Neutral
-        * `-1` - Negative
     ViewerCapabilities:
       type: object
       description: Inline serializer for the viewer's capabilities in a covenant.

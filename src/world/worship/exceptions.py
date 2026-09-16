@@ -130,3 +130,25 @@ class VisionEpisodeNotShared(VisionAttachmentInvalid):
 
 class VisionRecipientUnrostered(VisionAttachmentInvalid):
     user_message = "A clue needs a rostered recipient."
+
+
+class EditorError(Exception):
+    """The Deity Editor could not save a page. ``user_message`` is safe to show staff (#3780)."""
+
+    user_message = "That page cannot be saved."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class BeingNameTaken(EditorError):
+    user_message = "Another being already bears that name."
+
+
+class CodexPageNameTaken(EditorError):
+    user_message = (
+        "A Codex page with this name already exists under The Pantheon; rename the being "
+        "or link that page from the admin."
+    )

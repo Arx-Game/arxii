@@ -256,3 +256,46 @@ def resolve_codex_links(
             )
 
     return results
+
+
+def active_member_roster_entries(organization) -> list:
+    """The roster entries of an organization's active members (#3780)."""
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    memberships = OrganizationMembership.objects.filter(
+        organization=organization, left_at__isnull=True, exiled_at__isnull=True
+    ).select_related("persona__character_sheet")
+    entries = []
+    for membership in memberships:
+        roster_entry = membership.persona.character_sheet.roster_entry_or_none
+        if roster_entry is not None:
+            entries.append(roster_entry)
+    return entries
+
+
+def grant_organization_entry_to_members(grant) -> int:
+    """Hand an ``OrganizationCodexGrant``'s entry to every current member; returns
+    how many first learned it (#3780)."""
+    learned = 0
+    for roster_entry in active_member_roster_entries(grant.organization):
+        _, created = grant_codex_entry(roster_entry, grant.entry)
+        learned += int(created)
+    return learned
+
+
+def apply_organization_codex_grants(membership) -> int:
+    """A new member learns everything their organization grants (#3780). Called
+    from ``societies.membership_services.join_organization``. Returns how many
+    entries were newly learned."""
+    from world.codex.models import OrganizationCodexGrant  # noqa: PLC0415
+
+    roster_entry = membership.persona.character_sheet.roster_entry_or_none
+    if roster_entry is None:
+        return 0
+    learned = 0
+    for grant in OrganizationCodexGrant.objects.filter(
+        organization=membership.organization
+    ).select_related("entry"):
+        _, created = grant_codex_entry(roster_entry, grant.entry)
+        learned += int(created)
+    return learned

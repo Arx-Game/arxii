@@ -9,51 +9,45 @@ reply nests a thread inside the one its anchor belongs to (#3787).
 
 ## Data model
 
-- `InteractionThread` is ANCHORED at the row it answers: `anchor_interaction` +
-  `anchor_timestamp`, both required, name that row, and the thread's members are the
-  replies to it. The anchor is not a member of its own thread. `unique_thread_per_anchor`
-  over the pair is what makes two people answering the same blow land in one exchange
-  instead of opening parallel ones.
-- `Interaction.thread` is nullable and means "what I am an answer to", not "which pile I
-  am in" (changed by #3787; #3757's flat membership put the answered row in the thread
-  too). Root poses keep `thread_id = null`, and so does a row that is only ever answered.
-- `InteractionThread.parent` names the thread the anchor row itself belongs to, when the
-  anchor is a reply. Null makes this thread a root. Answering a reply therefore nests a
-  thread rather than flattening into the enclosing one. The field has existed since #3757;
-  #3787 is the first writer.
-- `InteractionThread.root` denormalizes the top of the nesting tree, null on a root thread,
-  so a reader groups a whole exchange without walking parents.
+- `InteractionThread` is ANCHORED at its first member: `thread_services.thread_anchor_ids`
+  derives the anchor with `Min("id")` over the thread's interaction members. The anchor
+  is a member of its own thread; no anchor interaction or timestamp columns are stored,
+  and there is no one-thread-per-anchor database constraint.
+- `Interaction.thread` is nullable and identifies the thread containing an answer. An
+  unanswered root pose keeps `thread_id = null`. A target that is already in a thread
+  may be moved into a nested child thread when answered, preserving the parent edge.
+- `InteractionThread.parent` names the enclosing thread when this thread's first member
+  was itself a reply. Null makes this thread a root. The top of the nesting tree is
+  derived by walking `parent` (`thread_services.thread_roots`); it is not stored on the
+  thread.
 - `InteractionThread` also owns a UUID identity and immutable scene, place, or
   fixed-whisper-party holder metadata. `interaction_thread_holder_shape` pins which holder
-  columns each kind may set; `interaction_thread_no_self_nesting` refuses a thread that
-  nests inside itself.
-- Thread members use existing `(timestamp, id)` chronology. No order column is stored.
-- `anchor_interaction` is `db_constraint=False` with its own denormalized timestamp because
-  `arxii_interaction` is monthly range-partitioned with a composite `(id, timestamp)`
-  primary key and cannot take an ordinary single-column FK. `InteractionReceiver`
-  (`world/scenes/place_models.py`) is the precedent; see ADR-0293 for why
-  `InteractionAction` is not.
+  columns each kind may set.
+- Thread members use the derived `Min("id")` anchor and existing `(timestamp, id)`
+  chronology. No order, anchor, or root column is stored.
 - There is no `InteractionReply` bridge and no reply-edge handler. A per-reply edge table
-  was built and removed at review, because the thread carries the edge itself (ADR-0293,
-  decision 4).
+  was built and removed at review, because the thread's membership plus `parent` carries
+  the topology (ADR-0293, decision 4).
 
 ## The two derivations every consumer uses
 
-`parent(row) = row.thread.anchor` and `exchange(row) = row.thread.root or row.thread`.
-Nothing walks the tree; both are columns on the one thread row.
+`parent(row)` is the first member of `row.thread` when `row` is not that first member;
+when `row` is the anchor, it is the first member of `row.thread.parent`, if any.
+`exchange(row)` is the derived root thread, or `row.thread` when that thread is already
+root. `thread_anchor_ids` and `thread_roots` calculate these values; no anchor or root
+columns are read.
 
-- **Parent** is the reader's chip. `InteractionListSerializer.get_reply_to` reads
-  `anchor_interaction_id` / `anchor_timestamp` straight off the joined thread row (no join
-  to the partitioned interaction table, no per-row handler), gated on the parent's own
-  `visible_to` through a context-cached batch lookup: a reader who cannot see the parent
-  gets no `reply_to`, never a leaked reference.
-- **Exchange** is the grouping key. `get_root_thread_id` serializes it as `root_thread_id`,
-  which the reader (`ThreadedNarrativeReader`) groups by so a nested back-and-forth renders
-  as ONE card opening on the anchor, and which `useThreading.getThreadKey` prefers over
-  `thread_id` so a nested exchange opens one conversation tab. Server-side,
-  `play_views._exchange_keys` resolves the same pair of facts for a whole page in two flat
-  queries, so `PlayThreadsView` groups by exchange and puts the root thread's anchor back at
-  the head of its members when the viewer can see it.
+- **Parent** is the reader's chip. `InteractionListSerializer.get_reply_to` derives the
+  parent id from the thread-member aggregates and parent thread, then batch-checks that
+  interaction with `visible_to`; a reader who cannot see the parent gets no `reply_to`,
+  never a leaked reference. The returned `{id, timestamp}` comes from the parent row.
+- **Exchange** is the grouping key. `get_root_thread_id` serializes the derived value as
+  `root_thread_id`, which the reader (`ThreadedNarrativeReader`) groups by so a nested
+  back-and-forth renders as ONE card opening on the anchor, and which
+  `useThreading.getThreadKey` prefers over `thread_id` so a nested exchange opens one
+  conversation tab. Server-side, `play_views._exchange_keys` resolves the same facts for a
+  whole page, so `PlayThreadsView` groups by exchange and puts the root thread's anchor
+  back at the head of its members when the viewer can see it.
 
 ## Reachability (#3787)
 
@@ -77,20 +71,17 @@ history). Server-side, it is read from two call sites, never duplicated:
   to see - stays refused, with no ratified hint copy.
 
 Both refusals translate through the same `{code, field, detail, hint}` 400 body
-(`interaction_views._refusal_response`) and the same telnet hint-append in
-`Action.run()`'s exception handler (`actions/base.py`) - one refusal vocabulary for REST
-and telnet alike. Neither ever widens the audience of an already-refused reply to make
-it land (ADR-0293, decision 1); the Place-to-Scene case above is not a widening, since
-the writer could already read what they're answering.
+(`interaction_views._refusal_response`), and the typed errors are also handled by telnet
+(`Action.run()` in `actions/base.py`). The `hint` is optional: tagging refusals provide a
+venue hint, while reply refusals currently do not. Neither ever widens the audience of an
+already-refused reply to make it land (ADR-0293, decision 1); the Place-to-Scene case
+above is not a widening, since the writer could already read what they're answering.
 
-`persona_can_receive`'s rules are also deliberately mirrored client-side, in
-`frontend/src/scenes/replyReachability.ts` (#3787, reply targets) and
-`frontend/src/scenes/tagReachability.ts` (#3810, tagged targets). Neither mirror
-replaces the server check above; both exist solely so the composer can give a
-pre-emptive refusal (disabled Send, inline hint) before the round trip that hits the
-server's own authoritative check. This duplication is intentional and must be kept in
-step with `persona_can_receive` whenever its rules change - it is not something to
-eliminate.
+`tagReachability.ts` (#3810) mirrors tagging so the composer can give a pre-emptive
+refusal before the server's authoritative check. `replyReachability.ts` (#3787) remains
+permissive: there is no ratified pre-emptive refusal copy, and the reverse holder mismatch
+is caught only by the server's authoritative check. These client and server rules must
+stay aligned when a refusal is ratified or `persona_can_receive` changes.
 
 **Reachability governs only player-authored addressing.** A resolved combat action's
 targets are written through `write_target_personas` directly, with no reachability check

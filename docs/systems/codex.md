@@ -49,6 +49,7 @@ from world.codex.constants import CodexKnowledgeStatus
 | `PathCodexGrant` | Codex entries granted by a Path choice | `path`, `entry` |
 | `DistinctionCodexGrant` | Codex entries granted by a Distinction | `distinction`, `entry` |
 | `TraditionCodexGrant` | Codex entries granted by a Tradition | `tradition`, `entry`, `is_perspective` |
+| `OrganizationCodexGrant` | Codex entries an Organization's membership knows (#3780, the "Obscure" tier; granted on join by `apply_organization_codex_grants`, to current members when created by `grant_organization_entry_to_members`) | `organization`, `entry` |
 
 Species are the exception: there is no `SpeciesCodexGrant` table. `Species.codex_entry`
 is a plain nullable FK on the species row (one entry per species, not many), and
