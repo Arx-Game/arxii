@@ -21,6 +21,7 @@ from world.worship.constants import (
     BeingRelationshipValence,
     BeingResonanceTier,
     ConsecrationScope,
+    DireStraitsKind,
     MiracleTrigger,
     RiteTier,
 )
@@ -28,6 +29,7 @@ from world.worship.constants import (
 # Verbose name reused across Meta verbose_name / verbose_name_plural / __str__ (python:S1192).
 CHOSEN_FAVOR_CONFIG_VERBOSE = "Chosen Favor Config"
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+ACCOUNT_DB_MODEL = "accounts.AccountDB"
 
 
 class PatronageValence(models.TextChoices):
@@ -880,3 +882,130 @@ class ConsecrationTier(SharedMemoryModel):
         return (
             f"{self.get_scope_display()} {self.name} ({self.min_points}+: +{self.bonus_percent}%)"
         )
+
+
+class Prayer(SharedMemoryModel):
+    """A character's freeform words to a being (#3779).
+
+    A plain log with no mechanical effect of its own: one of the few freeform
+    channels a player has straight to staff. A prayer becomes mechanically
+    meaningful only through the qualifying conditions ``pray`` records on it,
+    each independent and stackable: ``devotion_granted`` for the first prayer
+    of the game week made at a shrine or temple of the being, ``dire_straits``
+    plus ``intervention`` when the character prayed in Soulfray or near death
+    and a miracle answered.
+    """
+
+    character_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL, on_delete=models.CASCADE, related_name="prayers"
+    )
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.PROTECT, related_name="prayers")
+    text = models.TextField()
+    room_profile = models.ForeignKey(
+        "arxii.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="prayers",
+        help_text="Where the prayer was made; a shrine or temple here is what pays devotion.",
+    )
+    game_week = models.ForeignKey(
+        "arxii.GameWeek", on_delete=models.PROTECT, related_name="prayers"
+    )
+    devotion_granted = models.PositiveIntegerField(
+        default=0, help_text="Favor paid by the weekly holy-site prayer; 0 for every other."
+    )
+    dire_straits = models.CharField(
+        max_length=12, choices=DireStraitsKind.choices, blank=True, default=""
+    )
+    intervention = models.OneToOneField(
+        MiraclePerformance,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="answered_prayer",
+        help_text="The miracle that answered a dire-straits prayer, when one did.",
+    )
+    prayed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-prayed_at"]
+        verbose_name = "Prayer"
+        verbose_name_plural = "Prayers"
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} to {self.being} ({self.prayed_at:%Y-%m-%d})"
+
+
+class Vision(SharedMemoryModel):
+    """A GM-sent vision (#3779): prose a being sends one character.
+
+    First-class and standalone: the prose is the point, meaningful because it
+    happened. ``reveal_source`` decides whether the recipient is told which
+    being sent it (the twisted-rite leak shape: a true being the record keeps,
+    a face the recipient sees). Delivery rides the narrative message system
+    (``message``, category VISIONS), so an offline recipient receives it at
+    login and it lists beside the sheet's other messages. Two attachments,
+    each optional: a Codex ``clue`` when the vision doubles as the starter of a
+    real mystery, an ``episode`` when it is a personal beat of a story the
+    recipient is in. Rarity is not enforced: a GM composes each one.
+    """
+
+    recipient = models.ForeignKey(
+        CHARACTER_SHEET_MODEL, on_delete=models.CASCADE, related_name="visions"
+    )
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.PROTECT, related_name="visions")
+    sent_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="visions_sent",
+        help_text="The GM who composed it; null once that account is gone.",
+    )
+    body = models.TextField()
+    reveal_source = models.BooleanField(
+        default=False, help_text="Whether the recipient is told which being sent it."
+    )
+    prayer = models.ForeignKey(
+        Prayer,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="visions",
+        help_text="The prayer this answers, when it answers one.",
+    )
+    clue = models.ForeignKey(
+        "arxii.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="visions",
+        help_text="A Codex clue the vision hands the recipient (a mystery's starter).",
+    )
+    episode = models.ForeignKey(
+        "arxii.Episode",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="visions",
+        help_text="The episode this is a personal beat of; the recipient must be in its story.",
+    )
+    message = models.OneToOneField(
+        "arxii.NarrativeMessage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="vision",
+        help_text="The narrative message (category VISIONS) that delivered it.",
+    )
+    resonance_spent = models.PositiveIntegerField(default=0)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-sent_at"]
+        verbose_name = "Vision"
+        verbose_name_plural = "Visions"
+
+    def __str__(self) -> str:
+        return f"Vision to {self.recipient} from {self.being} ({self.sent_at:%Y-%m-%d})"

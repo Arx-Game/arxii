@@ -578,6 +578,8 @@ class ActionRegistryTests(TestCase):
             "shrine_dissolve",
             "temple_dedicate",
             "temple_revoke",
+            "pray",
+            "vision_send",
             "ceremony_open",
             "ceremony_offering",
             "ceremony_speech",

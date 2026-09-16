@@ -39154,6 +39154,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/Miracle'
           description: ''
+  /api/worship/prayers/:
+    get:
+      operationId: worship_prayers_list
+      description: 'A character''s prayers (#3779): the owner reads their own, staff
+        read anyone''s.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPrayerList'
+          description: ''
+  /api/worship/prayers/{id}/:
+    get:
+      operationId: worship_prayers_retrieve
+      description: 'A character''s prayers (#3779): the owner reads their own, staff
+        read anyone''s.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prayer'
+          description: ''
   /api/worship/rites/:
     get:
       operationId: worship_rites_list
@@ -39227,6 +39278,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorshipRite'
+          description: ''
+  /api/worship/visions/:
+    get:
+      operationId: worship_visions_list
+      description: 'Visions (#3779): the recipient reads their own, staff read anyone''s
+        and send new ones.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVisionList'
+          description: ''
+    post:
+      operationId: worship_visions_create
+      description: 'Visions (#3779): the recipient reads their own, staff read anyone''s
+        and send new ones.'
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisionCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisionCreate'
+          description: ''
+  /api/worship/visions/{id}/:
+    get:
+      operationId: worship_visions_retrieve
+      description: 'Visions (#3779): the recipient reads their own, staff read anyone''s
+        and send new ones.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vision'
           description: ''
 components:
   schemas:
@@ -48305,6 +48428,14 @@ components:
         * `hard` - Hard
         * `daunting` - Daunting
         * `harrowing` - Harrowing
+    DireStraitsEnum:
+      enum:
+      - soulfray
+      - near_death
+      type: string
+      description: |-
+        * `soulfray` - Soulfray active
+        * `near_death` - Near death
     DirectionEnum:
       enum:
       - favor
@@ -65571,6 +65702,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PortalDestination'
+    PaginatedPrayerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prayer'
     PaginatedProclamationList:
       type: object
       required:
@@ -67158,6 +67312,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserStoryMute'
+    PaginatedVisionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vision'
     PaginatedWillExecutorList:
       type: object
       required:
@@ -72547,6 +72724,51 @@ components:
       - running_total
       - source_label
       - stage
+    Prayer:
+      type: object
+      description: A character's prayer as its owner (or staff) reads it back (#3779).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        being:
+          type: integer
+          readOnly: true
+        being_name:
+          type: string
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+        devotion_granted:
+          type: integer
+          readOnly: true
+          description: Favor paid by the weekly holy-site prayer; 0 for every other.
+        dire_straits:
+          allOf:
+          - $ref: '#/components/schemas/DireStraitsEnum'
+          readOnly: true
+        answered:
+          type: boolean
+          readOnly: true
+        prayed_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - answered
+      - being
+      - being_name
+      - character_sheet
+      - devotion_granted
+      - dire_straits
+      - id
+      - prayed_at
+      - text
     PrecaptureConsentRequest:
       type: object
       properties:
@@ -83953,6 +84175,126 @@ components:
       - player_line
       - requires_feature_opened
       - taken_per_feature
+    Vision:
+      type: object
+      description: 'A vision as its recipient reads it (#3779): the being only when
+        revealed or to staff.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        recipient:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        being_name:
+          type: string
+          nullable: true
+          readOnly: true
+        body:
+          type: string
+          readOnly: true
+        reveal_source:
+          type: boolean
+          readOnly: true
+          description: Whether the recipient is told which being sent it.
+        prayer:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The prayer this answers, when it answers one.
+        clue:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: A Codex clue the vision hands the recipient (a mystery's starter).
+        clue_slug:
+          type: string
+          nullable: true
+          readOnly: true
+        episode:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The episode this is a personal beat of; the recipient must
+            be in its story.
+        episode_title:
+          type: string
+          nullable: true
+          readOnly: true
+        sent_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - being_name
+      - body
+      - clue
+      - clue_slug
+      - episode
+      - episode_title
+      - id
+      - prayer
+      - recipient
+      - reveal_source
+      - sent_at
+    VisionCreate:
+      type: object
+      description: What a GM supplies to send a vision (#3779); the service does the
+        rest.
+      properties:
+        recipient:
+          type: integer
+          description: The character this sheet belongs to
+        being:
+          type: integer
+        body:
+          type: string
+        reveal_source:
+          type: boolean
+          default: false
+        prayer:
+          type: integer
+          nullable: true
+        clue:
+          type: integer
+          nullable: true
+        episode:
+          type: integer
+          nullable: true
+      required:
+      - being
+      - body
+      - recipient
+    VisionCreateRequest:
+      type: object
+      description: What a GM supplies to send a vision (#3779); the service does the
+        rest.
+      properties:
+        recipient:
+          type: integer
+          description: The character this sheet belongs to
+        being:
+          type: integer
+        body:
+          type: string
+          minLength: 1
+        reveal_source:
+          type: boolean
+          default: false
+        prayer:
+          type: integer
+          nullable: true
+        clue:
+          type: integer
+          nullable: true
+        episode:
+          type: integer
+          nullable: true
+      required:
+      - being
+      - body
+      - recipient
     VitalsFatigue:
       type: object
       description: All three fatigue pools plus global flags.

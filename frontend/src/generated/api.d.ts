@@ -24089,6 +24089,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/prayers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A character's prayers (#3779): the owner reads their own, staff read anyone's. */
+    get: operations['worship_prayers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/prayers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A character's prayers (#3779): the owner reads their own, staff read anyone's. */
+    get: operations['worship_prayers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/rites/': {
     parameters: {
       query?: never;
@@ -24115,6 +24149,41 @@ export interface paths {
     };
     /** @description The rites a being offers (#3777): what a worshipper can perform. */
     get: operations['worship_rites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/visions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Visions (#3779): the recipient reads their own, staff read anyone's and send new ones. */
+    get: operations['worship_visions_list'];
+    put?: never;
+    /** @description Visions (#3779): the recipient reads their own, staff read anyone's and send new ones. */
+    post: operations['worship_visions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/visions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Visions (#3779): the recipient reads their own, staff read anyone's and send new ones. */
+    get: operations['worship_visions_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -28389,6 +28458,12 @@ export interface components {
      * @enum {string}
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
+    /**
+     * @description * `soulfray` - Soulfray active
+     *     * `near_death` - Near death
+     * @enum {string}
+     */
+    DireStraitsEnum: 'soulfray' | 'near_death';
     /**
      * @description * `favor` - Favor
      *     * `disfavor` - Disfavor
@@ -37356,6 +37431,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PortalDestination'][];
     };
+    PaginatedPrayerList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Prayer'][];
+    };
     PaginatedProclamationList: {
       /** @example 123 */
       count: number;
@@ -38390,6 +38480,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['UserStoryMute'][];
+    };
+    PaginatedVisionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Vision'][];
     };
     PaginatedWillExecutorList: {
       /** @example 123 */
@@ -41407,6 +41512,21 @@ export interface components {
       op: string;
       amount: number;
       running_total: number;
+    };
+    /** @description A character's prayer as its owner (or staff) reads it back (#3779). */
+    Prayer: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
+      readonly being: number;
+      readonly being_name: string;
+      readonly text: string;
+      /** @description Favor paid by the weekly holy-site prayer; 0 for every other. */
+      readonly devotion_granted: number;
+      readonly dire_straits: components['schemas']['DireStraitsEnum'];
+      readonly answered: boolean;
+      /** Format: date-time */
+      readonly prayed_at: string;
     };
     PrecaptureConsentRequest: {
       readonly id: number;
@@ -47103,6 +47223,50 @@ export interface components {
       opens_feature: boolean;
       requires_feature_opened: boolean;
       cg_max_rank: number;
+    };
+    /** @description A vision as its recipient reads it (#3779): the being only when revealed or to staff. */
+    Vision: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly recipient: number;
+      readonly being_name: string | null;
+      readonly body: string;
+      /** @description Whether the recipient is told which being sent it. */
+      readonly reveal_source: boolean;
+      /** @description The prayer this answers, when it answers one. */
+      readonly prayer: number | null;
+      /** @description A Codex clue the vision hands the recipient (a mystery's starter). */
+      readonly clue: number | null;
+      readonly clue_slug: string | null;
+      /** @description The episode this is a personal beat of; the recipient must be in its story. */
+      readonly episode: number | null;
+      readonly episode_title: string | null;
+      /** Format: date-time */
+      readonly sent_at: string;
+    };
+    /** @description What a GM supplies to send a vision (#3779); the service does the rest. */
+    VisionCreate: {
+      /** @description The character this sheet belongs to */
+      recipient: number;
+      being: number;
+      body: string;
+      /** @default false */
+      reveal_source: boolean;
+      prayer?: number | null;
+      clue?: number | null;
+      episode?: number | null;
+    };
+    /** @description What a GM supplies to send a vision (#3779); the service does the rest. */
+    VisionCreateRequest: {
+      /** @description The character this sheet belongs to */
+      recipient: number;
+      being: number;
+      body: string;
+      /** @default false */
+      reveal_source: boolean;
+      prayer?: number | null;
+      clue?: number | null;
+      episode?: number | null;
     };
     /** @description All three fatigue pools plus global flags. */
     VitalsFatigue: {
@@ -80772,6 +80936,51 @@ export interface operations {
       };
     };
   };
+  worship_prayers_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPrayerList'];
+        };
+      };
+    };
+  };
+  worship_prayers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Prayer'];
+        };
+      };
+    };
+  };
   worship_rites_list: {
     parameters: {
       query?: {
@@ -80825,6 +81034,74 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorshipRite'];
+        };
+      };
+    };
+  };
+  worship_visions_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedVisionList'];
+        };
+      };
+    };
+  };
+  worship_visions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VisionCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VisionCreate'];
+        };
+      };
+    };
+  };
+  worship_visions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Vision'];
         };
       };
     };

@@ -269,3 +269,151 @@ class RevokeTempleAction(Action):
         return ActionResult(
             success=True, message=f"The temple of {dedication.being.name} is no longer dedicated."
         )
+
+
+def _sheet_of(actor: ObjectDB):
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        return actor.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+
+
+@dataclass
+class PrayAction(Action):
+    """Pray to a being in your own words (#3779).
+
+    kwargs:
+        being / being_name: whom the prayer is to.
+        text: the words.
+    """
+
+    key: str = "pray"
+    name: str = "Pray"
+    icon: str = "hands"
+    category: str = "worship"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.worship.exceptions import PrayerError  # noqa: PLC0415
+        from world.worship.prayer_services import pray  # noqa: PLC0415
+
+        being, error = _resolve_being(kwargs)
+        if error is not None:
+            return error
+        sheet = _sheet_of(actor)
+        if sheet is None:
+            return ActionResult(success=False, message="You have no character sheet to pray with.")
+        try:
+            outcome = pray(sheet, being, str(kwargs.get("text") or ""))
+        except PrayerError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        parts = [f"You pray to {being.name}."]
+        if outcome.devotion_granted:
+            parts.append(f"An act of devotion: +{outcome.devotion_granted} favor.")
+        if outcome.intervention is not None:
+            parts.append(f"{being.name} answers.")
+        return ActionResult(
+            success=True,
+            message=" ".join(parts),
+            data={
+                "prayer_id": outcome.prayer.pk,
+                "devotion_granted": outcome.devotion_granted,
+                "at_holy_site": outcome.at_holy_site,
+                "dire_straits": outcome.dire_straits.kind,
+                "answered": outcome.intervention is not None,
+            },
+        )
+
+
+def _resolve_recipient(kwargs: dict[str, Any]):
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    recipient = kwargs.get("recipient")
+    if recipient is not None:
+        return recipient, None
+    name = (kwargs.get("recipient_name") or "").strip()
+    if not name:
+        return None, ActionResult(success=False, message="Name the recipient.")
+    sheet = CharacterSheet.objects.filter(character__db_key__iexact=name).first()
+    if sheet is None:
+        return None, ActionResult(success=False, message=f"No character '{name}' is known.")
+    return sheet, None
+
+
+def _optional_row(model, kwargs: dict[str, Any], key: str):
+    """The row for ``kwargs[key]`` (an instance or a pk), None when absent, or an error."""
+    value = kwargs.get(key)
+    if value is None or value == "":
+        return None, None
+    if isinstance(value, model):
+        return value, None
+    row = model.objects.filter(pk=value).first()
+    if row is None:
+        return None, ActionResult(success=False, message=f"No {key} with id {value}.")
+    return row, None
+
+
+@dataclass
+class SendVisionAction(Action):
+    """A GM sends a character a vision from a being (#3779). Staff only.
+
+    kwargs:
+        recipient / recipient_name, being / being_name, body,
+        reveal_source (bool), prayer (id), clue (id), episode (id).
+    """
+
+    key: str = "vision_send"
+    name: str = "Send Vision"
+    icon: str = "eye"
+    category: str = "worship"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.clues.models import Clue  # noqa: PLC0415
+        from world.stories.models import Episode  # noqa: PLC0415
+        from world.worship.exceptions import VisionError  # noqa: PLC0415
+        from world.worship.models import Prayer  # noqa: PLC0415
+        from world.worship.prayer_services import send_vision  # noqa: PLC0415
+
+        account = kwargs.get("account") or (actor.account if actor is not None else None)
+        if account is None or not account.is_staff:
+            return ActionResult(success=False, message="Only staff send visions.")
+        recipient, error = _resolve_recipient(kwargs)
+        if error is not None:
+            return error
+        being, error = _resolve_being(kwargs)
+        if error is not None:
+            return error
+        prayer, error = _optional_row(Prayer, kwargs, "prayer")
+        if error is not None:
+            return error
+        clue, error = _optional_row(Clue, kwargs, "clue")
+        if error is not None:
+            return error
+        episode, error = _optional_row(Episode, kwargs, "episode")
+        if error is not None:
+            return error
+        try:
+            vision = send_vision(
+                recipient=recipient,
+                being=being,
+                body=str(kwargs.get("body") or ""),
+                sent_by=account,
+                reveal_source=bool(kwargs.get("reveal_source", False)),
+                prayer=prayer,
+                clue=clue,
+                episode=episode,
+            )
+        except VisionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"A vision from {being.name} reaches {recipient.character.key}.",
+            data={"vision_id": vision.pk},
+        )

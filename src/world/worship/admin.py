@@ -13,10 +13,12 @@ from world.worship.models import (
     MiracleAppliedCondition,
     MiracleDamageProfile,
     MiraclePerformance,
+    Prayer,
     Relic,
     RiteKind,
     ShrineDetails,
     TempleDedication,
+    Vision,
     WorshipDeclaration,
     WorshipFeastDay,
     WorshipGrant,
@@ -237,3 +239,32 @@ class TempleDedicationAdmin(admin.ModelAdmin):
 class ConsecrationTierAdmin(admin.ModelAdmin):
     list_display = ("scope", "name", "min_points", "bonus_percent")
     list_filter = ("scope",)
+
+
+@admin.register(Prayer)
+class PrayerAdmin(admin.ModelAdmin):
+    """The freeform channel staff read (#3779): newest first, answerable from the vision admin."""
+
+    list_display = (
+        "prayed_at",
+        "character_sheet",
+        "being",
+        "devotion_granted",
+        "dire_straits",
+        "intervention",
+    )
+    list_filter = ("being", "dire_straits")
+    search_fields = ("text", "character_sheet__character__db_key", "being__name")
+    autocomplete_fields = ("being",)
+    raw_id_fields = ("character_sheet", "room_profile", "game_week", "intervention")
+    readonly_fields = ("prayed_at",)
+
+
+@admin.register(Vision)
+class VisionAdmin(admin.ModelAdmin):
+    list_display = ("sent_at", "recipient", "being", "reveal_source", "sent_by", "prayer")
+    list_filter = ("being", "reveal_source")
+    search_fields = ("body", "recipient__character__db_key", "being__name")
+    autocomplete_fields = ("being",)
+    raw_id_fields = ("recipient", "sent_by", "prayer", "clue", "episode", "message")
+    readonly_fields = ("sent_at", "resonance_spent")

@@ -191,6 +191,7 @@ from commands.wedding import CmdWedding
 from commands.where import CmdWhere
 from commands.who import CmdWho
 from commands.windows import CmdCloseWindow, CmdOpenWindow
+from commands.worship import CmdPray, CmdVision
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -485,6 +486,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2289 — ceremony rites: funeral/blessing/sermon open, offering,
             # speech, finish/abandon + the show read surface.
             CmdCeremony,
+            # #3779 — freeform prayer, and the staff-only vision that may answer one.
+            CmdPray,
+            CmdVision,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #3293 — appeals to organizations.
