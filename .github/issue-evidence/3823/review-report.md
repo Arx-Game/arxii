@@ -1,7 +1,7 @@
 # Issue #3823 visual review evidence
 
 - **Reviewer:** demo-fidelity-reviewer (local fallback)
-- **Reviewed implementation commit:** `bb3332b8d` (`feat(actions): reveal authored consequence pool picks`)
+- **Reviewed implementation commit:** `3831feff7` (`feat(actions): reveal authored consequence pool picks`)
 - **Evidence commit:** `1f7d37ada`
 - **Application identity:** Arx II frontend roulette payload/component contract on the feature branch
 - **Environment:** local devcontainer; Chromium 145 headless via Playwright 1.58.2
