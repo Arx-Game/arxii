@@ -831,3 +831,21 @@ class PerspectiveHolderExclusivityTests(TestCase):
 
         grant = TraditionCodexGrantFactory.build(entry=self.entry, is_perspective=False)
         grant.clean()
+
+
+class PublicEntryAndClueTests(TestCase):
+    def test_public_flag_refused_while_a_clue_targets_the_entry(self):
+        from world.clues.factories import ClueFactory
+
+        entry = CodexEntryFactory(is_public=False)
+        ClueFactory(target_codex_entry=entry, slug="catacomb-ledger")
+
+        entry.is_public = True
+        with self.assertRaises(ValidationError) as ctx:
+            entry.clean()
+        self.assertIn("is_public", ctx.exception.message_dict)
+        self.assertIn("catacomb-ledger", str(ctx.exception.message_dict["is_public"]))
+
+    def test_public_flag_fine_without_clues(self):
+        entry = CodexEntryFactory(is_public=True)
+        entry.clean()

@@ -39,6 +39,17 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   The first Misbegotten were born in 980 AS. _Avoid_: heritage start date,
   age cap field.
 
+## Profile Beginnings (#3775, ADR-0303)
+
+- **Profile Beginnings**: `ProfileBeginnings`, every origin a character holds, with its
+  `source` (`character_creation`, written once by the wizard at where play began;
+  `recovered_memory`, a Sleeper remembering the homeland they were taken from;
+  `past_life`, a reincarnation remembering a former life). The set only grows - a
+  character keeps every origin it has ever held, and adding a row through the Profile
+  admin grants that origin's codex entries to the one character. `Profile.beginnings` is
+  the M2M this row is the through table of; `CharacterSheet.beginnings` forwards to it
+  read-only. _Avoid_: second beginnings, origin slot.
+
 ## The Actor's Sheet (#3621, ADR-0279)
 
 - **Actor's Sheet** — the out-of-character half of Chapter 10: three questions about what

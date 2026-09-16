@@ -1,16 +1,24 @@
 """Django admin configuration for the codex system."""
 
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.db.models import Count, OuterRef, Q, Subquery
+from django.http import HttpRequest
 
+from world.clues.models import Clue
 from world.codex.models import (
+    BeginningsCodexGrant,
     CharacterCodexKnowledge,
     CodexCategory,
     CodexEntry,
     CodexEntryFiling,
     CodexSubject,
     CodexTeachingOffer,
+    DistinctionCodexGrant,
     OrganizationCodexGrant,
+    PathCodexGrant,
+    TraditionCodexGrant,
 )
+from world.codex.services import grant_entry_to_species_holders, grant_to_current_holders
 from world.contributors.admin import CREDIT_FIELDSET
 
 
@@ -71,25 +79,186 @@ class CodexEntryFilingInline(admin.TabularInline):
     autocomplete_fields = ["subject"]
 
 
+class GrantReachOnSaveMixin:
+    """Apply newly created grant inline rows to the characters already in the group.
+
+    Every admin that can create a grant row (the entry, Beginnings, Tradition,
+    Path, Distinction and Organization grant admins) mixes this in, so a grant
+    added after characters exist is never a dead row (#3775). Runs after the
+    inline formsets save, reads each formset's ``new_objects``, and only acts on
+    rows whose model has ``holder_roster_entries``.
+    """
+
+    def save_related(self, request: HttpRequest, form, formsets, change: bool) -> None:
+        super().save_related(request, form, formsets, change)  # type: ignore[misc]
+        learned = 0
+        rows = 0
+        for formset in formsets:
+            # save_new_objects (called above, inside super().save_related()) always
+            # sets this on a BaseModelFormSet before returning.
+            for grant in formset.new_objects:
+                if hasattr(grant, "holder_roster_entries"):
+                    learned += grant_to_current_holders(grant)
+                    rows += 1
+        if rows:
+            messages.info(
+                request,
+                f"{rows} new grant row(s) reached {learned} existing character(s).",
+            )
+
+
+#: string literals, per tools/lint_string_literal.py.
+_REACH_PUBLIC = "public"
+_REACH_GRANTED = "granted"
+_REACH_CLUE = "clue"
+_REACH_UNREACHABLE = "unreachable"
+
+
+class ReachListFilter(admin.SimpleListFilter):
+    """How an entry can be reached: public, granted to a group, by a clue, or not at all."""
+
+    title = "reach"
+    parameter_name = "reach"
+
+    #: Django passes both hook arguments positionally, so the leading underscores
+    #: mark them unused without needing a suppression.
+    def lookups(self, _request, _model_admin):
+        return [
+            (_REACH_PUBLIC, "Public"),
+            (_REACH_GRANTED, "Granted to a group"),
+            (_REACH_CLUE, "Reached by a clue"),
+            (_REACH_UNREACHABLE, "Unreachable"),
+        ]
+
+    def queryset(self, _request, queryset):
+        granted = (
+            Q(beginnings_grants__isnull=False)
+            | Q(tradition_grants__isnull=False)
+            | Q(path_grants__isnull=False)
+            | Q(distinction_grants__isnull=False)
+            | Q(organization_grants__isnull=False)
+            | Q(species__isnull=False)
+        )
+        if self.value() == _REACH_PUBLIC:
+            return queryset.filter(is_public=True)
+        if self.value() == _REACH_GRANTED:
+            return queryset.filter(granted).distinct()
+        if self.value() == _REACH_CLUE:
+            return queryset.filter(clues__isnull=False).distinct()
+        if self.value() == _REACH_UNREACHABLE:
+            return queryset.filter(is_public=False).exclude(granted).exclude(clues__isnull=False)
+        return queryset
+
+
+class _GrantInline(admin.TabularInline):
+    """Base for a codex grant inline: shows how many characters hold it today."""
+
+    extra = 0
+    readonly_fields = ["holders_today"]
+
+    @admin.display(description="Holders today")
+    def holders_today(self, obj) -> str:
+        if obj.pk is None:
+            return ""
+        return f"{len(obj.holder_roster_entries())} characters"
+
+
+class BeginningsGrantInline(_GrantInline):
+    """Codex entries granted by a Beginnings choice."""
+
+    model = BeginningsCodexGrant
+    fields = ["beginnings", "is_perspective", "holders_today"]
+    autocomplete_fields = ["beginnings"]
+    verbose_name_plural = "Known from birth: Beginnings codex grants"
+
+
+class TraditionGrantInline(_GrantInline):
+    """Codex entries granted by a Tradition."""
+
+    model = TraditionCodexGrant
+    fields = ["tradition", "is_perspective", "holders_today"]
+    autocomplete_fields = ["tradition"]
+    verbose_name_plural = "Taught by a tradition: Tradition codex grants"
+
+
+class OrganizationGrantInline(_GrantInline):
+    """Codex entries granted to an Organization's membership on joining."""
+
+    model = OrganizationCodexGrant
+    fields = ["organization", "holders_today"]
+    autocomplete_fields = ["organization"]
+    verbose_name_plural = "Taught on joining: Organization codex grants"
+
+
+class PathGrantInline(_GrantInline):
+    """Codex entries granted by a Path choice."""
+
+    model = PathCodexGrant
+    fields = ["path", "holders_today"]
+    autocomplete_fields = ["path"]
+    verbose_name_plural = "Path codex grants"
+
+
+class DistinctionGrantInline(_GrantInline):
+    """Codex entries granted by a Distinction."""
+
+    model = DistinctionCodexGrant
+    fields = ["distinction", "holders_today"]
+    autocomplete_fields = ["distinction"]
+    verbose_name_plural = "Distinction codex grants"
+
+
+def _plural(count: int, noun: str) -> str:
+    """Render a count with its noun, pluralizing naturally (1 room, 2 rooms)."""
+    if count == 1:
+        return f"{count} {noun}"
+    return f"{count} {noun}s"
+
+
+class ClueInline(admin.TabularInline):
+    """Read only: the clues that lead to this entry. Author them under Clues."""
+
+    model = Clue
+    fk_name = "target_codex_entry"
+    fields = ["slug", "placements"]
+    readonly_fields = ["slug", "placements"]
+    extra = 0
+    can_delete = False
+    verbose_name_plural = "Found through a Mystery: clues leading here (read only)"
+
+    @admin.display(description="Placed")
+    def placements(self, obj: Clue) -> str:
+        rooms = obj.room_placements.count()
+        triggers = obj.trigger_placements.count()
+        return f"{_plural(rooms, 'room')}, {_plural(triggers, 'trigger')}"
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
 @admin.register(CodexEntry)
-class CodexEntryAdmin(admin.ModelAdmin):
-    """Admin interface for CodexEntry."""
+class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
+    """Admin interface for CodexEntry: leads with who knows it (#3775)."""
 
-    inlines = [CodexEntryFilingInline]
-
-    list_display = [
-        "name",
-        "subject",
-        "modifier_target",
-        "share_cost",
-        "learn_cost",
-        "learn_threshold",
-        "prerequisite_count",
+    inlines = [
+        CodexEntryFilingInline,
+        BeginningsGrantInline,
+        TraditionGrantInline,
+        OrganizationGrantInline,
+        PathGrantInline,
+        DistinctionGrantInline,
+        ClueInline,
     ]
-    list_filter = ["subject__category", "subject", "modifier_target__category"]
+    list_display = ["name", "subject", "is_public", "known_via", "prerequisite_count"]
+    list_filter = [ReachListFilter, "is_public", "subject__category", "subject"]
     search_fields = ["name", "subject__name", "lore_content", "mechanics_content"]
     filter_horizontal = ["prerequisites"]
     ordering = ["subject", "display_order", "name"]
+    actions = ["publish_entries", "unpublish_entries", "grant_to_holders"]
+    autocomplete_fields = ["modifier_target", "art", "subject_item_instance"]
 
     fieldsets = (
         (None, {"fields": ("subject", "name", "summary", "quote", "art")}),
@@ -101,52 +270,169 @@ class CodexEntryAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Costs",
+            "Who knows this",
             {
-                "fields": ("share_cost", "learn_cost"),
-                "description": "AP costs for teaching and learning.",
+                "fields": ("is_public", "is_featured", "featured_order"),
+                "description": (
+                    "Public: everyone can read it, including visitors who are not logged in. "
+                    "Leave it off when a character has to get it by a path: born into it, "
+                    "taught by a tradition, taught on joining an organization, taught by "
+                    "another character, or found through a Mystery. The grant tables below "
+                    "are those paths. An entry a clue leads to cannot be public."
+                ),
             },
         ),
         (
-            "Learning",
+            "Costs and learning",
             {
-                "fields": ("learn_difficulty", "learn_threshold"),
-                "description": "Difficulty and progress required to learn.",
+                "fields": ("share_cost", "learn_cost", "learn_difficulty", "learn_threshold"),
+                "description": "AP to teach and accept; difficulty and progress for research.",
+                "classes": ["collapse"],
             },
         ),
-        ("Prerequisites", {"fields": ("prerequisites",)}),
+        ("Prerequisites", {"fields": ("prerequisites",), "classes": ["collapse"]}),
         (
-            "Mechanics Link",
+            "Mechanics link",
             {
                 "fields": ("modifier_target",),
-                "description": "Link to a modifier target (resonance, stat, etc.) "
-                "this entry documents.",
+                "description": (
+                    "Link to a modifier target (resonance, stat, etc.) this entry documents."
+                ),
+                "classes": ["collapse"],
             },
         ),
         (
-            "Item Pointer",
+            "Item pointer",
             {
                 "fields": ("subject_item_template", "subject_item_instance"),
-                "description": "Optional: this entry is about an item kind/instance "
-                "(#2540 exact-pointer ruling).",
+                "description": "Optional: this entry is about an item kind/instance (#2540).",
                 "classes": ["collapse"],
             },
         ),
-        (
-            "Display",
-            {
-                "fields": ("display_order", "is_public", "is_featured", "featured_order"),
-                "classes": ["collapse"],
-            },
-        ),
+        ("Display order", {"fields": ("display_order",), "classes": ["collapse"]}),
         CREDIT_FIELDSET,
     )
-    autocomplete_fields = ["modifier_target", "art", "subject_item_instance"]
 
+    def get_queryset(self, request: HttpRequest):
+        # Separate subqueries, not one Coalesce: the perspective holder's name alone
+        # cannot say which table it came from, and known_via has to append the note
+        # to the matching part (beginnings vs. tradition).
+        beginnings_perspective = BeginningsCodexGrant.objects.filter(
+            entry=OuterRef("pk"), is_perspective=True
+        ).values("beginnings__name")[:1]
+        tradition_perspective = TraditionCodexGrant.objects.filter(
+            entry=OuterRef("pk"), is_perspective=True
+        ).values("tradition__name")[:1]
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("subject")
+            .annotate(
+                beginnings_count=Count("beginnings_grants", distinct=True),
+                tradition_count=Count("tradition_grants", distinct=True),
+                organization_count=Count("organization_grants", distinct=True),
+                path_count=Count("path_grants", distinct=True),
+                distinction_count=Count("distinction_grants", distinct=True),
+                species_count=Count("species", distinct=True),
+                clue_count=Count("clues", distinct=True),
+                beginnings_perspective=Subquery(beginnings_perspective),
+                tradition_perspective=Subquery(tradition_perspective),
+            )
+        )
+
+    @admin.display(description="Known via")
+    def known_via(self, obj: CodexEntry) -> str:
+        parts = []
+        for count, label, perspective in (
+            (obj.beginnings_count, "beginnings", obj.beginnings_perspective),
+            (obj.tradition_count, "tradition", obj.tradition_perspective),
+            (obj.organization_count, "organization", None),
+            (obj.path_count, "path", None),
+            (obj.distinction_count, "distinction", None),
+            (obj.species_count, "species", None),
+            (obj.clue_count, "clue", None),
+        ):
+            if count:
+                part = f"{count} {label}"
+                if perspective:
+                    part += f" (perspective: {perspective})"
+                parts.append(part)
+        if not parts:
+            return "public only" if obj.is_public else "unreachable"
+        return ", ".join(parts)
+
+    @admin.display(description="Prerequisites")
     def prerequisite_count(self, obj: CodexEntry) -> int:
         return obj.prerequisites.count()
 
-    prerequisite_count.short_description = "Prerequisites"
+    @admin.action(description="Publish (everyone can read)")
+    def publish_entries(self, request: HttpRequest, queryset) -> None:
+        skipped = []
+        flipped = 0
+        for entry in queryset:
+            if entry.clues.exists():
+                skipped.append(entry.name)
+                continue
+            if not entry.is_public:
+                entry.is_public = True
+                entry.save(update_fields=["is_public"])
+                flipped += 1
+        messages.success(request, f"Published {flipped} entries.")
+        if skipped:
+            messages.warning(
+                request,
+                "Skipped, a clue leads to them: " + ", ".join(sorted(skipped)),
+            )
+
+    @admin.action(description="Unpublish")
+    def unpublish_entries(self, request: HttpRequest, queryset) -> None:
+        flipped = 0
+        unfeatured = 0
+        for entry in queryset:
+            if not entry.is_public:
+                continue
+            fields = ["is_public"]
+            entry.is_public = False
+            if entry.is_featured or entry.featured_order is not None:
+                entry.is_featured = False
+                entry.featured_order = None
+                fields += ["is_featured", "featured_order"]
+                unfeatured += 1
+            entry.save(update_fields=fields)
+            flipped += 1
+        messages.success(
+            request, f"Unpublished {flipped} entries; {unfeatured} were also un-featured."
+        )
+
+    @admin.action(description="Grant to current holders")
+    def grant_to_holders(self, request: HttpRequest, queryset) -> None:
+        checked = 0
+        learned = 0
+        unreachable = 0
+        for entry in queryset:
+            checked += 1
+            grants = [
+                *entry.beginnings_grants.all(),
+                *entry.tradition_grants.all(),
+                *entry.organization_grants.all(),
+                *entry.path_grants.all(),
+                *entry.distinction_grants.all(),
+            ]
+            for grant in grants:
+                learned += grant_to_current_holders(grant)
+            learned += grant_entry_to_species_holders(entry)
+            if (
+                not grants
+                and not entry.is_public
+                and not entry.clues.exists()
+                and not entry.species.exists()
+            ):
+                unreachable += 1
+        messages.success(
+            request,
+            f"{checked} entries checked; {learned} knowledge rows created; "
+            f"{unreachable} entries still unreachable.",
+        )
 
 
 @admin.register(CharacterCodexKnowledge)
@@ -211,3 +497,12 @@ class OrganizationCodexGrantAdmin(admin.ModelAdmin):
     list_display = ("organization", "entry")
     search_fields = ("organization__name", "entry__name")
     autocomplete_fields = ("organization", "entry")
+
+    def save_model(
+        self, request: HttpRequest, obj: OrganizationCodexGrant, form, change: bool
+    ) -> None:
+        """A newly created grant reaches the organization's current members (#3775)."""
+        super().save_model(request, obj, form, change)
+        if not change:
+            learned = grant_to_current_holders(obj)
+            messages.info(request, f"Reached {learned} current member(s).")

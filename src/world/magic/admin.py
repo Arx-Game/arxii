@@ -8,6 +8,7 @@ from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.admin_utils import describe_reverse_relations
 from world.character_creation.constants import OfferChapter
 from world.character_creation.models import DistinctionOffer
+from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import TraditionCodexGrant
 from world.conditions.inspection import inspect_condition_template
 from world.magic.audere import AudereThreshold
@@ -860,7 +861,7 @@ class TraditionGiftGrantInline(admin.TabularInline):
 
 
 @admin.register(Tradition)
-class TraditionAdmin(admin.ModelAdmin):
+class TraditionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_display = ["name", "is_active", "sort_order", "get_member_count"]
     list_filter = ["is_active"]
     search_fields = ["name", "description"]

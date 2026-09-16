@@ -478,6 +478,22 @@ class ActivityState(models.TextChoices):
     FROZEN = "FROZEN", "Frozen (OC swap, time-bounded)"
 
 
+class ProfileBeginningsSource(models.TextChoices):
+    """Why a character holds a Beginnings (#3775).
+
+    ``CHARACTER_CREATION`` is where play began, written by the wizard once per
+    character (the partial unique constraint on ``ProfileBeginnings`` enforces
+    once). The others are origins a character came to know later, added by staff:
+    a Sleeper remembering the homeland they were taken from, a reincarnation
+    remembering a former life. The value ``character_creation`` is the spelling
+    ``DistinctionOrigin`` and ``AcquisitionOrigin`` already use for the same fact.
+    """
+
+    CHARACTER_CREATION = "character_creation", "Where play began"
+    RECOVERED_MEMORY = "recovered_memory", "A memory recovered"
+    PAST_LIFE = "past_life", "A past life remembered"
+
+
 class LifecycleState(models.TextChoices):
     """IC condition for a CharacterSheet (#671).
 

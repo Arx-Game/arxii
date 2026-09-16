@@ -197,6 +197,15 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, CreditedContent, SharedMemoryMod
                 )
         elif not self._is_unset(self.target_item_instance_id):
             errors["target_item_instance"] = "Must be null when target_kind is not item."
+        if (
+            self.target_kind == ClueTargetKind.CODEX
+            and self.target_codex_entry_id is not None
+            and self.target_codex_entry.is_public
+        ):
+            errors["target_codex_entry"] = (
+                "This entry is public, so everyone can already read it; a clue must "
+                "lead to an entry a character has to discover."
+            )
         if errors:
             raise ValidationError(errors)
 
