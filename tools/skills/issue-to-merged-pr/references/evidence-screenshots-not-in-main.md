@@ -14,6 +14,14 @@ question.
 
 ## The move
 
+**Reachability warning:** a raw URL is only as durable as the commit that contains
+its blob. Do not amend, rebase, or force-push the branch after publishing image
+URLs; those operations can orphan the upload commit and make GitHub return 404
+from `raw.githubusercontent.com`, even while the old issue comment remains visible.
+Publish screenshots only after the code/history is stable. If the branch must be
+rewritten, re-upload the images afterward and verify every final URL with HTTP
+200 plus `image/png` before editing the report comment.
+
 1. Do the whole evidence pass as normal: commit the report + screenshots to the
    branch, push, let `open-pr.sh`/CI validate against them (`PR_EVIDENCE_FILE`
    pointing at the committed path). This is the easiest way to iterate — local
@@ -35,11 +43,10 @@ question.
    — the SHA of the commit that has the files right now (verify at least one
    resolves: `curl -sI <url>` should return `200` and `content-type: image/…`,
    not `curl -sI`'s silent everything-looks-fine-when-it-isn't habit on a
-   redirect-to-404). This works, and keeps working, **because GitHub retains
-   every commit that was ever pushed as part of an open PR** (reachable via
-   that PR's own `refs/pull/<N>/head`) independent of what the branch's
-   current tip contains — the URL doesn't stop resolving once the branch
-   moves past that commit. After posting, confirm the images actually
+   redirect-to-404). This works, and keeps working, **only while the upload commit remains reachable
+   from the open PR's refs**. A normal fast-forward removal commit preserves that
+   ancestry, but a later amend, rebase, or force-push can orphan it and make the
+   raw URL return 404. After posting, confirm the images actually
    rendered (don't just trust the markdown syntax): `gh api
    repos/<owner>/<repo>/issues/comments/<id> -H "Accept:
    application/vnd.github.html+json" --jq .body_html | grep -c '<img'` should
@@ -53,7 +60,8 @@ question.
    --pr-body <(gh pr view <N> --json body --jq .body)` (with the edited body,
    not the live one, if you haven't patched yet) — this is the exact check
    CI runs; don't push and find out.
-4. `git rm` the local report + screenshots directory, commit, push. Since
+4. `git rm` the local report + screenshots directory, commit, and make a normal
+   fast-forward push (never `git push --force` after the URLs are published). Since
    `main` only ever receives a **squash-merge's tree snapshot at the PR's
    final tip**, this removal commit is what decides what lands in `main` —
    the earlier commits where the files still existed are simply never part of
@@ -110,7 +118,9 @@ approach before a PR exists:
    Markdown alone:
    `gh api repos/<owner>/<repo>/issues/comments/<id> -H 'Accept: application/vnd.github.html+json' --jq .body_html | grep -c '<img'`.
 4. Keep the upload branch separate from `main` when the images are throwaway.
-   If the feature branch later becomes a PR, the evidence files may be removed
+   Do not amend/rebase/force-push after this upload; if that is unavoidable,
+   rerun the upload and replace the links. If the feature branch later becomes a PR,
+   the evidence files may be removed
    before merge; the issue comment still points to the upload commits. Do not
    upload secrets or player data.
 

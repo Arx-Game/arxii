@@ -88,8 +88,10 @@ When an issue needs screenshots before a PR exists and the interactive Artifact
 publisher is unavailable, push the feature branch and run
 `tools/skills/issue-to-merged-pr/scripts/publish-issue-images.sh`. It uploads
 images through the GitHub Contents API and posts an issue comment with immutable
-raw URLs. See `references/evidence-screenshots-not-in-main.md` for the exact
-sequence and verification command.
+raw URLs. Do this only after branch history is stable: amending, rebasing, or
+force-pushing afterward can orphan the upload commits and break the URLs. See
+`references/evidence-screenshots-not-in-main.md` for the exact sequence and
+verification command.
 
 ## Updating
 
