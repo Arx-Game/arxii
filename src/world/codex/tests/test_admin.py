@@ -6,7 +6,7 @@ from django.urls import reverse
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import BeginningsFactory
 from world.character_sheets.factories import ProfileBeginningsFactory
-from world.clues.factories import ClueFactory
+from world.clues.factories import ClueFactory, RoomClueFactory
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import BeginningsCodexGrant, CharacterCodexKnowledge
 from world.roster.factories import RosterEntryFactory
@@ -22,10 +22,10 @@ class CodexEntryAdminTests(TestCase):
         cls.granted = CodexEntryFactory(name="The Five Castes")
         cls.beginnings = BeginningsFactory(name="The Blessed")
         cls.grant = BeginningsCodexGrant.objects.create(
-            beginnings=cls.beginnings, entry=cls.granted
+            beginnings=cls.beginnings, entry=cls.granted, is_perspective=True
         )
         cls.clued = CodexEntryFactory(name="Under the Catacombs")
-        ClueFactory(target_codex_entry=cls.clued, slug="catacomb-ledger")
+        cls.clue = ClueFactory(target_codex_entry=cls.clued, slug="catacomb-ledger")
         cls.unreachable = CodexEntryFactory(name="The Citadel of Absolution")
 
     def setUp(self):
@@ -37,6 +37,7 @@ class CodexEntryAdminTests(TestCase):
         body = response.content.decode()
         self.assertIn("Known via", body)
         self.assertIn("1 beginnings", body)
+        self.assertIn("(perspective: The Blessed)", body)
 
     def test_reach_filter_unreachable(self):
         response = self.client.get(CHANGELIST, {"reach": "unreachable"})
@@ -110,6 +111,13 @@ class CodexEntryAdminTests(TestCase):
         self.assertIn("beginnings_grants", body)
         self.assertIn("tradition_grants", body)
         self.assertIn("organization_grants", body)
+
+    def test_change_form_clue_inline_shows_placements(self):
+        RoomClueFactory(clue=self.clue)
+        response = self.client.get(reverse("admin:arxii_codexentry_change", args=[self.clued.pk]))
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn("1 room(s), 0 trigger(s)", body)
 
     def test_saving_a_new_grant_inline_reaches_existing_holders(self):
         holder = RosterEntryFactory()

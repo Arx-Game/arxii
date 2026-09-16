@@ -1,7 +1,7 @@
 """Django admin configuration for the codex system."""
 
 from django.contrib import admin, messages
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import HttpRequest
 
 from world.clues.models import Clue
@@ -213,11 +213,17 @@ class ClueInline(admin.TabularInline):
 
     model = Clue
     fk_name = "target_codex_entry"
-    fields = ["slug", "target_kind"]
-    readonly_fields = ["slug", "target_kind"]
+    fields = ["slug", "placements"]
+    readonly_fields = ["slug", "placements"]
     extra = 0
     can_delete = False
     verbose_name_plural = "Found through a Mystery: clues leading here (read only)"
+
+    @admin.display(description="Placed")
+    def placements(self, obj: Clue) -> str:
+        rooms = obj.room_placements.count()
+        triggers = obj.trigger_placements.count()
+        return f"{rooms} room(s), {triggers} trigger(s)"
 
     def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
@@ -301,6 +307,15 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     )
 
     def get_queryset(self, request: HttpRequest):
+        # Separate subqueries, not one Coalesce: the perspective holder's name alone
+        # cannot say which table it came from, and known_via has to append the note
+        # to the matching part (beginnings vs. tradition).
+        beginnings_perspective = BeginningsCodexGrant.objects.filter(
+            entry=OuterRef("pk"), is_perspective=True
+        ).values("beginnings__name")[:1]
+        tradition_perspective = TraditionCodexGrant.objects.filter(
+            entry=OuterRef("pk"), is_perspective=True
+        ).values("tradition__name")[:1]
         return (
             super()
             .get_queryset(request)
@@ -313,23 +328,28 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
                 distinction_count=Count("distinction_grants", distinct=True),
                 species_count=Count("species", distinct=True),
                 clue_count=Count("clues", distinct=True),
+                beginnings_perspective=Subquery(beginnings_perspective),
+                tradition_perspective=Subquery(tradition_perspective),
             )
         )
 
     @admin.display(description="Known via")
     def known_via(self, obj: CodexEntry) -> str:
         parts = []
-        for count, label in (
-            (obj.beginnings_count, "beginnings"),
-            (obj.tradition_count, "tradition"),
-            (obj.organization_count, "organization"),
-            (obj.path_count, "path"),
-            (obj.distinction_count, "distinction"),
-            (obj.species_count, "species"),
-            (obj.clue_count, "clue"),
+        for count, label, perspective in (
+            (obj.beginnings_count, "beginnings", obj.beginnings_perspective),
+            (obj.tradition_count, "tradition", obj.tradition_perspective),
+            (obj.organization_count, "organization", None),
+            (obj.path_count, "path", None),
+            (obj.distinction_count, "distinction", None),
+            (obj.species_count, "species", None),
+            (obj.clue_count, "clue", None),
         ):
             if count:
-                parts.append(f"{count} {label}")
+                part = f"{count} {label}"
+                if perspective:
+                    part += f" (perspective: {perspective})"
+                parts.append(part)
         if not parts:
             return "public only" if obj.is_public else "unreachable"
         return ", ".join(parts)
