@@ -81,11 +81,19 @@ gh api "repos/$REPO/branches/$ENCODED_BRANCH" >/dev/null
 for image in "$@"; do
   name=$(basename "$image")
   remote_path=".github/issue-evidence/$ISSUE/$STAMP-$name"
-  content=$(base64 --wrap=0 "$image")
-  response=$(gh api -X PUT "repos/$REPO/contents/$remote_path" \
-    -f message="docs: publish issue #$ISSUE review image $name" \
-    -f content="$content" \
-    -f branch="$BRANCH")
+  encoded_tmp=$(mktemp)
+  payload_tmp=$(mktemp)
+  trap 'rm -f "$COMMENT_TMP" "$encoded_tmp" "$payload_tmp"' EXIT
+  base64 --wrap=0 "$image" > "$encoded_tmp"
+  # Keep the base64 out of argv. Several screenshots can exceed ARG_MAX when
+  # sent as repeated `gh -f content=...` form arguments.
+  jq -n \
+    --arg message "docs: publish issue #$ISSUE review image $name" \
+    --rawfile content "$encoded_tmp" \
+    --arg branch "$BRANCH" \
+    '{message: $message, content: ($content | rtrimstr("\n")), branch: $branch}' > "$payload_tmp"
+  response=$(gh api -X PUT "repos/$REPO/contents/$remote_path" --input "$payload_tmp")
+  rm -f "$encoded_tmp" "$payload_tmp"
   commit_sha=$(jq -r '.commit.sha' <<<"$response")
   [[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || {
     echo "ERROR: GitHub returned no commit SHA for $image" >&2
