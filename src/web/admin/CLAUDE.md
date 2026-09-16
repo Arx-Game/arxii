@@ -215,9 +215,10 @@ If an agent is asked about any of these topics, this is the system:
 **Purpose:** a superuser-only dashboard for writing and reviewing the prose
 backlog across every credited content model in one place - a worst-first
 queue (placeholder text first, then unwritten, then unreviewed), a row
-editor scoped to prose fields only, and reference search - instead of a
-writer hunting through the stock Django admin's per-model change lists one
-model at a time.
+editor whose heading is the row's own name, editable, for any model
+`identity_field_for` names (else the plain title), plus its prose fields,
+and reference search - instead of a writer hunting through the stock Django
+admin's per-model change lists one model at a time.
 
 **Location:** header link ("Authoring Workbench" button, superuser-only,
 beside Tuning/Ops) and a "Author content" link on the Game Setup hub, both
@@ -324,8 +325,10 @@ to `_authoring/` (`admin_authoring`).
   field **in field-declaration order** (`prose_fields_for` iterates
   `model._meta.get_fields()`, e.g. `CodexEntry` renders `summary`,
   `lore_content`, `mechanics_content` in that order, never alphabetized).
-  **Layout (#3828):** heading row (title + a `Row N of M to write · <domain>`
-  position line), notices, then the prose form - first textarea `autofocus`
+  **Layout (#3828):** heading row (the row's own name in an editable input
+  when `identity_field_for(model)` returns one, else the plain title, #3890
+  + a `Row N of M to write · <domain>` position line), notices, then the
+  prose form - first textarea `autofocus`
   (htmx honours it on swapped content) - with the action row, then the
   mechanical fields and credit columns in a closed `<details
   class="editor-details">`, then related entries and mentions. The editor
@@ -344,18 +347,24 @@ to `_authoring/` (`admin_authoring`).
   is an `hx-get` of `_editor_url` for the successor with the same `queue` and
   the successor's `pos`. `_QueueNav` is the context object; every editor
   request now costs one backlog scan, the same as the queue panel.
-  `authoring_editor_save` (POST) assigns only `prose_fields_for(model)` keys
-  actually present in the POST body - allowlist-only: a mechanical field
-  smuggled into the POST under its own name is never read, let alone
-  assigned - then `full_clean()` + `save()`; a validation failure re-renders
-  with nothing persisted. `authoring_editor_credit` (POST) runs that same
-  prose save first (only if prose keys were posted) and stamps
-  `written_by`/`written_on` from the operator's own linked contributor;
-  `authoring_editor_review` (POST) only ever stamps `reviewed_by`/
-  `reviewed_on` and never touches prose or authorship - **credit and review
-  stamping are separate actions**, so confirming review never silently
-  overwrites an in-flight, unsaved prose edit. Either POST view falls back
-  to the setup-gate guidance line (no stamp written) when the operator has
+  `_apply_edits` (#3890, renamed from `_apply_prose_edits`) assigns
+  `prose_fields_for(model)` keys present in the POST body plus `name` when
+  `identity_field_for(model)` returns one and the POST carries it -
+  allowlist-only: nothing else in the POST is ever assigned. A posted name
+  carrying an em or en dash is refused by code point before it ever reaches
+  `full_clean()`; otherwise it flows into the same `full_clean()` + `save()`
+  prose already uses, so a blank or duplicate name is refused the ordinary
+  way. `authoring_editor_save` (POST) runs `_apply_edits` and fires the
+  `authoring-backlog-changed` `HX-Trigger` when the name actually changed;
+  a validation failure re-renders with nothing persisted.
+  `authoring_editor_credit` (POST) runs the same `_apply_edits` when prose
+  or the name was posted, then stamps `written_by`/`written_on` from the
+  operator's own linked contributor. `authoring_editor_review` (POST) only
+  ever stamps `reviewed_by`/`reviewed_on` and never reads posted prose or a
+  posted name - **credit and review stamping are separate actions**, so
+  confirming review never silently overwrites an in-flight, unsaved edit.
+  Either POST view falls back to the setup-gate guidance line (no stamp
+  written) when the operator has
   no linked contributor, since this editor is reachable by direct URL and
   is not itself behind the dashboard's setup gate. A `full_clean()` failure
   keyed on a mechanical field or Django's own `"__all__"` key has no
