@@ -24,11 +24,14 @@ from typing import TYPE_CHECKING
 from world.checks.models import Consequence
 
 logger = logging.getLogger(__name__)
+MIN_CONSEQUENCE_FACES = 2
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.types import WeightedConsequence
     from world.checks.types import CheckResult
+    from world.traits.models import CheckOutcome
 
 
 def should_emit_theater(consequences: list[Consequence]) -> bool:
@@ -41,6 +44,7 @@ def build_roulette_payload(
     title: str,
     consequences: list[Consequence],
     selected: Consequence,
+    stage_label: str | None = None,
 ) -> dict:
     """Shape the tier candidates into the frontend RoulettePayload contract.
 
@@ -49,7 +53,7 @@ def build_roulette_payload(
     Identity comparison picks the selected face (tier candidates may include
     unsaved synthetic rows, so pk equality is not reliable).
     """
-    return {
+    payload = {
         "template_name": title,
         "consequences": [
             {
@@ -61,6 +65,44 @@ def build_roulette_payload(
             for c in consequences
         ],
     }
+    if stage_label is not None:
+        payload["stage_label"] = stage_label
+    return payload
+
+
+def consequence_pool_faces(
+    *,
+    consequences: list[WeightedConsequence],
+    outcome: CheckOutcome | None,
+    selected_consequence_id: int | None,
+) -> tuple[list[Consequence], Consequence | None]:
+    """Build faces for the selected tier of an action-template pool.
+
+    Pool weights are preserved exactly as authored (including a child pool's
+    weight override). A second wheel is worthwhile only when that tier has at
+    least two candidates. The selected identity comes from the backend's
+    character-loss-protected resolution, so the wheel lands on what actually
+    applied rather than re-rolling on the client.
+    """
+    if outcome is None:
+        return [], None
+    tier_consequences = [c for c in consequences if c.outcome_tier == outcome]
+    if len(tier_consequences) < MIN_CONSEQUENCE_FACES:
+        return [], None
+
+    faces: list[Consequence] = []
+    selected: Consequence | None = None
+    for weighted in tier_consequences:
+        face = Consequence(
+            outcome_tier=weighted.outcome_tier,
+            label=weighted.label,
+            weight=weighted.weight,
+            character_loss=weighted.character_loss,
+        )
+        faces.append(face)
+        if weighted.pk == selected_consequence_id:
+            selected = face
+    return faces, selected
 
 
 def check_outcome_faces(
@@ -118,13 +160,14 @@ def check_outcome_faces(
     return faces, selected
 
 
-def maybe_emit_resolution_theater(
+def maybe_emit_resolution_theater(  # noqa: PLR0913 - payload controls are explicit
     *,
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - theater targets whoever rolled, any puppet
     title: str,
     consequences: list[Consequence],
     selected: Consequence | None,
     force: bool = False,
+    stage_label: str | None = None,
 ) -> bool:
     """Emit the roulette reveal to the roller's client when the pool warrants it.
 
@@ -136,7 +179,12 @@ def maybe_emit_resolution_theater(
         return False
     if not force and not should_emit_theater(consequences):
         return False
-    payload = build_roulette_payload(title=title, consequences=consequences, selected=selected)
+    payload = build_roulette_payload(
+        title=title,
+        consequences=consequences,
+        selected=selected,
+        stage_label=stage_label,
+    )
     try:
         character.msg(roulette_result=((), payload))
     except Exception:  # noqa: BLE001 — theater must never break resolution

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -172,9 +173,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ActionTemplate
-    from actions.types import PendingActionResolution
+    from actions.types import PendingActionResolution, StepResult
     from world.character_sheets.models import CharacterSheet
-    from world.checks.models import CheckType
+    from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
@@ -1527,50 +1528,163 @@ def _targeted_outcome_content(
     return content
 
 
+def _resolution_steps(
+    *,
+    resolution: PendingActionResolution | None,
+    check_result: CheckResult | None,
+) -> list:
+    """Return gate and main steps in the order players experienced them."""
+    if resolution is not None:
+        steps = [*resolution.gate_results]
+        if resolution.main_result is not None:
+            steps.append(resolution.main_result)
+        return steps
+    if check_result is None:
+        return []
+    return [
+        SimpleNamespace(
+            check_result=check_result,
+            consequence_pool_id=None,
+            consequence_id=None,
+        )
+    ]
+
+
+def _pool_faces_for_step(step: StepResult) -> tuple[list[Consequence], Consequence | None]:
+    """Build a second-stage wheel for a step when its tier has choices."""
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from actions.services import get_effective_consequences  # noqa: PLC0415
+    from world.checks.theater import consequence_pool_faces  # noqa: PLC0415
+
+    pool_id = step.consequence_pool_id
+    if pool_id is None:
+        return [], None
+    pool = ConsequencePool.objects.filter(pk=pool_id).first()
+    if pool is None:
+        return [], None
+    return consequence_pool_faces(
+        consequences=get_effective_consequences(pool),
+        outcome=step.check_result.outcome,
+        selected_consequence_id=step.consequence_id,
+    )
+
+
+def _emit_theater_to_audience(  # noqa: PLR0913 - one payload per audience stage
+    *,
+    characters: tuple[ObjectDB, ObjectDB | None],
+    title: str,
+    chart_faces: list[Consequence],
+    chart_selected: Consequence,
+    pool_faces: list[Consequence],
+    pool_selected: Consequence | None,
+) -> None:
+    """Queue one or two wheel stages for the roller and effective target."""
+    has_consequence_stage = bool(pool_faces and pool_selected is not None)
+    stage_label = "Stage 1 of 2 · Success level" if has_consequence_stage else None
+    for character in characters:
+        if character is None:
+            continue
+        maybe_emit_resolution_theater(
+            character=character,
+            title=title,
+            consequences=chart_faces,
+            selected=chart_selected,
+            force=True,
+            stage_label=stage_label,
+        )
+        if has_consequence_stage:
+            maybe_emit_resolution_theater(
+                character=character,
+                title=title,
+                consequences=pool_faces,
+                selected=pool_selected,
+                force=True,
+                stage_label="Stage 2 of 2 · Consequence",
+            )
+
+
 def _schedule_check_outcome_theater(
     *,
     action_request: SceneActionRequest,
     check_result: CheckResult | None,
     initiator_character: ObjectDB,
     target_character: ObjectDB | None,
+    resolution: PendingActionResolution | None = None,
 ) -> None:
-    """Schedule the #3807 Part B roulette reveal for a resolved social check.
+    """Schedule ordered success and consequence reveals for an action resolution.
 
-    Faces come from ``check_outcome_faces`` (chart bands only — see its HARD RULE
-    docstring; never rollmod or outcome-guarantee logic). Fires for the initiator
-    always, and for the effective target when there is one; bystanders never get
-    it. Faces are built inside the commit callback, so a rolled-back resolution
-    never reads the chart, and a check with no chart or outcome spins nothing.
+    Each gate and the main step is a separate check. When its landed tier has
+    multiple pool candidates, its chart reveal is followed immediately by a
+    weighted consequence reveal. Both payloads are queued in one commit callback,
+    preserving order and ensuring rolled-back resolutions never reach a client.
     """
-    if check_result is None:
+    steps = _resolution_steps(resolution=resolution, check_result=check_result)
+    if not steps:
         return
 
-    if action_request.action_template_id is not None:
-        title = action_request.action_template.name
-    else:
-        title = action_request.action_key
+    title = (
+        action_request.action_template.name
+        if action_request.action_template_id is not None
+        else action_request.action_key
+    )
 
     def _emit() -> None:
-        faces, selected = check_outcome_faces(check_result)
-        if not faces or selected is None:
-            return
-        maybe_emit_resolution_theater(
-            character=initiator_character,
-            title=title,
-            consequences=faces,
-            selected=selected,
-            force=True,
-        )
-        if target_character is not None:
-            maybe_emit_resolution_theater(
-                character=target_character,
+        for step in steps:
+            current_check = step.check_result
+            chart_faces, chart_selected = check_outcome_faces(current_check)
+            if not chart_faces or chart_selected is None:
+                continue
+            pool_faces, pool_selected = _pool_faces_for_step(step)
+            _emit_theater_to_audience(
+                characters=(initiator_character, target_character),
                 title=title,
-                consequences=faces,
-                selected=selected,
-                force=True,
+                chart_faces=chart_faces,
+                chart_selected=chart_selected,
+                pool_faces=pool_faces,
+                pool_selected=pool_selected,
             )
 
     transaction.on_commit(_emit)
+
+
+def _record_template_consequence_outcomes(
+    *,
+    action_request: SceneActionRequest,
+    resolution: PendingActionResolution,
+    interaction: Interaction,
+) -> None:
+    """Persist selected pool consequences against the resolved action row."""
+    if action_request.action_template_id is None:
+        return
+
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.checks.models import CheckType, Consequence  # noqa: PLC0415
+    from world.checks.services import record_consequence_outcome  # noqa: PLC0415
+    from world.checks.types import ModifierBreakdown  # noqa: PLC0415
+
+    steps = [*resolution.gate_results]
+    if resolution.main_result is not None:
+        steps.append(resolution.main_result)
+    for step in steps:
+        if step.consequence_pool_id is None or step.consequence_id is None:
+            continue
+        check_type = step.check_result.check_type
+        if not isinstance(check_type, CheckType):
+            # Mocked/test-only resolutions do not have a persistable FK.
+            continue
+        pool = ConsequencePool.objects.filter(pk=step.consequence_pool_id).first()
+        consequence = Consequence.objects.filter(pk=step.consequence_id).first()
+        if pool is None or consequence is None:
+            continue
+        record_consequence_outcome(
+            character_sheet=action_request.initiator_persona.character_sheet,
+            check_type=check_type,
+            pool=pool,
+            selected_consequence=consequence,
+            breakdown=ModifierBreakdown(),
+            action_interaction=interaction,
+            summary=interaction.content,
+        )
 
 
 def _create_result_interaction(
@@ -1643,6 +1757,12 @@ def _create_result_interaction(
         # for a target who simply stood up from the table mid-action.
         write_target_personas(interaction, target_personas)
 
+    _record_template_consequence_outcomes(
+        action_request=action_request,
+        resolution=result.action_resolution,
+        interaction=interaction,
+    )
+
     # #3807: this row was persisted and delivered to nobody live. Deliver on commit,
     # after the target rows above so the involvement mark has target_persona_ids.
     initiator_location = action_request.initiator_persona.character_sheet.character.location
@@ -1657,6 +1777,7 @@ def _create_result_interaction(
         target_character=(
             effective_target.character_sheet.character if effective_target is not None else None
         ),
+        resolution=result.action_resolution,
     )
 
     if mode == InteractionMode.MUTTER:

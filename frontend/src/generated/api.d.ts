@@ -27826,9 +27826,8 @@ export interface components {
      *     reconstructed from the authored consequence links on the approach and
      *     challenge template — no pool is stored; no denormalization occurs.
      *
-     *     combat_interaction and challenge_record are exposed as plain integer ids to
-     *     avoid touching the range-partitioned arxii_interaction table at
-     *     serialization time.
+     *     Interaction sources are exposed as plain integer ids to avoid touching the
+     *     range-partitioned arxii_interaction table at serialization time.
      */
     ConsequenceOutcome: {
       readonly id: number;
@@ -27844,6 +27843,7 @@ export interface components {
       readonly modifiers: components['schemas']['ConsequenceOutcomeModifier'][];
       readonly combat_interaction_id: number;
       readonly challenge_record_id: number;
+      readonly action_interaction_id: number | null;
       /** Format: date-time */
       readonly created_at: string;
     };

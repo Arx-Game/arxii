@@ -1,7 +1,7 @@
 """ConsequenceOutcome and ConsequenceOutcomeModifier models.
 
 ConsequenceOutcome is the unified anchor record written once per check
-resolution — both combat damage resolution and challenge resolution write one.
+resolution — combat, challenge, and action-template resolution write one.
 A ViewSet exposes it with the roulette recomputed on read.
 
 The `combat_interaction` FK is declared db_constraint=False because
@@ -29,8 +29,8 @@ from world.checks.constants import ModifierSourceKind
 class ConsequenceOutcome(SharedMemoryModel):
     """Unified record of one consequence-resolution event.
 
-    Exactly one of (combat_interaction, challenge_record) must be set —
-    enforced by the CheckConstraint below.  The modifier_total stores the
+    Exactly one of (combat_interaction, challenge_record, action_interaction) must
+    be set — enforced by the CheckConstraint below.  The modifier_total stores the
     pre-computed sum of all modifiers that were in effect at resolution time;
     individual rows are in ConsequenceOutcomeModifier (the ``modifiers``
     reverse relation).
@@ -114,23 +114,62 @@ class ConsequenceOutcome(SharedMemoryModel):
         ),
     )
 
+    # action_interaction: FK to the partitioned Interaction table for
+    # action-template resolutions outside combat. Kept separate from
+    # combat_interaction so the source is explicit in readers and constraints.
+    action_interaction = models.ForeignKey(
+        "arxii.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_constraint=False,
+        related_name="action_consequence_outcomes",
+        help_text=(
+            "The Interaction created for a template-driven scene action. "
+            "Null for combat and challenge-based resolutions."
+        ),
+    )
+    action_interaction_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Denormalized from action_interaction.timestamp for the partition key. "
+            "Integrity is maintained by the writer setting both columns atomically."
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=(Q(combat_interaction__isnull=False) & Q(challenge_record__isnull=True))
-                | (Q(combat_interaction__isnull=True) & Q(challenge_record__isnull=False)),
+                check=(
+                    Q(combat_interaction__isnull=False)
+                    & Q(challenge_record__isnull=True)
+                    & Q(action_interaction__isnull=True)
+                )
+                | (
+                    Q(combat_interaction__isnull=True)
+                    & Q(challenge_record__isnull=False)
+                    & Q(action_interaction__isnull=True)
+                )
+                | (
+                    Q(combat_interaction__isnull=True)
+                    & Q(challenge_record__isnull=True)
+                    & Q(action_interaction__isnull=False)
+                ),
                 name="consequence_outcome_exactly_one_source",
             )
         ]
 
     def __str__(self) -> str:
-        source = (
-            f"interaction={self.combat_interaction_id}"
-            if self.combat_interaction_id
-            else f"challenge_record={self.challenge_record_id}"
-        )
+        if self.combat_interaction_id:
+            source = f"interaction={self.combat_interaction_id}"
+        elif self.challenge_record_id:
+            source = f"challenge_record={self.challenge_record_id}"
+        else:
+            source = f"action_interaction={self.action_interaction_id}"
         return f"ConsequenceOutcome({source} character={self.character_id})"
 
 

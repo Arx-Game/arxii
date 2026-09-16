@@ -98,9 +98,8 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     reconstructed from the authored consequence links on the approach and
     challenge template — no pool is stored; no denormalization occurs.
 
-    combat_interaction and challenge_record are exposed as plain integer ids to
-    avoid touching the range-partitioned arxii_interaction table at
-    serialization time.
+    Interaction sources are exposed as plain integer ids to avoid touching the
+    range-partitioned arxii_interaction table at serialization time.
     """
 
     modifiers = serializers.SerializerMethodField()
@@ -108,6 +107,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     outcome_display = serializers.SerializerMethodField()
     combat_interaction_id = serializers.IntegerField(read_only=True)
     challenge_record_id = serializers.IntegerField(read_only=True)
+    action_interaction_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     def _visible_kinds_filter(self, rows: list) -> list:
         """Modifier rows visible to the requesting user (staff see all kinds)."""
@@ -144,6 +144,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             "modifiers",
             "combat_interaction_id",
             "challenge_record_id",
+            "action_interaction_id",
             "created_at",
         ]
         read_only_fields = fields
