@@ -1,6 +1,6 @@
 # #3824 same-connection room-state resync review
 
-**Reviewed revision:** approved issue specification posted 2026-09-16, plus implementation branch `feature/3824-room-state-resync` (implementation commit recorded below).
+**Reviewed revision:** approved issue specification posted 2026-09-16, plus implementation commit `b08a6d8cc` on branch `feature/3824-room-state-resync`.
 **Review mode:** local fixture and automated tests. No reload or reconnect is used by the recovery path.
 
 ## Scenario-to-criterion matrix
