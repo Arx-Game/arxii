@@ -39068,6 +39068,18 @@ paths:
         name: tradition
         schema:
           type: integer
+      - in: query
+        name: visibility
+        schema:
+          type: string
+          enum:
+          - obscure
+          - public
+          - secret
+        description: |-
+          * `public` - Public
+          * `obscure` - Obscure
+          * `secret` - Secret
       tags:
       - worship
       security:
@@ -39142,33 +39154,6 @@ paths:
             schema:
               $ref: '#/components/schemas/StaffBeingPageRequest'
         required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StaffBeingPage'
-          description: ''
-    patch:
-      operationId: worship_admin_beings_partial_update
-      description: Beings as the Deity Editor sees them. Sorted by pool, the way the
-        list shows them.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this worshipped being.
-        required: true
-      tags:
-      - worship
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedStaffBeingPageRequest'
       security:
       - cookieAuth: []
       responses:
@@ -70039,66 +70024,6 @@ components:
         category:
           type: integer
           description: Allowlist is scoped per category.
-    PatchedStaffBeingPageRequest:
-      type: object
-      description: 'The edit page, both directions: what staff read and what they
-        save.'
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 100
-        description:
-          type: string
-          default: ''
-        domains:
-          type: string
-          default: ''
-        tradition:
-          type: integer
-        is_active:
-          type: boolean
-          default: true
-        quote:
-          type: string
-          default: ''
-          maxLength: 300
-        nicknames:
-          type: array
-          items:
-            type: string
-            minLength: 1
-            maxLength: 100
-        resonances:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResonanceLineRequest'
-        facets:
-          type: array
-          items:
-            type: integer
-        feast_days:
-          type: array
-          items:
-            $ref: '#/components/schemas/FeastDayLineRequest'
-        tarot_cards:
-          type: array
-          items:
-            type: integer
-        relationships:
-          type: array
-          items:
-            $ref: '#/components/schemas/RelationshipLineRequest'
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/StaffBeingPageVisibilityEnum'
-          default: secret
-        organization:
-          type: integer
-          nullable: true
-        gm_notes:
-          type: string
-          default: ''
     PatchedStaffingProfileLineRequest:
       type: object
       properties:

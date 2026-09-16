@@ -24044,8 +24044,7 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
-    patch: operations['worship_admin_beings_partial_update'];
+    patch?: never;
     trace?: never;
   };
   '/api/worship/admin/beings/{id}/codex/': {
@@ -40074,30 +40073,6 @@ export interface components {
       allowed_tenure?: number;
       /** @description Allowlist is scoped per category. */
       category?: number;
-    };
-    /** @description The edit page, both directions: what staff read and what they save. */
-    PatchedStaffBeingPageRequest: {
-      name?: string;
-      /** @default  */
-      description: string;
-      /** @default  */
-      domains: string;
-      tradition?: number;
-      /** @default true */
-      is_active: boolean;
-      /** @default  */
-      quote: string;
-      nicknames?: string[];
-      resonances?: components['schemas']['ResonanceLineRequest'][];
-      facets?: number[];
-      feast_days?: components['schemas']['FeastDayLineRequest'][];
-      tarot_cards?: number[];
-      relationships?: components['schemas']['RelationshipLineRequest'][];
-      /** @default secret */
-      visibility: components['schemas']['StaffBeingPageVisibilityEnum'];
-      organization?: number | null;
-      /** @default  */
-      gm_notes: string;
     };
     PatchedStaffingProfileLineRequest: {
       profile?: number;
@@ -81185,6 +81160,12 @@ export interface operations {
         /** @description A search term. */
         search?: string;
         tradition?: number;
+        /**
+         * @description * `public` - Public
+         *     * `obscure` - Obscure
+         *     * `secret` - Secret
+         */
+        visibility?: 'obscure' | 'public' | 'secret';
       };
       header?: never;
       path?: never;
@@ -81260,32 +81241,6 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['StaffBeingPageRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['StaffBeingPage'];
-        };
-      };
-    };
-  };
-  worship_admin_beings_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this worshipped being. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedStaffBeingPageRequest'];
       };
     };
     responses: {
