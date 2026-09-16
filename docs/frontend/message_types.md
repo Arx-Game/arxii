@@ -92,3 +92,38 @@ Describes the player's current location. The payload includes the room, nearby o
 ```
 
 Clients should display placeholder icons when `thumbnail_url` is null.
+
+
+## Same-connection room-state recovery
+
+The live `/game` client can request a fresh viewer-relative snapshot without
+reconnecting:
+
+```json
+["request_room_state", [], {"client_request_id": "550e8400-e29b-41d4-a716-446655440000"}]
+```
+
+The server sends a normal `room_state` first. It includes `state_epoch` and
+monotonic `state_sequence`, and echoes the validated request id as
+`resync_request_id`. It then sends a requester-only acknowledgement:
+
+```json
+["state_resync", [], {
+  "client_request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "state_epoch": "<server-epoch>", "state_sequence": 42,
+  "room_dbref": "#123", "room_id": 123, "scene_id": 17
+}]
+```
+
+Errors use stable codes and never echo an invalid id:
+
+```json
+["state_resync_error", [], {
+  "client_request_id": null, "code": "invalid_request"
+}]
+```
+
+`retry_after_ms` is included only for `rate_limited`. The client keeps the
+request pending for six seconds; a snapshot without its acknowledgement is a
+retryable partial success. Portal-parser forms that cannot reach the inputfunc
+remain an ingress limitation of the current Evennia websocket seam.

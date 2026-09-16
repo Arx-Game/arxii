@@ -37,6 +37,9 @@ export const WS_MESSAGE_TYPE = {
   MAIL_ARRIVED: 'mail_arrived',
   /** Inbound: an environmental hazard entered a damaging stage; show the response card (#2846). */
   HAZARD_PROMPT: 'hazard_prompt',
+  REQUEST_ROOM_STATE: 'request_room_state',
+  STATE_RESYNC: 'state_resync',
+  STATE_RESYNC_ERROR: 'state_resync_error',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -80,11 +83,8 @@ export type IncomingMessage = [SocketMessageType, unknown[], Record<string, unkn
 
 export type OutgoingMessage =
   | [typeof WS_MESSAGE_TYPE.TEXT, [string], Record<string, unknown>]
-  | [
-      typeof WS_MESSAGE_TYPE.EXECUTE_ACTION,
-      [],
-      { action: string; kwargs: Record<string, unknown> },
-    ];
+  | [typeof WS_MESSAGE_TYPE.EXECUTE_ACTION, [], { action: string; kwargs: Record<string, unknown> }]
+  | [typeof WS_MESSAGE_TYPE.REQUEST_ROOM_STATE, [], { client_request_id: string }];
 
 /**
  * Result payload for an `execute_action` round-trip. Mirrors the dataclass
@@ -178,6 +178,11 @@ export interface HubTidings {
 
 export interface RoomStatePayload {
   room: RoomStateObject;
+  /** Server revision used to reject stale same-socket snapshots. */
+  state_epoch?: string;
+  state_sequence?: number;
+  /** Correlates a targeted resync snapshot with its acknowledgement. */
+  resync_request_id?: string;
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];

@@ -52,8 +52,9 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
  * unconditionally (satisfying the rules of hooks) without triggering a
  * REST fetch or matching the WS selector against every session.
  */
-export function useSceneInteractions(sceneId: string | undefined) {
+export function useSceneInteractions(sceneId: string | undefined, viewerKey?: string | null) {
   const activeCharacter = useAppSelector((state) => state.game.active);
+  const queryViewerKey = viewerKey === null ? undefined : (viewerKey ?? activeCharacter);
 
   // Memoized selector: only recomputes when the sceneInteractions array reference changes,
   // not on every Redux state change (Fix #2)
@@ -76,7 +77,11 @@ export function useSceneInteractions(sceneId: string | undefined) {
     results: Interaction[];
     next?: string;
   }>({
-    queryKey: ['scene-interactions', sceneId ?? 'none'],
+    queryKey: [
+      'scene-interactions',
+      sceneId ?? 'none',
+      ...(queryViewerKey ? [queryViewerKey] : []),
+    ],
     queryFn: ({ pageParam }) =>
       fetchInteractions(sceneId as string, pageParam as string | undefined),
     getNextPageParam: (lastPage) => {

@@ -26,8 +26,11 @@ as argument.
 
 """
 
+import time
 from typing import cast
+import uuid
 
+from django.core.exceptions import ObjectDoesNotExist
 from evennia.server.inputfuncs import text as _evennia_text
 
 from server.conf.mush_markup import normalize_mush_markup
@@ -86,6 +89,120 @@ def text(session, *args, **kwargs):
         _evennia_text(session, *args, **kwargs)
     finally:
         session.ndb.console_capture = False
+
+
+_RESYNC_REQUEST_ID_LENGTH = 36
+_RESYNC_RATE_LIMIT_SECONDS = 5.0
+_RESYNC_REPLAY_TTL_SECONDS = 300.0
+_RESYNC_REPLAY_MAX_ENTRIES = 32
+_RESYNC_RATE_LIMITED_CODE = "rate_limited"
+
+
+def _canonical_resync_request_id(value: object) -> str | None:
+    """Return only the canonical UUID wire form used for resync correlation."""
+    if not isinstance(value, str) or len(value) != _RESYNC_REQUEST_ID_LENGTH:
+        return None
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        return None
+    canonical = str(parsed)
+    return canonical if value == canonical else None
+
+
+def _send_resync_error(
+    session,
+    request_id: str | None,
+    code: str,
+    retry_after_ms: int | None = None,
+) -> None:
+    """Send a bounded requester-only resync error frame."""
+    payload = {"client_request_id": request_id, "code": code}
+    if code == _RESYNC_RATE_LIMITED_CODE:
+        payload["retry_after_ms"] = retry_after_ms
+    session.msg(state_resync_error=((), payload))
+
+
+def request_room_state(session, *args, **kwargs):  # noqa: C901, PLR0912
+    """Request a full viewer-bound room-state snapshot on this websocket.
+
+    The Evennia portal passes the third frame element as direct keyword
+    arguments. Only the canonical ``client_request_id`` field is accepted.
+    """
+    if args or set(kwargs) != {"client_request_id"}:
+        _send_resync_error(session, None, "invalid_request")
+        return
+    request_id = _canonical_resync_request_id(kwargs.get("client_request_id"))
+    if request_id is None:
+        _send_resync_error(session, None, "invalid_request")
+        return
+
+    actor = session.puppet
+    if actor is None:
+        _send_resync_error(session, request_id, "not_puppeted")
+        return
+    if not actor.has_account:
+        _send_resync_error(session, request_id, "not_authenticated")
+        return
+    if actor.location is None:
+        _send_resync_error(session, request_id, "no_location")
+        return
+
+    now = time.monotonic()
+    try:
+        replay_cache = session.ndb.room_state_resync_replay
+    except AttributeError:
+        replay_cache = {}
+        session.ndb.room_state_resync_replay = replay_cache
+    expired = [
+        key for key, seen_at in replay_cache.items() if now - seen_at >= _RESYNC_REPLAY_TTL_SECONDS
+    ]
+    for key in expired:
+        del replay_cache[key]
+    if request_id in replay_cache:
+        _send_resync_error(session, request_id, "duplicate_request")
+        return
+    try:
+        last_accepted = session.ndb.room_state_resync_last_accepted
+    except AttributeError:
+        last_accepted = None
+    if last_accepted is not None and now - last_accepted < _RESYNC_RATE_LIMIT_SECONDS:
+        retry_after_ms = int((_RESYNC_RATE_LIMIT_SECONDS - (now - last_accepted)) * 1000)
+        _send_resync_error(session, request_id, "rate_limited", retry_after_ms)
+        return
+
+    # Reserve atomically before expensive serialization. Even a failed send
+    # consumes this reservation, preventing concurrent bypasses.
+    replay_cache[request_id] = now
+    while len(replay_cache) > _RESYNC_REPLAY_MAX_ENTRIES:
+        oldest = min(replay_cache, key=replay_cache.get)
+        del replay_cache[oldest]
+    session.ndb.room_state_resync_last_accepted = now
+
+    try:
+        result = actor.send_room_state(session=session, resync_request_id=request_id)
+    except (AttributeError, TypeError, ValueError, ObjectDoesNotExist):
+        _send_resync_error(session, request_id, "serialization_failed")
+        return
+    if not result.sent:
+        _send_resync_error(session, request_id, result.code or "send_failed")
+        return
+    if session.puppet is not actor or session not in actor.sessions.all():
+        _send_resync_error(session, request_id, "session_rebound")
+        return
+    session.msg(
+        state_resync=(
+            (),
+            {
+                "client_request_id": request_id,
+                "state_epoch": result.state_epoch,
+                "state_sequence": result.state_sequence,
+                "room_dbref": result.room_dbref,
+                "room_id": result.room_id,
+                "scene_id": result.scene_id,
+            },
+        )
+    )
 
 
 def _build_action_ref(kwargs: dict) -> object:

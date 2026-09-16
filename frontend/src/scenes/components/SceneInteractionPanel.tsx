@@ -30,7 +30,7 @@ export function SceneInteractionPanel({
   canGm,
   onAvatarClick,
 }: SceneInteractionPanelProps) {
-  const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
+  const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId, null);
   const {
     threads,
     filteredInteractions,

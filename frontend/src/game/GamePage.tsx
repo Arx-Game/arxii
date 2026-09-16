@@ -180,10 +180,16 @@ function speakingAsProps(
 }
 
 /** The three widgets that only exist while standing in a place. */
-function placeWidgets(placesRoomId: string | null | undefined) {
-  if (!placesRoomId) return {};
+function placeWidgets(
+  placesRoomId: string | null | undefined,
+  character: string | null,
+  currentPlaceId: number | null
+) {
+  if (!placesRoomId || !character) return {};
   return {
-    placeBar: <PlaceBar sceneId={placesRoomId} />,
+    placeBar: (
+      <PlaceBar sceneId={placesRoomId} character={character} currentPlaceId={currentPlaceId} />
+    ),
     tavernGameWidget: <TavernGameWidget roomId={placesRoomId} />,
     speakerQueueBar: <SpeakerQueueBar roomId={placesRoomId} />,
   };
@@ -360,15 +366,16 @@ function useSceneThreadStateSync({
 interface GameCenterProps {
   sceneId?: string;
   accountId: number;
+  activeCharacter?: string | null;
   gameWindow: ComponentProps<typeof GameWindow>;
 }
 
-function GameCenter({ sceneId, accountId, gameWindow }: GameCenterProps) {
+function GameCenter({ sceneId, accountId, activeCharacter, gameWindow }: GameCenterProps) {
   return (
     <>
-      {sceneId && <ConsentPrompt sceneId={sceneId} />}
+      {sceneId && <ConsentPrompt sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
       <GameWindow {...gameWindow} draftScopePrefix={`account:${accountId}`} />
-      {sceneId && <ActionPanel sceneId={sceneId} />}
+      {sceneId && <ActionPanel sceneId={sceneId} viewerKey={activeCharacter ?? undefined} />}
     </>
   );
 }
@@ -530,7 +537,7 @@ export function GamePage() {
   // (SceneMessages + composer). Called unconditionally — sceneId is simply
   // undefined with no active scene, which both hooks handle without firing
   // network calls or producing threads.
-  const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
+  const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId, active);
   const threadLastSeen = activeSession?.threadLastSeen ?? EMPTY_THREAD_LAST_SEEN;
   const sceneBaselineId = activeSession?.sceneBaselineId ?? null;
   const threading = useThreading(allInteractions, roomName, {
@@ -806,7 +813,7 @@ export function GamePage() {
   // moves. `currentPlaceId` below is correct the instant a fresh room_state
   // frame arrives instead.
   const { data: placesData } = useQuery({
-    queryKey: ['scene-places', placesRoomId],
+    queryKey: ['scene-places', placesRoomId, ...(active ? [active] : [])],
     queryFn: () => fetchPlaces(placesRoomId!),
     enabled: !!placesRoomId,
   });
@@ -972,7 +979,7 @@ export function GamePage() {
     referenceLoading: Boolean(reference && referenceLoading),
     referenceRetryable: Boolean(reference && referenceRetryable),
     onRetryReference: () => refetchReference(),
-    ...placeWidgets(placesRoomId),
+    ...placeWidgets(placesRoomId, active, currentPlaceId),
     pendingAttachments: sceneId ? (
       <PendingActionAttachments
         sceneId={sceneId}
@@ -997,7 +1004,12 @@ export function GamePage() {
           />
         }
         center={
-          <GameCenter sceneId={sceneId} accountId={account.id} gameWindow={gameWindowProps} />
+          <GameCenter
+            sceneId={sceneId}
+            accountId={account.id}
+            activeCharacter={active}
+            gameWindow={gameWindowProps}
+          />
         }
         sidebar={
           <PlaySidebar

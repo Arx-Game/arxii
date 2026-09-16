@@ -8,6 +8,8 @@ import {
   resetGame,
   setSessionConnectionStatus,
   setSessionLifecycle,
+  resetSessionRoomRevision,
+  setRoomStateResyncStatus,
 } from '@/store/gameSlice';
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
@@ -73,6 +75,69 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 // clearing an in-flight draft is exactly what this guards against.
 const connectionGenerations: Record<string, number> = {};
 
+type PendingResync = {
+  character: MyRosterEntry['name'];
+  generation: number;
+  requestId: string;
+  timer: ReturnType<typeof setTimeout>;
+  snapshotAccepted: boolean;
+  snapshotRevision?: { epoch: string; sequence: number };
+};
+const pendingResync = new Map<string, PendingResync>();
+
+function finishResync(
+  pending: PendingResync,
+  dispatch: AppDispatch,
+  status: 'success' | 'partial' | 'failure',
+  error?: string
+): void {
+  if (pendingResync.get(pending.requestId) !== pending) return;
+  clearTimeout(pending.timer);
+  pendingResync.delete(pending.requestId);
+  dispatch(
+    setRoomStateResyncStatus({ character: pending.character, status, ...(error ? { error } : {}) })
+  );
+}
+
+function markResyncSnapshot(
+  character: MyRosterEntry['name'],
+  generation: number,
+  requestId: string,
+  kwargs: Record<string, unknown>,
+  dispatch: AppDispatch
+): void {
+  const pending = pendingResync.get(requestId);
+  if (!pending || pending.character !== character || pending.generation !== generation) return;
+  pending.snapshotAccepted = true;
+  if (typeof kwargs.state_epoch === 'string' && Number.isInteger(kwargs.state_sequence)) {
+    pending.snapshotRevision = {
+      epoch: kwargs.state_epoch,
+      sequence: kwargs.state_sequence as number,
+    };
+  }
+  // Keep pending until the acknowledgement arrives; the timeout/close path
+  // reports partial success when only the snapshot made it through.
+  dispatch(setRoomStateResyncStatus({ character, status: 'pending' }));
+}
+
+function finishGenerationResyncs(
+  character: MyRosterEntry['name'],
+  generation: number,
+  dispatch: AppDispatch
+): void {
+  for (const pending of pendingResync.values()) {
+    if (pending.character !== character || pending.generation !== generation) continue;
+    finishResync(
+      pending,
+      dispatch,
+      pending.snapshotAccepted ? 'partial' : 'failure',
+      pending.snapshotAccepted
+        ? 'Room state refreshed, but confirmation was lost.'
+        : 'Room state refresh failed. Retry.'
+    );
+  }
+}
+
 function nextGeneration(character: string): number {
   const next = (connectionGenerations[character] ?? 0) + 1;
   connectionGenerations[character] = next;
@@ -96,6 +161,8 @@ export function __resetGameSocketModuleStateForTests(): void {
   Object.keys(connectionGenerations).forEach(
     (character) => delete connectionGenerations[character]
   );
+  pendingResync.forEach((pending) => clearTimeout(pending.timer));
+  pendingResync.clear();
 }
 
 /** Swallow reconnect failures so a transient socket error doesn't reject the timer. */
@@ -134,6 +201,68 @@ type IncomingMessageHandler = (ctx: IncomingMessageContext) => boolean | void;
 // which is exactly what CodeQL js/unvalidated-dynamic-method-call flags.
 function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefined {
   switch (msgType) {
+    case WS_MESSAGE_TYPE.STATE_RESYNC:
+      return ({ character, kwargs, dispatch }) => {
+        if (
+          typeof kwargs?.client_request_id !== 'string' ||
+          typeof kwargs.state_epoch !== 'string' ||
+          !Number.isInteger(kwargs.state_sequence) ||
+          typeof kwargs.room_id !== 'number' ||
+          !Number.isInteger(kwargs.room_id) ||
+          (kwargs.scene_id !== null &&
+            (typeof kwargs.scene_id !== 'number' || !Number.isInteger(kwargs.scene_id)))
+        ) {
+          return false;
+        }
+        const pending = pendingResync.get(kwargs.client_request_id);
+        if (
+          !pending ||
+          pending.character !== character ||
+          !pending.snapshotAccepted ||
+          !pending.snapshotRevision ||
+          pending.snapshotRevision.epoch !== kwargs.state_epoch ||
+          pending.snapshotRevision.sequence !== kwargs.state_sequence
+        )
+          return false;
+        const invalidations: Promise<unknown>[] = [];
+        if (kwargs.scene_id !== null) {
+          invalidations.push(
+            queryClient.invalidateQueries({
+              queryKey: ['scene-interactions', String(kwargs.scene_id), character],
+              exact: true,
+            })
+          );
+          invalidations.push(
+            queryClient.invalidateQueries({
+              queryKey: ['scene-places', String(kwargs.room_id), character],
+              exact: true,
+            })
+          );
+        }
+        Promise.all(invalidations).then(
+          () => finishResync(pending, dispatch, 'success'),
+          () =>
+            finishResync(
+              pending,
+              dispatch,
+              'partial',
+              'Room state refreshed, but scene data could not be refreshed.'
+            )
+        );
+        return true;
+      };
+
+    case WS_MESSAGE_TYPE.STATE_RESYNC_ERROR:
+      return ({ character, kwargs, dispatch }) => {
+        if (typeof kwargs?.client_request_id !== 'string' || typeof kwargs.code !== 'string') {
+          return false;
+        }
+        const pending = pendingResync.get(kwargs.client_request_id);
+        if (!pending || pending.character !== character) return false;
+        finishResync(pending, dispatch, 'failure', 'Room state refresh failed. Retry.');
+        return true;
+      };
+
     case WS_MESSAGE_TYPE.ROOM_STATE:
       return ({ character, kwargs, dispatch }) =>
         handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch);
@@ -279,13 +408,35 @@ function dispatchIncomingMessage(
   character: MyRosterEntry['name'],
   parsed: IncomingMessage,
   dispatch: AppDispatch,
-  navigate: NavigateFunction
+  navigate: NavigateFunction,
+  generation: number
 ): void {
   const [msgType, args, kwargs] = parsed;
   const handler = handlerFor(msgType);
   if (handler) {
     const accepted = handler({ character, args, kwargs, dispatch, navigate });
     updateLifecycle(character, msgType, kwargs, accepted, dispatch);
+    if (accepted === false) {
+      dispatch(
+        addSessionDiagnostic({
+          character,
+          message: 'A connection message was malformed or out of sequence. Try again.',
+        })
+      );
+    }
+    if (
+      msgType === WS_MESSAGE_TYPE.ROOM_STATE &&
+      accepted !== false &&
+      typeof kwargs?.resync_request_id === 'string'
+    ) {
+      markResyncSnapshot(
+        character,
+        generation,
+        kwargs.resync_request_id,
+        kwargs as Record<string, unknown>,
+        dispatch
+      );
+    }
     return;
   }
   if (dispatchLegacyText(character, parsed, msgType, kwargs, dispatch)) return;
@@ -362,6 +513,10 @@ export function useGameSocket() {
 
       socket.addEventListener('open', () => {
         clearReconnect(character);
+        // A new socket generation starts a fresh ordering baseline. Stale
+        // callbacks from the previous generation are rejected by socket and
+        // generation guards before they can reach Redux.
+        dispatch(resetSessionRoomRevision({ character }));
         dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
 
         // Step 1: reauthorize. Re-puppet immediately — everything downstream
@@ -415,6 +570,7 @@ export function useGameSocket() {
         // Never let stale frames or stale closes mutate the current session.
         if (sockets[character] !== socket) return;
         dispatch(setSessionConnectionStatus({ character, status: false }));
+        finishGenerationResyncs(character, generation, dispatch);
         delete sockets[character];
         if (event.code === 1000) {
           clearReconnect(character);
@@ -479,7 +635,7 @@ export function useGameSocket() {
           return;
         }
 
-        dispatchIncomingMessage(character, parsed, dispatch, navigate);
+        dispatchIncomingMessage(character, parsed, dispatch, navigate, generation);
       });
     },
     [account, dispatch, navigate]
@@ -532,6 +688,64 @@ export function useGameSocket() {
     []
   );
 
+  /** Request a viewer-bound room snapshot without closing this socket. */
+  const requestRoomState = useCallback(
+    (character: MyRosterEntry['name']): string | null => {
+      const existing = Array.from(pendingResync.values()).find(
+        (pending) => pending.character === character
+      );
+      if (existing) return existing.requestId;
+      const socket = sockets[character];
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        dispatch(
+          setRoomStateResyncStatus({
+            character,
+            status: 'failure',
+            error: 'Room state refresh unavailable while disconnected.',
+          })
+        );
+        return null;
+      }
+      const requestId = globalThis.crypto.randomUUID();
+      const generation = connectionGenerations[character] ?? 0;
+      const timer = setTimeout(() => {
+        const pending = pendingResync.get(requestId);
+        if (!pending || pending.generation !== generation) return;
+        finishResync(
+          pending,
+          dispatch,
+          pending.snapshotAccepted ? 'partial' : 'failure',
+          pending.snapshotAccepted
+            ? 'Room state refreshed, but confirmation was lost.'
+            : 'Room state refresh failed. Retry.'
+        );
+      }, 6000);
+      pendingResync.set(requestId, {
+        character,
+        generation,
+        requestId,
+        timer,
+        snapshotAccepted: false,
+      });
+      dispatch(setRoomStateResyncStatus({ character, status: 'pending' }));
+      const message: OutgoingMessage = [
+        WS_MESSAGE_TYPE.REQUEST_ROOM_STATE,
+        [],
+        { client_request_id: requestId },
+      ];
+      try {
+        socket.send(JSON.stringify(message));
+      } catch {
+        const pending = pendingResync.get(requestId);
+        if (pending)
+          finishResync(pending, dispatch, 'failure', 'Room state refresh failed. Retry.');
+        return null;
+      }
+      return requestId;
+    },
+    [dispatch]
+  );
+
   /** Current connection generation for `character` (0 if never connected). */
   const currentGeneration = useCallback(
     (character: MyRosterEntry['name']) => connectionGenerations[character] ?? 0,
@@ -545,6 +759,7 @@ export function useGameSocket() {
     sendConsole,
     disconnectAll,
     executeAction,
+    requestRoomState,
     currentGeneration,
   };
 }

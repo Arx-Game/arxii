@@ -1,6 +1,20 @@
 """Type declarations for flows system."""
 
+from dataclasses import dataclass
 from typing import NotRequired, TypedDict
+
+
+@dataclass(frozen=True)
+class RoomStateSendResult:
+    """Result metadata for a viewer-bound room-state send."""
+
+    sent: bool
+    code: str | None = None
+    room_dbref: str | None = None
+    room_id: int | None = None
+    scene_id: int | None = None
+    state_epoch: str | None = None
+    state_sequence: int | None = None
 
 
 class SerializedObjectState(TypedDict):
@@ -25,6 +39,9 @@ class SceneInfo(TypedDict):
 
 class SimpleRoomPayload(TypedDict):
     room: SerializedObjectState
+    state_epoch: NotRequired[str]
+    state_sequence: NotRequired[int]
+    resync_request_id: NotRequired[str]
     objects: list[SerializedObjectState]
     exits: list[SerializedObjectState]
     scene: SceneInfo | None

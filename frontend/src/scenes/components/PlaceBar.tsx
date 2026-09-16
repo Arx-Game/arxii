@@ -7,34 +7,45 @@ import type { Place } from '../actionTypes';
 
 interface Props {
   sceneId: string;
+  /** Active `/game` viewer key; omitted for legacy SceneDetailPage. */
+  character?: string;
+  currentPlaceId?: number | null;
 }
 
-export function PlaceBar({ sceneId }: Props) {
-  const [currentPlaceId, setCurrentPlaceId] = useState<number | null>(null);
+export function PlaceBar({ sceneId, character, currentPlaceId = null }: Props) {
+  const [localPlaceId, setLocalPlaceId] = useState<number | null>(null);
+  const controlled = character !== undefined;
+  const selectedPlaceId = controlled ? currentPlaceId : localPlaceId;
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['scene-places', sceneId],
+    queryKey: ['scene-places', sceneId, ...(character ? [character] : [])],
     queryFn: () => fetchPlaces(sceneId),
   });
 
   const join = useMutation({
     mutationFn: (placeId: number) => joinPlace(sceneId, placeId),
     onSuccess: (_data, placeId) => {
-      setCurrentPlaceId(placeId);
+      if (!controlled) setLocalPlaceId(placeId);
       // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
       // real key is 'scene-interactions' (useSceneInteractions).
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({
+        queryKey: ['scene-interactions', sceneId, ...(character ? [character] : [])],
+        exact: true,
+      });
     },
   });
 
   const leave = useMutation({
     mutationFn: (placeId: number) => leavePlace(sceneId, placeId),
     onSuccess: () => {
-      setCurrentPlaceId(null);
+      if (!controlled) setLocalPlaceId(null);
       // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
       // real key is 'scene-interactions' (useSceneInteractions).
-      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({
+        queryKey: ['scene-interactions', sceneId, ...(character ? [character] : [])],
+        exact: true,
+      });
     },
   });
 
@@ -43,7 +54,7 @@ export function PlaceBar({ sceneId }: Props) {
   if (isLoading || places.length === 0) return null;
 
   function handlePlaceClick(place: Place) {
-    if (currentPlaceId === place.id) {
+    if (selectedPlaceId === place.id) {
       leave.mutate(place.id);
     } else {
       join.mutate(place.id);
@@ -56,7 +67,7 @@ export function PlaceBar({ sceneId }: Props) {
       <span className="text-xs font-medium text-muted-foreground">Places:</span>
       <div className="flex gap-1">
         {places.map((place) => {
-          const isCurrent = currentPlaceId === place.id;
+          const isCurrent = selectedPlaceId === place.id;
           return (
             <Button
               key={place.id}

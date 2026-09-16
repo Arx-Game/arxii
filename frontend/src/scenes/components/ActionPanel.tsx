@@ -46,6 +46,8 @@ import { BoonAskForm } from './BoonAskForm';
 
 interface Props {
   sceneId: string;
+  /** Character segment for the live `/game` query; omitted on legacy scene pages. */
+  viewerKey?: string;
 }
 
 interface PendingWarning {
@@ -147,7 +149,7 @@ function TechniqueFormPicker({
   );
 }
 
-export function ActionPanel({ sceneId }: Props) {
+export function ActionPanel({ sceneId, viewerKey }: Props) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
@@ -188,7 +190,10 @@ export function ActionPanel({ sceneId }: Props) {
   function invalidateActionOutcomeQueries() {
     // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
     // real key is 'scene-interactions' (useSceneInteractions).
-    queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+    queryClient.invalidateQueries({
+      queryKey: ['scene-interactions', sceneId, ...(viewerKey ? [viewerKey] : [])],
+      exact: true,
+    });
     queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     if (characterId !== null) {
       queryClient.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) });

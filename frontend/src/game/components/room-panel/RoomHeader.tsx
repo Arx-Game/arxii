@@ -17,6 +17,9 @@ interface RoomHeaderProps {
   hasActiveEncounter?: boolean;
   /** True when the scene's room has an active (unresolved) Battle (#2157). */
   hasActiveBattle?: boolean;
+  onRefreshRoomState?: () => void;
+  roomStateResyncStatus?: 'idle' | 'pending' | 'success' | 'partial' | 'failure';
+  roomStateResyncError?: string;
 }
 
 export function RoomHeader({
@@ -30,22 +33,49 @@ export function RoomHeader({
   onEditRoom,
   hasActiveEncounter = false,
   hasActiveBattle = false,
+  onRefreshRoomState,
+  roomStateResyncStatus = 'idle',
+  roomStateResyncError,
 }: RoomHeaderProps) {
   return (
     <div className="border-b px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{name}</h3>
-        {canEdit && onEditRoom && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-h-11 px-2 text-xs text-foreground"
-            onClick={onEditRoom}
-          >
-            Edit
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {onRefreshRoomState && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-11 px-2 text-xs text-foreground"
+              onClick={onRefreshRoomState}
+              disabled={roomStateResyncStatus === 'pending'}
+              aria-label="Refresh room state"
+            >
+              {roomStateResyncStatus === 'pending' ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          )}
+          {canEdit && onEditRoom && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-11 px-2 text-xs text-foreground"
+              onClick={onEditRoom}
+            >
+              Edit
+            </Button>
+          )}
+        </div>
       </div>
+      {roomStateResyncStatus !== 'idle' && (
+        <p className="mt-1 text-xs text-muted-foreground" role="status" aria-live="polite">
+          {roomStateResyncStatus === 'pending' && 'Refreshing room state…'}
+          {roomStateResyncStatus === 'success' && 'Room state refreshed.'}
+          {roomStateResyncStatus === 'partial' &&
+            'Room state refreshed, but confirmation was lost.'}
+          {roomStateResyncStatus === 'failure' &&
+            (roomStateResyncError ?? 'Room state refresh failed. Retry.')}
+        </p>
+      )}
       {scene ? (
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <Link to={`/scenes/${scene.id}`}>

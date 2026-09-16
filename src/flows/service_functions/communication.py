@@ -160,6 +160,19 @@ def send_room_state(
     if caller.obj.location is None:
         return
 
+    # Character.send_room_state is the single revision-aware seam. It also
+    # preserves dreamside and multi-session behavior. Keep the generic path
+    # only for non-Character flow objects that cannot expose that method.
+    try:
+        send_state = caller.obj.send_room_state
+        authenticated = caller.obj.has_account
+    except AttributeError:
+        send_state = None
+        authenticated = False
+    if send_state is not None and authenticated:
+        send_state(room_state=room_state)
+        return
+
     if room_state is None:
         room = caller.obj.location
         sdm = SceneDataManager()
