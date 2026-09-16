@@ -613,7 +613,9 @@ from actions.definitions.worship import (
     DissolveShrineAction,
     FoundShrineAction,
     PerformWorshipRiteAction,
+    PrayAction,
     RevokeTempleAction,
+    SendVisionAction,
 )
 from actions.types import TargetType
 
@@ -1077,6 +1079,9 @@ _ALL_ACTIONS: list[Action] = [
     DreamwalkAction(),
     RetireCharacterAction(),
     GiveDeathKudosAction(),
+    # #3779: freeform prayer, and the GM-sent vision that may answer one.
+    PrayAction(),
+    SendVisionAction(),
     # #3777: a being's solo worship rite, performed in a live scene.
     PerformWorshipRiteAction(),
     # #3778: holy sites, a room's shrine and a building's temple.

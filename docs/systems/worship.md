@@ -113,6 +113,21 @@ issue bodies; the model decision is ADR-0132.
   `name`, `min_points`, `bonus_percent` (unique per scope+min_points). Seeded
   PLACEHOLDER: shrine Humble 0 → 5%, Tended 25 → 10%, Hallowed 100 → 20%; temple
   Founded 0 → 10%, Consecrated 100 → 25%, Great 500 → 50%.
+- `Prayer` (#3779) — a character's freeform words to a being: `character_sheet`,
+  `being` FK (`related_name="prayers"`), `text`, `room_profile` (where it was made),
+  `game_week`, `devotion_granted` (the weekly holy-site prayer's favor, else 0),
+  `dire_straits` (`DireStraitsKind`: SOULFRAY / NEAR_DEATH / blank), OneToOne
+  `intervention` → `MiraclePerformance` (the miracle that answered it, when one did),
+  `prayed_at`. A plain log with no effect of its own: one of the few freeform channels
+  a player has straight to staff.
+- `Vision` (#3779) — a GM-sent vision, first-class and standalone: `recipient` sheet
+  (`related_name="visions"`), `being` FK (the true sender), `sent_by` account, `body`,
+  `reveal_source` (whether the recipient is told the being; the twisted-rite leak
+  shape), optional `prayer` FK (the prayer it answers), optional `clue` FK → `clues.Clue`
+  (a CODEX clue the vision hands over; PROTECT), optional `episode` FK →
+  `stories.Episode` (a personal beat of a story the recipient is in), OneToOne
+  `message` → `narrative.NarrativeMessage` (the VISIONS-category delivery),
+  `resonance_spent`, `sent_at`. Rarity is not enforced: a GM composes each one.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
@@ -205,6 +220,44 @@ anima-recovery ritual's shape.
   "worship"): `rite` or `rite_name` (+ `being_name`) kwargs, resolves the scene from
   the actor's room, maps every `WorshipRiteError` to a soft failure.
 
+**Prayer services** (`worship/prayer_services.py`, #3779) — a prayer is a message,
+not a mechanic; three independent, stackable conditions make one count.
+
+- `pray(character_sheet, being, text)` → `PrayerOutcome(prayer, at_holy_site,
+  devotion_granted, dire_straits, intervention)`. Writes the `Prayer` first (it stands
+  on its own; `PrayerEmpty` / `PrayerTooLong` / `PrayerBeingInactive` refuse before
+  any write). Then: the **weekly holy-site prayer**: when the character's room holds a
+  shrine or sits under a temple of the being (`consecration_services.sites_of`) and
+  `site_prayer_capped_this_week` is False, `bump_devotion` pays
+  `PRAYER_SITE_DEVOTION_AMOUNT` (once per being per `GameWeek`, below a tier 1 rite);
+  and **dire straits**: `dire_straits_for(sheet)` reads Soulfray through
+  `magic.services.soulfray.get_soulfray_warning` (a read on TehomCD's domain, not a
+  redesign) and near death as `CharacterVitals.health_percentage <=
+  KNOCKOUT_HEALTH_THRESHOLD` while alive; when either holds, `fire_divine_intervention`
+  runs on the `NEAR_DEATH` trigger narrowed to the being prayed to, outside the
+  prayer's transaction (a miracle is its own committed act). The performance's
+  `trigger_event` is `prayer_soulfray` / `prayer_near_death` and the prayer records it.
+- `send_vision(*, recipient, being, body, sent_by=None, reveal_source=False,
+  prayer=None, clue=None, episode=None)` → `Vision`. Validates the attachments
+  (`VisionPrayerMismatch`, `VisionClueNotCodex`, `VisionEpisodeNotShared`,
+  `VisionRecipientUnrostered`), then in one transaction spends
+  `VISION_RESONANCE_POOL_COST` from the being's pool through `spend_worship_pool`
+  (`VisionPoolInsufficient`), records the `Vision` and hands a clue over through
+  `clues.services.acquire_clue`; only after that commit does it deliver the prose as a
+  VISIONS `NarrativeMessage` (`send_narrative_message`: live push when online, login
+  catch-up otherwise; `related_story` from the episode) and link it on the row, so a
+  push never precedes a record that could roll back. A revealed source appends
+  "You know whose vision this is: <being>." to the delivered prose; the stored `body`
+  stays the GM's words.
+- Actions (`actions/definitions/worship.py`): `PrayAction` (`pray`: `being` /
+  `being_name`, `text`), `SendVisionAction` (`vision_send`, staff only: `recipient` /
+  `recipient_name`, `being` / `being_name`, `body`, `reveal_source`, `prayer`, `clue`,
+  `episode` ids). Telnet (`commands/worship.py`): `pray <being>=<words>`,
+  `vision[/reveal] <character>/<being>=<prose>`, `vision/prayer <id> ...` (Admin).
+- Delivery presentation: a VISIONS message is the one narrative category with its own
+  tag and colour, `|G[VISION]|n` on telnet (Arx 1's green), and the frame carries
+  `category` so the web feed files it as its own `vision` kind; see the narrative doc.
+
 **Consecration services** (`worship/consecration_services.py`, #3778) — shrines and
 temples are places, not fees: a site of the rite's own being boosts the award, and
 the rite consecrates the site in turn.
@@ -282,10 +335,17 @@ Majora crossings.
 - `perform_divine_intervention(sheet, being, miracle, *, scene)` → MiraclePerformance —
   the commit seam: spends pool, applies `MiracleAppliedCondition` rows via
   `apply_condition`, creates audit row, broadcasts narrative EMIT.
+- `fire_divine_intervention(sheet, *, trigger, trigger_event, scene=None, being=None)`
+  (#3779) — the shared check: cooldown, then every `DevotionStanding` at or above the
+  config threshold (narrowed to `being` when given), each of its miracles on
+  `trigger` whose own threshold and pool cost are met, highest priority first;
+  performs it with `trigger_event` on the audit row and applies the cooldown
+  condition. Returns the `MiraclePerformance` or None.
 - `maybe_fire_divine_intervention(character, payload)` — trigger handler: called by
   the `divine_intervention_on_incapacitated` TriggerDefinition's flow step when
-  `CHARACTER_INCAPACITATED` fires. Checks favor + pool + cooldown, picks highest-
-  priority miracle, calls `perform_divine_intervention`, applies cooldown condition.
+  `CHARACTER_INCAPACITATED` fires; resolves the sheet and scene and calls
+  `fire_divine_intervention` on the INCAPACITATED trigger. The NEAR_DEATH trigger is
+  the dire-straits prayer's (#3779, `prayer_services.pray`).
 - `install_divine_intervention_trigger(sheet, being)` / `remove_divine_intervention_trigger(sheet, being)` —
   installs/removes the `Trigger` row on the character's ObjectDB. Called from
   `bump_devotion` when favor crosses the config threshold. Mirrors Soul Tether's
@@ -355,7 +415,12 @@ returns `faith_variant.vision_text` when set, else `threshold.vision_text`.
 
 **API**: `/api/worship/beings/` — read-only reference catalog (id, name,
 tradition name only; pools/avatars never serialized). Sheet identity section
-exposes the **public** worship name only. `/api/worship/rites/` (#3777) — the
+exposes the **public** worship name only. `/api/worship/prayers/` and
+`/api/worship/visions/` (#3779) — a character's prayers and visions: the account that
+plays the sheet reads its own, staff read anyone's (filter `character_sheet` /
+`recipient`), and staff `POST /api/worship/visions/` sends one (`VisionCreate`). A
+vision's `being_name` is null unless `reveal_source` or the reader is staff. Web: the
+sheet's Worship card (`frontend/src/worship/`). `/api/worship/rites/` (#3777) — the
 rites of active beings (`WorshipRiteSerializer`: name, description, kind name,
 tier, check type name, resonance name; filter `being`, `kind__tier`; search
 `name`).

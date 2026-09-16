@@ -225,11 +225,13 @@ def perform_divine_intervention(
     miracle: "Miracle",
     *,
     scene=None,
+    trigger_event: str = "character_incapacitated",
 ) -> "MiraclePerformance":
     """Commit seam for a divine intervention: spend pool, apply conditions, audit.
 
-    Called by ``maybe_fire_divine_intervention``. Assumes eligibility is already
-    verified (favor threshold, pool sufficient, cooldown clear).
+    Called by ``fire_divine_intervention``. Assumes eligibility is already
+    verified (favor threshold, pool sufficient, cooldown clear). ``trigger_event``
+    names what fired it on the audit row (the combat event, or a prayer's straits).
     """
     from django.db import transaction  # noqa: PLC0415
 
@@ -258,7 +260,7 @@ def perform_divine_intervention(
             target_character=character_sheet,
             scene=scene,
             resonance_spent=miracle.resonance_pool_cost,
-            trigger_event="character_incapacitated",
+            trigger_event=trigger_event,
         )
 
     # Broadcast narrative (outside transaction, mirrors _broadcast_manifestation)
@@ -275,35 +277,63 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
     ``CharacterIncapacitatedPayload`` (unused — the character is the trigger's ``obj``).
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.scenes.models import Scene  # noqa: PLC0415
     from world.worship.constants import MiracleTrigger  # noqa: PLC0415
-    from world.worship.models import Miracle  # noqa: PLC0415
 
     sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
         return
+    scene = Scene.objects.active_for_room(character.location).first()
+    fire_divine_intervention(
+        sheet,
+        trigger=MiracleTrigger.INCAPACITATED,
+        trigger_event="character_incapacitated",
+        scene=scene,
+    )
 
+
+def fire_divine_intervention(
+    character_sheet: "CharacterSheet",
+    *,
+    trigger: str,
+    trigger_event: str,
+    scene=None,
+    being: WorshippedBeing | None = None,
+) -> "MiraclePerformance | None":
+    """The divine-intervention check: the highest-priority qualifying miracle fires.
+
+    Shared by the incapacitation trigger (#2360) and the dire-straits prayer
+    (#3779). A miracle qualifies when its ``intervention_trigger`` is
+    ``trigger``, the character's favor with its being meets both the config
+    threshold and the miracle's own, and the being's pool covers the larger of
+    the miracle's cost and the config minimum. ``being`` narrows the candidates
+    to one god (a prayer is to someone). Returns None when nothing fires: no
+    candidate, or the per-character cooldown condition is still on.
+    """
+    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition as _apply  # noqa: PLC0415
+    from world.worship.models import Miracle  # noqa: PLC0415
+
+    character = character_sheet.character
     cfg = get_divine_intervention_config()
 
-    # Cooldown check
     if ConditionInstance.objects.filter(
         target=character,
         condition__name=_DIVINE_INTERVENTION_COOLDOWN_NAME,
     ).exists():
-        return
+        return None
 
-    # Find qualifying (being, miracle) pairs.
     standings = DevotionStanding.objects.filter(
-        character_sheet=sheet,
+        character_sheet=character_sheet, favor__gte=cfg.favor_threshold
     ).select_related("being")
+    if being is not None:
+        standings = standings.filter(being=being)
 
-    candidates: list[tuple] = []
+    candidates: list[tuple[DevotionStanding, Miracle]] = []
     for standing in standings:
-        if standing.favor < cfg.favor_threshold:
-            continue
         miracles = Miracle.objects.filter(
             being=standing.being,
-            intervention_trigger=MiracleTrigger.INCAPACITATED,
+            intervention_trigger=trigger,
             is_active=True,
             favor_threshold__lte=standing.favor,
         )
@@ -313,25 +343,15 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
             if standing.being.resonance_pool
             >= max(miracle.resonance_pool_cost, cfg.min_pool_for_intervention)
         )
-
     if not candidates:
-        return
+        return None
 
-    # Pick highest-priority (lowest sort_order).
+    # Highest priority first (lowest sort_order).
     candidates.sort(key=lambda pair: pair[1].sort_order)
     standing, miracle = candidates[0]
-
-    # Resolve scene.
-    from world.scenes.models import Scene  # noqa: PLC0415
-
-    scene = Scene.objects.active_for_room(character.location).first()
-
-    # Perform the miracle.
-    perform_divine_intervention(sheet, standing.being, miracle, scene=scene)
-
-    # Apply cooldown condition.
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import apply_condition as _apply  # noqa: PLC0415
+    performance = perform_divine_intervention(
+        character_sheet, standing.being, miracle, scene=scene, trigger_event=trigger_event
+    )
 
     cooldown_template = ConditionTemplate.objects.filter(
         name=_DIVINE_INTERVENTION_COOLDOWN_NAME,
@@ -342,6 +362,7 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
             condition=cooldown_template,
             duration_rounds=cfg.cooldown_hours * 60,
         )
+    return performance
 
 
 def install_divine_intervention_trigger(

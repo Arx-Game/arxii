@@ -22,7 +22,16 @@ describe('FeedChipStrip (#3856)', () => {
     const names = within(strip)
       .getAllByRole('button')
       .map((b) => b.textContent?.trim());
-    expect(names).toEqual(['Roleplay', 'Whispers', 'Movement', 'Ambience', 'System', '+', 'All']);
+    expect(names).toEqual([
+      'Roleplay',
+      'Whispers',
+      'Movement',
+      'Ambience',
+      'Visions',
+      'System',
+      '+',
+      'All',
+    ]);
     expect(within(strip).getByRole('button', { name: 'Roleplay' })).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -118,6 +127,7 @@ describe('FeedChipStrip (#3856)', () => {
       'rp',
       'wh',
       'am',
+      'vi',
       'sy',
     ]);
   });

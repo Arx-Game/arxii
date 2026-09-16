@@ -31,6 +31,7 @@ import { LanguagesSection } from '@/character_sheets/components/LanguagesSection
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { OriginsSection } from '@/character_sheets/components/OriginsSection';
 import { ActorSheetSection } from '@/character_sheets/components/ActorSheetSection';
+import { WorshipSection, type PublicWorshipRef } from '@/worship/components/WorshipSection';
 
 type ActorSheetGoal = Parameters<typeof ActorSheetSection>[0]['goals'][number];
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
@@ -199,6 +200,13 @@ export function CharacterSheetPage() {
             <MechanicsSection stats={sheetPayload.stats} skills={sheetPayload.skills} />
           )}
           {isMyCharacter && <LanguagesSection />}
+          <WorshipSection
+            sheetId={entry.character.id}
+            characterName={entry.character.name}
+            isMyCharacter={isMyCharacter}
+            isStaff={Boolean(account?.is_staff)}
+            publicWorship={(sheetPayload?.identity.worship as PublicWorshipRef | null) ?? null}
+          />
           <GalleriesSection galleries={entry.character.galleries} />
           <ApplicationSlot entry={entry} account={account} />
           {isMyCharacter && (

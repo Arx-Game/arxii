@@ -40,6 +40,8 @@ export const DEFAULT_FEED_CHIPS: readonly FeedChip[] = [
   { id: 'wh', label: 'Whispers', kinds: ['whisper'], on: true, wake: true, custom: false },
   { id: 'mv', label: 'Movement', kinds: ['arrive', 'move'], on: true, wake: false, custom: false },
   { id: 'am', label: 'Ambience', kinds: ['ambience'], on: true, wake: false, custom: false },
+  // A vision is rare and prized (#3779): it shows and it wakes.
+  { id: 'vi', label: 'Visions', kinds: ['vision'], on: true, wake: true, custom: false },
   {
     id: 'sy',
     label: 'System',
@@ -60,6 +62,7 @@ export const KIND_LABELS: Record<FeedKind, string> = {
   arrive: 'Arrivals and departures',
   move: 'Your own movement',
   ambience: 'Ambient flavour',
+  vision: 'Visions',
   look: 'Look results',
   item: 'Item handling',
   error: 'Command errors',

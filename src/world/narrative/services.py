@@ -339,7 +339,9 @@ def _push_to_online_recipient(delivery: NarrativeMessageDelivery) -> None:
     if not sessions:
         return  # offline; leave for catch-up
     formatted = _format_message_for_display(delivery.message)
-    character.msg((formatted, {"type": "narrative"}))
+    # The category rides the frame so the web client can give a vision its own
+    # lane (#3779); every other category files as ambience as before.
+    character.msg((formatted, {"type": "narrative", "category": delivery.message.category}))
     delivery.delivered_at = timezone.now()
     delivery.save(update_fields=["delivered_at"])
 
@@ -353,7 +355,13 @@ def _format_message_for_display(message: NarrativeMessage) -> str:
 
     The OOC note is NOT included in the player-facing text; it's visible
     only through the staff/GM admin and API surfaces.
+
+    A VISIONS message (#3779) is the one exception: Arx 1 coloured its
+    dream-visions green and players prized the rarity, so a vision keeps its own
+    tag and colour, used for nothing else.
     """
+    if message.category == NarrativeCategory.VISIONS:
+        return f"|G[VISION]|n {message.body}"
     return f"|R[NARRATIVE]|n {message.body}"
 
 

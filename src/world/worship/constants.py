@@ -15,7 +15,10 @@ WORSHIP_SECRET_DEFAULT_LEVEL = 2
 class MiracleTrigger(models.TextChoices):
     """Danger context a miracle responds to (#2360).
 
-    Only ``INCAPACITATED`` is wired in this issue; ``NEAR_DEATH`` is
+    ``INCAPACITATED`` fires from the combat trigger (#2360); ``NEAR_DEATH`` is
+    the dire-straits prayer's trigger (#3779): a character in Soulfray or below
+    the knockout health band prays, and a miracle of that trigger may answer.
+    ``NEAR_DEATH`` is
     defined for future use (see Scope/follow-ups in the spec).
     """
 
@@ -75,3 +78,17 @@ class ConsecrationScope(models.TextChoices):
 # in points (#3778). PLACEHOLDER magnitude; the tier tables are authored rows.
 CONSECRATION_POINTS_PER_RITE_TIER = 1
 SHRINE_KIND_NAME = "Shrine"
+
+
+class DireStraitsKind(models.TextChoices):
+    """Why a prayer counted as dire straits (#3779), recorded on the ``Prayer``."""
+
+    SOULFRAY = "soulfray", "Soulfray active"
+    NEAR_DEATH = "near_death", "Near death"
+
+
+# Freeform prayer (#3779). Every magnitude is PLACEHOLDER.
+PRAYER_TEXT_MAX_LENGTH = 2000
+PRAYER_SITE_DEVOTION_AMOUNT = 1  # the weekly holy-site prayer, below a tier 1 rite
+VISION_RESONANCE_POOL_COST = 10  # what a being spends to send one vision
+PRAYER_INTERVENTION_EVENT_PREFIX = "prayer_"  # MiraclePerformance.trigger_event

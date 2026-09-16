@@ -79,7 +79,26 @@ class OnlinePushTests(TestCase):
         # the line, which is how the old spelling silently dropped the type.
         body_arg, options = msg_mock.call_args.args[0]
         self.assertIn("A whisper reaches your ears.", body_arg)
-        self.assertEqual(options, {"type": "narrative"})
+        # A vision keeps its own tag and colour (#3779), and the category rides
+        # the frame so the web client can give it its own lane.
+        self.assertTrue(body_arg.startswith("|G[VISION]|n "))
+        self.assertEqual(options, {"type": "narrative", "category": "visions"})
+
+    def test_every_other_category_keeps_the_narrative_tag(self) -> None:
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        with (
+            mock.patch.object(character.sessions, "all", return_value=[mock.Mock()]),
+            mock.patch.object(character, "msg") as msg_mock,
+        ):
+            send_narrative_message(
+                recipients=[sheet],
+                body="The rain lets up.",
+                category=NarrativeCategory.ATMOSPHERE,
+            )
+        body_arg, options = msg_mock.call_args.args[0]
+        self.assertTrue(body_arg.startswith("|R[NARRATIVE]|n "))
+        self.assertEqual(options["category"], "atmosphere")
 
 
 class DeliverQueuedMessagesTests(TestCase):

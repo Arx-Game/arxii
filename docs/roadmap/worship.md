@@ -60,6 +60,22 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   points; a site of another being does neither. Every magnitude is PLACEHOLDER and the
   ladders are authored rows, reconcilable with a general location-intensity system
   (#3771) later.
+- **Prayers & visions (#3779, 2026-09-16):** Arx 1's freeform prayer revived, split from the
+  mechanical rites. A `Prayer` is a plain log of a character's words to a being (`pray`,
+  telnet `pray <being>=<words>`), one of the few freeform channels straight to staff, with
+  no effect of its own. Three independent, stackable conditions make one count: dire straits
+  (Soulfray active, or health in the knockout band) runs the divine-intervention check on the
+  NEAR_DEATH trigger, the wire `MiracleTrigger.NEAR_DEATH` had waited for, narrowed to the god
+  prayed to; the first prayer of the game week at a shrine or temple of the being pays a
+  little devotion (the humblest engagement, below a tier 1 rite); and a GM may answer with a
+  `Vision`. A vision is first-class prose from a being (`send_vision`, staff action
+  `vision_send`, the sheet's Send-vision composer beside the character's recent prayers),
+  with `reveal_source`, an optional Codex clue handed over on the spot, an optional episode of
+  a story the recipient is in, delivered through the narrative system's VISIONS category with
+  the one treatment reserved for visions: `|G[VISION]|n` on telnet, its own `vision` feed lane
+  and the sheet's emerald `VisionCard` on the web. Rarity is the GM's restraint, not a rule.
+  Every magnitude is PLACEHOLDER. The near-death read is a light touch on TehomCD's
+  Soulfray/vitals domain, flagged on the PR.
 - **Miracles / divine intervention (#2360):** gods spend `resonance_pool` on authored
   `Miracle` effects that fire automatically for a high-devotion PC in danger, plus
   faith-colored Audere Majora crossing variants.

@@ -69,15 +69,16 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   Best-effort: any storage error (unavailable, unparsable) is swallowed and
   treated as "nothing stored."
 - **`feedKinds.ts`**: The closed `FeedKind` union (#3856) every feed entry carries,
-  the list the filter chips will offer. `classifyText(kwargs.type)` maps a `text`
-  frame's wire type (`look`, `item`, `error`, `move`, `arrive`; `narrative` and
-  `gemit` both to `ambience`; anything else `system`) and `classifyInteraction(mode)`
+  the list the filter chips will offer. `classifyText(kwargs.type, kwargs.category)`
+  maps a `text` frame's wire type (`look`, `item`, `error`, `move`, `arrive`;
+  `narrative` and `gemit` to `ambience`, except a `narrative` frame in the `visions`
+  category, which is the `vision` kind (#3779); anything else `system`) and `classifyInteraction(mode)`
   maps an interaction's mode. A new kind is a deliberate addition here, never an ad
   hoc string.
 - **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
 kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
-  are the demo's five (Roleplay and Whispers wake; Movement, Ambience, System do
-  not; `system` unowned). Rules: `isKindShown` (All off hides everything; an unowned
+  are the demo's five plus Visions (#3779) (Roleplay, Whispers and Visions wake;
+  Movement, Ambience, System do not; `system` unowned). Rules: `isKindShown` (All off hides everything; an unowned
   kind shows), `wakingKinds` (on and wake), `toggleChip` (with All off, a press turns
   All on with only that chip), `toggleAll`, `setKindOwner` (moves a kind between
   chips), `renameChip`, `setChipWake`, `addCustomChip` (cap 3), `deleteChip` (its
