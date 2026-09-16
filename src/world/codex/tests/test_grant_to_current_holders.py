@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from world.character_creation.factories import BeginningsFactory
-from world.character_sheets.factories import ProfileBeginningsFactory
+from world.character_sheets.factories import CharacterSheetFactory, ProfileBeginningsFactory
 from world.classes.factories import PathFactory
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CodexEntryFactory
@@ -15,11 +15,12 @@ from world.codex.models import (
     PathCodexGrant,
     TraditionCodexGrant,
 )
-from world.codex.services import grant_to_current_holders
+from world.codex.services import grant_entry_to_species_holders, grant_to_current_holders
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.magic.factories import CharacterTraditionFactory, TraditionFactory
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import RosterEntryFactory
+from world.species.factories import SpeciesFactory
 
 
 def _known(roster_entry, entry) -> bool:
@@ -109,3 +110,19 @@ class DistinctionHoldersTests(TestCase):
 
         self.assertEqual(grant_to_current_holders(grant), 1)
         self.assertTrue(_known(holder, entry))
+
+
+class SpeciesHoldersTests(TestCase):
+    def test_species_holder_learns_other_species_does_not_and_repeat_is_a_noop(self):
+        entry = CodexEntryFactory(name="The Khati Kinship")
+        species = SpeciesFactory(name="Khati Testkind", codex_entry=entry)
+        other_species = SpeciesFactory(name="Elf Testkind")
+        holder = RosterEntryFactory(character_sheet=CharacterSheetFactory(species=species))
+        stranger = RosterEntryFactory(character_sheet=CharacterSheetFactory(species=other_species))
+
+        learned = grant_entry_to_species_holders(entry)
+
+        self.assertEqual(learned, 1)
+        self.assertTrue(_known(holder, entry))
+        self.assertFalse(_known(stranger, entry))
+        self.assertEqual(grant_entry_to_species_holders(entry), 0)

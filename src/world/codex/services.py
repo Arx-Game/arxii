@@ -325,7 +325,10 @@ def species_holder_roster_entries(entry: CodexEntry) -> list:
     if not owners.exists():
         return []
     entries = []
-    for sheet in CharacterSheet.objects.filter(species__isnull=False).select_related("species"):
+    sheets = CharacterSheet.objects.filter(species__isnull=False).select_related(
+        "species", "roster_entry"
+    )
+    for sheet in sheets:
         if entry in sheet.species.codex_entries:
             roster_entry = sheet.roster_entry_or_none
             if roster_entry is not None:
