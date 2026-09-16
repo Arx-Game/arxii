@@ -1071,7 +1071,7 @@ _ALL_ACTIONS: list[Action] = [
     DreamwalkAction(),
     RetireCharacterAction(),
     GiveDeathKudosAction(),
-    # #3777 — a being's solo worship rite, performed in a live scene.
+    # #3777: a being's solo worship rite, performed in a live scene.
     PerformWorshipRiteAction(),
     # #2289 — ceremonies (worship rites over the events/scenes chassis).
     OpenCeremonyAction(),

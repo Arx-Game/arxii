@@ -341,7 +341,7 @@ class GainSource(models.TextChoices):
     COMPROMISE = "COMPROMISE", "Moral compromise"
     PENANCE = "PENANCE", "Atonement resonance conversion"
     FALL_CONVERSION = "FALL_CONVERSION", "Fall/Redemption conversion"
-    # #3777 — a worship rite performed in a scene
+    # #3777: a worship rite performed in a scene
     WORSHIP_RITE = "WORSHIP_RITE", "Worship rite"
 
 

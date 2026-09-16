@@ -149,7 +149,7 @@ def _resolve_open_title(type_key: str, title_name: str | None):
 
 
 def _resolve_open_rite(type_key: str, rite_name: str | None, being_name: str | None):
-    """(rite, error) — a RITE ceremony names a tier 3 rite; other types ignore it."""
+    """(rite, error): a RITE ceremony names a tier 3 rite; other types ignore it."""
     from world.ceremonies.constants import CeremonyTypeKey  # noqa: PLC0415
     from world.worship.models import WorshipRite  # noqa: PLC0415
 

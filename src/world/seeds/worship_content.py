@@ -204,7 +204,7 @@ def ensure_traditions_and_beings(specs: dict[str, object]) -> None:
 
 
 _RITE_KINDS = (
-    # (name, tier, description) — all PLACEHOLDER; many kinds share a tier.
+    # (name, tier, description): all PLACEHOLDER; many kinds share a tier.
     ("Vigil", 1, "PLACEHOLDER: a night kept awake in the being's name."),
     ("Sermon", 1, "PLACEHOLDER: preaching the being's word to whoever listens."),
     ("Canticle", 1, "PLACEHOLDER: a sung devotion."),
