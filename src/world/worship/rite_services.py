@@ -165,8 +165,8 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
     from world.worship.consecration_services import (  # noqa: PLC0415
-        consecration_bonus_percent,
         grow_consecration,
+        sites_of,
     )
     from world.worship.services import bump_devotion  # noqa: PLC0415
 
@@ -176,7 +176,8 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
     room_profile = _room_profile_for(scene=scene, ceremony=ceremony)
     # #3778: a shrine or temple of the rite's own being adds its tier bonus; the
     # two stack by addition, and the performance then consecrates them further.
-    site_bonus = consecration_bonus_percent(room_profile, rite.being)
+    sites = sites_of(room_profile, rite.being)
+    site_bonus = sites.bonus_percent()
     percent = reward_multiplier_percent(character_sheet, rite) * (100 + site_bonus) // 100
     resonance_amount = award.resonance_amount * percent // 100
     capped = favor_capped_this_week(character_sheet, rite, game_week=week)
@@ -203,7 +204,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             )
         if favor_amount > 0:
             bump_devotion(character_sheet, rite.being, favor_amount)
-        grow_consecration(room_profile, rite)
+        grow_consecration(sites, rite)
     return RiteOutcome(
         performance=performance,
         outcome_name=outcome.name,

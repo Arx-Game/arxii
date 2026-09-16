@@ -213,17 +213,20 @@ the rite consecrates the site in turn.
   `building_over(room_profile)` walks `Area.parent` up from the room's area to the
   BUILDING-level node (self first, cycle-safe) and returns its `Building`;
   `temple_over(room_profile)` → that building's active `TempleDedication` or None.
-- `consecration_bonus_percent(room_profile, being)` — the shrine bonus plus the
-  temple bonus, each only when the site belongs to `being`, each read through
-  `tier_bonus_percent(scope, points)` (the highest `ConsecrationTier` whose
-  `min_points` the site has reached). Stacking is additive: a cathedral's own inner
-  altar is a shrine inside a temple.
+- `sites_of(room_profile, being)` → `ConsecrationSites(shrine, temple)`, each only
+  when the site belongs to `being`; `ConsecrationSites.bonus_percent()` adds the shrine
+  bonus and the temple bonus, each read through `tier_bonus_percent(scope, points)`
+  (the highest `ConsecrationTier` whose `min_points` the site has reached). Stacking
+  is additive: a cathedral's own inner altar is a shrine inside a temple.
+  `consecration_bonus_percent(room_profile, being)` is the one-call form.
 - `apply_rite_award` resolves the room from the scene (or the ceremony's scene),
-  multiplies the tier award by `100 + consecration_bonus_percent` after the
-  FAVORED/feast/birth multipliers, and calls `grow_consecration(room_profile, rite)`
-  in the same transaction: every matching site gains `rite.tier` ×
-  `CONSECRATION_POINTS_PER_RITE_TIER` points. `RiteOutcome.consecration_bonus_percent`
-  reports what applied. A site of another being neither boosts nor grows.
+  resolves the sites once, multiplies the tier award by `100 + bonus` after the
+  FAVORED/feast/birth multipliers, and calls `grow_consecration(sites, rite)` in the
+  same transaction: every site gains `rite.tier` × `CONSECRATION_POINTS_PER_RITE_TIER`
+  points through an `F()` update (race-safe across the game server and web requests),
+  and the held row is set from a `values_list` read, since `refresh_from_db` is a
+  no-op on an identity-mapped row. `RiteOutcome.consecration_bonus_percent` reports
+  what applied. A site of another being neither boosts nor grows.
 - Founding gates on holding the place, never on payment: `found_shrine(room_profile,
   being, founder)` requires the founder's persona to be the room's
   `effective_owner` (`SiteNotHeld`), refuses a room whose one feature slot is taken

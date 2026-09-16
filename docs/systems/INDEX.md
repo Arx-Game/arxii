@@ -8473,9 +8473,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   grant, devotion capped once per rite per `GameWeek` via `favor_capped_this_week`), action
   `PerformWorshipRiteAction` (`worship_rite`), `GET /api/worship/rites/`. **Consecration**
   (`worship/consecration_services.py`, #3778): `shrine_at`, `building_over` (walks `Area.parent`
-  to the BUILDING node), `temple_over`, `consecration_bonus_percent(room_profile, being)` (shrine
-  + temple bonuses, additive, only for sites of that being; `apply_rite_award` multiplies the
-  award by it and calls `grow_consecration`, +`tier` points per site), `found_shrine` /
+  to the BUILDING node), `temple_over`, `sites_of(room_profile, being)` → `ConsecrationSites`
+  (shrine + temple of that being; `.bonus_percent()` adds the two), `consecration_bonus_percent`
+  (the one-call form); `apply_rite_award` multiplies the award by the bonus and calls
+  `grow_consecration(sites, rite)` (+`tier` points per site via `F()`), `found_shrine` /
   `dissolve_shrine` (gate: the room's `effective_owner` persona; one feature slot per room),
   `dedicate_temple` / `revoke_temple` (gate: `owner_persona`, the area holder, or its org
   leader), actions `shrine_found`/`shrine_dissolve`/`temple_dedicate`/`temple_revoke`;

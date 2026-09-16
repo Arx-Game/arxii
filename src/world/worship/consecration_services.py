@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from world.worship.constants import CONSECRATION_POINTS_PER_RITE_TIER, ConsecrationScope
@@ -95,37 +96,67 @@ def tier_bonus_percent(scope: str, points: int) -> int:
     return tier.bonus_percent if tier is not None else 0
 
 
-def consecration_bonus_percent(room_profile: RoomProfile | None, being: WorshippedBeing) -> int:
-    """The summed bonus a rite of ``being`` earns for being performed at ``room_profile``.
+@dataclass(frozen=True)
+class ConsecrationSites:
+    """The sites of one being that cover a room: resolved once, read for the
+    bonus and then grown, so a performance never looks the same rows up twice."""
 
-    Each source counts only when its dedicated being is the rite's being; the
-    two are then added (a cathedral's inner altar), never max()'d.
-    """
-    bonus = 0
+    shrine: ShrineDetails | None = None
+    temple: TempleDedication | None = None
+
+    def bonus_percent(self) -> int:
+        """The shrine bonus plus the temple bonus (a cathedral's inner altar), never max()'d."""
+        bonus = 0
+        if self.shrine is not None:
+            bonus += tier_bonus_percent(ConsecrationScope.SHRINE, self.shrine.consecration_points)
+        if self.temple is not None:
+            bonus += tier_bonus_percent(ConsecrationScope.TEMPLE, self.temple.consecration_points)
+        return bonus
+
+
+def sites_of(room_profile: RoomProfile | None, being: WorshippedBeing) -> ConsecrationSites:
+    """The shrine in the room and the temple over it, each only when dedicated to ``being``."""
     shrine = shrine_at(room_profile)
-    if shrine is not None and shrine.being_id == being.pk:
-        bonus += tier_bonus_percent(ConsecrationScope.SHRINE, shrine.consecration_points)
     temple = temple_over(room_profile)
-    if temple is not None and temple.being_id == being.pk:
-        bonus += tier_bonus_percent(ConsecrationScope.TEMPLE, temple.consecration_points)
-    return bonus
+    return ConsecrationSites(
+        shrine=shrine if shrine is not None and shrine.being_id == being.pk else None,
+        temple=temple if temple is not None and temple.being_id == being.pk else None,
+    )
 
 
-def grow_consecration(room_profile: RoomProfile | None, rite: WorshipRite) -> ConsecrationGrowth:
-    """A rite of a site's own being performed there consecrates it by its tier."""
+def consecration_bonus_percent(room_profile: RoomProfile | None, being: WorshippedBeing) -> int:
+    """The summed bonus a rite of ``being`` earns for being performed at ``room_profile``."""
+    return sites_of(room_profile, being).bonus_percent()
+
+
+def grow_consecration(sites: ConsecrationSites, rite: WorshipRite) -> ConsecrationGrowth:
+    """A rite performed at its being's sites consecrates each by the rite's tier.
+
+    The counters move through an ``F()`` update so two performances landing at
+    the same site at once (the game server and a web request) both count. The
+    identity-mapped row the caller holds is then set from the database by a
+    ``values_list`` read: ``refresh_from_db`` is a no-op on a SharedMemoryModel,
+    since the re-fetch hands back the very same cached instance (ADR-0008).
+    """
     points = rite.kind.tier * CONSECRATION_POINTS_PER_RITE_TIER
     shrine_points = temple_points = 0
-    shrine = shrine_at(room_profile)
-    if shrine is not None and shrine.being_id == rite.being_id:
-        shrine.consecration_points += points
-        shrine.save(update_fields=["consecration_points"])
+    if sites.shrine is not None:
+        _bump_counter(ShrineDetails, sites.shrine, points)
         shrine_points = points
-    temple = temple_over(room_profile)
-    if temple is not None and temple.being_id == rite.being_id:
-        temple.consecration_points += points
-        temple.save(update_fields=["consecration_points"])
+    if sites.temple is not None:
+        _bump_counter(TempleDedication, sites.temple, points)
         temple_points = points
     return ConsecrationGrowth(shrine_points=shrine_points, temple_points=temple_points)
+
+
+def _bump_counter(
+    model: type[ShrineDetails | TempleDedication],
+    site: ShrineDetails | TempleDedication,
+    points: int,
+) -> None:
+    rows = model.objects.filter(pk=site.pk)
+    rows.update(consecration_points=F("consecration_points") + points)
+    site.consecration_points = rows.values_list("consecration_points", flat=True).get()
 
 
 def _holds_room(room: ObjectDB, persona: Persona) -> bool:

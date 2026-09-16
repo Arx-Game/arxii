@@ -17,6 +17,7 @@ from world.worship.constants import (
     GODS_FAVORITE_CHOSEN,
     GODS_FAVORITE_PRINCE,
     GODS_FAVORITE_PRINCESS,
+    ConsecrationScope,
 )
 
 RITES_SKILL_NAME = "Rites"
@@ -299,12 +300,12 @@ def ensure_shrine_kind():
 
 # (scope, name, min_points, bonus_percent): PLACEHOLDER tiers, a temple's bigger.
 _CONSECRATION_TIERS = (
-    ("shrine", "Humble", 0, 5),
-    ("shrine", "Tended", 25, 10),
-    ("shrine", "Hallowed", 100, 20),
-    ("temple", "Founded", 0, 10),
-    ("temple", "Consecrated", 100, 25),
-    ("temple", "Great", 500, 50),
+    (ConsecrationScope.SHRINE, "Humble", 0, 5),
+    (ConsecrationScope.SHRINE, "Tended", 25, 10),
+    (ConsecrationScope.SHRINE, "Hallowed", 100, 20),
+    (ConsecrationScope.TEMPLE, "Founded", 0, 10),
+    (ConsecrationScope.TEMPLE, "Consecrated", 100, 25),
+    (ConsecrationScope.TEMPLE, "Great", 500, 50),
 )
 
 

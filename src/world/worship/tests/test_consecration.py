@@ -44,6 +44,10 @@ from world.worship.models import ShrineDetails, TempleDedication
 from world.worship.rite_services import perform_worship_rite
 
 
+def _points(model, site) -> int:
+    return model.objects.filter(pk=site.pk).values_list("consecration_points", flat=True).get()
+
+
 def _own_room(profile, persona) -> LocationOwnership:
     return LocationOwnership.objects.create(
         parent_type=LocationParentType.ROOM,
@@ -232,10 +236,11 @@ class RiteGrowsTheSiteTests(ConsecrationTestBase):
 
         self.assertEqual(outcome.consecration_bonus_percent, 5 + 10)
         self.assertEqual(outcome.resonance_granted, 10 * 115 // 100)
-        shrine.refresh_from_db()
-        temple.refresh_from_db()
-        self.assertEqual(shrine.consecration_points, 2)  # tier 2 rite
-        self.assertEqual(temple.consecration_points, 2)
+        # Database truth, not the identity-mapped instance (refresh_from_db is a
+        # no-op on a SharedMemoryModel: the re-fetch returns the same object).
+        self.assertEqual(_points(ShrineDetails, shrine), 2)  # tier 2 rite
+        self.assertEqual(_points(TempleDedication, temple), 2)
+        self.assertEqual(shrine.consecration_points, 2)  # and the held row was told
 
     def test_a_rite_of_another_being_neither_gains_nor_grows(self) -> None:
         shrine = ShrineDetailsFactory(
@@ -247,5 +252,4 @@ class RiteGrowsTheSiteTests(ConsecrationTestBase):
 
         self.assertEqual(outcome.consecration_bonus_percent, 0)
         self.assertEqual(outcome.resonance_granted, 10)
-        shrine.refresh_from_db()
-        self.assertEqual(shrine.consecration_points, 0)
+        self.assertEqual(_points(ShrineDetails, shrine), 0)
