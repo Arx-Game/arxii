@@ -29,6 +29,7 @@ from world.worship.editor_services import (
     save_being,
     visibility_of,
 )
+from world.worship.exceptions import BeingNameTaken, CodexPageNameTaken
 from world.worship.factories import (
     BeingNicknameFactory,
     PrayerFactory,
@@ -153,6 +154,18 @@ class SaveBeingTests(TestCase):
         self.assertIsNotNone(being.codex_entry)
         self.assertEqual(visibility_of(being), BeingVisibility.SECRET)
 
+    def test_a_taken_name_or_a_same_named_pantheon_page_is_refused(self) -> None:
+        with self.assertRaises(BeingNameTaken):
+            save_being(_page(self.tradition, name=self.other.name.upper()))
+        self.assertFalse(WorshippedBeing.objects.filter(name__iexact=self.other.name).count() > 1)
+
+        # A page already filed under The Pantheon with this name is someone's lore.
+        first = save_being(_page(self.tradition, visibility=BeingVisibility.PUBLIC))
+        first.codex_entry = None
+        first.save(update_fields=["codex_entry"])
+        with self.assertRaises(CodexPageNameTaken):
+            save_being(_page(self.tradition, visibility=BeingVisibility.PUBLIC), being=first)
+
     def test_a_new_member_learns_what_the_organization_grants(self) -> None:
         entry = CodexEntryFactory(is_public=False)
         OrganizationCodexGrant.objects.create(organization=self.organization, entry=entry)
@@ -255,6 +268,20 @@ class StaffBeingAPITests(TestCase):
         self.assertEqual(updated.json()["gm_notes"], "Keep her patient.")
         self.assertEqual(updated.json()["visibility"], "secret")
         self.assertFalse(BeingRelationship.objects.exists())
+
+    def test_a_partial_write_is_refused_and_a_taken_name_is_a_400(self) -> None:
+        client = self._client(self.staff)
+        patched = client.patch(
+            f"/api/worship/admin/beings/{self.rich.pk}/", {"gm_notes": "x"}, format="json"
+        )
+        taken = client.post(
+            "/api/worship/admin/beings/",
+            {"name": self.poor.name, "tradition": self.tradition.pk},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, 405)
+        self.assertEqual(taken.status_code, 400)
+        self.assertIn("name", taken.json())
 
     def test_obscure_needs_an_organization(self) -> None:
         response = self._client(self.staff).post(

@@ -13,6 +13,7 @@ from django.db.models import OuterRef, QuerySet, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
@@ -26,6 +27,7 @@ from world.stories.pagination import StandardResultsSetPagination
 from world.tarot.models import TarotCard
 from world.worship.constants import ConsecrationScope
 from world.worship.editor_services import save_being
+from world.worship.exceptions import EditorError
 from world.worship.filters import StaffBeingFilterSet
 from world.worship.models import (
     BeingNickname,
@@ -59,6 +61,13 @@ TAB_ROWS = 50
 PREREQUISITE_DEPTH = 6
 
 
+def _save_or_400(page, *, being: WorshippedBeing | None = None) -> WorshippedBeing:
+    try:
+        return save_being(page, being=being)
+    except EditorError as exc:
+        raise ValidationError({"name": exc.user_message}) from exc
+
+
 def _refs(rows) -> list[dict[str, Any]]:
     return [{"id": row.pk, "name": row.name} for row in rows]
 
@@ -71,15 +80,25 @@ class StaffBeingViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_class = StaffBeingFilterSet
     search_fields = ["name", "nicknames__name"]
-    http_method_names = ["get", "post", "put", "patch", "head", "options"]
+    # No PATCH: the page is the truth, and a partial write would silently empty the
+    # lists it omits. A partial request gets a real 405, not a 200 that lost data.
+    http_method_names = ["get", "post", "put", "head", "options"]
 
     def get_queryset(self) -> QuerySet[WorshippedBeing]:
         # The tile's nickname comes as an annotation, not a prefetch: a to_attr
         # on an identity-mapped row would outlive the request.
         first_nickname = BeingNickname.objects.filter(being=OuterRef("pk")).order_by("pk")
+        # The Obscure organization comes the same way, so a 100-tile list costs no
+        # per-row grant query (the tier itself reads off the joined codex entry).
+        obscure_org = OrganizationCodexGrant.objects.filter(entry=OuterRef("codex_entry")).order_by(
+            "pk"
+        )
         return (
             WorshippedBeing.objects.select_related("tradition", "codex_entry")
-            .annotate(first_nickname=Subquery(first_nickname.values("name")[:1]))
+            .annotate(
+                first_nickname=Subquery(first_nickname.values("name")[:1]),
+                obscure_organization_name=Subquery(obscure_org.values("organization__name")[:1]),
+            )
             .order_by("-resonance_pool", "name")
             .distinct()
         )
@@ -92,19 +111,15 @@ class StaffBeingViewSet(viewsets.ModelViewSet):
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = StaffBeingPageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        being = save_being(serializer.to_page())
+        being = _save_or_400(serializer.to_page())
         return Response(StaffBeingPageSerializer(being).data, status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         being = self.get_object()
         serializer = StaffBeingPageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        being = save_being(serializer.to_page(), being=being)
+        being = _save_or_400(serializer.to_page(), being=being)
         return Response(StaffBeingPageSerializer(being).data)
-
-    def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        # The page is the truth: a partial write would silently empty the lists it omits.
-        return self.update(request, *args, **kwargs)
 
     @action(detail=False, methods=["get"])
     def options(self, request: Request) -> Response:

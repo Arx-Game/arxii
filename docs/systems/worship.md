@@ -284,8 +284,9 @@ saved live (no draft gate pre-launch); blank fields simply do not render on the 
   (`StaffBeingListSerializer`: name, first nickname as an annotation, domain chips,
   pool, lifetime worship, visibility, organization; sorted by pool; `search` on name
   and nicknames; `StaffBeingFilterSet` `visibility` / `tradition` / `is_active`),
-  retrieve / create / update = the page (`StaffBeingPageSerializer`; PATCH is refused
-  the same way as PUT since a partial write would empty the lists it omits), `options`
+  retrieve / create / update = the page (`StaffBeingPageSerializer`; no PATCH at all,
+  a 405, since a partial write would empty the lists it omits; a taken being name or a
+  same-named page already under The Pantheon is a 400, never adopted), `options`
   (every picker's choices), and the dashboard actions `overview` (pool, lifetime, most
   devoted, site count, a merged recent-activity feed of grants, rite performances,
   prayers and visions), `worship` (contributors, offerings, most devoted on one tab),

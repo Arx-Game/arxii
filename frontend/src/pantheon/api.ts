@@ -99,7 +99,7 @@ export function fetchCodexRows(id: number): Promise<CodexRow[]> {
 
 /** Characters by name, for the Send-vision recipient picker. */
 export async function searchRosterCharacters(name: string): Promise<RosterCharacterRef[]> {
-  const query = new URLSearchParams({ name, page_size: '20' });
+  const query = new URLSearchParams({ name });
   const data = await getJson<PaginatedResponse<RosterCharacterRef> | RosterCharacterRef[]>(
     withQuery('/api/roster/entries/', query),
     'Failed to search characters.'

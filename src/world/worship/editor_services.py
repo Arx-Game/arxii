@@ -23,6 +23,7 @@ from world.worship.constants import (
     PANTHEON_CODEX_SUBJECT_NAME,
     BeingVisibility,
 )
+from world.worship.exceptions import BeingNameTaken, CodexPageNameTaken
 from world.worship.models import (
     BeingFacet,
     BeingNickname,
@@ -67,10 +68,15 @@ def ensure_codex_entry(being: WorshippedBeing) -> CodexEntry:
     subject, _ = CodexSubject.objects.get_or_create(
         category=category, parent=None, name=PANTHEON_CODEX_SUBJECT_NAME
     )
-    entry, _ = CodexEntry.objects.get_or_create(
+    # (subject, name) is the entry's natural key: a page already sitting under the
+    # pantheon subject with this name is someone's authored lore, never adopted.
+    if CodexEntry.objects.filter(subject=subject, name=being.name).exists():
+        raise CodexPageNameTaken
+    entry = CodexEntry.objects.create(
         subject=subject,
         name=being.name,
-        defaults={"summary": being.description[:300], "lore_content": being.description},
+        summary=being.description[:300],
+        lore_content=being.description,
     )
     being.codex_entry = entry
     being.save(update_fields=["codex_entry"])
@@ -123,10 +129,17 @@ def save_being(page: BeingPage, *, being: WorshippedBeing | None = None) -> Wors
     """Write one edit page. Live at once; there is no draft gate pre-launch."""
     from world.codex.services import grant_organization_entry_to_members  # noqa: PLC0415
 
+    name = page.name.strip()
+    taken = WorshippedBeing.objects.filter(name__iexact=name)
+    if being is not None:
+        taken = taken.exclude(pk=being.pk)
+    if taken.exists():
+        raise BeingNameTaken
+
     with transaction.atomic():
         if being is None:
             being = WorshippedBeing(tradition_id=page.tradition_id)
-        being.name = page.name.strip()
+        being.name = name
         being.description = page.description
         being.domains = page.domains
         being.tradition_id = page.tradition_id

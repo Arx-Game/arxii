@@ -646,6 +646,7 @@ export function BeingEditPage() {
                 role="radio"
                 aria-checked={draft.visibility === tier}
                 data-testid={`visibility-${tier}`}
+                title={VISIBILITY_HINTS[tier]}
                 onClick={() => set('visibility', tier)}
                 className={cn(
                   'rounded-md border p-3 text-left transition-colors hover:bg-muted/50',
@@ -653,7 +654,6 @@ export function BeingEditPage() {
                 )}
               >
                 <div className="font-semibold">{VISIBILITY_LABELS[tier]}</div>
-                <div className="text-xs text-muted-foreground">{VISIBILITY_HINTS[tier]}</div>
               </button>
             ))}
           </div>

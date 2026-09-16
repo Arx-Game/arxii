@@ -73,12 +73,19 @@ class StaffBeingListSerializer(serializers.ModelSerializer):
     def get_domain_chips(self, obj: WorshippedBeing) -> list[str]:
         return _domain_chips(obj.domains)
 
+    # Both read the annotations StaffBeingViewSet.get_queryset adds (no query per tile).
     def get_visibility(self, obj: WorshippedBeing) -> str:
-        return visibility_of(obj)
+        entry = obj.codex_entry
+        if entry is None:
+            return BeingVisibility.SECRET
+        if entry.is_public:
+            return BeingVisibility.PUBLIC
+        return BeingVisibility.OBSCURE if obj.obscure_organization_name else BeingVisibility.SECRET
 
     def get_organization_name(self, obj: WorshippedBeing) -> str:
-        organization = obscure_organization_of(obj)
-        return organization.name if organization is not None else ""
+        if obj.codex_entry is None or obj.codex_entry.is_public:
+            return ""
+        return obj.obscure_organization_name or ""
 
 
 class ResonanceLineSerializer(serializers.Serializer):
