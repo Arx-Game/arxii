@@ -366,6 +366,15 @@ stage clamps to the payload and, when the year is present, adds the sentence "Th
 Misbegotten were born in 980 AS." after the range; nothing else is said at the cap. Existing
 characters keep their recorded age; only the CG ceiling moves.
 
+**Finalize records where play began (#3775, ADR-0303).** Alongside `_set_heritage`
+and `_set_origin_realm`, `_set_beginnings` writes a `ProfileBeginnings` row
+(`source=ProfileBeginningsSource.CHARACTER_CREATION`) linking the sheet's
+`true_profile` to `draft.selected_beginnings`, idempotent via `get_or_create` so a
+re-run finds the existing row. The draft is deleted at the end of finalize, so this row
+becomes the only record of the character's origin afterward; a later recovered memory
+or past life adds a further `ProfileBeginnings` row through the Profile admin rather
+than replacing this one.
+
 **`can_create_character` eligibility gates (#3046, #3726):** staff bypass both
 checks. (1) Email verification is real: it reuses
 `PlayerData.can_apply_for_characters()` (allauth `EmailAddress`, primary +

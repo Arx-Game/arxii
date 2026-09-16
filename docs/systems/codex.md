@@ -56,6 +56,14 @@ is a plain nullable FK on the species row (one entry per species, not many), and
 `_finalize_species_codex` walks `Species.parent` so a subspecies character receives
 its own entry *and* every ancestor's — see `docs/systems/species.md`.
 
+Every grant model carries `holder_roster_entries()`, returning the roster entries of
+everyone already in its group (a Beginnings' holders read `Profile.beginnings` on the
+true profile, a Tradition's read active membership, an Organization's read active
+membership, and so on); `world.codex.services.grant_to_current_holders(grant)` hands the
+grant's entry to each of them and returns how many first learned it (#3775). Species,
+which has no grant table, gets the parallel pair `species_holder_roster_entries(entry)`
+and `grant_entry_to_species_holders(entry)` in the same module.
+
 ---
 
 ## Filing an entry under a second subject (ADR-0275)
@@ -198,6 +206,11 @@ Two callers deliberately create UNCOVERED rows and must keep doing so, because t
   you a lead, not the answer;
 - `CodexTeachingOffer.accept` — the learner has paid AP and now has to make progress.
 
+**A clue and the public flag refuse each other (#3775).** `CodexEntry.clean()` raises when
+`is_public` is set while a `Clue` still targets the entry; `Clue.clean()` raises when a
+new clue's `target_codex_entry` is already public. An entry is reached by discovery or it
+is reached by being public, never both.
+
 **Wired to achievements (#2899).** `CodexEntry` inherits
 `world.achievements.models.DiscoverableContent` (a nullable `discovery_achievement` FK),
 so a codex entry can carry a discovery achievement the same way Technique and
@@ -299,6 +312,8 @@ restored_ap = offer.cancel()
   A subject description must not become the public face of a topic with no readable
   entries, and an all-secret branch must not leak its name
 - Detail view gates `lore_content` and `mechanics_content` behind KNOWN status or `is_public`
+- Staff (`is_staff`) see every entry with full content (#3775); GMs are not staff and read
+  as a player
 
 ---
 
@@ -308,7 +323,23 @@ All models registered with filters, search, and inline editing:
 
 - `CodexCategoryAdmin` - With inline subjects, shows subject count
 - `CodexSubjectAdmin` - With inline entries, filterable by category
-- `CodexEntryAdmin` - Full editing with fieldsets for content, costs, learning, prerequisites, and modifier type link; `filter_horizontal` for prerequisites; inline `CodexEntryFilingInline` for the entry's secondary subject listings
+- `CodexEntryAdmin` - Leads with "Who knows this" (#3775): a fieldset of `is_public`,
+  `is_featured`, `featured_order` follows the basic fields and Content, and every
+  fieldset after it (Costs and learning, Prerequisites, Mechanics link, Item pointer,
+  Display order) is collapsed. A `known_via` list column summarizes how many
+  beginnings/tradition/organization/path/distinction/species/clue rows reach the entry;
+  `ReachListFilter` narrows the list to public,
+  granted to a group, reached by a clue, or unreachable. Actions: Publish (skips any entry a
+  clue still targets), Unpublish (also clears `is_featured`/`featured_order`), Grant to current
+  holders (runs every one of the entry's grant rows through `grant_to_current_holders` plus
+  `grant_entry_to_species_holders`). Inlines: the five grant tables (`BeginningsGrantInline`,
+  `TraditionGrantInline`, `OrganizationGrantInline`, `PathGrantInline`,
+  `DistinctionGrantInline`), each showing a read-only "Holders today" count from
+  `holder_roster_entries()`, plus a read-only `ClueInline` listing the clues that target the
+  entry. `GrantReachOnSaveMixin` applies every newly added grant row to the characters already
+  in its group on save; it is also mixed into `BeginningsAdmin`, `TraditionAdmin`, `PathAdmin`,
+  and `DistinctionAdmin`, and `OrganizationCodexGrantAdmin.save_model` applies the same reach
+  on create.
 - `CharacterCodexKnowledgeAdmin` - Read-only debugging with status/progress fields
 - `CodexClueAdmin` - Clue management with autocomplete to entries
 - `CharacterClueKnowledgeAdmin` - Read-only debugging for found clues

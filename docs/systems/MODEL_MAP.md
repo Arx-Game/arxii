@@ -1337,6 +1337,8 @@
   - drafts <- character_creation.CharacterDraft
   - first_look_offers <- character_creation.DistinctionOffer
   - offer_pins <- character_creation.OfferFirstLook
+  - profiles <- character_sheets.Profile
+  - profile_rows <- character_sheets.ProfileBeginnings
   - codex_grants <- codex.BeginningsCodexGrant
   - ritual_grants <- magic.BeginningsRitualGrant
 
@@ -1788,10 +1790,17 @@
   - origin_realm -> realms.Realm [FK] (nullable)
   - family -> roster.Family [FK] (nullable)
   - tarot_card -> tarot.TarotCard [FK] (nullable)
+  - beginnings -> character_creation.Beginnings [M2M]
 **Pointed to by:**
+  - beginnings_rows <- character_sheets.ProfileBeginnings
   - text_versions <- character_sheets.ProfileTextVersion
   - owning_sheet <- character_sheets.CharacterSheet
   - personas <- scenes.Persona
+
+### ProfileBeginnings
+**Foreign Keys:**
+  - profile -> character_sheets.Profile [FK]
+  - beginnings -> character_creation.Beginnings [FK]
 
 ### ProfileTextVersion
 **Foreign Keys:**
@@ -2218,8 +2227,11 @@
 - `apply_organization_codex_grants(membership) -> 'int' - A new member learns everything their organization grants (#3780). Called`
 - `file_entry_under(entry: 'CodexEntry', subject: 'CodexSubject', *, sort_order: 'int' = 0) -> 'CodexEntryFiling' - Cross-list ``entry`` in ``subject``'s listing, in addition to its home.`
 - `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' - Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
+- `grant_entry_to_species_holders(entry: 'CodexEntry') -> 'int' - Hand a species-owned entry to every character of that species (#3775).`
 - `grant_organization_entry_to_members(grant) -> 'int' - Hand an ``OrganizationCodexGrant``'s entry to every current member; returns`
+- `grant_to_current_holders(grant) -> 'int' - Hand a grant row's entry to everyone already in its group (#3775).`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entries: 'Sequence[RosterEntry]') -> 'list[dict]' - Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
+- `species_holder_roster_entries(entry: 'CodexEntry') -> 'list' - Roster entries of every character whose species lineage owns ``entry`` (#3775).`
 - `unfile_entry(entry: 'CodexEntry', subject: 'CodexSubject') -> 'None' - Remove ``entry``'s filing under ``subject``, if any. No-op otherwise.`
 
 

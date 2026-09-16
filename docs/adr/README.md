@@ -351,4 +351,5 @@ treat those names as hints to confirm, not gospel.
 - [0300 - Scene participation is read off the log, and the entrance is the first line](0300-scene-participation-is-read-off-the-log.md) (#3867; related ADR-0293, #904, #2183, #3069)
 - [0301 - One-way exits are a staff tool; owner and story links stay symmetric](0301-one-way-exits-are-a-staff-tool.md) (#3860; related ADR-0120, ADR-0219)
 - [0302 - Browsing identity is per tab; the account column is the default](0302-browsing-identity-is-per-tab-the-account-column-is-the-default.md) (#3479; amends ADR-0241; reconciled with ADR-0294; related ADR-0247)
+- [0303 - A codex entry is public or reached by a path, and the admin leads with who knows it](0303-a-codex-entry-is-public-or-reached-by-a-path.md) (#3775; relates ADR-0221, ADR-0222)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)
