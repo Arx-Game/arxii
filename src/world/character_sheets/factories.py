@@ -17,9 +17,10 @@ from world.character_sheets.models import (
     Gender,
     MoodOption,
     Profile,
+    ProfileBeginnings,
     Pronouns,
 )
-from world.character_sheets.types import MaritalStatus
+from world.character_sheets.types import MaritalStatus, ProfileBeginningsSource
 
 
 class ProfileFactory(factory_django.DjangoModelFactory):
@@ -263,3 +264,15 @@ class CharacterWithCharacteristicsFactory:
             CharacterFormValueFactory(form=form, trait=trait, option=option)
 
         return data
+
+
+class ProfileBeginningsFactory(factory_django.DjangoModelFactory):
+    """One origin a profile holds (#3775). Defaults to where play began."""
+
+    class Meta:
+        model = ProfileBeginnings
+
+    profile = factory.SubFactory(ProfileFactory)
+    beginnings = factory.SubFactory("world.character_creation.factories.BeginningsFactory")
+    source = ProfileBeginningsSource.CHARACTER_CREATION
+    note = ""
