@@ -91,3 +91,30 @@ ships a real public API for that, switch to it — it would be strictly better
 (no dependence on a specific commit's retention at all). Until then, the
 raw-URL-at-commit-SHA technique above needs no new permissions and no new
 external service, which is why it's the default here.
+
+## Posting images before a PR exists
+
+A design/demo reviewer may need to see screenshots on the **issue** while the
+spec is still waiting for approval. GitHub's web comment uploader is not
+available through the repository-scoped PAT, so use the same immutable-content
+approach before a PR exists:
+
+1. Push the feature branch once so it exists on `origin`:
+   `git push --set-upstream origin <branch>`.
+2. Run `tools/skills/issue-to-merged-pr/scripts/publish-issue-images.sh <issue> <branch> <image>...`.
+   The script verifies a supported image extension, uploads each image through the GitHub
+   Contents API under `.github/issue-evidence/<issue>/`, and posts one issue
+   comment containing Markdown images.
+3. The comment links each image to the full 40-character upload commit SHA at
+   `raw.githubusercontent.com`. Confirm the rendered HTML rather than trusting
+   Markdown alone:
+   `gh api repos/<owner>/<repo>/issues/comments/<id> -H 'Accept: application/vnd.github.html+json' --jq .body_html | grep -c '<img'`.
+4. Keep the upload branch separate from `main` when the images are throwaway.
+   If the feature branch later becomes a PR, the evidence files may be removed
+   before merge; the issue comment still points to the upload commits. Do not
+   upload secrets or player data.
+
+For a safe preview, run `publish-issue-images.sh --dry-run ...` first. The
+remote branch check is intentional: it prevents an accidental upload to a
+misspelled branch. This path is for review/demo images only; it does not replace
+the required visual reviewer or its evidence report.
