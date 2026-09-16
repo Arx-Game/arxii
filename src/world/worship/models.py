@@ -103,6 +103,12 @@ class WorshippedBeing(SharedMemoryModel):
         help_text="Rare: the NPC sheet a manifested god is played through.",
     )
     is_active = models.BooleanField(default=True)
+    gm_notes = models.TextField(
+        blank=True,
+        default="",
+        help_text="Staff-only prose: continuity, who this being was in Arx 1. Never shown "
+        "to players (#3780).",
+    )
     tarot_cards = models.ManyToManyField(
         "arxii.TarotCard",
         blank=True,

@@ -166,6 +166,20 @@ export function StaffHubPage() {
           </Card>
         </Link>
 
+        <Link to="/staff/pantheon">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>Deity Editor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Author the pantheon: gods, nicknames, feast days, relationships, visibility, and
+                each being&apos;s tracking dashboard.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link to="/staff/missions/givers">
           <Card className="cursor-pointer transition-colors hover:bg-muted/50">
             <CardHeader>

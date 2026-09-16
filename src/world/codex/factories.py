@@ -13,6 +13,7 @@ from world.codex.models import (
     CodexSubject,
     CodexTeachingOffer,
     DistinctionCodexGrant,
+    OrganizationCodexGrant,
     PathCodexGrant,
     TraditionCodexGrant,
 )
@@ -145,4 +146,12 @@ class TraditionCodexGrantFactory(DjangoModelFactory):
         model = TraditionCodexGrant
 
     tradition = factory.SubFactory("world.magic.factories.TraditionFactory")
+    entry = factory.SubFactory(CodexEntryFactory)
+
+
+class OrganizationCodexGrantFactory(DjangoModelFactory):
+    class Meta:
+        model = OrganizationCodexGrant
+
+    organization = factory.SubFactory("world.societies.factories.OrganizationFactory")
     entry = factory.SubFactory(CodexEntryFactory)

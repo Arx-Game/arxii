@@ -1688,7 +1688,7 @@ Time/effort resource economy with regeneration via cron. The most complete gate 
 ### Codex
 Lore storage and character knowledge tracking.
 
-- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`,
+- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`, `OrganizationCodexGrant` (#3780: an entry an organization's active membership knows, the Deity Editor's Obscure tier; applied on `join_organization`),
   `CodexEntryFiling` (secondary cross-listing of an entry under a second subject;
   ADR-0275)
 - **Key Methods:** Character learning from starting choices or teaching; `services.
@@ -8492,7 +8492,15 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   message, `acquire_clue` for a CODEX clue, episode needs a `StoryParticipation`), actions
   `pray` / `vision_send` (staff), telnet `pray` / `vision`, `GET /api/worship/prayers/`,
   `GET|POST /api/worship/visions/`; `fire_divine_intervention(sheet, *, trigger, trigger_event,
-  scene, being)` is the shared check `maybe_fire_divine_intervention` now calls. CG: `CharacterDraft.public_worship`/
+  scene, being)` is the shared check `maybe_fire_divine_intervention` now calls. **Deity Editor**
+  (`worship/editor_services.py`, #3780): `BeingPage` + `save_being(page, *, being=None)` (one
+  transaction: being, Codex page via `ensure_codex_entry`, quote, `is_public`, the Obscure
+  `OrganizationCodexGrant`, satellite sets replaced wholesale), `visibility_of` /
+  `obscure_organization_of` (`BeingVisibility`); `WorshippedBeing.gm_notes`; staff API
+  `/api/worship/admin/beings/` (`StaffBeingViewSet`: tiles sorted by pool, `StaffBeingFilterSet`
+  visibility filter, nickname search, page create/update, `options`, and the dashboard actions
+  `overview` / `worship` / `sites` / `prayers` / `visions` / `relics` / `codex`); web
+  `frontend/src/pantheon/` at `/staff/pantheon`. CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.

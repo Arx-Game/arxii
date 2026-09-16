@@ -32,6 +32,16 @@
   being (#3776). Pure association, no cap, no claim of canon. Read by birth favor (below);
   distinct from a character's own single `tarot_card`. _Avoid_: the being's card (there may
   be several, and belief is not fact).
+- **Deity Editor** — the staff tool that authors the pantheon (#3780): one long edit
+  page per being, saved live, and a per-being tracking dashboard. Lives in
+  `worship/editor_services.py` and `frontend/src/pantheon/`. _Avoid_: "god admin",
+  "pantheon builder".
+- **Visibility tier** — a being's Codex tier as the editor reads it (`BeingVisibility`,
+  #3780): **Public** (`is_public`), **Obscure** (not public, one organization's membership
+  knows it through an `OrganizationCodexGrant`), **Secret** (a Clue must be found; also a
+  being with no page yet). Never a field on the being.
+- **GM notes** — `WorshippedBeing.gm_notes` (#3780): staff-only prose, never shown to
+  players; prose, never a link, since no Arx 1 object exists here to link to.
 - **Being codex entry** — `WorshippedBeing.codex_entry`, the being's own Codex page,
   following the `Gift`/`Technique`/`HouseAspectOption` precedent (#3776). Visibility
   (public / known-to-some / researchable) is read ENTIRELY through the linked entry's

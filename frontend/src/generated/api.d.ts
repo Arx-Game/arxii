@@ -24011,6 +24011,178 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/admin/beings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_list'];
+    put?: never;
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    post: operations['worship_admin_beings_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_retrieve'];
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    put: operations['worship_admin_beings_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/codex/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_codex_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/overview/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_overview_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/prayers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_prayers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/relics/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_relics_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/sites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_sites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/visions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_visions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/{id}/worship/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Beings as the Deity Editor sees them. Sorted by pool, the way the list shows them. */
+    get: operations['worship_admin_beings_worship_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/admin/beings/options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Handler method for HTTP 'OPTIONS' request. */
+    get: operations['worship_admin_beings_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/beings/': {
     parameters: {
       query?: never;
@@ -30145,6 +30317,20 @@ export interface components {
       /** Format: double */
       percentage: number;
       zone: components['schemas']['ZoneEnum'];
+    };
+    FeastDayLine: {
+      ic_month: number;
+      ic_day: number;
+      name: string;
+      /** @default  */
+      lore: string;
+    };
+    FeastDayLineRequest: {
+      ic_month: number;
+      ic_day: number;
+      name: string;
+      /** @default  */
+      lore: string;
     };
     /**
      * @description * `background` - Background
@@ -37971,6 +38157,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['SpreadableDeed'][];
     };
+    PaginatedStaffBeingListList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StaffBeingList'][];
+    };
     PaginatedStaffingProfileLineList: {
       /** @example 123 */
       count: number;
@@ -41945,9 +42146,16 @@ export interface components {
        *     * `0` - Neutral
        *     * `-1` - Negative
        */
-      valence?: components['schemas']['ValenceEnum'];
+      valence?: components['schemas']['ReactionEmojiValenceEnum'];
       sort_order?: number;
     };
+    /**
+     * @description * `1` - Positive
+     *     * `0` - Neutral
+     *     * `-1` - Negative
+     * @enum {integer}
+     */
+    ReactionEmojiValenceEnum: 1 | 0 | -1;
     /** @description The realm's two boards. Rows carry a name and a phrase; no numeric field exists. */
     RealmBoards: {
       renown: components['schemas']['RankingRow'][];
@@ -42138,6 +42346,26 @@ export interface components {
       /** @description Order for display purposes (lower values appear first) */
       readonly display_order: number;
     };
+    RelationshipLine: {
+      other_being: number;
+      valence: components['schemas']['RelationshipLineValenceEnum'];
+      /** @default  */
+      public_story: string;
+    };
+    RelationshipLineRequest: {
+      other_being: number;
+      valence: components['schemas']['RelationshipLineValenceEnum'];
+      /** @default  */
+      public_story: string;
+    };
+    /**
+     * @description * `ally` - Ally
+     *     * `rival` - Rival
+     *     * `feud` - Feud
+     *     * `unknown` - Unclear
+     * @enum {string}
+     */
+    RelationshipLineValenceEnum: 'ally' | 'rival' | 'feud' | 'unknown';
     /** @description Serializer for RelationshipTier. */
     RelationshipTier: {
       readonly id: number;
@@ -42450,6 +42678,20 @@ export interface components {
       | 'PENANCE'
       | 'FALL_CONVERSION'
       | 'WORSHIP_RITE';
+    ResonanceLine: {
+      resonance: number;
+      tier: components['schemas']['ResonanceLineTierEnum'];
+    };
+    ResonanceLineRequest: {
+      resonance: number;
+      tier: components['schemas']['ResonanceLineTierEnum'];
+    };
+    /**
+     * @description * `favored` - Favored
+     *     * `associated` - Associated
+     * @enum {string}
+     */
+    ResonanceLineTierEnum: 'favored' | 'associated';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -44081,6 +44323,79 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /** @description A tile on the god list. */
+    StaffBeingList: {
+      readonly id: number;
+      readonly name: string;
+      readonly tradition_name: string;
+      readonly nickname: string;
+      readonly domain_chips: string[];
+      /** @description Spendable accumulated worship (miracles draw here, #2360). */
+      readonly resonance_pool: number;
+      /** @description Monotonic total worship ever received (audit). */
+      readonly lifetime_worship: number;
+      readonly visibility: string;
+      readonly organization_name: string;
+      readonly is_active: boolean;
+    };
+    /** @description The edit page, both directions: what staff read and what they save. */
+    StaffBeingPage: {
+      readonly id: number;
+      name: string;
+      /** @default  */
+      description: string;
+      /** @default  */
+      domains: string;
+      tradition: number;
+      /** @default true */
+      is_active: boolean;
+      /** @default  */
+      quote: string;
+      nicknames?: string[];
+      resonances?: components['schemas']['ResonanceLine'][];
+      facets?: number[];
+      feast_days?: components['schemas']['FeastDayLine'][];
+      tarot_cards?: number[];
+      relationships?: components['schemas']['RelationshipLine'][];
+      /** @default secret */
+      visibility: components['schemas']['StaffBeingPageVisibilityEnum'];
+      organization?: number | null;
+      /** @default  */
+      gm_notes: string;
+      readonly resonance_pool: number;
+      readonly codex_entry: number | null;
+    };
+    /** @description The edit page, both directions: what staff read and what they save. */
+    StaffBeingPageRequest: {
+      name: string;
+      /** @default  */
+      description: string;
+      /** @default  */
+      domains: string;
+      tradition: number;
+      /** @default true */
+      is_active: boolean;
+      /** @default  */
+      quote: string;
+      nicknames?: string[];
+      resonances?: components['schemas']['ResonanceLineRequest'][];
+      facets?: number[];
+      feast_days?: components['schemas']['FeastDayLineRequest'][];
+      tarot_cards?: number[];
+      relationships?: components['schemas']['RelationshipLineRequest'][];
+      /** @default secret */
+      visibility: components['schemas']['StaffBeingPageVisibilityEnum'];
+      organization?: number | null;
+      /** @default  */
+      gm_notes: string;
+    };
+    /**
+     * @description * `public` - Public
+     *     * `obscure` - Obscure
+     *     * `secret` - Secret
+     * @enum {string}
+     */
+    StaffBeingPageVisibilityEnum: 'public' | 'obscure' | 'secret';
     /** @description Staff authoring: a building kind's baseline crew (#2827 phase 1). */
     StaffingProfile: {
       readonly id: number;
@@ -47155,13 +47470,6 @@ export interface components {
       basis: string;
       presumed_importance: number;
     };
-    /**
-     * @description * `1` - Positive
-     *     * `0` - Neutral
-     *     * `-1` - Negative
-     * @enum {integer}
-     */
-    ValenceEnum: 1 | 0 | -1;
     /** @description Inline serializer for the viewer's capabilities in a covenant. */
     ViewerCapabilities: {
       can_invite: boolean;
@@ -80837,6 +81145,284 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedWorldBuilderRoomHitList'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description A search term. */
+        search?: string;
+        tradition?: number;
+        /**
+         * @description * `public` - Public
+         *     * `obscure` - Obscure
+         *     * `secret` - Secret
+         */
+        visibility?: 'obscure' | 'public' | 'secret';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStaffBeingListList'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffBeingPageRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffBeingPageRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_codex_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_overview_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_prayers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_relics_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_sites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_visions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_worship_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
         };
       };
     };

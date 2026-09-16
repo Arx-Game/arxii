@@ -76,6 +76,21 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   and the sheet's emerald `VisionCard` on the web. Rarity is the GM's restraint, not a rule.
   Every magnitude is PLACEHOLDER. The near-death read is a light touch on TehomCD's
   Soulfray/vitals domain, flagged on the PR.
+- **Deity Editor (#3780, 2026-09-16):** the staff surface over the whole stack, at
+  `/staff/pantheon`. A tile grid sorted by resonance pool (the number beside each name),
+  searchable by name or nickname, filterable by Codex tier; "+ Add God" opens the edit
+  page. The edit page is one long page, never a wizard: collapsible sections (Identity,
+  Nicknames, Portfolio with resonances and favored facets, Feast Days, Tarot, Relationships,
+  Visibility, GM Notes) with a highlight dot while an optional field is unfilled, no explainer
+  copy anywhere (each "+ Add" carries its explanation as a hover tooltip), saved live with no
+  draft gate pre-launch. Visibility is the linked Codex entry's tier: Public, Obscure (known to
+  one organization's membership through the new `OrganizationCodexGrant`, the bridge #3776
+  deferred to implementation), or Secret. The per-being tracking dashboard puts the pool and
+  "Send Vision…" together in the header and tabs Overview, Worship (contributors, offerings
+  and most devoted on one page), Temples & Shrines, Prayers (dire / act of devotion / answered
+  badges), Visions, Relics, and Codex Entries (the being's page, its prerequisite chain and
+  the entries its visions' clues open, with which clue unlocks each). Only Dan and TehomCD use
+  it; density over hand-holding.
 - **Miracles / divine intervention (#2360):** gods spend `resonance_pool` on authored
   `Miracle` effects that fire automatically for a high-devotion PC in danger, plus
   faith-colored Audere Majora crossing variants.

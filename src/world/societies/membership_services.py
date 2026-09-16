@@ -161,6 +161,10 @@ def join_organization(
         organization=organization, persona=persona, rank=rank, vacancy=vacancy
     )
     sync_covert_membership_secret(membership)
+    # #3780: what the organization knows, its new member now knows.
+    from world.codex.services import apply_organization_codex_grants  # noqa: PLC0415
+
+    apply_organization_codex_grants(membership)
     return membership
 
 

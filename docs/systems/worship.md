@@ -25,7 +25,12 @@ issue bodies; the model decision is ADR-0132.
   `codex.CodexEntry`, `on_delete=PROTECT`, `related_name="worshipped_beings"` —
   mirrors `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`;
   visibility (Public/Obscure/Secret) is read entirely through the linked entry's
-  `is_public` tier, no separate visibility field on `WorshippedBeing` itself).
+  `is_public` tier, no separate visibility field on `WorshippedBeing` itself; #3780
+  spells the three tiers out as `BeingVisibility` in `editor_services.visibility_of`:
+  PUBLIC when the entry is public, OBSCURE when an `OrganizationCodexGrant` names the
+  organization whose membership knows it, SECRET otherwise or when no entry exists).
+  `gm_notes` (#3780): staff-only prose (continuity, who the being was in Arx 1), never
+  shown to players.
   Reuses `CodexEntry.quote` (#3776 Task 10, `codex/models.py`) for free: an optional
   italic intro line shown atop any entry's Codex page (blank hides it) — added as a
   general `CodexEntry` field (benefits every entry type, not worship-specific) so a
@@ -257,6 +262,38 @@ not a mechanic; three independent, stackable conditions make one count.
 - Delivery presentation: a VISIONS message is the one narrative category with its own
   tag and colour, `|G[VISION]|n` on telnet (Arx 1's green), and the frame carries
   `category` so the web feed files it as its own `vision` kind; see the narrative doc.
+
+**Deity Editor** (`worship/editor_services.py`, `staff_serializers.py`, `staff_views.py`,
+`filters.py`; #3780) — the staff tool that authors everything above. One long edit page,
+saved live (no draft gate pre-launch); blank fields simply do not render on the Codex.
+
+- `BeingPage` (dataclass) is the page: identity (`name`, `description`, `domains`,
+  `tradition_id`, `is_active`), the Codex `quote`, `nicknames`, `resonances`
+  (`ResonanceLine`), `facet_ids`, `feast_days` (`FeastDayLine`), `tarot_card_ids`,
+  `relationships` (`RelationshipLine`, from this being's side), `visibility`,
+  `organization_id`, `gm_notes`. `save_being(page, *, being=None)` writes it in one
+  transaction: the being, then its Codex page (`ensure_codex_entry` creates one under
+  the seeded "The World" / "The Pantheon" subject when a public or obscure tier needs
+  it; a secret being keeps whatever it has), the quote and `is_public`, the Obscure
+  grant (`OrganizationCodexGrant`, handed to current members through
+  `codex.services.grant_organization_entry_to_members`), and every satellite set
+  replaced wholesale (the page is the truth; relationships are stored once per pair in
+  canonical id order, so this being's page owns every pair it is part of).
+- `visibility_of(being)` / `obscure_organization_of(being)`: the read side.
+- API (`/api/worship/admin/beings/`, staff only, `StaffBeingViewSet`): list = tiles
+  (`StaffBeingListSerializer`: name, first nickname as an annotation, domain chips,
+  pool, lifetime worship, visibility, organization; sorted by pool; `search` on name
+  and nicknames; `StaffBeingFilterSet` `visibility` / `tradition` / `is_active`),
+  retrieve / create / update = the page (`StaffBeingPageSerializer`; no PATCH at all,
+  a 405, since a partial write would empty the lists it omits; a taken being name or a
+  same-named page already under The Pantheon is a 400, never adopted), `options`
+  (every picker's choices), and the dashboard actions `overview` (pool, lifetime, most
+  devoted, site count, a merged recent-activity feed of grants, rite performances,
+  prayers and visions), `worship` (contributors, offerings, most devoted on one tab),
+  `sites`, `prayers`, `visions`, `relics`, `codex` (the being's page, its prerequisite
+  chain, entries its visions' clues open; per entry the tier, the organizations that
+  know it and the clues that target it). Web: `frontend/src/pantheon/` at
+  `/staff/pantheon`.
 
 **Consecration services** (`worship/consecration_services.py`, #3778) — shrines and
 temples are places, not fees: a site of the rite's own being boosts the award, and

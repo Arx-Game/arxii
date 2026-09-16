@@ -2148,6 +2148,7 @@
   - path_grants <- codex.PathCodexGrant
   - distinction_grants <- codex.DistinctionCodexGrant
   - tradition_grants <- codex.TraditionCodexGrant
+  - organization_grants <- codex.OrganizationCodexGrant
   - house_aspect_options <- societies.HouseAspectOption
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
@@ -2197,6 +2198,11 @@
   - distinction -> distinctions.Distinction [FK]
   - entry -> codex.CodexEntry [FK]
 
+### OrganizationCodexGrant
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - entry -> codex.CodexEntry [FK]
+
 ### PathCodexGrant
 **Foreign Keys:**
   - path -> classes.Path [FK]
@@ -2208,8 +2214,11 @@
   - entry -> codex.CodexEntry [FK]
 
 ### Service Functions
+- `active_member_roster_entries(organization) -> 'list' - The roster entries of an organization's active members (#3780).`
+- `apply_organization_codex_grants(membership) -> 'int' - A new member learns everything their organization grants (#3780). Called`
 - `file_entry_under(entry: 'CodexEntry', subject: 'CodexSubject', *, sort_order: 'int' = 0) -> 'CodexEntryFiling' - Cross-list ``entry`` in ``subject``'s listing, in addition to its home.`
 - `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' - Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
+- `grant_organization_entry_to_members(grant) -> 'int' - Hand an ``OrganizationCodexGrant``'s entry to every current member; returns`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entries: 'Sequence[RosterEntry]') -> 'list[dict]' - Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
 - `unfile_entry(entry: 'CodexEntry', subject: 'CodexSubject') -> 'None' - Remove ``entry``'s filing under ``subject``, if any. No-op otherwise.`
 
@@ -9235,6 +9244,7 @@
   - anchor_prompts <- character_creation.OriginTemplateSlot
   - connection_rows <- character_creation.CharacterOriginSlot
   - enemies_of <- character_sheets.CharacterEnemy
+  - codex_grants <- codex.OrganizationCodexGrant
   - child_orgs <- societies.Organization
   - ranks <- societies.OrganizationRank
   - gift_grants <- societies.OrganizationGiftGrant
