@@ -123,7 +123,9 @@ async function mockPantheon(page: Page): Promise<void> {
     const path = url.pathname;
     if (path === '/api/worship/admin/beings/') {
       const wanted = url.searchParams.get('visibility');
-      const results = wanted ? TILES.filter((t) => t.visibility === wanted) : TILES;
+      // Sorted by pool the way the server sorts them (StaffBeingViewSet.get_queryset).
+      const sorted = [...TILES].sort((a, b) => b.resonance_pool - a.resonance_pool);
+      const results = wanted ? sorted.filter((t) => t.visibility === wanted) : sorted;
       await route.fulfill({ json: { count: results.length, next: null, previous: null, results } });
     } else if (path === '/api/worship/admin/beings/options/') {
       await route.fulfill({ json: OPTIONS });
@@ -337,8 +339,8 @@ test.describe('Deity Editor (#3780)', () => {
     await page.goto('/staff/pantheon');
     await expect(page.getByRole('heading', { name: 'Deity Editor' })).toBeVisible();
     await expect(page.getByTestId('god-tile')).toHaveCount(3);
-    await expect(page.getByTestId('god-tile').first()).toContainText('Fleshreaper');
-    await expect(page.getByTestId('god-tile').first()).toContainText('48,200');
+    await expect(page.getByTestId('god-tile').first()).toContainText('Tyrant of Chains');
+    await expect(page.getByTestId('god-tile').first()).toContainText('190,500');
     await expect(page.getByTestId('add-god')).toHaveAttribute('href', '/staff/pantheon/new');
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/screen-1-list-1280.png`, fullPage: true });
 
@@ -385,6 +387,8 @@ test.describe('Deity Editor (#3780)', () => {
       ['Codex Entries', 'screen-8-codex-1280.png', 'codex-row'],
     ] as const) {
       await page.getByRole('tab', { name: tab }).click();
+      // Let the tab strip settle before a still, so the highlight sits under the shown tab.
+      await expect(page.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
       if (marker) await expect(page.getByTestId(marker).first()).toBeVisible();
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/${shot}`, fullPage: true });
     }
