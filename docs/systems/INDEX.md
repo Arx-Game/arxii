@@ -688,16 +688,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 Anchored, nestable reply threads for scene, place, and fixed-party whisper interactions,
 plus the reachability rule (#3787).
 
-- **Models:** `scenes.InteractionThread`, anchored at the row it answers
-  (`anchor_interaction` + `anchor_timestamp`, both required, `db_constraint=False` plus a
-  denormalized timestamp because `arxii_interaction` is range-partitioned on a composite
-  key - `InteractionReceiver` is the precedent, see ADR-0293 for why `InteractionAction` is
-  not), with `parent` naming the thread its anchor belongs to and `root` denormalizing the
-  top of the nesting tree; nullable `scenes.Interaction.thread`, which now means "what I am
-  an answer to", not "which pile I am in". The anchor is NOT a member of its own thread,
-  and `unique_thread_per_anchor` makes two answers to the same row one exchange. There is
-  no `InteractionReply` bridge: an edge table was built and removed at review (ADR-0293,
-  decision 4).
+- **Models:** `scenes.InteractionThread`, whose members are replies and whose anchor is
+  derived as the first member with `thread_services.thread_anchor_ids` (`Min("id")`), with
+  `parent` naming the enclosing thread and the top of the nesting tree derived by walking
+  `parent`; nullable `scenes.Interaction.thread` identifies the thread containing an
+  answer. The anchor is a member of its own thread. No dedicated anchor, timestamp, or
+  top-of-tree fields or one-thread-per-anchor constraint are stored, and there is no
+  `InteractionReply` bridge (ADR-0293, decision 4).
 - **Write target:** serializer-only `reply_to` (`id` + RFC3339 `timestamp`).
 - **Read payload:** `thread_id`, `root_thread_id` (the exchange key a nested back-and-forth
   groups by; null when the row's own thread is the root), `reply_to` (derived from the
@@ -705,13 +702,12 @@ plus the reachability rule (#3787).
   delivery rules remain canonical.
 - **Reachability (#3787):** `world.scenes.reachability.persona_can_receive` is the shared
   predicate behind both the tagging refusal (`UnreachableError`, `create_interaction`) and
-  the reply refusal (`InteractionThreadError`, `assign_interaction_thread`) - a private
-  venue's reply target is refused, never widened, and both refusals preserve the writer's
-  draft. Its rules are also deliberately mirrored client-side, in
-  `frontend/src/scenes/replyReachability.ts` (#3787) and `frontend/src/scenes/tagReachability.ts`
-  (#3810), so the composer can give a pre-emptive refusal before the server's own
-  authoritative check runs; that mirroring is intentional and kept in step with
-  `persona_can_receive`, not eliminated. See ADR-0293.
+  the reply refusal (`InteractionThreadError`, `assign_interaction_thread`). A Place-held
+  draft may answer a Scene-held target in the same scene; the reverse direction remains
+  refused. Both refusals preserve the writer's draft; reply refusals currently carry no
+  venue hint. `tagReachability.ts` (#3810) mirrors tagging for a pre-emptive composer
+  check. `replyReachability.ts` (#3787) remains permissive because there is no ratified
+  pre-emptive refusal copy; the server remains authoritative. See ADR-0293.
 - **Targeting vs. grouping (#3787):** `target_persona_ids` drives the involvement mark and
   `attention.ts`'s `direct` badge tier; it does not drive reader grouping - `getThreadKey`
   keys `action`/`outcome` mode rows by scene, not by target, so a multi-target combat round

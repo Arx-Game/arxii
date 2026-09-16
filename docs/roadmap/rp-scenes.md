@@ -417,14 +417,15 @@ combat action records whom it targeted.
 - **Grouping stays whole.** `getThreadKey` (`frontend/src/scenes/hooks/useThreading.ts`)
   keys `action`/`outcome` rows by scene, never by target, so a multi-target round stays
   one reader group instead of fragmenting per victim.
-- **The parent edge is the thread's anchor.** `InteractionThread` gained
-  `anchor_interaction` + `anchor_timestamp` (the row every member answers, both required),
-  a written `parent` (the thread the anchor itself belongs to, so answering a reply nests)
-  and a denormalized `root` (the top of the tree). A row's `thread` now means "what I am an
-  answer to"; the answered row is reachable as the anchor and is not a member. So
-  `get_reply_to()` reads the chip's `{id, timestamp}` straight off the joined thread row
-  with no join to the partitioned table and no per-row handler, and the list query budgets
-  went DOWN. Rendered as the reader's parent chip (web only - telnet can only quote). See
+- **The parent edge is derived from thread membership.** `InteractionThread` stores
+  members plus a `parent` self-FK. `thread_services.thread_anchor_ids` derives each
+  thread's anchor as its first member (`Min("id")`); the anchor is a member, not a
+  separate column. Answering a reply nests a child thread, and the top of the tree is
+  derived by walking `parent` rather than stored separately. A row's `thread` identifies
+  the thread containing its answer. `get_reply_to()` derives the parent from these
+  relationships and batch-checks the parent with `visible_to`; its `{id, timestamp}`
+  payload comes from the parent interaction. Rendered as the reader's parent chip (web
+  only - telnet can only quote). See
   [`scene-interaction-threads.md`](../systems/scene-interaction-threads.md) and ADR-0293,
   decision 4, which records the per-reply edge table (`InteractionReply`) that was built
   and then rejected at review.
@@ -439,10 +440,10 @@ combat action records whom it targeted.
 - **Reachability.** `world.scenes.reachability.persona_can_receive` is the one shared
   predicate behind two refusals: tagging a persona outside the audience
   (`UnreachableError`) and replying from a venue that cannot reach its target
-  (`InteractionThreadError`, reusing the existing holder-mismatch check with a typed
-  shape and a stated venue hint instead of an opaque string). Both refuse rather than
-  widen the audience, both preserve the writer's draft, and both are telnet-parity
-  (the parent chip alone is web only). See ADR-0293.
+  (`InteractionThreadError`). A Place-held draft may answer a Scene-held target in the
+  same scene; the reverse direction remains refused. Both refusals preserve the
+  writer's draft and use the typed server error; reply refusals currently carry no
+  venue hint. They are telnet-parity (the parent chip alone is web only). See ADR-0293.
 
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode

@@ -88,16 +88,23 @@ be a live participant/opponent); the narrative "is this persona standing somewhe
 pose actually reaches" question does not apply to a system-authored record of a mechanical
 outcome.
 
-**Decision 4: The parent edge is the thread's anchor, not a table of edges.**
-`InteractionThread` carries `anchor_interaction` + `anchor_timestamp`, both required: the
-row every member of that thread answers. The anchor is not itself a member. The `parent`
-self-FK names the thread the anchor row belongs to when the anchor is itself a reply,
-which is what makes this thread a nested one, and `root` denormalizes the top of that
-tree so a reader groups a whole exchange without walking parents. A row's `thread`
-therefore means "what I am an answer to", not "which pile I am in"; root poses keep
-`thread_id` null. `parent(row) = row.thread.anchor`, and
-`exchange(row) = row.thread.root or row.thread` (`world/scenes/models.py`,
-`world/scenes/thread_services.py`).
+**Decision 4: The parent edge is derived from thread membership, not a table of edges.**
+`InteractionThread` stores the members of an exchange and its `parent` self-FK. The
+anchor is the first member of the thread, derived by `thread_services.thread_anchor_ids`
+with `Min("id")`; it is a member, not a separate anchor field or timestamp column. When
+an unanswered reply is answered, that reply becomes the
+first member of a nested child thread, whose `parent` is the enclosing thread. The top of
+the tree is derived by walking `parent` (`thread_services.thread_roots`), not copied to a
+separate field. An `Interaction.thread` therefore identifies the thread containing the
+answer; an unanswered root pose keeps it null. The reader derives the answered row from
+the first member of the row's thread, or from the first member of its parent thread when
+the row itself is that first member.
+
+`thread_anchor_ids` and `thread_roots` are the canonical derivations used by the
+serializer, live push, and play views. There is no one-thread-per-anchor database
+constraint: two answers to the same row join the same thread through the existing
+membership assignment, while nested replies use `parent`. The holder-shape check on the
+thread still enforces scene, place, and fixed-party-whisper context.
 
 *Rejected alternative:* a per-reply edge table (`InteractionReply`), one row per reply
 holding a child reference and a parent reference with their own denormalized timestamps.
@@ -105,43 +112,43 @@ It was built, reviewed and merged into this branch, then removed at maintainer r
 Rejected because a flat membership container plus a separate edge table is two mechanisms
 for one topology, and nesting expresses that topology with one. The duplication showed up
 in the rows themselves: N people answering the same blow wrote N edge rows each repeating
-the same fact, where one anchored thread carries it once. A reply to a reply is a nested
-thread, the way a mailing list nests, not a new data structure.
+the same fact, where one thread carries the membership once. A reply to a reply is a
+nested thread, the way a mailing list nests, not a new data structure.
 
-Two things fell out of the anchored shape, and they are evidence for the decision rather
-than decoration. First, `get_reply_to` needs no join and no per-row handler: the chip's
-whole payload is `{id, timestamp}`, and both are columns on the thread row the serializer
-already joins in, so `InteractionReplyHandler` and the `list()` priming that existed only
-to feed it were both deleted and the list query budgets went down. Second,
-`InteractionThread.parent` had existed since #3757 with no writer anywhere in the
-codebase, a self-FK nothing ever set. A field designed and half-built is a strong hint
-about the shape the model was already reaching for, and the edge table was building the
-other half of it somewhere else.
+Two things fell out of this shape, and they are evidence for the decision rather than
+decoration. First, `get_reply_to` derives the parent id from the thread-member aggregates
+and the enclosing thread, then performs a page-wide `visible_to` lookup. The chip's whole
+payload is `{id, timestamp}`, with the timestamp read from the parent interaction; no
+`InteractionReplyHandler` or per-row edge lookup is needed. Second,
+`InteractionThread.parent` had existed since #3757 with no writer anywhere in the codebase,
+a self-FK nothing ever set. A field designed and half-built was a strong hint about the
+shape the model was already reaching for, and the edge table was building the other half
+of it somewhere else.
 
-**The partition constraint still governs the anchor.** `arxii_interaction` is monthly
-range-partitioned with a composite primary key `(id, timestamp)`, so an ordinary
-single-column database FK to its id cannot exist at all. The anchor is therefore
-`db_constraint=False` paired with a denormalized `anchor_timestamp`, and
-`unique_thread_per_anchor` over that pair is what makes "one thread per answered row"
-true in the database rather than only in the service.
+**The partition constraint still governs parent lookup.** `InteractionThread` stores no
+foreign key or denormalized timestamp to the partitioned `Interaction` table. When a
+reader needs the parent chip, the parent interaction is resolved with its `(id, timestamp)`
+identity and checked by `visible_to`; `InteractionReceiver` remains the precedent for
+cross-partition references that do store a timestamp. `InteractionAction` is not a
+precedent for adding one.
 
-**The two channels gate the parent edge differently, and the WS gate is the weaker
-one.** REST gates it per viewer on `visible_to(request.user)`
-(`InteractionSerializer.get_reply_to`). The live WebSocket push has no single viewer, so
-it uses a structural gate evaluated once (`interaction_services._reply_parent_payload`):
-the parent goes on the wire only when it is room-heard in the same scene, using the
-shared `managers.ROOM_HEARD` classification. State that gate's guarantee exactly: **it
-discloses strictly less than the live push it rides on already delivers to that same
-audience.** It does NOT match per-recipient REST visibility, and two cases send a parent
-`visible_to` would withhold: a room-heard parent in a PRIVATE scene reaching a bystander
-standing in the room who never authored or received anything in it (`visible_to`'s
-`present_scene_ids` keys on authorship/receipt, not presence), and a parent older than
-`visible_to`'s 90-day `time_bound`, which the room-heard predicate does not carry. Both
-are accepted: the disclosure is an opaque id and an ISO timestamp with no path to content
-(`ParentChip` renders "a pose not currently loaded" on a miss and never fetches), and
-both recipients are receiving the reply's own full text over that same broadcast. Do not
-restate this as "the WS gate can never over-disclose"; it can, in those two cases, and it
-is fine because it still says less than the push already did.
+**The two channels gate the parent edge differently, and the WS gate is the weaker one.**
+REST derives the parent id from thread membership and gates it per viewer on
+`visible_to(request.user)` (`InteractionListSerializer.get_reply_to`). The live WebSocket
+push has no single viewer, so it uses a structural gate evaluated once
+(`interaction_services._reply_parent_payload`): the parent goes on the wire only when it
+is room-heard in the same scene, using the shared `managers.ROOM_HEARD` classification.
+State that gate's guarantee exactly: **it discloses strictly less than the live push it
+rides on already delivers to that same audience.** It does NOT match per-recipient REST
+visibility, and two cases send a parent `visible_to` would withhold: a room-heard parent
+in a PRIVATE scene reaching a bystander standing in the room who never authored or
+received anything in it, and a parent older than `visible_to`'s 90-day `time_bound`, which
+the room-heard predicate does not carry. Both are accepted: the disclosure is an opaque id
+and an ISO timestamp with no path to content (`ParentChip` renders "a pose not currently
+loaded" on a miss and never fetches), and both recipients are receiving the reply's own
+full text over that same broadcast. Do not restate this as "the WS gate can never
+over-disclose"; it can, in those two cases, and it is fine because it still says less than
+the push already did.
 
 **A correction worth recording:** `InteractionAction` (the POSE-to-ACTION-Interaction
 bridge, `world/scenes/models.py`) is not a precedent for the denormalized-timestamp half of
