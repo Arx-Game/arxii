@@ -117,7 +117,7 @@ class CodexEntryAdminTests(TestCase):
         response = self.client.get(reverse("admin:arxii_codexentry_change", args=[self.clued.pk]))
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        self.assertIn("1 room(s), 0 trigger(s)", body)
+        self.assertIn("1 room, 0 triggers", body)
 
     def test_saving_a_new_grant_inline_reaches_existing_holders(self):
         holder = RosterEntryFactory()

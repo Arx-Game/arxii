@@ -208,6 +208,13 @@ class DistinctionGrantInline(_GrantInline):
     verbose_name_plural = "Distinction codex grants"
 
 
+def _plural(count: int, noun: str) -> str:
+    """Render a count with its noun, pluralizing naturally (1 room, 2 rooms)."""
+    if count == 1:
+        return f"{count} {noun}"
+    return f"{count} {noun}s"
+
+
 class ClueInline(admin.TabularInline):
     """Read only: the clues that lead to this entry. Author them under Clues."""
 
@@ -223,7 +230,7 @@ class ClueInline(admin.TabularInline):
     def placements(self, obj: Clue) -> str:
         rooms = obj.room_placements.count()
         triggers = obj.trigger_placements.count()
-        return f"{rooms} room(s), {triggers} trigger(s)"
+        return f"{_plural(rooms, 'room')}, {_plural(triggers, 'trigger')}"
 
     def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
