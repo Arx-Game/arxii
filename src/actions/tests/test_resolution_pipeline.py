@@ -92,6 +92,7 @@ class SinglePipelineTests(TestCase):
         assert result.main_result is not None
         assert result.main_result.step_label == "main"
         assert result.main_result.consequence_id == self.consequence.pk
+        assert result.main_result.consequence_pool_id == self.pool.pk
         assert result.gate_results == []
         mock_check.assert_called_once()
         mock_apply.assert_called_once()
@@ -156,8 +157,10 @@ class GatedPipelinePassTests(TestCase):
         assert result.current_phase == ResolutionPhase.COMPLETE
         assert len(result.gate_results) == 1
         assert result.gate_results[0].step_label == "gate:activation"
+        assert result.gate_results[0].consequence_pool_id == self.gate_pool.pk
         assert result.main_result is not None
         assert result.main_result.step_label == "main"
+        assert result.main_result.consequence_pool_id == self.main_pool.pk
 
 
 class GatedPipelineAbortTests(TestCase):
@@ -447,6 +450,7 @@ class EmptyPoolTests(TestCase):
         assert result.current_phase == ResolutionPhase.COMPLETE
         assert result.main_result is not None
         assert result.main_result.consequence_id is None
+        assert result.main_result.consequence_pool_id == self.empty_pool.pk
 
 
 class TestRunMainStepNullPool(TestCase):
@@ -484,4 +488,5 @@ class TestRunMainStepNullPool(TestCase):
 
         assert result.check_result == mock_result
         assert result.applied_effect_ids is None
+        assert result.consequence_pool_id is None
         mock_check.assert_called_once()

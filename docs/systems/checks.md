@@ -291,7 +291,10 @@ via `build_roulette_payload` and fire only for the roller.
 (`world/scenes/action_services.py`) schedules a success-level wheel for every resolved
 social check, inside `_create_result_interaction`'s `transaction.on_commit` callback so a
 rolled-back resolution never spins one. It emits to the roller always, and to the
-effective target when the action has one; bystanders never receive it.
+effective target when the action has one; bystanders never receive it. For action-template
+steps with at least two effective consequences, it queues a second wheel immediately after
+the chart wheel using authored effective weights; the backend-selected consequence is the
+landed face and no client-side selection occurs.
 
 **`check_outcome_faces(check_result)`** (`world/checks/theater.py`) builds the wheel's
 faces straight off the check's own `ResultChart` bands, one unsaved `Consequence` per
@@ -310,8 +313,10 @@ ADR-0297.
 **Frontend:** the wheel renders as a flat proportional disc (Part C), replacing the
 earlier equal-slice prism wheel; slice angles are proportional to each face's `weight`.
 
-**Deferred:** the consequence-pool's own second spin for template-driven (non-social)
-checks is tracked in #3823, not built here.
+**Action-template persistence (#3823):** selected template consequences are recorded in
+`ConsequenceOutcome` with `action_interaction` provenance and its partition timestamp. The
+existing API exposes the action source id and includes it in scene-scoped visibility. A tier
+with one effective consequence is applied directly without a second wheel.
 
 ## Internal Service Functions
 

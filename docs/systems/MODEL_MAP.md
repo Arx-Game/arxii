@@ -1952,6 +1952,7 @@
   - selected_consequence -> checks.Consequence [FK] (nullable)
   - combat_interaction -> scenes.Interaction [FK] (nullable)
   - challenge_record -> mechanics.CharacterChallengeRecord [FK] (nullable)
+  - action_interaction -> scenes.Interaction [FK] (nullable; partition timestamp companion)
 **Pointed to by:**
   - modifiers <- checks.ConsequenceOutcomeModifier
 
@@ -1971,7 +1972,7 @@
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None) -> int - Preview the rank difference for a check without rolling.`
-- `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, summary: str = '') -> world.checks.outcome_models.ConsequenceOutcome - Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
+- `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, action_interaction: 'Interaction | None' = None, summary: str = '') -> world.checks.outcome_models.ConsequenceOutcome - Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
 
 
 ## world.classes

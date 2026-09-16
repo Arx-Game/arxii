@@ -1360,12 +1360,14 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     *,
     combat_interaction: "Interaction | None" = None,
     challenge_record: "CharacterChallengeRecord | None" = None,
+    action_interaction: "Interaction | None" = None,
     summary: str = "",
 ) -> ConsequenceOutcome:
     """Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.
 
-    Exactly one of ``combat_interaction`` / ``challenge_record`` must be provided;
-    ValueError is raised before any DB write if the constraint would be violated.
+    Exactly one of ``combat_interaction`` / ``challenge_record`` /
+    ``action_interaction`` must be provided; ValueError is raised before any DB
+    write if the constraint would be violated.
 
     ``combat_interaction_timestamp`` is derived from ``combat_interaction.timestamp``
     (the same attribute CombatRoundAction.interaction_timestamp is denormalized from)
@@ -1385,7 +1387,9 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         combat_interaction: Interaction created for the combat resolution.
             Mutually exclusive with challenge_record.
         challenge_record: CharacterChallengeRecord this resolved against.
-            Mutually exclusive with combat_interaction.
+            Mutually exclusive with the interaction sources.
+        action_interaction: Interaction created for a template-driven action
+            resolution outside combat. Mutually exclusive with the other sources.
         summary: Optional human-readable summary string.
 
     Returns:
@@ -1394,12 +1398,17 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     Raises:
         ValueError: If neither or both of combat_interaction/challenge_record are provided.
     """
-    both_set = combat_interaction is not None and challenge_record is not None
-    neither_set = combat_interaction is None and challenge_record is None
-    if both_set or neither_set:
+    sources = {
+        "combat_interaction": combat_interaction,
+        "challenge_record": challenge_record,
+        "action_interaction": action_interaction,
+    }
+    populated = [name for name, value in sources.items() if value is not None]
+    if len(populated) != 1:
         raise ValueError(
-            "record_consequence_outcome requires exactly one of combat_interaction or "
-            "challenge_record; got " + ("both" if both_set else "neither") + "."
+            "record_consequence_outcome requires exactly one source; got "
+            + (", ".join(populated) if populated else "none")
+            + "."
         )
 
     outcome = ConsequenceOutcome.objects.create(
@@ -1414,6 +1423,10 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
             combat_interaction.timestamp if combat_interaction is not None else None
         ),
         challenge_record=challenge_record,
+        action_interaction=action_interaction,
+        action_interaction_timestamp=(
+            action_interaction.timestamp if action_interaction is not None else None
+        ),
     )
 
     if breakdown.contributions:

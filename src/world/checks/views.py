@@ -219,6 +219,7 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
                 "check_type",
                 "challenge_record__approach",
                 "challenge_record__challenge_instance__template",
+                "action_interaction",
             )
             .prefetch_related(
                 _MODIFIERS_PREFETCH,
@@ -241,6 +242,7 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
         return qs.filter(
             Q(character__character__db_account=user)
             | Q(combat_interaction__scene__participations__account=user)
+            | Q(action_interaction__scene__participations__account=user)
             | Q(
                 challenge_record__challenge_instance__situation_instance__scene__participations__account=user
             )

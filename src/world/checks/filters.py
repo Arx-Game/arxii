@@ -32,7 +32,9 @@ class ConsequenceOutcomeFilter(django_filters.FilterSet):
         )
         if scene_id is None:
             return queryset.none()
-        return queryset.filter(combat_interaction__scene_id=scene_id)
+        return queryset.filter(
+            Q(combat_interaction__scene_id=scene_id) | Q(action_interaction__scene_id=scene_id)
+        )
 
     class Meta:
         model = ConsequenceOutcome

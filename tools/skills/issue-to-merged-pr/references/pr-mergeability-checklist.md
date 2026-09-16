@@ -106,7 +106,7 @@ them as an error rather than a question:
   Validated against `git rev-parse HEAD^1`, which every push moves - run
   `sync-evidence-revision.sh <pr>` before each push once the evidence exists.
 - **Open code-scanning alerts** on the PR head ref (section 3).
-- **Evidence committed under `docs/reviews/`** is failed by the
+- **Evidence committed under `docs/reviews/` or `.github/issue-evidence/`** is failed by the
   `review-evidence-not-committed` CI job; the report belongs in a PR comment.
 
 ## 6. Migration tip, before enqueueing

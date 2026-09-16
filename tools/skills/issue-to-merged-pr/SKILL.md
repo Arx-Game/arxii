@@ -315,7 +315,7 @@ original issue open too.
 
 **The evidence report and its screenshots never belong in `main`'s permanent
 history, and this is enforced.** The `review-evidence-not-committed` CI job
-fails any PR with a tracked file under `docs/reviews/`. Deleting the files
+fails any PR with a tracked file under `docs/reviews/` or `.github/issue-evidence/`. Deleting the files
 without doing the rest does not pass either: the `review-evidence` job then has
 no report to validate and fails instead. The two gates only both go green when
 the evidence actually lives in a PR comment.
@@ -331,7 +331,7 @@ red, so do not treat it as cleanup to get to later:
    trick.
 3. **Point the PR body's `- Report:` line at that comment URL.** The
    `review-evidence` job reads that line; a stale path there fails it.
-4. **Delete `docs/reviews/` and push again.**
+4. **Delete `docs/reviews/` and `.github/issue-evidence/`, then push again.**
 5. **Before EVERY later push, run
    `scripts/sync-evidence-revision.sh <pr>`.** It restates the report's
    `Reviewed revision` to the current `HEAD^1`, prints what changed between the

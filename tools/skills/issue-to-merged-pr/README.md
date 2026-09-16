@@ -82,6 +82,17 @@ See `references/design.md` for
 the full design: phase-detection table, CI watch cadence, bail conditions,
 cross-issue overlap detection, token scopes, distribution model.
 
+## Issue/demo image fallback
+
+When an issue needs screenshots before a PR exists and the interactive Artifact
+publisher is unavailable, push the feature branch and run
+`tools/skills/issue-to-merged-pr/scripts/publish-issue-images.sh`. It uploads
+images through the GitHub Contents API and posts an issue comment with immutable
+raw URLs. Do this only after branch history is stable: amending, rebasing, or
+force-pushing afterward can orphan the upload commits and break the URLs. See
+`references/evidence-screenshots-not-in-main.md` for the exact sequence and
+verification command.
+
 ## Updating
 
 Edit files in this directory. In the devcontainer, the symlink picks up
