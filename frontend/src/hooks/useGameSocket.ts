@@ -261,7 +261,7 @@ function dispatchLegacyText(
       addFeedNote({
         character,
         note: {
-          kind: classifyText(kwargs?.type),
+          kind: classifyText(kwargs?.type, kwargs?.category),
           content: message.content,
           ...(subject ? { subject } : {}),
           timestamp: new Date().toISOString(),

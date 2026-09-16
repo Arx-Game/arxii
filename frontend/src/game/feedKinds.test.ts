@@ -22,6 +22,13 @@ describe('classifyText (#3856)', () => {
   ])('kwargs.type %s becomes the %s kind', (wireType, expected) => {
     expect(classifyText(wireType)).toBe(expected);
   });
+
+  // A narrative frame carries its category (#3779); only visions get their own lane.
+  it('files a narrative frame in the visions category as a vision', () => {
+    expect(classifyText('narrative', 'visions')).toBe('vision');
+    expect(classifyText('narrative', 'story')).toBe('ambience');
+    expect(classifyText('gemit', 'visions')).toBe('ambience');
+  });
 });
 
 describe('classifyInteraction (#3856)', () => {
@@ -52,6 +59,7 @@ describe('FEED_KINDS', () => {
       'arrive',
       'move',
       'ambience',
+      'vision',
       'look',
       'item',
       'error',

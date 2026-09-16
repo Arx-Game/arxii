@@ -27,12 +27,14 @@ const defaults = (): FeedChipState => ({
 });
 
 describe('default chips (#3856)', () => {
-  it('match the demo: Roleplay, Whispers, Movement, Ambience, System; only the first two wake', () => {
+  it('match the demo: Roleplay, Whispers, Movement, Ambience, Visions, System; Roleplay, Whispers and Visions wake', () => {
     expect(DEFAULT_FEED_CHIPS.map((c) => [c.label, c.kinds.join(','), c.wake])).toEqual([
       ['Roleplay', 'pose,say,emit', true],
       ['Whispers', 'whisper', true],
       ['Movement', 'arrive,move', false],
       ['Ambience', 'ambience', false],
+      // A vision is rare and prized (#3779): it shows and it wakes.
+      ['Visions', 'vision', true],
       ['System', 'look,item,error', false],
     ]);
     expect(DEFAULT_FEED_CHIPS.every((c) => c.on && !c.custom)).toBe(true);
@@ -64,6 +66,7 @@ describe('show rules', () => {
       ['wh', false],
       ['mv', false],
       ['am', false],
+      ['vi', false],
       ['sy', false],
     ]);
   });
@@ -99,7 +102,7 @@ describe('editing', () => {
 
   it('deleting a chip leaves its kinds unowned, and a default chip may be deleted too', () => {
     const state = deleteChip(defaults(), 'sy');
-    expect(state.chips.map((c) => c.id)).toEqual(['rp', 'wh', 'mv', 'am']);
+    expect(state.chips.map((c) => c.id)).toEqual(['rp', 'wh', 'mv', 'am', 'vi']);
     expect(isKindShown('look', state)).toBe(true);
   });
 
@@ -112,9 +115,11 @@ describe('editing', () => {
   it('wake is per chip', () => {
     const state = setChipWake(defaults(), 'am', true);
     expect(wakingKinds(state.chips)).toEqual(
-      new Set(['pose', 'say', 'emit', 'whisper', 'ambience'])
+      new Set(['pose', 'say', 'emit', 'whisper', 'ambience', 'vision'])
     );
-    expect(wakingKinds(toggleChip(state, 'rp').chips)).toEqual(new Set(['whisper', 'ambience']));
+    expect(wakingKinds(toggleChip(state, 'rp').chips)).toEqual(
+      new Set(['whisper', 'ambience', 'vision'])
+    );
   });
 });
 

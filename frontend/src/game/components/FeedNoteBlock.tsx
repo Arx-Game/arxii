@@ -3,6 +3,7 @@ import { EvenniaMessage } from './EvenniaMessage';
 import { cn } from '@/lib/utils';
 import { FeedBlockFrame } from './FeedBlockFrame';
 import { KIND_LABELS, feedItemKey } from '../feedChips';
+import { VISION_FRAME_CLASS, VISION_GLYPH, VISION_TEXT_CLASS } from '@/worship/visionStyle';
 
 interface FeedNoteBlockProps {
   note: FeedNote;
@@ -21,6 +22,8 @@ const BOX_GLYPHS: Partial<Record<FeedNote['kind'], string>> = { look: '◎', err
  * - `error`: the box in the destructive tokens with a ! glyph.
  * - `arrive` and `move`: a bare italic muted line, no box.
  * - `ambience`: the italic line with a hairline on the left.
+ * - `vision` (#3779): the treatment reserved for visions, shared with the sheet's
+ *   `VisionCard`: an emerald frame and glyph, the prose in the reading face.
  *
  * Every body goes through `EvenniaMessage` in prose presentation: a look
  * result, an item line and a gemit all reach the client as Evennia's HTML
@@ -45,6 +48,31 @@ export function FeedNoteBlock({ note }: FeedNoteBlockProps) {
 
 function FeedNoteBody({ note, time }: FeedNoteBlockProps & { time: string }) {
   const { kind } = note;
+
+  if (kind === 'vision') {
+    return (
+      <div
+        data-testid="feed-note"
+        data-kind={kind}
+        className={cn(VISION_FRAME_CLASS, 'flex max-w-[64ch] items-start gap-2 px-3 py-2')}
+      >
+        <span
+          aria-hidden="true"
+          className="w-3.5 flex-none text-center text-emerald-600 dark:text-emerald-400"
+        >
+          {VISION_GLYPH}
+        </span>
+        <div className="min-w-0 flex-1">
+          <EvenniaMessage
+            content={note.content}
+            presentation="prose"
+            className={VISION_TEXT_CLASS}
+          />
+        </div>
+        <span className="sr-only">{time}</span>
+      </div>
+    );
+  }
 
   if (kind === 'arrive' || kind === 'move' || kind === 'ambience') {
     return (

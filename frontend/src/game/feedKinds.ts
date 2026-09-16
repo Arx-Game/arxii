@@ -17,6 +17,7 @@ export const FEED_KINDS = [
   'arrive',
   'move',
   'ambience',
+  'vision',
   'look',
   'item',
   'error',
@@ -40,11 +41,13 @@ export function classifyInteraction(mode: string): FeedKind {
  * commands send `look`, `item` and `error` (`ArxCommand.send_result`), Evennia's
  * own movement announcements send `move` for a departure and, through our
  * `Character.announce_move_to`, `arrive` for an arrival, and the narrative
- * service sends `narrative` or `gemit`, both ambience here. A frame with no
- * type, or one this client does not know, is a plain line it cannot place:
- * `system`.
+ * service sends `narrative` or `gemit`, both ambience here. A narrative frame
+ * also carries its `category` (#3779); the `visions` category is the one lane
+ * with its own kind, `vision`, so the treatment reserved for a god's message
+ * reaches the feed at the delivery moment. A frame with no type, or one this
+ * client does not know, is a plain line it cannot place: `system`.
  */
-export function classifyText(wireType: unknown): FeedKind {
+export function classifyText(wireType: unknown, category?: unknown): FeedKind {
   switch (wireType) {
     case 'look':
     case 'item':
@@ -53,6 +56,7 @@ export function classifyText(wireType: unknown): FeedKind {
     case 'arrive':
       return wireType;
     case 'narrative':
+      return category === 'visions' ? 'vision' : 'ambience';
     case 'gemit':
       return 'ambience';
     default:
