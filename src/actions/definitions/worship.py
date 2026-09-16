@@ -375,14 +375,18 @@ class SendVisionAction(Action):
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
+        from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
         from world.clues.models import Clue  # noqa: PLC0415
         from world.stories.models import Episode  # noqa: PLC0415
         from world.worship.exceptions import VisionError  # noqa: PLC0415
         from world.worship.models import Prayer  # noqa: PLC0415
         from world.worship.prayer_services import send_vision  # noqa: PLC0415
 
-        account = kwargs.get("account") or (actor.account if actor is not None else None)
-        if account is None or not account.is_staff:
+        # An actor's own account outranks a supplied one; the kwarg exists for the
+        # account-scoped telnet face and tests, never for a client to assert staff.
+        account = actor.account if actor is not None else kwargs.get("account")
+        if not isinstance(account, AccountDB) or not account.is_staff:
             return ActionResult(success=False, message="Only staff send visions.")
         recipient, error = _resolve_recipient(kwargs)
         if error is not None:

@@ -106,12 +106,16 @@ def site_prayer_capped_this_week(
         from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
 
         game_week = get_current_game_week()
+    return _week_prayers(character_sheet, being, game_week).exists()
+
+
+def _week_prayers(character_sheet: CharacterSheet, being: WorshippedBeing, game_week: GameWeek):
     return Prayer.objects.filter(
         character_sheet=character_sheet,
         being=being,
         game_week=game_week,
         devotion_granted__gt=0,
-    ).exists()
+    )
 
 
 def _room_profile_of(character_sheet: CharacterSheet) -> RoomProfile | None:
@@ -160,7 +164,11 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
             dire_straits=straits.kind,
         )
         devotion = 0
-        if at_site and not site_prayer_capped_this_week(character_sheet, being, game_week=week):
+        # Locked while deciding, so two prayers landing together cannot both pay.
+        already_paid = (
+            at_site and _week_prayers(character_sheet, being, week).select_for_update().exists()
+        )
+        if at_site and not already_paid:
             devotion = PRAYER_SITE_DEVOTION_AMOUNT
             bump_devotion(character_sheet, being, devotion)
             prayer.devotion_granted = devotion
@@ -242,18 +250,13 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
         if roster_entry is None:
             raise VisionRecipientUnrostered
 
+    # The spend, the row and the clue commit first; the delivery follows, since
+    # send_narrative_message pushes to the recipient's session the moment its
+    # own transaction ends, and a push inside a transaction that then rolls back
+    # would show the player a vision the record never kept.
     with transaction.atomic():
         if not spend_worship_pool(being, VISION_RESONANCE_POOL_COST, reason="vision"):
             raise VisionPoolInsufficient
-        message = send_narrative_message(
-            recipients=[recipient],
-            body=_vision_text(being, prose, reveal_source=reveal_source),
-            category=NarrativeCategory.VISIONS,
-            sender_account=sent_by,
-            ooc_note=f"A vision from {being.name}"
-            + (", source revealed." if reveal_source else ", source concealed."),
-            related_story=story,
-        )
         vision = Vision.objects.create(
             recipient=recipient,
             being=being,
@@ -263,9 +266,19 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
             prayer=prayer,
             clue=clue,
             episode=episode,
-            message=message,
             resonance_spent=VISION_RESONANCE_POOL_COST,
         )
         if clue is not None and roster_entry is not None:
             acquire_clue(roster_entry, clue)
+    message = send_narrative_message(
+        recipients=[recipient],
+        body=_vision_text(being, prose, reveal_source=reveal_source),
+        category=NarrativeCategory.VISIONS,
+        sender_account=sent_by,
+        ooc_note=f"A vision from {being.name}"
+        + (", source revealed." if reveal_source else ", source concealed."),
+        related_story=story,
+    )
+    vision.message = message
+    vision.save(update_fields=["message"])
     return vision

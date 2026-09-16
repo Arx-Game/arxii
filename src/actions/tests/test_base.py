@@ -137,6 +137,17 @@ class ActionRegistryTests(TestCase):
     def test_get_action_returns_none_for_unknown(self):
         assert get_action("nonexistent") is None
 
+    def test_every_registered_action_is_an_instance(self):
+        """A class in the list resolves by key (dataclass defaults read as class
+        attributes) and then fails at dispatch with an unbound ``run`` (#3779)."""
+        from actions.base import Action
+        from actions.registry import ACTIONS_BY_KEY
+
+        not_instances = [
+            key for key, action in ACTIONS_BY_KEY.items() if not isinstance(action, Action)
+        ]
+        self.assertEqual(not_instances, [])
+
     def test_all_expected_actions_registered(self):
         expected_keys = {
             "look",

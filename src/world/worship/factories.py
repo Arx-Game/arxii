@@ -266,6 +266,12 @@ class ConsecrationTierFactory(factory.django.DjangoModelFactory):
     bonus_percent = 10
 
 
+def _current_week():
+    from world.game_clock.week_services import get_current_game_week
+
+    return get_current_game_week()
+
+
 class PrayerFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Prayer
@@ -273,11 +279,7 @@ class PrayerFactory(factory.django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     being = factory.SubFactory(WorshippedBeingFactory)
     text = "[PLACEHOLDER] Hear me."
-    game_week = factory.LazyFunction(
-        lambda: __import__(
-            "world.game_clock.week_services", fromlist=["get_current_game_week"]
-        ).get_current_game_week()
-    )
+    game_week = factory.LazyFunction(lambda: _current_week())
 
 
 class VisionFactory(factory.django.DjangoModelFactory):

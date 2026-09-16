@@ -240,11 +240,13 @@ not a mechanic; three independent, stackable conditions make one count.
 - `send_vision(*, recipient, being, body, sent_by=None, reveal_source=False,
   prayer=None, clue=None, episode=None)` → `Vision`. Validates the attachments
   (`VisionPrayerMismatch`, `VisionClueNotCodex`, `VisionEpisodeNotShared`,
-  `VisionRecipientUnrostered`), spends `VISION_RESONANCE_POOL_COST` from the being's
-  pool through `spend_worship_pool` (`VisionPoolInsufficient`), delivers the prose as a
+  `VisionRecipientUnrostered`), then in one transaction spends
+  `VISION_RESONANCE_POOL_COST` from the being's pool through `spend_worship_pool`
+  (`VisionPoolInsufficient`), records the `Vision` and hands a clue over through
+  `clues.services.acquire_clue`; only after that commit does it deliver the prose as a
   VISIONS `NarrativeMessage` (`send_narrative_message`: live push when online, login
-  catch-up otherwise; `related_story` from the episode), records the `Vision`, and
-  hands a clue over through `clues.services.acquire_clue`. A revealed source appends
+  catch-up otherwise; `related_story` from the episode) and link it on the row, so a
+  push never precedes a record that could roll back. A revealed source appends
   "You know whose vision this is: <being>." to the delivered prose; the stored `body`
   stays the GM's words.
 - Actions (`actions/definitions/worship.py`): `PrayAction` (`pray`: `being` /
