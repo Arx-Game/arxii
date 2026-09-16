@@ -46,6 +46,7 @@ const SAMPLE_OUTCOME: ConsequenceOutcome = {
   ],
   combat_interaction_id: 100,
   challenge_record_id: 200,
+  action_interaction_id: null,
   created_at: '2026-06-01T12:00:00Z',
 };
 

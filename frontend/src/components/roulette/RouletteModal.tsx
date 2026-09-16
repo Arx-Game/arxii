@@ -65,6 +65,11 @@ export function RouletteModal() {
       >
         <DialogHeader>
           <DialogTitle className="text-center">{current.template_name}</DialogTitle>
+          {current.stage_label && (
+            <p className="text-center text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              {current.stage_label}
+            </p>
+          )}
           <DialogDescription className="sr-only">
             Spinning to determine the outcome
           </DialogDescription>

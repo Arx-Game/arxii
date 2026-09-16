@@ -8,4 +8,6 @@ export interface ConsequenceDisplay {
 export interface RoulettePayload {
   template_name: string;
   consequences: ConsequenceDisplay[];
+  /** Optional stage copy for an ordered two-stage action-template reveal. */
+  stage_label?: string;
 }

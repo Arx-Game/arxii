@@ -830,8 +830,11 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **Resolution theater (#924, extended #3807 Part B):** `check_outcome_faces(check_result)` /
   `maybe_emit_resolution_theater` (`world/checks/theater.py`) push a dramatic-reveal wheel to a
   player's client. A social check schedules one for roller + target via
-  `_schedule_check_outcome_theater` (`world/scenes/action_services.py`); faces come only from
-  the check's own `ResultChart` bands, never rollmod or an outcome guarantee (ADR-0297). See
+  `_schedule_check_outcome_theater` (`world/scenes/action_services.py`); action-template steps
+  with multiple effective consequences queue a weighted second-stage pool wheel immediately
+  afterward, while `ConsequenceOutcome.action_interaction` persists the selected row. Faces come
+  only from the check's own `ResultChart` bands for stage one, never rollmod or an outcome
+  guarantee (ADR-0297). See
   "Resolution theater" in [checks.md](checks.md).
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)

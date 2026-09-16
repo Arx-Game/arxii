@@ -182,6 +182,45 @@ class RecordConsequenceOutcomeTests(TestCase):
         self.assertIsNotNone(outcome.combat_interaction_timestamp)
         self.assertEqual(outcome.combat_interaction_timestamp, self.interaction.timestamp)
 
+    def test_record_consequence_outcome_supports_action_interaction(self) -> None:
+        """Template-driven outcomes anchor to their scene interaction."""
+        from world.checks.services import record_consequence_outcome
+        from world.checks.types import ModifierBreakdown
+
+        outcome = record_consequence_outcome(
+            character_sheet=self.sheet,
+            check_type=self.check_type,
+            pool=self.pool,
+            selected_consequence=self.consequence,
+            breakdown=ModifierBreakdown(),
+            action_interaction=self.interaction,
+            summary="Action summary",
+        )
+
+        self.assertEqual(outcome.action_interaction_id, self.interaction.pk)
+        self.assertEqual(
+            outcome.action_interaction_timestamp,
+            self.interaction.timestamp,
+        )
+        self.assertIsNone(outcome.combat_interaction_id)
+        self.assertIsNone(outcome.challenge_record_id)
+
+    def test_action_outcome_string_uses_action_source(self) -> None:
+        """Action-sourced outcomes identify their interaction in admin output."""
+        from world.checks.services import record_consequence_outcome
+        from world.checks.types import ModifierBreakdown
+
+        outcome = record_consequence_outcome(
+            character_sheet=self.sheet,
+            check_type=self.check_type,
+            pool=self.pool,
+            selected_consequence=self.consequence,
+            breakdown=ModifierBreakdown(),
+            action_interaction=self.interaction,
+        )
+
+        self.assertIn(f"action_interaction={self.interaction.pk}", str(outcome))
+
     def test_record_consequence_outcome_neither_source_raises(self) -> None:
         """Passing neither combat_interaction nor challenge_record raises ValueError."""
         from world.checks.services import record_consequence_outcome

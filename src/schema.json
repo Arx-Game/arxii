@@ -46774,9 +46774,8 @@ components:
         reconstructed from the authored consequence links on the approach and
         challenge template — no pool is stored; no denormalization occurs.
 
-        combat_interaction and challenge_record are exposed as plain integer ids to
-        avoid touching the range-partitioned arxii_interaction table at
-        serialization time.
+        Interaction sources are exposed as plain integer ids to avoid touching the
+        range-partitioned arxii_interaction table at serialization time.
       properties:
         id:
           type: integer
@@ -46822,11 +46821,16 @@ components:
         challenge_record_id:
           type: integer
           readOnly: true
+        action_interaction_id:
+          type: integer
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
           readOnly: true
       required:
+      - action_interaction_id
       - challenge_record_id
       - character
       - check_type
