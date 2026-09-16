@@ -151,3 +151,19 @@ class ClueNaturalKeyTests(TestCase):
         clue = ClueFactory(slug="torn-letter")
         self.assertEqual(clue.natural_key(), ("torn-letter",))
         self.assertEqual(Clue.objects.get_by_natural_key("torn-letter"), clue)
+
+
+class ClueTargetsPublicEntryTests(TestCase):
+    def test_public_codex_target_refused(self):
+        from world.codex.factories import CodexEntryFactory
+
+        clue = ClueFactory.build(target_codex_entry=CodexEntryFactory(is_public=True))
+        with self.assertRaises(ValidationError) as ctx:
+            clue.clean()
+        self.assertIn("target_codex_entry", ctx.exception.message_dict)
+
+    def test_non_public_codex_target_allowed(self):
+        from world.codex.factories import CodexEntryFactory
+
+        clue = ClueFactory.build(target_codex_entry=CodexEntryFactory(is_public=False))
+        clue.clean()

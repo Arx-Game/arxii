@@ -1179,6 +1179,27 @@ def _set_origin_realm(sheet: CharacterSheet, draft: CharacterDraft) -> None:
         sheet.origin_realm = draft.selected_area.realm
 
 
+def _set_beginnings(sheet: CharacterSheet, draft: CharacterDraft) -> None:
+    """Record the chosen Beginnings as where play began (#3775).
+
+    The draft is deleted at the end of finalize, so this row is the only record
+    of the character's origin afterwards. Idempotent: a re-run finds the row.
+    """
+    if not draft.selected_beginnings:
+        return
+    from world.character_sheets.models import ProfileBeginnings  # noqa: PLC0415
+    from world.character_sheets.types import ProfileBeginningsSource  # noqa: PLC0415
+
+    profile = _ensure_profile(sheet)
+    if profile.pk is None:
+        profile.save()
+    ProfileBeginnings.objects.get_or_create(
+        profile=profile,
+        beginnings=draft.selected_beginnings,
+        defaults={"source": ProfileBeginningsSource.CHARACTER_CREATION},
+    )
+
+
 def _ensure_profile(sheet: CharacterSheet) -> Profile:
     """Return the sheet's true_profile, creating one if missing."""
     profile = sheet.true_profile
@@ -1249,6 +1270,7 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     _set_tarot_card(sheet, draft)
     _set_heritage(sheet, draft)
     _set_origin_realm(sheet, draft)
+    _set_beginnings(sheet, draft)
 
     answers_present = _set_descriptive_text(sheet, draft)
     # Refresh origin-story state now that the assembled prose is persisted (#2478).

@@ -43,3 +43,25 @@ that issue deferred to implementation. Applied on `join_organization`
 (`apply_organization_codex_grants`) and to current members when the grant is created
 (`grant_organization_entry_to_members`); a plain grant, never a perspective holder.
 _Avoid_: "org secret", "faction lore".
+
+**Reach** (#3775, ADR-0303):
+How a `CodexEntry` can be known at all: public (`is_public`), granted to a group through
+one of the five grant tables (Beginnings, Path, Distinction, Tradition, Organization) or a
+species lineage, or found through a Mystery (a `Clue` with `target_kind=CODEX`). An entry
+with none of these is **unreachable** - no character can ever come to know it, and no
+future character can either until someone adds a route. `ReachListFilter` is the entry
+admin's list filter of this name (public / granted to a group / reached by a clue /
+unreachable); `known_via` is the paired list-display column naming which routes an entry
+has and how many rows each contributes.
+_Avoid_: visibility tier, access level.
+
+**Grant to current holders** (#3775, ADR-0303):
+`world.codex.services.grant_to_current_holders(grant)`: hands one grant row's entry to
+every roster entry its `holder_roster_entries()` names, and returns how many first learned
+it. Exists because a grant row created after characters already exist would otherwise be a
+dead row until the next character who joins the group - `GrantReachOnSaveMixin` calls it
+automatically when an admin saves a new grant row, and the entry admin's "Grant to current
+holders" action calls it for every existing grant on the selected entries plus
+`grant_entry_to_species_holders` for species. Idempotent, because the `grant_codex_entry`
+it calls is idempotent.
+_Avoid_: backfill, retroactive grant.

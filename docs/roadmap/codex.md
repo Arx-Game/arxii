@@ -40,6 +40,17 @@ The living lore repository that reflects what each character knows — not a sta
   have no roster entry yet and so can't see it through the gated codex API. A
   `PerspectivesPanel` frontend component renders these in HeritageStage's beginning
   detail panel and TraditionPicker's tradition detail panel
+- **Visibility and reach (2026-09-16, #3775, ADR-0303):** every grant model
+  (Beginnings, Path, Distinction, Tradition, Organization) gained `holder_roster_entries()`
+  and a shared `services.grant_to_current_holders(grant)` so a grant added after
+  characters already exist reaches them instead of sitting dead; the entry admin now
+  leads with "Who knows this" - a reach filter (public / granted / clue / unreachable), a
+  `known_via` column, and Publish/Unpublish/Grant-to-current-holders actions. A
+  `CodexEntry.clean()`/`Clue.clean()` pair refuses letting a clue's target go public.
+  Character origins moved off a single FK onto `ProfileBeginnings`, a row per origin a
+  character holds (`character_creation` once, plus any later `recovered_memory` or
+  `past_life`), so a recovered origin adds knowledge instead of overwriting where play
+  began. Staff accounts (`is_staff`) read every entry with full content; GMs are not staff.
 - **Frontend:** Codex pages, components, and queries in frontend/src/codex/. IC/OOC split navigation, breadcrumb display, character knowledge-scope selector with known-by badges
 - **Tests:** Model tests, visibility tests, view tests, container-hiding and knowledge-union tests
 

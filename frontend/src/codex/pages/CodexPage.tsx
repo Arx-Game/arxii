@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useAccount } from '@/store/hooks';
 import { useCodexTree, useCodexSearch } from '../queries';
 import { CodexTree } from '../components/CodexTree';
 import { CodexContent } from '../components/CodexContent';
@@ -29,6 +30,7 @@ export function CodexPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 300);
+  const account = useAccount();
 
   const categoryId = getIntParam(searchParams, 'category');
   const subjectId = getIntParam(searchParams, 'subject');
@@ -107,71 +109,78 @@ export function CodexPage() {
   const showCharacterScope = (myCharacters?.length ?? 0) >= 2;
 
   return (
-    <div className="flex gap-6">
-      {/* Sidebar */}
-      <aside className="w-64 shrink-0">
-        <div className="sticky top-4 space-y-4">
-          {/* Character knowledge scope (multi-character accounts only) */}
-          {showCharacterScope && (
-            <Select
-              value={characterId ? characterId.toString() : ALL_CHARACTERS}
-              onValueChange={handleSelectCharacter}
-            >
-              <SelectTrigger aria-label="Character knowledge scope">
-                <Users className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_CHARACTERS}>All characters</SelectItem>
-                {myCharacters?.map((character) => (
-                  <SelectItem key={character.id} value={character.id.toString()}>
-                    {character.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+    <div className="flex flex-col gap-4">
+      {account?.is_staff && (
+        <p className="rounded border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+          Staff view: every entry is shown. Players see only what their characters know.
+        </p>
+      )}
+      <div className="flex gap-6">
+        {/* Sidebar */}
+        <aside className="w-64 shrink-0">
+          <div className="sticky top-4 space-y-4">
+            {/* Character knowledge scope (multi-character accounts only) */}
+            {showCharacterScope && (
+              <Select
+                value={characterId ? characterId.toString() : ALL_CHARACTERS}
+                onValueChange={handleSelectCharacter}
+              >
+                <SelectTrigger aria-label="Character knowledge scope">
+                  <Users className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_CHARACTERS}>All characters</SelectItem>
+                  {myCharacters?.map((character) => (
+                    <SelectItem key={character.id} value={character.id.toString()}>
+                      {character.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search codex..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-8"
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search codex..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+
+            {/* Search Results or Tree */}
+            <CodexSidebarResults
+              showSearchResults={showSearchResults}
+              searchLoading={searchLoading}
+              searchResults={searchResults}
+              treeLoading={treeLoading}
+              tree={tree}
+              characterId={characterId}
+              categoryId={categoryId}
+              subjectId={subjectId}
+              onSelectCategory={handleSelectCategory}
+              onSelectSubject={handleSelectSubject}
+              onSelectEntry={handleSelectEntry}
             />
           </div>
+        </aside>
 
-          {/* Search Results or Tree */}
-          <CodexSidebarResults
-            showSearchResults={showSearchResults}
-            searchLoading={searchLoading}
-            searchResults={searchResults}
-            treeLoading={treeLoading}
-            tree={tree}
-            characterId={characterId}
+        {/* Main Content */}
+        <main className="min-w-0 flex-1">
+          <CodexContent
             categoryId={categoryId}
             subjectId={subjectId}
-            onSelectCategory={handleSelectCategory}
+            entryId={entryId}
+            characterId={characterId}
             onSelectSubject={handleSelectSubject}
             onSelectEntry={handleSelectEntry}
+            onNavigateBreadcrumb={handleNavigateBreadcrumb}
           />
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="min-w-0 flex-1">
-        <CodexContent
-          categoryId={categoryId}
-          subjectId={subjectId}
-          entryId={entryId}
-          characterId={characterId}
-          onSelectSubject={handleSelectSubject}
-          onSelectEntry={handleSelectEntry}
-          onNavigateBreadcrumb={handleNavigateBreadcrumb}
-        />
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

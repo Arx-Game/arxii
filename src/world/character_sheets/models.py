@@ -49,6 +49,7 @@ from world.character_sheets.types import (
     LifecycleState,
     MaritalStatus,
     PosthumousJournalDisposition,
+    ProfileBeginningsSource,
     ProfileTextField,
     SheetVisibility,
 )
@@ -185,6 +186,10 @@ class Profile(SharedMemoryModel):
     properties on ``CharacterSheet`` so existing ``sheet.<field>`` reads/writes are unchanged.
     """
 
+    #: The CharacterSheet this is the *true* profile of, or None for a cover profile
+    #: that no sheet owns as its real bio (reverse of ``CharacterSheet.true_profile``, #3775).
+    owning_sheet_or_none = ReverseOneToOneOrNone("owning_sheet")
+
     concept = models.CharField(
         max_length=255,
         blank=True,
@@ -235,6 +240,13 @@ class Profile(SharedMemoryModel):
         related_name="profiles",
         help_text="Character's family. Null for orphans/unknown lineage.",
     )
+    beginnings = models.ManyToManyField(
+        "arxii.Beginnings",
+        through="arxii.ProfileBeginnings",
+        related_name="profiles",
+        blank=True,
+        help_text="Every origin this character holds; the through row says why (#3775).",
+    )
     tarot_card = models.ForeignKey(
         "arxii.TarotCard",
         null=True,
@@ -277,6 +289,57 @@ _PROFILE_LINEAGE_FIELDS: tuple[str, ...] = (
     "tarot_reversed",
 )
 _PROFILE_FIELDS: tuple[str, ...] = _PROFILE_BIO_FIELDS + _PROFILE_LINEAGE_FIELDS
+
+
+class ProfileBeginnings(SharedMemoryModel):
+    """One origin a character holds, and why (#3775).
+
+    A character's origins are a set that only grows: the character-creation
+    wizard writes the first row as ``CHARACTER_CREATION`` (where play began), and
+    staff add a later one when a Sleeper recovers a memory or a reincarnation
+    remembers a former life. Adding a row is what grants that Beginnings' codex
+    entries to an existing character (``world.codex.services
+    .grant_to_current_holders`` run for this one character, from the Profile
+    admin). Deleting a row revokes nothing: knowledge belongs to the character.
+    """
+
+    profile = models.ForeignKey(
+        "arxii.Profile",
+        on_delete=models.CASCADE,
+        related_name="beginnings_rows",
+    )
+    beginnings = models.ForeignKey(
+        "arxii.Beginnings",
+        on_delete=models.CASCADE,
+        related_name="profile_rows",
+    )
+    source = models.CharField(
+        max_length=30,
+        choices=ProfileBeginningsSource.choices,
+        default=ProfileBeginningsSource.CHARACTER_CREATION,
+        help_text="Why this character holds this origin.",
+    )
+    note = models.TextField(
+        blank=True,
+        help_text="The specific why, in staff's words (e.g. where the memory returned).",
+    )
+    gained_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["profile", "beginnings"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile"],
+                condition=models.Q(source="character_creation"),
+                name="one_character_creation_beginnings_per_profile",
+            ),
+        ]
+        ordering = ["gained_at", "id"]
+        verbose_name = "Profile Beginnings"
+        verbose_name_plural = "Profile Beginnings"
+
+    def __str__(self) -> str:
+        return f"{self.profile} holds {self.beginnings} ({self.get_source_display()})"
 
 
 class ProfileTextVersion(SharedMemoryModel):
@@ -809,6 +872,19 @@ class CharacterSheet(SharedMemoryModel):
     @family.setter
     def family(self, value: Any) -> None:
         self._ensure_true_profile().family = value
+
+    @property
+    def beginnings(self) -> Any:
+        """Every origin this character holds (#3775); empty without a true profile.
+
+        Read-only: rows are added through ``ProfileBeginnings`` so each carries
+        its ``source``. Mechanical readers use this, never a presented profile.
+        """
+        from world.character_creation.models import Beginnings  # noqa: PLC0415
+
+        if self.true_profile is None:
+            return Beginnings.objects.none()
+        return self.true_profile.beginnings.all()
 
     @property
     def tarot_card(self) -> Any:

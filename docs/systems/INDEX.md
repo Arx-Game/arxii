@@ -1691,13 +1691,21 @@ Lore storage and character knowledge tracking.
   `CodexEntryFiling` (secondary cross-listing of an entry under a second subject;
   ADR-0275)
 - **Key Methods:** Character learning from starting choices or teaching; `services.
-  file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing
+  file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing.
+  Reach tooling (#3775, ADR-0303): every grant model (`BeginningsCodexGrant`,
+  `PathCodexGrant`, `DistinctionCodexGrant`, `TraditionCodexGrant`,
+  `OrganizationCodexGrant`) has `holder_roster_entries()`, and
+  `services.grant_to_current_holders(grant)` hands its entry to everyone already
+  holding the group; `species_holder_roster_entries(entry)`/
+  `grant_entry_to_species_holders(entry)` are the species-side equivalent.
 - **Visibility (ADR-0221):** entries are the only unit of secrecy; categories/subjects
   with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
   is the union across the account's characters (`?character=` narrows; `known_by`
   per-character breakdown in entry payloads) — `CodexVisibilityMixin` in
   `world/codex/views.py`; the account's knowledge map is `Account.cached_codex_knowledge`
-  (#3597), cleared on every knowledge write, so the mixin holds no per-request state
+  (#3597), cleared on every knowledge write, so the mixin holds no per-request state.
+  Staff accounts (`is_staff`) see every entry with full content; GMs are not staff
+  (#3775, ADR-0303)
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.
@@ -2203,7 +2211,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
-- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
+- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621; `beginnings`, an M2M to `character_creation.Beginnings` through `ProfileBeginnings` (`source`, `note`, `gained_at`), every origin the character holds, #3775, ADR-0303), `ProfileBeginnings` (the through row; `source` is `character_creation`/`recovered_memory`/`past_life`, one `character_creation` row per profile), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
   (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
   personality): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG

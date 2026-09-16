@@ -10,7 +10,8 @@ scope to one of the account's characters. Categories and subjects are pure
 taxonomy with no visibility of their own, so any container whose subtree
 holds no visible entry is hidden outright -- subject descriptions are prose,
 and prose nobody can contextualize with entries must not become the public
-face of a topic (nor leak the existence of an all-secret branch).
+face of a topic (nor leak the existence of an all-secret branch). Staff
+accounts (``is_staff``) see every entry with full content; GMs are not staff.
 """
 
 from django.db.models import Count, Exists, OuterRef, Q, Subquery
@@ -127,11 +128,18 @@ class CodexVisibilityMixin:
     def _visible_entry_ids(self) -> set[int]:
         """Public entries plus every entry a selected character has a row for.
 
+        Staff (``is_staff``) see every entry: the Codex is the system that decides
+        who has knowledge, and staff need to read the corpus as written (#3775).
+        A GM is a story role, not staff, and reads as a player.
+
         One cheap query (the public-id set), deliberately uncached (ADR-0260):
         callers that need the set fetch it and may repeat the query within a
         request (e.g. ``CodexEntryViewSet`` calls this in both ``get_queryset``
         and ``get_serializer_context``).
         """
+        user = self.request.user
+        if user.is_authenticated and user.is_staff:
+            return set(CodexEntry.objects.values_list("id", flat=True))
         public_ids = set(CodexEntry.objects.filter(is_public=True).values_list("id", flat=True))
         return public_ids | set(self._knowledge_by_entry())
 

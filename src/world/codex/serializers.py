@@ -254,7 +254,10 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
             return obj.subject.breadcrumb_path
 
     def _can_see_content(self, obj: CodexEntry) -> bool:
-        """Check if full content should be visible to the user."""
+        """Full content for public entries, KNOWN entries, and staff readers (#3775)."""
+        request = self.context.get("request")
+        if request is not None and request.user.is_authenticated and request.user.is_staff:
+            return True
         return obj.is_public or self.get_knowledge_status(obj) == CodexKnowledgeStatus.KNOWN
 
     def get_lore_content(self, obj: CodexEntry) -> str | None:
