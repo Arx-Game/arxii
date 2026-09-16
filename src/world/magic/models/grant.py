@@ -501,6 +501,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="DISTINCTION"),
             ),
