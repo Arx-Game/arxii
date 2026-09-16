@@ -17,6 +17,7 @@ jobs:
       - name: Reject review evidence committed to the repository
         run: |
           set -euo pipefail
+          # Both locations are temporary evidence staging areas, never PR contents.
           tracked="$(git ls-files docs/reviews .github/issue-evidence)"
           if [ -n "$tracked" ]; then
             echo "::error::Review evidence must not be committed. Found forbidden evidence files:"
