@@ -23,6 +23,12 @@ repos:
       - id: ruff-format
   - repo: local
     hooks:
+      - id: image-path
+        name: Reject images outside temporary evidence directories
+        entry: uv run python tools/lint_image_paths.py
+        language: system
+        pass_filenames: true
+        files: (?i)\.(avif|bmp|gif|heic|ico|jpe?g|png|svg|tiff?)$
       - id: getattr-literal
         name: Block getattr with literal attribute names
         entry: uv run python tools/lint_getattr_literal.py
