@@ -817,3 +817,39 @@ class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.tradition} grants {self.entry}"
+
+
+class OrganizationCodexGrant(NaturalKeyMixin, SharedMemoryModel):
+    """Codex entries an Organization's membership knows (#3780).
+
+    The "Obscure" visibility tier the Deity Editor sets: an entry that is not
+    public, granted to every active member of one organization on join
+    (``codex.services.apply_organization_codex_grants``) and to the current
+    members when the grant is created. Confirmed with Dan on #3776 as the
+    mechanism for "known to some"; nothing bespoke on the being.
+    """
+
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.CASCADE,
+        related_name="codex_grants",
+    )
+    entry = models.ForeignKey(
+        CodexEntry,
+        on_delete=models.CASCADE,
+        related_name="organization_grants",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["organization", "entry"]
+        dependencies = ["arxii.Organization", CODEX_ENTRY_MODEL]
+
+    class Meta:
+        unique_together = ["organization", "entry"]
+        verbose_name = "Organization Codex Grant"
+        verbose_name_plural = "Organization Codex Grants"
+
+    def __str__(self) -> str:
+        return f"{self.organization} grants {self.entry}"

@@ -9,6 +9,7 @@ from world.codex.models import (
     CodexEntryFiling,
     CodexSubject,
     CodexTeachingOffer,
+    OrganizationCodexGrant,
 )
 from world.contributors.admin import CREDIT_FIELDSET
 
@@ -203,3 +204,10 @@ class CodexTeachingOfferAdmin(admin.ModelAdmin):
         ),
         ("Timestamps", {"fields": ("created_at",), "classes": ["collapse"]}),
     )
+
+
+@admin.register(OrganizationCodexGrant)
+class OrganizationCodexGrantAdmin(admin.ModelAdmin):
+    list_display = ("organization", "entry")
+    search_fields = ("organization__name", "entry__name")
+    autocomplete_fields = ("organization", "entry")
