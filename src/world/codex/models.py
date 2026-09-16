@@ -322,6 +322,17 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
         if self.is_featured and not self.is_public:
             msg = "A featured entry must also be public (is_public=True)."
             raise ValidationError({"is_featured": msg})
+        if self.is_public and self.pk is not None:
+            clue_slugs = list(
+                self.clues.order_by("slug").values_list("slug", flat=True)  # type: ignore[attr-defined]
+            )
+            if clue_slugs:
+                names = ", ".join(slug or "(unnamed clue)" for slug in clue_slugs)
+                msg = (
+                    "A clue leads to this entry, so it cannot be public; "
+                    f"remove the clue first or keep the entry reachable by discovery ({names})."
+                )
+                raise ValidationError({"is_public": msg})
         if (
             self.subject_item_instance_id is not None
             and self.subject_item_template_id is not None
