@@ -3874,7 +3874,7 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
   ABILITY (access-change notifications — gained/lost techniques or capabilities; also used
   by `announce_achievement` for first-ever Discovery ceremonies on discoverable content)
 - **Key Services:**
-  - `send_narrative_message(recipients, body, category, ...)` — atomic create + fan-out + real-time push to puppeted recipients via `character.msg()` with `|R[NARRATIVE]|n` color tag; offline recipients stay queued
+  - `send_narrative_message(recipients, body, category, ...)` — atomic create + fan-out + real-time push to puppeted recipients via `character.msg()` with the `|R[NARRATIVE]|n` color tag (a VISIONS message gets `|G[VISION]|n`, #3779) and `{"type": "narrative", "category": ...}` on the frame; offline recipients stay queued
   - `deliver_queued_messages(sheet)` — drains queued deliveries at login (called from `at_post_puppet` via stories login service)
 - **Pattern:** One message fans out to many recipients via NarrativeMessageDelivery rows (e.g., GM sends covenant message to 5 of 8 members — one message, five delivery rows). Messages are immutable; delivery rows track per-recipient state.
 - **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
@@ -8451,7 +8451,11 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `RoomFeatureInstance`; `being`, `founder_character_sheet`, `consecration_points`),
   `TempleDedication` (#3778: the building-level site, FK `Building`, one active per building
   via `dissolved_at`; one shared `consecration_points` for every room under the building's
-  area node), `ConsecrationTier` (#3778: authored `min_points` → `bonus_percent` ladder per
+  area node), `Prayer` (#3779: a character's freeform words to a being, a plain log;
+  `devotion_granted` for the weekly holy-site prayer, `dire_straits` + OneToOne `intervention`
+  when a miracle answered), `Vision` (#3779: GM-sent prose from a being, `reveal_source`,
+  optional `prayer` / CODEX `clue` / `episode`, OneToOne `message` → the VISIONS
+  `NarrativeMessage` that delivered it), `ConsecrationTier` (#3778: authored `min_points` → `bonus_percent` ladder per
   scope SHRINE/TEMPLE), `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
@@ -8480,7 +8484,15 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `dissolve_shrine` (gate: the room's `effective_owner` persona; one feature slot per room),
   `dedicate_temple` / `revoke_temple` (gate: `owner_persona`, the area holder, or its org
   leader), actions `shrine_found`/`shrine_dissolve`/`temple_dedicate`/`temple_revoke`;
-  `ConsecrationError` (`SiteNotHeld`, `SiteAlreadyTaken`, `SiteNotFound`). CG: `CharacterDraft.public_worship`/
+  `ConsecrationError` (`SiteNotHeld`, `SiteAlreadyTaken`, `SiteNotFound`). **Prayers**
+  (`worship/prayer_services.py`, #3779): `pray(sheet, being, text)` (log; weekly holy-site
+  devotion via `sites_of` + `site_prayer_capped_this_week`; `dire_straits_for` = Soulfray via
+  `get_soulfray_warning` or health ≤ `KNOCKOUT_HEALTH_THRESHOLD` → `fire_divine_intervention`
+  on NEAR_DEATH narrowed to that being), `send_vision(...)` (spends the pool, VISIONS narrative
+  message, `acquire_clue` for a CODEX clue, episode needs a `StoryParticipation`), actions
+  `pray` / `vision_send` (staff), telnet `pray` / `vision`, `GET /api/worship/prayers/`,
+  `GET|POST /api/worship/visions/`; `fire_divine_intervention(sheet, *, trigger, trigger_event,
+  scene, being)` is the shared check `maybe_fire_divine_intervention` now calls. CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.

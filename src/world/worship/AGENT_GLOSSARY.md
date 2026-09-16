@@ -99,6 +99,21 @@
 - **Holding a place** — the founding gate for a site (`SiteNotHeld`, #3778): a room's
   `effective_owner` persona for a shrine; a building's credited `owner_persona`, the holder
   of its area, or that holder's org leader for a temple. Never a payment.
+- **Prayer** — a character's freeform words to a being (`Prayer`, #3779): a plain log
+  with no effect of its own, read by staff. Mechanically meaningful only through the
+  conditions recorded on it: the **holy-site prayer** (the first per game week at a shrine
+  or temple of the being pays a little devotion) and **dire straits** (Soulfray active or
+  near death; the NEAR_DEATH intervention check runs for the god prayed to). _Avoid_:
+  "prayer" for the Rites skill or the Prayer TechniqueStyle (both older uses); "petition".
+- **Vision** — a GM-sent vision (`Vision`, #3779): prose a being sends one character,
+  first-class and standalone, delivered as a VISIONS narrative message in the one
+  treatment reserved for visions. `reveal_source` decides whether the recipient learns
+  the being. May answer a prayer, hand over a Codex clue, or belong to an episode; usually
+  none of these. Never automatic, never player-triggered. _Avoid_: "dream" (the dreams app
+  is the sleep realm), "omen", "vision_text" (an Audere Majora threshold's own field).
+- **Dire straits** — the danger a god might answer (`DireStraitsKind`, #3779): Soulfray
+  active (read through the safety checkpoint's `get_soulfray_warning`) or health at or
+  below the knockout band while alive. Near death outranks Soulfray on the record.
 - **Feast day** — a being's annually-recurring worship holiday (`WorshipFeastDay`,
   #3776): `ic_month`/`ic_day`, no year, unique per being+date. Its own model rather
   than reusing `weather.FeastDay` — a religious concept shouldn't be owned by the
@@ -119,8 +134,9 @@
   reusing the `Abstract*` bases. _Avoid_: "prayer" (the mundane skill is Rites; a
   TechniqueStyle named Prayer exists).
 - **Divine Intervention** — the automatic firing of a Miracle when a PC with
-  `DevotionStanding.favor` above the config threshold is incapacitated (#2360). The
-  god decides — no player prompt. Per-character cooldown via a timed condition.
+  `DevotionStanding.favor` above the config threshold is incapacitated (#2360), or
+  prays in dire straits (#3779, the NEAR_DEATH trigger, narrowed to the god prayed to).
+  The god decides — no player prompt. Per-character cooldown via a timed condition.
   Trigger installed on the character's ObjectDB when `bump_devotion` pushes favor past
   the threshold; removed when it drops below.
 - **Faith Variant** — an `AudereMajoraFaithVariant` — per-being ceremony override for

@@ -239,6 +239,7 @@
   - places <- scenes.Place
   - speaker_queues <- scenes.SpeakerQueue
   - travel_hub <- travel.TravelHub
+  - prayers <- worship.Prayer
 
 ### RoomSizeTier
 **Pointed to by:**
@@ -1762,6 +1763,8 @@
   - rite_performances <- worship.WorshipRitePerformance
   - founded_shrines <- worship.ShrineDetails
   - founded_temples <- worship.TempleDedication
+  - prayers <- worship.Prayer
+  - visions <- worship.Vision
 
 ### Gender
 **Pointed to by:**
@@ -2068,6 +2071,7 @@
   - trigger_placements <- clues.ClueTrigger
   - item_trigger_placements <- clues.ItemClueTrigger
   - npc_reveal_offers <- npc_services.ClueRevealOfferDetails
+  - visions <- worship.Vision
 
 ### ClueTrigger
 **Foreign Keys:**
@@ -4028,6 +4032,7 @@
   - relationships <- relationships.CharacterRelationship
   - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
   - rite_performances <- worship.WorshipRitePerformance
+  - prayers <- worship.Prayer
 
 ### ScheduledTaskRecord
 
@@ -6878,6 +6883,7 @@
   - related_episode_resolution -> stories.EpisodeResolution [FK] (nullable)
 **Pointed to by:**
   - deliveries <- narrative.NarrativeMessageDelivery
+  - vision <- worship.Vision
 
 ### NarrativeMessageDelivery
 **Foreign Keys:**
@@ -9750,6 +9756,7 @@
   - session_requests <- stories.SessionRequest
   - crossover_invites <- stories.CrossoverInvite
   - crossover_invites_accepted <- stories.CrossoverInvite
+  - visions <- worship.Vision
 
 ### EpisodeProgressionRequirement
 **Foreign Keys:**
@@ -10456,6 +10463,18 @@
   - being -> worship.WorshippedBeing [FK]
   - target_character -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+**Pointed to by:**
+  - answered_prayer <- worship.Prayer
+
+### Prayer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - being -> worship.WorshippedBeing [FK]
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - game_week -> game_clock.GameWeek [FK]
+  - intervention -> worship.MiraclePerformance [OneToOne] (nullable)
+**Pointed to by:**
+  - visions <- worship.Vision
 
 ### Relic
 **Foreign Keys:**
@@ -10477,6 +10496,16 @@
   - building -> buildings.Building [FK]
   - being -> worship.WorshippedBeing [FK]
   - founder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+
+### Vision
+**Foreign Keys:**
+  - recipient -> character_sheets.CharacterSheet [FK]
+  - being -> worship.WorshippedBeing [FK]
+  - sent_by -> evennia.AccountDB [FK] (nullable)
+  - prayer -> worship.Prayer [FK] (nullable)
+  - clue -> clues.Clue [FK] (nullable)
+  - episode -> stories.Episode [FK] (nullable)
+  - message -> narrative.NarrativeMessage [OneToOne] (nullable)
 
 ### WorshipDeclaration
 **Foreign Keys:**
@@ -10550,6 +10579,8 @@
   - relics <- worship.Relic
   - shrines <- worship.ShrineDetails
   - temples <- worship.TempleDedication
+  - prayers <- worship.Prayer
+  - visions <- worship.Vision
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
@@ -10557,6 +10588,7 @@
 - `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int) -> world.worship.models.DevotionStanding - Upsert the (sheet, being) standing and run the God's Favorite check.`
 - `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`
 - `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding - Get-or-create a DevotionStanding and mark it as a patronage.`
+- `fire_divine_intervention(character_sheet: 'CharacterSheet', *, trigger: str, trigger_event: str, scene=None, being: world.worship.models.WorshippedBeing | None = None) -> 'MiraclePerformance | None' - The divine-intervention check: the highest-priority qualifying miracle fires.`
 - `get_chosen_favor_config() -> world.worship.models.ChosenFavorConfig - Lazy-create the ChosenFavorConfig singleton (pk=1).`
 - `get_divine_intervention_config() -> 'DivineInterventionConfig' - Lazy-create the singleton (pk=1) divine intervention config (#2360).`
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
@@ -10564,7 +10596,7 @@
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
 - `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
 - `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
-- `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None) -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
+- `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`
 - `remove_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Remove the divine intervention trigger when favor drops below threshold.`
 - `spend_worship_pool(being: world.worship.models.WorshippedBeing, amount: int, *, reason: str = '') -> bool - Deduct ``amount`` from ``being.resonance_pool`` (the spend counterpart to ``grant_worship``).`
