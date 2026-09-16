@@ -38,6 +38,7 @@ from world.worship.models import WorshipRite, WorshipRitePerformance, WorshipRit
 if TYPE_CHECKING:
     from world.ceremonies.models import Ceremony
     from world.character_sheets.models import CharacterSheet
+    from world.game_clock.models import GameWeek
     from world.scenes.models import Scene
     from world.traits.models import CheckOutcome
     from world.worship.models import WorshippedBeing
@@ -94,52 +95,88 @@ def reward_multiplier_percent(character_sheet: CharacterSheet, rite: WorshipRite
     return percent
 
 
-def favor_capped_this_week(character_sheet: CharacterSheet, rite: WorshipRite) -> bool:
+def favor_capped_this_week(
+    character_sheet: CharacterSheet, rite: WorshipRite, *, game_week: GameWeek | None = None
+) -> bool:
     """Whether ``character_sheet`` already earned favor from ``rite`` this game week."""
-    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    if game_week is None:
+        from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
 
+        game_week = get_current_game_week()
     return WorshipRitePerformance.objects.filter(
         character_sheet=character_sheet,
         rite=rite,
-        game_week=get_current_game_week(),
+        game_week=game_week,
         favor_granted__gt=0,
     ).exists()
 
 
-def apply_rite_award(
+def award_for(rite: WorshipRite, outcome: CheckOutcome) -> WorshipRiteTierAward:
+    """The (tier, outcome) award row, or ``RiteAwardMissing``: a content gap is
+    raised rather than paid as 0 (the AnimaRitualBudgetAward convention)."""
+    award = WorshipRiteTierAward.objects.filter(tier=rite.kind.tier, outcome_tier=outcome).first()
+    if award is None:
+        raise RiteAwardMissing
+    return award
+
+
+def require_complete_award_table(rite: WorshipRite) -> None:
+    """Raise ``RiteAwardMissing`` unless every CheckOutcome has a row for the rite's tier.
+
+    Called BEFORE a rite charges anything: the cost spend and the fatigue mutate
+    identity-mapped rows in place, and a rollback after them would restore the
+    database while the cached instances kept the spent values (ADR-0008). So
+    the only content-gap raise happens while nothing has been written yet.
+    """
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    expected = set(CheckOutcome.objects.values_list("pk", flat=True))
+    have = set(
+        WorshipRiteTierAward.objects.filter(tier=rite.kind.tier).values_list(
+            "outcome_tier_id", flat=True
+        )
+    )
+    if expected - have:
+        raise RiteAwardMissing
+
+
+def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-only and distinct
     character_sheet: CharacterSheet,
     rite: WorshipRite,
     outcome: CheckOutcome,
     *,
     scene: Scene | None = None,
     ceremony: Ceremony | None = None,
+    award: WorshipRiteTierAward | None = None,
 ) -> RiteOutcome:
     """Pay a rite's tier award for ``outcome``: the audit row, the resonance
     grant (ledger source WORSHIP_RITE) and the weekly-capped favor bump.
 
     Shared by a solo performance (``perform_worship_rite``, which rolled the
     check itself) and a tier 3 ceremony (``finish_ceremony``, which passes the
-    officiant's Rites roll). Raises ``RiteAwardMissing`` for an unseeded
-    (tier, outcome) pair rather than paying 0.
+    officiant's Rites roll and the ``award`` row it already resolved so a
+    content gap surfaces before the ceremony's honors are written). Raises
+    ``RiteAwardMissing`` for an unseeded (tier, outcome) pair rather than
+    paying 0.
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
 
-    award = WorshipRiteTierAward.objects.filter(tier=rite.kind.tier, outcome_tier=outcome).first()
     if award is None:
-        raise RiteAwardMissing
+        award = award_for(rite, outcome)
+    week = get_current_game_week()
     percent = reward_multiplier_percent(character_sheet, rite)
     resonance_amount = award.resonance_amount * percent // 100
-    capped = favor_capped_this_week(character_sheet, rite)
+    capped = favor_capped_this_week(character_sheet, rite, game_week=week)
     favor_amount = 0 if capped else award.favor_amount * percent // 100
 
     with transaction.atomic():
         performance = WorshipRitePerformance.objects.create(
             character_sheet=character_sheet,
             rite=rite,
-            game_week=get_current_game_week(),
+            game_week=week,
             scene=scene,
             ceremony=ceremony,
             outcome_tier=outcome,
@@ -167,6 +204,9 @@ def apply_rite_award(
 
 
 def _scene_participant(scene: Scene, character_sheet: CharacterSheet) -> bool:
+    """The roster-tenure participation check ``magic.services.anima`` and
+    ``conditions.services`` each keep privately; this one reuses the public
+    ``account_for_sheet`` walk rather than copying theirs."""
     from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
     from world.scenes.models import SceneParticipation  # noqa: PLC0415
 
@@ -213,6 +253,7 @@ def perform_worship_rite(
         raise RiteIsCeremony
     if not scene.is_active or not _scene_participant(scene, character_sheet):
         raise RiteScenePrerequisiteFailed
+    require_complete_award_table(rite)
 
     with transaction.atomic():
         _charge_costs(character_sheet, rite)

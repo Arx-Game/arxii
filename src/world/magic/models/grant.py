@@ -177,6 +177,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
@@ -197,6 +198,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -218,6 +220,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="MISSION_REPORT"),
             ),
@@ -240,6 +243,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="STAKE_REWARD"),
             ),
@@ -260,6 +264,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
             ),
@@ -280,6 +285,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="SCENE_ENTRY"),
             ),
@@ -300,6 +306,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="OUTFIT_TRICKLE"),
             ),
@@ -323,6 +330,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="SANCTUM_WEAVING"),
             ),
@@ -342,6 +350,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="SANCTUM_OWNER_BONUS"),
             ),
@@ -363,6 +372,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="SANCTUM_DISSOLUTION_RECOVERY"),
             ),
@@ -383,6 +393,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="PROJECT_CONTRIBUTION"),
             ),
@@ -403,6 +414,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="ENTRY_FLOURISH"),
             ),
@@ -423,6 +435,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="DRAMATIC_MOMENT"),
             ),
@@ -443,6 +456,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="STYLE_PRESENTATION"),
             ),
@@ -463,6 +477,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="MISSION_REWARD"),
             ),
@@ -507,6 +522,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="COMPROMISE"),
             ),
@@ -526,6 +542,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="PENANCE"),
             ),
@@ -545,6 +562,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
                 )
                 | ~Q(source="FALL_CONVERSION"),
             ),

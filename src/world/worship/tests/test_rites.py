@@ -206,19 +206,20 @@ class PerformRiteTests(RiteTestBase):
         with self.assertRaises(RiteScenePrerequisiteFailed):
             self._perform()
 
-    def test_missing_award_row_raises_and_rolls_back(self) -> None:
+    def test_an_incomplete_award_table_refuses_before_anything_is_charged(self) -> None:
+        # A second CheckOutcome with no award row for this tier: the gap is
+        # detected before the cost spend, so neither the database row nor the
+        # identity-mapped pool instance is touched (ADR-0008 rollback staleness).
         botch = CheckOutcomeFactory(name="Critical Failure", success_level=-2)
 
         with self.assertRaises(RiteAwardMissing):
             self._perform(botch)
 
         self.assertFalse(WorshipRitePerformance.objects.exists())
-        # Read the row, not the identity-mapped instance: a rolled-back atomic
-        # block restores the DB but leaves the cached object holding the spend.
         stored = (
             ActionPointPool.objects.filter(pk=self.pool.pk).values_list("current", flat=True).get()
         )
-        self.assertEqual(stored, 10)  # the atomic block refunded the cost
+        self.assertEqual(stored, 10)
 
     def test_rite_must_channel_its_own_beings_resonance(self) -> None:
         from django.core.exceptions import ValidationError

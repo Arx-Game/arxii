@@ -8,6 +8,7 @@ this PR): most gods are never played; the rare manifested god links an
 no consumer system (ADR-0010).
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -671,8 +672,6 @@ class WorshipRite(SharedMemoryModel):
             and self.being_id is not None
             and self.resonance.being_id != self.being_id
         ):
-            from django.core.exceptions import ValidationError  # noqa: PLC0415
-
             msg = "A rite channels one of its own being's resonances."
             raise ValidationError({"resonance": msg})
 

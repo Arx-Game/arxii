@@ -93,6 +93,12 @@ class OpenRiteCeremonyTests(RiteCeremonyTestBase):
         with self.assertRaises(CeremonyError):
             self._open(other)
 
+    def test_an_inactive_rite_is_refused(self) -> None:
+        self.ordeal.is_active = False
+        self.ordeal.save(update_fields=["is_active"])
+        with self.assertRaises(CeremonyError):
+            self._open(self.ordeal)
+
     def test_other_ceremony_types_carry_no_rite(self) -> None:
         with self.assertRaises(CeremonyError):
             self._open(self.ordeal, type_key=CeremonyTypeKey.BLESSING)
@@ -140,6 +146,21 @@ class FinishRiteCeremonyTests(RiteCeremonyTestBase):
         second = WorshipRitePerformance.objects.order_by("-pk").first()
         self.assertEqual(second.resonance_granted, 12)
         self.assertEqual(second.favor_granted, 0)
+
+    def test_a_missing_award_row_stops_the_finish_before_any_honor(self) -> None:
+        from world.ceremonies.constants import CeremonyStatus
+        from world.societies.models import LegendEntry
+
+        botch = CheckOutcomeFactory(name="Critical Failure", success_level=-2)
+        ceremony = self._open(self.ordeal)
+
+        with force_check_outcome(botch), self.assertRaises(CeremonyError):
+            finish_ceremony(ceremony=ceremony)
+
+        ceremony.refresh_from_db()
+        self.assertEqual(ceremony.status, CeremonyStatus.OPEN)
+        self.assertFalse(LegendEntry.objects.exists())
+        self.assertFalse(DevotionStanding.objects.filter(character_sheet=self.sheet).exists())
 
     def test_a_plain_ceremony_pays_no_rite_award(self) -> None:
         ceremony = self._open(None, type_key=CeremonyTypeKey.BLESSING)

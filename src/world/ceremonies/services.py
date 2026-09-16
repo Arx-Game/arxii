@@ -457,6 +457,9 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
         if result.outcome is not None:
             rites_outcome = result.outcome
             quality_level = result.outcome.success_level
+    # #3777: a RITE ceremony's award row is resolved here, before a single honor
+    # is written; finish is not atomic, so a content gap must surface first.
+    rite_award = _resolve_rite_award(ceremony, rites_outcome)
 
     multiplier = max(
         25, 100 + quality_level * config.quality_multiplier_percent_per_level
@@ -497,7 +500,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
                 f"Officiated a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
             )
     bump_devotion(officiant_sheet, ceremony.being, config.devotion_officiant)
-    _pay_rite_award(ceremony, officiant_sheet, rites_outcome)
+    _pay_rite_award(ceremony, officiant_sheet, rites_outcome, rite_award)
 
     _run_type_specific_finish(ceremony, honorees)
 
@@ -509,30 +512,42 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     return ceremony
 
 
-def _pay_rite_award(ceremony: Ceremony, officiant_sheet, rites_outcome) -> None:
+def _resolve_rite_award(ceremony: Ceremony, rites_outcome):
+    """The (tier, outcome) award a RITE ceremony will pay, or None when there is
+    nothing to pay (no rite, or no Rites check type seeded so no roll). A
+    missing row is a ``CeremonyError`` raised before any honor is written."""
+    if ceremony.worship_rite_id is None or rites_outcome is None:
+        return None
+    from world.worship.exceptions import WorshipRiteError  # noqa: PLC0415
+    from world.worship.rite_services import award_for  # noqa: PLC0415
+
+    try:
+        return award_for(ceremony.worship_rite, rites_outcome)
+    except WorshipRiteError as exc:
+        raise CeremonyError(exc.user_message) from exc
+
+
+def _pay_rite_award(ceremony: Ceremony, officiant_sheet, rites_outcome, rite_award) -> None:
     """A RITE ceremony pays its tier 3 award off the officiant's Rites roll (#3777).
 
     The same ``apply_rite_award`` a solo rite uses, so the performance row, the
     resonance ledger source and the weekly favor cap are one path. Participants
-    earn their own resonance through dramatic-moment tags, not here. With no
-    Rites check type seeded there was no roll and nothing to grade, so the
-    award is skipped rather than invented.
+    earn their own resonance through dramatic-moment tags, not here. ``rite_award``
+    was resolved by ``_resolve_rite_award`` before the honors; None means nothing
+    to pay.
     """
-    if ceremony.worship_rite_id is None or rites_outcome is None:
+    if rite_award is None:
         return
-    from world.worship.exceptions import WorshipRiteError  # noqa: PLC0415
     from world.worship.rite_services import apply_rite_award  # noqa: PLC0415
 
-    try:
-        apply_rite_award(
-            officiant_sheet,
-            ceremony.worship_rite,
-            rites_outcome,
-            scene=ceremony.scene,
-            ceremony=ceremony,
-        )
-    except WorshipRiteError as exc:
-        raise CeremonyError(exc.user_message) from exc
+    apply_rite_award(
+        officiant_sheet,
+        ceremony.worship_rite,
+        rites_outcome,
+        scene=ceremony.scene,
+        ceremony=ceremony,
+        award=rite_award,
+    )
 
 
 def _run_type_specific_finish(ceremony: Ceremony, honorees: list[CeremonyHonoree]) -> None:

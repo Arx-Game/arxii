@@ -361,7 +361,6 @@ ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.STYLE_PRESENTATION,
         GainSource.OUTFIT_TRICKLE,
         GainSource.ROOM_RESIDENCE,
-        GainSource.WORSHIP_RITE,
     }
 )
 
@@ -380,6 +379,10 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.COMPROMISE,
         GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
+        # #3777: a rite pays off the performer's own roll against an authored
+        # award table; a live scene is its prerequisite, not its witness, and
+        # its resonance is uncapped, so it is never accelerated.
+        GainSource.WORSHIP_RITE,
     }
 )
 

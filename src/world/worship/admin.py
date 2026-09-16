@@ -208,6 +208,6 @@ class WorshipRitePerformanceAdmin(admin.ModelAdmin):
 @admin.register(Relic)
 class RelicAdmin(admin.ModelAdmin):
     list_display = ("item_instance", "being", "created_at")
-    search_fields = ("being__name", "item_instance__name")
+    search_fields = ("being__name", "item_instance__custom_name", "item_instance__template__name")
     autocomplete_fields = ("being",)
     raw_id_fields = ("item_instance",)
