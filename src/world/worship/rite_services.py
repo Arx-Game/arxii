@@ -36,6 +36,7 @@ from world.worship.exceptions import (
 from world.worship.models import WorshipRite, WorshipRitePerformance, WorshipRiteTierAward
 
 if TYPE_CHECKING:
+    from evennia_extensions.models import RoomProfile
     from world.ceremonies.models import Ceremony
     from world.character_sheets.models import CharacterSheet
     from world.game_clock.models import GameWeek
@@ -54,6 +55,7 @@ class RiteOutcome:
     favor_granted: int
     favor_capped: bool
     multiplier_percent: int
+    consecration_bonus_percent: int = 0
 
 
 def rite_ap_cost(rite: WorshipRite) -> int:
@@ -162,12 +164,20 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.worship.consecration_services import (  # noqa: PLC0415
+        consecration_bonus_percent,
+        grow_consecration,
+    )
     from world.worship.services import bump_devotion  # noqa: PLC0415
 
     if award is None:
         award = award_for(rite, outcome)
     week = get_current_game_week()
-    percent = reward_multiplier_percent(character_sheet, rite)
+    room_profile = _room_profile_for(scene=scene, ceremony=ceremony)
+    # #3778: a shrine or temple of the rite's own being adds its tier bonus; the
+    # two stack by addition, and the performance then consecrates them further.
+    site_bonus = consecration_bonus_percent(room_profile, rite.being)
+    percent = reward_multiplier_percent(character_sheet, rite) * (100 + site_bonus) // 100
     resonance_amount = award.resonance_amount * percent // 100
     capped = favor_capped_this_week(character_sheet, rite, game_week=week)
     favor_amount = 0 if capped else award.favor_amount * percent // 100
@@ -193,6 +203,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             )
         if favor_amount > 0:
             bump_devotion(character_sheet, rite.being, favor_amount)
+        grow_consecration(room_profile, rite)
     return RiteOutcome(
         performance=performance,
         outcome_name=outcome.name,
@@ -200,7 +211,17 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
         favor_granted=favor_amount,
         favor_capped=capped,
         multiplier_percent=percent,
+        consecration_bonus_percent=site_bonus,
     )
+
+
+def _room_profile_for(*, scene: Scene | None, ceremony: Ceremony | None) -> RoomProfile | None:
+    """Where a performance happened: the ceremony's room, else the scene's."""
+    if ceremony is not None:
+        return ceremony.location
+    if scene is not None and scene.location is not None:
+        return scene.location.room_profile_or_none
+    return None
 
 
 def _scene_participant(scene: Scene, character_sheet: CharacterSheet) -> bool:

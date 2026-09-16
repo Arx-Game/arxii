@@ -15,6 +15,8 @@ class RoomFeatureServiceStrategy(models.TextChoices):
 
     FIELD = "FIELD", "Field"
     SANCTUM = "SANCTUM", "Sanctum"
+    # #3778: a room-level holy site of one being; home app is world.worship.
+    SHRINE = "SHRINE", "Shrine"
     LIBRARY = "LIBRARY", "Library"
     TRAINING_ROOM = "TRAINING_ROOM", "Training Room"
     LAB = "LAB", "Lab"

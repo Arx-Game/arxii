@@ -62,3 +62,16 @@ RITE_SOCIAL_FATIGUE_COST = 1
 FAVORED_RESONANCE_REWARD_MULTIPLIER_PERCENT = 200  # BeingResonance.tier == FAVORED
 FEAST_DAY_REWARD_MULTIPLIER_PERCENT = 200  # performed on one of the being's feast days
 BIRTH_FAVOR_REWARD_MULTIPLIER_PERCENT = 200  # is_birth_favored_by holds today
+
+
+class ConsecrationScope(models.TextChoices):
+    """Which holy site a consecration tier row describes (#3778)."""
+
+    SHRINE = "shrine", "Shrine"
+    TEMPLE = "temple", "Temple"
+
+
+# A rite performed at a holy site of its own being consecrates it by its tier
+# in points (#3778). PLACEHOLDER magnitude; the tier tables are authored rows.
+CONSECRATION_POINTS_PER_RITE_TIER = 1
+SHRINE_KIND_NAME = "Shrine"

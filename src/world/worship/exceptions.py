@@ -41,3 +41,26 @@ class RiteAwardMissing(WorshipRiteError):
     raised rather than paying 0 (the AnimaRitualBudgetAward convention)."""
 
     user_message = "That rite's rewards are not configured yet; tell staff."
+
+
+class ConsecrationError(Exception):
+    """A shrine or temple could not be founded, grown or dissolved; player-safe."""
+
+    user_message = "That cannot be consecrated."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class SiteNotHeld(ConsecrationError):
+    user_message = "You do not hold this place."
+
+
+class SiteAlreadyTaken(ConsecrationError):
+    user_message = "This place already carries a feature or dedication."
+
+
+class SiteNotFound(ConsecrationError):
+    user_message = "There is no such holy site here."
