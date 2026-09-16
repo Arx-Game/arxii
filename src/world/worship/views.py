@@ -6,8 +6,12 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from world.stories.pagination import StandardResultsSetPagination
-from world.worship.models import Miracle, WorshippedBeing
-from world.worship.serializers import MiracleSerializer, WorshippedBeingRefSerializer
+from world.worship.models import Miracle, WorshippedBeing, WorshipRite
+from world.worship.serializers import (
+    MiracleSerializer,
+    WorshippedBeingRefSerializer,
+    WorshipRiteSerializer,
+)
 
 
 class WorshippedBeingViewSet(ReadOnlyModelViewSet):
@@ -32,3 +36,19 @@ class MiracleViewSet(ReadOnlyModelViewSet):
     serializer_class = MiracleSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = Miracle.objects.select_related("being")
+
+
+class WorshipRiteViewSet(ReadOnlyModelViewSet):
+    """The rites a being offers (#3777): what a worshipper can perform."""
+
+    serializer_class = WorshipRiteSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["being", "kind__tier"]
+    search_fields = ["name"]
+    queryset = (
+        WorshipRite.objects.filter(is_active=True, being__is_active=True)
+        .select_related("being", "kind", "check_type", "resonance__resonance")
+        .order_by("being__name", "kind__tier", "name")
+    )

@@ -203,6 +203,70 @@ def ensure_traditions_and_beings(specs: dict[str, object]) -> None:
         )
 
 
+_RITE_KINDS = (
+    # (name, tier, description) — all PLACEHOLDER; many kinds share a tier.
+    ("Vigil", 1, "PLACEHOLDER: a night kept awake in the being's name."),
+    ("Sermon", 1, "PLACEHOLDER: preaching the being's word to whoever listens."),
+    ("Canticle", 1, "PLACEHOLDER: a sung devotion."),
+    ("Blessing", 1, "PLACEHOLDER: a small consecration of a person, place or thing."),
+    ("Pilgrimage", 2, "PLACEHOLDER: a demanding journey or service owed to the being."),
+    ("Ordeal", 3, "PLACEHOLDER: a dangerous rite held as a full ceremony."),
+)
+
+# (tier, outcome name) -> (resonance, favor). PLACEHOLDER magnitudes: every
+# tier pays every canonical outcome, a botch included, so a rite always reads
+# a row (a missing row raises rather than paying 0).
+_RITE_TIER_AWARDS = {
+    1: {
+        "Critical Failure": (0, 0),
+        "Failure": (1, 1),
+        "Partial Success": (2, 2),
+        "Success": (4, 3),
+        "Critical Success": (6, 5),
+    },
+    2: {
+        "Critical Failure": (0, 0),
+        "Failure": (2, 2),
+        "Partial Success": (4, 4),
+        "Success": (8, 6),
+        "Critical Success": (12, 10),
+    },
+    3: {
+        "Critical Failure": (0, 0),
+        "Failure": (3, 3),
+        "Partial Success": (6, 6),
+        "Success": (12, 9),
+        "Critical Success": (18, 15),
+    },
+}
+
+
+def ensure_rite_kinds_and_awards() -> None:
+    """Seed the shared RiteKind catalog and the (tier, outcome) award table (#3777).
+
+    Idempotent (get_or_create on names and on the (tier, outcome) pair). The
+    five canonical CheckOutcome rows come from ``seed_check_resolution_tables``,
+    the same guarantee the anima ritual awards rely on. No per-being rite is
+    seeded here: rites are authored per being (the Deity Editor, #3780).
+    """
+    from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+    from world.worship.models import RiteKind, WorshipRiteTierAward  # noqa: PLC0415
+
+    for name, tier, description in _RITE_KINDS:
+        RiteKind.objects.get_or_create(
+            name=name, defaults={"tier": tier, "description": description}
+        )
+    seed_check_resolution_tables()
+    for tier, rows in _RITE_TIER_AWARDS.items():
+        for outcome_name, (resonance_amount, favor_amount) in rows.items():
+            WorshipRiteTierAward.objects.get_or_create(
+                tier=tier,
+                outcome_tier=CheckOutcome.objects.get(name=outcome_name),
+                defaults={"resonance_amount": resonance_amount, "favor_amount": favor_amount},
+            )
+
+
 def seed_worship_content() -> None:
     """Cluster entry point — idempotent.
 
@@ -213,6 +277,7 @@ def seed_worship_content() -> None:
     ensure_ceremony_check_type(seeded["skill"])
     ensure_favorite_achievements()
     ensure_traditions_and_beings(seeded["specs"])
+    ensure_rite_kinds_and_awards()
 
     from world.worship.factories import wire_miracle_content  # noqa: PLC0415
 
