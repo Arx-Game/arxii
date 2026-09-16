@@ -24089,6 +24089,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/rites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The rites a being offers (#3777): what a worshipper can perform. */
+    get: operations['worship_rites_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/rites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The rites a being offers (#3777): what a worshipper can perform. */
+    get: operations['worship_rites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -26102,6 +26136,8 @@ export interface components {
       readonly honorees: components['schemas']['CeremonyHonoree'][];
       readonly speeches: components['schemas']['CeremonySpeech'][];
       readonly offering_count: number;
+      /** @description The tier 3 rite a RITE ceremony performs (#3777), else None. */
+      readonly worship_rite_name: string | null;
     };
     CeremonyHonoree: {
       readonly id: number;
@@ -38415,6 +38451,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['WorldBuilderRoomHit'][];
     };
+    PaginatedWorshipRiteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['WorshipRite'][];
+    };
     PaginatedWorshippedBeingRefList: {
       /** @example 123 */
       count: number;
@@ -42223,6 +42274,7 @@ export interface components {
        *     * `COMPROMISE` - Moral compromise
        *     * `PENANCE` - Atonement resonance conversion
        *     * `FALL_CONVERSION` - Fall/Redemption conversion
+       *     * `WORSHIP_RITE` - Worship rite
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -42253,6 +42305,7 @@ export interface components {
      *     * `COMPROMISE` - Moral compromise
      *     * `PENANCE` - Atonement resonance conversion
      *     * `FALL_CONVERSION` - Fall/Redemption conversion
+     *     * `WORSHIP_RITE` - Worship rite
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -42275,7 +42328,8 @@ export interface components {
       | 'COMBO_DISCOVERY'
       | 'COMPROMISE'
       | 'PENANCE'
-      | 'FALL_CONVERSION';
+      | 'FALL_CONVERSION'
+      | 'WORSHIP_RITE';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -47472,6 +47526,18 @@ export interface components {
     WorshipConversionOfferRequest: {
       status?: components['schemas']['Status7baEnum'];
     };
+    /** @description A being's rite as the client shows it (#3777): flavor plus the tier. */
+    WorshipRite: {
+      readonly id: number;
+      readonly being: number;
+      readonly being_name: string;
+      readonly name: string;
+      readonly description: string;
+      readonly kind_name: string;
+      readonly tier: number;
+      readonly check_type_name: string;
+      readonly resonance_name: string;
+    };
     WorshippedBeingRef: {
       readonly id: number;
       name: string;
@@ -50091,12 +50157,14 @@ export interface operations {
          *     * `wedding` - Wedding
          *     * `conversion` - Conversion
          *     * `coronation` - Coronation
+         *     * `rite` - Rite
          */
         ceremony_type__key?:
           | 'blessing'
           | 'conversion'
           | 'coronation'
           | 'funeral'
+          | 'rite'
           | 'seance'
           | 'sermon'
           | 'wedding';
@@ -64447,6 +64515,7 @@ export interface operations {
          *     * `COMPROMISE` - Moral compromise
          *     * `PENANCE` - Atonement resonance conversion
          *     * `FALL_CONVERSION` - Fall/Redemption conversion
+         *     * `WORSHIP_RITE` - Worship rite
          */
         source?:
           | 'COMBO_DISCOVERY'
@@ -64468,7 +64537,8 @@ export interface operations {
           | 'SCENE_ENTRY'
           | 'STAFF_GRANT'
           | 'STAKE_REWARD'
-          | 'STYLE_PRESENTATION';
+          | 'STYLE_PRESENTATION'
+          | 'WORSHIP_RITE';
       };
       header?: never;
       path?: never;
@@ -80698,6 +80768,63 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Miracle'];
+        };
+      };
+    };
+  };
+  worship_rites_list: {
+    parameters: {
+      query?: {
+        being?: number;
+        /**
+         * @description Sets the AP cost (1 per tier) and the award table row; tier 3 is a Ceremony.
+         *
+         *     * `1` - Devotional
+         *     * `2` - Demanding
+         *     * `3` - Perilous
+         */
+        kind__tier?: 1 | 2 | 3;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorshipRiteList'];
+        };
+      };
+    };
+  };
+  worship_rites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worship rite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorshipRite'];
         };
       };
     };

@@ -70,6 +70,32 @@ issue bodies; the model decision is ADR-0132.
   universal worship-rite reward multiplier for anyone worshipping the being on
   that date (wired in #3777) — distinct from `is_birth_favored_by` below,
   which is per-character (tarot match + personal birthday), not per-date.
+- `RiteKind` (#3777) — the pantheon-wide catalog of rite kinds: `name`, `description`,
+  `tier` (`RiteTier`: 1 Devotional, 2 Demanding, 3 Perilous). Many kinds share a tier
+  and the tier is the only mechanical fact a kind carries (AP cost = 1 per tier;
+  tier 3 is a Ceremony). Seeded: Vigil, Sermon, Canticle, Blessing (1), Pilgrimage
+  (2), Ordeal (3), all PLACEHOLDER.
+- `WorshipRite` (#3777) — a being's own instantiation of a kind: `being` FK
+  (`related_name="rites"`), `kind` FK, `name`/`description` (the being's flavor,
+  unique per being+name), `check_type` FK, `resonance` FK → one of the being's own
+  `BeingResonance` rows (`clean()` refuses another being's), `is_active`. No
+  difficulty, cost or reward field: all read from the kind's tier. Authored per
+  being (the Deity Editor, #3780); nothing seeds one.
+- `WorshipRiteTierAward` (#3777) — the payout per (`tier`, `outcome_tier` FK →
+  `traits.CheckOutcome`): `resonance_amount`, `favor_amount`; unique per pair. The
+  `AnimaRitualBudgetAward` shape keyed additionally by tier, so three tiers tune once
+  for every god; NOT an `OutcomeTierAward` subclass (that base's OneToOne allows one
+  row per outcome). Every (tier, outcome) pair must be seeded; a missing row raises
+  `RiteAwardMissing` rather than paying 0. Seeded 3 × 5 PLACEHOLDER rows.
+- `WorshipRitePerformance` (#3777) — one performance: `character_sheet`, `rite`,
+  `game_week` FK, nullable `scene`, nullable OneToOne `ceremony` (set for a tier 3
+  rite), `outcome_tier`, `resonance_granted`, `favor_granted`, `performed_at`. The
+  audit row, the `ResonanceGrant` source (`GainSource.WORSHIP_RITE`,
+  `source_worship_rite_performance`) and the weekly devotion cap in one table.
+- `Relic` (#3777) — a specific sacred item of a being: `being` FK
+  (`related_name="relics"`), OneToOne `item_instance` → `items.ItemInstance`, `lore`.
+  A particular named instance, never an archetype; distinct from the offering facet
+  bonus below. Surfaced on the being's dashboard (#3780).
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
@@ -137,6 +163,30 @@ issue bodies; the model decision is ADR-0132.
   — never the real wall clock; returns False (never raises) with no active
   `GameClock`. Read by issue #3777's worship-rite reward calculation to double
   the being-scoped payout; grants nothing itself.
+
+**Rite services** (`worship/rite_services.py`, #3777) — mechanics serve RP: a rite
+is a dramatic in-scene act with a real cost and an outcome-tiered payout, the
+anima-recovery ritual's shape.
+
+- `perform_worship_rite(character_sheet, rite, *, scene)` → `RiteOutcome`. Tier 1
+  and 2 only (a tier 3 rite raises `RiteIsCeremony`); needs an active scene the
+  performer has entered (`RiteScenePrerequisiteFailed`); charges `rite_ap_cost`
+  (1 AP per tier, `RiteActionPointsInsufficient` when short) plus
+  `RITE_SOCIAL_FATIGUE_COST` social fatigue before the roll (a botch still cost the
+  effort); rolls the rite's `check_type` with the being's tradition specialization
+  (the same modifier the ceremony Rites roll applies); then `apply_rite_award`.
+- `apply_rite_award(character_sheet, rite, outcome, *, scene=None, ceremony=None)`
+  — the shared payout: reads the (tier, outcome) award, applies
+  `reward_multiplier_percent` (FAVORED being resonance ×2, `is_feast_day_today`
+  ×2, `is_birth_favored_by` ×2, stacking; all PLACEHOLDER constants in
+  `worship/constants.py`), writes the `WorshipRitePerformance`, grants resonance
+  through `grant_resonance` (source `WORSHIP_RITE`) and bumps devotion unless
+  `favor_capped_this_week`: favor from a given rite lands at most once per
+  `GameWeek` per character; resonance is never capped, so repeating a rite stays
+  fine for RP. Called by `finish_ceremony` for a RITE ceremony.
+- Action: `PerformWorshipRiteAction` (registry key `worship_rite`, `category`
+  "worship"): `rite` or `rite_name` (+ `being_name`) kwargs, resolves the scene from
+  the actor's room, maps every `WorshipRiteError` to a soft failure.
 
 ### Miracles & Divine Intervention (#2360)
 
@@ -245,7 +295,10 @@ returns `faith_variant.vision_text` when set, else `threshold.vision_text`.
 
 **API**: `/api/worship/beings/` — read-only reference catalog (id, name,
 tradition name only; pools/avatars never serialized). Sheet identity section
-exposes the **public** worship name only.
+exposes the **public** worship name only. `/api/worship/rites/` (#3777) — the
+rites of active beings (`WorshipRiteSerializer`: name, description, kind name,
+tier, check type name, resonance name; filter `being`, `kind__tier`; search
+`name`).
 
 ## Ceremonies (`world/ceremonies`, #2289)
 
@@ -257,16 +310,33 @@ to both; normally it runs inside them.
 renown-only; Seance the third ghost-window handler, #2393; Wedding solemnizes
 an active Betrothal on finish gated on WeddingConsentOffers, #2358/#2999;
 Conversion repoints public worship on finish, #2361; Coronation solemnizes an
-already-held title, #2358), `Ceremony` (officiant
+already-held title, #2358; Rite holds a tier 3 worship rite as a ceremony,
+#3777), `Ceremony` (officiant
 Persona, TRUE `being` vs `presented_being` — see leak rule, location
 RoomProfile, status OPEN/COMPLETED/ABANDONED, one-OPEN-per-location
-constraint, quality_level, nullable `title` FK — CORONATION only),
+constraint, quality_level, nullable `title` FK — CORONATION only, nullable
+`worship_rite` FK — RITE only, the TRUE being's tier 3 rite),
 `CeremonyHonoree`, `CeremonyOffering` (item
 snapshot; the item is destroyed; `item_legend_value` snapshots the offered
 item's legend at sacrifice time — #2359), `CeremonySpeech`, `CeremonyConfig`
-singleton (all magnitudes PLACEHOLDER), `SeanceManifestationOffer` (#2393,
+singleton (all magnitudes PLACEHOLDER; `offering_favored_facet_multiplier_percent`,
+#3777, scales an offering that carries a facet the TRUE being favors), `SeanceManifestationOffer` (#2393,
 consent gate for a Seance honoree's manifestation), `WorshipConversionOffer`
 (#2361, consent gate for a PC-officiated Conversion honoree — see below).
+
+**Rites as ceremonies (#3777)**: a RITE ceremony carries exactly one tier 3
+`WorshipRite` of the TRUE being (`_validate_rite_for_type`: other types carry none,
+a tier 1 or 2 rite is refused as a scene act); at finish the officiant's Rites roll
+outcome pays the rite's tier award through `worship.rite_services.apply_rite_award`
+(`_pay_rite_award`; skipped when no Rites check type is seeded, so there was no
+roll), on top of the ceremony's own honors and `devotion_officiant`. Participants
+earn resonance through `DramaticMomentType`/`DramaticMomentTag` as before; the
+event's own contest resolution stays out of scope (#3770). Telnet: `ceremony/rite
+<rite>[,<honoree>…][=<being>]`; the open action takes `rite_name`.
+**Favored offerings (#3777)**: `record_offering` resolves, in one query before any
+item is destroyed, which offered items carry an `ItemFacet` matching one of the TRUE
+being's `BeingFacet` rows; those are credited at the config multiplier on both the
+pool grant and the offerer's devotion bump (the god likes it more, so favor follows).
 
 **Services** (`ceremonies/services.py`): `open_ceremony` (Decision-10
 being/presented mapping: default = officiant's public declaration; explicit

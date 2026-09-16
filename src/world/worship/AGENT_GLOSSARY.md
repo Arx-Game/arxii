@@ -64,6 +64,25 @@
   presence/absence of a mystery. `being_a`/`being_b` are undirected (ALLY of X reads the
   same as ALLY of Y) and get sorted into canonical pk order automatically, so the same
   pair can never be recorded twice with the sides swapped.
+- **Rite kind** — a pantheon-wide kind of rite (`RiteKind`, #3777): a name and a
+  **rite tier** (`RiteTier` 1 Devotional / 2 Demanding / 3 Perilous). The tier is the
+  only mechanical fact: 1 AP per tier, the award row, and at tier 3 that the rite is
+  a Ceremony. _Avoid_: "ritual" (that is `magic.Ritual`, an unrelated mechanic).
+- **Worship rite** — a being's own instantiation of a rite kind (`WorshipRite`): its
+  flavor text, the check it rolls, and which of the being's own resonances it
+  channels. Performed as a scene act at tiers 1 and 2 (`perform_worship_rite`), as
+  a RITE ceremony at tier 3. _Avoid_: "rite" for the ceremony Rites skill roll.
+- **Tier award** — the authored payout per (rite tier, check outcome)
+  (`WorshipRiteTierAward`): resonance and favor. Every pair is seeded; a missing
+  row raises rather than paying 0.
+- **Rite performance** — one performance of a rite by one character
+  (`WorshipRitePerformance`): the audit row, the resonance ledger's WORSHIP_RITE
+  source, and the weekly favor cap (favor from a given rite lands once per game
+  week per character; resonance is never capped).
+- **Relic** — a specific sacred item of a being (`Relic`, #3777): one named
+  `ItemInstance`, never an archetype. Distinct from a **favored offering**, any
+  sacrificed item whose facet the being favors (credited at the config multiplier).
+  _Avoid_: "artifact".
 - **Feast day** — a being's annually-recurring worship holiday (`WorshipFeastDay`,
   #3776): `ic_month`/`ic_day`, no year, unique per being+date. Its own model rather
   than reusing `weather.FeastDay` — a religious concept shouldn't be owned by the

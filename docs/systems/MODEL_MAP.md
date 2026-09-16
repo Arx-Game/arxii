@@ -1220,11 +1220,13 @@
   - scene -> scenes.Scene [FK] (nullable)
   - event -> events.Event [FK] (nullable)
   - title -> societies.Title [FK] (nullable)
+  - worship_rite -> worship.WorshipRite [FK] (nullable)
 **Pointed to by:**
   - honorees <- ceremonies.CeremonyHonoree
   - offerings <- ceremonies.CeremonyOffering
   - speeches <- ceremonies.CeremonySpeech
   - coronation <- ceremonies.Coronation
+  - rite_performance <- worship.WorshipRitePerformance
 
 ### CeremonyConfig
 
@@ -1277,7 +1279,7 @@
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
 - `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
-- `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
+- `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
@@ -1756,6 +1758,7 @@
   - devotion_standings <- worship.DevotionStanding
   - worship_declaration <- worship.WorshipDeclaration
   - miracle_performances <- worship.MiraclePerformance
+  - rite_performances <- worship.WorshipRitePerformance
 
 ### Gender
 **Pointed to by:**
@@ -1869,6 +1872,7 @@
   - project_contribution_methods <- projects.ContributionMethod
   - scene_check_modifiers <- scenes.SceneCheckModifier
   - task_templates <- tasking.TaskTemplate
+  - worship_rites <- worship.WorshipRite
 
 ### CheckTypeAspect
 **Foreign Keys:**
@@ -4020,6 +4024,7 @@
   - journal_xp_trackers <- journals.WeeklyJournalXP
   - relationships <- relationships.CharacterRelationship
   - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
+  - rite_performances <- worship.WorshipRitePerformance
 
 ### ScheduledTaskRecord
 
@@ -4534,6 +4539,7 @@
   - crime_evidence <- justice.CrimeEvidence
   - project_contributions <- projects.Contribution
   - secrets_about <- secrets.Secret
+  - relic_of <- worship.Relic
 
 ### ItemRefinementDetails
 **Foreign Keys:**
@@ -5681,6 +5687,7 @@
   - source_style_presentation_endorsement -> magic.StylePresentationEndorsement [FK] (nullable)
   - source_mission_deed_reward_line -> missions.MissionDeedRewardLine [FK] (nullable)
   - source_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
+  - source_worship_rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
 
 ### ResonanceTier
 
@@ -6191,7 +6198,7 @@
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' - Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" - Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' - Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' - Return threads whose dev_points are within `within` of the next XP-locked boundary.`
@@ -8528,6 +8535,7 @@
   - story_episodes <- stories.EpisodeScene
   - deaths <- vitals.CharacterVitals
   - miracle_performances <- worship.MiraclePerformance
+  - rite_performances <- worship.WorshipRitePerformance
 
 ### SceneActionDeclaration
 **Foreign Keys:**
@@ -10061,6 +10069,7 @@
 - `resolve_task(task: 'OrgTask') -> 'TaskFulfillment' - Resolve an ASSIGNED task now: agent check -> route payouts + risk pool.`
 - `resolve_task_for_mission(instance, route=None) -> 'None' - Terminal-completion seam (#2820 phase 5) — mirrors the crisis seam.`
 - `target_label(task: 'OrgTask') -> 'str'`
+- `task_difficulty(task: 'OrgTask') -> 'int' - The target difficulty every roll on ``task`` uses (#696 gap 8).`
 
 
 ## world.tavern_games
@@ -10146,6 +10155,8 @@
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
   - beat_completions <- stories.BeatCompletion
+  - worship_rite_awards <- worship.WorshipRiteTierAward
+  - rite_performances <- worship.WorshipRitePerformance
 
 ### CheckRank
 
@@ -10403,6 +10414,8 @@
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
   - resonance -> magic.Resonance [FK]
+**Pointed to by:**
+  - rites <- worship.WorshipRite
 
 ### ChosenFavorConfig
 
@@ -10438,6 +10451,15 @@
   - target_character -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
 
+### Relic
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - item_instance -> items.ItemInstance [OneToOne]
+
+### RiteKind
+**Pointed to by:**
+  - rites <- worship.WorshipRite
+
 ### WorshipDeclaration
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
@@ -10453,6 +10475,31 @@
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
   - granted_by -> character_sheets.CharacterSheet [FK] (nullable)
+
+### WorshipRite
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - kind -> worship.RiteKind [FK]
+  - check_type -> checks.CheckType [FK]
+  - resonance -> worship.BeingResonance [FK]
+**Pointed to by:**
+  - ceremonies <- ceremonies.Ceremony
+  - performances <- worship.WorshipRitePerformance
+
+### WorshipRitePerformance
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - rite -> worship.WorshipRite [FK]
+  - game_week -> game_clock.GameWeek [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - ceremony -> ceremonies.Ceremony [OneToOne] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK]
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+
+### WorshipRiteTierAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [FK]
 
 ### WorshipTradition
 **Foreign Keys:**
@@ -10481,6 +10528,8 @@
   - secret_worshippers <- worship.WorshipDeclaration
   - miracles <- worship.Miracle
   - miracle_performances <- worship.MiraclePerformance
+  - rites <- worship.WorshipRite
+  - relics <- worship.Relic
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`

@@ -28,6 +28,10 @@
   first of funeral / will-reading / sweeper wins; safe no-op for long-dead honorees).
 - **Trusted handler** — someone the dead player's tenure friended; may take from the
   corpse without `steal`.
+- **Rite ceremony** — a `CeremonyType` (`RITE`, #3777) holding a tier 3 worship rite
+  (`Ceremony.worship_rite`, the TRUE being's). At finish the officiant's Rites roll
+  pays the rite's tier award on top of the ceremony's own honors; participants earn
+  through dramatic-moment tags. Tier 1 and 2 rites are never ceremonies.
 - **Conversion** — a `CeremonyType` (`CONVERSION`, #2361) that repoints the convert's
   public `WorshipDeclaration.public_being` on finish. Two routes: a PC-officiated rite
   the convert must accept (`WorshipConversionOffer`, mirrors the Seance offer), or a
