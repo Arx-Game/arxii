@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.societies.models import PhilosophicalArchetype
-    from world.worship.models import WorshippedBeing
+    from world.worship.models import WorshippedBeing, WorshipRite
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,33 @@ def _validate_honorees_for_type(
         _validate_coronation_open(honoree_sheets, title, is_staff_fiat=is_staff_fiat)
 
 
+def _validate_rite_for_type(ceremony_type: CeremonyType, worship_rite, true_being) -> None:
+    """A RITE ceremony carries exactly one tier 3 rite of the TRUE being (#3777).
+
+    Tier 1 and 2 rites are solo scene acts (``perform_worship_rite``); only a
+    tier 3 rite is held as a ceremony. The rite belongs to the being the
+    officiant actually serves, not the presented one, so a twisted rite still
+    performs the true being's liturgy (Decision 10). Every other ceremony type
+    carries no rite.
+    """
+    from world.worship.constants import RiteTier  # noqa: PLC0415
+
+    if ceremony_type.key != CeremonyTypeKey.RITE:
+        if worship_rite is not None:
+            msg = "Only a rite ceremony performs a worship rite."
+            raise CeremonyError(msg)
+        return
+    if worship_rite is None:
+        msg = "Name the rite this ceremony performs."
+        raise CeremonyError(msg)
+    if not worship_rite.is_active or worship_rite.being_id != true_being.pk:
+        msg = "That rite is not one of this being's."
+        raise CeremonyError(msg)
+    if worship_rite.kind.tier != RiteTier.PERILOUS:
+        msg = "That rite is a scene act, not a ceremony; perform it where you stand."
+        raise CeremonyError(msg)
+
+
 def _validate_coronation_open(
     honoree_sheets: "list[CharacterSheet]", title, *, is_staff_fiat: bool
 ) -> None:
@@ -186,6 +213,7 @@ def open_ceremony(  # noqa: PLR0913
     event=None,
     title=None,
     is_staff_fiat: bool = False,
+    worship_rite: "WorshipRite | None" = None,
 ) -> Ceremony:
     """Open a ceremony at a location, recognizing zero or more honorees.
 
@@ -204,6 +232,7 @@ def open_ceremony(  # noqa: PLR0913
 
     officiant_sheet = officiant_persona.character_sheet
     true_being, presented = _resolve_beings(officiant_sheet, being)
+    _validate_rite_for_type(ceremony_type, worship_rite, true_being)
 
     try:
         with transaction.atomic():
@@ -216,6 +245,7 @@ def open_ceremony(  # noqa: PLR0913
                 scene=scene,
                 event=event,
                 title=title if ceremony_type.key == CeremonyTypeKey.CORONATION else None,
+                worship_rite=worship_rite,
             )
             CeremonyHonoree.objects.bulk_create(
                 CeremonyHonoree(ceremony=ceremony, honoree_sheet=sheet) for sheet in honoree_sheets
@@ -278,17 +308,26 @@ def record_offering(
 
     config = get_ceremony_config()
     officiant_sheet = ceremony.officiant.character_sheet
+    favored_item_ids = _favored_offering_ids(ceremony.being, item_instances)
     offerings: list[CeremonyOffering] = []
     for instance in item_instances:
+        # #3777: an item carrying a facet the TRUE being favors pleases it more;
+        # the multiplier scales the pool grant and the offerer's devotion alike.
+        percent = (
+            config.offering_favored_facet_multiplier_percent
+            if instance.pk in favored_item_ids
+            else 100
+        )
         value = instance.template.value
         legend_value = instance.legend_value
         name = str(instance)
         hard_delete_item_instance(instance)
         grant = None
-        if value > 0:
+        credited = value * config.offering_resonance_per_value * percent // 100
+        if credited > 0:
             grant = grant_worship(
                 ceremony.being,
-                value * config.offering_resonance_per_value,
+                credited,
                 granted_by=officiant_sheet,
                 reason=f"ceremony:{ceremony.pk}",
             )
@@ -302,8 +341,29 @@ def record_offering(
                 offered_by=ceremony.officiant,
             )
         )
-        bump_devotion(officiant_sheet, ceremony.being, config.devotion_per_offering)
+        bump_devotion(
+            officiant_sheet, ceremony.being, config.devotion_per_offering * percent // 100
+        )
     return offerings
+
+
+def _favored_offering_ids(being, item_instances: "list[ItemInstance]") -> set[int]:
+    """The pks of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet).
+
+    One query over the being's favored facets and one over the offered items'
+    ItemFacet rows, before anything is deleted; empty when the being favors
+    nothing, which skips the second query.
+    """
+    from world.items.models import ItemFacet  # noqa: PLC0415
+
+    favored_facet_ids = set(being.being_facets.values_list("facet_id", flat=True))
+    if not favored_facet_ids or not item_instances:
+        return set()
+    return set(
+        ItemFacet.objects.filter(
+            item_instance__in=item_instances, facet_id__in=favored_facet_ids
+        ).values_list("item_instance_id", flat=True)
+    )
 
 
 def record_speech(
@@ -384,6 +444,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     officiant_sheet = ceremony.officiant.character_sheet
 
     quality_level = 0
+    rites_outcome = None
     check_type = CheckType.objects.filter(name=CEREMONY_CHECK_TYPE_NAME).first()
     if check_type is not None:
         # The rite follows the TRUE being's forms (Decision 10) — its tradition
@@ -394,6 +455,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
             specialization=ceremony.being.tradition.rites_specialization,
         )
         if result.outcome is not None:
+            rites_outcome = result.outcome
             quality_level = result.outcome.success_level
 
     multiplier = max(
@@ -435,6 +497,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
                 f"Officiated a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
             )
     bump_devotion(officiant_sheet, ceremony.being, config.devotion_officiant)
+    _pay_rite_award(ceremony, officiant_sheet, rites_outcome)
 
     _run_type_specific_finish(ceremony, honorees)
 
@@ -444,6 +507,32 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     ceremony.save(update_fields=["quality_level", "status", "finished_at"])
     revoke_seance_manifestations(ceremony)
     return ceremony
+
+
+def _pay_rite_award(ceremony: Ceremony, officiant_sheet, rites_outcome) -> None:
+    """A RITE ceremony pays its tier 3 award off the officiant's Rites roll (#3777).
+
+    The same ``apply_rite_award`` a solo rite uses, so the performance row, the
+    resonance ledger source and the weekly favor cap are one path. Participants
+    earn their own resonance through dramatic-moment tags, not here. With no
+    Rites check type seeded there was no roll and nothing to grade, so the
+    award is skipped rather than invented.
+    """
+    if ceremony.worship_rite_id is None or rites_outcome is None:
+        return
+    from world.worship.exceptions import WorshipRiteError  # noqa: PLC0415
+    from world.worship.rite_services import apply_rite_award  # noqa: PLC0415
+
+    try:
+        apply_rite_award(
+            officiant_sheet,
+            ceremony.worship_rite,
+            rites_outcome,
+            scene=ceremony.scene,
+            ceremony=ceremony,
+        )
+    except WorshipRiteError as exc:
+        raise CeremonyError(exc.user_message) from exc
 
 
 def _run_type_specific_finish(ceremony: Ceremony, honorees: list[CeremonyHonoree]) -> None:

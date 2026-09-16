@@ -40,6 +40,11 @@ class CeremonySerializer(serializers.ModelSerializer):
     honorees = CeremonyHonoreeSerializer(many=True, read_only=True)
     speeches = CeremonySpeechSerializer(many=True, read_only=True)
     offering_count = serializers.IntegerField(source="offerings.count", read_only=True)
+    worship_rite_name = serializers.SerializerMethodField()
+
+    def get_worship_rite_name(self, obj: Ceremony) -> str | None:
+        """The tier 3 rite a RITE ceremony performs (#3777), else None."""
+        return obj.worship_rite.name if obj.worship_rite_id is not None else None
 
     class Meta:
         model = Ceremony
@@ -57,6 +62,7 @@ class CeremonySerializer(serializers.ModelSerializer):
             "honorees",
             "speeches",
             "offering_count",
+            "worship_rite_name",
         ]
 
 

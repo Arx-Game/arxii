@@ -8,7 +8,7 @@ from world.ceremonies.seeds import seed_ceremony_types
 
 
 class SeedCeremonyTypesTests(TestCase):
-    def test_seeds_all_six_types(self) -> None:
+    def test_seeds_every_type(self) -> None:
         seed_ceremony_types()
         keys = set(CeremonyType.objects.values_list("key", flat=True))
         self.assertEqual(
@@ -21,10 +21,11 @@ class SeedCeremonyTypesTests(TestCase):
                 CeremonyTypeKey.WEDDING,
                 CeremonyTypeKey.CONVERSION,
                 CeremonyTypeKey.CORONATION,
+                CeremonyTypeKey.RITE,
             },
         )
 
     def test_idempotent(self) -> None:
         seed_ceremony_types()
         seed_ceremony_types()
-        self.assertEqual(CeremonyType.objects.count(), 7)
+        self.assertEqual(CeremonyType.objects.count(), 8)

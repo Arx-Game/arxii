@@ -31,6 +31,10 @@ class CeremonyTypeKey(models.TextChoices):
     WEDDING = "wedding", "Wedding"
     CONVERSION = "conversion", "Conversion"
     CORONATION = "coronation", "Coronation"
+    # #3777: a tier 3 worship rite held as a full ceremony. Carries a
+    # ``worship_rite``; the officiant's Rites roll pays the rite's tier award
+    # at finish on top of the ceremony's own honors.
+    RITE = "rite", "Rite"
 
 
 class SeanceOfferStatus(models.TextChoices):

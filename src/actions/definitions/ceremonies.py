@@ -148,6 +148,28 @@ def _resolve_open_title(type_key: str, title_name: str | None):
     return title, None
 
 
+def _resolve_open_rite(type_key: str, rite_name: str | None, being_name: str | None):
+    """(rite, error) — a RITE ceremony names a tier 3 rite; other types ignore it."""
+    from world.ceremonies.constants import CeremonyTypeKey  # noqa: PLC0415
+    from world.worship.models import WorshipRite  # noqa: PLC0415
+
+    if type_key != CeremonyTypeKey.RITE:
+        return None, None
+    if not rite_name:
+        return None, ActionResult(success=False, message="Name the rite this ceremony performs.")
+    rites = WorshipRite.objects.filter(name__iexact=rite_name, is_active=True)
+    if being_name:
+        rites = rites.filter(being__name__iexact=being_name)
+    rites = list(rites.select_related("being", "kind")[:2])
+    if not rites:
+        return None, ActionResult(success=False, message=f"No rite '{rite_name}' is known.")
+    if len(rites) > 1:
+        return None, ActionResult(
+            success=False, message="More than one being has a rite by that name; name the being."
+        )
+    return rites[0], None
+
+
 @dataclass
 class OpenCeremonyAction(Action):
     """Open a ceremony recognizing honorees (``ceremony/<type> names[=<being>]``)."""
@@ -178,6 +200,11 @@ class OpenCeremonyAction(Action):
         title, error = _resolve_open_title(type_key, kwargs.get("title_name"))
         if error is not None:
             return error
+        rite, error = _resolve_open_rite(
+            type_key, kwargs.get("rite_name"), kwargs.get("being_name")
+        )
+        if error is not None:
+            return error
 
         try:
             ceremony = open_ceremony(
@@ -188,15 +215,18 @@ class OpenCeremonyAction(Action):
                 being=being,
                 title=title,
                 is_staff_fiat=is_staff_observer(actor),
+                worship_rite=rite,
             )
         except CeremonyError as exc:
             return ActionResult(success=False, message=exc.user_message)
+        what = (
+            ceremony.worship_rite.name
+            if ceremony.worship_rite_id is not None
+            else f"a {ceremony.ceremony_type.name.lower()}"
+        )
         return ActionResult(
             success=True,
-            message=(
-                f"You open a {ceremony.ceremony_type.name.lower()} in the name of "
-                f"{ceremony.presented_being.name}."
-            ),
+            message=f"You open {what} in the name of {ceremony.presented_being.name}.",
         )
 
 

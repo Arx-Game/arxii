@@ -19,6 +19,7 @@ _TYPE_NAMES: dict[str, str] = {
     CeremonyTypeKey.WEDDING: "Wedding",
     CeremonyTypeKey.CONVERSION: "Conversion",
     CeremonyTypeKey.CORONATION: "Coronation",
+    CeremonyTypeKey.RITE: "Rite",
 }
 
 
