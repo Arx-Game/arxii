@@ -276,11 +276,7 @@ def active_member_roster_entries(organization) -> list:
 def grant_organization_entry_to_members(grant) -> int:
     """Hand an ``OrganizationCodexGrant``'s entry to every current member; returns
     how many first learned it (#3780)."""
-    learned = 0
-    for roster_entry in active_member_roster_entries(grant.organization):
-        _, created = grant_codex_entry(roster_entry, grant.entry)
-        learned += int(created)
-    return learned
+    return grant_to_current_holders(grant)
 
 
 def apply_organization_codex_grants(membership) -> int:
@@ -297,5 +293,50 @@ def apply_organization_codex_grants(membership) -> int:
         organization=membership.organization
     ).select_related("entry"):
         _, created = grant_codex_entry(roster_entry, grant.entry)
+        learned += int(created)
+    return learned
+
+
+def grant_to_current_holders(grant) -> int:
+    """Hand a grant row's entry to everyone already in its group (#3775).
+
+    Works for every grant kind (beginnings, tradition, path, distinction,
+    organization): the row knows its holders through ``holder_roster_entries``.
+    Returns how many characters first learned the entry. Idempotent, because
+    ``grant_codex_entry`` is.
+    """
+    learned = 0
+    for roster_entry in grant.holder_roster_entries():
+        _, created = grant_codex_entry(roster_entry, grant.entry)
+        learned += int(created)
+    return learned
+
+
+def species_holder_roster_entries(entry: CodexEntry) -> list:
+    """Roster entries of every character whose species lineage owns ``entry`` (#3775).
+
+    Species have no grant table: ``Species.codex_entry`` plus ``Species.lineage``
+    decide what a species character is owed (``_finalize_species_codex``).
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
+
+    owners = Species.objects.filter(codex_entry=entry)
+    if not owners.exists():
+        return []
+    entries = []
+    for sheet in CharacterSheet.objects.filter(species__isnull=False).select_related("species"):
+        if entry in sheet.species.codex_entries:
+            roster_entry = sheet.roster_entry_or_none
+            if roster_entry is not None:
+                entries.append(roster_entry)
+    return entries
+
+
+def grant_entry_to_species_holders(entry: CodexEntry) -> int:
+    """Hand a species-owned entry to every character of that species (#3775)."""
+    learned = 0
+    for roster_entry in species_holder_roster_entries(entry):
+        _, created = grant_codex_entry(roster_entry, entry)
         learned += int(created)
     return learned

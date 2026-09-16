@@ -25,6 +25,16 @@ from world.roster.models import RosterEntry, RosterTenure
 CODEX_ENTRY_MODEL = "arxii.CodexEntry"
 
 
+def _roster_entries_of(sheets) -> list[RosterEntry]:
+    """The roster entries behind a queryset of sheets, skipping sheets without one (#3775)."""
+    entries = []
+    for sheet in sheets.select_related("roster_entry"):
+        roster_entry = sheet.roster_entry_or_none
+        if roster_entry is not None:
+            entries.append(roster_entry)
+    return entries
+
+
 class CodexCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Top-level category for lore.
@@ -697,6 +707,17 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.beginnings} grants {self.entry}"
 
+    def holder_roster_entries(self) -> list[RosterEntry]:
+        """Roster entries of every character who holds this Beginnings (#3775).
+
+        Reads ``Profile.beginnings`` on the true profile, so a character with a
+        recovered second origin holds both.
+        """
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        sheets = CharacterSheet.objects.filter(true_profile__beginnings=self.beginnings)
+        return _roster_entries_of(sheets)
+
 
 # Idmapper metaclass sets attrs["path"] which shadows the "path" FK
 class PathCodexGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
@@ -727,6 +748,18 @@ class PathCodexGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
     def __str__(self) -> str:
         return f"{self.path} grants {self.entry}"
 
+    def holder_roster_entries(self) -> list[RosterEntry]:
+        """Roster entries of every character who has ever walked this path (#3775).
+
+        Any ``CharacterPathHistory`` row counts: finalize grants the path's entries
+        to whoever selected it, and knowledge is never revoked, so a character who
+        moved on to a later path still holds the earlier one.
+        """
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        sheets = CharacterSheet.objects.filter(path_history__path=self.path).distinct()
+        return _roster_entries_of(sheets)
+
 
 class DistinctionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries granted by a Distinction."""
@@ -755,6 +788,15 @@ class DistinctionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.distinction} grants {self.entry}"
+
+    def holder_roster_entries(self) -> list[RosterEntry]:
+        """Roster entries of every character holding this distinction (#3775)."""
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        sheets = CharacterSheet.objects.filter(
+            distinctions__distinction=self.distinction
+        ).distinct()
+        return _roster_entries_of(sheets)
 
 
 class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
@@ -818,6 +860,20 @@ class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.tradition} grants {self.entry}"
 
+    def holder_roster_entries(self) -> list[RosterEntry]:
+        """Roster entries of every ACTIVE member of this tradition (#3775).
+
+        ``left_at IS NULL`` only: a former member keeps what they learned but
+        receives nothing new.
+        """
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        sheets = CharacterSheet.objects.filter(
+            character_traditions__tradition=self.tradition,
+            character_traditions__left_at__isnull=True,
+        ).distinct()
+        return _roster_entries_of(sheets)
+
 
 class OrganizationCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries an Organization's membership knows (#3780).
@@ -853,3 +909,9 @@ class OrganizationCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.organization} grants {self.entry}"
+
+    def holder_roster_entries(self) -> list[RosterEntry]:
+        """Roster entries of this organization's active members (#3775)."""
+        from world.codex.services import active_member_roster_entries  # noqa: PLC0415
+
+        return active_member_roster_entries(self.organization)
