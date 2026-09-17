@@ -4,7 +4,7 @@
 # Pushes the branch (--force-with-lease if it was rebased) and opens a PR
 # whose body is composed from templates/pr-body.md with substitutions:
 #   {{issue_number}}, {{summary}}, {{followup_list}},
-#   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}, {{link_verb}}
+#   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}
 #
 # Required env vars (set exactly one):
 #   PR_EVIDENCE_URL  - GitHub issue/PR comment containing the review report
@@ -19,14 +19,11 @@
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
 #   PR_RAN_OR_SKIPPED - replaces {{ran_or_skipped}} (default: "ran")
 #   PR_SYNC_SUMMARY   - replaces {{sync_summary}} (default: "(no rebase performed)")
-#   PR_KEEP_OPEN      - use Refs instead of Closes (default: 0, i.e. close by
-#                       default). Set to 1 only when this PR is a deliberate
-#                       partial step toward an issue's scope with more PRs
-#                       still planned against the SAME issue (a multi-PR
-#                       umbrella spec). Genuinely separable remaining scope
-#                       gets its own issue via file-followup.sh instead - that
-#                       does not require keeping this issue open too.
 #   PR_TITLE          - PR title (default: derived from issue title)
+#
+# Every PR opened by this script closes its issue. If the work is a partial
+# step, file a child issue for the remaining scope and pass that child issue
+# here instead of keeping the parent open with a Refs reference.
 #
 # Emits the new PR number on stdout.
 #
@@ -116,9 +113,9 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
 - A PASS requires concrete evidence for every mandatory criterion, including a visual checklist where applicable, and no unresolved findings."
 fi
 
-LINK_VERB="Closes"
 if [[ "${PR_KEEP_OPEN:-0}" == "1" ]]; then
-  LINK_VERB="Refs"
+  echo "ERROR: PR_KEEP_OPEN is no longer supported; file a child issue for remaining scope and close that issue." >&2
+  exit 1
 fi
 
 # Build the follow-up list (markdown bullets) or "(none)".
@@ -146,7 +143,14 @@ BODY=${BODY//\{\{sync_summary\}\}/$SYNC_SUMMARY}
 BODY=${BODY//\{\{evidence_file\}\}/$EVIDENCE_REFERENCE}
 BODY=${BODY//\{\{evidence_marker\}\}/$EVIDENCE_MARKER}
 BODY=${BODY//\{\{evidence_status\}\}/$EVIDENCE_STATUS}
-BODY=${BODY//\{\{link_verb\}\}/$LINK_VERB}
+
+# Keep the close contract mechanical: a future template edit cannot silently
+# reintroduce a non-closing reference after this script has passed its checks.
+FIRST_LINE=${BODY%%$'\n'*}
+if [[ "$FIRST_LINE" != "Closes #${ISSUE}" && "$FIRST_LINE" != "Closes #${ISSUE}." ]]; then
+  echo "ERROR: generated PR body must begin with 'Closes #${ISSUE}'." >&2
+  exit 1
+fi
 
 # Derive a PR title if not explicitly given.
 if [[ -z "${PR_TITLE:-}" ]]; then

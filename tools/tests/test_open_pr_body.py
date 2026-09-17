@@ -73,6 +73,27 @@ class OpenPrBodyTests(unittest.TestCase):
     def test_committed_report_path_is_backtick_wrapped_once(self) -> None:
         body = _dry_run_body({"PR_EVIDENCE_FILE": "docs/reviews/1234.md"})
         self.assert_report_line(body, "- Report: `docs/reviews/1234.md`")
+        self.assertTrue(body.startswith("Closes #1234\n"))
+
+    def test_keep_open_override_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for name, script in _STUBS.items():
+                stub = Path(directory) / name
+                stub.write_text(script, encoding="utf-8")
+                stub.chmod(0o755)
+            env = {key: value for key, value in os.environ.items() if not key.startswith("PR_")}
+            env.update({"PR_EVIDENCE_FILE": "docs/reviews/1234.md", "PR_KEEP_OPEN": "1"})
+            env["PATH"] = f"{directory}{os.pathsep}{env['PATH']}"
+            result = subprocess.run(
+                ["bash", str(OPEN_PR), "--dry-run", "some-branch", ISSUE],
+                capture_output=True,
+                text=True,
+                env=env,
+                cwd=ROOT,
+                check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PR_KEEP_OPEN is no longer supported", result.stderr)
 
     def test_comment_url_is_left_bare(self) -> None:
         url = "https://github.com/Arx-Game/arxii/issues/1234#issuecomment-1"

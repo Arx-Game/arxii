@@ -304,14 +304,12 @@ Whichever delivery mechanism is used, the report must record the exact revision,
 build/environment, ordinary user interactions, fixture/live boundaries, visual
 screenshots when a design/demo exists, one verdict per mandatory criterion, and
 an empty unresolved-findings section. A green build or component-presence test
-is not acceptance evidence. **`open-pr.sh` closes the issue by default
-(`Closes #N`)** — leaving an issue open requires a stated reason, not the other
-way around. Set `PR_KEEP_OPEN=1` only when this PR is a deliberate partial step
-toward the issue's scope with more PRs still planned against the *same* issue
-(a multi-PR umbrella spec that a completeness review hasn't yet confirmed in
-full). Genuinely separable remaining scope gets its own issue via
-`file-followup.sh` (below) instead — that does not call for keeping the
-original issue open too.
+is not acceptance evidence. **Every PR opened by `open-pr.sh` must close its
+issue (`Closes #N`)**. There is no keep-open override: if this PR is only a
+partial step, file a child issue for the remaining scope and make this PR close
+the child. Genuinely separable remaining scope gets its own issue via
+`file-followup.sh` (below), and the PR must close the issue that precisely
+matches the work it delivers.
 
 **The evidence report and its screenshots never belong in `main`'s permanent
 history, and this is enforced.** The `review-evidence-not-committed` CI job
@@ -394,9 +392,10 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```
 
-The PR body links the committed report and uses `Closes #<issue>` by default.
-Only a deliberately partial step toward a multi-PR umbrella spec opts into
-`PR_KEEP_OPEN=1`; the ordinary case (this PR is the whole fix) closes.
+The PR body links the committed report and uses `Closes #<issue>`. `open-pr.sh`
+rejects the former `PR_KEEP_OPEN` override; partial work must close a child
+issue instead of leaving its parent open. CI also rejects PRs without an
+explicit closing issue reference.
 
 **Do NOT run `uv run pre-commit run --all-files` (or `just test-affected` /
 `just regression` / any whole-repo suite) as a pre-push precheck.** Running the

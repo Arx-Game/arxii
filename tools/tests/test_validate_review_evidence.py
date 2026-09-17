@@ -41,9 +41,23 @@ class ReviewEvidenceTests(unittest.TestCase):
         self.assertEqual(_VALIDATOR.linked_issue_number(body), "3750")
 
     def test_pr_body_accepts_issue_comment_report_url(self) -> None:
-        body = "Refs #3750\n\n## Review evidence\n\n"
+        body = "Closes #3750\n\n## Review evidence\n\n"
         body += "- Report: https://github.com/Arx-Game/arxii/issues/3750#issuecomment-1\n"
         self.assertEqual(validate_pr_body(body, expected_issue="3750"), [])
+
+    def test_pr_body_rejects_reference_without_closing_issue(self) -> None:
+        body = "Refs #3750\n\n## Review evidence\n\n"
+        body += "- Report: https://github.com/Arx-Game/arxii/issues/3750#issuecomment-1\n"
+        errors = validate_pr_body(body, expected_issue="3750")
+        self.assertIn("must begin with Closes", " ".join(errors))
+
+    def test_closing_issue_number_ignores_reference_only(self) -> None:
+        self.assertIsNone(_VALIDATOR.closing_issue_number("Refs #3750\n"))
+        self.assertEqual(_VALIDATOR.closing_issue_number("Closes #3750\n"), "3750")
+
+    def test_closing_issue_must_be_the_first_line(self) -> None:
+        body = "Summary\n\nCloses #3750\n"
+        self.assertIsNone(_VALIDATOR.closing_issue_number(body))
 
     def test_archived_3735_shape_is_rejected(self) -> None:
         result = subprocess.run(
