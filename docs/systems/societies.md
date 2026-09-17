@@ -49,7 +49,7 @@ tier.range_description                       # "+250 to +499"
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals`, `can_declare_standing` (#3290), `can_resolve_appeals` (#3293) |
-| `OrganizationMembership` | Links a Persona to an Organization at a rank | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at` |
+| `OrganizationMembership` | Links a Persona to an Organization at a rank; every creation path applies the organization's `OrganizationCodexGrant` rows to the new member (#3788) | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at` |
 | `OrganizationMembershipOffer` | Pending or resolved invitation/application | `organization`, `from_persona`, `to_persona`, `kind` (`INVITE`/`APPLICATION`), `status` (`PENDING`/`ACCEPTED`/`DECLINED`/`CANCELLED`), `created_at`, `resolved_at` |
 | `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
 | `OrganizationReputation` | Persona's reputation with an Organization | `persona`, `organization`, `value` (-1000 to +1000) |
@@ -392,6 +392,13 @@ from world.societies.membership_services import (
 - `expel_member(target, actor)` records an expulsion (`left_at` and `exiled_at`).
 - `promote_member(target, actor)` / `demote_member(target, actor)` move a member one tier, gated by `can_manage_ranks`.
 
+Every path that creates an `OrganizationMembership` applies the organization's
+codex grants to the new member: the join service (`join_organization`, via
+`codex.services.apply_organization_codex_grants`), the Organization change form's
+membership inline (`OrganizationAdmin.save_related`), and the standalone
+`OrganizationMembershipAdmin` add form (`save_model`). See the Admin section below
+and `docs/systems/codex.md`'s `OrganizationCodexGrant` row (#3788).
+
 ### Player actions and telnet command
 
 All major transitions are actions on the shared `action.run()` / `dispatch_player_action()` seam:
@@ -537,8 +544,14 @@ All models registered with Django admin:
 
 - `SocietyAdmin` - Principle fields grouped in fieldsets, `OrganizationInline` for child orgs
 - `OrganizationTypeAdmin` - Rank title management
-- `OrganizationAdmin` - Collapsible principle/rank overrides, `OrganizationMembershipInline`
-- `OrganizationMembershipAdmin` - With effective title display
+- `OrganizationAdmin` - Collapsible principle/rank overrides, `OrganizationMembershipInline`,
+  and an `OrganizationCodexGrantInline` ("Codex grants: what every member knows") that mixes
+  in `codex.admin.GrantReachOnSaveMixin` so a newly authored grant row reaches current members
+  on save; a new membership row on this page applies the organization's codex grants to the
+  new member (`OrganizationAdmin.save_related`, via the module-level
+  `apply_grants_to_new_memberships` helper) (#3788)
+- `OrganizationMembershipAdmin` - With effective title display; a membership created here
+  (not edited) applies the organization's codex grants to the new member (#3788)
 - `SocietyReputationAdmin` / `OrganizationReputationAdmin` - With tier display
 - `StandingDeclarationAdmin` (#3290) - `delta_applied` visible for staff dispute resolution (the player-facing API omits it)
 - `LegendEntryAdmin` - With total value, spread count, `LegendSpreadInline`

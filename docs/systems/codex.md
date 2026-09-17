@@ -49,7 +49,7 @@ from world.codex.constants import CodexKnowledgeStatus
 | `PathCodexGrant` | Codex entries granted by a Path choice | `path`, `entry` |
 | `DistinctionCodexGrant` | Codex entries granted by a Distinction | `distinction`, `entry` |
 | `TraditionCodexGrant` | Codex entries granted by a Tradition | `tradition`, `entry`, `is_perspective` |
-| `OrganizationCodexGrant` | Codex entries an Organization's membership knows (#3780, the "Obscure" tier; granted on join by `apply_organization_codex_grants`, to current members when created by `grant_organization_entry_to_members`) | `organization`, `entry` |
+| `OrganizationCodexGrant` | Codex entries an Organization's membership knows (#3780, the "Obscure" tier; granted on join by `apply_organization_codex_grants`, every membership-creating admin path included per #3788, and to current members when created by `grant_organization_entry_to_members`) | `organization`, `entry` |
 
 Species are the exception: there is no `SpeciesCodexGrant` table. `Species.codex_entry`
 is a plain nullable FK on the species row (one entry per species, not many), and
@@ -338,8 +338,13 @@ All models registered with filters, search, and inline editing:
   `holder_roster_entries()`, plus a read-only `ClueInline` listing the clues that target the
   entry. `GrantReachOnSaveMixin` applies every newly added grant row to the characters already
   in its group on save; it is also mixed into `BeginningsAdmin`, `TraditionAdmin`, `PathAdmin`,
-  and `DistinctionAdmin`, and `OrganizationCodexGrantAdmin.save_model` applies the same reach
-  on create.
+  `DistinctionAdmin`, and (#3788) `societies.admin.OrganizationAdmin` (its own
+  `OrganizationCodexGrantInline`, "Codex grants: what every member knows"), and
+  `OrganizationCodexGrantAdmin.save_model` applies the same reach on create. The other
+  direction is covered too: a membership row created on the Organization page or through the
+  standalone `OrganizationMembershipAdmin` applies the organization's grants to the new member
+  (`apply_organization_codex_grants`), the same as the `join_organization` service. See
+  `docs/systems/societies.md`'s Membership Lifecycle section.
 - `CharacterCodexKnowledgeAdmin` - Read-only debugging with status/progress fields
 - `CodexClueAdmin` - Clue management with autocomplete to entries
 - `CharacterClueKnowledgeAdmin` - Read-only debugging for found clues

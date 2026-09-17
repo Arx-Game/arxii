@@ -6,8 +6,12 @@ organizations, memberships, reputations, and legend entries.
 Note: Realm admin is in the `realms` app.
 """
 
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.http import HttpRequest
 
+from world.codex.admin import GrantReachOnSaveMixin
+from world.codex.models import OrganizationCodexGrant
+from world.codex.services import apply_organization_codex_grants
 from world.contributors.admin import CREDIT_FIELDSET
 from world.societies.models import (
     CovenantLegendCredit,
@@ -86,6 +90,21 @@ class OrganizationGiftGrantInline(admin.TabularInline):
     fields = ["gift", "anchor_cap", "project"]
     readonly_fields = ["project"]
     raw_id_fields = ["gift", "project"]
+
+
+class OrganizationCodexGrantInline(admin.TabularInline):
+    """Author what every member of this organization knows (#3788).
+
+    Being in an organization is the whole gate: a grant added here reaches
+    current members on save (``GrantReachOnSaveMixin`` on ``OrganizationAdmin``)
+    and every future member on join (``apply_organization_codex_grants``).
+    """
+
+    model = OrganizationCodexGrant
+    extra = 0
+    fields = ["entry"]
+    autocomplete_fields = ["entry"]
+    verbose_name_plural = "Codex grants: what every member knows"
 
 
 class LegendSpreadInline(admin.TabularInline):
@@ -252,8 +271,37 @@ class VacancyInline(admin.TabularInline):
     raw_id_fields = ("kin_pool", "kin_node", "rank")
 
 
+def apply_grants_to_new_memberships(request: HttpRequest, formsets) -> int:
+    """A membership row added on the Organization page learns the org's grants (#3788).
+
+    Mirrors ``GrantReachOnSaveMixin`` (which reaches every existing member when a
+    new *grant* row is added) from the other direction: this reaches only the
+    newly created *membership* row(s), the same way
+    ``membership_services.join_organization`` already does for the join service.
+    A membership whose persona has no roster-backed character learns nothing -
+    ``apply_organization_codex_grants`` skips it itself.
+    """
+    learned = 0
+    rows = 0
+    for formset in formsets:
+        if formset.model is not OrganizationMembership:
+            continue
+        # save_new_objects (called inside super().save_related(), before this
+        # helper runs) always sets this on a BaseModelFormSet - same guarantee
+        # GrantReachOnSaveMixin relies on (world/codex/admin.py).
+        for membership in formset.new_objects:
+            learned += apply_organization_codex_grants(membership)
+            rows += 1
+    if rows:
+        messages.info(
+            request,
+            f"{rows} new membership(s) learned {learned} entries from the organization.",
+        )
+    return learned
+
+
 @admin.register(Organization)
-class OrganizationAdmin(admin.ModelAdmin):
+class OrganizationAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     """Admin interface for Organization management.
 
     Shows organization details, principle overrides, and membership management.
@@ -273,6 +321,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     inlines = [
         OrganizationRankInline,
         OrganizationMembershipInline,
+        OrganizationCodexGrantInline,
         OrganizationGiftGrantInline,
         VacancyInline,
     ]
@@ -314,6 +363,12 @@ class OrganizationAdmin(admin.ModelAdmin):
         return obj.memberships.count()
 
     member_count.short_description = "Members"
+
+    def save_related(self, request: HttpRequest, form, formsets, change: bool) -> None:
+        """A new grant row reaches current members; a new membership learns the
+        organization's grants (#3775, #3788)."""
+        super().save_related(request, form, formsets, change)
+        apply_grants_to_new_memberships(request, formsets)
 
 
 @admin.register(Vacancy)
@@ -378,6 +433,16 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
         return obj.get_title()
 
     get_title.short_description = "Title"
+
+    def save_model(
+        self, request: HttpRequest, obj: OrganizationMembership, form, change: bool
+    ) -> None:
+        """A membership created in admin learns the organization's grants (#3788),
+        the same way ``membership_services.join_organization`` already does."""
+        super().save_model(request, obj, form, change)
+        if not change:
+            learned = apply_organization_codex_grants(obj)
+            messages.info(request, f"Applied the organization's codex grants: {learned} learned.")
 
 
 @admin.register(OrganizationObligation)
