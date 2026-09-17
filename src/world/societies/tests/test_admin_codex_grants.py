@@ -42,7 +42,7 @@ def _member_with_roster_entry(organization):
 
 def _organization_form_data(response) -> dict:
     """Every field of the rendered Organization change form, as the browser would
-    post it — including each existing inline row, not just its management form
+    post it, including each existing inline row, not just its management form
     (the organization's auto-created rank ladder means every inline already has
     rows on a fresh organization, unlike a freshly created CodexEntry)."""
     forms = [response.context["adminform"].form]
@@ -181,7 +181,7 @@ class OrganizationMembershipAdminGrantTests(TestCase):
     def test_editing_a_membership_does_not_apply_grants_again(self):
         """A membership built directly (bypassing the join service and admin
         creation) has learned nothing yet; an admin *edit* save must not teach it
-        the organization's grants — only a *creation* save does (#3788)."""
+        the organization's grants. Only a *creation* save does (#3788)."""
         membership = OrganizationMembershipFactory(
             organization=self.organization, persona=self.persona
         )
