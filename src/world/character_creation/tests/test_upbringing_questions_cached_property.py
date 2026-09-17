@@ -54,6 +54,20 @@ class UpbringingQuestionsCachedPropertyTests(TestCase):
         middle = OriginTemplateSlotFactory(template=template, name="Middle", sort_order=2)
         assert list(template.questions) == [first, middle, later]
 
+    def test_reassigning_a_slot_clears_both_templates(self):
+        old_template = OriginTemplateFactory()
+        new_template = OriginTemplateFactory()
+        slot = OriginTemplateSlotFactory(template=old_template)
+
+        self.assertEqual(list(old_template.questions), [slot])
+        self.assertEqual(list(new_template.questions), [])
+
+        slot.template = new_template
+        slot.save()
+
+        self.assertEqual(list(old_template.questions), [])
+        self.assertEqual(list(new_template.questions), [slot])
+
     def test_a_deleted_slot_is_gone_from_a_warm_cache(self):
         template = OriginTemplateFactory()
         first = OriginTemplateSlotFactory(template=template, name="First", sort_order=0)
