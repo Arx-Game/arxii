@@ -30,6 +30,7 @@ _LEDGER_COLUMNS = 4
 _UNRESOLVED_HEADING = "## unresolved findings"
 _ISSUE_LINK = re.compile(r"^(Refs|Closes)\s+#([0-9]+)\.?\s*$", re.MULTILINE)
 _CLOSING_ISSUE_LINK = re.compile(r"\ACloses\s+#([0-9]+)\.?\s*$", re.MULTILINE)
+_DEPENDABOT_LOGINS = frozenset({"dependabot[bot]", "dependabot-preview[bot]"})
 # The PR body's report reference: a backtick-wrapped repository path, or a bare
 # https URL. The review-evidence workflow imports this rather than copying it.
 REPORT_LINE = re.compile(r"^- Report: (?:`([^`]+)`|(https://\S+))$", re.MULTILINE)
@@ -50,6 +51,11 @@ def closing_issue_number(body: str) -> str | None:
     """Return the first issue that the PR body explicitly closes."""
     match = _CLOSING_ISSUE_LINK.search(body)
     return match.group(1) if match else None
+
+
+def is_dependabot_login(login: str | None) -> bool:
+    """Return whether a pull-request author is a Dependabot account."""
+    return login in _DEPENDABOT_LOGINS
 
 
 def _field(lines: list[str], label: str) -> str:

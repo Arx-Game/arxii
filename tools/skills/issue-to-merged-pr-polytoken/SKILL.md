@@ -217,8 +217,9 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
 ```
 
 The PR body links the committed report and uses `Closes #<issue>`. CI rejects
-PRs without an explicit closing issue reference, and partial work must close a
-child issue rather than leaving its parent open.
+non-Dependabot PRs without an explicit closing issue reference, and partial
+work must close a child issue rather than leaving its parent open. Dependabot
+PRs are exempt because automated dependency updates may lack issues.
 
 **Do NOT run `uv run pre-commit run --all-files` (or whole-repo test suites) as a
 pre-push precheck — it can crash this devcontainer.** The per-file hooks already

@@ -59,6 +59,12 @@ class ReviewEvidenceTests(unittest.TestCase):
         body = "Summary\n\nCloses #3750\n"
         self.assertIsNone(_VALIDATOR.closing_issue_number(body))
 
+    def test_dependabot_accounts_are_exempt_from_closing_issue_requirement(self) -> None:
+        self.assertTrue(_VALIDATOR.is_dependabot_login("dependabot[bot]"))
+        self.assertTrue(_VALIDATOR.is_dependabot_login("dependabot-preview[bot]"))
+        self.assertFalse(_VALIDATOR.is_dependabot_login("release-bot[bot]"))
+        self.assertFalse(_VALIDATOR.is_dependabot_login(None))
+
     def test_archived_3735_shape_is_rejected(self) -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), str(ROOT / "tools/tests/fixtures/pr-3735-body.md")],

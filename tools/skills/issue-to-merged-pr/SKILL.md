@@ -394,8 +394,9 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
 
 The PR body links the committed report and uses `Closes #<issue>`. `open-pr.sh`
 rejects the former `PR_KEEP_OPEN` override; partial work must close a child
-issue instead of leaving its parent open. CI also rejects PRs without an
-explicit closing issue reference.
+issue instead of leaving its parent open. CI also rejects non-Dependabot PRs
+without an explicit closing issue reference. Dependabot pull requests are the deliberate exception because
+automated dependency updates may not have repository issues.
 
 **Do NOT run `uv run pre-commit run --all-files` (or `just test-affected` /
 `just regression` / any whole-repo suite) as a pre-push precheck.** Running the
