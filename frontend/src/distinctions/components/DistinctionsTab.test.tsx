@@ -51,7 +51,7 @@ describe('DistinctionsTab', () => {
     expect(screen.getByTestId('distinctions-empty-state')).toBeInTheDocument();
   });
 
-  it('renders a row per distinction with rank, and badges only the secret one', () => {
+  it('renders a row per distinction and tags only the secret one', () => {
     mockPayload([
       makeDistinction(),
       makeDistinction({ id: 2, name: 'Hidden Oath', rank: 1, is_secret: true }),
@@ -62,11 +62,25 @@ describe('DistinctionsTab', () => {
     expect(rows).toHaveLength(2);
 
     expect(screen.getByText('Iron Will')).toBeInTheDocument();
-    expect(screen.getByText('Rank 2')).toBeInTheDocument();
     expect(screen.getByText('Hidden Oath')).toBeInTheDocument();
-    expect(screen.getByText('Rank 1')).toBeInTheDocument();
-
     expect(screen.getAllByText('Secret')).toHaveLength(1);
+  });
+
+  it('says a disadvantage in words, never as a negative number (#3898)', () => {
+    // "Rank -1" names a storage detail at a reader. The demo says "Disadvantage".
+    mockPayload([makeDistinction({ id: 3, name: 'Owes the Wrong People', rank: -1 })]);
+    render(<DistinctionsTab characterId={1} />);
+
+    expect(screen.getByText('Disadvantage')).toBeInTheDocument();
+    expect(screen.queryByText(/rank/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('-1')).not.toBeInTheDocument();
+  });
+
+  it('marks a distinction aimed at a visible feature', () => {
+    mockPayload([makeDistinction({ id: 4, name: 'A Burn Across the Palm', feature: 'Left hand' })]);
+    render(<DistinctionsTab characterId={1} />);
+
+    expect(screen.getByText('Distinctive feature')).toBeInTheDocument();
   });
 
   it('says it is reading while loading', () => {

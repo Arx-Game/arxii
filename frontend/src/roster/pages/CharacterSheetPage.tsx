@@ -163,11 +163,6 @@ export function CharacterSheetPage() {
               publicWorship={(sheet?.identity.worship as PublicWorshipRef | null) ?? null}
             />
             <ApplicationSlot entry={entry} account={account} />
-            {isMyCharacter && (
-              <div id="messages">
-                <MessagesSection />
-              </div>
-            )}
           </Stack>
         )}
 
@@ -229,6 +224,15 @@ export function CharacterSheetPage() {
               <Heading>Points to place</Heading>
               <StatPointPanel sheetId={sheetId} />
               <MaturationPanel sheetId={sheetId} />
+            </Stack>
+            {/* Messages belongs here rather than on the front, per the spec's ledger:
+                it is the player's own correspondence about the character, which is a
+                Growth concern, not something a reader of the sheet came for. */}
+            <Stack>
+              <Heading>Messages</Heading>
+              <div id="messages">
+                <MessagesSection />
+              </div>
             </Stack>
           </Stack>
         )}

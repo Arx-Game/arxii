@@ -43,8 +43,19 @@ import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
   characterId: number;
-  /** True when the viewer owns this character — gates the workbench link-outs. */
+  /** True when the viewer owns this character — gates the owner-only panels. */
   isMyCharacter: boolean;
+  /**
+   * Which half of the Magic section this instance is drawing (#3898). The spec and the
+   * demo split the page: what a caster DOES (gifts, motif, the owner's workbenches) runs
+   * down the main column, and what their magic IS (the aura, the resonances they hold)
+   * sits in a narrow rail beside it. Both halves read the same payload through the same
+   * cache key, so drawing them as two instances costs nothing.
+   *
+   * `all` keeps the whole spellbook in one column, which is what a caller outside the
+   * sheet would want.
+   */
+  slot?: 'all' | 'main' | 'rail';
 }
 
 /**
@@ -223,7 +234,7 @@ function dominantAffinityLabel(aura: CharacterSheetAura): string {
   )[0];
 }
 
-export function SpellbookTab({ characterId, isMyCharacter }: Props) {
+export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props) {
   const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
   const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
 
@@ -232,16 +243,18 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
   }
 
   const magic = payload?.magic ?? null;
+  const drawsMain = slot !== 'rail';
+  const drawsRail = slot !== 'main';
 
   return (
     <Stack wide>
-      {magic === null && (
+      {magic === null && drawsMain && (
         <p className="refsheet-ledger" data-testid="spellbook-empty-state">
           Nothing is known of their magic.
         </p>
       )}
 
-      {magic && magic.gifts.length > 0 && (
+      {drawsMain && magic && magic.gifts.length > 0 && (
         <div className="refsheet-stack" data-testid="spellbook-gifts">
           {magic.gifts.map((gift) => (
             <Stack key={gift.name} data-testid="spellbook-gift">
@@ -281,7 +294,7 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
         </div>
       )}
 
-      {magic && magic.resonances.length > 0 && (
+      {drawsRail && magic && magic.resonances.length > 0 && (
         <div className="refsheet-stack" data-testid="spellbook-resonances">
           <Subheading>Resonances</Subheading>
           <dl className="refsheet-glance">
@@ -299,7 +312,7 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
         </div>
       )}
 
-      {magic?.motif && (
+      {drawsMain && magic?.motif && (
         <div className="refsheet-stack" data-testid="spellbook-motif">
           <Subheading>Motif</Subheading>
           {magic.motif.description && (
@@ -330,11 +343,13 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
         </div>
       )}
 
-      {isMyCharacter && magic && <MotifStylePanel characterSheetId={characterId} />}
+      {drawsMain && isMyCharacter && magic && <MotifStylePanel characterSheetId={characterId} />}
 
-      {isMyCharacter && magic && <TechniqueProgressPanel characterSheetId={characterId} />}
+      {drawsMain && isMyCharacter && magic && (
+        <TechniqueProgressPanel characterSheetId={characterId} />
+      )}
 
-      {magic?.aura && (
+      {drawsRail && magic?.aura && (
         <div className="refsheet-stack" data-testid="spellbook-aura">
           <Subheading>Aura</Subheading>
           {/* The strip is proportional, never labelled with its figures: the three
@@ -379,7 +394,7 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
         </div>
       )}
 
-      {isMyCharacter && magic?.aura && (
+      {drawsRail && isMyCharacter && magic?.aura && (
         <GlimpseEditorDialog
           open={glimpseDialogOpen}
           onOpenChange={setGlimpseDialogOpen}

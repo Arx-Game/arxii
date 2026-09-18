@@ -41,9 +41,16 @@ interface MaturationPanelProps {
   sheetId: number;
 }
 
-/** The idle line: the next milestone, or none once the last (75) is behind the character (#3635). */
-function waitingLine(nextMilestoneYear: number | null): string {
-  if (nextMilestoneYear === null) return 'No points waiting, and no milestones remain.';
+/**
+ * The idle line: the next milestone, or none once the last (75) is behind the character
+ * (#3635). An absent year is treated the same as an explicit null — an older payload, or
+ * one that simply did not carry the field, printed "at age undefined" at the player
+ * (found while capturing #3898's evidence, once Growth became a page people read).
+ */
+function waitingLine(nextMilestoneYear: number | null | undefined): string {
+  if (nextMilestoneYear === null || nextMilestoneYear === undefined) {
+    return 'No points waiting, and no milestones remain.';
+  }
   return `No points waiting. The next milestone arrives at age ${nextMilestoneYear}.`;
 }
 

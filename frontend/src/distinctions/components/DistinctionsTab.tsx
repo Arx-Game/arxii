@@ -7,7 +7,10 @@
  * re-implement privacy client-side — and tags rows where `is_secret` is true.
  *
  * Drawn in the Reference Sheet's vocabulary (#3898): one entry per distinction on a
- * hairline, with the rank pulled right, rather than a stack of bordered cards.
+ * hairline rather than a bordered card, and what a row says about itself is a word
+ * rather than a number. The old page printed "Rank -1" at a reader, which names a
+ * storage detail; the demo says "Disadvantage", and a distinction aimed at a visible
+ * feature says so too.
  */
 
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
@@ -44,8 +47,13 @@ export function DistinctionsTab({ characterId }: Props) {
           <div key={distinction.id} data-testid="distinction-row">
             <Entry
               name={distinction.name}
-              aside={<span className="refsheet-note">{`Rank ${distinction.rank}`}</span>}
-              tags={distinction.is_secret ? <Tag accent>Secret</Tag> : undefined}
+              tags={
+                <>
+                  {distinction.rank < 0 && <Tag>Disadvantage</Tag>}
+                  {distinction.feature !== '' && <Tag>Distinctive feature</Tag>}
+                  {distinction.is_secret && <Tag accent>Secret</Tag>}
+                </>
+              }
               gloss={distinction.notes || undefined}
             />
           </div>

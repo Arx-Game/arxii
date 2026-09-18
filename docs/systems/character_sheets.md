@@ -92,6 +92,12 @@ heading the sheet already draws, the soul-tether card whose entire body was the 
 section row read as a second navigation bar. A panel composed into a section draws no
 heading at that weight — `Subheading` is the one it uses for a group inside a section.
 
+**Holdings has no "Owed and Owing" block**, which the spec asks for. There is nothing to
+read: `currency.DebtInstrument` and both obligation models are organization-to-organization,
+and no character-level debt exists anywhere in `world`. The contracts half of that block is
+already served by Agreements (wills, claims, settlements). Building a personal-debt system
+is its own subsystem and its own issue, so the block is absent rather than faked.
+
 **Three gaps are open questions rather than unfinished work**, and each is a ruling for
 Apostate rather than more building. A stranger's rumor band renders but is passed
 nothing, because which guideline a rumor may draw from, and in whose words, is undecided.

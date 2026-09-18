@@ -31,6 +31,8 @@ import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
 import { XpLedgerCard } from '@/progression/components/advancement/XpLedgerCard';
 import { useCharacterPurse } from '@/status/queries';
+import { useInventory } from '@/inventory/hooks/useInventory';
+import { useOutfits } from '@/inventory/hooks/useOutfits';
 import { useThreads } from '@/magic/queries';
 import { formatCoppers } from '@/lib/currency';
 import type { CharacterSheetMentor, CharacterSheetPayload } from '@/character_sheets/api';
@@ -121,10 +123,12 @@ export function DistinctionsPanel({ sheetId }: { sheetId: number }) {
 /**
  * Magic — the spellbook, plus the character's threads and where each is anchored.
  *
- * The aura lives inside `SpellbookTab` already, which is why Dan's ruling sent it here:
- * this is the page a reader opens to see how someone's magic is faring. Threads are the
- * owner's own (the list endpoint is account-scoped), narrowed to THIS character by the
- * `owner` filter so an account with alts does not read another character's weaving here.
+ * The aura lives here, which is why Dan's ruling sent it off the plate: this is the page
+ * a reader opens to see how someone's magic is faring. The section splits the way the
+ * demo draws it — what a caster DOES down the main column, what their magic IS in the
+ * rail — which `SpellbookTab`'s `slot` prop exists to serve. Threads are the owner's own
+ * (the list endpoint is account-scoped), narrowed to THIS character by the `owner` filter
+ * so an account with alts does not read another character's weaving here.
  */
 export function MagicPanel({
   sheetId,
@@ -138,10 +142,15 @@ export function MagicPanel({
       <Stack wide>
         <Stack>
           <Heading>Gifts</Heading>
-          <SpellbookTab characterId={sheetId} isMyCharacter={isMyCharacter} />
+          <SpellbookTab characterId={sheetId} isMyCharacter={isMyCharacter} slot="main" />
         </Stack>
+        {isMyCharacter && <ThreadsBlock sheetId={sheetId} />}
       </Stack>
-      {isMyCharacter && <ThreadsBlock sheetId={sheetId} />}
+      {/* The rail holds what their magic IS, beside what they DO with it: the aura and
+          the resonances they hold. Both halves read one payload through one cache key. */}
+      <Stack wide>
+        <SpellbookTab characterId={sheetId} isMyCharacter={isMyCharacter} slot="rail" />
+      </Stack>
     </div>
   );
 }
@@ -246,13 +255,7 @@ export function HoldingsPanel({
             what they carry.
           </p>
         </Stack>
-        <Stack>
-          <Heading>Carried</Heading>
-          <Ledger>
-            Everything they own, and the outfits they keep, live in the{' '}
-            <Link to="/wardrobe">wardrobe</Link>.
-          </Ledger>
-        </Stack>
+        <CarriedBlock sheetId={sheetId} />
         <Stack>
           <Heading>The law</Heading>
           <CrimeTab viewerEntryId={viewerEntryId} />
@@ -268,6 +271,64 @@ export function HoldingsPanel({
           <AgreementsPanel characterSheetId={sheetId} />
         </Stack>
       </div>
+    </Stack>
+  );
+}
+
+/**
+ * What they carry: how much of it there is, the few pieces worth naming, and the outfits
+ * they keep, each a door into the wardrobe where the sorting and the changing happen.
+ *
+ * "Notable" is read as worth: the most valuable handful. That is a judgement the sheet
+ * has to make because the inventory has no notability flag, and value is the only signal
+ * on the row that means anything to a reader.
+ *
+ * The worn outfit is NOT marked, and the demo marks it. `Outfit` carries no worn flag,
+ * and inferring one would mean fetching every outfit's slots and comparing them to the
+ * equipped set, which is a query per outfit for a marker. Recorded rather than guessed.
+ */
+function CarriedBlock({ sheetId }: { sheetId: number }) {
+  const { data: inventory = [] } = useInventory(sheetId);
+  const { data: outfits = [] } = useOutfits(sheetId);
+
+  const notable = [...inventory]
+    .sort((a, b) => (b.suggested_value ?? 0) - (a.suggested_value ?? 0))
+    .slice(0, 4);
+
+  return (
+    <Stack>
+      <Heading>Carried</Heading>
+      <Ledger>
+        {inventory.length === 0
+          ? 'They carry nothing.'
+          : `${inventory.length} ${inventory.length === 1 ? 'thing' : 'things'}, sorted in the `}
+        {inventory.length > 0 && <Link to="/wardrobe">wardrobe</Link>}
+        {inventory.length > 0 && '.'}
+      </Ledger>
+      {notable.length > 0 && (
+        <Entries>
+          {notable.map((item) => (
+            <Entry
+              key={item.id}
+              name={item.display_name}
+              tags={item.quality_tier?.name ? <Tag>{item.quality_tier.name}</Tag> : undefined}
+            />
+          ))}
+        </Entries>
+      )}
+      {outfits.length > 0 && (
+        <Stack>
+          <Ledger>Outfits they keep.</Ledger>
+          <Entries>
+            {outfits.map((outfit) => (
+              <Entry key={outfit.id} name={outfit.name} gloss={outfit.description || undefined} />
+            ))}
+          </Entries>
+        </Stack>
+      )}
+      <Link className="refsheet-quiet-door" to="/wardrobe">
+        Change outfit
+      </Link>
     </Stack>
   );
 }
