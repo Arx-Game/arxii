@@ -72,6 +72,7 @@ def start_encounter_for_option(
     from world.combat.encounter_prep import spawn_opponent_lines  # noqa: PLC0415
     from world.combat.models import CombatEncounter  # noqa: PLC0415
     from world.combat.services import (  # noqa: PLC0415
+        add_participant,
         finalize_new_encounter,
         update_encounter_settings,
     )
@@ -87,6 +88,13 @@ def start_encounter_for_option(
     encounter = CombatEncounter.objects.create(scene=scene, scenario_deed=deed)
     finalize_new_encounter(encounter)
     update_encounter_settings(encounter, risk_level=option.encounter_risk_level)
+
+    # The stat block freezes during spawn.  Add the scenario's already-selected
+    # party before spawning so scaling uses the intended covenant party rather
+    # than an empty encounter (or whichever player happens to join first).
+    for mission_participant in instance.participants.select_related("character"):
+        add_participant(encounter, mission_participant.character)
+
     spawn_opponent_lines(
         encounter,
         option.opponent_lines.select_related("creature_template").order_by("order"),

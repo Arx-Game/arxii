@@ -609,7 +609,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 max_health=data.get("max_health"),
                 threat_pool=pool,
                 description=data.get("description", ""),
-                soak_value=data.get("soak_value", 0),
+                soak_value=data.get("soak_value"),
                 probing_threshold=data.get("probing_threshold"),
                 level=data.get("level"),
                 acting_account=cast(AccountDB, request.user),
