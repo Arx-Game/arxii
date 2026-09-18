@@ -1281,7 +1281,7 @@ _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
             Prefetch(
                 "organization_memberships",
                 queryset=OrganizationMembership.objects.filter(
-                    left_at__isnull=True, vacancy__isnull=False
+                    left_at__isnull=True, exiled_at__isnull=True, vacancy__isnull=False
                 ).select_related("vacancy"),
                 to_attr="cached_vacancy_memberships",
             ),
@@ -1474,24 +1474,6 @@ def _build_current_residence(sheet: CharacterSheet) -> IdNameRef | None:
 
 # --- Section registry for queryset aggregation ---
 
-_DOMAINS_SELECT_RELATED: tuple[str, ...] = ()
-# The character's personas, each with their CURRENT organization memberships, each with
-# the organization and its domains and the area each domain decorates. One prefetch
-# chain rather than a walk, so a character in six houses costs the same as one in none.
-# No ``to_attr`` (ADR-0278).
-_DOMAINS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    Prefetch(
-        "personas__organization_memberships",
-        queryset=OrganizationMembership.objects.filter(
-            left_at__isnull=True, exiled_at__isnull=True
-        ).select_related("organization"),
-    ),
-    Prefetch(
-        "personas__organization_memberships__organization__domains",
-        queryset=Domain.objects.select_related("area"),
-    ),
-)
-
 
 def _build_domains(sheet: CharacterSheet, *, privileged: bool) -> list[OrgDomainEntry]:
     """Build the Estate section's Domains block: the land this character's orgs hold.
@@ -1512,26 +1494,41 @@ def _build_domains(sheet: CharacterSheet, *, privileged: bool) -> list[OrgDomain
     if not privileged:
         return []
 
-    entries: list[OrgDomainEntry] = []
-    seen: set[int] = set()
-    for persona in sheet.personas.all():
-        for membership in persona.organization_memberships.all():
-            organization = membership.organization
-            for domain in organization.domains.all():
-                # A character with two personas in the same house reads one keep, not two.
-                if domain.pk in seen:
-                    continue
-                seen.add(domain.pk)
-                entries.append(
-                    OrgDomainEntry(
-                        id=domain.pk,
-                        name=domain.name,
-                        organization=organization.name,
-                        where=domain.area.name,
-                    )
-                )
-    entries.sort(key=lambda row: (row["organization"], row["name"]))
-    return entries
+    # ONE query, joined from the personas the sheet already has. A prefetch chain was
+    # the first shape tried and was the wrong one twice over: a top-level
+    # ``personas__organization_memberships`` lookup cannot reuse the ``cached_personas``
+    # Prefetch (its ``prefetch_to`` is the bare attr name), so Django re-fetched every
+    # persona to redescend; and nesting it needed a ``to_attr`` on an idmapper parent,
+    # which ADR-0278 forbids. Joining costs one query instead of two and needs neither.
+    persona_ids = [
+        persona.pk
+        for persona in (
+            sheet.cached_personas if hasattr(sheet, "cached_personas") else sheet.personas.all()
+        )
+    ]
+    if not persona_ids:
+        return []
+
+    domains = (
+        Domain.objects.filter(
+            owner_org__memberships__persona_id__in=persona_ids,
+            owner_org__memberships__left_at__isnull=True,
+            owner_org__memberships__exiled_at__isnull=True,
+        )
+        .select_related("area", "owner_org")
+        # A character with two personas in the same house reads one keep, not two.
+        .distinct()
+        .order_by("owner_org__name", "name")
+    )
+    return [
+        OrgDomainEntry(
+            id=domain.pk,
+            name=domain.name,
+            organization=domain.owner_org.name,
+            where=domain.area.name,
+        )
+        for domain in domains
+    ]
 
 
 _MENTORS_SELECT_RELATED: tuple[str, ...] = ()
@@ -1663,7 +1660,6 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_LOOKS_SELECT_RELATED, _LOOKS_PREFETCH_RELATED),
     (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
     (_MENTORS_SELECT_RELATED, _MENTORS_PREFETCH_RELATED),
-    (_DOMAINS_SELECT_RELATED, _DOMAINS_PREFETCH_RELATED),
 )
 
 

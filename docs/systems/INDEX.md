@@ -2274,7 +2274,10 @@ Character identity, appearance, demographics, and guise system.
   render-or-vanish: a band a viewer may not read is absent, never an empty state.
   Payload additions: `looks` (tenure media tagged with the `MoodOption` each shows, via
   `TenureMedia.look`; public-gallery images plus the worn one for a non-privileged
-  viewer) and `plate_ink` (`PlateInk`, OOC chrome). Styles:
+  viewer), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
+  gated by the #2985 layer walk rather than a visibility tier), `mentors` (#1165
+  Mentor's Vow bonds, owner and staff only) and `domains` (#3901 — land the character's
+  organizations hold, gated on active membership; owner and staff only). Styles:
   `frontend/src/character_sheets/sheet.css` under `.refsheet`.
 - **Integrates with:** roster (character management, `set_profile_picture` wears a look,
   `TenureMedia.look`), character_creation (sheet setup),

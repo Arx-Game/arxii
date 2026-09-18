@@ -2293,6 +2293,23 @@ class TestProfilePictureNull(TestCase):
         assert response.data["profile_picture"] is None
 
 
+def _seed_house_holding_land(persona) -> None:
+    """Put the persona in a house that owns a domain, for the query-count fixture.
+
+    Its own function so the fixture stays under the statement cap, and seeded at all
+    because the domains read joins through membership: with no membership the join
+    returns nothing, and the bound would pass without ever measuring the query it
+    claims to count (#3901).
+    """
+    house = OrganizationFactory(name="QCHouse")
+    create_domain(
+        area=AreaFactory(level=AreaLevel.REGION, name="QCRegion"),
+        name="QCKeep",
+        owner_org=house,
+    )
+    OrganizationMembershipFactory(persona=persona, organization=house)
+
+
 class TestCharacterSheetQueryCount(TestCase):
     """Integration test to lock in the query count and catch N+1 regressions.
 
@@ -2379,6 +2396,9 @@ class TestCharacterSheetQueryCount(TestCase):
         # --- Distinctions ---
         dist = DistinctionFactory(name="QCBrave")
         CharacterDistinctionFactory(character=cls.character.sheet_data, distinction=dist, rank=1)
+
+        # --- An organization holding land (#3901) ---
+        _seed_house_holding_land(cls.sheet.primary_persona)
 
         # --- Magic ---
         resonance = ResonanceFactory(name="QCResolve")
@@ -2538,20 +2558,27 @@ class TestCharacterSheetQueryCount(TestCase):
                Ties). Two queries because the two directions are two relations on the
                sheet: 47 is where the character is the sidekick, 48 where they are the
                mentor. Fixed however many bonds they hold.
-        49-50. org-domain prefetches, #3901 (the land the character's organizations hold,
-               for Estate's Domains block). Two queries because the chain is
-               ``personas -> organization_memberships -> organization -> domains``: 49
-               fetches the current memberships with their organizations, 50 the domains
-               with the area each decorates. Fixed however many houses they belong to
-               and however much land those houses hold.
+        49.    the org-domain read, #3901 (the land the character's organizations hold,
+               for Estate's Domains block). ONE query, joined from the personas the
+               sheet already has rather than prefetched. A prefetch chain was the first
+               shape and was wrong twice over: a top-level
+               ``personas__organization_memberships`` lookup cannot reuse the
+               ``cached_personas`` Prefetch, so Django re-fetched every persona to
+               redescend; and nesting it needed a ``to_attr`` on an idmapper parent,
+               which ADR-0278 forbids. Fixed however many houses they belong to and
+               however much land those houses hold.
+
+               The fixture seeds a house that HOLDS land on purpose. With no membership
+               the join returns nothing and the bound would pass without ever measuring
+               what it claims to.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
         # Introductions (journal entries by kind).
         # +6 (#3898): the identity beginnings prefetch, the looks strip, the worn
         # pieces and both directions of the mentor bond, per 43-48.
-        # +2 (#3901): the org-domain chain, per 49-50.
-        with self.assertNumQueries(50):
+        # +1 (#3901): the org-domain read, per 49.
+        with self.assertNumQueries(49):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
