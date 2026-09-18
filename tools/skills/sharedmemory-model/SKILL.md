@@ -57,6 +57,20 @@ Once a model instance is loaded, it is a persistent Python object in the identit
 
 **Why this matters for mutations:** `.save()` on a SharedMemoryModel updates the in-memory instance. Cached properties (`@cached_property`, `Prefetch(to_attr=...)`) can go stale — update them in-place when you mutate, don't flush the whole cache. See `src/world/combat/views.py` for examples of in-place list updates on `participants_cached` after adding/removing participants.
 
+### Choosing a related-row cache
+
+For a parent-owned list, prefer a Django `Prefetch` with `to_attr` targeting
+`evennia_extensions.cached_property.PrunedCachedProperty`. The queryset should
+use ordinary parent filtering and `select_related()` for fields the reader
+needs; do not use cross-row `F()` expressions to avoid an identity-map FK walk.
+Keep derived views as cheap Python properties over that raw list. Invalidation
+belongs to the write path through direct list updates or
+`related_cache_fields`/`RelatedCacheClearingMixin`; `PrunedCachedProperty` only
+handles cold prefetch detection and pk-nulled deleted rows. Do not add a handler
+or request cache merely to filter a parent-owned list. A parameterized cache
+needs a separate design review rather than another general caching wrapper.
+
+
 ## Known stale-cache traps
 
 If a `@tag("postgres")` test fails with `obj.<fk> != expected` after a `refresh_from_db()` or a bulk `SET_NULL` elsewhere, the identity map can be stale in two distinct, easy-to-conflate ways — see [`references/stale-cache-traps.md`](references/stale-cache-traps.md) for the decision procedure before reaching for a fix (a cache-pop only helps one of the two cases; the other needs `flush_instance_cache()`, and the most common cause is neither — a service that never wrote the row).
