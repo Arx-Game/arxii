@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Ledger } from '@/character_sheets/components/sheet/primitives';
 import { useRenownEligiblePersonasQuery } from '../queries';
 
 interface Props {
@@ -19,6 +18,10 @@ interface Props {
  *
  * Render-prop API: callers receive the effective selected persona id
  * (PRIMARY first, then index-0 fallback) and render their own body.
+ *
+ * Both panels are reached only through the character sheet's Ties section, so the
+ * loading and empty arms are drawn in the sheet's voice (#3898): a quiet line, never a
+ * bordered card whose whole body is an apology for an empty section.
  */
 export function PersonaSelectionShell({ characterSheetId, children }: Props) {
   const { data: personas, isLoading: personasLoading } =
@@ -32,25 +35,15 @@ export function PersonaSelectionShell({ characterSheetId, children }: Props) {
     null;
 
   if (personasLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <Ledger>Reading what they are known for…</Ledger>;
   }
 
   if (!personas || personas.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          No personas with renown to display.
-        </CardContent>
-      </Card>
-    );
+    return <Ledger>No face of theirs is known for anything yet.</Ledger>;
   }
 
   return (
-    <div className="space-y-4">
+    <div className="refsheet-stack">
       {personas.length > 1 && (
         <Tabs value={String(effectiveSelectedId)} onValueChange={(v) => setSelectedId(Number(v))}>
           <TabsList>

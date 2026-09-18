@@ -188,7 +188,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
 }
 
 function mountSheet() {
-  renderWithProviders(
+  return renderWithProviders(
     <Routes>
       <Route path="/:id" element={<CharacterSheetPage />} />
     </Routes>,
@@ -373,5 +373,26 @@ describe('CharacterSheetPage', () => {
     // Clicking swaps the frame locally and writes nothing: a stranger flipping
     // through someone's images must never change what that character wears.
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("carries the sheet's plate ink onto the root, where the tokens are declared", () => {
+    // `--plate-ground` and `--plate-accent` are declared by `.refsheet[data-ink=...]`,
+    // so a root without the attribute leaves the plate with no ground at all. The
+    // payload carried `plate_ink` from the first day and nothing read it.
+    setEntry(ENTRY);
+    mockUseCharacterSheetQuery.mockReturnValue({
+      data: makeSheet({ plate_ink: 'verdigris' }),
+    } as unknown as ReturnType<typeof useCharacterSheetQuery>);
+    const { container } = mountSheet();
+    expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'verdigris');
+  });
+
+  it('falls back to the default ink before the payload arrives', () => {
+    setEntry(ENTRY);
+    mockUseCharacterSheetQuery.mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useCharacterSheetQuery>);
+    const { container } = mountSheet();
+    expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'ember');
   });
 });

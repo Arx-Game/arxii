@@ -104,7 +104,11 @@ export function CharacterSheetPage() {
   }));
 
   return (
-    <div className="refsheet">
+    // The ink is a token set on the ROOT, not a style on the plate: `--plate-ground` and
+    // `--plate-accent` are declared by `.refsheet[data-ink=...]` and read by every part
+    // of the plate. Without this attribute the plate renders with no ground at all, so
+    // the default stands in until the payload arrives.
+    <div className="refsheet" data-ink={sheet?.plate_ink ?? 'ember'}>
       <Plate
         name={displayName}
         titles={titleNames}

@@ -54,7 +54,7 @@ describe('RenownPanel', () => {
     setPersonas([]);
     setRenown(undefined);
     renderWithProviders(<RenownPanel characterSheetId={1} />);
-    expect(screen.getByText(/no personas with renown/i)).toBeInTheDocument();
+    expect(screen.getByText(/no face of theirs is known for anything yet/i)).toBeInTheDocument();
   });
 
   it('renders renown for the primary persona by default', () => {
