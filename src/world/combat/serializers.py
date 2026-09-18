@@ -1793,7 +1793,7 @@ class AddOpponentSerializer(serializers.Serializer):
     level = serializers.IntegerField(min_value=1, max_value=30, required=False, allow_null=True)
     threat_pool_id = serializers.IntegerField()
     description = serializers.CharField(required=False, default="")
-    soak_value = serializers.IntegerField(required=False, default=0)
+    soak_value = serializers.IntegerField(required=False)
     probing_threshold = serializers.IntegerField(
         required=False,
         allow_null=True,

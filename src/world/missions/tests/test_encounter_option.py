@@ -17,7 +17,13 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.beat_wiring import encounter_completed_beat_handler
 from world.combat.constants import EncounterOutcome, RiskLevel
 from world.combat.factories import CreatureTemplateFactory, seed_scaling_defaults
-from world.combat.models import CombatEncounter, CombatOpponent, EncounterOutcomeMapping
+from world.combat.models import (
+    CombatEncounter,
+    CombatOpponent,
+    CombatParticipant,
+    EncounterOutcomeMapping,
+)
+from world.combat.scaling import compute_opponent_stat_block
 from world.missions.constants import OptionKind, OptionSource
 from world.missions.factories import (
     MissionInstanceFactory,
@@ -86,6 +92,19 @@ class PickEncounterOptionTests(EncounterOptionTestBase):
         self.assertEqual(encounter.risk_level, self.option.encounter_risk_level)
         self.assertIsNone(encounter.story_beat_id)
         self.assertEqual(CombatOpponent.objects.filter(encounter=encounter).count(), 2)
+        self.assertEqual(
+            list(
+                CombatParticipant.objects.filter(encounter=encounter).values_list(
+                    "character_sheet_id", flat=True
+                )
+            ),
+            [self.sheet.pk],
+        )
+        expected = compute_opponent_stat_block(self.creature.tier, encounter)
+        self.assertEqual(
+            CombatOpponent.objects.filter(encounter=encounter).first().max_health,
+            expected.max_health,
+        )
         self.instance.refresh_from_db()
         self.assertTrue(self.instance.is_paused)
 

@@ -31,13 +31,16 @@ from world.combat.factories import (
     EscalationCurveFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
+    seed_scaling_defaults,
 )
 from world.combat.models import (
     CombatEncounter,
+    CombatOpponent,
     CombatOpponentAction,
     CombatRoundAction,
     DuelChallenge,
 )
+from world.combat.scaling import compute_opponent_stat_block
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.conditions.models import ConditionInstance
 from world.covenants.constants import RoleArchetype
@@ -194,6 +197,46 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
             self.encounter.opponents.count(),
             1,
         )
+
+    def test_add_opponent_omitted_soak_uses_scaled_default(self) -> None:
+        """Omitting soak preserves auto-scaling instead of becoming an override."""
+        seed_scaling_defaults()
+        pool = ThreatPoolFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            f"/api/combat/{self.encounter.pk}/add_opponent/",
+            {"name": "Scaled Elite", "tier": OpponentTier.ELITE, "threat_pool_id": pool.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK, response.data)
+        preview = compute_opponent_stat_block(OpponentTier.ELITE, self.encounter)
+        opponent = CombatOpponent.objects.get(encounter=self.encounter)
+        self.assertEqual(opponent.max_health, preview.max_health)
+        self.assertEqual(opponent.soak_value, preview.soak_value)
+
+    def test_add_opponent_explicit_zero_soak_is_preserved(self) -> None:
+        """An explicit zero remains a deliberate override in auto-scaling mode."""
+        seed_scaling_defaults()
+        pool = ThreatPoolFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            f"/api/combat/{self.encounter.pk}/add_opponent/",
+            {
+                "name": "Unsoaked Elite",
+                "tier": OpponentTier.ELITE,
+                "threat_pool_id": pool.pk,
+                "soak_value": 0,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK, response.data)
+        preview = compute_opponent_stat_block(OpponentTier.ELITE, self.encounter)
+        opponent = CombatOpponent.objects.get(encounter=self.encounter)
+        self.assertEqual(opponent.max_health, preview.max_health)
+        self.assertEqual(opponent.soak_value, 0)
+        self.assertNotEqual(preview.soak_value, 0)
 
     def test_pause_as_gm(self) -> None:
         """GM can toggle pause."""
