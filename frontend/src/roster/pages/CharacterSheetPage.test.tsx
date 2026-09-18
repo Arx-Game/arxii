@@ -181,6 +181,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     current_residence: null,
     looks: [],
     plate_ink: 'ember',
+    worn: [],
     ...overrides,
   };
 }

@@ -387,6 +387,26 @@ class LookEntry(TypedDict):
     is_current: bool
 
 
+class WornEntry(TypedDict):
+    """One piece the character has on, for the sheet's Physical section (#3898).
+
+    Worn things are visible things, so this rides the sheet payload rather than the
+    equipped-items endpoint. That endpoint answers "what am I wearing" for the player
+    who owns the character, and ``VisibleWornItemViewSet`` answers "what can I see on
+    them" for someone in the same room; a roster visitor is neither, and the ruling is
+    that what a character wears shows on their sheet to anyone who opens it.
+
+    ``is_hidden`` marks a piece the layer walk (#2985) says is covered by something
+    above it. Those rows are dropped for everyone but the owner and staff, who get them
+    with the flag set so the sheet can say the piece is there and unseen.
+    """
+
+    id: int
+    name: str
+    description: str
+    is_hidden: bool
+
+
 class ProfileTextField(models.TextChoices):
     """Profile prose fields covered by table update requests + version history (#2631).
 

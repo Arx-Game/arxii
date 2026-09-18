@@ -25,7 +25,6 @@ import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
 import { WorshipSection, type PublicWorshipRef } from '@/worship/components/WorshipSection';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { useCharacterVitalsQuery } from '@/vitals/vitalsQueries';
-import { useEquippedItems, useInventory } from '@/inventory/hooks/useInventory';
 import { usePersonaTitles } from '@/achievements/queries';
 import { useMyLanguages } from '@/species/queries';
 import '@/character_sheets/sheet.css';
@@ -78,12 +77,6 @@ export function CharacterSheetPage() {
   // active character's languages. Off entirely for anyone else.
   const { data: myLanguages } = useMyLanguages();
 
-  // What they are wearing, for Physical. Owner-only: the public "what can I see on
-  // them" endpoint is same-room gated (it answers the look command), so a roster
-  // visitor has no business asking it and would only get a 403.
-  const { data: equipped = [] } = useEquippedItems(isMyCharacter ? sheetId : undefined);
-  const { data: inventory = [] } = useInventory(isMyCharacter ? sheetId : undefined);
-
   const wearLook = useWearLook(entryId, sheetId);
 
   if (isLoading) return <p className="p-4">Loading...</p>;
@@ -100,15 +93,15 @@ export function CharacterSheetPage() {
   const displayName = sheet?.identity.fullname || entry.fullname || entry.character.name;
   const titleNames = (titles ?? []).map((row) => row.title).filter(Boolean);
 
-  const worn: WornItem[] = equipped.map((row) => {
-    const item = inventory.find((candidate) => candidate.id === row.item_instance);
-    return {
-      id: row.id,
-      name: item?.display_name ?? row.body_region_display,
-      description: item?.display_description ?? row.equipment_layer_display,
-      isHidden: false,
-    };
-  });
+  // What they are wearing rides the sheet payload rather than the equipped-items
+  // endpoint. That endpoint answers only for a character its caller plays, which would
+  // empty the Wearing block for every visitor — and worn things are visible things.
+  const worn: WornItem[] = (sheet?.worn ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    isHidden: row.is_hidden,
+  }));
 
   return (
     <div className="refsheet">
@@ -179,6 +172,7 @@ export function CharacterSheetPage() {
             sheet={sheet}
             vitals={vitals}
             isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
+            onOpenHoldings={isMyCharacter ? () => setSection('holdings') : undefined}
             worn={worn}
             galleries={entry.character.galleries ?? []}
           />
@@ -249,10 +243,12 @@ function glanceLines(sheet: ReturnType<typeof useCharacterSheetQuery>['data']): 
   if (!sheet) return [];
   const { identity, appearance } = sheet;
 
+  // The realm is deliberately NOT here. It has its own "From" row under At a glance,
+  // and a Beginning already carries a place in its name ("A Caretaker of Arx"), so
+  // naming the realm again reads as a stutter.
   const who = [
     identity.species?.name,
     identity.beginnings.map((row) => row.name).join(', ') || null,
-    identity.origin?.name && `Of ${identity.origin.name}`,
     identity.family?.name,
     identity.age !== null ? `${identity.age}` : null,
   ]

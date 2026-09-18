@@ -378,6 +378,27 @@
 .refsheet-soft {
   color: hsl(var(--muted-foreground));
 }
+/*
+ * A quiet door: the Folio system's word for a link that leads somewhere without
+ * announcing itself as a button. It reads as text until the reader is on it.
+ */
+.refsheet-quiet-door {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  font-family: var(--sheet-caps);
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  padding: 0 0 1px;
+}
+.refsheet-quiet-door:hover,
+.refsheet-quiet-door:focus-visible {
+  border-bottom-color: hsl(var(--accent));
+  color: hsl(var(--accent));
+}
 
 /* A label/value list. `max-content` on the labels keeps the values on one axis
    without a fixed width that a long label would overflow. */

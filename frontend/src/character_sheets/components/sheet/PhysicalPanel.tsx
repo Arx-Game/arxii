@@ -41,6 +41,12 @@ interface PhysicalPanelProps {
   worn: WornItem[];
   /** The character's published galleries. Every viewer sees these; they are public. */
   galleries: { name: string; url: string }[];
+  /**
+   * Opens Holdings, where the wardrobe is. Passed only for the character's own player —
+   * the demo puts a "Change outfit" line under Wearing, and it is the one place on this
+   * page that leads anywhere the reader can act.
+   */
+  onOpenHoldings?: () => void;
 }
 
 export interface WornItem {
@@ -57,6 +63,7 @@ export function PhysicalPanel({
   isPrivileged,
   worn,
   galleries,
+  onOpenHoldings,
 }: PhysicalPanelProps) {
   const { appearance, identity } = sheet;
 
@@ -132,6 +139,11 @@ export function PhysicalPanel({
                   />
                 ))}
               </Entries>
+              {onOpenHoldings && (
+                <button type="button" className="refsheet-quiet-door" onClick={onOpenHoldings}>
+                  Change outfit
+                </button>
+              )}
             </Stack>
           )}
         </Stack>

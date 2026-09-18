@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type {
   CharacterSheetDistinction,
+  CharacterSheetGift,
   CharacterSheetGoal,
   CharacterSheetPayload,
 } from '@/character_sheets/api';
@@ -138,6 +139,20 @@ function TraitsBlock({ distinctions }: { distinctions: CharacterSheetDistinction
 }
 
 /**
+ * One gift as one sentence: its name, what it resonates with, and the techniques worked
+ * through it. The demo's line reads "Hush, resonant with Silence: Still Room, Thief of
+ * Echoes", and every part of that but the tradition is already on the payload. The
+ * tradition is not — `GiftEntry` carries no tradition field — so the sentence names what
+ * it has rather than leaving a gap where a word should be.
+ */
+function giftSentence(gift: CharacterSheetGift): string {
+  const resonances = gift.resonances.join(', ');
+  const techniques = gift.techniques.map((technique) => technique.name).join(', ');
+  const opening = resonances ? `${gift.name}, resonant with ${resonances}` : gift.name;
+  return techniques ? `${opening}: ${techniques}.` : `${opening}.`;
+}
+
+/**
  * The gift in one sentence, pointing at Magic for the rest. The aura lives there
  * (Dan's ruling): it belongs where a reader goes to see how a character's magic fares,
  * not front and centre on a page about who they are.
@@ -150,11 +165,12 @@ function GiftBlock({
   isMyCharacter: boolean;
 }) {
   if (!magic || magic.gifts.length === 0) return null;
-  const names = magic.gifts.map((gift) => gift.name).join(', ');
   return (
     <Stack>
       <Heading>Gift</Heading>
-      <p>{names}</p>
+      {magic.gifts.map((gift) => (
+        <p key={gift.name}>{giftSentence(gift)}</p>
+      ))}
       <Ledger>
         {isMyCharacter
           ? 'Their aura, threads and how each fares are on the Magic page.'

@@ -375,6 +375,20 @@ export interface CharacterSheetPayload {
   looks: CharacterSheetLook[];
   /** #3898 — OOC chrome: the ground colour the plate is printed in. */
   plate_ink: PlateInk;
+  /** #3898 — what the character has on, as the layer walk says anyone would see it. */
+  worn: CharacterSheetWorn[];
+}
+
+/**
+ * Mirrors `world.character_sheets.types.WornEntry` (#3898) — one piece the character
+ * is wearing. `is_hidden` is only ever true for the owner and staff: a piece the layer
+ * walk says is covered is dropped for everyone else.
+ */
+export interface CharacterSheetWorn {
+  id: number;
+  name: string;
+  description: string;
+  is_hidden: boolean;
 }
 
 export async function fetchCharacterSheet(sheetId: number): Promise<CharacterSheetPayload> {

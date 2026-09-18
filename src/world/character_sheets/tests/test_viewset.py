@@ -46,6 +46,8 @@ from world.forms.factories import (
 )
 from world.forms.models import FormType
 from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.factories import EquippedItemFactory, ItemInstanceFactory
 from world.magic.constants import GlimpseState, GlimpseTagAxis, RitualExecutionKind
 from world.magic.factories import (
     CharacterAuraFactory,
@@ -2034,6 +2036,85 @@ class TestLooksSection(TestCase):
         assert response.data["plate_ink"] == "ember"
 
 
+class TestWornSection(TestCase):
+    """The Physical section's Wearing block (#3898): what the character has on.
+
+    Worn things are the most visible things a character has, so this rides the sheet
+    payload rather than the equipped-items endpoint, which answers only for a character
+    its caller plays. What separates viewers here is not a visibility tier but the
+    #2985 layer walk: a piece covered by something opaque above it is dropped for
+    everyone except the owner and staff, who keep it flagged.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="WornChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # A plain coat over a shift at the same region: the coat shows, the shift does
+        # not. A plain cut conceals what is beneath it by default.
+        cls.coat = ItemInstanceFactory(
+            custom_name="Ash-Grey Coat",
+            custom_description="Cut long, and mended at one cuff.",
+        )
+        cls.shift = ItemInstanceFactory(custom_name="Linen Shift", custom_description="Plain.")
+        EquippedItemFactory(
+            character=cls.sheet,
+            item_instance=cls.coat,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.OUTER,
+        )
+        EquippedItemFactory(
+            character=cls.sheet,
+            item_instance=cls.shift,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _worn(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["worn"]
+
+    def test_a_stranger_sees_what_is_on_the_outside(self) -> None:
+        """The whole point of the section: a visitor is not sent away empty-handed."""
+        worn = self._worn(self.stranger)
+        assert [row["name"] for row in worn] == ["Ash-Grey Coat"]
+        assert worn[0]["description"] == "Cut long, and mended at one cuff."
+        assert worn[0]["is_hidden"] is False
+
+    def test_a_stranger_never_sees_what_the_coat_covers(self) -> None:
+        names = {row["name"] for row in self._worn(self.stranger)}
+        assert "Linen Shift" not in names
+
+    def test_the_owner_sees_the_covered_piece_flagged(self) -> None:
+        worn = {row["name"]: row for row in self._worn(self.player)}
+        assert set(worn) == {"Ash-Grey Coat", "Linen Shift"}
+        assert worn["Linen Shift"]["is_hidden"] is True
+        assert worn["Ash-Grey Coat"]["is_hidden"] is False
+
+    def test_wearing_nothing_renders_no_block(self) -> None:
+        """Render-or-vanish: an empty list, not a row saying the character is bare."""
+        bare = CharacterFactory(db_key="BareChar")
+        bare_sheet = CharacterSheetFactory(character=bare)
+        RosterEntryFactory(character_sheet=bare_sheet)
+        self.client.force_authenticate(user=self.stranger.account)
+        response = self.client.get(f"/api/character-sheets/{bare.pk}/")
+        assert response.data["worn"] == []
+
+
 class TestProfilePictureNull(TestCase):
     """Tests for the profile_picture field when no picture is set."""
 
@@ -2298,12 +2379,17 @@ class TestCharacterSheetQueryCount(TestCase):
                deeper prefetch through a ``to_attr`` parent — so the second declaration
                pays for its own tenure row. Both are fixed: one pair for the whole strip,
                not one per image.
+        46.    worn prefetch, #3898 (what the character has on, for Physical's Wearing
+               block). One query for every piece, with the template and both silhouettes
+               selected along with it so the layer walk that decides what shows costs
+               nothing further.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
         # Introductions (journal entries by kind).
-        # +3 (#3898): the identity beginnings prefetch and the looks strip, per 43-45.
-        with self.assertNumQueries(45):
+        # +4 (#3898): the identity beginnings prefetch, the looks strip and the worn
+        # pieces, per 43-46.
+        with self.assertNumQueries(46):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

@@ -60,6 +60,7 @@ from world.character_sheets.types import (
     TechniqueEntry,
     ThemingSection,
     VacancyRef,
+    WornEntry,
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
@@ -71,6 +72,8 @@ from world.forms.models import (
     PersonaTraitDescriptor,
 )
 from world.goals.models import CharacterGoal
+from world.items.models import EquippedItem
+from world.items.services.visibility import compute_worn_visibility
 from world.magic.constants import GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
@@ -1467,6 +1470,64 @@ def _build_current_residence(sheet: CharacterSheet) -> IdNameRef | None:
 
 # --- Section registry for queryset aggregation ---
 
+_WORN_SELECT_RELATED: tuple[str, ...] = ()
+# The layer walk reads the template's `is_revealing` and both silhouettes, so they are
+# selected here rather than left to fire one query per worn piece. No ``to_attr``
+# (ADR-0278): ``sheet.equipped_items.all()`` reads the prefetch cache directly.
+_WORN_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "equipped_items",
+        queryset=EquippedItem.objects.select_related(
+            "item_instance",
+            "item_instance__template",
+            "item_instance__silhouette",
+            "item_instance__template__silhouette",
+        ),
+    ),
+)
+
+
+def _build_worn(sheet: CharacterSheet, *, privileged: bool) -> list[WornEntry]:
+    """Build the Wearing block: what the character has on, as anyone would see it.
+
+    Visibility is the #2985 layer walk, not a permission tier. ``compute_worn_visibility``
+    is the one predicate the look command, the skin read and the show/conceal verbs all
+    share, so a shift is under a coat here for the same reason it is there. What differs
+    per viewer is only what happens to a covered piece: it is dropped for everyone except
+    the owner and staff, who keep it flagged so the sheet can say it is there and unseen.
+
+    This lives on the sheet rather than on the equipped-items endpoint deliberately. That
+    endpoint refuses anyone but the character's own player, which would make the whole
+    block vanish for every visitor — and worn things are the most visible things a
+    character has.
+    """
+    rows = list(sheet.equipped_items.all())
+    if not rows:
+        return []
+    visibility = compute_worn_visibility(rows)
+
+    entries: list[WornEntry] = []
+    seen: set[int] = set()
+    for row in rows:
+        instance = row.item_instance
+        # A piece covering several regions has a row per region; it is one thing worn.
+        if instance.pk in seen:
+            continue
+        seen.add(instance.pk)
+        is_hidden = not visibility.is_visible(instance.pk)
+        if is_hidden and not privileged:
+            continue
+        entries.append(
+            WornEntry(
+                id=instance.pk,
+                name=instance.display_name,
+                description=instance.display_description,
+                is_hidden=is_hidden,
+            )
+        )
+    return entries
+
+
 _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = (
     (_CAN_EDIT_SELECT_RELATED, _CAN_EDIT_PREFETCH_RELATED),
     (_IDENTITY_SELECT_RELATED, _IDENTITY_PREFETCH_RELATED),
@@ -1484,6 +1545,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
     (_CURRENT_RESIDENCE_SELECT_RELATED, _CURRENT_RESIDENCE_PREFETCH_RELATED),
     (_LOOKS_SELECT_RELATED, _LOOKS_PREFETCH_RELATED),
+    (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
 )
 
 
@@ -1614,6 +1676,9 @@ class CharacterSheetSerializer(serializers.Serializer):
             # nothing about the character, only how their page is printed.
             "looks": _build_looks(sheet, privileged=privileged),
             "plate_ink": sheet.plate_ink,
+            # Worn things are visible things, so this is ungated by tier — only the
+            # layer walk decides, and only a covered piece is owner-only.
+            "worn": _build_worn(sheet, privileged=privileged),
         }
 
 
