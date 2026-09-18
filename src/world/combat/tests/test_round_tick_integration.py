@@ -151,7 +151,10 @@ class RoundTickIntegrationTests(EvenniaTestCase):
         # Simulate post-cleanup state: null out the objectdb FK.
         from world.combat.models import CombatOpponent
 
-        CombatOpponent.objects.filter(pk=opponent.pk).update(objectdb=None)
+        CombatOpponent.objects.filter(pk=opponent.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            objectdb=None,
+        )
 
         # Should not raise.
         resolve_round(encounter)

@@ -525,7 +525,10 @@ def abandon_voyage(voyage: Voyage, caller) -> None:
         voyage.status = VoyageStatus.ABANDONED
         voyage.completed_at = timezone.now()
         voyage.save()
-        voyage.participants.filter(left_at__isnull=True).update(left_at=timezone.now())
+        voyage.participants.filter(left_at__isnull=True).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            left_at=timezone.now(),
+        )
     else:
         caller_participant.left_at = timezone.now()
         caller_participant.save()

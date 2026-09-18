@@ -94,7 +94,10 @@ class MintStoryNpcServiceTests(TestCase):
         # End the first NPC's tenure -- it should free a cap slot.
         RosterTenure.objects.filter(
             roster_entry__character_sheet__character__db_key="Retired NPC"
-        ).update(end_date=timezone.now())
+        ).update_with_reason(
+            reason="test fixture: simulate stale row",
+            end_date=timezone.now(),
+        )
 
         # This would raise if the ended tenure still counted (cap is 2 at JUNIOR).
         mint_story_npc(gm_account=account, name="Active NPC 2")

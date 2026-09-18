@@ -10,7 +10,8 @@ AudereMajoraThreshold and is never duplicated here.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class RitualLiturgy(SharedMemoryModel):

@@ -363,7 +363,10 @@ class LeaveRoundAction(Action):
             scene_round__room_id=room.pk,
             scene_round__status__in=ACTIVE_SCENE_ROUND_STATUSES,
             character_sheet=sheet,
-        ).update(status=SceneRoundParticipantStatus.LEFT)
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            status=SceneRoundParticipantStatus.LEFT,
+        )
 
         return ActionResult(success=True, message="You leave the round.")
 

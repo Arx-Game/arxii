@@ -15,8 +15,8 @@ All models set ``Meta.app_label = "arxii"`` (the single collapsed app, #2906).
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.items.constants import DEFAULT_ASKING_PRICE_PCT, OrgMaterialLedgerKind
 
 _MATERIAL_CATEGORY_FK = "arxii.MaterialCategory"

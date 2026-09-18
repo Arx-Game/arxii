@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"

@@ -34,7 +34,10 @@ def _make_interaction(
     """
     row = InteractionFactory(scene=scene, persona=persona, mode=mode)
     target_ts = base_ts + timedelta(seconds=ts_offset_seconds)
-    Interaction.objects.filter(pk=row.pk).update(timestamp=target_ts)
+    Interaction.objects.filter(pk=row.pk).update_with_reason(
+        reason="test fixture: simulate stale row",
+        timestamp=target_ts,
+    )
     # Mutate the in-memory instance directly — the .update() above set the DB
     # value; we sync the Python object without going through the identity map.
     row.timestamp = target_ts

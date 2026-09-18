@@ -447,8 +447,9 @@ def wire_technique_cast_templates(modeladmin, request, queryset):  # type: ignor
         return
 
     template = get_standalone_cast_template()
-    Technique.objects.filter(pk__in=[technique.pk for technique in techniques]).update(
-        action_template_id=template.pk
+    Technique.objects.filter(pk__in=[technique.pk for technique in techniques]).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        action_template_id=template.pk,
     )
     for technique in techniques:
         technique.action_template_id = template.pk

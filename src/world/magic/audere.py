@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 from django.db import models, transaction
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet

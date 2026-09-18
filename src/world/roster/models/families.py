@@ -20,8 +20,8 @@ consistent by construction and knowledge is per-life.
 
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.constants import (
     DefinitionTier,

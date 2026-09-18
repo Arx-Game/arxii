@@ -5,9 +5,9 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.types import WeightedConsequence, _entry_to_weighted
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 

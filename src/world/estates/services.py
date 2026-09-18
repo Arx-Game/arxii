@@ -830,7 +830,9 @@ def _end_residency_and_work(sheet: CharacterSheet) -> None:
         tenant_persona__character_sheet=sheet, ends_at__isnull=True
     ):
         end_tenancy(tenancy)
-    CharacterEmployment.objects.filter(character_sheet=sheet, active=True).update(active=False)
+    CharacterEmployment.objects.filter(character_sheet=sheet, active=True).update_with_reason(
+        reason="issue #3817: intentional atomic write", active=False
+    )
 
 
 def _mint_claims(

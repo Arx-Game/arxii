@@ -14,8 +14,7 @@ from django.utils.functional import cached_property
 if TYPE_CHECKING:
     from world.roster.models.tenures import RosterTenure
 
-from evennia.utils.idmapper.models import SharedMemoryModel
-
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
 from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType

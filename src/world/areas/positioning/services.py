@@ -403,7 +403,10 @@ def instantiate_blueprint(
                 ).values_list("gating_challenge_id", flat=True)
             )
             if stale_challenge_ids:
-                ChallengeInstance.objects.filter(pk__in=stale_challenge_ids).update(is_active=False)
+                ChallengeInstance.objects.filter(pk__in=stale_challenge_ids).update_with_reason(
+                    reason="issue #3817: intentional atomic write",
+                    is_active=False,
+                )
                 # Bulk .update() writes the DB row directly, bypassing per-instance
                 # .save() — the idmapper identity map never sees it, so any cached
                 # ChallengeInstance for these pks would still report is_active=True.

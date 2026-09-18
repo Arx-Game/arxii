@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionTargetType, GateRole, Pipeline
 from actions.models.consequence_pools import ConsequencePool
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.scenes.action_constants import ActionDelivery
 

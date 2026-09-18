@@ -365,7 +365,7 @@ def extract_asset(asset: NPCAsset, extractor) -> int:
     return Functionary.objects.filter(
         persona_id=asset.asset_persona_id,
         is_active=True,
-    ).update(is_active=False)
+    ).update_with_reason(reason="issue #3817: intentional atomic write", is_active=False)
 
 
 @transaction.atomic

@@ -10,8 +10,8 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import TargetKind
 

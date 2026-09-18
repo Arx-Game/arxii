@@ -512,7 +512,10 @@ def _retire_sanctum_threads(sanctum: SanctumDetails) -> None:
         target_sanctum_details=sanctum,
         target_kind=TargetKind.SANCTUM,
         retired_at__isnull=True,
-    ).update(retired_at=timezone.now())
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        retired_at=timezone.now(),
+    )
 
 
 def _delete_homecoming_lvm_rows(sanctum: SanctumDetails) -> None:

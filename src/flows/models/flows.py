@@ -3,8 +3,8 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowActionChoices, FlowState
 from flows.execution.prompts import register_pending_prompt

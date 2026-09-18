@@ -11,8 +11,8 @@ from typing import ClassVar
 
 from django.db import models
 from django.db.models import Q
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent

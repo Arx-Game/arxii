@@ -31,9 +31,9 @@ from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin

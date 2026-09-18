@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from django.core.validators import MinValueValidator
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.ships.constants import ARMAMENT_PER_LEVEL, HANDLING_PER_LEVEL, ShipUpgradeStat
 
 # Cross-app FK string constants — centralized per the buildings/models.py

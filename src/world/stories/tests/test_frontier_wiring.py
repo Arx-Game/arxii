@@ -184,7 +184,10 @@ class FrontierWiringTests(TestCase):
         # Force the staleness clock well into the past so the assertion is
         # meaningful even within a single fast test run.
         old = timezone.now() - timedelta(days=30)
-        StoryProgress.objects.filter(pk=progress.pk).update(last_advanced_at=old)
+        StoryProgress.objects.filter(pk=progress.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            last_advanced_at=old,
+        )
         progress.refresh_from_db()
         first = progress.last_advanced_at
 

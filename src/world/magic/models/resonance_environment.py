@@ -16,10 +16,9 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.manager import SharedMemoryManager
-from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import ArxSharedMemoryManager
+from core.managers import ArxSharedMemoryManager, GuardedSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -35,7 +34,7 @@ if TYPE_CHECKING:
 _MISSING: object = object()
 
 
-class AffinityInteractionManager(SharedMemoryManager):
+class AffinityInteractionManager(GuardedSharedMemoryManager):
     """Manager for AffinityInteraction with a cached lookup over the fixed 9-row table.
 
     Test-isolation: the cross-process cache is stored as a class-level dict
@@ -303,7 +302,7 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         return f"ResonanceEnvironmentConfig(pk={self.pk})"
 
 
-class ResonanceAlignmentBoonTierManager(SharedMemoryManager):
+class ResonanceAlignmentBoonTierManager(GuardedSharedMemoryManager):
     """Manager for ResonanceAlignmentBoonTier with a cached distinct-template set.
 
     Test-isolation: the cross-process cache is stored as a class-level

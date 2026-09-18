@@ -1364,7 +1364,8 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         if not create or not extracted:
             return
         tech = TechniqueFactory(level=1)
-        Thread.objects.filter(pk=self.pk).update(
+        Thread.objects.filter(pk=self.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.TECHNIQUE,
             target_technique=tech,
             target_trait=None,
@@ -1390,7 +1391,8 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         from world.relationships.factories import RelationshipTrackProgressFactory
 
         progress = RelationshipTrackProgressFactory()
-        Thread.objects.filter(pk=self.pk).update(
+        Thread.objects.filter(pk=self.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             target_relationship_track=progress,
             target_trait=None,
@@ -1448,7 +1450,8 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         from world.relationships.factories import RelationshipCapstoneFactory
 
         capstone = RelationshipCapstoneFactory()
-        Thread.objects.filter(pk=self.pk).update(
+        Thread.objects.filter(pk=self.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
             target_capstone=capstone,
             target_trait=None,
@@ -1495,7 +1498,8 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         from world.covenants.factories import CovenantRoleFactory
 
         role = CovenantRoleFactory()
-        Thread.objects.filter(pk=self.pk).update(
+        Thread.objects.filter(pk=self.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=role,
             target_trait=None,

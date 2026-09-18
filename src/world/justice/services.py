@@ -298,7 +298,10 @@ def heat_decay_tick() -> int:
     touched = (
         PersonaHeat.objects.filter(value__gt=0)
         .exclude(pinned_until__gt=now)
-        .update(value=Greatest(F("value") - HEAT_DECAY_PER_DAY, 0))
+        .update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            value=Greatest(F("value") - HEAT_DECAY_PER_DAY, 0),
+        )
     )
     # Lying low (#1826): declared go-to-ground rows cool faster in that area.
     from world.justice.constants import LIE_LOW_DECAY_MULT  # noqa: PLC0415
@@ -311,7 +314,10 @@ def heat_decay_tick() -> int:
             (
                 PersonaHeat.objects.filter(persona=state.persona, area=state.area, value__gt=0)
                 .exclude(pinned_until__gt=now)
-                .update(value=Greatest(F("value") - extra, 0))
+                .update_with_reason(
+                    reason="issue #3817: intentional atomic write",
+                    value=Greatest(F("value") - extra, 0),
+                )
             )
     PersonaHeat.objects.filter(value=0).exclude(pinned_until__gt=now).delete()
     return touched

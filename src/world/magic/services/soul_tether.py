@@ -466,7 +466,10 @@ def dissolve_soul_tether(
             Thread.objects.filter(
                 target_capstone_id__in=ritual_capstone_ids,
                 retired_at__isnull=True,
-            ).update(retired_at=timezone.now())
+            ).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                retired_at=timezone.now(),
+            )
 
         # 3. Remove the SoulTetherActive ConditionInstance from the Sinner only
         #    if no other tethers remain.  Trigger rows cascade-delete automatically

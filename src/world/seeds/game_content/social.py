@@ -141,7 +141,10 @@ class SocialContent:
                 ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
 
             # Wire the pool to the template
-            ActionTemplate.objects.filter(pk=template.pk).update(consequence_pool=pool)
+            ActionTemplate.objects.filter(pk=template.pk).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                consequence_pool=pool,
+            )
             template.consequence_pool = pool
 
         return SocialContentResult(

@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING
 
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 if TYPE_CHECKING:
     from world.game_clock.models import GameWeek

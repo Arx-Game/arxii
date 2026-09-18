@@ -192,5 +192,8 @@ def resolve_pending_interpose_harm(scene_round: SceneRound) -> None:
             template__name=INTERPOSE_CHALLENGE_NAME,
             target_object=target_character,
             is_active=True,
-        ).update(is_active=False)
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            is_active=False,
+        )
         pending.delete()

@@ -162,7 +162,10 @@ class GroupVoteFlowTests(TestCase):
 class GroupVoteTimeoutTests(TestCase):
     def _expire(self, instance, node):
         past = timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS + 5)
-        MissionGroupBallot.objects.filter(instance=instance, node=node).update(created_at=past)
+        MissionGroupBallot.objects.filter(instance=instance, node=node).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=past,
+        )
 
     def test_lazy_resolve_on_access_after_window_expires(self):
         instance, holder, p2, opt_a, opt_b, _da, _db = _group("lazy")
@@ -388,7 +391,10 @@ class GroupVoteRegressionTests(TestCase):
             submit_group_pick(instance, p2, option_id=opt.pk)  # holder never picks
         # Expire the window, then a lazy access resolves anchoring on p2.
         past = timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS + 5)
-        MissionGroupBallot.objects.filter(instance=instance).update(created_at=past)
+        MissionGroupBallot.objects.filter(instance=instance).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=past,
+        )
         with patch("world.missions.services.resolution.perform_check", side_effect=_always_success):
             res = group_beat(instance, p2)
         self.assertIsNotNone(res.resolved)

@@ -9,8 +9,8 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.items.gems.constants import (
     GEM_QUALITY_LEVEL_MAX,
     GEM_QUALITY_LEVEL_MIN,

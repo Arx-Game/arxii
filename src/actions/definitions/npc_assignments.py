@@ -313,7 +313,11 @@ def _assign_npc_role(
         room=profile,
         assignment_role=role,
         is_active=True,
-    ).update(is_active=False, ended_at=timezone.now())
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        is_active=False,
+        ended_at=timezone.now(),
+    )
 
     assignment = NPCAssignment.objects.create(
         source_type=source_type_enum,
@@ -353,7 +357,11 @@ def _unassign_npc_role(
         room=profile,
         assignment_role=role,
         is_active=True,
-    ).update(is_active=False, ended_at=timezone.now())
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        is_active=False,
+        ended_at=timezone.now(),
+    )
 
     if updated == 0:
         return ActionResult(success=False, message=f"There is no {noun} assigned here.")

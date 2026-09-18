@@ -56,11 +56,17 @@ class ProgressionSeriesTests(TestCase):
         # create (standard pattern in this repo, e.g.
         # world/progression/tests/test_random_scene_services.py).
         earn = CharacterXPTransactionFactory(character=cls.sheet, amount=100)
-        CharacterXPTransaction.objects.filter(pk=earn.pk).update(transaction_date=timezone.now())
+        CharacterXPTransaction.objects.filter(pk=earn.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            transaction_date=timezone.now(),
+        )
 
         # A negative (spend) transaction this week must NOT count as "earned".
         spend = CharacterXPTransactionFactory(character=cls.sheet, amount=-40)
-        CharacterXPTransaction.objects.filter(pk=spend.pk).update(transaction_date=timezone.now())
+        CharacterXPTransaction.objects.filter(pk=spend.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            transaction_date=timezone.now(),
+        )
 
     def test_zero_fill_for_week_with_no_rows(self) -> None:
         series = progression_series(weeks=8)
@@ -115,10 +121,16 @@ class WeeklyWindowBoundaryTests(TestCase):
         )
 
         cls.inside = CharacterXPTransactionFactory(character=cls.sheet, amount=10)
-        CharacterXPTransaction.objects.filter(pk=cls.inside.pk).update(transaction_date=inside_dt)
+        CharacterXPTransaction.objects.filter(pk=cls.inside.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            transaction_date=inside_dt,
+        )
 
         cls.outside = CharacterXPTransactionFactory(character=cls.sheet, amount=20)
-        CharacterXPTransaction.objects.filter(pk=cls.outside.pk).update(transaction_date=outside_dt)
+        CharacterXPTransaction.objects.filter(pk=cls.outside.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            transaction_date=outside_dt,
+        )
 
     def test_weekly_window_boundary_inclusion_and_exclusion(self) -> None:
         series = progression_series(weeks=8)
@@ -167,7 +179,10 @@ class EconomySeriesTests(TestCase):
             amount=30, reason="transfer test", from_purse=cls.purse_a, to_purse=cls.purse_b
         )
         for row in (cls.mint, cls.sink, cls.moved):
-            type(row).objects.filter(pk=row.pk).update(created_at=timezone.now())
+            type(row).objects.filter(pk=row.pk).update_with_reason(
+                reason="test fixture: simulate stale row",
+                created_at=timezone.now(),
+            )
 
     def test_null_source_counts_as_minted(self) -> None:
         series = economy_series(weeks=8)

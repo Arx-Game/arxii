@@ -9,7 +9,8 @@ from typing import ClassVar
 from django.db import models
 from django.db.models import QuerySet
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class PlayerMail(SharedMemoryModel):

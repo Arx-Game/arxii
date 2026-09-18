@@ -342,7 +342,12 @@ def _apply_ap_regen(regen_target_name: str, base_regen: int, *, stamp_daily: boo
             for pool in to_update:
                 pool.last_daily_regen = now
             fields.append("last_daily_regen")
-        ActionPointPool.objects.bulk_update(to_update, fields, batch_size=500)
+        ActionPointPool.objects.bulk_update_with_reason(
+            to_update,
+            fields,
+            batch_size=500,
+            reason="issue #3817: intentional bulk write",
+        )
     return len(to_update)
 
 
@@ -389,7 +394,8 @@ def batch_journal_weekly_reset() -> None:
             | models.Q(retorted_this_week=True)
             | models.Q(was_retorted_this_week=True),
         )
-        .update(
+        .update_with_reason(
+            reason="issue #3817: intentional atomic write",
             posts_this_week=0,
             praised_this_week=False,
             was_praised_this_week=False,
@@ -412,7 +418,8 @@ def batch_relationship_weekly_reset() -> None:
         .filter(
             models.Q(developments_this_week__gt=0) | models.Q(changes_this_week__gt=0),
         )
-        .update(
+        .update_with_reason(
+            reason="issue #3817: intentional atomic write",
             developments_this_week=0,
             changes_this_week=0,
             game_week=current_week,

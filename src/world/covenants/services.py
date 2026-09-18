@@ -524,8 +524,9 @@ def dissolve_covenant(*, covenant: Covenant) -> None:
         affected_sheet_ids.add(membership.character_sheet_id)
     # Release every active CourtPact for the covenant (#1589) — a dissolved Court
     # must leave no dangling active pacts (would block re-induction if revived).
-    CourtPact.objects.filter(covenant=covenant, released_at__isnull=True).update(
-        released_at=timezone.now()
+    CourtPact.objects.filter(covenant=covenant, released_at__isnull=True).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        released_at=timezone.now(),
     )
     covenant.dissolved_at = timezone.now()
     covenant.save(update_fields=["dissolved_at"])
@@ -1367,7 +1368,10 @@ def delete_rank(
         covenant=rank.covenant,
         left_at__isnull=True,
         rank=rank,
-    ).update(rank=reassign_to)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        rank=reassign_to,
+    )
     for membership in affected:
         # Flush the SharedMemoryModel identity-map entry so subsequent
         # refresh_from_db() calls see the updated rank_id from the DB.

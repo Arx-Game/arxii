@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.manager import SharedMemoryManager
 
+from core.managers import ArxSharedMemoryQuerySet, GuardedSharedMemoryManager
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 
 if TYPE_CHECKING:
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
-class SceneQuerySet(models.QuerySet):
+class SceneQuerySet(ArxSharedMemoryQuerySet):
     """Queryset helpers for Scene visibility."""
 
     def active_for_room(self, location: ObjectDB | None) -> SceneQuerySet:
@@ -47,7 +47,7 @@ class SceneQuerySet(models.QuerySet):
 
 
 # Preserve the idmapper-cached .get() by subclassing SharedMemoryManager.
-SceneManager = SharedMemoryManager.from_queryset(SceneQuerySet)
+SceneManager = GuardedSharedMemoryManager.from_queryset(SceneQuerySet)
 
 
 def room_heard_q() -> models.Q:
@@ -74,7 +74,7 @@ def room_heard_q() -> models.Q:
     ) & ~models.Q(mode=InteractionMode.WHISPER)
 
 
-class InteractionQuerySet(models.QuerySet):
+class InteractionQuerySet(ArxSharedMemoryQuerySet):
     """Queryset helpers for Interaction read-visibility."""
 
     def room_heard(self) -> InteractionQuerySet:
@@ -169,4 +169,4 @@ class InteractionQuerySet(models.QuerySet):
 
 
 # Preserve the idmapper-cached .get() by subclassing SharedMemoryManager.
-InteractionManager = SharedMemoryManager.from_queryset(InteractionQuerySet)
+InteractionManager = GuardedSharedMemoryManager.from_queryset(InteractionQuerySet)

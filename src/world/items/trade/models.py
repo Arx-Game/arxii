@@ -15,7 +15,8 @@ two-phase ``select_for_update`` pattern).
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 _CHARACTER_SHEET_FK = "arxii.CharacterSheet"
 _INSTANCE_FK = "arxii.ItemInstance"

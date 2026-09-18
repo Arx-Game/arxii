@@ -231,7 +231,10 @@ class TestClusterRegistry(TestCase):
         # idempotent, and a staff edit survives a re-seed (get_or_create, not
         # update_or_create — the #2698 second guard forbids resyncing a
         # content row on every press).
-        CGExplanation.objects.filter(key="origin_heading").update(text="staff-edited")
+        CGExplanation.objects.filter(key="origin_heading").update_with_reason(
+            reason="test fixture: simulate stale row",
+            text="staff-edited",
+        )
         seed_character_creation_dev()
         # SharedMemoryModel (idmapper) — re-fetch via .values() rather than
         # .get() so a stale cached instance can't mask a regression (mirrors

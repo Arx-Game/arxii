@@ -10,8 +10,8 @@ capture/consent/truncate logic; this file only holds the consent-request row.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.scenes.action_constants import ActionRequestStatus
 
 

@@ -13,8 +13,8 @@ from typing import ClassVar, cast
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.traits.models import CharacterTraitValue, display_trait_value
 
 # XP Cost System

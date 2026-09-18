@@ -337,8 +337,14 @@ class PlayReadViewMarkConversationReadTests(APITestCase):
         # mirroring `test_interaction_services.test_cannot_delete_after_window`.
         earlier_ts = timezone.now() - timedelta(hours=2)
         later_ts = timezone.now() - timedelta(hours=1)
-        Interaction.objects.filter(pk=earlier.pk).update(timestamp=earlier_ts)
-        Interaction.objects.filter(pk=later.pk).update(timestamp=later_ts)
+        Interaction.objects.filter(pk=earlier.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=earlier_ts,
+        )
+        Interaction.objects.filter(pk=later.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=later_ts,
+        )
         Interaction.flush_cached_instance(earlier, force=True)
         Interaction.flush_cached_instance(later, force=True)
 

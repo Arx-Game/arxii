@@ -172,7 +172,10 @@ class WireFleeConfigTests(TestCase):
 
         wire_flee_config()
         # Staff raises the base difficulty; re-running must not reset it.
-        FleeConfig.objects.filter(pk=1).update(base_difficulty=25)
+        FleeConfig.objects.filter(pk=1).update_with_reason(
+            reason="test fixture: simulate stale row",
+            base_difficulty=25,
+        )
         # .filter().update() bypasses the identity map; flush so the next get()
         # reads from DB instead of returning the stale cached instance.
         idmapper_models.flush_cache()
@@ -208,7 +211,10 @@ class WireFleeConfigTests(TestCase):
         from world.traits.models import CheckOutcome
 
         name = f"{FLEE_CHECK_TYPE_NAME}_partial"
-        CheckOutcome.objects.filter(name=name).update(success_level=99)
+        CheckOutcome.objects.filter(name=name).update_with_reason(
+            reason="test fixture: simulate stale row",
+            success_level=99,
+        )
         idmapper_models.flush_cache()
 
         wire_flee_config()

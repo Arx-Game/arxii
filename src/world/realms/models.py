@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils.text import slugify
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.realms.constants import RealmTheme

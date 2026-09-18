@@ -6,8 +6,8 @@ from typing import ClassVar
 
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.scenes.constants import PlaceStatus
 

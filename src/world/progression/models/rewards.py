@@ -13,8 +13,8 @@ from typing import ClassVar, cast
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.progression.constants import (
     DP_BASE_LEVEL,
     DP_COST_MULTIPLIER,

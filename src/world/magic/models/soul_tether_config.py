@@ -1,8 +1,8 @@
 """SoulTetherConfig — singleton tuning surface for the Soul Tether bond mechanic (Spec B)."""
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 

@@ -5,7 +5,8 @@ Settings and media models for roster tenures.
 from typing import ClassVar
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 from .choices import PlotInvolvement
 

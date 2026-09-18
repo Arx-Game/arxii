@@ -253,7 +253,10 @@ class MissionOptionRouteRewardParentTests(TestCase):
             amount=10,
         )
         with self.assertRaises(IntegrityError), transaction.atomic():
-            MissionOptionRouteReward.objects.filter(pk=reward.pk).update(route=None)
+            MissionOptionRouteReward.objects.filter(pk=reward.pk).update_with_reason(
+                reason="test fixture: simulate stale row",
+                route=None,
+            )
 
     def test_check_constraint_rejects_queryset_update_to_both_set(self) -> None:
         # Same DB-level defense for the both-set bypass.
@@ -264,7 +267,8 @@ class MissionOptionRouteRewardParentTests(TestCase):
             amount=10,
         )
         with self.assertRaises(IntegrityError), transaction.atomic():
-            MissionOptionRouteReward.objects.filter(pk=reward.pk).update(
+            MissionOptionRouteReward.objects.filter(pk=reward.pk).update_with_reason(
+                reason="test fixture: simulate stale row",
                 candidate=self.candidate,
             )
 

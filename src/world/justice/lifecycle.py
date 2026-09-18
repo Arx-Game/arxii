@@ -255,10 +255,13 @@ def pardon_persona(granter: Persona, target: Persona, area: Area) -> PardonGrant
     from world.justice.pipeline import _release  # noqa: PLC0415
 
     now = timezone.now()
-    ExileDecree.objects.filter(persona=target, area=area, lifted_at__isnull=True).update(
-        lifted_at=now
+    ExileDecree.objects.filter(
+        persona=target, area=area, lifted_at__isnull=True
+    ).update_with_reason(reason="issue #3817: intentional atomic write", lifted_at=now)
+    PersonaHeat.objects.filter(persona=target, area=area).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        pinned_until=None,
     )
-    PersonaHeat.objects.filter(persona=target, area=area).update(pinned_until=None)
 
     # A captive still awaiting trial is released outright — never tried on the
     # stale weight the pardon just erased.

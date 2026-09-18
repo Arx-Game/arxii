@@ -10,9 +10,9 @@ from datetime import datetime
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.

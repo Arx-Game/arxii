@@ -9,8 +9,8 @@ the affected spends and re-aging reactivates them
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.classes.models import PathStage
 
 

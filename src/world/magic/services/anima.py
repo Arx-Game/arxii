@@ -592,7 +592,12 @@ def anima_regen_tick() -> AnimaRegenTickSummary:
 
     # Bulk update all at once
     if to_update:
-        CharacterAnima.objects.bulk_update(to_update, ["current"], batch_size=1000)
+        CharacterAnima.objects.bulk_update_with_reason(
+            to_update,
+            ["current"],
+            batch_size=1000,
+            reason="issue #3817: intentional bulk write",
+        )
 
     return AnimaRegenTickSummary(
         examined=examined,

@@ -13,8 +13,9 @@ class PoseSubmissionCleanupTests(TestCase):
     def test_prunes_rows_older_than_24h_keeps_recent(self):
         persona = PersonaFactory()
         old = PoseSubmission.objects.create(persona=persona, client_request_id=uuid.uuid4())
-        PoseSubmission.objects.filter(pk=old.pk).update(
-            created_at=timezone.now() - timedelta(hours=25)
+        PoseSubmission.objects.filter(pk=old.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=timezone.now() - timedelta(hours=25),
         )
         recent = PoseSubmission.objects.create(persona=persona, client_request_id=uuid.uuid4())
 

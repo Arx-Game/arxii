@@ -9,9 +9,9 @@ and receive a surname based on that card.
 from typing import ClassVar
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.tarot.constants import SUIT_SINGULAR, ArcanaType, TarotSuit

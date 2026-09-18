@@ -9,8 +9,8 @@ between players - consent belongs to the player's tenure, not the character.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.consent.constants import ConsentMode
 from world.roster.models import RosterTenure

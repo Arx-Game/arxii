@@ -17,9 +17,9 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionCategory, ActionTargetType
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
 from world.contributors.models import CreditedContent

@@ -127,7 +127,7 @@ def complete_ship_construction(
     now = timezone.now()
     claimed = ShipConstructionDetails.objects.filter(
         project=project, applied_at__isnull=True
-    ).update(applied_at=now)
+    ).update_with_reason(reason="issue #3817: intentional atomic write", applied_at=now)
     details = ShipConstructionDetails.objects.select_related(
         "ship_type", "owner_covenant__organization", "resulting_ship"
     ).get(project=project)
@@ -251,9 +251,9 @@ def complete_ship_upgrade(
     from world.ships.models import ShipUpgradeDetails  # noqa: PLC0415
 
     now = timezone.now()
-    claimed = ShipUpgradeDetails.objects.filter(project=project, applied_at__isnull=True).update(
-        applied_at=now
-    )
+    claimed = ShipUpgradeDetails.objects.filter(
+        project=project, applied_at__isnull=True
+    ).update_with_reason(reason="issue #3817: intentional atomic write", applied_at=now)
     if not claimed:
         return
     details = ShipUpgradeDetails.objects.select_related("ship").get(project=project)
@@ -340,9 +340,9 @@ def complete_ship_repair(
     from world.ships.models import ShipRepairDetails  # noqa: PLC0415
 
     now = timezone.now()
-    claimed = ShipRepairDetails.objects.filter(project=project, applied_at__isnull=True).update(
-        applied_at=now
-    )
+    claimed = ShipRepairDetails.objects.filter(
+        project=project, applied_at__isnull=True
+    ).update_with_reason(reason="issue #3817: intentional atomic write", applied_at=now)
     if not claimed:
         return
     details = ShipRepairDetails.objects.select_related("ship").get(project=project)

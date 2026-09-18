@@ -548,8 +548,9 @@ class TestRespondToActionTarget(TestCase):
             action_key="intimidate",
             status=ActionRequestStatus.PENDING,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
         return request
@@ -946,8 +947,9 @@ class TestPerTargetResolverIntegration(TestCase):
             action_key=action_key,
             status=ActionRequestStatus.PENDING,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
         return request
@@ -1015,8 +1017,9 @@ class TestEffortAndFatigueOnTargetedResolution(TestCase):
             effort_level=effort_level,
             status=ActionRequestStatus.PENDING,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
         return request
@@ -1138,8 +1141,9 @@ class TestDefenderSetsPlausibilityBandAtConsent(TestCase):
             action_key="intimidate",
             status=ActionRequestStatus.PENDING,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
         return request
@@ -1319,8 +1323,9 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
             action_key="intimidate",
             status=ActionRequestStatus.PENDING,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
         return request
@@ -1543,8 +1548,9 @@ class TestGradedAccrualOnAccept(TestCase):
             status=ActionRequestStatus.PENDING,
             difficulty_choice=band,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
         return request
@@ -1611,8 +1617,9 @@ class TestGradedAccrualOnAccept(TestCase):
             status=ActionRequestStatus.PENDING,
             difficulty_choice=DifficultyChoice.NORMAL,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
 
@@ -1857,8 +1864,9 @@ class SocialModifierSeamTests(TestCase):
             action_key="intimidate",
             status=ActionRequestStatus.PENDING,
         )
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
         return SceneActionTargetFactory(action_request=request)

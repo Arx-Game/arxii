@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from django.db import models
 from django.db.models import Q
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.constants import GainSource
 
 

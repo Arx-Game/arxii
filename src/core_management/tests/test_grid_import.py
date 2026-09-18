@@ -165,7 +165,10 @@ class GridImportTests(TestCase):
         """#3477 fix round 2 (review finding) — restoring a bundle into an empty
         database must not silently publish a WIP room: the export carries the
         NULL and the import preserves it."""
-        RoomProfile.objects.filter(pk=self.grid.taproom_obj.pk).update(published_at=None)
+        RoomProfile.objects.filter(pk=self.grid.taproom_obj.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            published_at=None,
+        )
         export_grid_bundles(self.root)
         self._wipe_authored_graph()
 

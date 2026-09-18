@@ -10,9 +10,9 @@ no consumer system (ADR-0010).
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractDamageProfile,

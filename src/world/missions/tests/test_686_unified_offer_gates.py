@@ -579,7 +579,10 @@ class TemplateReusabilityTests(TestCase):
 
         result_1 = issue_mission(offer, persona)
         # Manually clear the active gate (per-persona × role) by completing.
-        MissionInstance.objects.filter(pk=result_1.object_pk).update(status=MissionStatus.COMPLETE)
+        MissionInstance.objects.filter(pk=result_1.object_pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            status=MissionStatus.COMPLETE,
+        )
         # Clear the NPCRoleCooldown so the second accept passes.
         NPCRoleCooldown.objects.filter(role=role, persona=persona).delete()
 

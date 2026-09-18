@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.fatigue.constants import EffortLevel
 from world.magic.models.commitments import CommittingDeclaration
 from world.scenes.action_constants import (

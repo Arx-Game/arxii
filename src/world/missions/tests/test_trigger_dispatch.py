@@ -91,8 +91,11 @@ class TriggerDispatchTests(TestCase):
             ).exists()
         )
         # Clear the active-mission guard so the cooldown is what's tested.
-        MissionInstance.objects.filter(participants__character_id=self.character.pk).update(
-            status=MissionStatus.COMPLETE
+        MissionInstance.objects.filter(
+            participants__character_id=self.character.pk
+        ).update_with_reason(
+            reason="test fixture: simulate stale row",
+            status=MissionStatus.COMPLETE,
         )
         self.assertIsNone(maybe_dispatch_on_enter(self.character, self.room))
 

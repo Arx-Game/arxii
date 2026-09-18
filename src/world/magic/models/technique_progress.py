@@ -9,8 +9,8 @@ Prevents blowing all AP in one session.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.achievements.constants import AccessChangeSource
 
 

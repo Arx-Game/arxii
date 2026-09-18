@@ -211,9 +211,18 @@ class VisiblePostsDisplayCapTests(TestCase):
         third = BoardPostFactory(board=board, title="Third")
         # auto_now_add ignores an assigned value at create() — explicit .update()
         # afterward gives each post a distinct, ordering-deterministic timestamp.
-        BoardPost.objects.filter(pk=first.pk).update(created_at=now - timedelta(minutes=2))
-        BoardPost.objects.filter(pk=second.pk).update(created_at=now - timedelta(minutes=1))
-        BoardPost.objects.filter(pk=third.pk).update(created_at=now)
+        BoardPost.objects.filter(pk=first.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=now - timedelta(minutes=2),
+        )
+        BoardPost.objects.filter(pk=second.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=now - timedelta(minutes=1),
+        )
+        BoardPost.objects.filter(pk=third.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=now,
+        )
 
         visible = list(visible_posts_for_board(board))
         self.assertEqual(len(visible), 2)
