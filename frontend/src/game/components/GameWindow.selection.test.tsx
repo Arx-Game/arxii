@@ -19,6 +19,7 @@ vi.mock('@/hooks/useGameSocket', () => ({
     send: vi.fn(),
     disconnectAll: vi.fn(),
     executeAction: vi.fn(),
+    requestRoomState: vi.fn(),
   }),
 }));
 
