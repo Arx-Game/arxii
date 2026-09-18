@@ -24617,8 +24617,7 @@ export interface components {
       threat_pool_id: number;
       /** @default  */
       description: string;
-      /** @default 0 */
-      soak_value: number;
+      soak_value?: number;
       probing_threshold?: number | null;
       position_id?: number | null;
     };
