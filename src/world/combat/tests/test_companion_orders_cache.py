@@ -30,3 +30,7 @@ class CompanionOrderCacheTests(SimpleTestCase):
         orders = CombatEncounter.companion_orders_cached.fget(encounter)
 
         self.assertEqual([order.round_number for order in orders], [2])
+
+        encounter.round_number = 3
+        current_round = CombatEncounter.companion_orders_cached.fget(encounter)
+        self.assertEqual([order.round_number for order in current_round], [3])
