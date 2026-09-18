@@ -620,6 +620,12 @@ class CharacterSheet(SharedMemoryModel):
     # sections. Default SELF preserves the #1269 "private by default" behaviour; a player
     # can open a section to FRIENDS (their allow list) or PUBLIC. Bio/story tiers are a
     # follow-up (they interact with the presented-identity gating).
+    #
+    # ADDING ONE? Nothing else needs changing: ``visibility_field_names()`` below reads
+    # them off the model, and ``_viewer_access_level`` asks it rather than listing them.
+    # #3923 is why: #3906 added ``standing_visibility`` while the resolver kept its own
+    # hand-written four, so the resolver short-circuited before reading the allow list
+    # and every friend was resolved as a stranger — failing OPEN, and therefore silent.
     stats_visibility = models.CharField(
         max_length=10,
         choices=SheetVisibility.choices,
@@ -656,6 +662,21 @@ class CharacterSheet(SharedMemoryModel):
             "belong to and what each thinks of them. Friends by default."
         ),
     )
+
+    @classmethod
+    def visibility_field_names(cls) -> tuple[str, ...]:
+        """Every per-section visibility tier on this model, read off the model (#3923).
+
+        The one source anything gating a section should ask. Derived rather than
+        listed so that adding a sixth tier cannot leave a stale copy behind — the
+        failure that shape produces is silent, because a resolver that has not heard
+        of a tier grants MORE access, not less.
+        """
+        return tuple(
+            field.name
+            for field in cls._meta.get_fields()
+            if isinstance(field, models.CharField) and field.choices == SheetVisibility.choices
+        )
 
     # #3898 — the ground colour the sheet's plate is printed in. Chrome, not a
     # character trait: the player picks it in settings and it never enters any IC
