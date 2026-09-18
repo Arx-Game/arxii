@@ -30,7 +30,11 @@ interface SheetPanelProps {
   isMyCharacter: boolean;
   /** One rumor about this character, for a viewer who cannot read the guidelines. */
   rumor: string | null;
-  /** Languages line — the owner's own, so it only renders on their sheet. */
+  /**
+   * The "Speaks" line, or null for no row. The page passes this only for the viewer's
+   * ACTIVE character, because the languages endpoint is scoped to that character rather
+   * than to whichever owned sheet is open.
+   */
   languages: string | null;
 }
 
@@ -41,7 +45,10 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
     { label: 'Age', value: identity.age },
     { label: 'Born', value: identity.birthday },
     { label: 'Kind', value: identity.species?.name },
-    { label: 'Beginning', value: identity.origin?.name },
+    // Beginning is the CG archetype (Caretaker, Sleeper, Misbegotten), and a character
+    // may hold more than one; `origin` is the realm they are FROM, which is its own row.
+    { label: 'Beginning', value: identity.beginnings.map((row) => row.name).join(', ') },
+    { label: 'From', value: identity.origin?.name },
     {
       label: 'House',
       value: identity.family?.name ? (
@@ -53,7 +60,7 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
     { label: 'Path', value: identity.path?.name },
     { label: 'Keeps faith with', value: identity.worship?.name },
     { label: 'Lives', value: sheet.current_residence?.name },
-    { label: 'Speaks', value: isMyCharacter ? languages : null },
+    { label: 'Speaks', value: languages },
   ];
 
   const goals = sheet.goals;

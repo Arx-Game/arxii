@@ -57,6 +57,9 @@ export function Plate({
   const worn = looks.find((look) => look.is_current) ?? looks[0] ?? null;
   const shown = (previewId !== null && looks.find((l) => l.tenure_media_id === previewId)) || worn;
 
+  // What the empty frame is waiting on: the clicked look, else the worn one.
+  const shownLookName = shown?.look || shown?.title || '';
+
   const handleShow = (look: CharacterSheetLook) => {
     setPreviewId(look.tenure_media_id);
     if (canWear) onWear(look);
@@ -76,7 +79,11 @@ export function Plate({
               {canWear && (
                 <>
                   <span className="refsheet-frame-note refsheet-plate-soft text-sm">
-                    No art yet. The frame waits.
+                    {/* Naming the look says WHICH image is missing, so the sentence
+                        changes as the strip is clicked rather than reading as a single
+                        permanent state. */}
+                    {shownLookName ? `No art yet for ${shownLookName}. ` : 'No art yet. '}
+                    The frame waits.
                   </span>
                   {galleriesTo && (
                     <Link to={galleriesTo} className="refsheet-frame-note text-sm">

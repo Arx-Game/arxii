@@ -65,6 +65,9 @@ class IdentitySection(TypedDict):
     pronouns: PronounsData
     species: IdNameRef | None
     heritage: IdNameRef | None
+    # #3898 — every Beginnings this character holds (#3775): what the sheet calls their
+    # "Beginning". NOT the same as ``origin``, which is the realm they are from.
+    beginnings: list[IdNameRef]
     family: IdNameRef | None
     tarot_card: IdNameRef | None
     origin: IdNameRef | None
@@ -160,6 +163,10 @@ class DistinctionEntry(TypedDict):
     # secret entries at all — they're shown the public list only; the flag lets the owner / staff
     # see which of their distinctions are currently gated.
     is_secret: bool
+    # #3898/#3739 — the distinctive feature this row is aimed at (a trait row or a
+    # marking), by display name; blank for an ordinary distinction. The sheet's Physical
+    # page lists the non-blank ones, since a feature is something a person can see.
+    feature: str
     # Whether this distinction was born from the character's Glimpse (#2427) —
     # CharacterDistinction.from_glimpse is set. Drives the own-character sheet's
     # Glimpse editor "linked distinction" chip state (id here is the

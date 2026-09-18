@@ -109,6 +109,12 @@ export interface CharacterSheetDistinction {
   rank: number;
   notes: string;
   is_secret: boolean;
+  /**
+   * The distinctive feature this row is aimed at (#3739), by display name; blank for
+   * an ordinary distinction. Physical lists the non-blank ones — a feature is
+   * something a person can see.
+   */
+  feature: string;
   /** True when `CharacterDistinction.from_glimpse` points at this character's aura (#2427). */
   is_from_glimpse: boolean;
 }
@@ -273,6 +279,12 @@ export interface CharacterSheetIdentity {
   pronouns: CharacterSheetPronouns;
   species: IdNameRef | null;
   heritage: IdNameRef | null;
+  /**
+   * Every Beginnings this character holds (#3775) — what the sheet calls their
+   * "Beginning". NOT `origin`, which is the realm they are from; binding the
+   * Beginning row to `origin` was the bug this replaced.
+   */
+  beginnings: IdNameRef[];
   family: IdNameRef | null;
   tarot_card: IdNameRef | null;
   origin: IdNameRef | null;

@@ -422,6 +422,7 @@ describe('SpellbookTab', () => {
               rank: 1,
               notes: '',
               is_secret: false,
+              feature: '',
               is_from_glimpse: false,
             },
           ],

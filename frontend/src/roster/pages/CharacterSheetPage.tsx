@@ -27,6 +27,7 @@ import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { useCharacterVitalsQuery } from '@/vitals/vitalsQueries';
 import { useEquippedItems, useInventory } from '@/inventory/hooks/useInventory';
 import { usePersonaTitles } from '@/achievements/queries';
+import { useMyLanguages } from '@/species/queries';
 import '@/character_sheets/sheet.css';
 import { Plate } from '@/character_sheets/components/sheet/Plate';
 import { SectionRow, type SheetSection } from '@/character_sheets/components/sheet/SectionRow';
@@ -70,6 +71,12 @@ export function CharacterSheetPage() {
   // Titles compose into the name on the plate, so the page reads them here rather than
   // leaving them to a panel of their own.
   const { data: titles } = usePersonaTitles(titlesPersonaId);
+
+  // The "Speaks" line. `useMyLanguages` is scoped server-side to the viewer's ACTIVE
+  // character, not to whichever owned character this page is showing, so it is only
+  // honest on the active one — an owned alt would otherwise be labelled with the
+  // active character's languages. Off entirely for anyone else.
+  const { data: myLanguages } = useMyLanguages();
 
   // What they are wearing, for Physical. Owner-only: the public "what can I see on
   // them" endpoint is same-room gated (it answers the look command), so a roster
@@ -144,7 +151,11 @@ export function CharacterSheetPage() {
                 sheet={sheet}
                 isMyCharacter={isMyCharacter}
                 rumor={null}
-                languages={null}
+                languages={
+                  isActiveCharacter && myLanguages?.length
+                    ? myLanguages.map((row) => row.name).join(', ')
+                    : null
+                }
               />
             )}
             <WorshipSection
@@ -240,6 +251,7 @@ function glanceLines(sheet: ReturnType<typeof useCharacterSheetQuery>['data']): 
 
   const who = [
     identity.species?.name,
+    identity.beginnings.map((row) => row.name).join(', ') || null,
     identity.origin?.name && `Of ${identity.origin.name}`,
     identity.family?.name,
     identity.age !== null ? `${identity.age}` : null,

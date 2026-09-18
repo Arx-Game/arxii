@@ -61,8 +61,12 @@ vi.mock('@/inventory/hooks/useInventory', () => ({
   useEquippedItems: () => ({ data: [] }),
   useInventory: () => ({ data: [] }),
 }));
+let browsingEntryId: number | null = null;
 vi.mock('../useBrowsingIdentity', () => ({
-  useBrowsingIdentity: () => ({ entryId: null }),
+  useBrowsingIdentity: () => ({ entryId: browsingEntryId }),
+}));
+vi.mock('@/species/queries', () => ({
+  useMyLanguages: () => ({ data: [{ language_id: 1, name: 'Arvani', is_current: true }] }),
 }));
 // The other sections each own a tree of queries that are not what these tests are
 // about; stub them so a section switch renders a marker instead of a panel.
@@ -139,6 +143,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
       pronouns: { subject: 'she', object: 'her', possessive: 'hers' },
       species: { id: 2, name: 'Human' },
       heritage: null,
+      beginnings: [{ id: 5, name: 'A Caretaker of Arx' }],
       family: null,
       tarot_card: null,
       origin: null,
@@ -212,6 +217,7 @@ function setOwnership(isMine: boolean) {
 describe('CharacterSheetPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    browsingEntryId = null;
     setOwnership(false);
     mockUseCharacterSheetQuery.mockReturnValue({
       data: makeSheet(),
@@ -301,6 +307,46 @@ describe('CharacterSheetPage', () => {
     mountSheet();
     expect(screen.getByText(/Goals and guidelines/i)).toBeInTheDocument();
     expect(screen.getByText(/Sell a secret she was given freely/i)).toBeInTheDocument();
+  });
+
+  it("speaks the active character's languages, and nobody else's", async () => {
+    // Regression (#3898 review): the page passed a hardcoded null here, so the row was
+    // dead for every viewer including the owner — and a preview harness that fed the
+    // panel directly could not have shown it. The row must come from the real hook, and
+    // only for the ACTIVE character: the endpoint is scoped to that character, so an
+    // owned alt would otherwise be captioned with the active one's languages.
+    setEntry(ENTRY);
+    setOwnership(true);
+    browsingEntryId = ENTRY.id;
+    mountSheet();
+    expect(screen.getByText('Arvani')).toBeInTheDocument();
+  });
+
+  it('omits the speaks row when the viewed character is not the active one', () => {
+    setEntry(ENTRY);
+    setOwnership(true);
+    browsingEntryId = 999;
+    mountSheet();
+    expect(screen.queryByText('Arvani')).not.toBeInTheDocument();
+  });
+
+  it('shows the Beginning from beginnings, and the realm as its own row', () => {
+    // Regression (#3898 review): "Beginning" was bound to `identity.origin`, which is
+    // the realm the character is FROM (`Profile.origin_realm`), not their Beginnings
+    // archetype. The two are different fields and must not be interchangeable.
+    setEntry(ENTRY);
+    mockUseCharacterSheetQuery.mockReturnValue({
+      data: makeSheet({
+        identity: {
+          ...makeSheet().identity,
+          beginnings: [{ id: 5, name: 'A Caretaker of Arx' }],
+          origin: { id: 9, name: 'Arx, the Lantern Ward' },
+        },
+      }),
+    } as unknown as ReturnType<typeof useCharacterSheetQuery>);
+    mountSheet();
+    expect(screen.getByText('A Caretaker of Arx')).toBeInTheDocument();
+    expect(screen.getByText('Arx, the Lantern Ward')).toBeInTheDocument();
   });
 
   it('wears a look when the owner clicks one', async () => {

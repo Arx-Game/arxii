@@ -217,7 +217,11 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     # #2994 — owner/staff-only declared mood.
     "current_mood",
 )
-_IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
+_IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    _SHARED_PATH_HISTORY_PREFETCH,
+    # #3898 — the Beginnings the presented profile holds, for the identity section.
+    "true_profile__beginnings",
+)
 
 
 def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
@@ -242,6 +246,7 @@ def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
                 "heritage": None,
                 "tarot_card": None,
                 "origin": None,
+                "beginnings": [],
             },
         )
     return (
@@ -251,6 +256,13 @@ def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
             "family": bio_profile.family,
             "heritage": _id_name_or_null(bio_profile.heritage),
             "tarot_card": _id_name_or_null(bio_profile.tarot_card),
+            # #3898 — the Beginnings the character holds, which is what the sheet means
+            # by "Beginning" (Caretaker, Sleeper, Misbegotten). Distinct from `origin`
+            # below, which is the realm they are FROM. A set that only grows (#3775), so
+            # this is a list, and a cover profile presents its own fabricated set.
+            "beginnings": [
+                IdNameRef(id=row.pk, name=row.name) for row in bio_profile.beginnings.all()
+            ],
             "origin": _id_name_or_null(bio_profile.origin_realm),
         },
     )
@@ -391,6 +403,7 @@ def _build_identity(
         pronouns=pronouns,
         species=_id_name_or_null(sheet.species),
         heritage=lineage["heritage"],
+        beginnings=lineage["beginnings"],
         family=_id_name_or_null(family),
         tarot_card=lineage["tarot_card"],
         origin=lineage["origin"],
@@ -753,10 +766,30 @@ _DISTINCTIONS_SELECT_RELATED: tuple[str, ...] = ()
 _DISTINCTIONS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "distinctions",
-        queryset=CharacterDistinction.objects.select_related("distinction"),
+        # #3898 — `feature_trait`/`feature_marking` resolve the distinctive feature a
+        # per-feature distinction is aimed at, so Physical can list them without a query
+        # per row.
+        queryset=CharacterDistinction.objects.select_related(
+            "distinction", "feature_trait", "feature_marking"
+        ),
         to_attr="cached_distinctions",
     ),
 )
+
+
+def _feature_name(cd: CharacterDistinction) -> str:
+    """Name the distinctive feature a per-feature distinction is aimed at (#3739).
+
+    Blank for an ordinary distinction, which is what tells the sheet's Physical page
+    which rows belong in its "Distinctive features" block: a feature is something a
+    person can see, so it is read beside hair and eyes rather than only in the trait
+    list.
+    """
+    if cd.feature_marking_id is not None:
+        return cd.feature_marking.name
+    if cd.feature_trait_id is not None:
+        return cd.feature_trait.display_name
+    return ""
 
 
 def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[DistinctionEntry]:
@@ -776,6 +809,7 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             notes=cd.notes,
             is_secret=cd.is_secret,
             is_from_glimpse=cd.from_glimpse_id is not None,
+            feature=_feature_name(cd),
         )
         for cd in sheet.cached_distinctions
         if privileged or not cd.is_secret

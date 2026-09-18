@@ -10,11 +10,12 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
-from world.character_creation.factories import RealmFactory
+from world.character_creation.factories import BeginningsFactory, RealmFactory
 from world.character_sheets.factories import (
     CharacterSheetFactory,
     GenderFactory,
     MoodOptionFactory,
+    ProfileBeginningsFactory,
 )
 from world.character_sheets.models import CharacterSheet, Heritage
 from world.character_sheets.serializers import (
@@ -283,6 +284,7 @@ class TestIdentitySection(TestCase):
             "pronouns",
             "species",
             "heritage",
+            "beginnings",
             "family",
             "tarot_card",
             "origin",
@@ -349,6 +351,25 @@ class TestIdentitySection(TestCase):
         """origin is {id, name} from origin_realm."""
         identity = self._get_identity()
         assert identity["origin"] == {"id": self.realm.pk, "name": "Arx"}
+
+    def test_beginnings_are_not_the_origin_realm(self) -> None:
+        """beginnings and origin are different fields and must not be interchangeable.
+
+        Regression (#3898 review): the sheet's "Beginning" row was bound to ``origin``,
+        which is ``Profile.origin_realm`` — the realm a character is FROM, not the
+        Beginnings archetype they hold. Both are asserted here against distinctly-named
+        rows so a later refactor cannot silently re-point one at the other.
+        """
+        beginnings = BeginningsFactory(name="A Caretaker of Arx")
+        ProfileBeginningsFactory(profile=self.sheet.true_profile, beginnings=beginnings)
+        identity = self._get_identity()
+        assert identity["beginnings"] == [{"id": beginnings.pk, "name": "A Caretaker of Arx"}]
+        assert identity["origin"] == {"id": self.realm.pk, "name": "Arx"}
+
+    def test_beginnings_empty_when_none_held(self) -> None:
+        """beginnings is an empty list, not null, for a character holding none."""
+        identity = self._get_identity()
+        assert identity["beginnings"] == []
 
     def test_path_nested(self) -> None:
         """path is {id, name} from latest CharacterPathHistory."""
@@ -931,7 +952,7 @@ class TestDistinctionsSection(TestCase):
         assert len(distinctions) == 2
 
     def test_distinction_entry_keys(self) -> None:
-        """Each distinction entry has id, name, rank, notes, is_secret, is_from_glimpse (#2427)."""
+        """Each entry has id, name, rank, notes, is_secret, feature (#3898), is_from_glimpse."""
         distinctions = self._get_distinctions()
         for entry in distinctions:
             assert set(entry.keys()) == {
@@ -940,6 +961,7 @@ class TestDistinctionsSection(TestCase):
                 "rank",
                 "notes",
                 "is_secret",
+                "feature",
                 "is_from_glimpse",
             }
 
@@ -2265,20 +2287,23 @@ class TestCharacterSheetQueryCount(TestCase):
                 vacancy-bearing membership, not one per persona.
         41-42. Actor's Sheet prefetches, #3621 (enemy rows; the Introductions, journal
                entries by kind)
-        43-44. looks prefetch, #3898 (the character's images and the mood each shows,
+        43.    identity beginnings prefetch, #3898 (the Beginnings the presented profile
+               holds — what the sheet means by "Beginning", as distinct from the realm
+               the character is from). One query however many origins they hold.
+        44-45. looks prefetch, #3898 (the character's images and the mood each shows,
                for the plate's strip). Two queries rather than one because the chain is
-               ``roster_entry__tenures__media``: query 43 re-fetches the tenures and 44
-               fetches their media. The tenures ARE already prefetched for ``can_edit``
-               (#21), but into ``cached_tenures`` via ``to_attr``, and Django cannot
-               chain a deeper prefetch through a ``to_attr`` parent — so the second
-               declaration pays for its own tenure row. Both are fixed: one pair for the
-               whole strip, not one per image.
+               ``roster_entry__tenures__media``: 44 re-fetches the tenures and 45 fetches
+               their media. The tenures ARE already prefetched for ``can_edit`` (#21),
+               but into ``cached_tenures`` via ``to_attr``, and Django cannot chain a
+               deeper prefetch through a ``to_attr`` parent — so the second declaration
+               pays for its own tenure row. Both are fixed: one pair for the whole strip,
+               not one per image.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
         # Introductions (journal entries by kind).
-        # +2 (#3898): the looks strip, per 43-44 above.
-        with self.assertNumQueries(44):
+        # +3 (#3898): the identity beginnings prefetch and the looks strip, per 43-45.
+        with self.assertNumQueries(45):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

@@ -17,7 +17,7 @@
 import { Link } from 'react-router-dom';
 import type { CharacterVitalsData } from '@/vitals/vitalsQueries';
 import type { CharacterSheetPayload } from '@/character_sheets/api';
-import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack } from './primitives';
+import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack, Tag } from './primitives';
 import type { GlanceRow } from './primitives';
 
 /**
@@ -60,6 +60,11 @@ export function PhysicalPanel({
 }: PhysicalPanelProps) {
   const { appearance, identity } = sheet;
 
+  // The distinctions aimed at a visible feature — a burn, a scar, an unusual eye. They
+  // belong beside hair and build because that is where a reader looks for them, and they
+  // also stay in the full list under Distinctions.
+  const features = sheet.distinctions.filter((row) => row.feature !== '');
+
   // Height: the band is what anyone can tell by looking; the exact inches are the
   // owner's and staff's, and arrive null for everyone else (#1325).
   const heightValue = buildHeight(appearance.height_band, appearance.height_inches);
@@ -90,6 +95,22 @@ export function PhysicalPanel({
               modification, where the full palette is offered.
             </p>
           </Stack>
+
+          {features.length > 0 && (
+            <Stack>
+              <Heading>Distinctive features</Heading>
+              <Entries>
+                {features.map((feature) => (
+                  <Entry
+                    key={feature.id}
+                    name={feature.name}
+                    tags={feature.feature ? <Tag>{feature.feature}</Tag> : undefined}
+                    gloss={feature.notes || undefined}
+                  />
+                ))}
+              </Entries>
+            </Stack>
+          )}
 
           {worn.length > 0 && (
             <Stack>
