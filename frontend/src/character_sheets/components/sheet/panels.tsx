@@ -36,9 +36,11 @@ import { useOutfits } from '@/inventory/hooks/useOutfits';
 import { useThreads } from '@/magic/queries';
 import { formatCoppers } from '@/lib/currency';
 import type {
+  CharacterSheetCovenantRole,
   CharacterSheetDomain,
   CharacterSheetMentor,
   CharacterSheetPayload,
+  CharacterSheetStanding,
 } from '@/character_sheets/api';
 import { Entries, Entry, Heading, Ledger, Stack, Tag } from './primitives';
 
@@ -53,18 +55,22 @@ export function TiesPanel({
   entryId,
   isMyCharacter,
   viewerPersonaId,
-  viewedPersonaId,
   titlesPersonaId,
   mentors,
+  standing,
+  covenants,
 }: {
   sheetId: number;
   entryId: number;
   isMyCharacter: boolean;
   viewerPersonaId: number | null;
-  viewedPersonaId: number | null;
   titlesPersonaId: number | null;
   /** Active Mentor's Vow bonds; empty for anyone the payload did not give them to. */
   mentors: CharacterSheetMentor[];
+  /** Where they stand (#3906). The server applied `standing_visibility` already. */
+  standing: CharacterSheetStanding;
+  /** Active covenant roles (#3906). Public. */
+  covenants: CharacterSheetCovenantRole[];
 }) {
   return (
     <div className="refsheet-columns-2">
@@ -87,12 +93,15 @@ export function TiesPanel({
                 />
               ))}
             </Entries>
-            <Stack>
-              <Heading>Kin</Heading>
-              <KinshipPanel characterId={sheetId} />
-            </Stack>
           </Stack>
         )}
+        {/* Kin is its own block, NOT nested under Mentors: a character without a
+            Mentor's Vow still has a family, and nesting it lost the whole block for
+            everyone who had no vow. */}
+        <Stack>
+          <Heading>Kin</Heading>
+          <KinshipPanel characterId={sheetId} />
+        </Stack>
       </Stack>
       <Stack wide>
         <Stack>
@@ -102,7 +111,7 @@ export function TiesPanel({
             viewerPersonaId={viewerPersonaId}
             isMyCharacter={isMyCharacter}
             viewedEntryId={entryId}
-            viewedPersonaId={viewedPersonaId}
+            standing={standing}
           />
         </Stack>
         <Stack>
@@ -110,13 +119,12 @@ export function TiesPanel({
           <TitlesPanel personaId={titlesPersonaId} />
         </Stack>
         {/* Covenant is its own rail block, the way the spec lists it: a covenant is a
-            thing a character belongs to, not a shade of how they are thought of. */}
-        {isMyCharacter && (
-          <Stack>
-            <Heading>Covenant</Heading>
-            <CovenantRoles characterSheetId={sheetId} />
-          </Stack>
-        )}
+            thing a character belongs to, not a shade of how they are thought of. And
+            it is PUBLIC (#3906) — a role is a thing a character IS, like a title. */}
+        <Stack>
+          <Heading>Covenant</Heading>
+          <CovenantRoles covenants={covenants} />
+        </Stack>
       </Stack>
     </div>
   );

@@ -381,6 +381,37 @@ export interface CharacterSheetPayload {
   mentors: CharacterSheetMentor[];
   /** #3901 — land the character's organizations hold. Empty for anyone but the owner. */
   domains: CharacterSheetDomain[];
+  /** #3906 — where the presented face stands. Gated by `standing_visibility`. */
+  standing: CharacterSheetStanding;
+  /** #3906 — active covenant roles. Public. */
+  covenants: CharacterSheetCovenantRole[];
+}
+
+/**
+ * Mirrors `world.character_sheets.types.StandingSection` (#3906) — which houses the
+ * presented face belongs to and what each thinks of them. Both lists are empty for a
+ * viewer whose access does not meet the character's `standing_visibility`, which
+ * defaults to FRIENDS: the only one of the sheet's five tiers that does not default to
+ * SELF.
+ *
+ * Reputation is the NAMED TIER only, never the raw value.
+ */
+export interface CharacterSheetStanding {
+  memberships: { organization_id: number; organization: string; title: string }[];
+  reputations: { organization_id: number; organization: string; tier: string }[];
+}
+
+/**
+ * Mirrors `world.character_sheets.types.CovenantRoleEntry` (#3906) — one active
+ * covenant role. Public, the way the Titles block beside it has always been.
+ */
+export interface CharacterSheetCovenantRole {
+  id: number;
+  covenant_id: number;
+  covenant: string;
+  role: string;
+  rank: string;
+  engaged: boolean;
 }
 
 /**
