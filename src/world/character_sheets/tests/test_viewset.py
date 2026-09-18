@@ -73,6 +73,7 @@ from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
     RosterTenureFactory,
+    TenureGalleryFactory,
     TenureMediaFactory,
 )
 from world.scenes.factories import PersonaFactory
@@ -1908,6 +1909,109 @@ class TestProfilePictureSection(TestCase):
         )
 
 
+class TestLooksSection(TestCase):
+    """The plate's looks strip (#3898): the character's images and the mood each shows.
+
+    The interesting behaviour is the visibility split. The owner sees every image on
+    their tenures; anyone else sees only what is already public of the character —
+    images in a public gallery, plus the worn one, which the roster has always shown.
+    A private gallery must not reach the strip, because the sheet is a page anyone can
+    open.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="LooksChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.public_gallery = TenureGalleryFactory(tenure=cls.tenure, is_public=True)
+        cls.private_gallery = TenureGalleryFactory(tenure=cls.tenure, is_public=False)
+        cls.guarded_mood = MoodOptionFactory(name="Guarded")
+
+        # The worn look: tagged, and the entry's profile picture.
+        cls.worn = TenureMediaFactory(
+            tenure=cls.tenure,
+            gallery=cls.public_gallery,
+            look=cls.guarded_mood,
+            media__cloudinary_url="https://example.test/worn.jpg",
+        )
+        # A second public image, untagged — an artist's sheet is worth having before
+        # anyone has tagged a mood.
+        cls.public_untagged = TenureMediaFactory(
+            tenure=cls.tenure,
+            gallery=cls.public_gallery,
+            media__cloudinary_url="https://example.test/public.jpg",
+        )
+        # One the player keeps private.
+        cls.private = TenureMediaFactory(
+            tenure=cls.tenure,
+            gallery=cls.private_gallery,
+            media__cloudinary_url="https://example.test/private.jpg",
+        )
+        cls.roster_entry.profile_picture = cls.worn
+        cls.roster_entry.save(update_fields=["profile_picture"])
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _looks(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["looks"]
+
+    def test_owner_sees_every_image_with_the_worn_one_first(self) -> None:
+        looks = self._looks(self.player)
+        # The worn look leads, so the strip reads as "this one, and the others". The
+        # rest follow the gallery's own order, which this does not pin.
+        assert looks[0]["is_current"] is True
+        assert looks[0]["url"] == "https://example.test/worn.jpg"
+        assert looks[0]["look"] == "Guarded"
+        assert looks[0]["tenure_media_id"] == self.worn.pk
+        assert {row["url"] for row in looks} == {
+            "https://example.test/worn.jpg",
+            "https://example.test/public.jpg",
+            "https://example.test/private.jpg",
+        }
+        assert [row["is_current"] for row in looks].count(True) == 1
+
+    def test_untagged_image_carries_a_blank_look_rather_than_being_dropped(self) -> None:
+        looks = self._looks(self.player)
+        untagged = next(row for row in looks if row["url"] == "https://example.test/public.jpg")
+        assert untagged["look"] == ""
+
+    def test_stranger_sees_public_images_only(self) -> None:
+        looks = self._looks(self.stranger)
+        urls = {row["url"] for row in looks}
+        assert "https://example.test/private.jpg" not in urls
+        assert urls == {"https://example.test/worn.jpg", "https://example.test/public.jpg"}
+
+    def test_stranger_sees_the_worn_image_even_from_a_private_gallery(self) -> None:
+        """The profile picture is already public on the roster, wherever it is filed."""
+        self.roster_entry.profile_picture = self.private
+        self.roster_entry.save(update_fields=["profile_picture"])
+        try:
+            urls = [row["url"] for row in self._looks(self.stranger)]
+            assert "https://example.test/private.jpg" in urls
+        finally:
+            self.roster_entry.profile_picture = self.worn
+            self.roster_entry.save(update_fields=["profile_picture"])
+
+    def test_plate_ink_defaults_to_ember_and_is_ungated(self) -> None:
+        """The ink is OOC chrome — it says nothing about the character, so nobody is gated."""
+        self.client.force_authenticate(user=self.stranger.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.data["plate_ink"] == "ember"
+
+
 class TestProfilePictureNull(TestCase):
     """Tests for the profile_picture field when no picture is set."""
 
@@ -2161,11 +2265,20 @@ class TestCharacterSheetQueryCount(TestCase):
                 vacancy-bearing membership, not one per persona.
         41-42. Actor's Sheet prefetches, #3621 (enemy rows; the Introductions, journal
                entries by kind)
+        43-44. looks prefetch, #3898 (the character's images and the mood each shows,
+               for the plate's strip). Two queries rather than one because the chain is
+               ``roster_entry__tenures__media``: query 43 re-fetches the tenures and 44
+               fetches their media. The tenures ARE already prefetched for ``can_edit``
+               (#21), but into ``cached_tenures`` via ``to_attr``, and Django cannot
+               chain a deeper prefetch through a ``to_attr`` parent — so the second
+               declaration pays for its own tenure row. Both are fixed: one pair for the
+               whole strip, not one per image.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
         # Introductions (journal entries by kind).
-        with self.assertNumQueries(42):
+        # +2 (#3898): the looks strip, per 43-44 above.
+        with self.assertNumQueries(44):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
