@@ -113,11 +113,6 @@ function OwnReputationView({
       </Stack>
 
       <OrganizationStandingBlock viewedPersonaId={viewedPersonaId} />
-
-      <Stack>
-        <Subheading>Covenants</Subheading>
-        <CovenantRoles characterSheetId={entryCharacterId} />
-      </Stack>
     </Stack>
   );
 }
@@ -188,7 +183,12 @@ function OrganizationStandingBlock({ viewedPersonaId }: { viewedPersonaId: numbe
 // Covenants — active covenant role assignments for this character sheet.
 // ---------------------------------------------------------------------------
 
-function CovenantRoles({ characterSheetId }: { characterSheetId: number }) {
+/**
+ * The covenant roles a character holds. Exported because the sheet's Ties section gives
+ * Covenant a rail block of its own, the way the spec lists it, rather than nesting it
+ * under Standing.
+ */
+export function CovenantRoles({ characterSheetId }: { characterSheetId: number }) {
   const { data: roles, isLoading } = useCovenantRolesQuery(characterSheetId);
   const activeRoles = (roles ?? []).filter((r: CharacterCovenantRole) => r.is_active);
 

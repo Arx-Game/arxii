@@ -13,6 +13,13 @@ import { usePrayers, useVisions } from '../queries';
 import { PrayDialog } from './PrayDialog';
 import { SendVisionDialog } from './SendVisionDialog';
 import { VisionCard } from './VisionCard';
+import {
+  Entries,
+  Entry,
+  Heading,
+  Subheading,
+  Tag,
+} from '@/character_sheets/components/sheet/primitives';
 
 export interface PublicWorshipRef {
   id: number;
@@ -42,30 +49,30 @@ export function WorshipSection({
   const recentPrayers = (prayers ?? []).slice(0, RECENT_PRAYERS);
 
   return (
-    <section className="space-y-3" data-testid="worship-section">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-xl font-semibold">Worship</h3>
-        {isMyCharacter && (
-          <PrayDialog characterId={sheetId} defaultBeingId={publicWorship?.id ?? null} />
-        )}
-        {isStaff && (
-          <SendVisionDialog
-            recipientSheetId={sheetId}
-            recipientName={characterName}
-            prayers={recentPrayers}
-          />
-        )}
-      </div>
-      <p className="text-sm text-muted-foreground" data-testid="public-worship">
-        {publicWorship ? `Worships ${publicWorship.name}.` : 'No declared faith.'}
+    <div className="refsheet-stack" data-testid="worship-section">
+      <Heading>Worship</Heading>
+      <p className="refsheet-ledger" data-testid="public-worship">
+        {publicWorship ? `Keeps faith with ${publicWorship.name}.` : 'No declared faith.'}
       </p>
+      {(isMyCharacter || isStaff) && (
+        <div className="refsheet-doors">
+          {isMyCharacter && (
+            <PrayDialog characterId={sheetId} defaultBeingId={publicWorship?.id ?? null} />
+          )}
+          {isStaff && (
+            <SendVisionDialog
+              recipientSheetId={sheetId}
+              recipientName={characterName}
+              prayers={recentPrayers}
+            />
+          )}
+        </div>
+      )}
       {privileged && (
-        <div className="space-y-2" data-testid="visions-list">
-          <h4 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Visions
-          </h4>
+        <div className="refsheet-stack" data-testid="visions-list">
+          <Subheading>Visions</Subheading>
           {(visions ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="visions-empty">
+            <p className="refsheet-ledger" data-testid="visions-empty">
               No vision has come.
             </p>
           ) : (
@@ -74,25 +81,30 @@ export function WorshipSection({
         </div>
       )}
       {isStaff && recentPrayers.length > 0 && (
-        <div className="space-y-2" data-testid="prayers-list">
-          <h4 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Recent prayers (staff)
-          </h4>
-          <ul className="space-y-1">
+        <div className="refsheet-stack" data-testid="prayers-list">
+          <Subheading>Recent prayers (staff)</Subheading>
+          <Entries>
             {recentPrayers.map((prayer) => (
-              <li key={prayer.id} className="text-sm" data-testid="prayer-row">
-                <span className="text-muted-foreground">
-                  {formatRelativeTime(prayer.prayed_at)}, to {prayer.being_name}
-                  {prayer.dire_straits ? ` (${prayer.dire_straits.replace('_', ' ')})` : ''}
-                  {prayer.devotion_granted ? ' (act of devotion)' : ''}
-                  {prayer.answered ? ' (answered)' : ''}:
-                </span>{' '}
-                <span className="whitespace-pre-wrap">{prayer.text}</span>
-              </li>
+              <div key={prayer.id} data-testid="prayer-row">
+                <Entry
+                  name={`To ${prayer.being_name}`}
+                  aside={
+                    <span className="refsheet-note">{formatRelativeTime(prayer.prayed_at)}</span>
+                  }
+                  tags={
+                    <>
+                      {prayer.dire_straits && <Tag>{prayer.dire_straits.replace('_', ' ')}</Tag>}
+                      {prayer.devotion_granted && <Tag>act of devotion</Tag>}
+                      {prayer.answered && <Tag accent>answered</Tag>}
+                    </>
+                  }
+                  gloss={<span style={{ whiteSpace: 'pre-wrap' }}>{prayer.text}</span>}
+                />
+              </div>
             ))}
-          </ul>
+          </Entries>
         </div>
       )}
-    </section>
+    </div>
   );
 }

@@ -23,7 +23,7 @@ import { KinshipPanel } from '@/kinship/components/KinshipPanel';
 import { LanguagesSection } from '@/character_sheets/components/LanguagesSection';
 import { LocationsTab } from '@/locations/components/LocationsTab';
 import { RelationshipsSection } from '@/components/character';
-import { ReputationTab } from '@/reputation/components/ReputationTab';
+import { CovenantRoles, ReputationTab } from '@/reputation/components/ReputationTab';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { SpellbookTab } from '@/magic/components/SpellbookTab';
 import { StaffSecretsPanel } from '@/secrets/components/StaffSecretsPanel';
@@ -105,6 +105,14 @@ export function TiesPanel({
           <Heading>Titles</Heading>
           <TitlesPanel personaId={titlesPersonaId} />
         </Stack>
+        {/* Covenant is its own rail block, the way the spec lists it: a covenant is a
+            thing a character belongs to, not a shade of how they are thought of. */}
+        {isMyCharacter && (
+          <Stack>
+            <Heading>Covenant</Heading>
+            <CovenantRoles characterSheetId={sheetId} />
+          </Stack>
+        )}
       </Stack>
     </div>
   );
@@ -305,7 +313,7 @@ function CarriedBlock({ sheetId }: { sheetId: number }) {
         {inventory.length > 0 && <Link to="/wardrobe">wardrobe</Link>}
         {inventory.length > 0 && '.'}
       </Ledger>
-      {notable.length > 0 && (
+      {(notable.length > 0 || outfits.length > 0) && (
         <Entries>
           {notable.map((item) => (
             <Entry
@@ -314,21 +322,21 @@ function CarriedBlock({ sheetId }: { sheetId: number }) {
               tags={item.quality_tier?.name ? <Tag>{item.quality_tier.name}</Tag> : undefined}
             />
           ))}
+          {/* Outfits are one more row of this list, the way the demo draws them, with
+              the door to change them in the row's own gloss. */}
+          {outfits.length > 0 && (
+            <Entry
+              name="Outfits"
+              gloss={
+                <>
+                  {outfits.map((outfit) => outfit.name).join(', ')}.{' '}
+                  <Link to="/wardrobe">Change</Link>
+                </>
+              }
+            />
+          )}
         </Entries>
       )}
-      {outfits.length > 0 && (
-        <Stack>
-          <Ledger>Outfits they keep.</Ledger>
-          <Entries>
-            {outfits.map((outfit) => (
-              <Entry key={outfit.id} name={outfit.name} gloss={outfit.description || undefined} />
-            ))}
-          </Entries>
-        </Stack>
-      )}
-      <Link className="refsheet-quiet-door" to="/wardrobe">
-        Change outfit
-      </Link>
     </Stack>
   );
 }
@@ -339,12 +347,20 @@ export function GrowthPanel({
   isMyCharacter,
   isActiveCharacter,
   originStoryEditor,
+  pointsToPlace,
 }: {
   sheetId: number;
   isMyCharacter: boolean;
   isActiveCharacter: boolean;
   /** The finish-later origin-story dialog, composed by the page that owns the payload. */
   originStoryEditor?: React.ReactNode;
+  /**
+   * Stat points and the next maturation milestone, composed by the page. They belong
+   * INSIDE Advancement rather than under a heading of their own: the spec folds them
+   * into that bullet, and "points to place" is one more thing a player advances with,
+   * not a separate concern.
+   */
+  pointsToPlace?: React.ReactNode;
 }) {
   return (
     <div className="refsheet-columns-2">
@@ -352,6 +368,7 @@ export function GrowthPanel({
         <Stack>
           <Heading>Advancement</Heading>
           <XpLedgerCard sheetId={sheetId} />
+          {pointsToPlace}
           <AdvancementTab characterId={sheetId} isActiveCharacter={isActiveCharacter} />
         </Stack>
         <Stack>

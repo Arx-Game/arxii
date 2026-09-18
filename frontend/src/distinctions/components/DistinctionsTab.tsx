@@ -7,9 +7,10 @@
  * re-implement privacy client-side — and tags rows where `is_secret` is true.
  *
  * Drawn in the Reference Sheet's vocabulary (#3898): one entry per distinction on a
- * hairline rather than a bordered card, and what a row says about itself is a word
- * rather than a number. The old page printed "Rank -1" at a reader, which names a
- * storage detail; the demo says "Disadvantage", and a distinction aimed at a visible
+ * hairline rather than a bordered card. A positive rank is how strong the distinction
+ * is and the demo shows it, so it stays; a NEGATIVE rank is not a strength at all, and
+ * printing "Rank -1" at a reader names a storage detail rather than the thing. That one
+ * reads "Disadvantage", the way the demo says it, and a distinction aimed at a visible
  * feature says so too.
  */
 
@@ -49,7 +50,11 @@ export function DistinctionsTab({ characterId }: Props) {
               name={distinction.name}
               tags={
                 <>
-                  {distinction.rank < 0 && <Tag>Disadvantage</Tag>}
+                  {distinction.rank < 0 ? (
+                    <Tag>Disadvantage</Tag>
+                  ) : (
+                    <Tag>{`Rank ${distinction.rank}`}</Tag>
+                  )}
                   {distinction.feature !== '' && <Tag>Distinctive feature</Tag>}
                   {distinction.is_secret && <Tag accent>Secret</Tag>}
                 </>

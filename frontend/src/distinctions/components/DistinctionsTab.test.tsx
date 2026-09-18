@@ -64,6 +64,9 @@ describe('DistinctionsTab', () => {
     expect(screen.getByText('Iron Will')).toBeInTheDocument();
     expect(screen.getByText('Hidden Oath')).toBeInTheDocument();
     expect(screen.getAllByText('Secret')).toHaveLength(1);
+    // A positive rank is how strong the distinction is, and the demo shows it.
+    expect(screen.getByText('Rank 2')).toBeInTheDocument();
+    expect(screen.getByText('Rank 1')).toBeInTheDocument();
   });
 
   it('says a disadvantage in words, never as a negative number (#3898)', () => {

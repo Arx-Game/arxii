@@ -92,11 +92,14 @@ heading the sheet already draws, the soul-tether card whose entire body was the 
 section row read as a second navigation bar. A panel composed into a section draws no
 heading at that weight — `Subheading` is the one it uses for a group inside a section.
 
-**Holdings has no "Owed and Owing" block**, which the spec asks for. There is nothing to
-read: `currency.DebtInstrument` and both obligation models are organization-to-organization,
-and no character-level debt exists anywhere in `world`. The contracts half of that block is
-already served by Agreements (wills, claims, settlements). Building a personal-debt system
-is its own subsystem and its own issue, so the block is absent rather than faked.
+**Holdings has no "Owed and Owing" block**, which the spec asks for. Half of it has
+nothing to read: `currency.DebtInstrument` and both obligation models are
+organization-to-organization, and no character-level debt exists anywhere in `world`. The
+other half, contracts, DOES have a model — `currency.Contract` is persona to persona,
+with collateral, garnishment and formality — and it has no frontend surface anywhere in
+the app; Agreements covers wills, claims and settlements, not contracts. So the block is
+absent because building it means building a contracts surface from nothing, which is its
+own issue. It is not absent because the data was already shown elsewhere.
 
 **Three gaps are open questions rather than unfinished work**, and each is a ruling for
 Apostate rather than more building. A stranger's rumor band renders but is passed
@@ -114,6 +117,13 @@ satisfies both the spec and the magic app's standing rule that player-facing dat
 narrative rather than numerical. `.refsheet-aura` and its three segment rules had been
 written and left unconnected; #3898's second review caught that, the same shape as
 `plate_ink`.
+
+**Two blocks appear that the demo does not draw**, both carried forward from the old
+sixteen-tab page rather than added here, and both now in the sheet's own vocabulary
+rather than the old page's utility classes. Worship (the public faith line, the owner's
+Pray door, visions, and staff-only prayers) sits at the foot of the Sheet section; and
+At a glance carries a Tarot row. Removing a live feature to match a drawing is not this
+branch's call, so they are re-skinned and recorded.
 
 Two things deliberately keep their old chrome. `OwnedDwellingsCard` and
 `TenantedRoomsCard` under Holdings are shared with the Renown page, so re-skinning them

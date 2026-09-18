@@ -312,6 +312,25 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
         </div>
       )}
 
+      {/* The anima ritual: what the caster does to draw on themselves, as a sentence and
+          the three things it is worked with. Built server-side since #3001 and never
+          rendered until now. */}
+      {drawsMain && magic?.anima_ritual && (
+        <div className="refsheet-stack" data-testid="spellbook-anima-ritual">
+          <Subheading>Anima ritual</Subheading>
+          {magic.anima_ritual.description && (
+            <Prose>
+              <p>{magic.anima_ritual.description}</p>
+            </Prose>
+          )}
+          <div className="refsheet-tags">
+            {magic.anima_ritual.stat && <Tag>{magic.anima_ritual.stat}</Tag>}
+            {magic.anima_ritual.skill && <Tag>{magic.anima_ritual.skill}</Tag>}
+            {magic.anima_ritual.resonance && <Tag accent>{magic.anima_ritual.resonance}</Tag>}
+          </div>
+        </div>
+      )}
+
       {drawsMain && magic?.motif && (
         <div className="refsheet-stack" data-testid="spellbook-motif">
           <Subheading>Motif</Subheading>

@@ -285,6 +285,26 @@ describe('SpellbookTab', () => {
     expect(screen.queryByText(/20|30|50/)).not.toBeInTheDocument();
   });
 
+  it('draws the anima ritual, which the payload carried and nothing rendered (#3898)', () => {
+    mockPayload(
+      makeMagic({
+        anima_ritual: {
+          stat: 'Composure',
+          skill: 'Ritual',
+          resonance: 'Silence',
+          description: 'She counts the coins in the dark until the counting is the only sound.',
+        },
+      })
+    );
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    expect(screen.getByTestId('spellbook-anima-ritual')).toBeInTheDocument();
+    expect(
+      screen.getByText('She counts the coins in the dark until the counting is the only sound.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Composure')).toBeInTheDocument();
+  });
+
   it('draws no strip for an aura with nothing in it', () => {
     mockPayload(makeMagic({ aura: makeAura({ celestial: 0, primal: 0, abyssal: 0 }) }));
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);

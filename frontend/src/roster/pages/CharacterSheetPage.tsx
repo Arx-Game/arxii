@@ -219,12 +219,13 @@ export function CharacterSheetPage() {
               originStoryEditor={
                 sheet ? <OriginStoryEditorDialog characterId={sheetId} sheet={sheet} /> : undefined
               }
+              pointsToPlace={
+                <>
+                  <StatPointPanel sheetId={sheetId} />
+                  <MaturationPanel sheetId={sheetId} />
+                </>
+              }
             />
-            <Stack>
-              <Heading>Points to place</Heading>
-              <StatPointPanel sheetId={sheetId} />
-              <MaturationPanel sheetId={sheetId} />
-            </Stack>
             {/* Messages belongs here rather than on the front, per the spec's ledger:
                 it is the player's own correspondence about the character, which is a
                 Growth concern, not something a reader of the sheet came for. */}
