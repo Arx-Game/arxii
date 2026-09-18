@@ -13,11 +13,10 @@ attribute or ordinary ``@property``/``cached_property`` goes stale silently
 reaches, and everywhere else a new one still fails the
 ``pattern:PREFETCH_TO_ATTR`` ratchet.
 
-Rows a parent owns belong behind a ``PrunedCachedProperty``; the older
-``CachedRowsHandler`` (``evennia_extensions/handlers.py``) is reserved for the
-narrow case a plain property can't cover - rows parameterized per-parent that
-need their own cache key (its one remaining consumer is
-``CompanionOrderHandler``).
+Rows a parent owns belong behind a ``PrunedCachedProperty``. A derived view
+should filter that prefetched raw list in Python; do not introduce a parallel
+``CachedRowsHandler`` abstraction merely for a predicate. The former handler
+and its final ``CompanionOrderHandler`` consumer were removed in #3835.
 
 Use "# noqa: PREFETCH_STRING" to suppress a specific instance.
 """

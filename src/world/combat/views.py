@@ -364,6 +364,7 @@ class CombatEncounterViewSet(ModelViewSet):
 
     def _base_queryset(self) -> QuerySet[CombatEncounter]:
         from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
+        from world.companions.models import CompanionOrder  # noqa: PLC0415
 
         return CombatEncounter.objects.select_related(
             "scene", "room", "duel_winner__character"
@@ -390,6 +391,13 @@ class CombatEncounterViewSet(ModelViewSet):
                     ),
                 ),
                 to_attr="positions_cached",
+            ),
+            Prefetch(
+                "companion_orders",
+                queryset=CompanionOrder.objects.select_related("companion").order_by(
+                    "companion_id", "id"
+                ),
+                to_attr="companion_orders_all_cached",
             ),
             Prefetch(
                 "participants",

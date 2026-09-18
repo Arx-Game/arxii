@@ -199,11 +199,9 @@ repos:
         # is the sanctioned target: a real data descriptor that also self-heals
         # against pk-nulled zombie rows on every read (ADR-0296). The hook allows
         # `to_attr` only onto a same-file `PrunedCachedProperty`-decorated property
-        # of the matching name; everything else still fails. `CachedRowsHandler`
-        # (evennia_extensions/handlers.py) is reserved for the one remaining case
-        # `PrunedCachedProperty` can't cover - rows parameterized per-parent that
-        # need their own cache key - and today has exactly one consumer,
-        # `CompanionOrderHandler`.
+        # of the matching name; everything else still fails. Derived views
+        # filter a prefetched raw list in Python. `CachedRowsHandler` and its
+        # former `CompanionOrderHandler` consumer were removed by #3835.
         #
         # THIS SCOPE HAS ZERO ENFORCEMENT FOOTPRINT TODAY: neither
         # evennia_extensions/ nor web/admin/upbringing_builder/ contains a single

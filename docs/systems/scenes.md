@@ -630,7 +630,7 @@ reaction windows and their reactions, dramatic-moment tags and pending suggestio
 relations) is batched via `Prefetch(..., to_attr="cached_*")` calls onto `PrunedCachedProperty`
 properties (`world/scenes/models.py`, `world/scenes/reaction_models.py`, and — for
 `cached_resonances` and `cached_primary_persona` — `world/character_sheets/models.py`), not plain
-attributes or `CachedRowsHandler`. `CharacterSheet.cached_primary_persona` is the one fed twice:
+attributes or handler wrappers. `CharacterSheet.cached_primary_persona` is the one fed twice:
 once nested under endorsements on the `Interaction` queryset, once more on the separate
 `SceneEntryEndorsement` queryset built in `get_serializer_context()` — 14 `Prefetch(to_attr=...)`
 calls in total feeding those 13 properties. This is the sanctioned shape (ADR-0298): a genuine

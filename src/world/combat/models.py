@@ -14,13 +14,14 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.achievements.models import DiscoverableContent
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
     from world.combat.handlers import EncounterCombatHandler
-    from world.companions.handlers import CompanionOrderHandler
+    from world.companions.models import CompanionOrder
 
 from world.combat.constants import (
     COMBO_MIN_SLOTS,
@@ -244,12 +245,30 @@ class CombatEncounter(AbstractRound):
 
         return EncounterCombatHandler(self)
 
-    @cached_property
-    def companion_orders_cached(self) -> "CompanionOrderHandler":
-        """Current-round companion directives for this encounter."""
-        from world.companions.handlers import CompanionOrderHandler  # noqa: PLC0415
+    @PrunedCachedProperty
+    def companion_orders_all_cached(self) -> list["CompanionOrder"]:
+        """All companion directives for this encounter, across every round.
 
-        return CompanionOrderHandler(self)
+        The raw relation is cached without a round predicate so advancing the
+        identity-mapped encounter's round cannot leave a stale membership list.
+        ``companion_orders_cached`` applies the current-round view in Python.
+        """
+        from world.companions.models import CompanionOrder  # noqa: PLC0415
+
+        return list(
+            CompanionOrder.objects.filter(encounter=self)
+            .select_related("companion")
+            .order_by("companion_id", "id")
+        )
+
+    @property
+    def companion_orders_cached(self) -> list["CompanionOrder"]:
+        """Current-round companion directives for this encounter."""
+        return [
+            order
+            for order in self.companion_orders_all_cached
+            if order.round_number == self.round_number
+        ]
 
     @cached_property
     def is_lethal(self) -> bool:

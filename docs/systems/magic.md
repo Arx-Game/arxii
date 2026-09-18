@@ -334,8 +334,7 @@ via related_cache_fields (ADR-0298).** `GlimpseTag.offers` is a `PrunedCachedPro
 `GlimpseTagAdmin`'s change-form preview) reads `tag.offers` directly, no wrapper.
 `CGGlimpseTagViewSet.get_queryset()` batches the whole page in one query via
 `Prefetch("distinction_offers", ..., to_attr="offers")` — sanctioned onto a genuine
-`cached_property` with explicit write-side invalidation wired (ADR-0298), unlike the
-`GlimpseTagOffersHandler`/`CachedRowsHandler` wrapper this replaced (#3816 Task 9).
+`cached_property` with explicit write-side invalidation wired (ADR-0298), unlike the former `GlimpseTagOffersHandler` wrapper this replaced (#3816 Task 9).
 `DistinctionOffer.related_cache_fields = ["glimpse_tag", "origin_choice",
 "schooling_line", "enemy_reason", "appearance_section"]` clears the property's cache
 on every offer save/delete, for the offer's current and, when reassigned, previous
