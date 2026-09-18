@@ -1509,7 +1509,7 @@ class SpreadAssistTarget(SharedMemoryModel):
         return f"SpreadAssistTarget(window={self.window_id}, deed={self.legend_entry_id})"
 
 
-class AbstractLegendRecord(models.Model):
+class AbstractLegendRecord(SharedMemoryModel):
     """Abstract base for shared fields between LegendEvent and LegendEntry."""
 
     title = models.CharField(
