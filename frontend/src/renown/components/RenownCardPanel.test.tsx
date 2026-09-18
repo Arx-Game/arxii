@@ -44,7 +44,7 @@ describe('RenownCardPanel', () => {
     setPersonas([]);
     setCard(undefined);
     renderWithProviders(<RenownCardPanel characterSheetId={1} viewerPersonaId={5} />);
-    expect(screen.getByText(/no personas with renown/i)).toBeInTheDocument();
+    expect(screen.getByText(/no face of theirs is known for anything yet/i)).toBeInTheDocument();
   });
 
   it('shows the tier label only (no numeric reveal)', () => {

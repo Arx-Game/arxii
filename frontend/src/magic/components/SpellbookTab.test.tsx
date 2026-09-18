@@ -244,12 +244,10 @@ describe('SpellbookTab', () => {
     mockGlimpseQueries();
   });
 
-  it('shows a spinner while loading', () => {
+  it('says it is reading while loading', () => {
     mockPayload(undefined, { isLoading: true });
-    const { container } = renderWithProviders(
-      <SpellbookTab characterId={1} isMyCharacter={false} />
-    );
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.getByText('Reading their spellbook…')).toBeInTheDocument();
   });
 
   it('shows the muted empty line when magic is null', () => {
@@ -271,6 +269,48 @@ describe('SpellbookTab', () => {
     expect(screen.queryByText(/70/)).not.toBeInTheDocument();
   });
 
+  it('draws the aura as a proportional strip and says the split in words (#3898)', () => {
+    // The spec asks for three segments sized by their share, with the split in words
+    // beside them. The strip carries the proportions; the figures never reach the page.
+    mockPayload(makeMagic({ aura: makeAura({ celestial: 20, primal: 30, abyssal: 50 }) }));
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    const strip = screen.getByTestId('spellbook-aura-strip');
+    expect(strip).toBeInTheDocument();
+    expect(within(strip).getByTestId('aura-segment-celestial')).toHaveStyle({ flexGrow: '20' });
+    expect(within(strip).getByTestId('aura-segment-abyssal')).toHaveStyle({ flexGrow: '50' });
+    expect(
+      screen.getByText('A fifth celestial, a third primal, the rest abyssal.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/20|30|50/)).not.toBeInTheDocument();
+  });
+
+  it('draws the anima ritual, which the payload carried and nothing rendered (#3898)', () => {
+    mockPayload(
+      makeMagic({
+        anima_ritual: {
+          stat: 'Composure',
+          skill: 'Ritual',
+          resonance: 'Silence',
+          description: 'She counts the coins in the dark until the counting is the only sound.',
+        },
+      })
+    );
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    expect(screen.getByTestId('spellbook-anima-ritual')).toBeInTheDocument();
+    expect(
+      screen.getByText('She counts the coins in the dark until the counting is the only sound.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Composure')).toBeInTheDocument();
+  });
+
+  it('draws no strip for an aura with nothing in it', () => {
+    mockPayload(makeMagic({ aura: makeAura({ celestial: 0, primal: 0, abyssal: 0 }) }));
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.queryByTestId('spellbook-aura-strip')).not.toBeInTheDocument();
+  });
+
   it('renders resonance balances (#3042)', () => {
     mockPayload(
       makeMagic({
@@ -286,8 +326,8 @@ describe('SpellbookTab', () => {
     const balances = within(card).getAllByTestId('resonance-balance');
     expect(balances).toHaveLength(2);
     expect(within(card).getByText('Ember')).toBeInTheDocument();
-    expect(within(card).getByText('4')).toBeInTheDocument();
-    expect(within(card).getByText('12 lifetime')).toBeInTheDocument();
+    // One sentence per resonance rather than a number tile beside a caption (#3898).
+    expect(within(card).getByText('4 of 12 ever earned')).toBeInTheDocument();
   });
 
   it('omits the resonances card when there are no claimed resonances', () => {
@@ -311,17 +351,16 @@ describe('SpellbookTab', () => {
     expect(screen.queryByTestId('motif-style-panel')).not.toBeInTheDocument();
   });
 
-  it('renders workbench links for the own view', () => {
+  it('draws no workbench nav of its own, even for the owner (#3898)', () => {
+    // The four links this used to end with belonged to a standalone tab. Inside the
+    // Reference Sheet they sat under the section row and read as a second navigation
+    // bar, so the sheet's own row is the only way out of Magic now.
     mockPayload(makeMagic());
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={true} />);
 
-    expect(screen.getByRole('link', { name: /progression/i })).toHaveAttribute(
-      'href',
-      '/magic/progression'
-    );
-    expect(screen.getByRole('link', { name: /threads/i })).toHaveAttribute('href', '/threads');
-    expect(screen.getByRole('link', { name: /sanctums/i })).toHaveAttribute('href', '/sanctums');
-    expect(screen.getByRole('link', { name: /rituals/i })).toHaveAttribute('href', '/rituals');
+    expect(screen.queryByRole('link', { name: /progression/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /sanctums/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /rituals/i })).not.toBeInTheDocument();
   });
 
   it('mounts the style-binding panel for the own view', () => {
@@ -422,6 +461,7 @@ describe('SpellbookTab', () => {
               rank: 1,
               notes: '',
               is_secret: false,
+              feature: '',
               is_from_glimpse: false,
             },
           ],

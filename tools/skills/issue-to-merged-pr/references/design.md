@@ -121,7 +121,7 @@ the state-mutating ones.
 
 - **pickup-issue.sh** `<issue-number>` → first runs the superpowers precheck (exits 2 with install command if missing; see Plugin dependency); then fetches the issue, infers type from labels, emits JSON `{type, slug, branch, parent_issue_url}`; creates branch from `origin/main`; errors if issue is closed or assigned to a different user.
 - **sync-with-main.sh** `<branch>` → `git fetch origin && git rebase origin/main`; on conflict emits JSON listing conflicted files and any open issues whose body/comments substring-match those file paths (over-inclusive on purpose).
-- **open-pr.sh** `<branch> <issue-number> <followup-issue-numbers...>` → pushes (with `--force-with-lease` if branch was rebased), opens PR via `gh pr create` with body composed from `templates/pr-body.md`; emits PR number. `--dry-run` prints the body without pushing.
+- **open-pr.sh** `<branch> <issue-number> <followup-issue-numbers...>` → pushes (with `--force-with-lease` if branch was rebased), opens a PR via `gh pr create` with a body beginning `Closes #<issue-number>`; emits PR number. `--dry-run` prints the body without pushing and rejects the removed keep-open override.
 - **file-followup.sh** `<title> <body-path> <labels...>` → `gh issue create`; emits issue number. `--dry-run` prints the title/body/labels.
 - **comment-on-issue.sh** `<issue-number> <body-path>` → `gh issue comment`. `--dry-run` prints the comment.
 - **watch-ci.sh** `<pr-number>` → blocks with internal `sleep` calls per cadence below; exits when checks settle. Stdout: `OK` or `FAIL <check-name>`. **Idempotent across sessions:** on start, queries `gh pr checks` first; if no checks are pending, exits immediately with the current rollup status (no sleep). This makes re-invocation while a prior session's CI is mid-run safe — the new session walks straight into the right phase via the phase-detection table rather than racing a stale watch. There is no inter-session lock: GitHub is the single source of truth, multiple agents querying it concurrently is harmless.
@@ -134,7 +134,7 @@ the state-mutating ones.
 `templates/pr-body.md`:
 
 ```markdown
-{{link_verb}} #{{issue_number}}
+Closes #{{issue_number}}
 
 ## Summary
 
@@ -164,10 +164,11 @@ GitHub comment holding the report, preferred) or `PR_EVIDENCE_FILE` (a committed
 report path), validates it against the reviewed code revision (the evidence commit
 parent), and writes the `{{evidence_status}}` block's `- Report:` line: the URL
 bare, the path backtick-wrapped. `tools/tests/test_open_pr_body.py` runs the script
-and checks both shapes against the validator. The default is `Closes`
-— leaving an issue open needs a stated reason. `PR_KEEP_OPEN=1` switches to
-`Refs`, for the genuine case of a scoped repair PR that is one step of a
-multi-PR umbrella spec and must not silently close the umbrella issue.
+and checks both shapes against the validator. The reference is always
+`Closes #<issue>`. The old `PR_KEEP_OPEN=1` escape hatch is rejected. If a PR
+is only a partial step, the remaining work must be filed as a child issue and
+the PR must close that child; this preserves GitHub's automatic closure
+without falsely claiming the parent is complete.
 
 The trailing HTML comment is the marker `read-pr-comments.sh` reads. After the agent addresses comments and pushes, it updates the marker inline with `gh api -X PATCH repos/<owner>/<repo>/pulls/<pr> -F body=@-` (read the current body, replace the marker line, write it back; no dedicated script for this). Not `gh pr edit`: it fails on this repo and leaves the body unchanged, see SKILL.md step 8. Initial value `0` means "no comments addressed yet" — all comments are unread on first read.
 

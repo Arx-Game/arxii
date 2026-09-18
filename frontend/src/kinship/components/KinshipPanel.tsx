@@ -11,11 +11,14 @@
  * when its `sheet_id` is known (see `KinspersonNode` in `types.ts`); for
  * everyone else the panel says so honestly instead of guessing with the
  * wrong id.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): the graph keeps its frame, since a
+ * drawing needs edges, but everything around it is ledger lines and entries.
  */
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { useKinRelationship, useKinTree } from '../queries';
+import { Entries, Entry, Ledger, Stack } from '@/character_sheets/components/sheet/primitives';
 import type { KinspersonNode } from '../types';
 import { KinTreeGraph } from './KinTreeGraph';
 
@@ -29,27 +32,27 @@ export function KinshipPanel({ characterId }: Props) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <Ledger>Reading their line…</Ledger>;
   }
   if (isError) {
-    return <p className="text-destructive">Failed to load the kin tree.</p>;
+    return (
+      <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
+        The kin tree could not be read.
+      </p>
+    );
   }
 
   const nodes = tree?.nodes ?? [];
   if (nodes.length === 0) {
-    return <p className="py-8 text-center text-muted-foreground">No recorded kin.</p>;
+    return <Ledger>No kin on record.</Ledger>;
   }
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
 
   return (
-    <div className="space-y-4">
-      {tree?.family && <p className="text-sm text-muted-foreground">House {tree.family.name}</p>}
-      <div className="overflow-x-auto rounded-md border bg-card p-4">
+    <Stack>
+      {tree?.family && <Ledger>House {tree.family.name}</Ledger>}
+      <div className="refsheet-plateau">
         <KinTreeGraph
           nodes={nodes}
           parentage={tree?.parentage ?? []}
@@ -59,7 +62,7 @@ export function KinshipPanel({ characterId }: Props) {
         />
       </div>
       {selectedNode && <SelectedKinDetail characterId={characterId} node={selectedNode} />}
-    </div>
+    </Stack>
   );
 }
 
@@ -79,34 +82,27 @@ function SelectedKinDetail({ characterId, node }: SelectedKinDetailProps) {
   const relatableSheetId = node.sheet_id != null && !isSelf ? node.sheet_id : undefined;
   const { data: relationship } = useKinRelationship(characterId, relatableSheetId);
 
-  const renderSelf = () => {
+  const relatedness = () => {
     if (isSelf) {
-      return <p className="text-xs text-muted-foreground">This is the character you're viewing.</p>;
+      return 'This is the character you are reading.';
     }
     if (relatableSheetId == null) {
-      return (
-        <p className="text-xs text-muted-foreground">
-          No linked character record for this person - relatedness can't be checked from here.
-        </p>
-      );
+      return 'Nobody on the roster answers to this person, so relatedness cannot be checked here.';
     }
-    return (
-      <p className="text-sm">
-        {relationship?.label
-          ? `Relationship: ${relationship.label.replace(/_/g, ' ')}`
-          : 'No determinable relationship on record.'}
-      </p>
-    );
+    return relationship?.label
+      ? `Related as ${relationship.label.replace(/_/g, ' ')}.`
+      : 'No determinable relationship on record.';
   };
 
   return (
-    <div className="space-y-1 rounded-md border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">{node.name}</span>
-        <span className="text-xs text-muted-foreground">{node.tier.replace(/_/g, ' ')}</span>
-      </div>
-      {node.description && <p className="text-sm text-muted-foreground">{node.description}</p>}
-      {renderSelf()}
-    </div>
+    <Entries>
+      <Entry
+        name={node.name}
+        aside={<span className="refsheet-note">{node.tier.replace(/_/g, ' ')}</span>}
+        gloss={node.description || undefined}
+      >
+        <Ledger>{relatedness()}</Ledger>
+      </Entry>
+    </Entries>
   );
 }

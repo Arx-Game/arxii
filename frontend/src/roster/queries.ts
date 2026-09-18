@@ -14,6 +14,7 @@ import {
   fetchTenureGalleries,
   createTenureGallery,
   updateTenureGallery,
+  setEntryProfilePicture,
 } from './api';
 import type { RosterEntryFilters } from './api';
 import type { RosterEntryData, RosterData, PlayerMedia, TenureGallery } from './types';
@@ -100,6 +101,28 @@ export function useRosterEntryByNameQuery(name: string | undefined) {
     queryFn: () => fetchRosterEntries(undefined, 1, { name }),
     enabled: !!name,
     throwOnError: true,
+  });
+}
+
+/**
+ * Wear one of the character's looks (#3898) — sets the roster entry's profile picture
+ * to that image.
+ *
+ * Invalidates both the roster entry (whose `profile_picture` the roster and other
+ * surfaces read) and the character sheet payload (whose `looks` carry the `is_current`
+ * flag the strip marks), so the plate and the strip agree again without a reload.
+ * `sheetId` is the CharacterSheet pk, which the sheet query is keyed on.
+ */
+export function useWearLook(entryId: RosterEntryData['id'], sheetId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (tenureMediaId: number) => setEntryProfilePicture(entryId, tenureMediaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roster-entry', entryId] });
+      queryClient.invalidateQueries({ queryKey: ['character-sheets', sheetId] });
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to change the look.'),
   });
 }
 

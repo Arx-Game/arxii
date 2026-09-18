@@ -132,7 +132,7 @@ describe('ReputationTab', () => {
     setHeat([]);
   });
 
-  it('renders Renown, Standing, and Covenants sections for the own view', () => {
+  it('renders Renown and the standing groups for the own view', () => {
     setRenown(makeRenown());
     renderWithProviders(
       <ReputationTab
@@ -144,8 +144,12 @@ describe('ReputationTab', () => {
       />
     );
     expect(screen.getByText('Renown')).toBeInTheDocument();
-    expect(screen.getByText('Standing')).toBeInTheDocument();
-    expect(screen.getByText('Covenants')).toBeInTheDocument();
+    // "Standing" is the section heading the SHEET draws above this panel (#3898); the
+    // panel's own groups name what they hold instead.
+    expect(screen.getByText('Belongs to')).toBeInTheDocument();
+    expect(screen.getByText('Thought of as')).toBeInTheDocument();
+    // Covenant is its own rail block on the sheet (#3898), not a group in here.
+    expect(screen.queryByText('Covenants')).not.toBeInTheDocument();
   });
 
   it('shows a Wanted badge on a society row whose id appears in the heat data', () => {

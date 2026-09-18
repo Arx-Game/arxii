@@ -16,8 +16,7 @@
 
 import { useState, type FormEvent } from 'react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Subheading, Tag } from '@/character_sheets/components/sheet/primitives';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -157,7 +156,7 @@ export function MotifStylePanel({ characterSheetId }: Props) {
       <div className="space-y-3" data-testid="motif-style-bindings-list">
         {groups.map((group) => (
           <div key={group.resonanceId} data-testid={`motif-style-group-${group.resonanceId}`}>
-            <Badge variant="outline">{group.resonanceName}</Badge>
+            <Tag>{group.resonanceName}</Tag>
             <ul className="mt-1 space-y-1">
               {group.bindings.map((binding) => (
                 <li
@@ -189,42 +188,38 @@ export function MotifStylePanel({ characterSheetId }: Props) {
   };
 
   return (
-    <Card data-testid="motif-style-panel">
-      <CardHeader>
-        <CardTitle className="text-base">Style Bindings</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {renderBindings()}
+    <div className="refsheet-stack-wide" data-testid="motif-style-panel">
+      <Subheading>Style bindings</Subheading>
+      {renderBindings()}
 
-        {unbind.isError ? (
-          <p
-            role="alert"
-            data-testid="motif-style-unbind-error"
-            className="text-sm font-medium text-red-500"
-          >
-            {unbind.error?.message}
-          </p>
-        ) : null}
-
-        <form
-          onSubmit={handleBind}
-          className="space-y-2 border-t pt-3"
-          data-testid="motif-style-bind-form"
+      {unbind.isError ? (
+        <p
+          role="alert"
+          data-testid="motif-style-unbind-error"
+          className="text-sm font-medium text-red-500"
         >
-          <Label htmlFor="motif-style-select">Bind a style</Label>
-          {renderResonances()}
-        </form>
+          {unbind.error?.message}
+        </p>
+      ) : null}
 
-        {bind.isError ? (
-          <p
-            role="alert"
-            data-testid="motif-style-bind-error"
-            className="text-sm font-medium text-red-500"
-          >
-            {bind.error?.message}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
+      <form
+        onSubmit={handleBind}
+        className="space-y-2 border-t pt-3"
+        data-testid="motif-style-bind-form"
+      >
+        <Label htmlFor="motif-style-select">Bind a style</Label>
+        {renderResonances()}
+      </form>
+
+      {bind.isError ? (
+        <p
+          role="alert"
+          data-testid="motif-style-bind-error"
+          className="text-sm font-medium text-red-500"
+        >
+          {bind.error?.message}
+        </p>
+      ) : null}
+    </div>
   );
 }

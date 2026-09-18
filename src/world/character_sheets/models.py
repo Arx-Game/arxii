@@ -48,6 +48,7 @@ from world.character_sheets.types import (
     EnemyStatus,
     LifecycleState,
     MaritalStatus,
+    PlateInk,
     PosthumousJournalDisposition,
     ProfileBeginningsSource,
     ProfileTextField,
@@ -642,6 +643,17 @@ class CharacterSheet(SharedMemoryModel):
         choices=SheetVisibility.choices,
         default=SheetVisibility.SELF,
         help_text="Who can see this character's goals.",
+    )
+
+    # #3898 — the ground colour the sheet's plate is printed in. Chrome, not a
+    # character trait: the player picks it in settings and it never enters any IC
+    # read. Non-null with a default so every sheet renders a finished plate before
+    # anyone chooses (render-or-vanish leaves no unstyled state).
+    plate_ink = models.CharField(
+        max_length=10,
+        choices=PlateInk.choices,
+        default=PlateInk.EMBER,
+        help_text="Ground colour of this character's sheet plate (#3898). OOC chrome.",
     )
 
     # #981 — the persona (face) this character is currently presenting as. NULL

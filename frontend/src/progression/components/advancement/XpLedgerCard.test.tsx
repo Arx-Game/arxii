@@ -61,6 +61,6 @@ it('surfaces a failed load instead of rendering zeroes', () => {
 
   renderWithProviders(<XpLedgerCard sheetId={7} />);
 
-  expect(screen.getByText('Failed to load the XP ledger.')).toBeInTheDocument();
+  expect(screen.getByText('The XP ledger could not be read.')).toBeInTheDocument();
   expect(screen.queryByText('Earned on')).not.toBeInTheDocument();
 });

@@ -91,3 +91,43 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   content round trip). _Avoid_: mood/stance/disposition as a synonym for
   `StanceArchetype` or `NpcRegard`'s declared stance — those are different,
   already-claimed concepts (see their own ADRs).
+
+## The Reference Sheet (#3898)
+
+- **Plate** — the head of the web character sheet: the art, the name with its
+  titles, the concept, the quote, two glance lines and the looks strip. Painted
+  in night literals in both themes because it is the cover of the page. Nothing
+  mechanical belongs on it. _Avoid_: header, hero, banner.
+- **Look** — one image of a character, tagged with the `MoodOption` it shows
+  (`TenureMedia.look`). The character WEARS one, which is the roster entry's
+  profile picture; the rest sit beside it in the strip. Tagging an image says
+  what the picture shows, never what the character feels — a look is outward and
+  public, [Mood](#mood) is inward and silent, and they share `MoodOption` only so
+  that "which mood" has one vocabulary. _Avoid_: expression, pose, portrait
+  (a portrait is any image; a look is a tagged one).
+- **Plate ink** — which of four grounds a player's plate is printed on
+  (`CharacterSheet.plate_ink`, `PlateInk`). OOC chrome, set in settings, and the
+  only part of the sheet's appearance a player chooses. The page below the plate
+  stays on Arx paper whichever is picked. _Avoid_: theme, skin, realm colour (a
+  realm ink is a different, world-facing concept).
+- **Section** — one of the sheet's eight pages (Sheet, Physical, Ties,
+  Distinctions, Magic, and the owner-only Knowledge, Holdings, Growth). _Avoid_:
+  tab — the sixteen-tab strip is what #3898 replaced, and the word carries it.
+- **Band** — a full-width folding block below the sheet's columns, holding
+  material that is gated or simply tall (goals and guidelines, abilities). A
+  band a viewer may not read is absent, never empty.
+- **Entry** — one hairline-separated row in the sheet's index voice: a name, an
+  optional tag or two, a gloss beneath. The sheet's unit of listing, and what a
+  card used to be everywhere the sheet took a panel over. _Avoid_: card, tile,
+  row (a row is a table's).
+- **Quiet door** — a link the sheet offers without dressing it as a button
+  ("Change outfit", "Commend"). Reads as text until the reader is on it.
+  _Avoid_: action button, CTA.
+- **Plateau** — the one framed area the sheet draws, for something DRAWN rather
+  than written (the kin graph). A drawing needs an edge; prose does not.
+  _Avoid_: card, panel, box.
+- **Worn** — what a character has on, as the #2985 layer walk says an onlooker
+  would see it (`worn` on the sheet payload). Worn things are visible things, so
+  this is not gated by a visibility tier; only a COVERED piece is owner-only, and
+  it carries `is_hidden` so the sheet can say it is there and unseen. _Avoid_:
+  equipment, inventory (those are everything they hold, not what shows).

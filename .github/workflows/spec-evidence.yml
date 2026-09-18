@@ -46,6 +46,32 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+      - name: Require an explicit closing issue
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+
+          from tools.validate_review_evidence import closing_issue_number, is_dependabot_login
+
+          with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
+              event = json.load(stream)
+          body = event["pull_request"].get("body") or ""
+          author = event["pull_request"].get("user", {}).get("login")
+          if is_dependabot_login(author):
+              print(f"Dependabot PR is exempt from the issue-closing requirement: {author}")
+              raise SystemExit(0)
+          issue_number = closing_issue_number(body)
+          if issue_number is None:
+              raise SystemExit(
+                  "Every non-Dependabot pull request must explicitly close an issue "
+                  "with `Closes #<number>`; use a child issue for partial work."
+              )
+          print(f"pull request closes issue #{issue_number}")
+          PY
       - name: Validate labeled review evidence
         env:
           EVENT_PATH: ${{ github.event_path }}
@@ -56,18 +82,18 @@ jobs:
           import json
           import os
 
-          from tools.validate_review_evidence import linked_issue_number
+          from tools.validate_review_evidence import closing_issue_number
 
           with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
               event = json.load(stream)
           body = event["pull_request"].get("body") or ""
           with open("/tmp/pr-body.md", "w", encoding="utf-8") as stream:
               stream.write(body)
-          # Review evidence is opt-in through a label on the linked issue.
-          # PRs without an issue link cannot be opted in, so leave them alone
-          # (this includes Dependabot update PRs). GitHub accepts terminal
-          # punctuation after a closing reference, such as "Closes #123.".
-          print(linked_issue_number(body) or "")
+          # Review evidence is opt-in through a label on the closing issue.
+          # The preceding step requires every non-Dependabot PR to provide that issue link.
+          # GitHub accepts terminal punctuation after a closing reference, such
+          # as "Closes #123.".
+          print(closing_issue_number(body) or "")
           print(event["pull_request"]["head"]["sha"])
           PY
           )

@@ -76,13 +76,13 @@ describe('SecretsTab', () => {
   it('shows an empty state when no secrets are known', () => {
     mockResults([]);
     render(<SecretsTab subjectId={5} viewerId={7} />);
-    expect(screen.getByText(/know no secrets/i)).toBeInTheDocument();
+    expect(screen.getByText(/you know nothing of theirs/i)).toBeInTheDocument();
   });
 
   it('prompts to pick a character when none is active', () => {
     mockResults([]);
     render(<SecretsTab subjectId={5} viewerId={null} />);
-    expect(screen.getByText(/select a character/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose a character to see the secrets/i)).toBeInTheDocument();
   });
 
   it('offers a grievance response on a secret the viewer is wronged by (#1429)', () => {

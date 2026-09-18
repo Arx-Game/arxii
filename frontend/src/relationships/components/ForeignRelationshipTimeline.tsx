@@ -10,10 +10,13 @@
  * carry those fields; that data is author-private (ADR-0117) and stays on
  * `OwnRelationshipsList`. Only type-tagged (`kind`), categorical writeup
  * content: who wrote it, which track, the title/writeup text, and when.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): entries on hairlines, the kind as
+ * a tag, the author and track as the gloss.
  */
 
-import { Badge } from '@/components/ui/badge';
 import { useRelationshipTimeline } from '../queries';
+import { Entries, Entry, Ledger, Tag } from '@/character_sheets/components/sheet/primitives';
 import type { RelationshipTimelineEntry } from '../api';
 
 export interface ForeignRelationshipTimelineProps {
@@ -34,27 +37,25 @@ export function ForeignRelationshipTimeline({
   });
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <Ledger>Reading what others have written…</Ledger>;
   }
 
   if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">No visible relationship history yet.</p>;
+    return <Ledger>Nobody has written of knowing them yet.</Ledger>;
   }
 
   return (
-    <ul className="space-y-4">
+    <Entries>
       {entries.map((entry) => (
-        <li key={`${entry.kind}-${entry.id}`} className="border-b pb-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{KIND_LABELS[entry.kind] ?? entry.kind}</Badge>
-            <span className="font-medium">{entry.title}</span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            By {entry.author_name} &middot; {entry.track_name}
-          </p>
-          <p className="mt-1">{entry.writeup}</p>
-        </li>
+        <Entry
+          key={`${entry.kind}-${entry.id}`}
+          name={entry.title}
+          tags={<Tag>{KIND_LABELS[entry.kind] ?? entry.kind}</Tag>}
+          gloss={`By ${entry.author_name}, on ${entry.track_name}.`}
+        >
+          <p className="refsheet-entry-gloss">{entry.writeup}</p>
+        </Entry>
       ))}
-    </ul>
+    </Entries>
   );
 }
