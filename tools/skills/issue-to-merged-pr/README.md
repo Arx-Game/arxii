@@ -15,7 +15,9 @@ same workflow inside the devcontainer.
 4. **Sync with main** — rebases, surfaces cross-issue overlap.
 5. **Push & PR** — validates a committed review-evidence report against the
    exact HEAD, then opens a templated PR with durable evidence and links to
-   follow-up issues filed during implementation. Partial work uses `Refs`.
+   follow-up issues filed during implementation. Every workflow PR closes its
+   issue; partial work closes a child issue rather than using `Refs`. Dependabot
+   PRs are exempt because automated dependency updates may lack issues.
 6. **CI watch** — polls per a smart cadence (~25 min cap), with the evidence
    report revalidated before merge-queue enqueue.
 7. **CI fix** — reads failure logs, fixes, pushes; bails after 3 same-check

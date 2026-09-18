@@ -1,4 +1,4 @@
-{{link_verb}} #{{issue_number}}
+Closes #{{issue_number}}
 
 ## Summary
 

@@ -33,11 +33,13 @@ REPO_OWNER=${REPO_FULL%%/*}
 REPO_NAME=${REPO_FULL##*/}
 HEAD_REF=$(gh pr view "$PR" --json headRefName --jq .headRefName)
 PR_BODY=$(gh pr view "$PR" --json body --jq .body)
-LINKED_ISSUE=$(grep -oE '^(Refs|Closes) #[0-9]+' <<<"$PR_BODY" | grep -oE '[0-9]+' | head -1 || true)
-ISSUE_LABELS=""
-if [[ -n "$LINKED_ISSUE" ]]; then
-  ISSUE_LABELS=$(gh issue view "$LINKED_ISSUE" --json labels --jq '.labels[].name')
+LINKED_ISSUE=$(head -n 1 <<<"$PR_BODY" | grep -oE '^Closes #[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+if [[ -z "$LINKED_ISSUE" ]]; then
+  echo "ERROR: PR #$PR must explicitly close an issue with 'Closes #<number>'." >&2
+  echo "For partial work, file a child issue and make this PR close the child." >&2
+  exit 1
 fi
+ISSUE_LABELS=$(gh issue view "$LINKED_ISSUE" --json labels --jq '.labels[].name')
 if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
   EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
   EVIDENCE_URL="${PR_EVIDENCE_URL:-}"

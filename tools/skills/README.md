@@ -88,8 +88,11 @@ behavior.)
 Carries a GitHub issue through to a merged PR with minimal human gating:
 brainstorm/spec/plan, implementation, exact-HEAD review evidence, PR, CI watch
 and fix loop, and post-merge cleanup. Multi-invocation, GitHub-as-truth. A PR
-must name a tracked evidence report; partial work uses `Refs` rather than
-silently closing its umbrella issue. See [issue-to-merged-pr/README.md](issue-to-merged-pr/README.md),
+must name a tracked evidence report and close the issue it delivers; partial
+work must close a child issue rather than silently leaving its parent open.
+Dependabot pull requests are the CI exception because dependency updates may
+not have repository issues. See
+[issue-to-merged-pr/README.md](issue-to-merged-pr/README.md),
 [the design doc](issue-to-merged-pr/references/design.md), and
 [the evidence template](../../tools/skills/issue-to-merged-pr/templates/review-evidence.md).
 
