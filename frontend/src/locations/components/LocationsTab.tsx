@@ -7,6 +7,11 @@
  * `useMyShipsQuery`, and Domains is a muted placeholder until #1884/#930 ship an org-owned
  * domain read API.
  *
+ * Domains are NOT here. This tab is what the PERSONA holds; a domain is an
+ * organization's (`Domain.owner_org`, the #1884/#930 ruling) and a character can never
+ * hold one. The sheet's Estate section reads them from its own payload and draws them
+ * as their own block, so the dead placeholder that used to sit here is gone (#3901).
+ *
  * Ships is gated on `isActiveCharacter`: `GET /api/ships/ships/` is server-scoped to the
  * account's ACTIVE persona, not the persona being viewed, so rendering it for a non-active
  * character sheet would show the wrong character's ships. When inactive, the query is
@@ -58,9 +63,6 @@ export function LocationsTab({ personaId, isActiveCharacter }: Props) {
           Ships are visible while playing this character.
         </p>
       )}
-      <p className="text-sm text-muted-foreground" data-testid="domains-placeholder">
-        Domains your organizations hold will appear here (#1884).
-      </p>
     </div>
   );
 }

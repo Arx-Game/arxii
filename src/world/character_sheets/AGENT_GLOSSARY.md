@@ -111,8 +111,14 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   stays on Arx paper whichever is picked. _Avoid_: theme, skin, realm colour (a
   realm ink is a different, world-facing concept).
 - **Section** — one of the sheet's eight pages (Sheet, Physical, Ties,
-  Distinctions, Magic, and the owner-only Knowledge, Holdings, Growth). _Avoid_:
+  Distinctions, Magic, and the owner-only Knowledge, Estate, Growth). _Avoid_:
   tab — the sixteen-tab strip is what #3898 replaced, and the word carries it.
+- **Estate** — the owner-only section holding a character's purse, what they
+  carry, where they live, the land their organizations hold, what they have
+  promised and whether the law wants them. Named Estate because "holdings"
+  reads as fiefs and this is one person's money, things, roof and record;
+  Estate is the word the will copy inside it already uses (#3901). _Avoid_:
+  Holdings, Possessions, Property (Property is one block inside it).
 - **Band** — a full-width folding block below the sheet's columns, holding
   material that is gated or simply tall (goals and guidelines, abilities). A
   band a viewer may not read is absent, never empty.

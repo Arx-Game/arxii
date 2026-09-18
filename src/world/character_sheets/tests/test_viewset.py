@@ -11,6 +11,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.areas.constants import AreaLevel
+from world.areas.factories import AreaFactory
 from world.character_creation.factories import BeginningsFactory, RealmFactory
 from world.character_sheets.factories import (
     CharacterSheetFactory,
@@ -90,6 +92,8 @@ from world.skills.factories import (
     SkillFactory,
     SpecializationFactory,
 )
+from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+from world.societies.houses.services import create_domain
 from world.species.factories import SpeciesFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -2181,6 +2185,87 @@ class TestMentorsSection(TestCase):
         assert self._mentors(self.stranger) == []
 
 
+class TestDomainsSection(TestCase):
+    """Estate's Domains block (#3901): the land this character's organizations hold.
+
+    The point is discovery. A player coming onto a roster character may have no idea
+    their house holds a keep, or where it is, and nothing else on the sheet could tell
+    them. The gate is ACTIVE membership and nothing more: a domain is the organization's,
+    and whether this character may walk into it is a tenancy question about the land.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="DomainChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+        cls.persona = cls.sheet.primary_persona
+
+        cls.house = OrganizationFactory(name="House du Verane")
+        cls.keep = create_domain(
+            area=AreaFactory(level=AreaLevel.REGION, name="The Lantern Ward"),
+            name="Thornmere",
+            owner_org=cls.house,
+        )
+        cls.membership = OrganizationMembershipFactory(persona=cls.persona, organization=cls.house)
+
+        # A house the character does NOT belong to, holding land of its own.
+        cls.other_house = OrganizationFactory(name="House Blackspire")
+        create_domain(
+            area=AreaFactory(level=AreaLevel.REGION, name="The Salt Coast"),
+            name="Blackspire Hold",
+            owner_org=cls.other_house,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _domains(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["domains"]
+
+    def test_names_the_land_whose_it_is_and_where(self) -> None:
+        rows = self._domains(self.player)
+        assert len(rows) == 1
+        assert rows[0]["name"] == "Thornmere"
+        assert rows[0]["organization"] == "House du Verane"
+        assert rows[0]["where"] == "The Lantern Ward"
+
+    def test_land_of_a_house_they_do_not_belong_to_is_not_theirs_to_read(self) -> None:
+        names = {row["name"] for row in self._domains(self.player)}
+        assert "Blackspire Hold" not in names
+
+    def test_leaving_the_house_gives_up_its_land(self) -> None:
+        """Membership is CURRENT membership: left_at and exiled_at both null."""
+        self.membership.left_at = timezone.now()
+        self.membership.save(update_fields=["left_at"])
+        try:
+            assert self._domains(self.player) == []
+        finally:
+            self.membership.left_at = None
+            self.membership.save(update_fields=["left_at"])
+
+    def test_a_house_that_holds_nothing_contributes_nothing(self) -> None:
+        """Render-or-vanish: most organizations hold no land at all."""
+        landless = OrganizationFactory(name="The Tallow Row Pawn")
+        OrganizationMembershipFactory(persona=self.persona, organization=landless)
+        names = {row["organization"] for row in self._domains(self.player)}
+        assert "The Tallow Row Pawn" not in names
+
+    def test_a_stranger_is_told_nothing(self) -> None:
+        """Estate is the owner's section entire — purse, law and land alike."""
+        assert self._domains(self.stranger) == []
+
+
 class TestProfilePictureNull(TestCase):
     """Tests for the profile_picture field when no picture is set."""
 
@@ -2206,6 +2291,23 @@ class TestProfilePictureNull(TestCase):
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["profile_picture"] is None
+
+
+def _seed_house_holding_land(persona) -> None:
+    """Put the persona in a house that owns a domain, for the query-count fixture.
+
+    Its own function so the fixture stays under the statement cap, and seeded at all
+    because the domains read joins through membership: with no membership the join
+    returns nothing, and the bound would pass without ever measuring the query it
+    claims to count (#3901).
+    """
+    house = OrganizationFactory(name="QCHouse")
+    create_domain(
+        area=AreaFactory(level=AreaLevel.REGION, name="QCRegion"),
+        name="QCKeep",
+        owner_org=house,
+    )
+    OrganizationMembershipFactory(persona=persona, organization=house)
 
 
 class TestCharacterSheetQueryCount(TestCase):
@@ -2294,6 +2396,9 @@ class TestCharacterSheetQueryCount(TestCase):
         # --- Distinctions ---
         dist = DistinctionFactory(name="QCBrave")
         CharacterDistinctionFactory(character=cls.character.sheet_data, distinction=dist, rank=1)
+
+        # --- An organization holding land (#3901) ---
+        _seed_house_holding_land(cls.sheet.primary_persona)
 
         # --- Magic ---
         resonance = ResonanceFactory(name="QCResolve")
@@ -2453,13 +2558,27 @@ class TestCharacterSheetQueryCount(TestCase):
                Ties). Two queries because the two directions are two relations on the
                sheet: 47 is where the character is the sidekick, 48 where they are the
                mentor. Fixed however many bonds they hold.
+        49.    the org-domain read, #3901 (the land the character's organizations hold,
+               for Estate's Domains block). ONE query, joined from the personas the
+               sheet already has rather than prefetched. A prefetch chain was the first
+               shape and was wrong twice over: a top-level
+               ``personas__organization_memberships`` lookup cannot reuse the
+               ``cached_personas`` Prefetch, so Django re-fetched every persona to
+               redescend; and nesting it needed a ``to_attr`` on an idmapper parent,
+               which ADR-0278 forbids. Fixed however many houses they belong to and
+               however much land those houses hold.
+
+               The fixture seeds a house that HOLDS land on purpose. With no membership
+               the join returns nothing and the bound would pass without ever measuring
+               what it claims to.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
         # Introductions (journal entries by kind).
         # +6 (#3898): the identity beginnings prefetch, the looks strip, the worn
         # pieces and both directions of the mentor bond, per 43-48.
-        with self.assertNumQueries(48):
+        # +1 (#3901): the org-domain read, per 49.
+        with self.assertNumQueries(49):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

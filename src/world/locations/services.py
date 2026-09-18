@@ -138,16 +138,21 @@ def _bulk_room_profiles_and_ancestors(
 
 
 def _persona_organization_ids(persona: Persona) -> set[int]:
-    """Return organization IDs this persona is a current member of.
+    """Return organization IDs this persona is a CURRENT member of.
 
-    OrganizationMembership has no lifecycle fields (no left_at, no
-    is_active) — departures are model deletes. So presence in the table
-    is current membership.
+    Current means ``left_at IS NULL AND exiled_at IS NULL``, which is what
+    ``OrganizationMembership``'s own docstring and the membership serializer's
+    ``is_active`` both say. An earlier version of this helper asserted the model had
+    no lifecycle fields and that departures were deletes; that has not been true since
+    those fields landed, so every ex-member and every exile kept the organization's
+    tenancies — the key to the keep they were thrown out of (#3901).
     """
     return set(
-        OrganizationMembership.objects.filter(persona=persona).values_list(
-            "organization_id", flat=True
-        )
+        OrganizationMembership.objects.filter(
+            persona=persona,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+        ).values_list("organization_id", flat=True)
     )
 
 

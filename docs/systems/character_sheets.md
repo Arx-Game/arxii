@@ -42,9 +42,11 @@ attributes.
 
 **Eight sections** replace the old sixteen tabs. Five are public — Sheet, Physical,
 Ties, Distinctions, Magic — then a visible break labelled "Yours only" and three the
-character's own player reads: Knowledge (secrets, clues, gossip), Holdings (purse,
-carried, property, agreements, the law) and Growth (advancement, sheet-change requests,
-languages, origin story). Friends left the sheet for `/profile/friends`: an OOC
+character's own player reads: Knowledge (secrets, clues, gossip), Estate (purse,
+carried, property, the land their organizations hold, agreements, the law) and Growth
+(advancement, sheet-change requests, languages, origin story). Estate is named for what
+it holds rather than "Holdings", which reads as fiefs in this genre and is not what the
+section is; it is also the word the will copy inside it already uses (#3901). Friends left the sheet for `/profile/friends`: an OOC
 trusted-partner list belongs to the account, not to a character.
 
 **Gating is render-or-vanish.** A block a viewer may not read is absent, and the page
@@ -92,7 +94,22 @@ heading the sheet already draws, the soul-tether card whose entire body was the 
 section row read as a second navigation bar. A panel composed into a section draws no
 heading at that weight — `Subheading` is the one it uses for a group inside a section.
 
-**Holdings has no "Owed and Owing" block**, which the spec asks for. Half of it has
+**Estate's Domains block** (#3901) names the land the character's organizations hold:
+the domain, whose it is, and the area it decorates. The gate is ACTIVE membership and
+nothing more — `_build_domains` reads the character's personas' memberships where
+`left_at` and `exiled_at` are both null. That a house holds a stretch of land is not a
+secret anyone keeps; whether this character may walk into it is a different question,
+answered by `LocationTenancy` against the land rather than by anything on the sheet.
+
+The block exists because deleting it would have been worse. A `Domain` is org-owned
+(`owner_org`, the #1884/#930 ruling) and a `Building` is individual-owned
+(`owner_persona` is its only ownership field), so org land on a personal page muddies
+what the section is — but a player coming onto a roster character may have no idea their
+house holds a keep, and nothing else on the sheet could tell them. Render-or-vanish
+matters more here than anywhere: most organizations hold no land at all, so the block is
+absent far more often than it is present.
+
+**Estate has no "Owed and Owing" block**, which the spec asks for. Half of it has
 nothing to read: `currency.DebtInstrument` and both obligation models are
 organization-to-organization, and no character-level debt exists anywhere in `world`. The
 other half, contracts, DOES have a model — `currency.Contract` is persona to persona,
@@ -135,8 +152,8 @@ At a glance carries a Tarot row. Removing a live feature to match a drawing is n
 branch's call, so they are re-skinned and recorded.
 
 Two things deliberately keep their old chrome. `OwnedDwellingsCard` and
-`TenantedRoomsCard` under Holdings are shared with the Renown page, so re-skinning them
-would change a surface outside this issue; and the cards under Holdings and Growth are
+`TenantedRoomsCard` under Estate are shared with the Renown page, so re-skinning them
+would change a surface outside this issue; and the cards under Estate and Growth are
 forms rather than reference reading. Both are recorded in the roadmap as remaining.
 
 ## Web Sheet Mechanics Display (#3042)

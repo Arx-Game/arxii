@@ -75,7 +75,7 @@ vi.mock('@/character_sheets/components/sheet/panels', () => ({
   DistinctionsPanel: () => <div data-testid="distinctions-panel" />,
   MagicPanel: () => <div data-testid="magic-panel" />,
   KnowledgePanel: () => <div data-testid="knowledge-panel" />,
-  HoldingsPanel: () => <div data-testid="holdings-panel" />,
+  EstatePanel: () => <div data-testid="estate-panel" />,
   GrowthPanel: () => <div data-testid="growth-panel" />,
 }));
 vi.mock('@/worship/components/WorshipSection', () => ({
@@ -183,6 +183,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     plate_ink: 'ember',
     worn: [],
     mentors: [],
+    domains: [],
     ...overrides,
   };
 }
@@ -252,7 +253,7 @@ describe('CharacterSheetPage', () => {
     const nav = screen.getByRole('navigation', { name: /sections/i });
     expect(within(nav).getAllByRole('button')).toHaveLength(5);
     expect(within(nav).queryByRole('button', { name: 'Knowledge' })).not.toBeInTheDocument();
-    expect(within(nav).queryByRole('button', { name: 'Holdings' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Estate' })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: 'Growth' })).not.toBeInTheDocument();
     expect(within(nav).queryByText(/Yours only/i)).not.toBeInTheDocument();
   });
@@ -279,8 +280,8 @@ describe('CharacterSheetPage', () => {
     setEntry(ENTRY);
     setOwnership(true);
     mountSheet();
-    await userEvent.click(screen.getByRole('button', { name: 'Holdings' }));
-    expect(screen.getByTestId('holdings-panel')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Estate' }));
+    expect(screen.getByTestId('estate-panel')).toBeInTheDocument();
   });
 
   it('renders no gated band when the payload carried none of it', () => {

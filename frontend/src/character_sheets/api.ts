@@ -379,6 +379,20 @@ export interface CharacterSheetPayload {
   worn: CharacterSheetWorn[];
   /** #3898 — active Mentor's Vow bonds. Empty for anyone but the owner and staff. */
   mentors: CharacterSheetMentor[];
+  /** #3901 — land the character's organizations hold. Empty for anyone but the owner. */
+  domains: CharacterSheetDomain[];
+}
+
+/**
+ * Mirrors `world.character_sheets.types.OrgDomainEntry` (#3901) — one landholding an
+ * organization this character belongs to owns. A domain is never the character's own;
+ * the row says whose it is and where, so a player new to the character can find it.
+ */
+export interface CharacterSheetDomain {
+  id: number;
+  name: string;
+  organization: string;
+  where: string;
 }
 
 /**

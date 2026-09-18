@@ -2270,11 +2270,14 @@ Character identity, appearance, demographics, and guise system.
 - **The Reference Sheet (#3898):** the web sheet is an artist's reference sheet on the
   Folio system — a night plate (art, name + titles, concept, quote, two glance lines,
   the looks strip) over eight sections, five public and three the owner alone reads
-  (Knowledge, Holdings, Growth). Friends moved to `/profile/friends`. Gating is
+  (Knowledge, Estate, Growth). Friends moved to `/profile/friends`. Gating is
   render-or-vanish: a band a viewer may not read is absent, never an empty state.
   Payload additions: `looks` (tenure media tagged with the `MoodOption` each shows, via
   `TenureMedia.look`; public-gallery images plus the worn one for a non-privileged
-  viewer) and `plate_ink` (`PlateInk`, OOC chrome). Styles:
+  viewer), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
+  gated by the #2985 layer walk rather than a visibility tier), `mentors` (#1165
+  Mentor's Vow bonds, owner and staff only) and `domains` (#3901 — land the character's
+  organizations hold, gated on active membership; owner and staff only). Styles:
   `frontend/src/character_sheets/sheet.css` under `.refsheet`.
 - **Integrates with:** roster (character management, `set_profile_picture` wears a look,
   `TenureMedia.look`), character_creation (sheet setup),
@@ -2282,7 +2285,7 @@ Character identity, appearance, demographics, and guise system.
   game_clock (chronological derivation + aging crons), progression (Maturation
   Points), vitals (Frailty decline, read as words on Physical), species (`eternal_youth`,
   `decline_start_age`), tidings (birthday digest), magic (`ThreadFilter.owner` narrows
-  the thread list to one character), currency (the purse on Holdings)
+  the thread list to one character), currency (the purse on Estate)
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
