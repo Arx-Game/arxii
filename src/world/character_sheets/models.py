@@ -644,6 +644,18 @@ class CharacterSheet(SharedMemoryModel):
         default=SheetVisibility.SELF,
         help_text="Who can see this character's goals.",
     )
+    # #3906 — the only one of these that does NOT default to SELF. Apostate's ruling:
+    # standing is friends-by-default with public as the opt-in, because what a house
+    # thinks of you is something your friends would know, unlike your stats or goals.
+    standing_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.FRIENDS,
+        help_text=(
+            "Who can see this character's organizational standing — which houses they "
+            "belong to and what each thinks of them. Friends by default."
+        ),
+    )
 
     # #3898 — the ground colour the sheet's plate is printed in. Chrome, not a
     # character trait: the player picks it in settings and it never enters any IC
