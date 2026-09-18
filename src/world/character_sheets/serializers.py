@@ -498,20 +498,31 @@ def _viewer_is_privileged(sheet: CharacterSheet, user: Any) -> bool:
 def _viewer_access_level(sheet: CharacterSheet, user: Any, privileged: bool) -> int:
     """The viewer's section-visibility openness (#1271): 2=SELF, 1=FRIENDS, 0=PUBLIC.
 
-    Privileged (owner/staff) see everything. The FRIENDS check (is the viewer's account on
-    the sheet owner's ``PlayerAllowList``) runs at most once, and only when a section is
-    actually gated to FRIENDS — so the common all-default (SELF) case adds no query.
+    Privileged (owner/staff) see everything, and cost nothing: they return above the
+    check. For everyone else the FRIENDS check (is the viewer's account on the sheet
+    owner's ``PlayerAllowList``) runs at most once, and only when some section is
+    actually gated to FRIENDS.
+
+    That short-circuit used to spare the all-default sheet entirely. It no longer does,
+    and the change is deliberate: since #3906 the default sheet HAS a FRIENDS-gated
+    section (``standing_visibility``), so a non-privileged viewer now always pays one
+    indexed ``exists()``. That is the price of the ruling — standing is friends-by-
+    default, so the allow list is the answer and has to be read. Do not "restore" the
+    saving by narrowing the tier list again; that is #3923.
+
+    The tiers come from ``CharacterSheet.visibility_field_names()`` rather than a list
+    written out here. #3923: this function used to carry its own copy of four field
+    names, #3906 added ``standing_visibility`` without updating it, and the
+    short-circuit below then returned PUBLIC for a sheet whose only FRIENDS-gated
+    section was the new one — so every friend was resolved as a stranger and standing
+    was withheld from exactly the people it had just been opened to. That omission
+    fails OPEN and raises nothing, which is why the list must not be duplicated.
     """
     if privileged:
         return 2
     if user is None or not user.is_authenticated:
         return 0
-    gated = (
-        sheet.stats_visibility,
-        sheet.skills_visibility,
-        sheet.magic_visibility,
-        sheet.goals_visibility,
-    )
+    gated = tuple(getattr(sheet, field_name) for field_name in sheet.visibility_field_names())
     if SheetVisibility.FRIENDS not in gated:
         return 0  # nothing is FRIENDS-gated → no need to resolve the allow list
     roster_entry = sheet.roster_entry

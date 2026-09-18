@@ -11,6 +11,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.models import PlayerAllowList
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import BeginningsFactory, RealmFactory
@@ -2291,6 +2292,7 @@ class TestStandingAndCovenantSections(TestCase):
     def setUpTestData(cls) -> None:
         cls.player = PlayerDataFactory()
         cls.stranger = PlayerDataFactory()
+        cls.friend = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="StandingChar")
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
@@ -2327,6 +2329,36 @@ class TestStandingAndCovenantSections(TestCase):
         """FRIENDS is the default, and a stranger is not one."""
         standing = self._payload(self.stranger)["standing"]
         assert standing == {"memberships": [], "reputations": []}
+
+    def test_a_friend_sees_standing_on_an_otherwise_default_sheet(self) -> None:
+        """The middle tier, which is the whole point of the ruling (#3923).
+
+        #3906 shipped without this test and the feature did not work: the resolver's
+        short-circuit listed four visibility fields by hand and ``standing_visibility``
+        was not among them, so on a sheet whose other four tiers are all SELF -- the
+        default every character has -- it returned the PUBLIC rank without ever reading
+        the allow list, and the friend was resolved as a stranger.
+        """
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+        standing = self._payload(self.friend)["standing"]
+        assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
+        assert [row["organization"] for row in standing["reputations"]] == ["House du Verane"]
+
+    def test_every_visibility_tier_is_discoverable_from_the_model(self) -> None:
+        """The guard on #3923's recurrence shape.
+
+        ``_viewer_access_level`` asks the model which tiers exist. If a future tier is
+        declared with anything but ``SheetVisibility.choices`` it drops out of that
+        answer silently and the resolver grants MORE access than intended, so pin the
+        naming convention to the derivation: the two must name the same set.
+        """
+        by_convention = {
+            field.name
+            for field in CharacterSheet._meta.get_fields()
+            if field.name.endswith("_visibility")
+        }
+        assert set(CharacterSheet.visibility_field_names()) == by_convention
+        assert "standing_visibility" in by_convention
 
     def test_the_owner_sees_which_houses_and_what_each_thinks(self) -> None:
         standing = self._payload(self.player)["standing"]

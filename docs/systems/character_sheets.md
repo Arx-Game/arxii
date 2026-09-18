@@ -17,7 +17,16 @@ The **narrative bio** (concept, real_concept, quote, the three Actor's Sheet ans
 Each mechanical sheet section carries a player-controlled visibility tier
 (`SheetVisibility`: `SELF` / `FRIENDS` / `PUBLIC`) — `stats_visibility`, `skills_visibility`,
 `magic_visibility`, `goals_visibility` on `CharacterSheet`, defaulting to `SELF` (the #1109
-"private by default" behaviour). **`standing_visibility` (#3906) is the one that does not**:
+"private by default" behaviour). The resolver asks
+`CharacterSheet.visibility_field_names()` which tiers exist rather than listing them —
+#3923: #3906 added a fifth tier while `_viewer_access_level` kept its own hand-written
+four, so on a default sheet it short-circuited to the PUBLIC rank without reading the
+allow list and every friend was resolved as a stranger. That omission grants MORE access
+and raises nothing, so it went green. A consequence worth knowing: since the default
+sheet now HAS a FRIENDS-gated section, a non-privileged viewer always pays one indexed
+`PlayerAllowList` `exists()`; the short-circuit only spares privileged viewers now, and
+narrowing the tier list to win it back is the bug. **`standing_visibility` (#3906) is
+the one that does not default to SELF**:
 it defaults to `FRIENDS`, because which houses someone belongs to and what each thinks of
 them is the kind of thing a friend would know and a stranger would have to ask about, and
 `PUBLIC` is the opt-in for a character who wants their allegiances read off the page. The profile serializer resolves the viewer's openness once
