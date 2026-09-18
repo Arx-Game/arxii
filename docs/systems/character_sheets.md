@@ -134,7 +134,15 @@ character on the account and had to be filtered client-side to the viewed person
 `_build_standing` queries `OrganizationMembership` / `OrganizationReputation` directly off
 the presented persona and `_build_covenants` reads `covenant_role_assignments` off the
 sheet; `_section_visible(access, sheet.standing_visibility)` empties `standing` for a
-viewer below the tier, so what the client renders is already the answer. Note the prefetch
+viewer below the tier, so what the client renders is already the answer.
+
+Both blocks then **vanish when empty**, and here render-or-vanish is a correctness rule
+rather than a style one: a withheld section and an unaffiliated character arrive at the
+client identically, so a line reading "They belong to nobody" would be a flat lie on
+every stranger's view of a character who belongs to three houses. Vanishing also leaks
+nothing — a hidden rail and an empty one look the same, which is what a privacy tier is
+supposed to buy. Titles beside it keeps its empty-state line and is right to: it is
+never withheld, so its empty state is always true. Note the prefetch
 shape: `standing` deliberately does NOT ride a `personas__organization_memberships`
 prefetch — a top-level prefetch through `personas` cannot reuse the `cached_personas`
 Prefetch and re-fetches every persona to redescend, which cost four extra queries for
