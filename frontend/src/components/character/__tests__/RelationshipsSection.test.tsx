@@ -137,10 +137,12 @@ function createWrapper() {
 // ---------------------------------------------------------------------------
 
 describe('RelationshipsSection', () => {
-  it('renders the Relationships heading', () => {
+  it('draws no Relationships heading of its own (#3898)', () => {
+    // The sheet draws "Relationships" above this panel, so a second heading here
+    // rendered as a literal duplicate header.
     render(<RelationshipsSection />, { wrapper: createWrapper() });
 
-    expect(screen.getByRole('heading', { name: /relationships/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^relationships$/i })).not.toBeInTheDocument();
   });
 
   it('renders the Ties sub-section heading', () => {

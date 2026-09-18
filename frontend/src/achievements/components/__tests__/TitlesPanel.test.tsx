@@ -56,9 +56,9 @@ describe('TitlesPanel', () => {
     expect(screen.getByText('Slew the Wyrm')).toBeInTheDocument();
   });
 
-  it('shows a spinner while loading', () => {
+  it('says it is reading while loading', () => {
     mockTitles(undefined, true);
-    const { container } = render(<TitlesPanel personaId={1} />);
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    render(<TitlesPanel personaId={1} />);
+    expect(screen.getByText('Reading their titles…')).toBeInTheDocument();
   });
 });

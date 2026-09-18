@@ -262,8 +262,11 @@ export async function respondToStageAdvance(
  * Returns threads the requesting account owns (staff can see all), excluding
  * soft-retired rows.
  */
-export async function getThreads(): Promise<PaginatedThreadList> {
-  const res = await apiFetch(`${THREADS_URL}/`);
+export async function getThreads(characterSheetId?: number): Promise<PaginatedThreadList> {
+  // `owner` is the ThreadFilter's CharacterSheet narrowing (#3898); omitted, the list
+  // stays account-scoped as every earlier caller expects.
+  const query = characterSheetId != null ? `?owner=${characterSheetId}` : '';
+  const res = await apiFetch(`${THREADS_URL}/${query}`);
   if (!res.ok) throw new Error('Failed to load threads');
   return res.json() as Promise<PaginatedThreadList>;
 }

@@ -70,7 +70,9 @@ describe('WorshipSection', () => {
       />,
       { wrapper }
     );
-    expect(screen.getByTestId('public-worship')).toHaveTextContent('Worships The Shepherd.');
+    expect(screen.getByTestId('public-worship')).toHaveTextContent(
+      'Keeps faith with The Shepherd.'
+    );
     expect(screen.getByTestId('vision-card')).toHaveTextContent('A door opens in the dark.');
     expect(screen.getByTestId('vision-card')).not.toHaveTextContent('from');
     expect(screen.getByTestId('pray-button')).toBeInTheDocument();
@@ -108,7 +110,7 @@ describe('WorshipSection', () => {
     );
     expect(screen.getByTestId('send-vision-button')).toBeInTheDocument();
     expect(screen.getByTestId('prayer-row')).toHaveTextContent('Keep this house.');
-    expect(screen.getByTestId('prayer-row')).toHaveTextContent('(act of devotion)');
+    expect(screen.getByTestId('prayer-row')).toHaveTextContent('act of devotion');
     expect(screen.getByTestId('visions-empty')).toBeInTheDocument();
     expect(screen.queryByTestId('pray-button')).not.toBeInTheDocument();
   });

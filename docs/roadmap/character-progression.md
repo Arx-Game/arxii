@@ -29,7 +29,11 @@ The central spine connecting every system in the game. Characters develop throug
   Sheet tab, and claimed-resonance balances render on the Spellbook tab — the sheet API already
   serialized all three (`CharacterSheetSerializer`), they just had no frontend consumer.
   Per-trait development-point progress display is deferred to #3039's landing (not part of the
-  sheet payload yet).
+  sheet payload yet). **Since #3898** those stats and skills live in a folding "Abilities"
+  band on the sheet's front page rather than a flat list, and everything a player SPENDS
+  (XP ledger, advancement, stat points, maturation, sheet-change requests) moved to the
+  owner-only "Growth" section — the numbers you check and the numbers you spend are now
+  two different places.
 - **Audere Majora / Crossing the Threshold (#543):** the unified tier-crossing event. Per-boundary `AudereMajoraThreshold` rows (levels 5/10/15/20) gate a cast-time offer (intensity tier + deep Soulfray + engagement + active Audere + eligible next-stage path). Accepting atomically advances the level boundary, writes `CharacterPathHistory`, records an irreversible `AudereMajoraCrossing` receipt, and applies the Audere Majora power-spike condition (DeathDeferred — consequences resolve when the blaze ends). Ceremony content is DB-authored and spoiler-private. `PathIntent` lets players pre-declare their next path; the offer pre-selects it. REST + React offer surfaces mirror the Audere offer family
 - **Audere Majora legend-deed minting (#953):** `cross_threshold` now mints a full
   renown deed for the crosser. `AudereMajoraThreshold` inherits the new abstract

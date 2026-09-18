@@ -1783,6 +1783,8 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - tagged_media <- roster.TenureMedia
 
 ### Profile
 **Foreign Keys:**
@@ -8164,6 +8166,7 @@
   - tenure -> roster.RosterTenure [FK]
   - media -> evennia_extensions.Media [FK]
   - gallery -> roster.TenureGallery [FK] (nullable)
+  - look -> character_sheets.MoodOption [FK] (nullable)
 **Pointed to by:**
   - profile_for_entries <- roster.RosterEntry
 
@@ -8233,6 +8236,7 @@
   - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
   - consequence_outcomes <- checks.ConsequenceOutcome
+  - action_consequence_outcomes <- checks.ConsequenceOutcome
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - endorsements <- magic.PoseEndorsement

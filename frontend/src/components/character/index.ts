@@ -1,8 +1,6 @@
-export { CharacterPortrait } from './CharacterPortrait';
 export { BackgroundSection } from './BackgroundSection';
 export { StatsSection } from './StatsSection';
 export { RelationshipsSection } from './RelationshipsSection';
-export { GalleriesSection } from './GalleriesSection';
 export { CharacterApplicationForm } from './CharacterApplicationForm';
 export { ApplicationSlot } from './ApplicationSlot';
 export { CharacterLink } from './CharacterLink';

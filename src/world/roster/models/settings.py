@@ -121,6 +121,24 @@ class TenureMedia(SharedMemoryModel):
         null=True,
         blank=True,
     )
+    # #3898 — which face of the character this image shows, so the sheet's plate can
+    # wear the look that matches the mood and offer the rest as a strip. The tag hangs
+    # on the tenure link rather than on Media because it describes this character's use
+    # of the image, not the file: the same commissioned piece may be one character's
+    # "guarded" and appear untagged in another's gallery.
+    #
+    # Shares MoodOption with CharacterSheet.current_mood deliberately — one vocabulary
+    # for "which mood", so a declared mood can name an image without a second enum to
+    # keep in step. Tagging an image does NOT leak the character's declared mood
+    # (#2994 keeps that internal): this says what the picture shows, not what they feel.
+    look = models.ForeignKey(
+        "arxii.MoodOption",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tagged_media",
+        help_text="The mood this image shows (#3898); blank for an untagged image.",
+    )
 
     # Organization
     sort_order = models.PositiveIntegerField(default=0)
