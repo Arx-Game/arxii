@@ -96,14 +96,9 @@ class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Shared
         (`` to_attr `` "offers") on ``CGGlimpseTagViewSet.get_queryset()``, never one
         query per tag.
 
-        **Honest guarantee, not "always fresh":** a create/delete/``is_active`` toggle
-        on an offer clears THIS cache, for the offer's *current* ``glimpse_tag`` only.
-        Reassigning an offer's ``glimpse_tag`` FK (moving it to a different tag) clears
-        the *new* tag's cache but never the *old* one's - the old tag can keep serving
-        the moved offer for the life of the process. See the note on
-        ``DistinctionOffer.related_cache_fields`` for why; fixing it is
-        tracked as #3836, since it is a cross-cutting mixin change, not
-        specific to this relation.
+        A create/delete/``is_active`` toggle or FK reassignment on an offer
+        clears the affected tag's cache. Reassignments clear both the old and
+        new related objects through ``RelatedCacheClearingMixin``.
         """
         from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
 

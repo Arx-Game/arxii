@@ -338,14 +338,8 @@ via related_cache_fields (ADR-0298).** `GlimpseTag.offers` is a `PrunedCachedPro
 `GlimpseTagOffersHandler`/`CachedRowsHandler` wrapper this replaced (#3816 Task 9).
 `DistinctionOffer.related_cache_fields = ["glimpse_tag", "origin_choice",
 "schooling_line", "enemy_reason", "appearance_section"]` clears the property's cache
-on every offer save/delete, for the offer's *current* `glimpse_tag` only. **Known
-limitation:** reassigning an offer's `glimpse_tag` FK (moving it between tags via the
-Distinction Builder or the `GlimpseTagAdmin` inline) clears the *new* tag's cache but
-not the *old* one's — the moved offer can keep serving under its old tag for the life
-of the process. This is a property of the shared `RelatedCacheClearingMixin` itself
-(it only ever sees the FK's current value at save time), not specific to
-this relation; fixing it is tracked as #3836 (a cross-cutting mixin
-change), not addressed per-relation here.
+on every offer save/delete, for the offer's current and, when reassigned, previous
+related objects as well.
 
 **Models** (`models/glimpse.py`):
 

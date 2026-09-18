@@ -29,6 +29,49 @@ class GlimpseTagOffersCachedPropertyTests(TestCase):
         DistinctionOfferFactory(glimpse_tag=tag, chapter=OfferChapter.GLIMPSE, is_active=True)
         self.assertEqual(len(tag.offers), 1)
 
+    def test_reassigning_an_offer_clears_both_tag_caches(self):
+        old_tag = GlimpseTagFactory()
+        new_tag = GlimpseTagFactory()
+        offer = DistinctionOfferFactory(
+            glimpse_tag=old_tag, chapter=OfferChapter.GLIMPSE, is_active=True
+        )
+
+        self.assertEqual(list(old_tag.offers), [offer])
+        self.assertEqual(list(new_tag.offers), [])
+
+        offer.glimpse_tag = new_tag
+        offer.save()
+
+        self.assertEqual(list(old_tag.offers), [])
+        self.assertEqual(list(new_tag.offers), [offer])
+
+    def test_reassigning_an_offer_to_none_clears_old_tag_cache(self):
+        tag = GlimpseTagFactory()
+        offer = DistinctionOfferFactory(
+            glimpse_tag=tag, chapter=OfferChapter.GLIMPSE, is_active=True
+        )
+        self.assertEqual(list(tag.offers), [offer])
+
+        offer.glimpse_tag = None
+        offer.save()
+
+        self.assertNotIn("offers", tag.__dict__)
+        self.assertEqual(list(tag.offers), [])
+
+    def test_assigning_a_nullable_fk_id_after_cached_none_clears_new_tag(self):
+        tag = GlimpseTagFactory()
+        offer = DistinctionOfferFactory(
+            glimpse_tag=None, chapter=OfferChapter.GLIMPSE, is_active=True
+        )
+        self.assertIsNone(offer.glimpse_tag)  # warm the nullable relation's None cache
+        self.assertEqual(list(tag.offers), [])
+
+        offer.glimpse_tag_id = tag.pk
+        offer.save()
+
+        self.assertNotIn("offers", tag.__dict__)
+        self.assertEqual(list(tag.offers), [offer])
+
     def test_deactivated_offer_drops_out_on_next_read(self):
         tag = GlimpseTagFactory()
         offer = DistinctionOfferFactory(
