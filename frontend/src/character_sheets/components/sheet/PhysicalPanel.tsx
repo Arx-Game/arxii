@@ -14,6 +14,7 @@
  * carries is under Holdings.
  */
 
+import { Link } from 'react-router-dom';
 import type { CharacterVitalsData } from '@/vitals/vitalsQueries';
 import type { CharacterSheetPayload } from '@/character_sheets/api';
 import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack } from './primitives';
@@ -38,6 +39,8 @@ interface PhysicalPanelProps {
   isPrivileged: boolean;
   /** The outfit and equipped items the character is wearing, if the viewer may see them. */
   worn: WornItem[];
+  /** The character's published galleries. Every viewer sees these; they are public. */
+  galleries: { name: string; url: string }[];
 }
 
 export interface WornItem {
@@ -48,7 +51,13 @@ export interface WornItem {
   isHidden: boolean;
 }
 
-export function PhysicalPanel({ sheet, vitals, isPrivileged, worn }: PhysicalPanelProps) {
+export function PhysicalPanel({
+  sheet,
+  vitals,
+  isPrivileged,
+  worn,
+  galleries,
+}: PhysicalPanelProps) {
   const { appearance, identity } = sheet;
 
   // Height: the band is what anyone can tell by looking; the exact inches are the
@@ -128,6 +137,19 @@ export function PhysicalPanel({ sheet, vitals, isPrivileged, worn }: PhysicalPan
           <Prose>
             <p>{appearance.description}</p>
           </Prose>
+        </Stack>
+      )}
+
+      {/* Every published gallery, not just whichever one the plate happens to link.
+          Images of a character are how they look, so they belong on this page. */}
+      {galleries.length > 0 && (
+        <Stack>
+          <Heading>Galleries</Heading>
+          <Entries>
+            {galleries.map((gallery) => (
+              <Entry key={gallery.url} name={<Link to={gallery.url}>{gallery.name}</Link>} />
+            ))}
+          </Entries>
         </Stack>
       )}
     </Stack>

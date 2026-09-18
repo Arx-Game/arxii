@@ -31,7 +31,8 @@ interface PlateProps {
   canWear: boolean;
   onWear: (look: CharacterSheetLook) => void;
   isSaving: boolean;
-  galleriesTo: string;
+  /** Where 'All galleries' points for THIS viewer; null for no link. */
+  galleriesTo: string | null;
   /** Owner-only doors (friend/rival buttons live here on a foreign sheet). */
   actions?: ReactNode;
 }
@@ -77,9 +78,11 @@ export function Plate({
                   <span className="refsheet-frame-note refsheet-plate-soft text-sm">
                     No art yet. The frame waits.
                   </span>
-                  <Link to={galleriesTo} className="refsheet-frame-note text-sm">
-                    Choose from your galleries
-                  </Link>
+                  {galleriesTo && (
+                    <Link to={galleriesTo} className="refsheet-frame-note text-sm">
+                      Choose from your galleries
+                    </Link>
+                  )}
                 </>
               )}
             </>

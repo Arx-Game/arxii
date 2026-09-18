@@ -115,7 +115,7 @@ export function CharacterSheetPage() {
         canWear={isMyCharacter}
         onWear={(look) => wearLook.mutate(look.tenure_media_id)}
         isSaving={wearLook.isPending}
-        galleriesTo={`/roster/${entryId}/galleries`}
+        galleriesTo={isMyCharacter ? '/profile/media' : null}
         actions={
           !isMyCharacter && (
             <>
@@ -169,6 +169,7 @@ export function CharacterSheetPage() {
             vitals={vitals}
             isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
             worn={worn}
+            galleries={entry.character.galleries ?? []}
           />
         )}
 

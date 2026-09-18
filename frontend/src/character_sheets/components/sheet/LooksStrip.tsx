@@ -26,8 +26,16 @@ interface LooksStripProps {
   onShow: (look: CharacterSheetLook) => void;
   /** True only on the owner's own sheet: clicking wears the look and the Add tile shows. */
   canWear: boolean;
-  /** Where the Add tile sends the owner to tag or upload more images. */
-  galleriesTo: string;
+  /**
+   * Where the "All galleries" link sends this reader, or null for no link.
+   *
+   * It differs by viewer, and getting it wrong is easy: the owner's galleries live in
+   * the player area (`/profile/media`), because media hangs off the tenure and follows
+   * the player rather than the character. A visitor must never be sent there — that
+   * page is their own media — so they get the character's own public gallery link, or
+   * nothing when the character has published none.
+   */
+  galleriesTo: string | null;
   /** True while a wear request is in flight, so the strip does not invite a second one. */
   isSaving: boolean;
 }
@@ -48,9 +56,11 @@ export function LooksStrip({
         <span className="refsheet-eyebrow" style={{ fontSize: '0.6875rem' }}>
           Looks and expressions
         </span>
-        <Link to={galleriesTo} className="text-sm">
-          All galleries
-        </Link>
+        {galleriesTo && (
+          <Link to={galleriesTo} className="text-sm">
+            All galleries
+          </Link>
+        )}
       </div>
       <div className="refsheet-looks" role="group" aria-label="Looks and expressions">
         {looks.map((look) => {
@@ -72,7 +82,7 @@ export function LooksStrip({
             </button>
           );
         })}
-        {canWear && (
+        {canWear && galleriesTo && (
           <Link
             to={galleriesTo}
             className="refsheet-look refsheet-look-add"
