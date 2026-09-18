@@ -116,3 +116,18 @@ Domain-local vocabulary. Cross-cutting terms live in the root
 - **Band** — a full-width folding block below the sheet's columns, holding
   material that is gated or simply tall (goals and guidelines, abilities). A
   band a viewer may not read is absent, never empty.
+- **Entry** — one hairline-separated row in the sheet's index voice: a name, an
+  optional tag or two, a gloss beneath. The sheet's unit of listing, and what a
+  card used to be everywhere the sheet took a panel over. _Avoid_: card, tile,
+  row (a row is a table's).
+- **Quiet door** — a link the sheet offers without dressing it as a button
+  ("Change outfit", "Commend"). Reads as text until the reader is on it.
+  _Avoid_: action button, CTA.
+- **Plateau** — the one framed area the sheet draws, for something DRAWN rather
+  than written (the kin graph). A drawing needs an edge; prose does not.
+  _Avoid_: card, panel, box.
+- **Worn** — what a character has on, as the #2985 layer walk says an onlooker
+  would see it (`worn` on the sheet payload). Worn things are visible things, so
+  this is not gated by a visibility tier; only a COVERED piece is owner-only, and
+  it carries `is_hidden` so the sheet can say it is there and unseen. _Avoid_:
+  equipment, inventory (those are everything they hold, not what shows).

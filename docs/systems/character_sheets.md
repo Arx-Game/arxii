@@ -66,9 +66,36 @@ here, so the strip under-shows rather than risking a private image on a page any
 open. `plate_ink` (`PlateInk`: ember / verdigris / rose / night) is OOC chrome, ungated,
 and picked in settings rather than on the sheet.
 
+**`worn` and `mentors`** are the payload's other two contributions. `_build_worn` lists
+what the character has on, and what separates viewers is the #2985 layer walk rather than
+a visibility tier: `compute_worn_visibility` is the same predicate the look command and
+the show/conceal verbs use, so a shift under a coat is hidden here for the same reason it
+is hidden there. A covered piece is dropped for everyone but the owner and staff, who get
+it with `is_hidden` set so the sheet can say it is there and unseen. This lives on the
+sheet rather than on `EquippedItemViewSet` because that endpoint answers only for a
+character its caller plays, which emptied the Wearing block for every visitor — and worn
+things are the most visible things a character has. `_build_mentors` returns the active
+`MentorBond` rows (#1165) in both directions, each saying what the OTHER party is; it is
+owner and staff only, matching the covenant roles it sits beside, because a Mentor's Vow
+is sworn inside a covenant.
+
 Threads under Magic reuse the existing thread list endpoint, narrowed to one character by
 `ThreadFilter.owner` (#3898) — the list is account-scoped, so without it an account with
 alts read every character's threads on whichever sheet it opened.
+
+**The composed panels were re-skinned, not merely reparented.** `RelationshipsSection`,
+`KinshipPanel`, `ReputationTab`, `TitlesPanel`, `DistinctionsTab` and `SpellbookTab` now
+draw in the sheet's own primitives, and each lost something that only made sense when it
+was a tab of its own: the duplicate "Relationships" header a panel drew inside the
+heading the sheet already draws, the soul-tether card whose entire body was the words
+"No active soul tethers.", and the spellbook's four workbench links, which under the
+section row read as a second navigation bar. A panel composed into a section draws no
+heading at that weight — `Subheading` is the one it uses for a group inside a section.
+
+Two things deliberately keep their old chrome. `OwnedDwellingsCard` and
+`TenantedRoomsCard` under Holdings are shared with the Renown page, so re-skinning them
+would change a surface outside this issue; and the cards under Holdings and Growth are
+forms rather than reference reading. Both are recorded in the roadmap as remaining.
 
 ## Web Sheet Mechanics Display (#3042)
 
