@@ -91,6 +91,18 @@
 .refsheet-plate-soft {
   color: #c4b8a6;
 }
+/* The plate's right column runs the height of the art, with the looks strip settling
+   at the bottom rather than leaving the corner under it empty. */
+.refsheet-plate-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 100%;
+}
+.refsheet-plate-foot {
+  margin-top: auto;
+  padding-top: 1rem;
+}
 .refsheet-plate a {
   color: var(--plate-accent);
   text-decoration-color: var(--plate-accent);
@@ -179,13 +191,17 @@
 
 /* ---------- the looks strip ---------- */
 
+/* A wrapping row of fixed-width tiles rather than a grid: the strip holds anything
+   from one image to a dozen, and `auto-fill` tracks made a three-image strip render
+   as three tiles squeezed into the first three of eleven empty columns. */
 .refsheet-looks {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 .refsheet-look {
   position: relative;
+  width: 5.5rem;
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: flex-end;
@@ -198,7 +214,7 @@
   font-family: var(--sheet-caps);
   font-size: 0.625rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: left;
   line-height: 1.2;
@@ -210,9 +226,15 @@
   height: 100%;
   object-fit: cover;
 }
+/* A long mood name truncates rather than spilling out of the tile, which clipped it
+   mid-word against `overflow: hidden`. The full name stays on the button's title. */
 .refsheet-look span {
   position: relative;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 90%);
 }
 .refsheet-look[aria-pressed='true'] {
   border-color: var(--plate-accent);

@@ -98,7 +98,7 @@ export function Plate({
         )}
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="refsheet-plate-body">
         <h1 className="refsheet-name">
           {name}
           {titles.length > 0 && <span className="refsheet-title">{titles.join(' · ')}</span>}
@@ -120,7 +120,7 @@ export function Plate({
         )}
 
         {looks.length > 0 && (
-          <>
+          <div className="refsheet-plate-foot flex flex-col gap-3">
             <hr />
             <LooksStrip
               looks={looks}
@@ -130,7 +130,7 @@ export function Plate({
               galleriesTo={galleriesTo}
               isSaving={isSaving}
             />
-          </>
+          </div>
         )}
 
         {actions && <div className="flex flex-wrap gap-4 pt-1">{actions}</div>}

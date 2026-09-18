@@ -181,7 +181,7 @@ function conditionRows(
 ): GlanceRow[] {
   const { fatigue } = vitals;
   const pools = [
-    `body ${ZONE_WORDS[fatigue.physical.zone] ?? fatigue.physical.zone}`,
+    `Body ${ZONE_WORDS[fatigue.physical.zone] ?? fatigue.physical.zone}`,
     `mind ${ZONE_WORDS[fatigue.mental.zone] ?? fatigue.mental.zone}`,
     `spirit ${ZONE_WORDS[fatigue.social.zone] ?? fatigue.social.zone}`,
   ].join(', ');
