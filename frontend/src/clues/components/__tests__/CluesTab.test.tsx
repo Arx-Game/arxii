@@ -56,9 +56,9 @@ describe('CluesTab', () => {
     expect(screen.getByText('A glove stained dark.')).toBeInTheDocument();
   });
 
-  it('shows a spinner while loading', () => {
+  it('says it is reading while loading', () => {
     mockClues(undefined, true);
-    const { container } = render(<CluesTab characterSheetId={1} />);
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    render(<CluesTab characterSheetId={1} />);
+    expect(screen.getByText('Reading what they have found…')).toBeInTheDocument();
   });
 });

@@ -44,6 +44,7 @@ from world.character_sheets.types import (
     IntroductionEntry,
     LookEntry,
     MagicSection,
+    MentorBondEntry,
     MotifResonanceEntry,
     MotifSection,
     OriginSlotEntry,
@@ -64,6 +65,7 @@ from world.character_sheets.types import (
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
+from world.covenants.models import MentorBond
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import (
     CharacterForm,
@@ -1470,6 +1472,58 @@ def _build_current_residence(sheet: CharacterSheet) -> IdNameRef | None:
 
 # --- Section registry for queryset aggregation ---
 
+_MENTORS_SELECT_RELATED: tuple[str, ...] = ()
+# Both directions of the vow, each with the covenant it was sworn in and the other
+# party's ObjectDB, so naming a bond costs nothing further. No ``to_attr`` (ADR-0278).
+_MENTORS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "mentor_bonds_as_mentor",
+        queryset=MentorBond.objects.active().select_related(
+            "covenant", "sidekick_sheet__character"
+        ),
+    ),
+    Prefetch(
+        "mentor_bonds_as_sidekick",
+        queryset=MentorBond.objects.active().select_related("covenant", "mentor_sheet__character"),
+    ),
+)
+
+
+def _build_mentors(sheet: CharacterSheet, *, privileged: bool) -> list[MentorBondEntry]:
+    """Build the Mentors block on Ties: who took this character on, and whom they took on.
+
+    Owner and staff only. A Mentor's Vow is sworn inside a covenant, and the rest of what
+    a covenant knows about a character is already owner-only on this page (the covenant
+    roles under Standing), so publishing the bond to every visitor would say more about
+    the covenant than about the character.
+
+    The other party is named the way relationships name a target — by the character's own
+    key. Both directions are returned in one list, each row saying which the other party is.
+    """
+    if not privileged:
+        return []
+
+    entries: list[MentorBondEntry] = [
+        MentorBondEntry(
+            id=bond.pk,
+            name=bond.mentor_sheet.character.db_key,
+            role="Mentor",
+            covenant=bond.covenant.name,
+        )
+        for bond in sheet.mentor_bonds_as_sidekick.all()
+    ]
+    entries.extend(
+        MentorBondEntry(
+            id=bond.pk,
+            name=bond.sidekick_sheet.character.db_key,
+            role="Student",
+            covenant=bond.covenant.name,
+        )
+        for bond in sheet.mentor_bonds_as_mentor.all()
+    )
+    return entries
+
+
 _WORN_SELECT_RELATED: tuple[str, ...] = ()
 # The layer walk reads the template's `is_revealing` and both silhouettes, so they are
 # selected here rather than left to fire one query per worn piece. No ``to_attr``
@@ -1546,6 +1600,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_CURRENT_RESIDENCE_SELECT_RELATED, _CURRENT_RESIDENCE_PREFETCH_RELATED),
     (_LOOKS_SELECT_RELATED, _LOOKS_PREFETCH_RELATED),
     (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
+    (_MENTORS_SELECT_RELATED, _MENTORS_PREFETCH_RELATED),
 )
 
 
@@ -1679,6 +1734,9 @@ class CharacterSheetSerializer(serializers.Serializer):
             # Worn things are visible things, so this is ungated by tier — only the
             # layer walk decides, and only a covered piece is owner-only.
             "worn": _build_worn(sheet, privileged=privileged),
+            # Ties' Mentors block. Owner and staff only, like the covenant roles it
+            # sits beside.
+            "mentors": _build_mentors(sheet, privileged=privileged),
         }
 
 

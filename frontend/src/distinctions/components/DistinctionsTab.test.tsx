@@ -69,9 +69,9 @@ describe('DistinctionsTab', () => {
     expect(screen.getAllByText('Secret')).toHaveLength(1);
   });
 
-  it('shows a spinner while loading', () => {
+  it('says it is reading while loading', () => {
     mockPayload(undefined, true);
-    const { container } = render(<DistinctionsTab characterId={1} />);
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    render(<DistinctionsTab characterId={1} />);
+    expect(screen.getByText('Reading their distinctions…')).toBeInTheDocument();
   });
 });

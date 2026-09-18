@@ -30,7 +30,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Badge } from '@/components/ui/badge';
+import {
+  Entries,
+  Entry,
+  Ledger,
+  Stack,
+  Subheading,
+  Tag,
+} from '@/character_sheets/components/sheet/primitives';
 import { Button } from '@/components/ui/button';
 import { useCharacterPersonasQuery } from '@/game/personaQueries';
 import {
@@ -82,7 +89,7 @@ export function OwnRelationshipsList({ characterSheetId }: OwnRelationshipsListP
   const [dialogRequest, setDialogRequest] = useState<DialogRequest | null>(null);
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading relationships…</p>;
+    return <Ledger>Reading who they know…</Ledger>;
   }
 
   return (
@@ -90,7 +97,7 @@ export function OwnRelationshipsList({ characterSheetId }: OwnRelationshipsListP
       <CompanionBondList relationships={relationships} onWritten={() => refetch()} />
 
       {relationships.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No outbound relationships yet.</p>
+        <Ledger>They have written of knowing nobody yet.</Ledger>
       ) : (
         <Accordion type="multiple">
           {relationships.map((relationship) => (
@@ -183,47 +190,48 @@ function RelationshipRowDetail({ relationshipId }: { relationshipId: number }) {
   const { data: history = [] } = useRelationshipTimeline({ relationship: relationshipId });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h5 className="text-sm font-semibold">Tracks</h5>
+    <Stack wide>
+      <Stack>
+        <Subheading>Tracks</Subheading>
         {detail && detail.track_progress.length > 0 ? (
-          <ul className="mt-1 space-y-1">
+          <Entries>
             {detail.track_progress.map((track) => (
-              <li key={track.track} className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium">{track.track_name}</span>
-                <Badge variant="outline">{track.current_tier_name ?? 'No tier'}</Badge>
-                <span className="text-muted-foreground">
-                  {track.developed_points} developed / {track.capacity} capacity
-                  {track.temporary_points ? ` (+${track.temporary_points} temp)` : ''}
-                </span>
-              </li>
+              <Entry
+                key={track.track}
+                name={track.track_name}
+                tags={<Tag>{track.current_tier_name ?? 'No tier'}</Tag>}
+                gloss={
+                  `${track.developed_points} developed of ${track.capacity}` +
+                  (track.temporary_points ? `, and ${track.temporary_points} on loan.` : '.')
+                }
+              />
             ))}
-          </ul>
+          </Entries>
         ) : (
-          <p className="text-sm text-muted-foreground">No track progress yet.</p>
+          <Ledger>Nothing developed on any track yet.</Ledger>
         )}
-      </div>
+      </Stack>
 
-      <div>
-        <h5 className="text-sm font-semibold">History</h5>
+      <Stack>
+        <Subheading>History</Subheading>
         {history.length > 0 ? (
-          <ul className="mt-1 space-y-2">
+          <Entries>
             {history.map((entry) => (
-              <li key={`${entry.kind}-${entry.id}`} className="text-sm">
-                <Badge variant="secondary" className="mr-2">
-                  {entry.kind}
-                </Badge>
-                <span className="font-medium">{entry.title}</span>
-                <span className="text-muted-foreground">: {entry.track_name}</span>
-                <p className="text-muted-foreground">{entry.writeup}</p>
-              </li>
+              <Entry
+                key={`${entry.kind}-${entry.id}`}
+                name={entry.title}
+                tags={<Tag>{entry.kind}</Tag>}
+                gloss={entry.track_name}
+              >
+                <p className="refsheet-entry-gloss">{entry.writeup}</p>
+              </Entry>
             ))}
-          </ul>
+          </Entries>
         ) : (
-          <p className="text-sm text-muted-foreground">No history yet.</p>
+          <Ledger>Nothing written down yet.</Ledger>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 

@@ -182,6 +182,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     looks: [],
     plate_ink: 'ember',
     worn: [],
+    mentors: [],
     ...overrides,
   };
 }

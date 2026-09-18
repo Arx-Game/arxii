@@ -186,6 +186,7 @@ export function CharacterSheetPage() {
             viewerPersonaId={viewerPersonaId}
             viewedPersonaId={viewedPersonaId}
             titlesPersonaId={titlesPersonaId}
+            mentors={sheet?.mentors ?? []}
           />
         )}
 

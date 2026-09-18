@@ -33,7 +33,7 @@ import { XpLedgerCard } from '@/progression/components/advancement/XpLedgerCard'
 import { useCharacterPurse } from '@/status/queries';
 import { useThreads } from '@/magic/queries';
 import { formatCoppers } from '@/lib/currency';
-import type { CharacterSheetPayload } from '@/character_sheets/api';
+import type { CharacterSheetMentor, CharacterSheetPayload } from '@/character_sheets/api';
 import { Entries, Entry, Heading, Ledger, Stack, Tag } from './primitives';
 
 /**
@@ -49,6 +49,7 @@ export function TiesPanel({
   viewerPersonaId,
   viewedPersonaId,
   titlesPersonaId,
+  mentors,
 }: {
   sheetId: number;
   entryId: number;
@@ -56,6 +57,8 @@ export function TiesPanel({
   viewerPersonaId: number | null;
   viewedPersonaId: number | null;
   titlesPersonaId: number | null;
+  /** Active Mentor's Vow bonds; empty for anyone the payload did not give them to. */
+  mentors: CharacterSheetMentor[];
 }) {
   return (
     <div className="refsheet-columns-2">
@@ -68,6 +71,22 @@ export function TiesPanel({
           <Heading>Kin</Heading>
           <KinshipPanel characterId={sheetId} />
         </Stack>
+        {mentors.length > 0 && (
+          <Stack>
+            <Heading>Mentors</Heading>
+            <Ledger>Vows sworn inside a covenant, one way and the other.</Ledger>
+            <Entries>
+              {mentors.map((bond) => (
+                <Entry
+                  key={bond.id}
+                  name={bond.name}
+                  aside={<span className="refsheet-note">{bond.covenant}</span>}
+                  tags={<Tag accent>{bond.role}</Tag>}
+                />
+              ))}
+            </Entries>
+          </Stack>
+        )}
       </Stack>
       <Stack wide>
         <Stack>

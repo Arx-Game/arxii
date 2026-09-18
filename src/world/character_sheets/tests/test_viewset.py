@@ -7,6 +7,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
@@ -36,6 +37,8 @@ from world.character_sheets.serializers import (
 from world.character_sheets.types import SheetVisibility
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.covenants.factories import CovenantFactory, MentorBondFactory
+from world.covenants.models import MentorBond
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.forms.factories import (
     BuildFactory,
@@ -2115,6 +2118,69 @@ class TestWornSection(TestCase):
         assert response.data["worn"] == []
 
 
+class TestMentorsSection(TestCase):
+    """Ties' Mentors block (#3898): the Mentor's Vow bonds a character holds (#1165).
+
+    Both directions ride one list, each row saying what the OTHER party is. Owner and
+    staff only, matching the covenant roles it sits beside on the same page — a vow is
+    sworn inside a covenant, and publishing it would say more about the covenant than
+    about the character.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="MentorChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.covenant = CovenantFactory(name="The Lantern Vigil")
+        cls.teacher = CharacterSheetFactory(character=CharacterFactory(db_key="Maelis"))
+        cls.student = CharacterSheetFactory(character=CharacterFactory(db_key="Corwin"))
+        MentorBondFactory(
+            covenant=cls.covenant,
+            mentor_sheet=cls.teacher,
+            sidekick_sheet=cls.sheet,
+        )
+        MentorBondFactory(
+            covenant=cls.covenant,
+            mentor_sheet=cls.sheet,
+            sidekick_sheet=cls.student,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _mentors(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["mentors"]
+
+    def test_both_directions_ride_one_list_named_by_role(self) -> None:
+        rows = {row["name"]: row for row in self._mentors(self.player)}
+        assert set(rows) == {"Maelis", "Corwin"}
+        assert rows["Maelis"]["role"] == "Mentor"
+        assert rows["Corwin"]["role"] == "Student"
+        assert rows["Maelis"]["covenant"] == "The Lantern Vigil"
+
+    def test_a_dissolved_vow_is_not_a_bond(self) -> None:
+        MentorBond.objects.filter(sidekick_sheet=self.student).update(dissolved_at=timezone.now())
+        try:
+            assert [row["name"] for row in self._mentors(self.player)] == ["Maelis"]
+        finally:
+            MentorBond.objects.filter(sidekick_sheet=self.student).update(dissolved_at=None)
+
+    def test_a_stranger_is_told_nothing_of_their_vows(self) -> None:
+        assert self._mentors(self.stranger) == []
+
+
 class TestProfilePictureNull(TestCase):
     """Tests for the profile_picture field when no picture is set."""
 
@@ -2383,13 +2449,17 @@ class TestCharacterSheetQueryCount(TestCase):
                block). One query for every piece, with the template and both silhouettes
                selected along with it so the layer walk that decides what shows costs
                nothing further.
+        47-48. mentor bond prefetches, #3898 (#1165's Mentor's Vow, both ways round, for
+               Ties). Two queries because the two directions are two relations on the
+               sheet: 47 is where the character is the sidekick, 48 where they are the
+               mentor. Fixed however many bonds they hold.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
         # Introductions (journal entries by kind).
-        # +4 (#3898): the identity beginnings prefetch, the looks strip and the worn
-        # pieces, per 43-46.
-        with self.assertNumQueries(46):
+        # +6 (#3898): the identity beginnings prefetch, the looks strip, the worn
+        # pieces and both directions of the mentor bond, per 43-48.
+        with self.assertNumQueries(48):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

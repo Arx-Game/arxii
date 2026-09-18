@@ -132,7 +132,7 @@ describe('ReputationTab', () => {
     setHeat([]);
   });
 
-  it('renders Renown, Standing, and Covenants sections for the own view', () => {
+  it('renders Renown, the standing groups and Covenants for the own view', () => {
     setRenown(makeRenown());
     renderWithProviders(
       <ReputationTab
@@ -144,7 +144,10 @@ describe('ReputationTab', () => {
       />
     );
     expect(screen.getByText('Renown')).toBeInTheDocument();
-    expect(screen.getByText('Standing')).toBeInTheDocument();
+    // "Standing" is the section heading the SHEET draws above this panel (#3898); the
+    // panel's own groups name what they hold instead.
+    expect(screen.getByText('Belongs to')).toBeInTheDocument();
+    expect(screen.getByText('Thought of as')).toBeInTheDocument();
     expect(screen.getByText('Covenants')).toBeInTheDocument();
   });
 

@@ -1,80 +1,95 @@
-import { useGossipActionMutation, useGossipQuery } from '../queries';
-
-/** The gossip panel (#1572): work the rumor mill at a social hub — the web face of the telnet
+/**
+ * The gossip panel (#1572): work the rumor mill at a social hub — the web face of the telnet
  * `gossip` command. Lists the Level-1 secrets the active character could spread (with their heat in
  * the current region), and offers seek / spread / quiet. Gossip is per active character and
  * location-bound (you must be at a social hub); the services enforce the Gossip-skill + hub gates
- * and surface a message when they aren't met. `viewerId` is the active RosterEntry pk, or null. */
+ * and surface a message when they aren't met. `viewerId` is the active RosterEntry pk, or null.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): the three verbs are quiet doors under
+ * each rumor rather than bordered buttons, and the rumors are entries on hairlines.
+ */
+
+import { useGossipActionMutation, useGossipQuery } from '../queries';
+import {
+  Entries,
+  Entry,
+  Ledger,
+  QuietDoor,
+  Stack,
+} from '@/character_sheets/components/sheet/primitives';
+
 export function GossipPanel({ viewerId }: { viewerId: number | null }) {
   const { data, isLoading, isError } = useGossipQuery(viewerId);
   const action = useGossipActionMutation();
 
   if (viewerId === null) {
-    return <p className="text-muted-foreground">Select a character to work the rumor mill.</p>;
+    return <Ledger>Choose a character to work the rumor mill.</Ledger>;
   }
-  if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
-  if (isError) return <p className="text-destructive">Failed to load gossip.</p>;
+  if (isLoading) return <Ledger>Listening…</Ledger>;
+  if (isError) {
+    return (
+      <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
+        The rumor mill could not be read.
+      </p>
+    );
+  }
 
   const secrets = data ?? [];
   const overheard = action.isSuccess ? action.data : undefined;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Rumors you could spread at this hub.</p>
-        <button
-          type="button"
+    <Stack>
+      <Ledger>What you could put about, here and now.</Ledger>
+      <div className="refsheet-doors">
+        <QuietDoor
           disabled={action.isPending}
-          className="rounded border px-2 py-1 text-sm hover:bg-accent disabled:opacity-50"
           onClick={() => action.mutate({ action: 'seek', viewer: viewerId })}
         >
           Listen for gossip
-        </button>
+        </QuietDoor>
       </div>
 
       {action.isError && (
-        <p className="text-sm text-destructive">{(action.error as Error).message}</p>
+        <p className="refsheet-note" style={{ color: 'hsl(var(--destructive))' }}>
+          {(action.error as Error).message}
+        </p>
       )}
       {overheard?.content && (
-        <p className="rounded-md border border-dashed p-2 text-sm italic">
-          You overhear a rumor: {overheard.content}
-        </p>
+        <p className="refsheet-soft italic">You overhear: {overheard.content}</p>
       )}
 
       {secrets.length === 0 ? (
-        <p className="text-muted-foreground">You hold no idle gossip worth spreading.</p>
+        <Ledger>You hold no idle gossip worth spreading.</Ledger>
       ) : (
-        secrets.map((secret) => (
-          <div key={secret.id} className="space-y-1 rounded-md border p-3">
-            <p>{secret.content}</p>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Heat here: {secret.heat}</span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
+        <Entries>
+          {secrets.map((secret) => (
+            <Entry
+              key={secret.id}
+              name={secret.content}
+              aside={<span className="refsheet-note">Heat {secret.heat}</span>}
+            >
+              <div className="refsheet-doors">
+                <QuietDoor
                   disabled={action.isPending}
-                  className="rounded border px-2 py-1 text-sm hover:bg-accent disabled:opacity-50"
                   onClick={() =>
                     action.mutate({ action: 'plant', viewer: viewerId, secret: secret.id })
                   }
                 >
                   Spread
-                </button>
-                <button
-                  type="button"
+                </QuietDoor>
+                <QuietDoor
                   disabled={action.isPending}
-                  className="rounded border px-2 py-1 text-sm hover:bg-accent disabled:opacity-50"
                   onClick={() =>
                     action.mutate({ action: 'suppress', viewer: viewerId, secret: secret.id })
                   }
                 >
                   Quiet
-                </button>
+                </QuietDoor>
               </div>
-            </div>
-          </div>
-        ))
+            </Entry>
+          ))}
+        </Entries>
       )}
-    </div>
+    </Stack>
   );
 }

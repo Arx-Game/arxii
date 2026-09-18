@@ -26,6 +26,15 @@ export function Heading({ children }: { children: ReactNode }) {
 }
 
 /**
+ * A heading one step down from `Heading`, for a group inside a section — "Ties" under
+ * Relationships, "Writeups" beside it. The sheet supplies the section's own heading, so
+ * a panel composed into it never draws a second one at the same weight.
+ */
+export function Subheading({ children }: { children: ReactNode }) {
+  return <h3 className="refsheet-subheading">{children}</h3>;
+}
+
+/**
  * A quiet line in the world's bookkeeping voice — counts, states, "none of these".
  * Never a stat badge.
  */
@@ -132,6 +141,26 @@ export function Band({ title, note, defaultOpen = true, children }: BandProps) {
 /** A column of blocks inside a panel. `wide` spaces the blocks further apart. */
 export function Stack({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return <div className={wide ? 'refsheet-stack-wide' : 'refsheet-stack'}>{children}</div>;
+}
+
+/**
+ * A link that leads somewhere without announcing itself as a button. Takes an `onClick`
+ * because most of the sheet's doors move a section rather than a route.
+ */
+export function QuietDoor({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button type="button" className="refsheet-quiet-door" onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  );
 }
 
 /** Prose: description, background, anything written to be read. */

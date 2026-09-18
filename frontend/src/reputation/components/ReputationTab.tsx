@@ -17,16 +17,25 @@
  * unlike the covenant-roles endpoint, which already filters by `character_sheet`. So the
  * membership/reputation rows are filtered client-side to `viewedPersonaId` to avoid
  * leaking a different one of the viewer's own characters' standings onto this sheet.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): subheadings over entries on
+ * hairlines, with the rank or tier as the row's tag. The sheet supplies "Standing"
+ * above all of it, so nothing here draws a heading at that weight.
  */
 
 import { Link } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
-import { TIER_VARIANT, formatTier } from '@/renown/components/ReputationListCard';
+import { formatTier } from '@/renown/components/ReputationListCard';
+import {
+  Entries,
+  Entry,
+  Ledger,
+  Stack,
+  Subheading,
+  Tag,
+} from '@/character_sheets/components/sheet/primitives';
 import { usePersonaHeat } from '@/justice/queries';
 import type { PersonaHeatRow } from '@/justice/api';
 import type { CharacterCovenantRole } from '@/covenants/api';
@@ -97,28 +106,19 @@ function OwnReputationView({
   );
 
   return (
-    <div className="space-y-6">
-      <section aria-labelledby="reputation-tab-renown">
-        <h2 id="reputation-tab-renown" className="mb-3 text-lg font-semibold">
-          Renown
-        </h2>
+    <Stack wide>
+      <Stack>
+        <Subheading>Renown</Subheading>
         <RenownPanel characterSheetId={entryCharacterId} wantedSocietyIds={wantedSocietyIds} />
-      </section>
+      </Stack>
 
-      <section aria-labelledby="reputation-tab-standing">
-        <h2 id="reputation-tab-standing" className="mb-3 text-lg font-semibold">
-          Standing
-        </h2>
-        <OrganizationStandingCard viewedPersonaId={viewedPersonaId} />
-      </section>
+      <OrganizationStandingBlock viewedPersonaId={viewedPersonaId} />
 
-      <section aria-labelledby="reputation-tab-covenants">
-        <h2 id="reputation-tab-covenants" className="mb-3 text-lg font-semibold">
-          Covenants
-        </h2>
-        <CovenantsCard characterSheetId={entryCharacterId} />
-      </section>
-    </div>
+      <Stack>
+        <Subheading>Covenants</Subheading>
+        <CovenantRoles characterSheetId={entryCharacterId} />
+      </Stack>
+    </Stack>
   );
 }
 
@@ -126,7 +126,7 @@ function OwnReputationView({
 // Standing — org memberships/reputation, scoped to the viewed character's persona.
 // ---------------------------------------------------------------------------
 
-function OrganizationStandingCard({ viewedPersonaId }: { viewedPersonaId: number | null }) {
+function OrganizationStandingBlock({ viewedPersonaId }: { viewedPersonaId: number | null }) {
   const { data: memberships, isLoading: membershipsLoading } =
     useOrganizationMembershipsQuery(true);
   const { data: reputations, isLoading: reputationsLoading } =
@@ -138,66 +138,49 @@ function OrganizationStandingCard({ viewedPersonaId }: { viewedPersonaId: number
   );
   const scopedReputations = (reputations ?? []).filter((r) => r.persona === viewedPersonaId);
 
+  if (isLoading) {
+    return <Ledger>Reading where they stand…</Ledger>;
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Organizations</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
+    <Stack wide>
+      <Stack>
+        <Subheading>Belongs to</Subheading>
+        {activeMemberships.length === 0 ? (
+          <Ledger>They belong to nobody.</Ledger>
         ) : (
-          <>
-            <div>
-              <h3 className="mb-2 text-sm font-medium text-muted-foreground">Memberships</h3>
-              {activeMemberships.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No active organization memberships.</p>
-              ) : (
-                <ul className="space-y-2 text-sm">
-                  {activeMemberships.map((membership) => (
-                    <li key={membership.id} className="flex items-center justify-between">
-                      <Link
-                        to={`/orgs/${membership.organization}`}
-                        className="font-medium hover:underline"
-                      >
-                        {membership.organization_name}
-                      </Link>
-                      <Badge variant="outline">{membership.title}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div>
-              <h3 className="mb-2 text-sm font-medium text-muted-foreground">Reputation</h3>
-              {scopedReputations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No organizations have a recorded opinion yet.
-                </p>
-              ) : (
-                <ul className="space-y-2 text-sm">
-                  {scopedReputations.map((rep) => (
-                    <li key={rep.id} className="flex items-center justify-between">
-                      <Link
-                        to={`/orgs/${rep.organization}`}
-                        className="font-medium hover:underline"
-                      >
-                        {rep.organization_name}
-                      </Link>
-                      <Badge variant={TIER_VARIANT[rep.tier] ?? 'outline'}>
-                        {formatTier(rep.tier)}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </>
+          <Entries>
+            {activeMemberships.map((membership) => (
+              <Entry
+                key={membership.id}
+                name={
+                  <Link to={`/orgs/${membership.organization}`}>
+                    {membership.organization_name}
+                  </Link>
+                }
+                aside={<span className="refsheet-note">{membership.title}</span>}
+              />
+            ))}
+          </Entries>
         )}
-      </CardContent>
-    </Card>
+      </Stack>
+      <Stack>
+        <Subheading>Thought of as</Subheading>
+        {scopedReputations.length === 0 ? (
+          <Ledger>No organization has an opinion of them yet.</Ledger>
+        ) : (
+          <Entries>
+            {scopedReputations.map((rep) => (
+              <Entry
+                key={rep.id}
+                name={<Link to={`/orgs/${rep.organization}`}>{rep.organization_name}</Link>}
+                tags={<Tag accent>{formatTier(rep.tier)}</Tag>}
+              />
+            ))}
+          </Entries>
+        )}
+      </Stack>
+    </Stack>
   );
 }
 
@@ -205,41 +188,26 @@ function OrganizationStandingCard({ viewedPersonaId }: { viewedPersonaId: number
 // Covenants — active covenant role assignments for this character sheet.
 // ---------------------------------------------------------------------------
 
-function CovenantsCard({ characterSheetId }: { characterSheetId: number }) {
+function CovenantRoles({ characterSheetId }: { characterSheetId: number }) {
   const { data: roles, isLoading } = useCovenantRolesQuery(characterSheetId);
   const activeRoles = (roles ?? []).filter((r: CharacterCovenantRole) => r.is_active);
 
-  const renderActiveRoles = () => {
-    if (isLoading) {
-      return (
-        <div className="flex justify-center py-4">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      );
-    }
-    if (activeRoles.length === 0) {
-      return <p className="text-sm text-muted-foreground">No active covenant roles.</p>;
-    }
-    return (
-      <ul className="space-y-2 text-sm">
-        {activeRoles.map((role) => (
-          <li key={role.id} className="flex items-center justify-between">
-            <Link to={`/covenants/${role.covenant}`} className="font-medium hover:underline">
-              {role.covenant_role.name}
-            </Link>
-            <div className="flex items-center gap-2">
-              {role.engaged && <Badge variant="default">Engaged</Badge>}
-              <Badge variant="outline">{role.rank.name}</Badge>
-            </div>
-          </li>
-        ))}
-      </ul>
-    );
-  };
-
+  if (isLoading) {
+    return <Ledger>Reading their covenants…</Ledger>;
+  }
+  if (activeRoles.length === 0) {
+    return <Ledger>They hold no covenant role.</Ledger>;
+  }
   return (
-    <Card>
-      <CardContent className="py-4">{renderActiveRoles()}</CardContent>
-    </Card>
+    <Entries>
+      {activeRoles.map((role) => (
+        <Entry
+          key={role.id}
+          name={<Link to={`/covenants/${role.covenant}`}>{role.covenant_role.name}</Link>}
+          aside={<span className="refsheet-note">{role.rank.name}</span>}
+          tags={role.engaged ? <Tag accent>Engaged</Tag> : undefined}
+        />
+      ))}
+    </Entries>
   );
 }

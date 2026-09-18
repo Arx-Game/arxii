@@ -244,12 +244,10 @@ describe('SpellbookTab', () => {
     mockGlimpseQueries();
   });
 
-  it('shows a spinner while loading', () => {
+  it('says it is reading while loading', () => {
     mockPayload(undefined, { isLoading: true });
-    const { container } = renderWithProviders(
-      <SpellbookTab characterId={1} isMyCharacter={false} />
-    );
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.getByText('Reading their spellbook…')).toBeInTheDocument();
   });
 
   it('shows the muted empty line when magic is null', () => {
@@ -286,8 +284,8 @@ describe('SpellbookTab', () => {
     const balances = within(card).getAllByTestId('resonance-balance');
     expect(balances).toHaveLength(2);
     expect(within(card).getByText('Ember')).toBeInTheDocument();
-    expect(within(card).getByText('4')).toBeInTheDocument();
-    expect(within(card).getByText('12 lifetime')).toBeInTheDocument();
+    // One sentence per resonance rather than a number tile beside a caption (#3898).
+    expect(within(card).getByText('4 of 12 ever earned')).toBeInTheDocument();
   });
 
   it('omits the resonances card when there are no claimed resonances', () => {
@@ -311,17 +309,16 @@ describe('SpellbookTab', () => {
     expect(screen.queryByTestId('motif-style-panel')).not.toBeInTheDocument();
   });
 
-  it('renders workbench links for the own view', () => {
+  it('draws no workbench nav of its own, even for the owner (#3898)', () => {
+    // The four links this used to end with belonged to a standalone tab. Inside the
+    // Reference Sheet they sat under the section row and read as a second navigation
+    // bar, so the sheet's own row is the only way out of Magic now.
     mockPayload(makeMagic());
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={true} />);
 
-    expect(screen.getByRole('link', { name: /progression/i })).toHaveAttribute(
-      'href',
-      '/magic/progression'
-    );
-    expect(screen.getByRole('link', { name: /threads/i })).toHaveAttribute('href', '/threads');
-    expect(screen.getByRole('link', { name: /sanctums/i })).toHaveAttribute('href', '/sanctums');
-    expect(screen.getByRole('link', { name: /rituals/i })).toHaveAttribute('href', '/rituals');
+    expect(screen.queryByRole('link', { name: /progression/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /sanctums/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /rituals/i })).not.toBeInTheDocument();
   });
 
   it('mounts the style-binding panel for the own view', () => {

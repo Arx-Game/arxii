@@ -370,6 +370,30 @@
   color: hsl(var(--muted-foreground));
   font-size: 1rem;
 }
+/*
+ * A plateau: a framed area for something drawn rather than written — a kin graph, a
+ * map. The only place the sheet draws a box, because a drawing needs an edge.
+ */
+.refsheet-plateau {
+  border: 1px solid hsl(var(--border));
+  overflow-x: auto;
+  padding: 1rem;
+}
+.refsheet-doors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  margin-top: 0.4rem;
+}
+.refsheet-subheading {
+  font-family: var(--sheet-caps);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: hsl(var(--foreground));
+  margin: 0;
+  text-transform: none;
+}
 .refsheet-note {
   color: hsl(var(--muted-foreground));
   font-size: 0.875rem;

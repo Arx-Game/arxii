@@ -377,6 +377,20 @@ export interface CharacterSheetPayload {
   plate_ink: PlateInk;
   /** #3898 — what the character has on, as the layer walk says anyone would see it. */
   worn: CharacterSheetWorn[];
+  /** #3898 — active Mentor's Vow bonds. Empty for anyone but the owner and staff. */
+  mentors: CharacterSheetMentor[];
+}
+
+/**
+ * Mirrors `world.character_sheets.types.MentorBondEntry` (#3898) — one active Mentor's
+ * Vow bond. `role` says what the OTHER party is to this character: their Mentor, or
+ * their Student.
+ */
+export interface CharacterSheetMentor {
+  id: number;
+  name: string;
+  role: string;
+  covenant: string;
 }
 
 /**

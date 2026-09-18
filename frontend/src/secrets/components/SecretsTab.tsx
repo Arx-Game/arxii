@@ -1,48 +1,50 @@
+/**
+ * SecretsTab — the secrets the active viewing character knows about this person.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): an entry per secret, its level as
+ * the tag and its teller pulled right, with the partial-knowledge layers as a glance
+ * list underneath. A layer the viewer has not unlocked reads "Unknown" in the muted
+ * voice, which is the point — the gap is deliberate, not missing data.
+ */
+
 import { useKnownSecretsQuery } from '../queries';
 import type { KnownSecret } from '../types';
+import {
+  Entries,
+  Entry,
+  Glance,
+  Ledger,
+  Tag,
+} from '@/character_sheets/components/sheet/primitives';
+import type { GlanceRow } from '@/character_sheets/components/sheet/primitives';
 
 import { GrievancePrompt } from './GrievancePrompt';
 
 const UNKNOWN = 'Unknown';
 
-/** One partial-knowledge layer. The backend renders unlocked/unplaced layers as "Unknown"; we
- * style that muted so it reads as a deliberate gap, not missing data. */
-function Layer({ label, value }: { label: string; value: string }) {
-  const isUnknown = value === UNKNOWN;
-  return (
-    <div className="text-sm">
-      <span className="font-medium">{label}: </span>
-      <span className={isUnknown ? 'italic text-muted-foreground' : ''}>{value}</span>
-    </div>
-  );
+/** A layer's value, italicised when it is a gap the viewer has not closed. */
+function layerValue(value: string) {
+  return value === UNKNOWN ? <em className="refsheet-soft">{value}</em> : value;
 }
 
-function SecretCard({ secret, viewerId }: { secret: KnownSecret; viewerId: number }) {
+function SecretEntry({ secret, viewerId }: { secret: KnownSecret; viewerId: number }) {
+  const rows: GlanceRow[] = [
+    { label: 'Category', value: layerValue(secret.category) },
+    { label: 'Consequences', value: layerValue(secret.consequences) },
+    {
+      label: 'The truth behind',
+      value: secret.anchored_to.map((anchor) => anchor.label).join(', '),
+    },
+  ];
   return (
-    <div className="space-y-1 rounded-md border p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {secret.level}
-        </span>
-        <span className="text-xs text-muted-foreground">{secret.author}</span>
-      </div>
-      <p>{secret.content}</p>
-      <Layer label="Category" value={secret.category} />
-      <Layer label="Consequences" value={secret.consequences} />
-      {secret.anchored_to.length > 0 && (
-        <div className="text-sm">
-          <span className="font-medium">The truth behind: </span>
-          <span className="text-muted-foreground">
-            {secret.anchored_to.map((anchor) => anchor.label).join(', ')}
-          </span>
-        </div>
-      )}
-      {secret.can_grieve && (
-        <div className="pt-1">
-          <GrievancePrompt secretId={secret.id} viewerId={viewerId} />
-        </div>
-      )}
-    </div>
+    <Entry
+      name={secret.content}
+      aside={<span className="refsheet-note">{secret.author}</span>}
+      tags={<Tag>{secret.level}</Tag>}
+    >
+      <Glance rows={rows} />
+      {secret.can_grieve && <GrievancePrompt secretId={secret.id} viewerId={viewerId} />}
+    </Entry>
   );
 }
 
@@ -59,23 +61,27 @@ export function SecretsTab({
   const { data, isLoading, isError } = useKnownSecretsQuery(subjectId, viewerId);
 
   if (viewerId === null) {
+    return <Ledger>Choose a character to see the secrets they keep about this one.</Ledger>;
+  }
+  if (isLoading) return <Ledger>Reading what you know…</Ledger>;
+  if (isError) {
     return (
-      <p className="text-muted-foreground">Select a character to see the secrets they know.</p>
+      <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
+        Those secrets could not be read.
+      </p>
     );
   }
-  if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
-  if (isError) return <p className="text-destructive">Failed to load secrets.</p>;
 
   const secrets = data?.results ?? [];
   if (secrets.length === 0) {
-    return <p className="text-muted-foreground">You know no secrets about this person.</p>;
+    return <Ledger>You know nothing of theirs.</Ledger>;
   }
 
   return (
-    <div className="space-y-3">
+    <Entries>
       {secrets.map((secret) => (
-        <SecretCard key={secret.id} secret={secret} viewerId={viewerId} />
+        <SecretEntry key={secret.id} secret={secret} viewerId={viewerId} />
       ))}
-    </div>
+    </Entries>
   );
 }

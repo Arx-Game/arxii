@@ -39,14 +39,14 @@ describe('GossipPanel', () => {
   it('prompts to pick a character when none is active', () => {
     mockRows([]);
     render(<GossipPanel viewerId={null} />);
-    expect(screen.getByText(/select a character/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose a character to work the rumor mill/i)).toBeInTheDocument();
   });
 
   it('lists spreadable gossip with its heat', () => {
     mockRows([{ id: 7, content: 'A juicy rumor.', heat: 3 }]);
     render(<GossipPanel viewerId={42} />);
     expect(screen.getByText('A juicy rumor.')).toBeInTheDocument();
-    expect(screen.getByText(/heat here: 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/heat 3/i)).toBeInTheDocument();
   });
 
   it('dispatches a plant when Spread is clicked', () => {

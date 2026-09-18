@@ -105,16 +105,25 @@ describe('SoulTetherStatusPanel', () => {
     );
   });
 
-  it('renders empty state when relationshipIds is empty', () => {
-    render(<SoulTetherStatusPanel relationshipIds={[]} />, { wrapper: createWrapper() });
+  it('renders nothing at all when there are no tethers (#3898)', () => {
+    // Render-or-vanish: the card whose whole body was "No active soul tethers." took a
+    // reader's attention to tell them nothing, so a character with no tether has no
+    // tether block.
+    const { container } = render(<SoulTetherStatusPanel relationshipIds={[]} />, {
+      wrapper: createWrapper(),
+    });
 
-    expect(screen.getByText('No active soul tethers.')).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/soul tether/i)).not.toBeInTheDocument();
   });
 
-  it('renders a card with "Soul Tethers" header', () => {
-    render(<SoulTetherStatusPanel relationshipIds={[]} />, { wrapper: createWrapper() });
+  it('heads the block once it has a tether to show', () => {
+    const detail = makeTetherDetail({ sinner_sheet_id: 10, sineater_sheet_id: 20 });
+    vi.mocked(magicQueries.useSoulTetherDetail).mockReturnValue(makeQueryResult({ data: detail }));
 
-    expect(screen.getByText('Soul Tethers')).toBeInTheDocument();
+    render(<SoulTetherStatusPanel relationshipIds={[1]} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText('Soul tethers')).toBeInTheDocument();
   });
 
   it('renders one row per relationshipId', () => {
@@ -320,6 +329,6 @@ describe('SoulTetherStatusPanel', () => {
 
     render(<SoulTetherStatusPanel relationshipIds={[1]} />, { wrapper: createWrapper() });
 
-    expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
+    expect(screen.getByText(/could not be read/i)).toBeInTheDocument();
   });
 });

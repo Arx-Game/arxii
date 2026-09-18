@@ -13,16 +13,26 @@
  * Aura is rendered qualitatively per the magic app's key rule ("player-facing data is
  * narrative, not numerical") — the glimpse_story plus a dominant-affinity label, never the
  * raw celestial/primal/abyssal percentages.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): gifts and techniques are entries on
+ * hairlines, resonances are a glance list, and the aura is prose under its own
+ * subheading. The four workbench links this used to end with are gone: they belonged to
+ * a standalone tab with nowhere else to go, and on the sheet they read as a second
+ * navigation bar under the section row.
  */
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
+import {
+  Entries,
+  Entry,
+  Ledger,
+  Prose,
+  Stack,
+  Subheading,
+  Tag,
+} from '@/character_sheets/components/sheet/primitives';
 import type { CharacterSheetAura, CharacterSheetTechnique } from '@/character_sheets/api';
 import type { TechniqueForm } from '@/magic/types';
 import { MotifStylePanel } from './MotifStylePanel';
@@ -69,11 +79,7 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
             <div key={form.variant_id ?? 'base'} data-testid="technique-form">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm">{label(form)}</span>
-                {form.is_default && (
-                  <Badge variant="secondary" className="text-xs">
-                    default
-                  </Badge>
-                )}
+                {form.is_default && <Tag>default</Tag>}
                 <span className="text-xs text-muted-foreground">
                   intensity {form.intensity}, control {form.control}
                 </span>
@@ -141,123 +147,106 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
   const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <Ledger>Reading their spellbook…</Ledger>;
   }
 
   const magic = payload?.magic ?? null;
 
   return (
-    <div className="space-y-4">
+    <Stack wide>
       {magic === null && (
-        <p className="py-8 text-center text-muted-foreground" data-testid="spellbook-empty-state">
+        <p className="refsheet-ledger" data-testid="spellbook-empty-state">
           Nothing is known of their magic.
         </p>
       )}
 
       {magic && magic.gifts.length > 0 && (
-        <div className="space-y-2" data-testid="spellbook-gifts">
-          <h3 className="text-lg font-semibold">Gifts</h3>
+        <div className="refsheet-stack" data-testid="spellbook-gifts">
           {magic.gifts.map((gift) => (
-            <Card key={gift.name} data-testid="spellbook-gift">
-              <CardHeader>
-                <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
-                  <span>{gift.name}</span>
-                  <div className="flex flex-wrap gap-1">
-                    {gift.resonances.map((resonance) => (
-                      <Badge key={resonance} variant="outline">
-                        {resonance}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {gift.description && (
-                  <p className="text-sm text-muted-foreground">{gift.description}</p>
-                )}
+            <Stack key={gift.name} data-testid="spellbook-gift">
+              <Subheading>{gift.name}</Subheading>
+              {gift.resonances.length > 0 && (
+                <div className="refsheet-tags">
+                  {gift.resonances.map((resonance) => (
+                    <Tag key={resonance}>{resonance}</Tag>
+                  ))}
+                </div>
+              )}
+              {gift.description && (
+                <Prose>
+                  <p>{gift.description}</p>
+                </Prose>
+              )}
+              <Entries>
                 {gift.techniques.map((technique) => (
-                  <div
-                    key={technique.name}
-                    className="rounded-md border p-3"
-                    data-testid="spellbook-technique"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{technique.name}</span>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{technique.style}</Badge>
-                        <Badge variant="outline">{`Level ${technique.level}`}</Badge>
-                      </div>
-                    </div>
-                    {technique.description && (
-                      <p className="text-sm text-muted-foreground">{technique.description}</p>
-                    )}
-                    <TechniqueEffectSummaryDisplay
-                      summary={technique.effect_summary}
-                      variant="full"
-                      className="mt-1"
-                    />
-                    <TechniqueForms technique={technique} />
+                  <div key={technique.name} data-testid="spellbook-technique">
+                    <Entry
+                      name={technique.name}
+                      aside={<span className="refsheet-note">{`Level ${technique.level}`}</span>}
+                      tags={<Tag>{technique.style}</Tag>}
+                      gloss={technique.description || undefined}
+                    >
+                      <TechniqueEffectSummaryDisplay
+                        summary={technique.effect_summary}
+                        variant="full"
+                      />
+                      <TechniqueForms technique={technique} />
+                    </Entry>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
+              </Entries>
+            </Stack>
           ))}
         </div>
       )}
 
       {magic && magic.resonances.length > 0 && (
-        <Card data-testid="spellbook-resonances">
-          <CardHeader>
-            <CardTitle className="text-base">Resonances</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-              {magic.resonances.map((resonance) => (
-                <div key={resonance.name} data-testid="resonance-balance">
-                  <dt className="text-sm text-muted-foreground">{resonance.name}</dt>
-                  <dd className="flex items-baseline gap-2">
-                    <span className="text-lg font-semibold tabular-nums">{resonance.balance}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {resonance.lifetime_earned} lifetime
-                    </span>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </CardContent>
-        </Card>
+        <div className="refsheet-stack" data-testid="spellbook-resonances">
+          <Subheading>Resonances</Subheading>
+          <dl className="refsheet-glance">
+            {magic.resonances.map((resonance) => (
+              <div
+                key={resonance.name}
+                style={{ display: 'contents' }}
+                data-testid="resonance-balance"
+              >
+                <dt>{resonance.name}</dt>
+                <dd>{`${resonance.balance} of ${resonance.lifetime_earned} ever earned`}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
 
       {magic?.motif && (
-        <Card data-testid="spellbook-motif">
-          <CardHeader>
-            <CardTitle className="text-base">Motif</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {magic.motif.description && (
-              <p className="text-sm text-muted-foreground">{magic.motif.description}</p>
-            )}
+        <div className="refsheet-stack" data-testid="spellbook-motif">
+          <Subheading>Motif</Subheading>
+          {magic.motif.description && (
+            <Prose>
+              <p>{magic.motif.description}</p>
+            </Prose>
+          )}
+          <Entries>
             {magic.motif.resonances.map((resonance) => (
-              <div key={resonance.name} className="flex flex-wrap items-center gap-1">
-                <Badge variant="outline">{resonance.name}</Badge>
-                {resonance.facets.map((facet) => (
-                  <Badge key={facet} variant="secondary">
-                    {facet}
-                  </Badge>
-                ))}
-                {resonance.styles.map((style) => (
-                  <Badge key={style} variant="default" data-testid="motif-resonance-style">
-                    {style}
-                  </Badge>
-                ))}
-              </div>
+              <Entry
+                key={resonance.name}
+                name={resonance.name}
+                tags={
+                  <>
+                    {resonance.facets.map((facet) => (
+                      <Tag key={facet}>{facet}</Tag>
+                    ))}
+                    {resonance.styles.map((style) => (
+                      <span key={style} data-testid="motif-resonance-style">
+                        <Tag accent>{style}</Tag>
+                      </span>
+                    ))}
+                  </>
+                }
+              />
             ))}
-          </CardContent>
-        </Card>
+          </Entries>
+        </div>
       )}
 
       {isMyCharacter && magic && <MotifStylePanel characterSheetId={characterId} />}
@@ -265,46 +254,39 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
       {isMyCharacter && magic && <TechniqueProgressPanel characterSheetId={characterId} />}
 
       {magic?.aura && (
-        <Card data-testid="spellbook-aura">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <span>Aura</span>
-              <Badge variant="outline">{dominantAffinityLabel(magic.aura)}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {magic.aura.glimpse_tags.length > 0 && (
-              <div className="flex flex-wrap gap-1" data-testid="spellbook-glimpse-tags">
-                {magic.aura.glimpse_tags.map((tag) => (
-                  <Badge key={tag.id} variant="secondary">
-                    {tag.name}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            {magic.aura.glimpse_story && (
-              <p className="text-sm text-muted-foreground">{magic.aura.glimpse_story}</p>
-            )}
-            {isMyCharacter && magic.aura.can_finish_glimpse && (
-              <div className="space-y-2 pt-1">
-                {magic.aura.glimpse_state === 'TAGS_ONLY' && (
-                  <p className="text-sm text-muted-foreground">
-                    You&rsquo;ve chosen the shape of it; write the story when ready.
-                  </p>
-                )}
-                <Button
+        <div className="refsheet-stack" data-testid="spellbook-aura">
+          <Subheading>Aura</Subheading>
+          <Ledger>It reads as {dominantAffinityLabel(magic.aura).toLowerCase()}.</Ledger>
+          {magic.aura.glimpse_tags.length > 0 && (
+            <div className="refsheet-tags" data-testid="spellbook-glimpse-tags">
+              {magic.aura.glimpse_tags.map((tag) => (
+                <Tag key={tag.id}>{tag.name}</Tag>
+              ))}
+            </div>
+          )}
+          {magic.aura.glimpse_story && (
+            <Prose>
+              <p>{magic.aura.glimpse_story}</p>
+            </Prose>
+          )}
+          {isMyCharacter && magic.aura.can_finish_glimpse && (
+            <Stack>
+              {magic.aura.glimpse_state === 'TAGS_ONLY' && (
+                <Ledger>You have chosen the shape of it; write the story when ready.</Ledger>
+              )}
+              <div className="refsheet-doors">
+                <button
                   type="button"
-                  size="sm"
-                  variant="outline"
+                  className="refsheet-quiet-door"
                   onClick={() => setGlimpseDialogOpen(true)}
                   data-testid="finish-glimpse-button"
                 >
                   Finish your Glimpse
-                </Button>
+                </button>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </Stack>
+          )}
+        </div>
       )}
 
       {isMyCharacter && magic?.aura && (
@@ -316,23 +298,6 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
           distinctions={payload?.distinctions ?? []}
         />
       )}
-
-      {isMyCharacter && (
-        <div className="flex flex-wrap gap-4 border-t pt-4 text-sm text-muted-foreground">
-          <Link to="/magic/progression" className="hover:underline">
-            Progression
-          </Link>
-          <Link to="/threads" className="hover:underline">
-            Threads
-          </Link>
-          <Link to="/sanctums" className="hover:underline">
-            Sanctums
-          </Link>
-          <Link to="/rituals" className="hover:underline">
-            Rituals
-          </Link>
-        </div>
-      )}
-    </div>
+    </Stack>
   );
 }

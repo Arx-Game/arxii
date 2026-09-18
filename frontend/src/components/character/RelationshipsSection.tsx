@@ -9,6 +9,10 @@
  *    list (tracks/tiers/history); a foreign sheet gets the visibility-scoped timeline.
  *    Replaces the old free-text `CharacterData.relationships` Notes subsection, which
  *    no longer renders.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): entries on hairlines, not cards,
+ * and NO heading of its own — the sheet draws "Relationships" above this, and a second
+ * one here read as a duplicate.
  */
 
 import { useState } from 'react';
@@ -18,6 +22,13 @@ import { useMyTetherBonds } from '@/magic/queries';
 import { useGiveWriteupKudos, useMyWriteups } from '@/relationships/queries';
 import { RelationshipPanel } from '@/relationships/components/RelationshipPanel';
 import { WriteupComplaintDialog } from '@/relationships/components/WriteupComplaintDialog';
+import {
+  Entries,
+  Entry,
+  QuietDoor,
+  Stack,
+  Subheading,
+} from '@/character_sheets/components/sheet/primitives';
 
 interface RelationshipsSectionProps {
   /** The CharacterSheet PK for the viewed character. Passed to SoulTetherStatusPanel. */
@@ -75,66 +86,57 @@ export function RelationshipsSection({
   };
 
   return (
-    <section>
-      <h3 className="text-xl font-semibold">Relationships</h3>
+    <Stack wide>
+      <SoulTetherStatusPanel
+        relationshipIds={relationshipIds}
+        callerSheetId={characterSheetId}
+        bondedCharacterNames={bondedCharacterNames}
+      />
 
-      <div className="mt-4 space-y-6">
-        {/* Sub-section: Soul Tether bonds */}
-        <SoulTetherStatusPanel
-          relationshipIds={relationshipIds}
-          callerSheetId={characterSheetId}
-          bondedCharacterNames={bondedCharacterNames}
-        />
-
-        {/* Sub-section: Writeups (only shown when writeups exist) */}
-        {writeups.length > 0 && (
-          <div>
-            <h4 className="text-lg font-medium">Writeups</h4>
-            {kudosError && (
-              <p role="alert" className="text-sm text-destructive">
-                {kudosError}
-              </p>
-            )}
-            <ul className="space-y-4">
-              {writeups.map((writeup) => (
-                <li key={writeup.id} className="border-b pb-3">
-                  <p className="font-medium">{writeup.title}</p>
-                  <p className="text-sm text-muted-foreground">By {writeup.author_name}</p>
-                  <p className="mt-1">{writeup.writeup}</p>
-                  <div className="mt-2 flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">
-                      {writeup.kudos_count} kudos
-                    </span>
-                    {!writeup.viewer_has_kudosed && (
-                      <button
-                        type="button"
-                        onClick={() => handleCommend(writeup.id)}
-                        disabled={giveKudos.isPending}
-                      >
-                        Commend
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setComplaintTarget({ writeupId: writeup.id, title: writeup.title })
-                      }
+      {writeups.length > 0 && (
+        <Stack>
+          <Subheading>Writeups</Subheading>
+          {kudosError && (
+            <p role="alert" className="refsheet-note" style={{ color: 'hsl(var(--destructive))' }}>
+              {kudosError}
+            </p>
+          )}
+          <Entries>
+            {writeups.map((writeup) => (
+              <Entry
+                key={writeup.id}
+                name={writeup.title}
+                aside={<span className="refsheet-note">{writeup.kudos_count} kudos</span>}
+                gloss={`By ${writeup.author_name}`}
+              >
+                <p className="refsheet-entry-gloss">{writeup.writeup}</p>
+                <div className="refsheet-doors">
+                  {!writeup.viewer_has_kudosed && (
+                    <QuietDoor
+                      onClick={() => handleCommend(writeup.id)}
+                      disabled={giveKudos.isPending}
                     >
-                      Report
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+                      Commend
+                    </QuietDoor>
+                  )}
+                  <QuietDoor
+                    onClick={() =>
+                      setComplaintTarget({ writeupId: writeup.id, title: writeup.title })
+                    }
+                  >
+                    Report
+                  </QuietDoor>
+                </div>
+              </Entry>
+            ))}
+          </Entries>
+        </Stack>
+      )}
 
-        {/* Sub-section: Ties (#2159) — real relationship state, replacing free-text Notes */}
-        <div>
-          <h4 className="text-lg font-medium">Ties</h4>
-          <RelationshipPanel characterSheetId={characterSheetId} isMyCharacter={isMyCharacter} />
-        </div>
-      </div>
+      <Stack>
+        <Subheading>Ties</Subheading>
+        <RelationshipPanel characterSheetId={characterSheetId} isMyCharacter={isMyCharacter} />
+      </Stack>
 
       {complaintTarget && (
         <WriteupComplaintDialog
@@ -147,6 +149,6 @@ export function RelationshipsSection({
           writeupTitle={complaintTarget.title}
         />
       )}
-    </section>
+    </Stack>
   );
 }

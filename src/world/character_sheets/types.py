@@ -387,6 +387,20 @@ class LookEntry(TypedDict):
     is_current: bool
 
 
+class MentorBondEntry(TypedDict):
+    """One active Mentor's Vow bond this character holds (#1165), for Ties (#3898).
+
+    ``role`` is what the OTHER party is to this character: the mentor who took them on,
+    or the student they took on. The covenant is named because the vow is sworn inside
+    one, and a character may hold bonds in more than one.
+    """
+
+    id: int
+    name: str
+    role: str
+    covenant: str
+
+
 class WornEntry(TypedDict):
     """One piece the character has on, for the sheet's Physical section (#3898).
 
