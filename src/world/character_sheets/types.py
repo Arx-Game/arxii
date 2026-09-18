@@ -361,6 +361,25 @@ class ThemingSection(TypedDict):
     aura: AuraThemingData | None
 
 
+class LookEntry(TypedDict):
+    """One image of the character, tagged with the mood it shows (#3898).
+
+    The sheet's plate shows the look the character currently wears and offers the
+    rest as a strip beside it. ``tenure_media_id`` is the id
+    ``POST /api/roster/entries/{pk}/set_profile_picture/`` takes, so the owner can
+    make any look the worn one from the sheet itself; ``look`` is the
+    ``MoodOption`` name the image was tagged with, blank for an untagged image.
+    ``is_current`` marks the roster entry's profile picture — exactly one entry
+    carries it when a profile picture is set, none when it is not.
+    """
+
+    tenure_media_id: int
+    url: str
+    title: str
+    look: str
+    is_current: bool
+
+
 class ProfileTextField(models.TextChoices):
     """Profile prose fields covered by table update requests + version history (#2631).
 
@@ -423,6 +442,25 @@ class PosthumousJournalDisposition(models.TextChoices):
 
     REVEAL = "reveal", "Reveal after death (default)"
     SEAL = "seal", "Seal forever"
+
+
+class PlateInk(models.TextChoices):
+    """The ground colour a character's sheet plate is printed in (#3898).
+
+    The sheet reads as the reference sheet an artist makes for a character, and the
+    plate behind the art is the one thing about it the player chooses. Four inks
+    only: a wide palette would make the roster read as a set of unrelated pages,
+    and the page below the plate stays on Arx paper whichever is picked (the CG
+    ruling of 2026-09-03 — a realm is an ink, never a different page).
+
+    Picked in account settings rather than on the sheet: the sheet describes the
+    character, and its own chrome is never one of the character's fields.
+    """
+
+    EMBER = "ember", "Ember"
+    VERDIGRIS = "verdigris", "Verdigris"
+    ROSE = "rose", "Rose"
+    NIGHT = "night", "Night"
 
 
 class MaritalStatus(models.TextChoices):

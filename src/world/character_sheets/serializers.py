@@ -42,6 +42,7 @@ from world.character_sheets.types import (
     IdentitySection,
     IdNameRef,
     IntroductionEntry,
+    LookEntry,
     MagicSection,
     MotifResonanceEntry,
     MotifSection,
@@ -89,7 +90,7 @@ from world.magic.services.technique_forms import (
     technique_signature_payload,
 )
 from world.progression.models import CharacterPathHistory
-from world.roster.models import RosterTenure
+from world.roster.models import RosterTenure, TenureMedia
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
@@ -1348,6 +1349,62 @@ _PROFILE_PICTURE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 _CURRENT_RESIDENCE_SELECT_RELATED: tuple[str, ...] = ("current_residence__objectdb",)
 _CURRENT_RESIDENCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
+_LOOKS_SELECT_RELATED: tuple[str, ...] = ()
+# No ``to_attr`` here (ADR-0278): the rows hang off the prefetch cache on the default
+# related manager, so ``tenure.media.all()`` reads them without a second query and
+# without a parallel attribute on an idmapper-shared parent.
+_LOOKS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "roster_entry__tenures__media",
+        queryset=TenureMedia.objects.select_related("media", "gallery", "look").order_by(
+            "sort_order", "-media__uploaded_date"
+        ),
+    ),
+)
+
+
+def _build_looks(sheet: CharacterSheet, *, privileged: bool) -> list[LookEntry]:
+    """Build the looks strip: the character's images, tagged with the mood each shows.
+
+    Visibility. The owner and staff get every image on the character's tenures. Every
+    other viewer gets only what is already public of them: images in a gallery marked
+    ``is_public``, plus the profile picture itself (which the roster has always shown
+    to everyone). A private gallery shared with named tenures via
+    ``TenureGallery.allowed_viewers`` is honoured on the gallery pages and deliberately
+    NOT here — the plate is the character's public face, so this strip under-shows for
+    an allow-listed viewer rather than risking a private image on a page anyone can open.
+
+    Ordering puts the worn look first so the strip reads as "this one, and the others",
+    then follows the gallery's own ``sort_order``. An untagged image carries an empty
+    ``look`` and still renders — an artist's sheet is worth having before anyone has
+    tagged a mood, and render-or-vanish means the strip is simply absent when the
+    character has no images at all.
+    """
+    roster_entry = sheet.roster_entry
+    if roster_entry is None:
+        return []
+    current_id = roster_entry.profile_picture_id
+
+    entries: list[LookEntry] = []
+    for tenure in roster_entry.tenures.all():
+        for link in tenure.media.all():
+            is_current = link.pk == current_id
+            if not privileged and not is_current:
+                gallery = link.gallery
+                if gallery is None or not gallery.is_public:
+                    continue
+            entries.append(
+                LookEntry(
+                    tenure_media_id=link.pk,
+                    url=link.media.cloudinary_url,
+                    title=link.media.title,
+                    look=link.look.name if link.look is not None else "",
+                    is_current=is_current,
+                )
+            )
+    entries.sort(key=lambda row: not row["is_current"])
+    return entries
+
 
 def _build_profile_picture(sheet: CharacterSheet) -> str | None:
     """Return the profile picture URL or ``None``.
@@ -1392,6 +1449,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_THEMING_SELECT_RELATED, _THEMING_PREFETCH_RELATED),
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
     (_CURRENT_RESIDENCE_SELECT_RELATED, _CURRENT_RESIDENCE_PREFETCH_RELATED),
+    (_LOOKS_SELECT_RELATED, _LOOKS_PREFETCH_RELATED),
 )
 
 
@@ -1517,6 +1575,11 @@ class CharacterSheetSerializer(serializers.Serializer):
             "theming": _build_theming(sheet),
             "profile_picture": _build_profile_picture(sheet),
             "current_residence": _build_current_residence(sheet),
+            # #3898 — the plate: which images the character can wear, and the ground
+            # colour it is printed on. `plate_ink` is OOC chrome and ungated; it says
+            # nothing about the character, only how their page is printed.
+            "looks": _build_looks(sheet, privileged=privileged),
+            "plate_ink": sheet.plate_ink,
         }
 
 
