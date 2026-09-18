@@ -69,10 +69,6 @@ export function TiesPanel({
           <Heading>Relationships</Heading>
           <RelationshipsSection characterSheetId={sheetId} isMyCharacter={isMyCharacter} />
         </Stack>
-        <Stack>
-          <Heading>Kin</Heading>
-          <KinshipPanel characterId={sheetId} />
-        </Stack>
         {mentors.length > 0 && (
           <Stack>
             <Heading>Mentors</Heading>
@@ -87,6 +83,10 @@ export function TiesPanel({
                 />
               ))}
             </Entries>
+            <Stack>
+              <Heading>Kin</Heading>
+              <KinshipPanel characterId={sheetId} />
+            </Stack>
           </Stack>
         )}
       </Stack>

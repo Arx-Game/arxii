@@ -8,6 +8,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { SpendableStatList, type SpendableStat } from './SpendableStatList';
+import { Subheading } from '@/character_sheets/components/sheet/primitives';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -77,14 +78,18 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
   const pointNoun = data.available_points === 1 ? 'point' : 'points';
 
   return (
-    <section>
-      <h3 className="text-xl font-semibold">Maturation</h3>
-      <p className="text-sm text-muted-foreground">
+    <div className="refsheet-stack">
+      <Subheading>Maturation</Subheading>
+      <p className="refsheet-ledger">
         {data.available_points > 0
           ? `${data.available_points} ${pointNoun} earned by the years; spend them below.`
           : waitingLine(data.next_milestone_year)}
       </p>
-      {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
+      {error && (
+        <p className="refsheet-note" style={{ color: 'hsl(var(--destructive))' }}>
+          {error}
+        </p>
+      )}
       {data.available_points > 0 && (
         <SpendableStatList
           stats={data.stats}
@@ -93,6 +98,6 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
           onSpend={(traitId) => spend.mutate(traitId)}
         />
       )}
-    </section>
+    </div>
   );
 }

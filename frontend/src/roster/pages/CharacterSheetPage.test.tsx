@@ -3,8 +3,8 @@
  *
  * These replace the tests for the old tabbed sheet, whose assertions encoded the
  * design this issue changed: a vitals panel on the front page, and a covenant line
- * under the name. Both moved — condition to Physical, covenant into standing under
- * Ties — so the old tests could only have been "fixed" by asserting the thing the
+ * under the name. Both moved — condition to Physical, covenant to its own rail block
+ * under Ties — so the old tests could only have been "fixed" by asserting the thing the
  * redesign removed.
  *
  * What is worth pinning here is the gating, because it is the part a future change

@@ -101,6 +101,15 @@ the app; Agreements covers wills, claims and settlements, not contracts. So the 
 absent because building it means building a contracts surface from nothing, which is its
 own issue. It is not absent because the data was already shown elsewhere.
 
+**Two visibility questions on Ties are open**, and both are the maintainer's rather than
+a defect. A non-owner's Ties section still falls back to `RenownCardPanel` and shows no
+Standing at all, which predates this issue (#1446) but the demo draws Standing for every
+viewer. And the Covenant block is owner-only, although `useCovenantRolesQuery` is already
+sheet-scoped and the Titles block beside it is public — so unlike the memberships and
+reputations queries, which are account-wide and would leak a viewer's own alts, Covenant
+has no technical reason to be gated that its neighbours do not share. Both are left as
+they are rather than widened on a guess.
+
 **Three gaps are open questions rather than unfinished work**, and each is a ruling for
 Apostate rather than more building. A stranger's rumor band renders but is passed
 nothing, because which guideline a rumor may draw from, and in whose words, is undecided.
