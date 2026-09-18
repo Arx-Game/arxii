@@ -17,7 +17,10 @@ The **narrative bio** (concept, real_concept, quote, the three Actor's Sheet ans
 Each mechanical sheet section carries a player-controlled visibility tier
 (`SheetVisibility`: `SELF` / `FRIENDS` / `PUBLIC`) — `stats_visibility`, `skills_visibility`,
 `magic_visibility`, `goals_visibility` on `CharacterSheet`, defaulting to `SELF` (the #1109
-"private by default" behaviour). The profile serializer resolves the viewer's openness once
+"private by default" behaviour). **`standing_visibility` (#3906) is the one that does not**:
+it defaults to `FRIENDS`, because which houses someone belongs to and what each thinks of
+them is the kind of thing a friend would know and a stranger would have to ask about, and
+`PUBLIC` is the opt-in for a character who wants their allegiances read off the page. The profile serializer resolves the viewer's openness once
 (`_viewer_access_level`: staff/owner = SELF, on the owner's `PlayerAllowList` = FRIENDS, else
 PUBLIC) and shows each section when access meets its tier (`SHEET_VISIBILITY_RANK`). The FRIENDS
 allow-list lookup runs only when a section is actually FRIENDS-gated, so the all-default case adds
@@ -118,23 +121,44 @@ the app; Agreements covers wills, claims and settlements, not contracts. So the 
 absent because building it means building a contracts surface from nothing, which is its
 own issue. It is not absent because the data was already shown elsewhere.
 
-**Two visibility questions on Ties are open**, and both are the maintainer's rather than
-a defect. A non-owner's Ties section still falls back to `RenownCardPanel` and shows no
-Standing at all, which predates this issue (#1446) but the demo draws Standing for every
-viewer. And the Covenant block is owner-only, although `useCovenantRolesQuery` is already
-sheet-scoped and the Titles block beside it is public — so unlike the memberships and
-reputations queries, which are account-wide and would leak a viewer's own alts, Covenant
-has no technical reason to be gated that its neighbours do not share. Both are left as
-they are rather than widened on a guess.
+**Ties visibility was settled by #3906.** Covenant is PUBLIC — a covenant role is a thing
+a character IS in the world, the way a title is, and the Titles block beside it has always
+been public. Standing is FRIENDS by default with `standing_visibility` as the opt-in to
+`PUBLIC`.
 
-**Three gaps are open questions rather than unfinished work**, and each is a ruling for
-Apostate rather than more building. A stranger's rumor band renders but is passed
-nothing, because which guideline a rumor may draw from, and in whose words, is undecided.
-A look does NOT follow the character's declared mood: `CharacterSheet.current_mood` is
-inward and owner-only (#2994), so driving a public portrait from it would publish exactly
-what that ruling keeps private, and the plate's caption no longer promises it. And the
-Gift sentence names no tradition, because `GiftEntry` carries no tradition field;
-tradition membership lives on the character, not on the gift.
+Both blocks now read the **sheet payload** (`standing`, `covenants`) rather than calling
+the society and covenant-role endpoints. That is not a refactor for tidiness: all three of
+those endpoints answer only for the characters the REQUESTER plays, so as a visitor they
+returned nothing whatever the visibility field said, and as the owner they returned every
+character on the account and had to be filtered client-side to the viewed persona.
+`_build_standing` queries `OrganizationMembership` / `OrganizationReputation` directly off
+the presented persona and `_build_covenants` reads `covenant_role_assignments` off the
+sheet; `_section_visible(access, sheet.standing_visibility)` empties `standing` for a
+viewer below the tier, so what the client renders is already the answer.
+
+Both blocks then **vanish when empty**, and here render-or-vanish is a correctness rule
+rather than a style one: a withheld section and an unaffiliated character arrive at the
+client identically, so a line reading "They belong to nobody" would be a flat lie on
+every stranger's view of a character who belongs to three houses. Vanishing also leaks
+nothing — a hidden rail and an empty one look the same, which is what a privacy tier is
+supposed to buy. Titles beside it keeps its empty-state line and is right to: it is
+never withheld, so its empty state is always true. Note the prefetch
+shape: `standing` deliberately does NOT ride a `personas__organization_memberships`
+prefetch — a top-level prefetch through `personas` cannot reuse the `cached_personas`
+Prefetch and re-fetches every persona to redescend, which cost four extra queries for
+three rows of output.
+
+**Three gaps were open questions rather than unfinished work, and each now has its own
+issue.** A stranger's rumor band renders but is passed nothing, because which guideline a
+rumor may draw from, and in whose words, needs a mechanically determined rumor system
+first (**#3903**). The plate's portrait needs rights on public-facing art and flags so
+viewers can filter by preference, with friends seeing whatever image someone is showing
+(**#3904**); a look still does NOT follow the character's declared mood, since
+`CharacterSheet.current_mood` is inward and owner-only (#2994) and driving a public
+portrait from it would publish exactly what that ruling keeps private. And the Gift
+sentence names no tradition, because `GiftEntry` carries no tradition field and tradition
+membership lives on the character rather than the gift — provenance at acquisition is
+**#3905**.
 
 **The aura is a proportional strip**, three segments sized by their shares with the split
 said in words beneath ("A fifth celestial, a third primal, the rest abyssal."). The strip

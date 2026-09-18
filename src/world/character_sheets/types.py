@@ -406,6 +406,57 @@ class OrgDomainEntry(TypedDict):
     where: str
 
 
+class OrgMembershipEntry(TypedDict):
+    """One organization the presented face belongs to, and what it calls them (#3906)."""
+
+    organization_id: int
+    organization: str
+    title: str
+
+
+class OrgReputationEntry(TypedDict):
+    """What one organization thinks of the presented face (#3906).
+
+    The NAMED TIER only, never the raw value — the standing convention
+    ``OrganizationReputationSerializer`` sets and this payload keeps.
+    """
+
+    organization_id: int
+    organization: str
+    tier: str
+
+
+class StandingSection(TypedDict):
+    """Where the character stands with the organizations of the world (#3906).
+
+    Gated by ``CharacterSheet.standing_visibility``, which is the only one of the
+    sheet's visibility tiers that defaults to FRIENDS rather than SELF: what a house
+    thinks of you is something your friends would know.
+
+    Read off the PRESENTED persona, which makes it mask-safe for free (#1109) — an alt
+    face carries its own memberships or none, so a masked character never leaks the
+    real one's house through this.
+    """
+
+    memberships: list[OrgMembershipEntry]
+    reputations: list[OrgReputationEntry]
+
+
+class CovenantRoleEntry(TypedDict):
+    """One active covenant role the character holds (#3906).
+
+    PUBLIC, by Apostate's ruling. The covenant-roles endpoint is self-only, so this
+    rides the sheet payload rather than widening that endpoint for every caller.
+    """
+
+    id: int
+    covenant_id: int
+    covenant: str
+    role: str
+    rank: str
+    engaged: bool
+
+
 class MentorBondEntry(TypedDict):
     """One active Mentor's Vow bond this character holds (#1165), for Ties (#3898).
 

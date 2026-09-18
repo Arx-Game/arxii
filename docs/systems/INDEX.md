@@ -2276,9 +2276,15 @@ Character identity, appearance, demographics, and guise system.
   `TenureMedia.look`; public-gallery images plus the worn one for a non-privileged
   viewer), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
   gated by the #2985 layer walk rather than a visibility tier), `mentors` (#1165
-  Mentor's Vow bonds, owner and staff only) and `domains` (#3901 — land the character's
-  organizations hold, gated on active membership; owner and staff only). Styles:
-  `frontend/src/character_sheets/sheet.css` under `.refsheet`.
+  Mentor's Vow bonds, owner and staff only), `domains` (#3901 — land the character's
+  organizations hold, gated on active membership; owner and staff only), and `standing` +
+  `covenants` (#3906 — org memberships and reputation off the presented persona, gated by
+  the new `standing_visibility` field, which is the one visibility tier defaulting to
+  FRIENDS rather than SELF; covenant roles are public). Standing and Covenant read the
+  payload rather than the society/covenant-role endpoints, which answer only for the
+  requester's own characters and so returned nothing to a visitor and everything on the
+  account to an owner. Styles: `frontend/src/character_sheets/sheet.css` under
+  `.refsheet`.
 - **Integrates with:** roster (character management, `set_profile_picture` wears a look,
   `TenureMedia.look`), character_creation (sheet setup),
   gm (table update requests apply prose rewrites), stories (`Era` stamps),

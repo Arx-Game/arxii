@@ -33,6 +33,7 @@ from world.character_sheets.types import (
     AppearanceSection,
     AuraData,
     AuraThemingData,
+    CovenantRoleEntry,
     DistinctionEntry,
     EnemyEntry,
     FormTraitEntry,
@@ -48,6 +49,8 @@ from world.character_sheets.types import (
     MotifResonanceEntry,
     MotifSection,
     OrgDomainEntry,
+    OrgMembershipEntry,
+    OrgReputationEntry,
     OriginSlotEntry,
     PathDetailSection,
     PathHistoryEntry,
@@ -58,6 +61,7 @@ from world.character_sheets.types import (
     SkillEntry,
     SkillRef,
     SpecializationEntry,
+    StandingSection,
     StorySection,
     TechniqueEntry,
     ThemingSection,
@@ -66,7 +70,7 @@ from world.character_sheets.types import (
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
-from world.covenants.models import MentorBond
+from world.covenants.models import CharacterCovenantRole, MentorBond
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import (
     CharacterForm,
@@ -102,7 +106,7 @@ from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
 from world.societies.houses.models import Domain
-from world.societies.models import OrganizationMembership
+from world.societies.models import OrganizationMembership, OrganizationReputation
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
 
 
@@ -1390,6 +1394,96 @@ _PROFILE_PICTURE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 _CURRENT_RESIDENCE_SELECT_RELATED: tuple[str, ...] = ("current_residence__objectdb",)
 _CURRENT_RESIDENCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
+_STANDING_SELECT_RELATED: tuple[str, ...] = ()
+# Only the covenant roles are prefetched: they hang off the sheet directly, so one
+# Prefetch covers them however many the character holds. The memberships and
+# reputations are NOT declared here on purpose — they hang off the persona, and a
+# top-level ``personas__...`` lookup cannot reuse the ``cached_personas`` Prefetch
+# (its ``prefetch_to`` is the bare attr name), so Django re-fetches every persona just
+# to redescend. ``_build_standing`` queries the presented persona directly instead:
+# two queries instead of three, and none at all for a viewer who may not read them.
+_STANDING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "covenant_role_assignments",
+        queryset=CharacterCovenantRole.objects.filter(left_at__isnull=True).select_related(
+            "covenant", "covenant_role", "rank"
+        ),
+    ),
+)
+
+
+def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection:
+    """Which houses the presented face belongs to, and what each thinks of them (#3906).
+
+    Gated by ``standing_visibility``, the only sheet tier defaulting to FRIENDS rather
+    than SELF: what a house thinks of you is something your friends would know.
+
+    Read off the PRESENTED persona rather than the sheet, which makes it mask-safe for
+    free (#1109). It also has to be read here at all rather than by the frontend,
+    because every endpoint that serves this data is scoped to personas the REQUESTER
+    plays — self-only by design — so a friend asking them gets an empty list, and
+    widening them would hand every viewer other people's rows to filter client-side.
+
+    Reputation is the NAMED TIER only, never the raw value
+    (``OrganizationReputationSerializer``'s convention, kept here).
+    """
+    empty: StandingSection = {"memberships": [], "reputations": []}
+    if not visible or active is None:
+        return empty
+
+    membership_rows = (
+        OrganizationMembership.objects.filter(
+            persona=active, left_at__isnull=True, exiled_at__isnull=True
+        )
+        .select_related("organization", "rank", "vacancy")
+        .order_by("organization__name")
+    )
+    reputation_rows = (
+        OrganizationReputation.objects.filter(persona=active)
+        .select_related("organization")
+        .order_by("organization__name")
+    )
+    return {
+        "memberships": [
+            OrgMembershipEntry(
+                organization_id=row.organization_id,
+                organization=row.organization.name,
+                title=row.get_title(),
+            )
+            for row in membership_rows
+        ],
+        "reputations": [
+            OrgReputationEntry(
+                organization_id=row.organization_id,
+                organization=row.organization.name,
+                tier=row.get_tier().value,
+            )
+            for row in reputation_rows
+        ],
+    }
+
+
+def _build_covenants(sheet: CharacterSheet) -> list[CovenantRoleEntry]:
+    """The covenant roles this character holds. PUBLIC, by Apostate's ruling (#3906).
+
+    Unlike the org memberships beside it, this needs no tier: a covenant role is a
+    thing a character IS in the world, the way a title is, and the Titles block on the
+    same rail has always been public. It rides the payload only because
+    ``CharacterCovenantRoleViewSet`` is self-only for non-staff.
+    """
+    return [
+        CovenantRoleEntry(
+            id=row.pk,
+            covenant_id=row.covenant_id,
+            covenant=row.covenant.name,
+            role=row.covenant_role.name,
+            rank=row.rank.name,
+            engaged=row.engaged,
+        )
+        for row in sheet.covenant_role_assignments.all()
+    ]
+
+
 _LOOKS_SELECT_RELATED: tuple[str, ...] = ()
 # No ``to_attr`` here (ADR-0278): the rows hang off the prefetch cache on the default
 # related manager, so ``tenure.media.all()`` reads them without a second query and
@@ -1658,6 +1752,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
     (_CURRENT_RESIDENCE_SELECT_RELATED, _CURRENT_RESIDENCE_PREFETCH_RELATED),
     (_LOOKS_SELECT_RELATED, _LOOKS_PREFETCH_RELATED),
+    (_STANDING_SELECT_RELATED, _STANDING_PREFETCH_RELATED),
     (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
     (_MENTORS_SELECT_RELATED, _MENTORS_PREFETCH_RELATED),
 )
@@ -1744,6 +1839,8 @@ class CharacterSheetSerializer(serializers.Serializer):
         show_skills = _section_visible(access, sheet.skills_visibility)
         show_magic = _section_visible(access, sheet.magic_visibility)
         show_goals = _section_visible(access, sheet.goals_visibility)
+        # #3906 — the only tier defaulting to FRIENDS rather than SELF.
+        show_standing = _section_visible(access, sheet.standing_visibility)
         # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real
         # one when revealed, a cover persona's own when presenting one, else blank.
         bio_profile = _presented_bio_profile(sheet, active, reveal_identity=reveal_identity)
@@ -1769,6 +1866,10 @@ class CharacterSheetSerializer(serializers.Serializer):
             # Story reads from the presented face's profile (cover identities show their own).
             "story": _build_story(sheet=sheet, bio_profile=bio_profile, privileged=privileged),
             "goals": _build_goals(sheet) if show_goals else [],
+            # #3906 — Ties' rail. Standing rides its own tier; covenant roles are
+            # public, the way the Titles block beside them has always been.
+            "standing": _build_standing(active, visible=show_standing),
+            "covenants": _build_covenants(sheet),
             "actor_sheet": _build_actor_sheet(
                 sheet,
                 bio_profile=bio_profile,
