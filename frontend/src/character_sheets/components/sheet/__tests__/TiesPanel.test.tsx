@@ -111,4 +111,19 @@ describe('TiesPanel', () => {
     expect(screen.getByText('Covenant')).toBeInTheDocument();
     expect(screen.getByText('Blade')).toBeInTheDocument();
   });
+
+  it('drops the whole Covenant block when they hold no role', () => {
+    renderTies();
+    expect(screen.queryByText('Covenant')).not.toBeInTheDocument();
+  });
+
+  it('drops the Standing groups when the server withheld standing, keeping Renown', () => {
+    // The stranger's view. Standing gone, Titles and Covenant unaffected, and the
+    // page keeps its shape — which is what render-or-vanish is for.
+    renderTies({ standing: EMPTY_STANDING });
+    expect(screen.getByText('Standing')).toBeInTheDocument();
+    expect(screen.queryByText('Belongs to')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thought of as')).not.toBeInTheDocument();
+    expect(screen.getByText('Titles')).toBeInTheDocument();
+  });
 });

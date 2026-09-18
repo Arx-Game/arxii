@@ -120,11 +120,14 @@ export function TiesPanel({
         </Stack>
         {/* Covenant is its own rail block, the way the spec lists it: a covenant is a
             thing a character belongs to, not a shade of how they are thought of. And
-            it is PUBLIC (#3906) — a role is a thing a character IS, like a title. */}
-        <Stack>
-          <Heading>Covenant</Heading>
-          <CovenantRoles covenants={covenants} />
-        </Stack>
+            it is PUBLIC (#3906) — a role is a thing a character IS, like a title.
+            Absent when they hold none, which is most characters. */}
+        {covenants.length > 0 && (
+          <Stack>
+            <Heading>Covenant</Heading>
+            <CovenantRoles covenants={covenants} />
+          </Stack>
+        )}
       </Stack>
     </div>
   );

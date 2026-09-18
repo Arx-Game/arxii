@@ -104,7 +104,10 @@ describe('ReputationTab', () => {
         viewerPersonaId={1}
         isMyCharacter
         viewedEntryId={1}
-        standing={NO_STANDING}
+        standing={{
+          memberships: [{ organization_id: 10, organization: 'House Valardin', title: 'Voice' }],
+          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
+        }}
       />
     );
     expect(screen.getByText('Renown')).toBeInTheDocument();
@@ -167,7 +170,11 @@ describe('ReputationTab', () => {
     expect(screen.queryByText('Wanted')).not.toBeInTheDocument();
   });
 
-  it('says so in the world voice when the server withheld or emptied standing', () => {
+  it('draws no standing group at all when the server withheld or emptied it', () => {
+    // A withheld section and an unaffiliated character arrive identically, so a line
+    // claiming they belong to nobody would be a lie on every stranger's view of
+    // someone who belongs to three houses. Vanishing is the only honest answer, and it
+    // also means a viewer cannot tell a hidden rail from an empty one.
     setRenown(makeRenown());
     renderWithProviders(
       <ReputationTab
@@ -178,8 +185,28 @@ describe('ReputationTab', () => {
         standing={NO_STANDING}
       />
     );
-    expect(screen.getByText('They belong to nobody.')).toBeInTheDocument();
-    expect(screen.getByText('No organization has an opinion of them yet.')).toBeInTheDocument();
+    expect(screen.getByText('Renown')).toBeInTheDocument();
+    expect(screen.queryByText('Belongs to')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thought of as')).not.toBeInTheDocument();
+  });
+
+  it('drops only the empty half when a character belongs nowhere but is still judged', () => {
+    setRenown(makeRenown());
+    renderWithProviders(
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        standing={{
+          memberships: [],
+          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'reviled' }],
+        }}
+      />
+    );
+    expect(screen.queryByText('Belongs to')).not.toBeInTheDocument();
+    expect(screen.getByText('Thought of as')).toBeInTheDocument();
+    expect(screen.getByText('The Iron Guard')).toBeInTheDocument();
   });
 
   it('does not render the account-wide society-reputation list twice (only via RenownPanel)', () => {
@@ -232,8 +259,8 @@ describe('CovenantRoles', () => {
     expect(screen.getAllByText('Engaged')).toHaveLength(1);
   });
 
-  it('says they hold none rather than drawing an empty block', () => {
-    renderWithProviders(<CovenantRoles covenants={[]} />);
-    expect(screen.getByText('They hold no covenant role.')).toBeInTheDocument();
+  it('vanishes rather than drawing an empty block — most characters hold no role', () => {
+    const { container } = renderWithProviders(<CovenantRoles covenants={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

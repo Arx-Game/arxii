@@ -32,7 +32,6 @@ import { formatTier } from '@/renown/components/ReputationListCard';
 import {
   Entries,
   Entry,
-  Ledger,
   Stack,
   Subheading,
   Tag,
@@ -56,8 +55,9 @@ interface Props {
   viewedEntryId?: number | null;
   /**
    * Where this character stands, from the sheet payload (#3906). The server has
-   * already applied `standing_visibility`, so an empty pair means "not for this
-   * viewer" and the blocks say so in the world's voice rather than being absent.
+   * already applied `standing_visibility`, so an empty pair is all a withheld section
+   * ever looks like from here — see `OrganizationStandingBlock` for why that settles
+   * how it draws.
    */
   standing: CharacterSheetStanding;
 }
@@ -115,14 +115,27 @@ function OwnRenownView({
 // Standing — org memberships/reputation, scoped to the viewed character's persona.
 // ---------------------------------------------------------------------------
 
+/**
+ * Render-or-vanish, and here that is a correctness rule rather than a style one.
+ *
+ * A withheld section and a genuinely empty one arrive identically — the server sends
+ * an empty pair either way — so a line reading "They belong to nobody" would be a
+ * flat lie on every stranger's view of a character who belongs to three houses. And
+ * vanishing on both leaks nothing either: a viewer cannot tell a hidden rail from an
+ * unaffiliated one, which is what a privacy tier is supposed to buy.
+ *
+ * (Titles beside it speaks a line when empty, and is right to: it is never withheld,
+ * so its empty state is always the truth.)
+ */
 function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStanding }) {
+  if (standing.memberships.length === 0 && standing.reputations.length === 0) {
+    return null;
+  }
   return (
     <Stack wide>
-      <Stack>
-        <Subheading>Belongs to</Subheading>
-        {standing.memberships.length === 0 ? (
-          <Ledger>They belong to nobody.</Ledger>
-        ) : (
+      {standing.memberships.length > 0 && (
+        <Stack>
+          <Subheading>Belongs to</Subheading>
           <Entries>
             {standing.memberships.map((membership) => (
               <Entry
@@ -134,13 +147,11 @@ function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStand
               />
             ))}
           </Entries>
-        )}
-      </Stack>
-      <Stack>
-        <Subheading>Thought of as</Subheading>
-        {standing.reputations.length === 0 ? (
-          <Ledger>No organization has an opinion of them yet.</Ledger>
-        ) : (
+        </Stack>
+      )}
+      {standing.reputations.length > 0 && (
+        <Stack>
+          <Subheading>Thought of as</Subheading>
           <Entries>
             {standing.reputations.map((rep) => (
               <Entry
@@ -150,8 +161,8 @@ function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStand
               />
             ))}
           </Entries>
-        )}
-      </Stack>
+        </Stack>
+      )}
     </Stack>
   );
 }
@@ -167,10 +178,13 @@ function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStand
  *
  * It reads the payload rather than `useCovenantRolesQuery` because that endpoint only
  * answers for sheets the REQUESTER plays, so asking it as a visitor returns nothing.
+ *
+ * Vanishes when there is nothing, like the standing block above it — most characters
+ * hold no covenant role at all, so a line saying so would be the common case.
  */
 export function CovenantRoles({ covenants }: { covenants: CharacterSheetCovenantRole[] }) {
   if (covenants.length === 0) {
-    return <Ledger>They hold no covenant role.</Ledger>;
+    return null;
   }
   return (
     <Entries>
