@@ -8,6 +8,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { SpendableStatList, type SpendableStat } from './SpendableStatList';
+import { Subheading } from '@/character_sheets/components/sheet/primitives';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -41,9 +42,16 @@ interface MaturationPanelProps {
   sheetId: number;
 }
 
-/** The idle line: the next milestone, or none once the last (75) is behind the character (#3635). */
-function waitingLine(nextMilestoneYear: number | null): string {
-  if (nextMilestoneYear === null) return 'No points waiting, and no milestones remain.';
+/**
+ * The idle line: the next milestone, or none once the last (75) is behind the character
+ * (#3635). An absent year is treated the same as an explicit null — an older payload, or
+ * one that simply did not carry the field, printed "at age undefined" at the player
+ * (found while capturing #3898's evidence, once Growth became a page people read).
+ */
+function waitingLine(nextMilestoneYear: number | null | undefined): string {
+  if (nextMilestoneYear === null || nextMilestoneYear === undefined) {
+    return 'No points waiting, and no milestones remain.';
+  }
   return `No points waiting. The next milestone arrives at age ${nextMilestoneYear}.`;
 }
 
@@ -70,14 +78,18 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
   const pointNoun = data.available_points === 1 ? 'point' : 'points';
 
   return (
-    <section>
-      <h3 className="text-xl font-semibold">Maturation</h3>
-      <p className="text-sm text-muted-foreground">
+    <div className="refsheet-stack">
+      <Subheading>Maturation</Subheading>
+      <p className="refsheet-ledger">
         {data.available_points > 0
           ? `${data.available_points} ${pointNoun} earned by the years; spend them below.`
           : waitingLine(data.next_milestone_year)}
       </p>
-      {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
+      {error && (
+        <p className="refsheet-note" style={{ color: 'hsl(var(--destructive))' }}>
+          {error}
+        </p>
+      )}
       {data.available_points > 0 && (
         <SpendableStatList
           stats={data.stats}
@@ -86,6 +98,6 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
           onSpend={(traitId) => spend.mutate(traitId)}
         />
       )}
-    </section>
+    </div>
   );
 }

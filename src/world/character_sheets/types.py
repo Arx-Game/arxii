@@ -65,6 +65,9 @@ class IdentitySection(TypedDict):
     pronouns: PronounsData
     species: IdNameRef | None
     heritage: IdNameRef | None
+    # #3898 — every Beginnings this character holds (#3775): what the sheet calls their
+    # "Beginning". NOT the same as ``origin``, which is the realm they are from.
+    beginnings: list[IdNameRef]
     family: IdNameRef | None
     tarot_card: IdNameRef | None
     origin: IdNameRef | None
@@ -160,6 +163,10 @@ class DistinctionEntry(TypedDict):
     # secret entries at all — they're shown the public list only; the flag lets the owner / staff
     # see which of their distinctions are currently gated.
     is_secret: bool
+    # #3898/#3739 — the distinctive feature this row is aimed at (a trait row or a
+    # marking), by display name; blank for an ordinary distinction. The sheet's Physical
+    # page lists the non-blank ones, since a feature is something a person can see.
+    feature: str
     # Whether this distinction was born from the character's Glimpse (#2427) —
     # CharacterDistinction.from_glimpse is set. Drives the own-character sheet's
     # Glimpse editor "linked distinction" chip state (id here is the
@@ -361,6 +368,59 @@ class ThemingSection(TypedDict):
     aura: AuraThemingData | None
 
 
+class LookEntry(TypedDict):
+    """One image of the character, tagged with the mood it shows (#3898).
+
+    The sheet's plate shows the look the character currently wears and offers the
+    rest as a strip beside it. ``tenure_media_id`` is the id
+    ``POST /api/roster/entries/{pk}/set_profile_picture/`` takes, so the owner can
+    make any look the worn one from the sheet itself; ``look`` is the
+    ``MoodOption`` name the image was tagged with, blank for an untagged image.
+    ``is_current`` marks the roster entry's profile picture — exactly one entry
+    carries it when a profile picture is set, none when it is not.
+    """
+
+    tenure_media_id: int
+    url: str
+    title: str
+    look: str
+    is_current: bool
+
+
+class MentorBondEntry(TypedDict):
+    """One active Mentor's Vow bond this character holds (#1165), for Ties (#3898).
+
+    ``role`` is what the OTHER party is to this character: the mentor who took them on,
+    or the student they took on. The covenant is named because the vow is sworn inside
+    one, and a character may hold bonds in more than one.
+    """
+
+    id: int
+    name: str
+    role: str
+    covenant: str
+
+
+class WornEntry(TypedDict):
+    """One piece the character has on, for the sheet's Physical section (#3898).
+
+    Worn things are visible things, so this rides the sheet payload rather than the
+    equipped-items endpoint. That endpoint answers "what am I wearing" for the player
+    who owns the character, and ``VisibleWornItemViewSet`` answers "what can I see on
+    them" for someone in the same room; a roster visitor is neither, and the ruling is
+    that what a character wears shows on their sheet to anyone who opens it.
+
+    ``is_hidden`` marks a piece the layer walk (#2985) says is covered by something
+    above it. Those rows are dropped for everyone but the owner and staff, who get them
+    with the flag set so the sheet can say the piece is there and unseen.
+    """
+
+    id: int
+    name: str
+    description: str
+    is_hidden: bool
+
+
 class ProfileTextField(models.TextChoices):
     """Profile prose fields covered by table update requests + version history (#2631).
 
@@ -423,6 +483,25 @@ class PosthumousJournalDisposition(models.TextChoices):
 
     REVEAL = "reveal", "Reveal after death (default)"
     SEAL = "seal", "Seal forever"
+
+
+class PlateInk(models.TextChoices):
+    """The ground colour a character's sheet plate is printed in (#3898).
+
+    The sheet reads as the reference sheet an artist makes for a character, and the
+    plate behind the art is the one thing about it the player chooses. Four inks
+    only: a wide palette would make the roster read as a set of unrelated pages,
+    and the page below the plate stays on Arx paper whichever is picked (the CG
+    ruling of 2026-09-03 — a realm is an ink, never a different page).
+
+    Picked in account settings rather than on the sheet: the sheet describes the
+    character, and its own chrome is never one of the character's fields.
+    """
+
+    EMBER = "ember", "Ember"
+    VERDIGRIS = "verdigris", "Verdigris"
+    ROSE = "rose", "Rose"
+    NIGHT = "night", "Night"
 
 
 class MaritalStatus(models.TextChoices):

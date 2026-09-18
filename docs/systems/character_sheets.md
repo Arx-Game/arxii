@@ -24,6 +24,121 @@ allow-list lookup runs only when a section is actually FRIENDS-gated, so the all
 no query. Bio/story tiers (entangled with the presented-identity gating) and the player-facing
 tier-setting UI are follow-ups.
 
+## The Reference Sheet (#3898)
+
+The web character sheet (`frontend/src/roster/pages/CharacterSheetPage.tsx`) is the
+reference sheet an artist makes for a character, on the Arx Folio system the Gatefold
+and character creation already speak. Its styles live in
+`frontend/src/character_sheets/sheet.css`, scoped under `.refsheet`; the display
+primitives are `character_sheets/components/sheet/`. That file deliberately does not
+reuse `character-creation/cg.css`: CG's `.entry` is a *selection* control with a chosen
+state and doors, and the sheet only ever describes.
+
+**The plate** is the head: the art, the name with any `PersonaTitle`s composed into the
+same `h1`, the concept, the quote, two short glance lines, and the looks strip. It is
+painted in night literals in both themes — it is the cover, and a cover does not change
+with the reader's lights. Nothing mechanical appears on it: no health, no fatigue, no
+attributes.
+
+**Eight sections** replace the old sixteen tabs. Five are public — Sheet, Physical,
+Ties, Distinctions, Magic — then a visible break labelled "Yours only" and three the
+character's own player reads: Knowledge (secrets, clues, gossip), Holdings (purse,
+carried, property, agreements, the law) and Growth (advancement, sheet-change requests,
+languages, origin story). Friends left the sheet for `/profile/friends`: an OOC
+trusted-partner list belongs to the account, not to a character.
+
+**Gating is render-or-vanish.** A block a viewer may not read is absent, and the page
+keeps its shape for a stranger, a friend and the owner alike — no empty-state cards. The
+goals band and the abilities band are gated by the existing `goals_visibility` /
+`stats_visibility` / `skills_visibility` tiers, which the serializer already enforces by
+emptying those sections; the frontend renders what it is handed and never re-implements a
+tier. A viewer who gets neither band is offered a rumor about the character in their
+place. Condition on Physical reads as sentences for the owner and staff, and as one
+observational line for everyone else.
+
+**`looks` and `plate_ink`** are the payload's contribution. `_build_looks` returns the
+character's tenure media with the `MoodOption` each is tagged with (`TenureMedia.look`),
+the worn one first, so the plate can wear one and offer the rest beside it; the owner
+clicking a look calls `POST /api/roster/entries/{pk}/set_profile_picture/`. A
+non-privileged viewer receives only public-gallery images plus the worn one — a private
+gallery's `allowed_viewers` sharing is honoured on the gallery pages and deliberately not
+here, so the strip under-shows rather than risking a private image on a page anyone can
+open. `plate_ink` (`PlateInk`: ember / verdigris / rose / night) is OOC chrome, ungated,
+and picked in settings rather than on the sheet.
+
+**`worn` and `mentors`** are the payload's other two contributions. `_build_worn` lists
+what the character has on, and what separates viewers is the #2985 layer walk rather than
+a visibility tier: `compute_worn_visibility` is the same predicate the look command and
+the show/conceal verbs use, so a shift under a coat is hidden here for the same reason it
+is hidden there. A covered piece is dropped for everyone but the owner and staff, who get
+it with `is_hidden` set so the sheet can say it is there and unseen. This lives on the
+sheet rather than on `EquippedItemViewSet` because that endpoint answers only for a
+character its caller plays, which emptied the Wearing block for every visitor — and worn
+things are the most visible things a character has. `_build_mentors` returns the active
+`MentorBond` rows (#1165) in both directions, each saying what the OTHER party is; it is
+owner and staff only, matching the covenant roles it sits beside, because a Mentor's Vow
+is sworn inside a covenant.
+
+Threads under Magic reuse the existing thread list endpoint, narrowed to one character by
+`ThreadFilter.owner` (#3898) — the list is account-scoped, so without it an account with
+alts read every character's threads on whichever sheet it opened.
+
+**The composed panels were re-skinned, not merely reparented.** `RelationshipsSection`,
+`KinshipPanel`, `ReputationTab`, `TitlesPanel`, `DistinctionsTab` and `SpellbookTab` now
+draw in the sheet's own primitives, and each lost something that only made sense when it
+was a tab of its own: the duplicate "Relationships" header a panel drew inside the
+heading the sheet already draws, the soul-tether card whose entire body was the words
+"No active soul tethers.", and the spellbook's four workbench links, which under the
+section row read as a second navigation bar. A panel composed into a section draws no
+heading at that weight — `Subheading` is the one it uses for a group inside a section.
+
+**Holdings has no "Owed and Owing" block**, which the spec asks for. Half of it has
+nothing to read: `currency.DebtInstrument` and both obligation models are
+organization-to-organization, and no character-level debt exists anywhere in `world`. The
+other half, contracts, DOES have a model — `currency.Contract` is persona to persona,
+with collateral, garnishment and formality — and it has no frontend surface anywhere in
+the app; Agreements covers wills, claims and settlements, not contracts. So the block is
+absent because building it means building a contracts surface from nothing, which is its
+own issue. It is not absent because the data was already shown elsewhere.
+
+**Two visibility questions on Ties are open**, and both are the maintainer's rather than
+a defect. A non-owner's Ties section still falls back to `RenownCardPanel` and shows no
+Standing at all, which predates this issue (#1446) but the demo draws Standing for every
+viewer. And the Covenant block is owner-only, although `useCovenantRolesQuery` is already
+sheet-scoped and the Titles block beside it is public — so unlike the memberships and
+reputations queries, which are account-wide and would leak a viewer's own alts, Covenant
+has no technical reason to be gated that its neighbours do not share. Both are left as
+they are rather than widened on a guess.
+
+**Three gaps are open questions rather than unfinished work**, and each is a ruling for
+Apostate rather than more building. A stranger's rumor band renders but is passed
+nothing, because which guideline a rumor may draw from, and in whose words, is undecided.
+A look does NOT follow the character's declared mood: `CharacterSheet.current_mood` is
+inward and owner-only (#2994), so driving a public portrait from it would publish exactly
+what that ruling keeps private, and the plate's caption no longer promises it. And the
+Gift sentence names no tradition, because `GiftEntry` carries no tradition field;
+tradition membership lives on the character, not on the gift.
+
+**The aura is a proportional strip**, three segments sized by their shares with the split
+said in words beneath ("A fifth celestial, a third primal, the rest abyssal."). The strip
+carries the proportions so the figures themselves never reach the page, which is how it
+satisfies both the spec and the magic app's standing rule that player-facing data is
+narrative rather than numerical. `.refsheet-aura` and its three segment rules had been
+written and left unconnected; #3898's second review caught that, the same shape as
+`plate_ink`.
+
+**Two blocks appear that the demo does not draw**, both carried forward from the old
+sixteen-tab page rather than added here, and both now in the sheet's own vocabulary
+rather than the old page's utility classes. Worship (the public faith line, the owner's
+Pray door, visions, and staff-only prayers) sits at the foot of the Sheet section; and
+At a glance carries a Tarot row. Removing a live feature to match a drawing is not this
+branch's call, so they are re-skinned and recorded.
+
+Two things deliberately keep their old chrome. `OwnedDwellingsCard` and
+`TenantedRoomsCard` under Holdings are shared with the Renown page, so re-skinning them
+would change a surface outside this issue; and the cards under Holdings and Growth are
+forms rather than reference reading. Both are recorded in the roadmap as remaining.
+
 ## Web Sheet Mechanics Display (#3042)
 
 The `stats`/`skills` sections of `CharacterSheetSerializer` were always built (`_build_stats`/

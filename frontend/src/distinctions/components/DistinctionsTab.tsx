@@ -4,14 +4,18 @@
  * Ungated: every viewer sees this tab, because the server already filters secret rows for
  * non-privileged viewers (`_build_distinctions`, src/world/character_sheets/serializers.py:501).
  * This component only renders whatever `useCharacterSheetQuery` returns — it does NOT
- * re-implement privacy client-side — and adds a `Secret` badge on rows where `is_secret` is true.
+ * re-implement privacy client-side — and tags rows where `is_secret` is true.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): one entry per distinction on a
+ * hairline rather than a bordered card. A positive rank is how strong the distinction
+ * is and the demo shows it, so it stays; a NEGATIVE rank is not a strength at all, and
+ * printing "Rank -1" at a reader names a storage detail rather than the thing. That one
+ * reads "Disadvantage", the way the demo says it, and a distinction aimed at a visible
+ * feature says so too.
  */
 
-import { Loader2 } from 'lucide-react';
-
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
+import { Entries, Entry, Ledger, Tag } from '@/character_sheets/components/sheet/primitives';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
@@ -22,41 +26,44 @@ export function DistinctionsTab({ characterId }: Props) {
   const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <Ledger>Reading their distinctions…</Ledger>;
   }
 
   const distinctions = payload?.distinctions ?? [];
 
+  // One quiet line rather than a card apologising for an empty section. A character
+  // genuinely can hold none, and a new one usually does.
   if (distinctions.length === 0) {
     return (
-      <p className="py-8 text-center text-muted-foreground" data-testid="distinctions-empty-state">
-        No distinctions yet.
+      <p className="refsheet-ledger" data-testid="distinctions-empty-state">
+        Nothing set them apart yet.
       </p>
     );
   }
 
   return (
-    <div className="space-y-2" data-testid="distinctions-list">
-      {distinctions.map((distinction) => (
-        <Card key={distinction.id} data-testid="distinction-row">
-          <CardContent className="space-y-1 py-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">{distinction.name}</span>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">{`Rank ${distinction.rank}`}</Badge>
-                {distinction.is_secret && <Badge variant="secondary">Secret</Badge>}
-              </div>
-            </div>
-            {distinction.notes && (
-              <p className="text-sm text-muted-foreground">{distinction.notes}</p>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+    <div data-testid="distinctions-list">
+      <Entries>
+        {distinctions.map((distinction) => (
+          <div key={distinction.id} data-testid="distinction-row">
+            <Entry
+              name={distinction.name}
+              tags={
+                <>
+                  {distinction.rank < 0 ? (
+                    <Tag>Disadvantage</Tag>
+                  ) : (
+                    <Tag>{`Rank ${distinction.rank}`}</Tag>
+                  )}
+                  {distinction.feature !== '' && <Tag>Distinctive feature</Tag>}
+                  {distinction.is_secret && <Tag accent>Secret</Tag>}
+                </>
+              }
+              gloss={distinction.notes || undefined}
+            />
+          </div>
+        ))}
+      </Entries>
     </div>
   );
 }

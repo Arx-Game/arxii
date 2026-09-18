@@ -10,43 +10,47 @@
  * Owner-only, like the endpoint behind it. Unlike the rest of the Advancement
  * tab it does not need the character to be the active puppet: it reads by sheet
  * id and writes nothing.
+ *
+ * Drawn in the Reference Sheet's vocabulary (#3898): a glance list under the section's
+ * own heading, since the sheet's Growth page already says what this is.
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCharacterXpLedgerQuery } from '@/progression/queries';
-
-function LedgerRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="font-medium tabular-nums">{value.toLocaleString()} XP</span>
-    </div>
-  );
-}
+import { Glance, Ledger, Stack, Subheading } from '@/character_sheets/components/sheet/primitives';
+import type { GlanceRow } from '@/character_sheets/components/sheet/primitives';
 
 export function XpLedgerCard({ sheetId }: { sheetId: number }) {
   const { data, isLoading, error } = useCharacterXpLedgerQuery(sheetId);
 
+  const rows: GlanceRow[] = data
+    ? [
+        { label: 'Earned on', value: `${data.earned.toLocaleString()} XP` },
+        { label: 'Spent on', value: `${data.spent.toLocaleString()} XP` },
+        {
+          label: 'Locked from creation',
+          value: data.locked > 0 ? `${data.locked.toLocaleString()} XP` : null,
+        },
+      ]
+    : [];
+
   return (
-    <Card data-testid="xp-ledger-card">
-      <CardHeader>
-        <CardTitle className="text-base">Invested in this character</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">Failed to load the XP ledger.</p>}
-        {data && (
-          <>
-            <LedgerRow label="Earned on" value={data.earned} />
-            <LedgerRow label="Spent on" value={data.spent} />
-            {data.locked > 0 && <LedgerRow label="Locked from creation" value={data.locked} />}
-            <p className="pt-1 text-xs text-muted-foreground">
-              Your XP balance is held by your account, not by any one character. These are records
-              of where it came from and where it went.
-            </p>
-          </>
-        )}
-      </CardContent>
-    </Card>
+    <div className="refsheet-stack" data-testid="xp-ledger-card">
+      <Subheading>Invested in this character</Subheading>
+      {isLoading && <Ledger>Reading the ledger…</Ledger>}
+      {error && (
+        <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
+          The XP ledger could not be read.
+        </p>
+      )}
+      {data && (
+        <Stack>
+          <Glance rows={rows} />
+          <p className="refsheet-note">
+            XP is held by the account, not by any one character. This is the record of where it came
+            from and where it went.
+          </p>
+        </Stack>
+      )}
+    </div>
   );
 }

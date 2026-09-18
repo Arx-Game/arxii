@@ -7,14 +7,16 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
-from world.character_creation.factories import RealmFactory
+from world.character_creation.factories import BeginningsFactory, RealmFactory
 from world.character_sheets.factories import (
     CharacterSheetFactory,
     GenderFactory,
     MoodOptionFactory,
+    ProfileBeginningsFactory,
 )
 from world.character_sheets.models import CharacterSheet, Heritage
 from world.character_sheets.serializers import (
@@ -35,6 +37,8 @@ from world.character_sheets.serializers import (
 from world.character_sheets.types import SheetVisibility
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.covenants.factories import CovenantFactory, MentorBondFactory
+from world.covenants.models import MentorBond
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.forms.factories import (
     BuildFactory,
@@ -45,6 +49,8 @@ from world.forms.factories import (
 )
 from world.forms.models import FormType
 from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.factories import EquippedItemFactory, ItemInstanceFactory
 from world.magic.constants import GlimpseState, GlimpseTagAxis, RitualExecutionKind
 from world.magic.factories import (
     CharacterAuraFactory,
@@ -73,6 +79,7 @@ from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
     RosterTenureFactory,
+    TenureGalleryFactory,
     TenureMediaFactory,
 )
 from world.scenes.factories import PersonaFactory
@@ -282,6 +289,7 @@ class TestIdentitySection(TestCase):
             "pronouns",
             "species",
             "heritage",
+            "beginnings",
             "family",
             "tarot_card",
             "origin",
@@ -348,6 +356,25 @@ class TestIdentitySection(TestCase):
         """origin is {id, name} from origin_realm."""
         identity = self._get_identity()
         assert identity["origin"] == {"id": self.realm.pk, "name": "Arx"}
+
+    def test_beginnings_are_not_the_origin_realm(self) -> None:
+        """beginnings and origin are different fields and must not be interchangeable.
+
+        Regression (#3898 review): the sheet's "Beginning" row was bound to ``origin``,
+        which is ``Profile.origin_realm`` — the realm a character is FROM, not the
+        Beginnings archetype they hold. Both are asserted here against distinctly-named
+        rows so a later refactor cannot silently re-point one at the other.
+        """
+        beginnings = BeginningsFactory(name="A Caretaker of Arx")
+        ProfileBeginningsFactory(profile=self.sheet.true_profile, beginnings=beginnings)
+        identity = self._get_identity()
+        assert identity["beginnings"] == [{"id": beginnings.pk, "name": "A Caretaker of Arx"}]
+        assert identity["origin"] == {"id": self.realm.pk, "name": "Arx"}
+
+    def test_beginnings_empty_when_none_held(self) -> None:
+        """beginnings is an empty list, not null, for a character holding none."""
+        identity = self._get_identity()
+        assert identity["beginnings"] == []
 
     def test_path_nested(self) -> None:
         """path is {id, name} from latest CharacterPathHistory."""
@@ -930,7 +957,7 @@ class TestDistinctionsSection(TestCase):
         assert len(distinctions) == 2
 
     def test_distinction_entry_keys(self) -> None:
-        """Each distinction entry has id, name, rank, notes, is_secret, is_from_glimpse (#2427)."""
+        """Each entry has id, name, rank, notes, is_secret, feature (#3898), is_from_glimpse."""
         distinctions = self._get_distinctions()
         for entry in distinctions:
             assert set(entry.keys()) == {
@@ -939,6 +966,7 @@ class TestDistinctionsSection(TestCase):
                 "rank",
                 "notes",
                 "is_secret",
+                "feature",
                 "is_from_glimpse",
             }
 
@@ -1908,6 +1936,251 @@ class TestProfilePictureSection(TestCase):
         )
 
 
+class TestLooksSection(TestCase):
+    """The plate's looks strip (#3898): the character's images and the mood each shows.
+
+    The interesting behaviour is the visibility split. The owner sees every image on
+    their tenures; anyone else sees only what is already public of the character —
+    images in a public gallery, plus the worn one, which the roster has always shown.
+    A private gallery must not reach the strip, because the sheet is a page anyone can
+    open.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="LooksChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.public_gallery = TenureGalleryFactory(tenure=cls.tenure, is_public=True)
+        cls.private_gallery = TenureGalleryFactory(tenure=cls.tenure, is_public=False)
+        cls.guarded_mood = MoodOptionFactory(name="Guarded")
+
+        # The worn look: tagged, and the entry's profile picture.
+        cls.worn = TenureMediaFactory(
+            tenure=cls.tenure,
+            gallery=cls.public_gallery,
+            look=cls.guarded_mood,
+            media__cloudinary_url="https://example.test/worn.jpg",
+        )
+        # A second public image, untagged — an artist's sheet is worth having before
+        # anyone has tagged a mood.
+        cls.public_untagged = TenureMediaFactory(
+            tenure=cls.tenure,
+            gallery=cls.public_gallery,
+            media__cloudinary_url="https://example.test/public.jpg",
+        )
+        # One the player keeps private.
+        cls.private = TenureMediaFactory(
+            tenure=cls.tenure,
+            gallery=cls.private_gallery,
+            media__cloudinary_url="https://example.test/private.jpg",
+        )
+        cls.roster_entry.profile_picture = cls.worn
+        cls.roster_entry.save(update_fields=["profile_picture"])
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _looks(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["looks"]
+
+    def test_owner_sees_every_image_with_the_worn_one_first(self) -> None:
+        looks = self._looks(self.player)
+        # The worn look leads, so the strip reads as "this one, and the others". The
+        # rest follow the gallery's own order, which this does not pin.
+        assert looks[0]["is_current"] is True
+        assert looks[0]["url"] == "https://example.test/worn.jpg"
+        assert looks[0]["look"] == "Guarded"
+        assert looks[0]["tenure_media_id"] == self.worn.pk
+        assert {row["url"] for row in looks} == {
+            "https://example.test/worn.jpg",
+            "https://example.test/public.jpg",
+            "https://example.test/private.jpg",
+        }
+        assert [row["is_current"] for row in looks].count(True) == 1
+
+    def test_untagged_image_carries_a_blank_look_rather_than_being_dropped(self) -> None:
+        looks = self._looks(self.player)
+        untagged = next(row for row in looks if row["url"] == "https://example.test/public.jpg")
+        assert untagged["look"] == ""
+
+    def test_stranger_sees_public_images_only(self) -> None:
+        looks = self._looks(self.stranger)
+        urls = {row["url"] for row in looks}
+        assert "https://example.test/private.jpg" not in urls
+        assert urls == {"https://example.test/worn.jpg", "https://example.test/public.jpg"}
+
+    def test_stranger_sees_the_worn_image_even_from_a_private_gallery(self) -> None:
+        """The profile picture is already public on the roster, wherever it is filed."""
+        self.roster_entry.profile_picture = self.private
+        self.roster_entry.save(update_fields=["profile_picture"])
+        try:
+            urls = [row["url"] for row in self._looks(self.stranger)]
+            assert "https://example.test/private.jpg" in urls
+        finally:
+            self.roster_entry.profile_picture = self.worn
+            self.roster_entry.save(update_fields=["profile_picture"])
+
+    def test_plate_ink_defaults_to_ember_and_is_ungated(self) -> None:
+        """The ink is OOC chrome — it says nothing about the character, so nobody is gated."""
+        self.client.force_authenticate(user=self.stranger.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.data["plate_ink"] == "ember"
+
+
+class TestWornSection(TestCase):
+    """The Physical section's Wearing block (#3898): what the character has on.
+
+    Worn things are the most visible things a character has, so this rides the sheet
+    payload rather than the equipped-items endpoint, which answers only for a character
+    its caller plays. What separates viewers here is not a visibility tier but the
+    #2985 layer walk: a piece covered by something opaque above it is dropped for
+    everyone except the owner and staff, who keep it flagged.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="WornChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # A plain coat over a shift at the same region: the coat shows, the shift does
+        # not. A plain cut conceals what is beneath it by default.
+        cls.coat = ItemInstanceFactory(
+            custom_name="Ash-Grey Coat",
+            custom_description="Cut long, and mended at one cuff.",
+        )
+        cls.shift = ItemInstanceFactory(custom_name="Linen Shift", custom_description="Plain.")
+        EquippedItemFactory(
+            character=cls.sheet,
+            item_instance=cls.coat,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.OUTER,
+        )
+        EquippedItemFactory(
+            character=cls.sheet,
+            item_instance=cls.shift,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _worn(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["worn"]
+
+    def test_a_stranger_sees_what_is_on_the_outside(self) -> None:
+        """The whole point of the section: a visitor is not sent away empty-handed."""
+        worn = self._worn(self.stranger)
+        assert [row["name"] for row in worn] == ["Ash-Grey Coat"]
+        assert worn[0]["description"] == "Cut long, and mended at one cuff."
+        assert worn[0]["is_hidden"] is False
+
+    def test_a_stranger_never_sees_what_the_coat_covers(self) -> None:
+        names = {row["name"] for row in self._worn(self.stranger)}
+        assert "Linen Shift" not in names
+
+    def test_the_owner_sees_the_covered_piece_flagged(self) -> None:
+        worn = {row["name"]: row for row in self._worn(self.player)}
+        assert set(worn) == {"Ash-Grey Coat", "Linen Shift"}
+        assert worn["Linen Shift"]["is_hidden"] is True
+        assert worn["Ash-Grey Coat"]["is_hidden"] is False
+
+    def test_wearing_nothing_renders_no_block(self) -> None:
+        """Render-or-vanish: an empty list, not a row saying the character is bare."""
+        bare = CharacterFactory(db_key="BareChar")
+        bare_sheet = CharacterSheetFactory(character=bare)
+        RosterEntryFactory(character_sheet=bare_sheet)
+        self.client.force_authenticate(user=self.stranger.account)
+        response = self.client.get(f"/api/character-sheets/{bare.pk}/")
+        assert response.data["worn"] == []
+
+
+class TestMentorsSection(TestCase):
+    """Ties' Mentors block (#3898): the Mentor's Vow bonds a character holds (#1165).
+
+    Both directions ride one list, each row saying what the OTHER party is. Owner and
+    staff only, matching the covenant roles it sits beside on the same page — a vow is
+    sworn inside a covenant, and publishing it would say more about the covenant than
+    about the character.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="MentorChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.covenant = CovenantFactory(name="The Lantern Vigil")
+        cls.teacher = CharacterSheetFactory(character=CharacterFactory(db_key="Maelis"))
+        cls.student = CharacterSheetFactory(character=CharacterFactory(db_key="Corwin"))
+        MentorBondFactory(
+            covenant=cls.covenant,
+            mentor_sheet=cls.teacher,
+            sidekick_sheet=cls.sheet,
+        )
+        MentorBondFactory(
+            covenant=cls.covenant,
+            mentor_sheet=cls.sheet,
+            sidekick_sheet=cls.student,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _mentors(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["mentors"]
+
+    def test_both_directions_ride_one_list_named_by_role(self) -> None:
+        rows = {row["name"]: row for row in self._mentors(self.player)}
+        assert set(rows) == {"Maelis", "Corwin"}
+        assert rows["Maelis"]["role"] == "Mentor"
+        assert rows["Corwin"]["role"] == "Student"
+        assert rows["Maelis"]["covenant"] == "The Lantern Vigil"
+
+    def test_a_dissolved_vow_is_not_a_bond(self) -> None:
+        MentorBond.objects.filter(sidekick_sheet=self.student).update(dissolved_at=timezone.now())
+        try:
+            assert [row["name"] for row in self._mentors(self.player)] == ["Maelis"]
+        finally:
+            MentorBond.objects.filter(sidekick_sheet=self.student).update(dissolved_at=None)
+
+    def test_a_stranger_is_told_nothing_of_their_vows(self) -> None:
+        assert self._mentors(self.stranger) == []
+
+
 class TestProfilePictureNull(TestCase):
     """Tests for the profile_picture field when no picture is set."""
 
@@ -2161,11 +2434,32 @@ class TestCharacterSheetQueryCount(TestCase):
                 vacancy-bearing membership, not one per persona.
         41-42. Actor's Sheet prefetches, #3621 (enemy rows; the Introductions, journal
                entries by kind)
+        43.    identity beginnings prefetch, #3898 (the Beginnings the presented profile
+               holds — what the sheet means by "Beginning", as distinct from the realm
+               the character is from). One query however many origins they hold.
+        44-45. looks prefetch, #3898 (the character's images and the mood each shows,
+               for the plate's strip). Two queries rather than one because the chain is
+               ``roster_entry__tenures__media``: 44 re-fetches the tenures and 45 fetches
+               their media. The tenures ARE already prefetched for ``can_edit`` (#21),
+               but into ``cached_tenures`` via ``to_attr``, and Django cannot chain a
+               deeper prefetch through a ``to_attr`` parent — so the second declaration
+               pays for its own tenure row. Both are fixed: one pair for the whole strip,
+               not one per image.
+        46.    worn prefetch, #3898 (what the character has on, for Physical's Wearing
+               block). One query for every piece, with the template and both silhouettes
+               selected along with it so the layer walk that decides what shows costs
+               nothing further.
+        47-48. mentor bond prefetches, #3898 (#1165's Mentor's Vow, both ways round, for
+               Ties). Two queries because the two directions are two relations on the
+               sheet: 47 is where the character is the sidekick, 48 where they are the
+               mentor. Fixed however many bonds they hold.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
         # Introductions (journal entries by kind).
-        with self.assertNumQueries(42):
+        # +6 (#3898): the identity beginnings prefetch, the looks strip, the worn
+        # pieces and both directions of the mentor bond, per 43-48.
+        with self.assertNumQueries(48):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

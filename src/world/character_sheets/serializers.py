@@ -42,7 +42,9 @@ from world.character_sheets.types import (
     IdentitySection,
     IdNameRef,
     IntroductionEntry,
+    LookEntry,
     MagicSection,
+    MentorBondEntry,
     MotifResonanceEntry,
     MotifSection,
     OriginSlotEntry,
@@ -59,9 +61,11 @@ from world.character_sheets.types import (
     TechniqueEntry,
     ThemingSection,
     VacancyRef,
+    WornEntry,
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
+from world.covenants.models import MentorBond
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import (
     CharacterForm,
@@ -70,6 +74,8 @@ from world.forms.models import (
     PersonaTraitDescriptor,
 )
 from world.goals.models import CharacterGoal
+from world.items.models import EquippedItem
+from world.items.services.visibility import compute_worn_visibility
 from world.magic.constants import GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
@@ -89,7 +95,7 @@ from world.magic.services.technique_forms import (
     technique_signature_payload,
 )
 from world.progression.models import CharacterPathHistory
-from world.roster.models import RosterTenure
+from world.roster.models import RosterTenure, TenureMedia
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
@@ -216,7 +222,11 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     # #2994 — owner/staff-only declared mood.
     "current_mood",
 )
-_IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
+_IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    _SHARED_PATH_HISTORY_PREFETCH,
+    # #3898 — the Beginnings the presented profile holds, for the identity section.
+    "true_profile__beginnings",
+)
 
 
 def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
@@ -241,6 +251,7 @@ def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
                 "heritage": None,
                 "tarot_card": None,
                 "origin": None,
+                "beginnings": [],
             },
         )
     return (
@@ -250,6 +261,13 @@ def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
             "family": bio_profile.family,
             "heritage": _id_name_or_null(bio_profile.heritage),
             "tarot_card": _id_name_or_null(bio_profile.tarot_card),
+            # #3898 — the Beginnings the character holds, which is what the sheet means
+            # by "Beginning" (Caretaker, Sleeper, Misbegotten). Distinct from `origin`
+            # below, which is the realm they are FROM. A set that only grows (#3775), so
+            # this is a list, and a cover profile presents its own fabricated set.
+            "beginnings": [
+                IdNameRef(id=row.pk, name=row.name) for row in bio_profile.beginnings.all()
+            ],
             "origin": _id_name_or_null(bio_profile.origin_realm),
         },
     )
@@ -390,6 +408,7 @@ def _build_identity(
         pronouns=pronouns,
         species=_id_name_or_null(sheet.species),
         heritage=lineage["heritage"],
+        beginnings=lineage["beginnings"],
         family=_id_name_or_null(family),
         tarot_card=lineage["tarot_card"],
         origin=lineage["origin"],
@@ -752,10 +771,30 @@ _DISTINCTIONS_SELECT_RELATED: tuple[str, ...] = ()
 _DISTINCTIONS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "distinctions",
-        queryset=CharacterDistinction.objects.select_related("distinction"),
+        # #3898 — `feature_trait`/`feature_marking` resolve the distinctive feature a
+        # per-feature distinction is aimed at, so Physical can list them without a query
+        # per row.
+        queryset=CharacterDistinction.objects.select_related(
+            "distinction", "feature_trait", "feature_marking"
+        ),
         to_attr="cached_distinctions",
     ),
 )
+
+
+def _feature_name(cd: CharacterDistinction) -> str:
+    """Name the distinctive feature a per-feature distinction is aimed at (#3739).
+
+    Blank for an ordinary distinction, which is what tells the sheet's Physical page
+    which rows belong in its "Distinctive features" block: a feature is something a
+    person can see, so it is read beside hair and eyes rather than only in the trait
+    list.
+    """
+    if cd.feature_marking_id is not None:
+        return cd.feature_marking.name
+    if cd.feature_trait_id is not None:
+        return cd.feature_trait.display_name
+    return ""
 
 
 def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[DistinctionEntry]:
@@ -775,6 +814,7 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             notes=cd.notes,
             is_secret=cd.is_secret,
             is_from_glimpse=cd.from_glimpse_id is not None,
+            feature=_feature_name(cd),
         )
         for cd in sheet.cached_distinctions
         if privileged or not cd.is_secret
@@ -1348,6 +1388,62 @@ _PROFILE_PICTURE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 _CURRENT_RESIDENCE_SELECT_RELATED: tuple[str, ...] = ("current_residence__objectdb",)
 _CURRENT_RESIDENCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
+_LOOKS_SELECT_RELATED: tuple[str, ...] = ()
+# No ``to_attr`` here (ADR-0278): the rows hang off the prefetch cache on the default
+# related manager, so ``tenure.media.all()`` reads them without a second query and
+# without a parallel attribute on an idmapper-shared parent.
+_LOOKS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "roster_entry__tenures__media",
+        queryset=TenureMedia.objects.select_related("media", "gallery", "look").order_by(
+            "sort_order", "-media__uploaded_date"
+        ),
+    ),
+)
+
+
+def _build_looks(sheet: CharacterSheet, *, privileged: bool) -> list[LookEntry]:
+    """Build the looks strip: the character's images, tagged with the mood each shows.
+
+    Visibility. The owner and staff get every image on the character's tenures. Every
+    other viewer gets only what is already public of them: images in a gallery marked
+    ``is_public``, plus the profile picture itself (which the roster has always shown
+    to everyone). A private gallery shared with named tenures via
+    ``TenureGallery.allowed_viewers`` is honoured on the gallery pages and deliberately
+    NOT here — the plate is the character's public face, so this strip under-shows for
+    an allow-listed viewer rather than risking a private image on a page anyone can open.
+
+    Ordering puts the worn look first so the strip reads as "this one, and the others",
+    then follows the gallery's own ``sort_order``. An untagged image carries an empty
+    ``look`` and still renders — an artist's sheet is worth having before anyone has
+    tagged a mood, and render-or-vanish means the strip is simply absent when the
+    character has no images at all.
+    """
+    roster_entry = sheet.roster_entry
+    if roster_entry is None:
+        return []
+    current_id = roster_entry.profile_picture_id
+
+    entries: list[LookEntry] = []
+    for tenure in roster_entry.tenures.all():
+        for link in tenure.media.all():
+            is_current = link.pk == current_id
+            if not privileged and not is_current:
+                gallery = link.gallery
+                if gallery is None or not gallery.is_public:
+                    continue
+            entries.append(
+                LookEntry(
+                    tenure_media_id=link.pk,
+                    url=link.media.cloudinary_url,
+                    title=link.media.title,
+                    look=link.look.name if link.look is not None else "",
+                    is_current=is_current,
+                )
+            )
+    entries.sort(key=lambda row: not row["is_current"])
+    return entries
+
 
 def _build_profile_picture(sheet: CharacterSheet) -> str | None:
     """Return the profile picture URL or ``None``.
@@ -1376,6 +1472,116 @@ def _build_current_residence(sheet: CharacterSheet) -> IdNameRef | None:
 
 # --- Section registry for queryset aggregation ---
 
+_MENTORS_SELECT_RELATED: tuple[str, ...] = ()
+# Both directions of the vow, each with the covenant it was sworn in and the other
+# party's ObjectDB, so naming a bond costs nothing further. No ``to_attr`` (ADR-0278).
+_MENTORS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "mentor_bonds_as_mentor",
+        queryset=MentorBond.objects.active().select_related(
+            "covenant", "sidekick_sheet__character"
+        ),
+    ),
+    Prefetch(
+        "mentor_bonds_as_sidekick",
+        queryset=MentorBond.objects.active().select_related("covenant", "mentor_sheet__character"),
+    ),
+)
+
+
+def _build_mentors(sheet: CharacterSheet, *, privileged: bool) -> list[MentorBondEntry]:
+    """Build the Mentors block on Ties: who took this character on, and whom they took on.
+
+    Owner and staff only. A Mentor's Vow is sworn inside a covenant, and the rest of what
+    a covenant knows about a character is already owner-only on this page (the covenant
+    roles under Standing), so publishing the bond to every visitor would say more about
+    the covenant than about the character.
+
+    The other party is named the way relationships name a target — by the character's own
+    key. Both directions are returned in one list, each row saying which the other party is.
+    """
+    if not privileged:
+        return []
+
+    entries: list[MentorBondEntry] = [
+        MentorBondEntry(
+            id=bond.pk,
+            name=bond.mentor_sheet.character.db_key,
+            role="Mentor",
+            covenant=bond.covenant.name,
+        )
+        for bond in sheet.mentor_bonds_as_sidekick.all()
+    ]
+    entries.extend(
+        MentorBondEntry(
+            id=bond.pk,
+            name=bond.sidekick_sheet.character.db_key,
+            role="Student",
+            covenant=bond.covenant.name,
+        )
+        for bond in sheet.mentor_bonds_as_mentor.all()
+    )
+    return entries
+
+
+_WORN_SELECT_RELATED: tuple[str, ...] = ()
+# The layer walk reads the template's `is_revealing` and both silhouettes, so they are
+# selected here rather than left to fire one query per worn piece. No ``to_attr``
+# (ADR-0278): ``sheet.equipped_items.all()`` reads the prefetch cache directly.
+_WORN_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "equipped_items",
+        queryset=EquippedItem.objects.select_related(
+            "item_instance",
+            "item_instance__template",
+            "item_instance__silhouette",
+            "item_instance__template__silhouette",
+        ),
+    ),
+)
+
+
+def _build_worn(sheet: CharacterSheet, *, privileged: bool) -> list[WornEntry]:
+    """Build the Wearing block: what the character has on, as anyone would see it.
+
+    Visibility is the #2985 layer walk, not a permission tier. ``compute_worn_visibility``
+    is the one predicate the look command, the skin read and the show/conceal verbs all
+    share, so a shift is under a coat here for the same reason it is there. What differs
+    per viewer is only what happens to a covered piece: it is dropped for everyone except
+    the owner and staff, who keep it flagged so the sheet can say it is there and unseen.
+
+    This lives on the sheet rather than on the equipped-items endpoint deliberately. That
+    endpoint refuses anyone but the character's own player, which would make the whole
+    block vanish for every visitor — and worn things are the most visible things a
+    character has.
+    """
+    rows = list(sheet.equipped_items.all())
+    if not rows:
+        return []
+    visibility = compute_worn_visibility(rows)
+
+    entries: list[WornEntry] = []
+    seen: set[int] = set()
+    for row in rows:
+        instance = row.item_instance
+        # A piece covering several regions has a row per region; it is one thing worn.
+        if instance.pk in seen:
+            continue
+        seen.add(instance.pk)
+        is_hidden = not visibility.is_visible(instance.pk)
+        if is_hidden and not privileged:
+            continue
+        entries.append(
+            WornEntry(
+                id=instance.pk,
+                name=instance.display_name,
+                description=instance.display_description,
+                is_hidden=is_hidden,
+            )
+        )
+    return entries
+
+
 _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = (
     (_CAN_EDIT_SELECT_RELATED, _CAN_EDIT_PREFETCH_RELATED),
     (_IDENTITY_SELECT_RELATED, _IDENTITY_PREFETCH_RELATED),
@@ -1392,6 +1598,9 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_THEMING_SELECT_RELATED, _THEMING_PREFETCH_RELATED),
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
     (_CURRENT_RESIDENCE_SELECT_RELATED, _CURRENT_RESIDENCE_PREFETCH_RELATED),
+    (_LOOKS_SELECT_RELATED, _LOOKS_PREFETCH_RELATED),
+    (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
+    (_MENTORS_SELECT_RELATED, _MENTORS_PREFETCH_RELATED),
 )
 
 
@@ -1517,6 +1726,17 @@ class CharacterSheetSerializer(serializers.Serializer):
             "theming": _build_theming(sheet),
             "profile_picture": _build_profile_picture(sheet),
             "current_residence": _build_current_residence(sheet),
+            # #3898 — the plate: which images the character can wear, and the ground
+            # colour it is printed on. `plate_ink` is OOC chrome and ungated; it says
+            # nothing about the character, only how their page is printed.
+            "looks": _build_looks(sheet, privileged=privileged),
+            "plate_ink": sheet.plate_ink,
+            # Worn things are visible things, so this is ungated by tier — only the
+            # layer walk decides, and only a covered piece is owner-only.
+            "worn": _build_worn(sheet, privileged=privileged),
+            # Ties' Mentors block. Owner and staff only, like the covenant roles it
+            # sits beside.
+            "mentors": _build_mentors(sheet, privileged=privileged),
         }
 
 

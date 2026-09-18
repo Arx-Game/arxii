@@ -1,7 +1,7 @@
 /**
  * SoulTetherStatusPanel
  *
- * Card showing the caller's Soul Tether bonds. For each bond it displays:
+ * The caller's Soul Tether bonds. For each bond it shows:
  * - Bonded character name (from bondedCharacterNames prop, or "#<id>" fallback)
  * - Role label (Sinner / Sineater), derived from callerSheetId vs the detail payload
  * - HollowBar (current/max)
@@ -18,12 +18,14 @@
  * displaying the bonded character's sheet ID prefixed with "#". This avoids
  * needing a separate character-sheet lookup hook.
  *
- * Pattern: modeled after NominationsPanel (header card + item rows).
+ * Drawn in the Reference Sheet's vocabulary (#3898): a subheading over entries on
+ * hairlines, and NOTHING at all when there are no tethers. The card this used to be,
+ * whose whole body was the words "No active soul tethers.", is the empty-state card
+ * the sheet's rulings forbid — it took a reader's attention to tell them nothing.
  */
 
-import { Link2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HollowBar } from '@/magic/components/HollowBar';
+import { Entries, Entry, Stack, Subheading } from '@/character_sheets/components/sheet/primitives';
 import { useSoulTetherDetail } from '@/magic/queries';
 import type { SoulTetherDetail } from '@/magic/types';
 
@@ -86,12 +88,14 @@ function BondRow({ relationshipId, callerSheetId, bondedCharacterNames }: BondRo
   const { data, isLoading, isError } = useSoulTetherDetail(relationshipId);
 
   if (isLoading) {
-    return <li className="py-2 text-sm text-muted-foreground">Loading tether…</li>;
+    return <p className="refsheet-ledger">Loading tether…</p>;
   }
 
   if (isError || !data) {
     return (
-      <li className="py-2 text-sm text-destructive">Failed to load tether {relationshipId}.</li>
+      <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
+        That tether could not be read.
+      </p>
     );
   }
 
@@ -105,20 +109,15 @@ function BondRow({ relationshipId, callerSheetId, bondedCharacterNames }: BondRo
   const roleLabel = callerIsSineater ? 'Sineater' : 'Sinner';
 
   return (
-    <li className="space-y-2 rounded-md border p-3">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{bondedName}</span>
-        <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-          {roleLabel}
-        </span>
-      </div>
+    <Entry
+      name={bondedName}
+      aside={<span className="refsheet-note">{roleLabel}</span>}
+      gloss={
+        callerIsSineater ? `${data.sineater_lifetime_helped} units helped, all told.` : undefined
+      }
+    >
       <HollowBar current={data.hollow_current} max={data.hollow_max} />
-      {callerIsSineater && (
-        <p className="text-xs text-muted-foreground">
-          {data.sineater_lifetime_helped} units helped (lifetime)
-        </p>
-      )}
-    </li>
+    </Entry>
   );
 }
 
@@ -131,30 +130,22 @@ export function SoulTetherStatusPanel({
   callerSheetId,
   bondedCharacterNames,
 }: SoulTetherStatusPanelProps) {
+  // Render-or-vanish: a character with no tether has no tether block, not a block
+  // announcing the absence.
+  if (relationshipIds.length === 0) return null;
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Link2 className="h-4 w-4" />
-          Soul Tethers
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {relationshipIds.length > 0 ? (
-          <ul className="space-y-3">
-            {relationshipIds.map((id) => (
-              <BondRow
-                key={id}
-                relationshipId={id}
-                callerSheetId={callerSheetId}
-                bondedCharacterNames={bondedCharacterNames}
-              />
-            ))}
-          </ul>
-        ) : (
-          <p className="text-center text-sm text-muted-foreground">No active soul tethers.</p>
-        )}
-      </CardContent>
-    </Card>
+    <Stack>
+      <Subheading>Soul tethers</Subheading>
+      <Entries>
+        {relationshipIds.map((id) => (
+          <BondRow
+            key={id}
+            relationshipId={id}
+            callerSheetId={callerSheetId}
+            bondedCharacterNames={bondedCharacterNames}
+          />
+        ))}
+      </Entries>
+    </Stack>
   );
 }

@@ -181,6 +181,6 @@ describe('KinshipPanel', () => {
     render(<KinshipPanel characterId={7} />);
     fireEvent.click(screen.getByText('Aria'));
     expect(useKinRelationship).toHaveBeenCalled();
-    expect(screen.getByText(/no linked character record/i)).toBeInTheDocument();
+    expect(screen.getByText(/nobody on the roster answers to this person/i)).toBeInTheDocument();
   });
 });

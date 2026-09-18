@@ -87,10 +87,15 @@ class ThreadFilter(django_filters.FilterSet):
 
     resonance = django_filters.NumberFilter(field_name="resonance_id")
     target_kind = django_filters.CharFilter(field_name="target_kind")
+    # #3898 — narrow to one owned character. The list is account-scoped, so an account
+    # with alts otherwise reads every character's threads on whichever sheet it opens.
+    # Same narrowing `CharacterResonanceFilter.character` already provides for the
+    # sibling resonance list, and the same reason.
+    owner = django_filters.NumberFilter(field_name="owner_id")
 
     class Meta:
         model = Thread
-        fields = ["resonance", "target_kind"]
+        fields = ["resonance", "target_kind", "owner"]
 
 
 class CharacterAuraFilter(django_filters.FilterSet):

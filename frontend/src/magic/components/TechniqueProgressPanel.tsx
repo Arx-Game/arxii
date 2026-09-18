@@ -16,7 +16,7 @@
 
 import { useState, type FormEvent } from 'react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Subheading } from '@/character_sheets/components/sheet/primitives';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -158,11 +158,9 @@ export function TechniqueProgressPanel({ characterSheetId }: Props) {
   };
 
   return (
-    <Card data-testid="technique-progress-panel">
-      <CardHeader>
-        <CardTitle className="text-base">Training</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">{renderRows()}</CardContent>
-    </Card>
+    <div className="refsheet-stack" data-testid="technique-progress-panel">
+      <Subheading>Training</Subheading>
+      {renderRows()}
+    </div>
   );
 }
