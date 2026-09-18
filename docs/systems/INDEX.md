@@ -2264,11 +2264,22 @@ Character identity, appearance, demographics, and guise system.
   `age` (apparent) + `birthday`, owner/staff-only `chronological_age`/
   `biological_age`/`withered_years`; owner actions `GET …/maturation/` +
   `POST …/spend-maturation-point/`.
-- **Integrates with:** roster (character management), character_creation (sheet setup),
+- **The Reference Sheet (#3898):** the web sheet is an artist's reference sheet on the
+  Folio system — a night plate (art, name + titles, concept, quote, two glance lines,
+  the looks strip) over eight sections, five public and three the owner alone reads
+  (Knowledge, Holdings, Growth). Friends moved to `/profile/friends`. Gating is
+  render-or-vanish: a band a viewer may not read is absent, never an empty state.
+  Payload additions: `looks` (tenure media tagged with the `MoodOption` each shows, via
+  `TenureMedia.look`; public-gallery images plus the worn one for a non-privileged
+  viewer) and `plate_ink` (`PlateInk`, OOC chrome). Styles:
+  `frontend/src/character_sheets/sheet.css` under `.refsheet`.
+- **Integrates with:** roster (character management, `set_profile_picture` wears a look,
+  `TenureMedia.look`), character_creation (sheet setup),
   gm (table update requests apply prose rewrites), stories (`Era` stamps),
   game_clock (chronological derivation + aging crons), progression (Maturation
-  Points), vitals (Frailty decline), species (`eternal_youth`,
-  `decline_start_age`), tidings (birthday digest)
+  Points), vitals (Frailty decline, read as words on Physical), species (`eternal_youth`,
+  `decline_start_age`), tidings (birthday digest), magic (`ThreadFilter.owner` narrows
+  the thread list to one character), currency (the purse on Holdings)
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation

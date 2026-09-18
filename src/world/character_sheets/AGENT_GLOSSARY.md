@@ -91,3 +91,28 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   content round trip). _Avoid_: mood/stance/disposition as a synonym for
   `StanceArchetype` or `NpcRegard`'s declared stance — those are different,
   already-claimed concepts (see their own ADRs).
+
+## The Reference Sheet (#3898)
+
+- **Plate** — the head of the web character sheet: the art, the name with its
+  titles, the concept, the quote, two glance lines and the looks strip. Painted
+  in night literals in both themes because it is the cover of the page. Nothing
+  mechanical belongs on it. _Avoid_: header, hero, banner.
+- **Look** — one image of a character, tagged with the `MoodOption` it shows
+  (`TenureMedia.look`). The character WEARS one, which is the roster entry's
+  profile picture; the rest sit beside it in the strip. Tagging an image says
+  what the picture shows, never what the character feels — a look is outward and
+  public, [Mood](#mood) is inward and silent, and they share `MoodOption` only so
+  that "which mood" has one vocabulary. _Avoid_: expression, pose, portrait
+  (a portrait is any image; a look is a tagged one).
+- **Plate ink** — which of four grounds a player's plate is printed on
+  (`CharacterSheet.plate_ink`, `PlateInk`). OOC chrome, set in settings, and the
+  only part of the sheet's appearance a player chooses. The page below the plate
+  stays on Arx paper whichever is picked. _Avoid_: theme, skin, realm colour (a
+  realm ink is a different, world-facing concept).
+- **Section** — one of the sheet's eight pages (Sheet, Physical, Ties,
+  Distinctions, Magic, and the owner-only Knowledge, Holdings, Growth). _Avoid_:
+  tab — the sixteen-tab strip is what #3898 replaced, and the word carries it.
+- **Band** — a full-width folding block below the sheet's columns, holding
+  material that is gated or simply tall (goals and guidelines, abilities). A
+  band a viewer may not read is absent, never empty.

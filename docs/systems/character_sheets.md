@@ -24,6 +24,52 @@ allow-list lookup runs only when a section is actually FRIENDS-gated, so the all
 no query. Bio/story tiers (entangled with the presented-identity gating) and the player-facing
 tier-setting UI are follow-ups.
 
+## The Reference Sheet (#3898)
+
+The web character sheet (`frontend/src/roster/pages/CharacterSheetPage.tsx`) is the
+reference sheet an artist makes for a character, on the Arx Folio system the Gatefold
+and character creation already speak. Its styles live in
+`frontend/src/character_sheets/sheet.css`, scoped under `.refsheet`; the display
+primitives are `character_sheets/components/sheet/`. That file deliberately does not
+reuse `character-creation/cg.css`: CG's `.entry` is a *selection* control with a chosen
+state and doors, and the sheet only ever describes.
+
+**The plate** is the head: the art, the name with any `PersonaTitle`s composed into the
+same `h1`, the concept, the quote, two short glance lines, and the looks strip. It is
+painted in night literals in both themes — it is the cover, and a cover does not change
+with the reader's lights. Nothing mechanical appears on it: no health, no fatigue, no
+attributes.
+
+**Eight sections** replace the old sixteen tabs. Five are public — Sheet, Physical,
+Ties, Distinctions, Magic — then a visible break labelled "Yours only" and three the
+character's own player reads: Knowledge (secrets, clues, gossip), Holdings (purse,
+carried, property, agreements, the law) and Growth (advancement, sheet-change requests,
+languages, origin story). Friends left the sheet for `/profile/friends`: an OOC
+trusted-partner list belongs to the account, not to a character.
+
+**Gating is render-or-vanish.** A block a viewer may not read is absent, and the page
+keeps its shape for a stranger, a friend and the owner alike — no empty-state cards. The
+goals band and the abilities band are gated by the existing `goals_visibility` /
+`stats_visibility` / `skills_visibility` tiers, which the serializer already enforces by
+emptying those sections; the frontend renders what it is handed and never re-implements a
+tier. A viewer who gets neither band is offered a rumor about the character in their
+place. Condition on Physical reads as sentences for the owner and staff, and as one
+observational line for everyone else.
+
+**`looks` and `plate_ink`** are the payload's contribution. `_build_looks` returns the
+character's tenure media with the `MoodOption` each is tagged with (`TenureMedia.look`),
+the worn one first, so the plate can wear one and offer the rest beside it; the owner
+clicking a look calls `POST /api/roster/entries/{pk}/set_profile_picture/`. A
+non-privileged viewer receives only public-gallery images plus the worn one — a private
+gallery's `allowed_viewers` sharing is honoured on the gallery pages and deliberately not
+here, so the strip under-shows rather than risking a private image on a page anyone can
+open. `plate_ink` (`PlateInk`: ember / verdigris / rose / night) is OOC chrome, ungated,
+and picked in settings rather than on the sheet.
+
+Threads under Magic reuse the existing thread list endpoint, narrowed to one character by
+`ThreadFilter.owner` (#3898) — the list is account-scoped, so without it an account with
+alts read every character's threads on whichever sheet it opened.
+
 ## Web Sheet Mechanics Display (#3042)
 
 The `stats`/`skills` sections of `CharacterSheetSerializer` were always built (`_build_stats`/
