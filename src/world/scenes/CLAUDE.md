@@ -50,9 +50,13 @@ the unified Persona identity system, and non-combat scene rounds.
   (`journals.services.exclude_blocked_and_muted_authors`). Friend adds
   (`friend_services.add_friend`/`add_friend_all_characters`) reject a blocked pair with a shared
   neutral failure — the fan-out path loops through the gated single-add rather than duplicating the
-  check.
+  check. Player-authored scene target writes also use
+  `social_control_excluded_target_ids` before `create_interaction` writes an
+  `InteractionTargetPersona`; the refusal is neutral and preserves the draft, while
+  system-authored outcomes remain outside this gate (#3827).
 - **`Mute`** (#1278, #2996): the lighter, **one-way** sibling of Block — a player filters a persona
-  out of their own view (IC and/or OOC), reversible, no enforcement, the muted party never aware.
+  out of their own view (IC and/or OOC), reversible; IC target exclusion is enforced for
+  player-authored target writes (#3827), and the muted party is never told why.
   `mute_services.py` (`muted_persona_ids_for_viewer`, `set_mute`, `unmute`); the IC side is wired into
   the scene feed (muted personas skipped). The OOC channel, the "actions still show without text"
   refinement, the opt-in reveal, and the "N hidden" feed divider are follow-ups (#2087).

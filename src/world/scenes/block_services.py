@@ -14,13 +14,14 @@ job remain follow-up slices.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 
-from world.scenes.models import Block
+from world.scenes.models import Block, Mute
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -282,6 +283,138 @@ def _sheet_player(sheet: CharacterSheet) -> PlayerData | None:
 def _persona_player(persona: Persona) -> PlayerData | None:
     """The PlayerData currently playing this persona's character, or None (#1278)."""
     return _sheet_player(persona.character_sheet)
+
+
+def _block_excluded_target_ids(
+    *,
+    initiator_persona: Persona,
+    initiator_player_id: int,
+    targets: list[Persona],
+    player_ids_by_sheet: dict[int, int],
+    target_player_ids: set[int],
+) -> set[int]:
+    """Match existing symmetric Block scope against a target batch."""
+    candidates = list(
+        _active_blocks().filter(
+            Q(owner_id=initiator_player_id, blocked_player_id__in=target_player_ids)
+            | Q(blocked_player_id=initiator_player_id, owner_id__in=target_player_ids)
+        )
+    )
+    excluded: set[int] = set()
+    for target in targets:
+        target_player_id = player_ids_by_sheet.get(target.character_sheet_id)
+        if target_player_id is None:
+            continue
+        for block in candidates:
+            if block.blocked_player_id == target_player_id:
+                blocked_face_id = target.pk
+                blocker_face_id = initiator_persona.pk
+            elif (
+                block.owner_id == target_player_id
+                and block.blocked_player_id == initiator_player_id
+            ):
+                blocked_face_id = initiator_persona.pk
+                blocker_face_id = target.pk
+            else:
+                continue
+            if block.blocked_persona_id is not None and block.blocked_persona_id != blocked_face_id:
+                continue
+            if (
+                not block.account_level
+                and block.blocker_persona_id is not None
+                and block.blocker_persona_id != blocker_face_id
+            ):
+                continue
+            excluded.add(target.pk)
+            break
+    return excluded
+
+
+def _mute_excluded_target_ids(
+    *,
+    initiator_persona: Persona,
+    initiator_player_id: int,
+    targets: list[Persona],
+    player_ids_by_sheet: dict[int, int],
+    target_player_ids: set[int],
+) -> set[int]:
+    """Match existing one-way IC Mute scope against a target batch."""
+    muted_owner_ids = set(
+        Mute.objects.filter(owner_id__in=target_player_ids, mute_ic=True)
+        .filter(
+            Q(muted_persona_id=initiator_persona.pk)
+            | Q(account_level=True, muted_player_id=initiator_player_id)
+        )
+        .values_list("owner_id", flat=True)
+    )
+    return {
+        target.pk
+        for target in targets
+        if player_ids_by_sheet.get(target.character_sheet_id) in muted_owner_ids
+    }
+
+
+def social_control_excluded_target_ids(
+    *, initiator_persona: Persona, target_personas: Iterable[Persona]
+) -> set[int]:
+    """Return targets excluded by an active Block or IC Mute.
+
+    Block remains symmetric and exact-face/account scoped. Mute remains one-way: the target's
+    player must own an IC Mute naming the initiator face or its snapshotted player. The query work
+    is batched for the full target list so callers do not issue one social-control query per name.
+    Missing current players fail open, matching the existing Block and Mute service seams.
+
+    Args:
+        initiator_persona: The player-authored face making the interaction.
+        target_personas: The resolved faces the interaction intends to target.
+
+    Returns:
+        Persona primary keys that must be refused before the interaction is written.
+    """
+    targets = list(target_personas)
+    if not targets:
+        return set()
+
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    sheet_ids = {initiator_persona.character_sheet_id} | {
+        target.character_sheet_id for target in targets
+    }
+    player_ids_by_sheet = dict(
+        RosterTenure.objects.filter(
+            roster_entry__character_sheet_id__in=sheet_ids,
+            end_date__isnull=True,
+        ).values_list("roster_entry__character_sheet_id", "player_data_id")
+    )
+    initiator_player_id = player_ids_by_sheet.get(initiator_persona.character_sheet_id)
+    if initiator_player_id is None:
+        return set()
+
+    target_player_ids = {
+        player_id
+        for target in targets
+        if (player_id := player_ids_by_sheet.get(target.character_sheet_id)) is not None
+    }
+    if not target_player_ids:
+        return set()
+
+    excluded = _block_excluded_target_ids(
+        initiator_persona=initiator_persona,
+        initiator_player_id=initiator_player_id,
+        targets=targets,
+        player_ids_by_sheet=player_ids_by_sheet,
+        target_player_ids=target_player_ids,
+    )
+    excluded.update(
+        _mute_excluded_target_ids(
+            initiator_persona=initiator_persona,
+            initiator_player_id=initiator_player_id,
+            targets=targets,
+            player_ids_by_sheet=player_ids_by_sheet,
+            target_player_ids=target_player_ids,
+        )
+    )
+    return excluded
 
 
 def org_join_blocked(*, joining_sheet: CharacterSheet, member_sheets: Any) -> bool:

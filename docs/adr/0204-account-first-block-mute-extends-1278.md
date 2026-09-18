@@ -1,4 +1,4 @@
-# ADR-0204: Account-first block/mute extends #1278; IC stays flag-only; OOC is write-then-filter
+# ADR-0204: Account-first block/mute; IC delivery remains flag-only
 
 Context: #1278 built `Block`/`Mute` persona-scoped by default (an `account_level` opt-in existed
 only on `Block`), and wired enforcement into the profile gate, the scene target picker, and the
@@ -35,6 +35,16 @@ review flagged as silently under-serving the common case ("I block/mute a person
 them"), and it would have left four of seven enforcement seams unenforceable without a parallel,
 easy-to-drift `account_level` check duplicated in each caller instead of the two shared query
 helpers (`account_block_active`/`blocked_player_ids_for`, `account_muted`/`muted_player_ids_for`).
+
+
+### Addendum #3827: target exclusion is not delivery suppression
+
+The IC delivery rule remains flag-only: room-heard, say, pose, and whisper content is not
+silently removed from the interaction stream. A player-authored target is different from delivery:
+it is an explicit request to write an `InteractionTargetPersona` bridge. Before that write,
+`social_control_excluded_target_ids` refuses an active Block or IC Mute with neutral copy and keeps
+the draft. This does not disclose which moderation row matched, does not add client-visible
+moderation state, and does not alter system-authored action outcomes.
 
 > Status: accepted · Source: #2996 (extends #1278) · Related: ADR-0009 (no signals — every seam
 > is an explicit service-function/query-helper call), ADR-0007 (no JSON fields — `Mute` gained

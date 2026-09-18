@@ -11,6 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from world.scenes.block_services import social_control_excluded_target_ids
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -53,6 +54,10 @@ _ephemeral_counter = itertools.count()
 # is unreachable (place-scoped, receiver-scoped, or whisper): both routes it
 # names (address the room, or whisper) are always available to the writer.
 _TARGET_UNREACHABLE_HINT = "Address the room to reach them, or send a whisper. Your draft is kept."
+# #3827 - a neutral refusal for a private Block or IC Mute. It must not confirm which
+# moderation control matched, while preserving the same typed target-refusal contract.
+_TARGET_SOCIAL_CONTROL_DETAIL = "The selected target is unavailable for this interaction."
+_TARGET_SOCIAL_CONTROL_HINT = "Your draft is kept."
 # The threshold (#3867): present in the room, not yet in the scene.
 _THRESHOLD_HINT = (
     "They can be addressed after their first pose, or reached by a whisper. Your draft is kept."
@@ -77,6 +82,26 @@ def _describe_unreachable_targets(personas: list[Persona]) -> str:
         return f"{names[0]} is across the room and will not see table talk."
     joined = ", ".join(names[:-1]) + f" and {names[-1]}"
     return f"{joined} are across the room and will not see table talk."
+
+
+def _raise_if_social_control_excluded(
+    *, initiator_persona: Persona, target_personas: list[Persona] | None
+) -> None:
+    """Refuse player-authored targets excluded by Block or IC Mute."""
+    if not target_personas:
+        return
+    excluded_target_ids = social_control_excluded_target_ids(
+        initiator_persona=initiator_persona,
+        target_personas=target_personas,
+    )
+    if not excluded_target_ids:
+        return
+    excluded_targets = [target for target in target_personas if target.pk in excluded_target_ids]
+    raise UnreachableError(
+        excluded_targets,
+        _TARGET_SOCIAL_CONTROL_HINT,
+        message=_TARGET_SOCIAL_CONTROL_DETAIL,
+    )
 
 
 def _describe_threshold_targets(personas: list[Persona]) -> str:
@@ -298,6 +323,10 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         The created Interaction.
     """
     writer_account_id = _get_account_for_persona(persona)
+    _raise_if_social_control_excluded(
+        initiator_persona=persona,
+        target_personas=target_personas,
+    )
     with transaction.atomic():
         # Pin the writer's account at creation (#1219) — party identity for
         # private-content log visibility, stable across persona hand-offs.
@@ -1587,6 +1616,10 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     if scene is None:
         scene = get_active_scene(character.location)
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+        _raise_if_social_control_excluded(
+            initiator_persona=persona,
+            target_personas=target_personas,
+        )
         _record_ephemeral_interaction(
             persona=persona,
             content=content,
@@ -1671,6 +1704,10 @@ def record_whisper_interaction(  # noqa: PLR0913 - on_before_push is the #3783 l
 
     # Ephemeral scenes cannot persist or join threads.
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+        _raise_if_social_control_excluded(
+            initiator_persona=persona,
+            target_personas=[target_persona],
+        )
         if reply_to is not None:
             raise InteractionThreadError
         if on_before_push is not None:

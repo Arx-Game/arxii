@@ -59,7 +59,10 @@ history). Server-side, it is read from two call sites, never duplicated:
 - **Tagging** (`create_interaction`'s `target_personas` handling): every named target is
   checked before any row is written. A target who fails the check raises
   `reachability.UnreachableError` (`code = "target_unreachable"`), naming the venue that
-  would work; `create_interaction` writes nothing when this fires.
+  would work; `create_interaction` writes nothing when this fires. Before the spatial check,
+  #3827 also applies `block_services.social_control_excluded_target_ids` to player-authored
+  targets. Active Block or IC Mute exclusions use neutral detail and preserve the draft without
+  exposing which moderation row matched; system-authored target rows stay on the direct writer.
 - **Replying** (`thread_services.assign_interaction_thread`): a reply whose holder
   (scene/place/whisper-party signature) doesn't match its target's raises
   `InteractionThreadError` (`code = "reply_target_unavailable"`) - **except** a

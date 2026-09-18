@@ -1531,6 +1531,11 @@ account/privacy-scoped, not character-perception-scoped — a muted persona's po
 still *happened*; the viewer just filters their own feed. A different domain from
 Axes 1/2, each with its own canonical seam already. No extraction proposed.
 
+Player-authored target intent is a separate write-time control (#3827):
+`block_services.social_control_excluded_target_ids` reads the existing Block and IC Mute
+rows before `create_interaction` writes a target bridge. It refuses with neutral copy and keeps
+the draft; it does not suppress room-heard IC delivery or expose the moderation reason.
+
 ### The canonical perception CHECK (ratified, supersedes any per-mechanism roll)
 
 Orthogonal to the three axes above: **when a mechanic needs to ask "does this

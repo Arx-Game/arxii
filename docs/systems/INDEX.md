@@ -702,7 +702,10 @@ plus the reachability rule (#3787).
   delivery rules remain canonical.
 - **Reachability (#3787):** `world.scenes.reachability.persona_can_receive` is the shared
   predicate behind both the tagging refusal (`UnreachableError`, `create_interaction`) and
-  the reply refusal (`InteractionThreadError`, `assign_interaction_thread`). A Place-held
+  the reply refusal (`InteractionThreadError`, `assign_interaction_thread`). Player-authored
+  targets also pass through `block_services.social_control_excluded_target_ids` so active Block
+  and IC Mute controls refuse the write without disclosing the matching moderation row. A
+  Place-held
   draft may answer a Scene-held target in the same scene; the reverse direction remains
   refused. Both refusals preserve the writer's draft; reply refusals currently carry no
   venue hint. `tagReachability.ts` (#3810) mirrors tagging for a pre-emptive composer
