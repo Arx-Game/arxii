@@ -17,7 +17,7 @@ export type SheetSection =
   | 'distinctions'
   | 'magic'
   | 'knowledge'
-  | 'holdings'
+  | 'estate'
   | 'growth';
 
 /** The five anyone may open. */
@@ -32,7 +32,7 @@ const PUBLIC_SECTIONS: { id: SheetSection; label: string }[] = [
 /** The three only the character's own player opens. */
 const OWN_SECTIONS: { id: SheetSection; label: string }[] = [
   { id: 'knowledge', label: 'Knowledge' },
-  { id: 'holdings', label: 'Holdings' },
+  { id: 'estate', label: 'Estate' },
   { id: 'growth', label: 'Growth' },
 ];
 

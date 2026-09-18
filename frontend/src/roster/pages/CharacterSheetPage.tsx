@@ -35,7 +35,7 @@ import { PhysicalPanel, type WornItem } from '@/character_sheets/components/shee
 import {
   DistinctionsPanel,
   GrowthPanel,
-  HoldingsPanel,
+  EstatePanel,
   KnowledgePanel,
   MagicPanel,
   TiesPanel,
@@ -86,7 +86,7 @@ export function CharacterSheetPage() {
   // sections — switching characters keeps the section, so this falls back rather than
   // rendering a panel whose queries would all refuse.
   const shown: SheetSection =
-    !isMyCharacter && (section === 'knowledge' || section === 'holdings' || section === 'growth')
+    !isMyCharacter && (section === 'knowledge' || section === 'estate' || section === 'growth')
       ? 'sheet'
       : section;
 
@@ -171,7 +171,7 @@ export function CharacterSheetPage() {
             sheet={sheet}
             vitals={vitals}
             isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
-            onOpenHoldings={isMyCharacter ? () => setSection('holdings') : undefined}
+            onOpenEstate={isMyCharacter ? () => setSection('estate') : undefined}
             worn={worn}
             galleries={entry.character.galleries ?? []}
           />
@@ -201,12 +201,13 @@ export function CharacterSheetPage() {
           />
         )}
 
-        {shown === 'holdings' && isMyCharacter && (
-          <HoldingsPanel
+        {shown === 'estate' && isMyCharacter && (
+          <EstatePanel
             sheetId={sheetId}
             viewedPersonaId={viewedPersonaId}
             isActiveCharacter={isActiveCharacter}
             viewerEntryId={viewerEntryId}
+            domains={sheet?.domains ?? []}
           />
         )}
 

@@ -11,7 +11,7 @@
  * watch it.
  *
  * Worn items show here because they are visible; everything else the character owns or
- * carries is under Holdings.
+ * carries is under Estate.
  */
 
 import { Link } from 'react-router-dom';
@@ -42,11 +42,11 @@ interface PhysicalPanelProps {
   /** The character's published galleries. Every viewer sees these; they are public. */
   galleries: { name: string; url: string }[];
   /**
-   * Opens Holdings, where the wardrobe is. Passed only for the character's own player —
+   * Opens Estate, where the wardrobe is. Passed only for the character's own player —
    * the demo puts a "Change outfit" line under Wearing, and it is the one place on this
    * page that leads anywhere the reader can act.
    */
-  onOpenHoldings?: () => void;
+  onOpenEstate?: () => void;
 }
 
 export interface WornItem {
@@ -63,7 +63,7 @@ export function PhysicalPanel({
   isPrivileged,
   worn,
   galleries,
-  onOpenHoldings,
+  onOpenEstate,
 }: PhysicalPanelProps) {
   const { appearance, identity } = sheet;
 
@@ -139,8 +139,8 @@ export function PhysicalPanel({
                   />
                 ))}
               </Entries>
-              {onOpenHoldings && (
-                <button type="button" className="refsheet-quiet-door" onClick={onOpenHoldings}>
+              {onOpenEstate && (
+                <button type="button" className="refsheet-quiet-door" onClick={onOpenEstate}>
                   Change outfit
                 </button>
               )}

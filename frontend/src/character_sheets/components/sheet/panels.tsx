@@ -5,7 +5,7 @@
  * headings and rails. The regrouping is the point of this file: sixteen tabs became
  * eight sections, so Relationships / Kinship / Reputation / Titles are one page called
  * Ties, Secrets / Clues / Gossip are Knowledge, and Crime / Locations / Agreements join
- * the purse and the wardrobe as Holdings. Nothing here re-implements what those panels
+ * the purse and the wardrobe as Estate. Nothing here re-implements what those panels
  * already do — they keep their own queries, their own gating and their own internals.
  *
  * Friends is deliberately absent: an OOC trusted-partner list belongs to the account,
@@ -35,7 +35,11 @@ import { useInventory } from '@/inventory/hooks/useInventory';
 import { useOutfits } from '@/inventory/hooks/useOutfits';
 import { useThreads } from '@/magic/queries';
 import { formatCoppers } from '@/lib/currency';
-import type { CharacterSheetMentor, CharacterSheetPayload } from '@/character_sheets/api';
+import type {
+  CharacterSheetDomain,
+  CharacterSheetMentor,
+  CharacterSheetPayload,
+} from '@/character_sheets/api';
 import { Entries, Entry, Heading, Ledger, Stack, Tag } from './primitives';
 
 /**
@@ -225,23 +229,31 @@ export function KnowledgePanel({
 }
 
 /**
- * Holdings — the purse, what they carry, where they live, what they have promised, and
+ * Estate — the purse, what they carry, where they live, what they have promised, and
  * whether the law wants them.
+ *
+ * Named Estate rather than Holdings because "holdings" reads as fiefs in this genre and
+ * this section is not about fiefs; it is one person's money, things, roof and record.
+ * Estate is also the word the Agreements block below already uses, in the will copy
+ * about an estate falling to your house, then next of kin, then the crown.
  *
  * Dan's merge: money, possessions and property are one question for a player ("what do
  * I have?"), and debts sit beside the coin that pays them rather than in a tab of their
  * own. What is WORN is on Physical instead, because it is visible.
  */
-export function HoldingsPanel({
+export function EstatePanel({
   sheetId,
   viewedPersonaId,
   isActiveCharacter,
   viewerEntryId,
+  domains,
 }: {
   sheetId: number;
   viewedPersonaId: number | null;
   isActiveCharacter: boolean;
   viewerEntryId: number | null;
+  /** Land the character's organizations hold. Empty for most characters (#3901). */
+  domains: CharacterSheetDomain[];
 }) {
   const { data: purse } = useCharacterPurse(sheetId);
 
@@ -270,9 +282,30 @@ export function HoldingsPanel({
         </Stack>
       </div>
       <div className="refsheet-columns-even">
-        <Stack>
-          <Heading>Property</Heading>
-          <LocationsTab personaId={viewedPersonaId} isActiveCharacter={isActiveCharacter} />
+        <Stack wide>
+          <Stack>
+            <Heading>Property</Heading>
+            <LocationsTab personaId={viewedPersonaId} isActiveCharacter={isActiveCharacter} />
+          </Stack>
+          {/* Render-or-vanish, and here it is the common case: most organizations hold
+              no land, and plenty hold buildings under individual rather than org
+              control. A character whose houses hold nothing gets no block at all. */}
+          {domains.length > 0 && (
+            <Stack>
+              <Heading>Their houses hold</Heading>
+              <Ledger>Land their organizations hold. Not theirs, but theirs to know of.</Ledger>
+              <Entries>
+                {domains.map((domain) => (
+                  <Entry
+                    key={domain.id}
+                    name={domain.name}
+                    aside={<span className="refsheet-note">{domain.where}</span>}
+                    tags={<Tag>{domain.organization}</Tag>}
+                  />
+                ))}
+              </Entries>
+            </Stack>
+          )}
         </Stack>
         <Stack>
           <Heading>Agreements</Heading>

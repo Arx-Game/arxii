@@ -64,11 +64,10 @@ def _covenant_owned_ship_ids(persona: Persona) -> list[int]:
     ``world.ships.services.complete_ship_construction``); ``Building.area``
     is a primary-key OneToOne, so ``ShipDetails.pk == building_id == area_id``.
     Membership lookup intentionally mirrors
-    ``world.locations.services._persona_organization_ids`` (no lifecycle
-    filter on ``OrganizationMembership`` — presence in the table is current
-    membership per that helper's own docstring) to keep ownership semantics
-    identical to ``IsShipOwnerPrerequisite``, the write-side gate this
-    queryset mirrors.
+    ``world.locations.services._persona_organization_ids`` — current membership only
+    (``left_at IS NULL AND exiled_at IS NULL``), which is what that helper filters on
+    since #3901 — to keep ownership semantics identical to
+    ``IsShipOwnerPrerequisite``, the write-side gate this queryset mirrors.
     """
     from world.locations.constants import HolderType, LocationParentType  # noqa: PLC0415
     from world.locations.models import LocationOwnership  # noqa: PLC0415

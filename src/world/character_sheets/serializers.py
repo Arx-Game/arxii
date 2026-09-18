@@ -47,6 +47,7 @@ from world.character_sheets.types import (
     MentorBondEntry,
     MotifResonanceEntry,
     MotifSection,
+    OrgDomainEntry,
     OriginSlotEntry,
     PathDetailSection,
     PathHistoryEntry,
@@ -100,6 +101,7 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
+from world.societies.houses.models import Domain
 from world.societies.models import OrganizationMembership
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
 
@@ -1472,6 +1474,66 @@ def _build_current_residence(sheet: CharacterSheet) -> IdNameRef | None:
 
 # --- Section registry for queryset aggregation ---
 
+_DOMAINS_SELECT_RELATED: tuple[str, ...] = ()
+# The character's personas, each with their CURRENT organization memberships, each with
+# the organization and its domains and the area each domain decorates. One prefetch
+# chain rather than a walk, so a character in six houses costs the same as one in none.
+# No ``to_attr`` (ADR-0278).
+_DOMAINS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "personas__organization_memberships",
+        queryset=OrganizationMembership.objects.filter(
+            left_at__isnull=True, exiled_at__isnull=True
+        ).select_related("organization"),
+    ),
+    Prefetch(
+        "personas__organization_memberships__organization__domains",
+        queryset=Domain.objects.select_related("area"),
+    ),
+)
+
+
+def _build_domains(sheet: CharacterSheet, *, privileged: bool) -> list[OrgDomainEntry]:
+    """Build the Estate section's Domains block: the land this character's orgs hold.
+
+    The point is discovery, and it is Apostate's ruling (#3901): a player coming onto a
+    roster character may have no idea their house holds a keep, or where it is. Nothing
+    else on the sheet could ever tell them, so the block names the domain, whose it is,
+    and where.
+
+    The gate is ACTIVE membership and nothing more. A domain is the organization's, and
+    that a house holds a given stretch of land is not a secret anyone in the world keeps;
+    whether this character may walk into it is a different question, answered by
+    ``LocationTenancy`` against the land itself rather than by anything here.
+
+    Owner and staff only, because the whole Estate section is. Dropped for everyone else
+    along with the purse and the law.
+    """
+    if not privileged:
+        return []
+
+    entries: list[OrgDomainEntry] = []
+    seen: set[int] = set()
+    for persona in sheet.personas.all():
+        for membership in persona.organization_memberships.all():
+            organization = membership.organization
+            for domain in organization.domains.all():
+                # A character with two personas in the same house reads one keep, not two.
+                if domain.pk in seen:
+                    continue
+                seen.add(domain.pk)
+                entries.append(
+                    OrgDomainEntry(
+                        id=domain.pk,
+                        name=domain.name,
+                        organization=organization.name,
+                        where=domain.area.name,
+                    )
+                )
+    entries.sort(key=lambda row: (row["organization"], row["name"]))
+    return entries
+
+
 _MENTORS_SELECT_RELATED: tuple[str, ...] = ()
 # Both directions of the vow, each with the covenant it was sworn in and the other
 # party's ObjectDB, so naming a bond costs nothing further. No ``to_attr`` (ADR-0278).
@@ -1601,6 +1663,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_LOOKS_SELECT_RELATED, _LOOKS_PREFETCH_RELATED),
     (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
     (_MENTORS_SELECT_RELATED, _MENTORS_PREFETCH_RELATED),
+    (_DOMAINS_SELECT_RELATED, _DOMAINS_PREFETCH_RELATED),
 )
 
 
@@ -1737,6 +1800,10 @@ class CharacterSheetSerializer(serializers.Serializer):
             # Ties' Mentors block. Owner and staff only, like the covenant roles it
             # sits beside.
             "mentors": _build_mentors(sheet, privileged=privileged),
+            # Estate's Domains block: land the character's organizations hold. Gated on
+            # active membership alone (#3901) — the land is the organization's, and
+            # whether this character may enter it is a tenancy question, not this one.
+            "domains": _build_domains(sheet, privileged=privileged),
         }
 
 

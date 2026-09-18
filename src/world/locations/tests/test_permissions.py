@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.utils import timezone
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
@@ -38,6 +39,27 @@ class PersonaOrganizationIdsTests(TestCase):
         OrganizationFactory()  # unjoined org — must not appear in result
         OrganizationMembershipFactory(persona=persona, organization=joined_org)
         self.assertEqual(_persona_organization_ids(persona), {joined_org.pk})
+
+    def test_excludes_an_org_the_persona_has_left(self) -> None:
+        """Leaving gives up the organization's keys (#3901).
+
+        This helper gates org-inherited tenancy and vault access. It used to assert
+        that ``OrganizationMembership`` had no lifecycle fields and that departures
+        were deletes, which stopped being true when ``left_at`` landed — so a former
+        member kept every door the organization had opened for them.
+        """
+        persona = PersonaFactory()
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=persona, organization=org, left_at=timezone.now())
+        self.assertEqual(_persona_organization_ids(persona), set())
+
+    def test_excludes_an_org_the_persona_was_exiled_from(self) -> None:
+        """Being thrown out is not a way to keep the key."""
+        persona = PersonaFactory()
+        org = OrganizationFactory()
+        now = timezone.now()
+        OrganizationMembershipFactory(persona=persona, organization=org, left_at=now, exiled_at=now)
+        self.assertEqual(_persona_organization_ids(persona), set())
 
 
 class OwnershipForTests(TestCase):

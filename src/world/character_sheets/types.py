@@ -387,6 +387,25 @@ class LookEntry(TypedDict):
     is_current: bool
 
 
+class OrgDomainEntry(TypedDict):
+    """One landholding an organization this character belongs to owns (#3901).
+
+    The discovery line: a player coming onto a roster character may not know their
+    house holds a keep, or where it is. A ``Domain`` is org-owned (``owner_org``, the
+    #1884/#930 ruling) and a character can never hold one, so this says whose it is
+    and where, never that it is theirs.
+
+    ``where`` is the area the domain decorates. Whether the character may walk into it
+    is a separate question answered by ``LocationTenancy`` against the land, not by
+    this list.
+    """
+
+    id: int
+    name: str
+    organization: str
+    where: str
+
+
 class MentorBondEntry(TypedDict):
     """One active Mentor's Vow bond this character holds (#1165), for Ties (#3898).
 

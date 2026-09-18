@@ -107,15 +107,18 @@ describe('LocationsTab', () => {
     expect(screen.getByText('The Gull')).toBeInTheDocument();
   });
 
-  it('renders the Domains placeholder line', () => {
+  it('says nothing about domains, which are not a persona\u2019s to hold (#3901)', () => {
+    // A domain belongs to an organization, never to a character, so this tab has no
+    // business promising one. The sheet's Estate section reads them from its own
+    // payload and draws its own block; the dead placeholder that used to sit here is
+    // gone rather than left to look like an unbuilt feature.
     setRenown(makeRenown());
     setShips([]);
 
     renderWithProviders(<LocationsTab personaId={1} isActiveCharacter />);
 
-    expect(screen.getByTestId('domains-placeholder')).toHaveTextContent(
-      'Domains your organizations hold will appear here (#1884).'
-    );
+    expect(screen.queryByTestId('domains-placeholder')).not.toBeInTheDocument();
+    expect(screen.queryByText(/domains/i)).not.toBeInTheDocument();
   });
 
   it('shows a muted message when there is no active persona to view', () => {
