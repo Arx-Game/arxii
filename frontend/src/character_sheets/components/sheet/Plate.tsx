@@ -95,12 +95,17 @@ export function Plate({
             </>
           )}
         </div>
+        {/* The caption says only what the page actually does. An earlier draft promised
+            "a scene can change it with their mood", which nothing delivers: the worn
+            look is whichever image the owner last clicked, and the character's declared
+            mood is inward and owner-only (#2994), so driving a public portrait from it
+            would publish the one thing that ruling keeps private. Whether a look should
+            follow a mood at all is an open question, recorded in the roadmap. */}
         {canWear && looks.length > 0 && (
           <p className="refsheet-plate-soft text-sm">
             {shown?.is_current
               ? `Wearing ${shown.look || shown.title || 'this look'}.`
-              : 'Click a look to wear it.'}{' '}
-            A scene can change it with their mood.
+              : 'Click a look to wear it.'}
           </p>
         )}
       </div>

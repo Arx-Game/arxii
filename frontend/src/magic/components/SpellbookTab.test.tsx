@@ -269,6 +269,28 @@ describe('SpellbookTab', () => {
     expect(screen.queryByText(/70/)).not.toBeInTheDocument();
   });
 
+  it('draws the aura as a proportional strip and says the split in words (#3898)', () => {
+    // The spec asks for three segments sized by their share, with the split in words
+    // beside them. The strip carries the proportions; the figures never reach the page.
+    mockPayload(makeMagic({ aura: makeAura({ celestial: 20, primal: 30, abyssal: 50 }) }));
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    const strip = screen.getByTestId('spellbook-aura-strip');
+    expect(strip).toBeInTheDocument();
+    expect(within(strip).getByTestId('aura-segment-celestial')).toHaveStyle({ flexGrow: '20' });
+    expect(within(strip).getByTestId('aura-segment-abyssal')).toHaveStyle({ flexGrow: '50' });
+    expect(
+      screen.getByText('A fifth celestial, a third primal, the rest abyssal.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/20|30|50/)).not.toBeInTheDocument();
+  });
+
+  it('draws no strip for an aura with nothing in it', () => {
+    mockPayload(makeMagic({ aura: makeAura({ celestial: 0, primal: 0, abyssal: 0 }) }));
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.queryByTestId('spellbook-aura-strip')).not.toBeInTheDocument();
+  });
+
   it('renders resonance balances (#3042)', () => {
     mockPayload(
       makeMagic({

@@ -92,6 +92,23 @@ heading the sheet already draws, the soul-tether card whose entire body was the 
 section row read as a second navigation bar. A panel composed into a section draws no
 heading at that weight — `Subheading` is the one it uses for a group inside a section.
 
+**Three gaps are open questions rather than unfinished work**, and each is a ruling for
+Apostate rather than more building. A stranger's rumor band renders but is passed
+nothing, because which guideline a rumor may draw from, and in whose words, is undecided.
+A look does NOT follow the character's declared mood: `CharacterSheet.current_mood` is
+inward and owner-only (#2994), so driving a public portrait from it would publish exactly
+what that ruling keeps private, and the plate's caption no longer promises it. And the
+Gift sentence names no tradition, because `GiftEntry` carries no tradition field;
+tradition membership lives on the character, not on the gift.
+
+**The aura is a proportional strip**, three segments sized by their shares with the split
+said in words beneath ("A fifth celestial, a third primal, the rest abyssal."). The strip
+carries the proportions so the figures themselves never reach the page, which is how it
+satisfies both the spec and the magic app's standing rule that player-facing data is
+narrative rather than numerical. `.refsheet-aura` and its three segment rules had been
+written and left unconnected; #3898's second review caught that, the same shape as
+`plate_ink`.
+
 Two things deliberately keep their old chrome. `OwnedDwellingsCard` and
 `TenantedRoomsCard` under Holdings are shared with the Renown page, so re-skinning them
 would change a surface outside this issue; and the cards under Holdings and Growth are

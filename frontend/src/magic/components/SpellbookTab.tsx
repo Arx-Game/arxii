@@ -129,6 +129,87 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
   );
 }
 
+/**
+ * The aura as a proportional strip: three segments sized by their share, with the split
+ * said in words underneath rather than printed on them. An aura with nothing in it
+ * renders no strip — there is nothing to be proportional to.
+ */
+function AuraStrip({ aura }: { aura: CharacterSheetAura }) {
+  const total = aura.celestial + aura.primal + aura.abyssal;
+  if (total <= 0) return null;
+  const segments: Array<[string, number]> = [
+    ['celestial', aura.celestial],
+    ['primal', aura.primal],
+    ['abyssal', aura.abyssal],
+  ];
+  return (
+    <div className="refsheet-aura" data-testid="spellbook-aura-strip">
+      {segments
+        .filter(([, share]) => share > 0)
+        .map(([name, share]) => (
+          <span
+            key={name}
+            className={`refsheet-aura-${name}`}
+            style={{ flexGrow: share }}
+            data-testid={`aura-segment-${name}`}
+          />
+        ))}
+    </div>
+  );
+}
+
+/** Where the owner stands with their Glimpse, in a line. */
+function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
+  if (state === 'COMPLETE') return 'Your Glimpse is written.';
+  if (state === 'TAGS_ONLY') return 'Your Glimpse has its shape, and no story yet.';
+  return 'You have not looked into your own aura yet.';
+}
+
+/**
+ * A share of the aura, in words. The magic app's standing rule is that player-facing
+ * data is narrative rather than numerical, and the sheet's spec asks for the split to
+ * be said in words beside the strip — so this is the one place the three figures turn
+ * into language, and the figures themselves never reach the page.
+ */
+function shareInWords(share: number, total: number): string {
+  const part = total > 0 ? share / total : 0;
+  if (part <= 0) return 'none';
+  if (part < 0.08) return 'a trace';
+  if (part < 0.18) return 'a tenth';
+  if (part < 0.28) return 'a fifth';
+  if (part < 0.4) return 'a third';
+  if (part < 0.58) return 'half';
+  if (part < 0.8) return 'most';
+  return 'nearly all';
+}
+
+/**
+ * The aura's split as one sentence: the smaller shares named, the largest called "the
+ * rest", in the demo's own shape ("A fifth celestial, a third primal, the rest
+ * abyssal."). Silent when the aura is unformed and every share is zero.
+ */
+function auraSplitSentence(aura: CharacterSheetAura): string {
+  const total = aura.celestial + aura.primal + aura.abyssal;
+  const held = [
+    { name: 'celestial', share: aura.celestial },
+    { name: 'primal', share: aura.primal },
+    { name: 'abyssal', share: aura.abyssal },
+  ]
+    .filter((row) => row.share > 0)
+    .sort((a, b) => a.share - b.share);
+
+  if (held.length === 0) return '';
+  if (held.length === 1) return `All of it ${held[0].name}.`;
+
+  const rest = held[held.length - 1];
+  const named = held
+    .slice(0, -1)
+    .map((row) => `${shareInWords(row.share, total)} ${row.name}`)
+    .join(', ');
+  const sentence = `${named}, the rest ${rest.name}.`;
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+}
+
 /** The affinity with the highest share, as a qualitative label — never the raw percentage. */
 function dominantAffinityLabel(aura: CharacterSheetAura): string {
   const shares: Array<[string, number]> = [
@@ -256,7 +337,16 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
       {magic?.aura && (
         <div className="refsheet-stack" data-testid="spellbook-aura">
           <Subheading>Aura</Subheading>
-          <Ledger>It reads as {dominantAffinityLabel(magic.aura).toLowerCase()}.</Ledger>
+          {/* The strip is proportional, never labelled with its figures: the three
+              shares size the segments and the sentence beneath says the split in
+              words. The demo draws it this way, and the magic app's narrative-not-
+              numerical rule is why the numbers stay off the page. */}
+          <AuraStrip aura={magic.aura} />
+          <Ledger>
+            {auraSplitSentence(magic.aura) ||
+              `It reads as ${dominantAffinityLabel(magic.aura).toLowerCase()}.`}
+          </Ledger>
+          {isMyCharacter && <Ledger>{glimpseStateLine(magic.aura.glimpse_state)}</Ledger>}
           {magic.aura.glimpse_tags.length > 0 && (
             <div className="refsheet-tags" data-testid="spellbook-glimpse-tags">
               {magic.aura.glimpse_tags.map((tag) => (

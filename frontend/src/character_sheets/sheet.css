@@ -662,12 +662,28 @@
   padding-left: 0.875rem;
 }
 
-/* The aura, as a proportional strip rather than three numbers. */
+/* The aura, as a proportional strip rather than three numbers. The three grounds are
+   literals rather than theme tokens for the same reason the plate's are: this is a
+   drawing of one character's magic, and it must read the same to every reader on
+   either set of lights. */
 .refsheet-aura {
   display: flex;
   height: 2.25rem;
   border: 1px solid hsl(var(--border));
   overflow: hidden;
+}
+.refsheet-aura > span {
+  display: block;
+  min-width: 2px;
+}
+.refsheet-aura-celestial {
+  background: #d8c27a;
+}
+.refsheet-aura-primal {
+  background: #6f9c78;
+}
+.refsheet-aura-abyssal {
+  background: #3b3350;
 }
 
 /* ---------- prose ---------- */
