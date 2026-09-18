@@ -36,10 +36,12 @@ from evennia_extensions.factories import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.scenes.block_services import social_control_excluded_target_ids
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import PersonaFactory, PlaceFactory, PlacePresenceFactory
 from world.scenes.interaction_services import create_interaction
-from world.scenes.models import Interaction, InteractionTargetPersona
+from world.scenes.models import Block, Interaction, InteractionTargetPersona
+from world.scenes.mute_services import set_mute
 from world.scenes.reachability import UnreachableError
 
 _HINT = "Address the room to reach them, or send a whisper. Your draft is kept."
@@ -57,6 +59,177 @@ def _persona_in_room(room) -> object:
     character = CharacterFactory(location=room)
     sheet = CharacterSheetFactory(character=character)
     return sheet.primary_persona
+
+
+def _played_persona(name: str) -> tuple[object, object]:
+    """Build a Persona and current PlayerData pair for social-control tests."""
+    persona = PersonaFactory(name=name)
+    roster_entry = RosterEntryFactory(character_sheet=persona.character_sheet)
+    player_data = PlayerDataFactory()
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+    return persona, player_data
+
+
+class TestSocialControlTargeting(TestCase):
+    """Block and IC Mute refuse player-authored target writes without disclosure."""
+
+    def _assert_refused(self, writer, target) -> None:
+        interaction_count = Interaction.objects.count()
+        target_count = InteractionTargetPersona.objects.count()
+
+        with self.assertRaises(UnreachableError) as error:
+            create_interaction(
+                persona=writer,
+                content="asks for a word.",
+                mode=InteractionMode.POSE,
+                receivers=[target],
+                target_personas=[target],
+            )
+
+        assert error.exception.detail == "The selected target is unavailable for this interaction."
+        assert error.exception.venue_hint == "Your draft is kept."
+        assert Interaction.objects.count() == interaction_count
+        assert InteractionTargetPersona.objects.count() == target_count
+
+    def test_exact_persona_block_excludes_target(self) -> None:
+        writer, writer_player = _played_persona("Writer")
+        target, target_player = _played_persona("Blocker")
+        Block.objects.create(
+            owner=target_player,
+            blocked_player=writer_player,
+            blocker_persona=target,
+            blocked_persona=writer,
+        )
+
+        assert social_control_excluded_target_ids(
+            initiator_persona=writer, target_personas=[target]
+        ) == {target.pk}
+        self._assert_refused(writer, target)
+
+    def test_whisper_target_is_refused_by_the_same_gate(self) -> None:
+        writer, writer_player = _played_persona("Writer")
+        target, target_player = _played_persona("Blocker")
+        Block.objects.create(
+            owner=target_player,
+            blocked_player=writer_player,
+            blocker_persona=target,
+            blocked_persona=writer,
+        )
+
+        with self.assertRaises(UnreachableError):
+            create_interaction(
+                persona=writer,
+                content="whispers.",
+                mode=InteractionMode.WHISPER,
+                receivers=[target],
+                target_personas=[target],
+            )
+
+    def test_account_level_block_excludes_target_face(self) -> None:
+        writer, writer_player = _played_persona("Writer")
+        target, target_player = _played_persona("Blocker")
+        Block.objects.create(
+            owner=target_player,
+            blocked_player=writer_player,
+            blocker_persona=None,
+            blocked_persona=writer,
+            account_level=True,
+        )
+
+        self._assert_refused(writer, target)
+
+    def test_persona_scoped_block_does_not_exclude_blocker_alt(self) -> None:
+        writer, writer_player = _played_persona("Writer")
+        target, target_player = _played_persona("Blocker")
+        target_alt = PersonaFactory(name="Blocker Alt", character_sheet=target.character_sheet)
+        Block.objects.create(
+            owner=target_player,
+            blocked_player=writer_player,
+            blocker_persona=target,
+            blocked_persona=writer,
+        )
+
+        assert (
+            social_control_excluded_target_ids(
+                initiator_persona=writer, target_personas=[target_alt]
+            )
+            == set()
+        )
+
+    def test_ic_mute_excludes_muted_persona_from_targeting_muter(self) -> None:
+        writer, _writer_player = _played_persona("Muted Player")
+        target, target_player = _played_persona("Muter")
+        set_mute(owner=target_player, muted_persona=writer, ic=True, ooc=False)
+
+        self._assert_refused(writer, target)
+
+    def test_account_level_mute_excludes_muted_player_alt(self) -> None:
+        writer, _writer_player = _played_persona("Muted Player")
+        target, target_player = _played_persona("Muter")
+        writer_alt = PersonaFactory(name="Muted Player Alt", character_sheet=writer.character_sheet)
+        set_mute(
+            owner=target_player,
+            muted_persona=writer,
+            ic=True,
+            ooc=False,
+            account_level=True,
+        )
+
+        assert social_control_excluded_target_ids(
+            initiator_persona=writer_alt, target_personas=[target]
+        ) == {target.pk}
+
+    def test_ooc_only_mute_does_not_exclude_ic_target(self) -> None:
+        writer, _writer_player = _played_persona("Muted Player")
+        target, target_player = _played_persona("Muter")
+        set_mute(owner=target_player, muted_persona=writer, ic=False, ooc=True)
+
+        assert (
+            social_control_excluded_target_ids(initiator_persona=writer, target_personas=[target])
+            == set()
+        )
+        interaction = create_interaction(
+            persona=writer,
+            content="asks for a word.",
+            mode=InteractionMode.POSE,
+            receivers=[target],
+            target_personas=[target],
+        )
+        assert InteractionTargetPersona.objects.filter(
+            interaction=interaction, persona=target
+        ).exists()
+
+    def test_mute_is_one_way(self) -> None:
+        writer, writer_player = _played_persona("Muter")
+        target, _target_player = _played_persona("Muted Player")
+        set_mute(owner=writer_player, muted_persona=target, ic=True, ooc=False)
+
+        assert (
+            social_control_excluded_target_ids(initiator_persona=writer, target_personas=[target])
+            == set()
+        )
+
+    def test_multiple_targets_refuse_when_one_is_excluded(self) -> None:
+        writer, writer_player = _played_persona("Writer")
+        blocked, blocked_player = _played_persona("Blocker")
+        allowed, _allowed_player = _played_persona("Allowed")
+        Block.objects.create(
+            owner=blocked_player,
+            blocked_player=writer_player,
+            blocker_persona=blocked,
+            blocked_persona=writer,
+        )
+
+        interaction_count = Interaction.objects.count()
+        with self.assertRaises(UnreachableError):
+            create_interaction(
+                persona=writer,
+                content="asks both for a word.",
+                mode=InteractionMode.POSE,
+                receivers=[blocked, allowed],
+                target_personas=[blocked, allowed],
+            )
+        assert Interaction.objects.count() == interaction_count
 
 
 class TestCreateInteractionRefusesUnreachableTargets(TestCase):

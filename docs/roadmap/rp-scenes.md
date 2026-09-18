@@ -443,7 +443,10 @@ combat action records whom it targeted.
   (`InteractionThreadError`). A Place-held draft may answer a Scene-held target in the
   same scene; the reverse direction remains refused. Both refusals preserve the
   writer's draft and use the typed server error; reply refusals currently carry no
-  venue hint. They are telnet-parity (the parent chip alone is web only). See ADR-0293.
+  venue hint. They are telnet-parity (the parent chip alone is web only). Player-authored
+  target writes also apply `block_services.social_control_excluded_target_ids` for active
+  Block and IC Mute controls, with neutral copy and no client-visible moderation state.
+  See ADR-0293 and issue #3827.
 
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
