@@ -405,6 +405,7 @@ class OrgDomainEntry(TypedDict):
     organization: str
     where: str
 
+
 class OrgMembershipEntry(TypedDict):
     """One organization the presented face belongs to, and what it calls them (#3906)."""
 

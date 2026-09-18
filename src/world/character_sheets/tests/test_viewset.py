@@ -39,7 +39,11 @@ from world.character_sheets.serializers import (
 from world.character_sheets.types import SheetVisibility
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
-from world.covenants.factories import CovenantFactory, MentorBondFactory
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    MentorBondFactory,
+)
 from world.covenants.models import MentorBond
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.forms.factories import (
@@ -84,7 +88,6 @@ from world.roster.factories import (
     TenureGalleryFactory,
     TenureMediaFactory,
 )
-from world.covenants.factories import CharacterCovenantRoleFactory
 from world.scenes.factories import PersonaFactory
 from world.secrets.factories import SecretFactory
 from world.skills.factories import (
@@ -2299,9 +2302,7 @@ class TestStandingAndCovenantSections(TestCase):
         cls.persona = cls.sheet.primary_persona
 
         cls.house = OrganizationFactory(name="House du Verane")
-        cls.membership = OrganizationMembershipFactory(
-            persona=cls.persona, organization=cls.house
-        )
+        cls.membership = OrganizationMembershipFactory(persona=cls.persona, organization=cls.house)
         OrganizationReputationFactory(persona=cls.persona, organization=cls.house, value=0)
         cls.role = CharacterCovenantRoleFactory(character_sheet=cls.sheet)
 
@@ -2344,9 +2345,7 @@ class TestStandingAndCovenantSections(TestCase):
         self.sheet.save(update_fields=["standing_visibility"])
         try:
             standing = self._payload(self.stranger)["standing"]
-            assert [row["organization"] for row in standing["memberships"]] == [
-                "House du Verane"
-            ]
+            assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
         finally:
             self.sheet.standing_visibility = SheetVisibility.FRIENDS
             self.sheet.save(update_fields=["standing_visibility"])
@@ -2364,6 +2363,7 @@ class TestStandingAndCovenantSections(TestCase):
         """The only one of the five tiers that does. Apostate's ruling."""
         fresh = CharacterSheetFactory(character=CharacterFactory(db_key="FreshChar"))
         assert fresh.standing_visibility == SheetVisibility.FRIENDS
+
 
 class TestProfilePictureNull(TestCase):
     """Tests for the profile_picture field when no picture is set."""
