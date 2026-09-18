@@ -1,0 +1,623 @@
+/**
+ * The Reference Sheet (#3898) — the character sheet as the reference sheet an artist
+ * makes for a character they love.
+ *
+ * Scoped under `.refsheet` so none of it leaks onto other pages. The design language is
+ * the Arx Folio system the Gatefold landing page and character creation already speak
+ * (see `frontend/src/home/home.css` and `frontend/src/character-creation/cg.css`):
+ * Cinzel for inscription, EB Garamond for reading, the UI sans for instruments; entries
+ * rather than cards; ledger lines rather than stat tiles; render-or-vanish.
+ *
+ * It does NOT reuse cg.css's classes. Those are scoped under `.interview` and shaped for
+ * a wizard that *chooses* — its `.entry` is a selection control with a chosen state and
+ * doors, where the sheet's entry only ever describes. The two files share vocabulary
+ * deliberately and neither imports the other; a future consolidation would lift the
+ * common tokens into one base rather than making one surface depend on the other's
+ * wizard semantics.
+ *
+ * Colour comes from the app's `arx` realm tokens (`index.css`) so light/dark and the
+ * plain-mode escape hatch keep working. The one exception is the plate, which is painted
+ * in explicit night literals in BOTH themes: it is the cover, and a cover is the same
+ * object whichever way the reader has the lights.
+ */
+
+.refsheet {
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  font-size: 1.1875rem;
+  line-height: 1.62;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+
+  /* Instruments (dense, operated) keep the UI sans; everything read is Garamond. */
+  --sheet-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sheet-caps: 'Cinzel', Georgia, serif;
+  --sheet-hair: hsl(var(--border) / 0.6);
+}
+
+.refsheet a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  text-decoration-color: hsl(var(--accent));
+}
+.refsheet a:hover {
+  color: hsl(var(--accent));
+}
+.refsheet a:focus-visible,
+.refsheet button:focus-visible,
+.refsheet summary:focus-visible {
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: 3px;
+}
+.refsheet p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* ---------- the plate: always night, in both themes ---------- */
+
+.refsheet-plate {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  align-items: start;
+  padding: clamp(1.75rem, 4vw, 2.75rem) clamp(1rem, 4vw, 4rem);
+  color: #f1e6d6;
+  background: var(--plate-ground);
+}
+
+/* The four inks. Each sets its own ground plus the accent that reads on it; the page
+   below the plate stays on arx paper whichever is chosen (a realm is an ink, not a
+   different page — the CG ruling of 2026-09-03). */
+.refsheet[data-ink='ember'] {
+  --plate-ground: #1c1210;
+  --plate-accent: #e0763f;
+}
+.refsheet[data-ink='verdigris'] {
+  --plate-ground: #0f1a18;
+  --plate-accent: #6fc0a8;
+}
+.refsheet[data-ink='rose'] {
+  --plate-ground: #1a1014;
+  --plate-accent: #d98ca6;
+}
+.refsheet[data-ink='night'] {
+  --plate-ground: #0e1116;
+  --plate-accent: #c9a83e;
+}
+
+.refsheet-plate-soft {
+  color: #c4b8a6;
+}
+.refsheet-plate a {
+  color: var(--plate-accent);
+  text-decoration-color: var(--plate-accent);
+}
+.refsheet-plate a:hover {
+  color: #f1e6d6;
+}
+.refsheet-plate .refsheet-eyebrow {
+  color: var(--plate-accent);
+}
+.refsheet-plate hr {
+  border: 0;
+  border-top: 1px solid rgb(255 255 255 / 14%);
+  margin: 0;
+}
+
+@media (max-width: 52rem) {
+  .refsheet-plate {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The art frame. Aspect-ratio rather than a fixed height so a portrait and a full
+   figure both sit correctly, and so the empty frame is the same shape as a filled one. */
+.refsheet-frame {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid rgb(255 255 255 / 18%);
+  background: linear-gradient(170deg, rgb(255 255 255 / 6%), transparent);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 1rem;
+  overflow: hidden;
+}
+.refsheet-frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.refsheet-frame-empty {
+  margin: auto;
+  color: rgb(255 255 255 / 18%);
+}
+.refsheet-frame > .refsheet-frame-note {
+  position: relative;
+}
+
+.refsheet-name {
+  margin: 0;
+  font-family: var(--sheet-caps);
+  font-weight: 700;
+  font-size: clamp(2rem, 4.5vw, 3.5rem);
+  letter-spacing: 0.04em;
+  line-height: 1.08;
+  text-wrap: balance;
+  color: #f1e6d6;
+}
+/* The titles ride inside the h1 as a second line, so a long "Princess Ilsavet du
+   Verane" wraps as one composed name instead of pushing the layout around. */
+.refsheet-title {
+  display: block;
+  margin-top: 0.35rem;
+  font-weight: 400;
+  font-size: clamp(1rem, 1.6vw, 1.45rem);
+  letter-spacing: 0.06em;
+  color: #c4b8a6;
+}
+.refsheet-concept {
+  font-size: clamp(1.1rem, 1.5vw, 1.35rem);
+  max-width: 34rem;
+}
+.refsheet-quote {
+  margin: 0;
+  font-style: italic;
+  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+  line-height: 1.55;
+  color: #c4b8a6;
+  max-width: 34rem;
+}
+
+/* ---------- the looks strip ---------- */
+
+.refsheet-looks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr));
+  gap: 0.5rem;
+}
+.refsheet-look {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: flex-end;
+  padding: 0.35rem;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid rgb(255 255 255 / 18%);
+  background: rgb(255 255 255 / 5%);
+  color: #c4b8a6;
+  font-family: var(--sheet-caps);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  line-height: 1.2;
+}
+.refsheet-look img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.refsheet-look span {
+  position: relative;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
+}
+.refsheet-look[aria-pressed='true'] {
+  border-color: var(--plate-accent);
+  box-shadow: inset 0 0 0 1px var(--plate-accent);
+  color: #f1e6d6;
+}
+.refsheet-look-add {
+  border-style: dashed;
+  background: transparent;
+  color: var(--plate-accent);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+/* ---------- the section row ---------- */
+
+.refsheet-sections {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.75rem;
+  padding: 0 clamp(1rem, 4vw, 4rem);
+  border-bottom: 1px solid hsl(var(--border));
+}
+.refsheet-sections button {
+  font-family: var(--sheet-caps);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0.75rem 0;
+  cursor: pointer;
+}
+.refsheet-sections button:hover {
+  color: hsl(var(--foreground));
+}
+.refsheet-sections button[aria-current='page'] {
+  color: hsl(var(--primary));
+  border-bottom-color: hsl(var(--primary));
+}
+/* The break before the owner's own sections: they are set apart on the line rather
+   than mixed in, so a player can see at a glance which half only they read. */
+.refsheet-sections-break {
+  width: 1px;
+  align-self: center;
+  height: 1.125rem;
+  background: hsl(var(--border));
+  margin-inline: 0.5rem;
+}
+.refsheet-sections-yours {
+  font-family: var(--sheet-caps);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--accent));
+  align-self: center;
+}
+
+/* ---------- the leaf below the plate ---------- */
+
+.refsheet-leaf {
+  padding: clamp(1.5rem, 3vw, 2.25rem) clamp(1rem, 4vw, 4rem) clamp(3rem, 6vw, 4.5rem);
+}
+.refsheet-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 19rem) minmax(0, 1fr) minmax(0, 22rem);
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+  align-items: start;
+}
+.refsheet-columns-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  align-items: start;
+}
+.refsheet-columns-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+  align-items: start;
+}
+.refsheet-columns-even {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: clamp(1.5rem, 3vw, 3rem);
+  align-items: start;
+}
+@media (max-width: 62rem) {
+  .refsheet-columns,
+  .refsheet-columns-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.refsheet-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.refsheet-stack-wide {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+/* ---------- typographic furniture ---------- */
+
+.refsheet-eyebrow {
+  font-family: var(--sheet-caps);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: hsl(var(--accent));
+}
+.refsheet-heading {
+  font-family: var(--sheet-caps);
+  font-weight: 600;
+  font-size: 1.375rem;
+  letter-spacing: 0.08em;
+  color: hsl(var(--primary));
+  margin: 0;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.refsheet-ledger {
+  color: hsl(var(--muted-foreground));
+  font-size: 1rem;
+}
+.refsheet-note {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.refsheet-soft {
+  color: hsl(var(--muted-foreground));
+}
+
+/* A label/value list. `max-content` on the labels keeps the values on one axis
+   without a fixed width that a long label would overflow. */
+.refsheet-glance {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 1rem;
+  row-gap: 0.25rem;
+  align-items: baseline;
+  margin: 0;
+}
+.refsheet-glance dt {
+  margin: 0;
+  font-family: var(--sheet-caps);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  padding-top: 0.3rem;
+}
+.refsheet-glance dd {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.35;
+}
+
+/* Entries, not cards: hairline-separated index rows. */
+.refsheet-entries {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--sheet-hair);
+}
+.refsheet-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--sheet-hair);
+}
+.refsheet-entry-name {
+  font-family: var(--sheet-caps);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.refsheet-entry-gloss {
+  color: hsl(var(--muted-foreground));
+  font-size: 1.0625rem;
+}
+.refsheet-entry-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.refsheet-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.refsheet-tag {
+  font-family: var(--sheet-caps);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+.refsheet-tag-accent {
+  color: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+}
+
+/* Distinctions as pills — the trait chips an OC sheet always carries. A disadvantage
+   is dashed and muted rather than red: it is part of the character, not a warning. */
+.refsheet-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.refsheet-pill {
+  font-size: 1rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid hsl(var(--primary));
+  color: hsl(var(--primary));
+  border-radius: 999px;
+}
+.refsheet-pill-minor {
+  border-style: dashed;
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+
+/* The cast: a face per relation. */
+.refsheet-cast {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 1rem;
+}
+.refsheet-face {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+  min-width: 0;
+}
+.refsheet-face-ring {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  object-fit: cover;
+}
+.refsheet-face-who {
+  font-family: var(--sheet-caps);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.refsheet-face-how {
+  font-size: 0.9375rem;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.4;
+}
+
+/* ---------- folding bands ---------- */
+
+/* Gated material folds rather than crowding the columns: a band a viewer may not read
+   is absent entirely (render-or-vanish), and one they may read opens by default. */
+.refsheet-band {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+.refsheet-band > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1.125rem;
+}
+.refsheet-band > summary::-webkit-details-marker {
+  display: none;
+}
+.refsheet-band > summary::after {
+  content: 'Fold';
+  font-family: var(--sheet-caps);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+  margin-left: auto;
+}
+.refsheet-band:not([open]) > summary::after {
+  content: 'Unfold';
+}
+.refsheet-band-body {
+  padding: 0 1.125rem 1.125rem;
+}
+
+/* One prompt of the actor's sheet, inside a band. Borderless: the band already
+   frames them, and six framed cells inside a frame reads as a control panel. */
+.refsheet-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--sheet-hair);
+}
+.refsheet-prompt-q {
+  font-family: var(--sheet-caps);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+}
+.refsheet-prompt-a {
+  font-size: 1.0625rem;
+  line-height: 1.45;
+}
+
+/* ---------- instruments (numbers, operated not read) ---------- */
+
+.refsheet-instrument {
+  font-family: var(--sheet-sans);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.refsheet-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.25rem 1.5rem;
+}
+.refsheet-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-bottom: 1px solid var(--sheet-hair);
+  padding: 0.3rem 0;
+}
+.refsheet-stat-name {
+  color: hsl(var(--muted-foreground));
+}
+.refsheet-stat-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.refsheet-skills {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0 2rem;
+}
+.refsheet-skill {
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--sheet-hair);
+}
+.refsheet-skill-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.refsheet-skill-spec {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8125rem;
+  padding-left: 0.875rem;
+}
+
+/* The aura, as a proportional strip rather than three numbers. */
+.refsheet-aura {
+  display: flex;
+  height: 2.25rem;
+  border: 1px solid hsl(var(--border));
+  overflow: hidden;
+}
+
+/* ---------- prose ---------- */
+
+.refsheet-prose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 40rem;
+}
+.refsheet-prose p {
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refsheet * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

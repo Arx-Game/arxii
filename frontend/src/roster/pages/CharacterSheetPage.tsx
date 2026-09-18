@@ -1,48 +1,46 @@
-import { Link, useParams } from 'react-router-dom';
+/**
+ * The character sheet (#3898) — the Reference Sheet.
+ *
+ * The page is the reference sheet an artist makes for a character they love: a plate
+ * with the art, the name and the character's own words, then eight sections rather than
+ * sixteen tabs, with the three only the player reads set apart on the line.
+ *
+ * What this page owns is the composition and the gating. Every section's content comes
+ * from panels that already existed and keep their own queries; the sheet payload it
+ * fetches once feeds the plate, the front and Physical.
+ */
+
+import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
-import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
+import { useRosterEntryQuery, useMyRosterEntriesQuery, useWearLook } from '../queries';
 import { useBrowsingIdentity } from '../useBrowsingIdentity';
-import { useOrganizationByName } from '@/orgs/queries';
-import {
-  CharacterPortrait,
-  BackgroundSection,
-  StatsSection,
-  RelationshipsSection,
-  GalleriesSection,
-  ApplicationSlot,
-} from '@/components/character';
+import { ApplicationSlot } from '@/components/character';
 import { MessagesSection } from '@/narrative/components/MessagesSection';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ReputationTab } from '@/reputation/components/ReputationTab';
-import { VitalsPanel } from '@/vitals/components/VitalsPanel';
 import { FriendButton } from '@/friends/components/FriendButton';
 import { RivalButton } from '@/friends/components/RivalButton';
-import { FriendsTab } from '@/friends/components/FriendsTab';
-import { GossipPanel } from '@/secrets/components/GossipPanel';
-import { SecretsTab } from '@/secrets/components/SecretsTab';
-import { StaffSecretsPanel } from '@/secrets/components/StaffSecretsPanel';
-import { CluesTab } from '@/clues/components/CluesTab';
-import { CrimeTab } from '@/justice/components/CrimeTab';
-import { TitlesPanel } from '@/achievements/components/TitlesPanel';
+import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { MaturationPanel } from '@/character_sheets/components/MaturationPanel';
 import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
-import { MechanicsSection } from '@/character_sheets/components/MechanicsSection';
-import { LanguagesSection } from '@/character_sheets/components/LanguagesSection';
-import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
-import { OriginsSection } from '@/character_sheets/components/OriginsSection';
-import { ActorSheetSection } from '@/character_sheets/components/ActorSheetSection';
 import { WorshipSection, type PublicWorshipRef } from '@/worship/components/WorshipSection';
-
-type ActorSheetGoal = Parameters<typeof ActorSheetSection>[0]['goals'][number];
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
-import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
-import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
-import { SpellbookTab } from '@/magic/components/SpellbookTab';
-import { LocationsTab } from '@/locations/components/LocationsTab';
-import { AgreementsPanel } from '@/estates/components/AgreementsPanel';
-import { KinshipPanel } from '@/kinship/components/KinshipPanel';
-import { AdvancementTab } from '@/progression/components/advancement/AdvancementTab';
-import { XpLedgerCard } from '@/progression/components/advancement/XpLedgerCard';
+import { useCharacterVitalsQuery } from '@/vitals/vitalsQueries';
+import { useEquippedItems, useInventory } from '@/inventory/hooks/useInventory';
+import { usePersonaTitles } from '@/achievements/queries';
+import '@/character_sheets/sheet.css';
+import { Plate } from '@/character_sheets/components/sheet/Plate';
+import { SectionRow, type SheetSection } from '@/character_sheets/components/sheet/SectionRow';
+import { SheetPanel } from '@/character_sheets/components/sheet/SheetPanel';
+import { PhysicalPanel, type WornItem } from '@/character_sheets/components/sheet/PhysicalPanel';
+import {
+  DistinctionsPanel,
+  GrowthPanel,
+  HoldingsPanel,
+  KnowledgePanel,
+  MagicPanel,
+  TiesPanel,
+} from '@/character_sheets/components/sheet/panels';
+import { Heading, Stack } from '@/character_sheets/components/sheet/primitives';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -50,319 +48,211 @@ export function CharacterSheetPage() {
   const { data: entry, isLoading } = useRosterEntryQuery(entryId);
   const { data: myEntries } = useMyRosterEntriesQuery();
   const account = useAccount();
+  const [section, setSection] = useState<SheetSection>('sheet');
 
-  // Show messages section only when the viewing user owns this character.
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
-  // Full character sheet payload — needed for the origin-story finish-later
-  // editor (#2478) which reads story.origin_slots.
-  const { data: sheetPayload } = useCharacterSheetQuery(entry?.character.id ?? 0);
-  // For the Reputation tab on foreign sheets: resolve the viewer's primary
-  // persona from their first owned character. Null when the viewer has
-  // no characters → the backend returns the anonymous subset.
+  const sheetId = entry?.character.id ?? 0;
+  const { data: sheet } = useCharacterSheetQuery(sheetId);
+
+  // Vitals are owner/staff-gated server-side: the query resolves null for anyone else,
+  // which is exactly what Physical's plain-sight arm renders from.
+  const { data: vitals = null } = useCharacterVitalsQuery(sheetId);
+
+  // See the previous revision of this file for why each of these is resolved the way it
+  // is — the reasons are unchanged by the redesign.
   const viewerPersonaId = myEntries?.[0]?.primary_persona_id ?? null;
-  // For the Reputation tab's own-view: resolve the persona/entry of the character being
-  // VIEWED (not the account's first-listed character) — an account can own several
-  // characters, and scoping to myEntries[0] would leak another character's standing
-  // (heat, org memberships/reputation) onto this sheet.
   const viewedMyEntry = myEntries?.find((e) => e.id === entryId);
   const viewedPersonaId = viewedMyEntry?.primary_persona_id ?? null;
-  // For the Titles tab (#3466): titles are persona-scoped now, so the panel needs the
-  // presented persona's id, not the CharacterSheet pk. Own-view already has it
-  // (`viewedPersonaId` above); a foreign, non-privileged view's `sheetPayload.personas` comes
-  // back from the server pre-filtered to exactly one entry — the presented persona — so its
-  // id is the same fallback. Never fetch separately just to resolve this.
-  const titlesPersonaId = viewedPersonaId ?? sheetPayload?.personas[0]?.id ?? null;
-  // For the Secrets tab: IC knowledge scopes to the ACTIVE character (never the account), so
-  // resolve this tab's browsing identity (#3479). Null when nothing is browsing → no secrets.
+  const titlesPersonaId = viewedPersonaId ?? sheet?.personas[0]?.id ?? null;
   const { entryId: viewerEntryId } = useBrowsingIdentity();
-  // For the Locations tab's Ships section: GET /api/ships/ships/ is server-scoped to the
-  // account's ACTIVE persona, not the character being viewed, so only render it when the
-  // viewed character IS the active character (an account can own several characters).
   const isActiveCharacter = viewerEntryId === entryId;
-  // Resolve a same-named org for the family click-through (#1446); membership-gated visibility
-  // means an empty/absent result is normal — fall back to plain text in that case.
-  const { data: familyOrg } = useOrganizationByName(entry?.character.family ?? '');
+
+  // Titles compose into the name on the plate, so the page reads them here rather than
+  // leaving them to a panel of their own.
+  const { data: titles } = usePersonaTitles(titlesPersonaId);
+
+  // What they are wearing, for Physical. Owner-only: the public "what can I see on
+  // them" endpoint is same-room gated (it answers the look command), so a roster
+  // visitor has no business asking it and would only get a 403.
+  const { data: equipped = [] } = useEquippedItems(isMyCharacter ? sheetId : undefined);
+  const { data: inventory = [] } = useInventory(isMyCharacter ? sheetId : undefined);
+
+  const wearLook = useWearLook(entryId, sheetId);
 
   if (isLoading) return <p className="p-4">Loading...</p>;
   if (!entry) return <p className="p-4">Character not found.</p>;
 
-  const covenant = entry.character.covenant;
-  const family = entry.character.family;
+  // A viewer who is not the owner must never be left on one of the three own-only
+  // sections — switching characters keeps the section, so this falls back rather than
+  // rendering a panel whose queries would all refuse.
+  const shown: SheetSection =
+    !isMyCharacter && (section === 'knowledge' || section === 'holdings' || section === 'growth')
+      ? 'sheet'
+      : section;
+
+  const displayName = sheet?.identity.fullname || entry.fullname || entry.character.name;
+  const titleNames = (titles ?? []).map((row) => row.title).filter(Boolean);
+
+  const worn: WornItem[] = equipped.map((row) => {
+    const item = inventory.find((candidate) => candidate.id === row.item_instance);
+    return {
+      id: row.id,
+      name: item?.display_name ?? row.body_region_display,
+      description: item?.display_description ?? row.equipment_layer_display,
+      isHidden: false,
+    };
+  });
 
   return (
-    <div className="container mx-auto space-y-4 p-4">
-      <div className="space-y-2">
-        <CharacterPortrait
-          name={entry.fullname || entry.character.name}
-          profilePicture={entry.profile_picture}
-        >
-          {covenant && (
-            <p className="text-sm text-muted-foreground">
-              <Link to={`/covenants/${covenant.id}`} className="hover:underline">
-                {covenant.name}
-              </Link>
-              {'-'}
-              {covenant.role}
-            </p>
-          )}
-          {family && (
-            <p className="text-sm text-muted-foreground">
-              {familyOrg ? (
-                <Link to={`/orgs/${familyOrg.id}`} className="hover:underline">
-                  {family}
-                </Link>
-              ) : (
-                family
-              )}
-            </p>
-          )}
-        </CharacterPortrait>
-        {entry.quote && <blockquote className="italic">"{entry.quote}"</blockquote>}
-        {/* Friend this character — an OOC trusted-partner designation (#1727), only on others' sheets. */}
-        {!isMyCharacter && (
-          <FriendButton
-            viewerEntryId={viewerEntryId}
-            targetEntryId={entryId}
-            targetName={entry.character.name}
+    <div className="refsheet">
+      <Plate
+        name={displayName}
+        titles={titleNames}
+        concept={sheet?.identity.concept ?? entry.character.concept ?? ''}
+        quote={sheet?.identity.quote ?? entry.quote ?? ''}
+        glanceLines={glanceLines(sheet)}
+        looks={sheet?.looks ?? []}
+        canWear={isMyCharacter}
+        onWear={(look) => wearLook.mutate(look.tenure_media_id)}
+        isSaving={wearLook.isPending}
+        galleriesTo={`/roster/${entryId}/galleries`}
+        actions={
+          !isMyCharacter && (
+            <>
+              <FriendButton
+                viewerEntryId={viewerEntryId}
+                targetEntryId={entryId}
+                targetName={entry.character.name}
+              />
+              <RivalButton
+                viewerEntryId={viewerEntryId}
+                targetEntryId={entryId}
+                targetName={entry.character.name}
+              />
+            </>
+          )
+        }
+      />
+
+      <SectionRow current={shown} onSelect={setSection} isMyCharacter={isMyCharacter} />
+
+      <div className="refsheet-leaf">
+        {shown === 'sheet' && (
+          <Stack wide>
+            {sheet && (
+              <SheetPanel
+                sheet={sheet}
+                isMyCharacter={isMyCharacter}
+                rumor={null}
+                languages={null}
+              />
+            )}
+            <WorshipSection
+              sheetId={sheetId}
+              characterName={entry.character.name}
+              isMyCharacter={isMyCharacter}
+              isStaff={Boolean(account?.is_staff)}
+              publicWorship={(sheet?.identity.worship as PublicWorshipRef | null) ?? null}
+            />
+            <ApplicationSlot entry={entry} account={account} />
+            {isMyCharacter && (
+              <div id="messages">
+                <MessagesSection />
+              </div>
+            )}
+          </Stack>
+        )}
+
+        {shown === 'physical' && sheet && (
+          <PhysicalPanel
+            sheet={sheet}
+            vitals={vitals}
+            isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
+            worn={worn}
           />
         )}
-        {/* Declare an IC rival — the antagonism-consent counterpart (#2170), double opt-in. */}
-        {!isMyCharacter && (
-          <RivalButton
-            viewerEntryId={viewerEntryId}
-            targetEntryId={entryId}
-            targetName={entry.character.name}
+
+        {shown === 'ties' && (
+          <TiesPanel
+            sheetId={sheetId}
+            entryId={entryId}
+            isMyCharacter={isMyCharacter}
+            viewerPersonaId={viewerPersonaId}
+            viewedPersonaId={viewedPersonaId}
+            titlesPersonaId={titlesPersonaId}
           />
+        )}
+
+        {shown === 'distinctions' && <DistinctionsPanel sheetId={sheetId} />}
+
+        {shown === 'magic' && <MagicPanel sheetId={sheetId} isMyCharacter={isMyCharacter} />}
+
+        {shown === 'knowledge' && isMyCharacter && (
+          <KnowledgePanel
+            sheetId={sheetId}
+            viewerEntryId={viewerEntryId}
+            isStaff={Boolean(account?.is_staff)}
+          />
+        )}
+
+        {shown === 'holdings' && isMyCharacter && (
+          <HoldingsPanel
+            sheetId={sheetId}
+            viewedPersonaId={viewedPersonaId}
+            isActiveCharacter={isActiveCharacter}
+            viewerEntryId={viewerEntryId}
+          />
+        )}
+
+        {shown === 'growth' && isMyCharacter && (
+          <Stack wide>
+            <GrowthPanel
+              sheetId={sheetId}
+              isMyCharacter={isMyCharacter}
+              isActiveCharacter={isActiveCharacter}
+              originStoryEditor={
+                sheet ? <OriginStoryEditorDialog characterId={sheetId} sheet={sheet} /> : undefined
+              }
+            />
+            <Stack>
+              <Heading>Points to place</Heading>
+              <StatPointPanel sheetId={sheetId} />
+              <MaturationPanel sheetId={sheetId} />
+            </Stack>
+          </Stack>
         )}
       </div>
-
-      <Tabs defaultValue="sheet" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="sheet">Sheet</TabsTrigger>
-          <TabsTrigger value="relationships">Relationships</TabsTrigger>
-          <TabsTrigger value="reputation">Reputation</TabsTrigger>
-          <TabsTrigger value="titles">Titles</TabsTrigger>
-          <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
-          <TabsTrigger value="kinship">Kinship</TabsTrigger>
-          {isMyCharacter && <TabsTrigger value="updates">Updates</TabsTrigger>}
-          {isMyCharacter && <TabsTrigger value="advancement">Advancement</TabsTrigger>}
-          <TabsTrigger value="magic">Magic</TabsTrigger>
-          <TabsTrigger value="secrets">Secrets</TabsTrigger>
-          {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
-          {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
-          {isMyCharacter && <TabsTrigger value="crime">Crime</TabsTrigger>}
-          {isMyCharacter && <TabsTrigger value="friends">Friends</TabsTrigger>}
-          {isMyCharacter && <TabsTrigger value="locations">Locations</TabsTrigger>}
-          {isMyCharacter && <TabsTrigger value="agreements">Agreements</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="sheet" className="space-y-4">
-          <VitalsPanel characterId={entry.character.id} />
-          {entry.description && (
-            <section>
-              <h3 className="text-xl font-semibold">Description</h3>
-              <p>{entry.description}</p>
-            </section>
-          )}
-          {sheetPayload && (
-            <ActorSheetSection
-              block={sheetPayload.actor_sheet}
-              goals={sheetPayload.goals as ActorSheetGoal[]}
-            />
-          )}
-          {sheetPayload && sheetPayload.story.origin_slots.length > 0 ? (
-            <OriginsSection
-              story={sheetPayload.story}
-              background={entry.character.background}
-              isMyCharacter={isMyCharacter}
-            />
-          ) : (
-            <BackgroundSection background={entry.character.background} />
-          )}
-          {isMyCharacter && sheetPayload && (
-            <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />
-          )}
-          {isMyCharacter && <StatPointPanel sheetId={entry.character.id} />}
-          {isMyCharacter && <MaturationPanel sheetId={entry.character.id} />}
-          <StatsSection
-            age={entry.character.age}
-            birthday={entry.character.birthday}
-            gender={entry.character.gender}
-            race={entry.character.race}
-            charClass={entry.character.char_class}
-            level={entry.character.level}
-            concept={entry.character.concept}
-            family={entry.character.family}
-            vocation={entry.character.vocation}
-            socialRank={entry.character.social_rank}
-          />
-          {sheetPayload && (
-            <MechanicsSection stats={sheetPayload.stats} skills={sheetPayload.skills} />
-          )}
-          {isMyCharacter && <LanguagesSection />}
-          <WorshipSection
-            sheetId={entry.character.id}
-            characterName={entry.character.name}
-            isMyCharacter={isMyCharacter}
-            isStaff={Boolean(account?.is_staff)}
-            publicWorship={(sheetPayload?.identity.worship as PublicWorshipRef | null) ?? null}
-          />
-          <GalleriesSection galleries={entry.character.galleries} />
-          <ApplicationSlot entry={entry} account={account} />
-          {isMyCharacter && (
-            <div id="messages">
-              <MessagesSection />
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="relationships" className="space-y-4">
-          <RelationshipsSection
-            characterSheetId={entry.character.id}
-            isMyCharacter={isMyCharacter}
-          />
-        </TabsContent>
-
-        <TabsContent value="reputation" className="space-y-4">
-          {/* Consolidated Reputation tab (#1446): renown, standing (society + org), covenants,
-              and wanted flags for the own view; the existing RenownCardPanel for foreign views.
-              Radix unmounts inactive tab content, so these queries only fire when opened. */}
-          <ReputationTab
-            entryCharacterId={entry.character.id}
-            viewerPersonaId={viewerPersonaId}
-            isMyCharacter={isMyCharacter}
-            viewedEntryId={entryId}
-            viewedPersonaId={viewedPersonaId}
-          />
-        </TabsContent>
-
-        <TabsContent value="titles" className="space-y-4">
-          {/* Titles are cosmetic and public — render for any viewer. Persona-scoped (#3466):
-              see titlesPersonaId above for how it's resolved without a second fetch. */}
-          <TitlesPanel personaId={titlesPersonaId} />
-        </TabsContent>
-
-        <TabsContent value="distinctions" className="space-y-4">
-          {/* Ungated (#1446): the server already filters secret rows for non-privileged
-              viewers, so every viewer sees this tab and the tab only renders what it's given.
-              character.id is the CharacterSheet pk (shared with the ObjectDB pk). Radix
-              unmounts inactive tab content, so the query only fires when this tab is opened. */}
-          <DistinctionsTab characterId={entry.character.id} />
-        </TabsContent>
-
-        <TabsContent value="kinship" className="space-y-4">
-          {/* Ungated (#3003): the server already filters the kin graph to what the viewer may
-              see (public record + truths they know, or the full truth for staff) — the public
-              family record telnet's own family section shows more of, so gating this tab client
-              side would hide something the server already means to show. character.id is the
-              CharacterSheet pk the kin tree endpoint is centred on. Radix unmounts inactive tab
-              content, so the query only fires when this tab is opened. */}
-          <KinshipPanel characterId={entry.character.id} />
-        </TabsContent>
-
-        <TabsContent value="updates" className="space-y-4">
-          {/* Owner-gated (#2631 ruling): past sheet versions are owner/staff-only by default —
-              the endpoint returns [] for anyone else, and staff read history via admin.
-              character.id is the CharacterSheet pk. */}
-          <UpdatesTab characterId={entry.character.id} isMyCharacter={isMyCharacter} />
-        </TabsContent>
-
-        {isMyCharacter && (
-          <TabsContent value="advancement" className="space-y-4">
-            {/* Own-only (#3045): every spend/advance path (breakthroughs, class unlocks,
-                training, Durance) that previously required telnet. Also gated on
-                isActiveCharacter inside the tab — the backend views resolve the acting
-                character via the account's puppeted character, not this page's id, the
-                same constraint the Locations tab's Ships section already handles. */}
-            {/* Read-only and keyed by sheet id, so it stands outside the
-                isActiveCharacter gate the spend cards sit behind (#3748). */}
-            <XpLedgerCard sheetId={entry.character.id} />
-            <AdvancementTab
-              characterId={entry.character.id}
-              isActiveCharacter={isActiveCharacter}
-            />
-          </TabsContent>
-        )}
-
-        <TabsContent value="magic" className="space-y-4">
-          {/* Ungated (#1446): the server already gates payload.magic to null for foreign
-              viewers without visibility and for magic-less characters, so every viewer sees
-              this tab and the tab only renders what it's given (a muted line when null).
-              Spellbook/status view only — "the sheet describes; the scene does." character.id
-              is the CharacterSheet pk. Radix unmounts inactive tab content, so the query only
-              fires when this tab is opened. */}
-          <SpellbookTab characterId={entry.character.id} isMyCharacter={isMyCharacter} />
-        </TabsContent>
-
-        <TabsContent value="secrets" className="space-y-4">
-          {/* The character sheet shares its pk with the ObjectDB, so character.id is the
-              CharacterSheet pk the secret-tab API filters by. Radix unmounts inactive tab
-              content, so the query only fires when this tab is opened. */}
-          <SecretsTab subjectId={entry.character.id} viewerId={viewerEntryId} />
-          {/* Staff omniscient authoring surface (#3266) — every authored secret about this
-              character, mint/edit included. character.id is the CharacterSheet pk the
-              endpoint expects (shared with the ObjectDB pk). The backend also enforces
-              IsAdminUser; this gate just keeps the panel from flashing for non-staff. */}
-          {account?.is_staff && <StaffSecretsPanel subjectId={entry.character.id} />}
-        </TabsContent>
-
-        {isMyCharacter && (
-          <TabsContent value="clues" className="space-y-4">
-            {/* Held clues are private — only your own character's journal. character.id is the
-                CharacterSheet pk the clues API filters by. Radix unmounts inactive tab content,
-                so the query only fires when this tab is opened. */}
-            <CluesTab characterSheetId={entry.character.id} />
-          </TabsContent>
-        )}
-
-        {isMyCharacter && (
-          <TabsContent value="gossip" className="space-y-4">
-            {/* Gossip is the active character's own spreadable Level-1 secrets, location-bound to a
-                social hub (#1572) — so it's a self-only tab keyed on the active RosterEntry, not the
-                viewed subject. Radix unmounts inactive tabs, so the query only fires when opened. */}
-            <GossipPanel viewerId={viewerEntryId} />
-          </TabsContent>
-        )}
-
-        {isMyCharacter && (
-          <TabsContent value="crime" className="space-y-4">
-            {/* Where your active persona is wanted (#1765) — self-only risk information keyed on
-                the active RosterEntry, like Gossip. Radix unmounts inactive tabs, so the query
-                only fires when opened. */}
-            <CrimeTab viewerEntryId={viewerEntryId} />
-          </TabsContent>
-        )}
-
-        {isMyCharacter && (
-          <TabsContent value="friends" className="space-y-4">
-            {/* Your OOC friends list (#1727) — account-wide trusted partners, separate from IC
-                relationships. Add friends from other characters' sheets; this lists + removes. */}
-            <FriendsTab />
-          </TabsContent>
-        )}
-
-        {isMyCharacter && (
-          <TabsContent value="locations" className="space-y-4">
-            {/* Consolidated Locations tab (#1446): dwellings, tenancies, and ships. Own-only —
-                dwellings/tenancies are keyed on the viewed character's persona (never the
-                account's first-listed character, to avoid alt-leak); ships are self-scoped
-                server-side to the requester's ACTIVE persona, so isActiveCharacter gates
-                that section off when viewing a non-active character owned by this account.
-                Radix unmounts inactive tabs, so these queries only fire when opened. */}
-            <LocationsTab personaId={viewedPersonaId} isActiveCharacter={isActiveCharacter} />
-          </TabsContent>
-        )}
-
-        {isMyCharacter && (
-          <TabsContent value="agreements" className="space-y-4">
-            {/* Agreements hub (#1985): binding declarations that fire later. V1 content is
-                the will (bequests, executors, testament) plus executor/claim surfaces;
-                vows, oaths, treaties, and pacts join as they ship. Sheet pk == character
-                ObjectDB pk (OneToOne shares pk). */}
-            <AgreementsPanel characterSheetId={entry.character.id} />
-          </TabsContent>
-        )}
-      </Tabs>
     </div>
   );
+}
+
+/**
+ * The two short lines under the quote: who they are, then what they look like.
+ *
+ * Both are built from whatever the payload actually carried, so a sparse character
+ * gets a shorter line rather than a line full of "TBD" — the failure the old Stats
+ * block made unmissable.
+ */
+function glanceLines(sheet: ReturnType<typeof useCharacterSheetQuery>['data']): string[] {
+  if (!sheet) return [];
+  const { identity, appearance } = sheet;
+
+  const who = [
+    identity.species?.name,
+    identity.origin?.name && `Of ${identity.origin.name}`,
+    identity.family?.name,
+    identity.age !== null ? `${identity.age}` : null,
+  ]
+    .filter(Boolean)
+    .join('. ');
+
+  const looks = [
+    appearance.height_band,
+    appearance.build?.name,
+    ...appearance.form_traits.map((trait) => trait.value),
+  ]
+    .filter(Boolean)
+    .join('. ');
+
+  return [who ? `${who}.` : '', looks ? `${looks}.` : ''].filter(Boolean);
 }

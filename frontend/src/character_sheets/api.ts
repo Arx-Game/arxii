@@ -218,24 +218,151 @@ export interface CharacterSheetPersona {
   thumbnail: string | null;
 }
 
+/**
+ * Mirrors `world.character_sheets.types.GoalEntry` (#3621) — one numbered goal.
+ * The list arrives empty when the viewer's access does not meet `goals_visibility`,
+ * which is indistinguishable from "wrote none"; both render as no goals.
+ */
+export interface CharacterSheetGoal {
+  domain: string;
+  horizon: string;
+  ordinal: number;
+  points: number;
+  notes: string;
+}
+
+/** Mirrors `world.character_sheets.types.IdNameRef`. */
+export interface IdNameRef {
+  id: number;
+  name: string;
+}
+
+/** Mirrors `world.character_sheets.types.PronounsData`. */
+export interface CharacterSheetPronouns {
+  subject: string;
+  object: string;
+  possessive: string;
+}
+
+/** Mirrors `world.character_sheets.types.VacancyRef` (#3648). */
+export interface CharacterSheetVacancy {
+  name: string;
+  presumed_importance: number;
+  /** Owner/staff only; null for every other viewer. */
+  importance: number | null;
+}
+
+/**
+ * Mirrors `world.character_sheets.types.IdentitySection`.
+ *
+ * The age axes, `worship_sincere` and `current_mood` are owner/staff only and arrive
+ * null for every other viewer (the leak table) — render them only where the sheet is
+ * already showing owner-gated material, and never infer "no mood" from a null.
+ */
+export interface CharacterSheetIdentity {
+  name: string;
+  fullname: string;
+  concept: string;
+  quote: string;
+  age: number | null;
+  birthday: string | null;
+  chronological_age: number | null;
+  biological_age: number | null;
+  withered_years: number | null;
+  gender: IdNameRef | null;
+  pronouns: CharacterSheetPronouns;
+  species: IdNameRef | null;
+  heritage: IdNameRef | null;
+  family: IdNameRef | null;
+  tarot_card: IdNameRef | null;
+  origin: IdNameRef | null;
+  path: IdNameRef | null;
+  worship: IdNameRef | null;
+  worship_sincere: boolean | null;
+  current_mood: IdNameRef | null;
+  vacancy: CharacterSheetVacancy | null;
+}
+
+/** Mirrors `world.character_sheets.types.FormTraitEntry` — one hair/eye/skin row. */
+export interface CharacterSheetFormTrait {
+  trait: string;
+  value: string;
+}
+
+/**
+ * Mirrors `world.character_sheets.types.AppearanceSection`.
+ *
+ * `height_inches` is owner/staff only (#1325) — everyone else reads `height_band`.
+ * `description` is blank unless the presented identity is revealed, so a mask never
+ * leaks identifying prose.
+ */
+export interface CharacterSheetAppearance {
+  height_inches: number | null;
+  height_band: string | null;
+  build: IdNameRef | null;
+  description: string;
+  form_traits: CharacterSheetFormTrait[];
+}
+
+/** Mirrors `world.character_sheets.types.PathHistoryEntry`. */
+export interface CharacterSheetPathHistory {
+  path: string;
+  stage: number;
+  tier: string;
+  date: string;
+}
+
+/** Mirrors `world.character_sheets.types.PathDetailSection`. */
+export interface CharacterSheetPath {
+  id: number;
+  name: string;
+  stage: number;
+  tier: string;
+  history: CharacterSheetPathHistory[];
+}
+
+/**
+ * Mirrors `world.character_sheets.types.LookEntry` (#3898) — one image of the
+ * character, tagged with the mood it shows.
+ *
+ * `tenure_media_id` is what `POST /api/roster/entries/{pk}/set_profile_picture/`
+ * takes, so the owner can wear any look from the sheet. `look` is blank for an
+ * untagged image. A non-privileged viewer receives only public-gallery images plus
+ * the current one.
+ */
+export interface CharacterSheetLook {
+  tenure_media_id: number;
+  url: string;
+  title: string;
+  look: string;
+  is_current: boolean;
+}
+
+/** The four plate inks (`world.character_sheets.types.PlateInk`, #3898). */
+export type PlateInk = 'ember' | 'verdigris' | 'rose' | 'night';
+
 export interface CharacterSheetPayload {
   id: number;
   can_edit: boolean;
-  identity: Record<string, unknown>;
-  appearance: Record<string, unknown>;
+  identity: CharacterSheetIdentity;
+  appearance: CharacterSheetAppearance;
   /** Stat name -> display value (already ÷10 from the ×10 internal storage, ADR-0193). */
   stats: Record<string, number>;
   skills: CharacterSheetSkill[];
-  path: Record<string, unknown> | null;
+  path: CharacterSheetPath | null;
   distinctions: CharacterSheetDistinction[];
   magic: CharacterSheetMagic | null;
   story: CharacterSheetStory;
   actor_sheet: CharacterSheetActorSheet;
-  goals: unknown[];
+  goals: CharacterSheetGoal[];
   personas: CharacterSheetPersona[];
   theming: Record<string, unknown>;
-  profile_picture: unknown;
-  current_residence: unknown;
+  profile_picture: string | null;
+  current_residence: IdNameRef | null;
+  /** #3898 — the character's images, worn one first. Empty when they have none. */
+  looks: CharacterSheetLook[];
+  /** #3898 — OOC chrome: the ground colour the plate is printed in. */
+  plate_ink: PlateInk;
 }
 
 export async function fetchCharacterSheet(sheetId: number): Promise<CharacterSheetPayload> {

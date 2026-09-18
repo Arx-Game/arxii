@@ -20,6 +20,28 @@ export async function fetchRosterEntry(id: RosterEntryData['id']): Promise<Roste
   return res.json();
 }
 
+/**
+ * Make one of the character's images the one they wear (#3898).
+ *
+ * `tenureMediaId` is a `TenureMedia` pk — the `tenure_media_id` the sheet payload's
+ * `looks` entries carry. The endpoint enforces that the media belongs to this entry
+ * (and, for a non-staff caller, to their own tenure), so a wrong id is a 4xx rather
+ * than a silent no-op. Returns nothing: 204 on success.
+ */
+export async function setEntryProfilePicture(
+  entryId: RosterEntryData['id'],
+  tenureMediaId: number
+): Promise<void> {
+  const res = await apiFetch(`/api/roster/entries/${entryId}/set_profile_picture/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tenure_media_id: tenureMediaId }),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to change the look.');
+  }
+}
+
 export async function fetchMyRosterEntries(): Promise<MyRosterEntry[]> {
   const res = await apiFetch('/api/roster/entries/mine/');
   if (!res.ok) {

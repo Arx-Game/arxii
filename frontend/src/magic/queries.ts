@@ -171,11 +171,18 @@ export function usePendingStageAdvanceOffers() {
  *
  * Pass ``{ enabled: false }`` to defer the fetch (e.g. until a cast dialog is
  * open). Defaults to ``true`` so all existing callers are unaffected.
+ *
+ * Pass ``characterSheetId`` to narrow to one owned character (#3898) — required
+ * for any caller that shows one character at a time, so an account with alts does
+ * not read another character's threads. Same narrowing, and the same reason, as
+ * ``useCharacterResonances``. The id is part of the cache key, so the narrowed and
+ * unnarrowed lists never share an entry.
  */
-export function useThreads(options?: { enabled?: boolean }) {
+export function useThreads(options?: { enabled?: boolean; characterSheetId?: number }) {
+  const characterSheetId = options?.characterSheetId;
   return useQuery({
-    queryKey: magicKeys.threadList(),
-    queryFn: () => api.getThreads(),
+    queryKey: [...magicKeys.threadList(), characterSheetId ?? 'all'],
+    queryFn: () => api.getThreads(characterSheetId),
     throwOnError: true,
     enabled: options?.enabled ?? true,
   });
