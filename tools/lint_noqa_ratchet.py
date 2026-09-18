@@ -47,8 +47,7 @@ PATTERNS: dict[str, str] = {
     # This raw-string count stays broader on purpose (it has no way to tell a
     # sanctioned target from an unsanctioned one) - it is the outer net for
     # every site outside that hook's scope, and each site converted to
-    # `PrunedCachedProperty` (or, rarely, the narrower `CachedRowsHandler`)
-    # lowers this number.
+    # `PrunedCachedProperty` lowers this number.
     "PREFETCH_TO_ATTR": r"to_attr=",
 }
 

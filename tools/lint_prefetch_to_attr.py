@@ -179,10 +179,8 @@ def main(argv: list[str]) -> int:
                 "deleted ones, which arrive with a null id (ADR-0263, #3816, #3673). Target a "
                 "`PrunedCachedProperty` (`evennia_extensions/cached_property.py`) instead - "
                 "it is a real data descriptor and self-heals against pk-nulled zombie rows on "
-                "every read. `CachedRowsHandler` (`evennia_extensions/handlers.py`) remains "
-                "for the narrow case `PrunedCachedProperty` cannot cover: rows parameterized "
-                "per-parent that need their own cache key rather than a plain property "
-                "(its one surviving consumer is `CompanionOrderHandler`). Suppress with "
+                "every read. Derived views should filter a prefetched raw list in Python; do not "
+                "introduce a parallel handler merely for a predicate. Suppress with "
                 "`# noqa: PREFETCH_TO_ATTR` plus a reason."
             )
     return 1 if failed else 0

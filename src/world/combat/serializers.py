@@ -1473,12 +1473,6 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     @extend_schema_field(CompanionOrderSummarySerializer(many=True))
     def get_companion_orders(self, obj: CombatEncounter) -> list[dict[str, Any]]:
         """Return current-round companion directives for the encounter."""
-        try:
-            orders = obj.companion_orders_cached.rows
-        except AttributeError:
-            from world.companions.models import CompanionOrder  # noqa: PLC0415
-
-            orders = CompanionOrder.objects.filter(encounter=obj).select_related("companion")
         return [
             {
                 "companion_id": order.companion_id,
@@ -1487,8 +1481,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "target_opponent_id": order.target_opponent_id,
                 "defending_participant_id": order.defending_participant_id,
             }
-            for order in orders
-            if order.round_number == obj.round_number
+            for order in obj.companion_orders_cached
         ]
 
     @extend_schema_field(PositionAdjacencyItemSerializer(many=True))

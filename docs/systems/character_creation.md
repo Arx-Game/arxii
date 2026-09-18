@@ -459,7 +459,7 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
   query via `Prefetch("slots", ..., to_attr="questions")` - sanctioned onto a genuine
   `cached_property` with explicit write-side invalidation wired
   (`OriginTemplateSlot.related_cache_fields = ["template"]`, clearing the property's cache on
-  every slot save/delete), unlike the `UpbringingQuestionsHandler`/`CachedRowsHandler` wrapper
+  every slot save/delete), unlike the former `UpbringingQuestionsHandler` wrapper
   this replaced (#3816 Task 10). `claimable_kind_ids` is batched separately, with one flat
   query grouped in Python and passed through serializer context, rather than a per-instance
   `.claimable_kinds.all()` (ADR-0263, ADR-0279; #3617, #3673). Each
