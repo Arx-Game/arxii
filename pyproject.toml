@@ -185,6 +185,14 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "S607",    # partial executable path — git is always on PATH
 ]
 
+# Read-only production traceback scanner — subprocess calls are its fixed SSH
+# interface, and long CLI/error strings are intentional operator output.
+"infra/scripts/scan_prod_logs.py" = [
+    "S603", "S607", # fixed ssh executable and argument list
+    "TRY003", "EM101", "EM102", # descriptive operator-facing errors
+    "PLR2004", # bounded scanner defaults
+]
+
 # Additional test patterns
 "**/tests.py" = [
     "PLR2004", # magic values are common in test data

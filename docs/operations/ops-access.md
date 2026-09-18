@@ -121,5 +121,28 @@ web request, including client IPs. Every error-level line in `server.log`
 is also a Sentry event (tag `logger: evennia.twisted`), so check Sentry
 before opening the gate for a traceback.
 
+## Read-only traceback scan for agentic debugging
+
+When Sentry is unavailable or rate-limited, use the checked-in scanner from the
+operator's devcontainer while the ops gate is open:
+
+```bash
+just scan-prod-logs
+# Custom bounds: run the script directly.
+python3 infra/scripts/scan_prod_logs.py --days 2 --max-matches 20
+```
+
+The scanner reads only recent `server.log*` files. It uses a fixed SSH command
+set (`find` to enumerate files and `tail` to read bounded tails); it does not
+accept a remote command, invoke a remote shell script, use `sudo`, or write to
+the host. The defaults read at most four files and four megabytes, and emit at
+most 20 traceback blocks. `--json` emits the same bounded result for an agent
+to parse. Use `--file path --json` to scan a copied log or fixture without SSH.
+
+The command still requires the normal operator-approved `arxii` SSH gate. A
+failed gate is an explicit error, not a fallback to a broader credential. Log
+content can contain private player data; keep the output in the incident
+session and do not paste a traceback into a public issue or PR.
+
 A production traceback never goes into a public issue or PR
 ([ADR-0254](../adr/0254-sentry-digest-is-a-pointer-not-a-reproduction.md)).
