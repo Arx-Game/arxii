@@ -83,16 +83,25 @@ def space_remaining(building: Building) -> int:
     return max(0, building.space_budget - space_used(building))
 
 
-def _require_building_owner(persona: Persona, room: DefaultObject) -> Building:
-    """Resolve the room's Building and require ownership standing on the room."""
-    from world.locations.services import is_owner  # noqa: PLC0415
+def _require_building_trustee(persona: Persona, room: DefaultObject) -> Building:
+    """Resolve the room's Building and require TRUSTEE-or-above standing on the room.
+
+    Renamed from ``_require_building_trustee`` with the ladder (#3902): restructuring a
+    building is "control any home state", which Apostate's ruling gives to a trustee
+    as well as the deed-holder. The name mattered enough to change -- it is what a
+    reader checks when deciding what a new caller may do, and leaving it saying
+    "owner" while it accepted trustees is the quiet lie that makes the next person
+    widen the wrong gate.
+    """
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
 
     building = building_for_room(room)
     if building is None:
         msg = "This room isn't part of a building."
         raise RoomBuildError(msg)
-    if not is_owner(persona, room):
-        msg = "Only the building's owner can restructure it."
+    if not has_standing(persona, room, at_least=LocationRole.TRUSTEE):
+        msg = "Only the building's owner or a trustee can restructure it."
         raise RoomBuildError(msg)
     return building
 
@@ -163,7 +172,7 @@ def dig_room(  # noqa: PLR0913 — dig's optional knobs are the ratified UX surf
         msg = "The new room needs a name."
         raise RoomBuildError(msg)
 
-    building = _require_building_owner(persona, from_room)
+    building = _require_building_trustee(persona, from_room)
     from_profile = from_room.room_profile
     like_profile = _resolve_like_profile(like, building)
 
@@ -219,7 +228,7 @@ def dig_room(  # noqa: PLR0913 — dig's optional knobs are the ratified UX surf
 
 def resize_room(*, persona: Persona, room: DefaultObject, size: RoomSizeTier) -> RoomProfile:
     """Change a room's size tier, instant within the remaining budget."""
-    building = _require_building_owner(persona, room)
+    building = _require_building_trustee(persona, room)
     profile = room.room_profile
     current = profile.size.units if profile.size else 0
     delta = size.units - current
@@ -282,7 +291,7 @@ def link_rooms(
     This is where freeform exit names live ("through the oak door");
     directional digs derive theirs from the direction.
     """
-    building = _require_building_owner(persona, room_a)
+    building = _require_building_trustee(persona, room_a)
     for other in (room_b,):
         try:
             other_profile = other.room_profile
@@ -326,7 +335,7 @@ def _exit_pair(exit_obj: DefaultObject) -> list[DefaultObject]:
 def unlink_rooms(*, persona: Persona, exit_obj: DefaultObject) -> None:
     """Remove an exit (and its reverse sibling), refusing to strand rooms."""
     source = exit_obj.db_location
-    building = _require_building_owner(persona, source)
+    building = _require_building_trustee(persona, source)
     pair = _exit_pair(exit_obj)
     stranded = _stranded_rooms(building, drop_exit_ids=frozenset(e.pk for e in pair))
     if stranded:
@@ -339,7 +348,7 @@ def unlink_rooms(*, persona: Persona, exit_obj: DefaultObject) -> None:
 
 def rename_exit(*, persona: Persona, exit_obj: DefaultObject, name: str) -> None:
     """Rename one direction of an exit (the reverse keeps its own name)."""
-    _require_building_owner(persona, exit_obj.db_location)
+    _require_building_trustee(persona, exit_obj.db_location)
     if not name.strip():
         msg = "The exit needs a name."
         raise RoomBuildError(msg)
@@ -360,7 +369,7 @@ def place_room(
     Placement never gates play — it only moves the room's map cell. The one
     guard is cell collision on the target floor, so the map stays readable.
     """
-    _require_building_owner(persona, room)
+    _require_building_trustee(persona, room)
     profile = room.room_profile
     target_floor = profile.floor if floor is None else floor
     try:
@@ -411,7 +420,7 @@ def remove_room(*, persona: Persona, room: DefaultObject) -> None:
 
     from world.locations.models import LocationTenancy  # noqa: PLC0415
 
-    building = _require_building_owner(persona, room)
+    building = _require_building_trustee(persona, room)
     _room_removal_guards(building, room)
     profile = room.room_profile
     entry_obj = building.entry_room.objectdb if building.entry_room else None
@@ -453,13 +462,17 @@ def start_building_extension(*, persona: Persona, building: Building, added_budg
 
     from world.buildings.models import BuildingExtensionDetails  # noqa: PLC0415
     from world.buildings.room_constants import EXTENSION_THRESHOLD_PER_UNIT  # noqa: PLC0415
-    from world.locations.services import is_owner  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
     entry = building.entry_room
-    if entry is None or not is_owner(persona, entry.objectdb):
-        msg = "Only the building's owner can extend it."
+    # TRUSTEE (#3902): structural work is "control any home state", which the
+    # ruling gives to a trustee as well as the owner. A tenant may furnish the
+    # place (room features) but not restructure the building it sits in.
+    if entry is None or not has_standing(persona, entry.objectdb, at_least=LocationRole.TRUSTEE):
+        msg = "Only the building's owner or a trustee can extend it."
         raise RoomBuildError(msg)
     if added_budget < 1:
         msg = "The extension must add at least one unit of space."
@@ -555,13 +568,17 @@ def commission_decoration(
     from django.utils import timezone  # noqa: PLC0415
 
     from world.buildings.models import InteriorDesignDetails  # noqa: PLC0415
-    from world.locations.services import is_owner  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
     entry = building.entry_room
-    if entry is None or not is_owner(persona, entry.objectdb):
-        msg = "Only the building's owner can commission decoration."
+    # TRUSTEE (#3902): structural work is "control any home state", which the
+    # ruling gives to a trustee as well as the owner. A tenant may furnish the
+    # place (room features) but not restructure the building it sits in.
+    if entry is None or not has_standing(persona, entry.objectdb, at_least=LocationRole.TRUSTEE):
+        msg = "Only the building's owner or a trustee can commission decoration."
         raise RoomBuildError(msg)
     room_profile = None
     if room is not None:
