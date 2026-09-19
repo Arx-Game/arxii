@@ -14,6 +14,8 @@ scaling formula; it does not infer Soulfray likelihood.
 
 from __future__ import annotations
 
+import random
+
 from django.test import TestCase
 
 from actions.factories import ActionTemplateFactory
@@ -37,6 +39,7 @@ from world.combat.models import CombatRoundAction, PendingSelection
 from world.combat.objective_branches import objective_snapshot
 from world.combat.scaling import compute_opponent_stat_block, compute_party_profile
 from world.combat.services import detect_available_combos
+from world.combat.simulation import SimulationParams, run_party_vs_boss_simulation
 from world.conditions.services import has_condition
 from world.covenants.factories import (
     CovenantFactory,
@@ -404,6 +407,36 @@ class BridgeEvacuationAcceptanceTests(TestCase):
         # OrdinaryLegendCompletionTests; this direct adapter intentionally remains
         # a pure settlement operation for callers that own their replay guard.
         self.assertEqual(LegendEntry.objects.filter(event=report.event).count(), entries_before)
+
+    def test_engine_balance_sample_records_failure_and_duration_metrics(self) -> None:
+        """Run small deterministic engine samples for coordinated and spam tactics."""
+        samples = []
+        for combo_rate in (0.0, 0.5):
+            random.seed(3917)
+            report = run_party_vs_boss_simulation(
+                SimulationParams(
+                    party_size=4,
+                    avg_level=4,
+                    iterations=2,
+                    round_cap=4,
+                    combo_rate=combo_rate,
+                )
+            )
+            samples.append(
+                {
+                    "tactic": "independent_damage" if combo_rate == 0.0 else "coordinated",
+                    "rounds": report.round_counts,
+                    "failures": report.defeats + report.stalemates,
+                    "participation": 4,
+                    "resource_trajectory": "synthetic basic-anima pool",
+                    "soulfray_incidence": None,
+                    "rescues": None,
+                    "objective_outcomes": None,
+                }
+            )
+        self.assertEqual([sample["participation"] for sample in samples], [4, 4])
+        self.assertTrue(all(len(sample["rounds"]) == 2 for sample in samples))
+        self.assertEqual({sample["soulfray_incidence"] for sample in samples}, {None})
 
     def test_representative_balance_matrix_is_level_and_size_deterministic(self) -> None:
         """The measured preview matrix changes only with size and level inputs."""
