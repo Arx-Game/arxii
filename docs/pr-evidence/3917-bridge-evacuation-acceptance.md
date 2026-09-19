@@ -1,6 +1,6 @@
 # Review evidence
 
-- Reviewed revision: `c58a52edde5138e5ef1c20f6a9ac484173dc3b05`
+- Reviewed revision: `eadd1709acca09554b92bbbeb0a5ed1f25c807bf`
 - Reviewer: local acceptance test run
 - Reviewer verdict: PASS
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
