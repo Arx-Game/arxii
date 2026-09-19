@@ -24,9 +24,9 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import connection, models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.checks.models import OutcomeTierAward
 from world.contributors.models import CreditedContent
@@ -1509,7 +1509,7 @@ class SpreadAssistTarget(SharedMemoryModel):
         return f"SpreadAssistTarget(window={self.window_id}, deed={self.legend_entry_id})"
 
 
-class AbstractLegendRecord(models.Model):
+class AbstractLegendRecord(SharedMemoryModel):
     """Abstract base for shared fields between LegendEvent and LegendEntry."""
 
     title = models.CharField(

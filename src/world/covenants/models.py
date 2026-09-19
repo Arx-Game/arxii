@@ -15,9 +15,9 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import ArxSharedMemoryManager
+from core.managers import ArxSharedMemoryManager, ArxSharedMemoryQuerySet
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.battles.constants import BattleActionKind
@@ -1700,7 +1700,7 @@ class CourtGrantConfig(SharedMemoryModel):
 # =============================================================================
 
 
-class MentorBondQuerySet(models.QuerySet):
+class MentorBondQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for MentorBond."""
 
     def active(self) -> MentorBondQuerySet:
@@ -1772,7 +1772,7 @@ class MentorBond(SharedMemoryModel):
 # =============================================================================
 
 
-class CourtPactQuerySet(models.QuerySet):
+class CourtPactQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for CourtPact."""
 
     def active(self) -> CourtPactQuerySet:

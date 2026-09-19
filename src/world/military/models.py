@@ -11,8 +11,8 @@ into a persistent force for campaigns or defense.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.battles.constants import DEFAULT_MORALE, UnitQuality
 from world.conditions.models import CapabilityType
 from world.mechanics.models import Property

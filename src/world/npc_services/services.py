@@ -750,7 +750,10 @@ def adjust_npc_affection(pc_persona, npc_persona, *, delta: int) -> int:
         defaults={"affection": 0},
     )
     if delta != 0:
-        NPCStanding.objects.filter(pk=standing.pk).update(affection=F("affection") + delta)
+        NPCStanding.objects.filter(pk=standing.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            affection=F("affection") + delta,
+        )
         # ``F()``-based UPDATE bypasses Evennia's SharedMemoryModel instance,
         # so the cached copy must be purged and reloaded for callers that
         # already hold the same idmapped object.
@@ -773,7 +776,8 @@ def incur_npc_debt(
     lets a PC over-draw an NPC's goodwill can call this. Mirrors
     ``adjust_npc_affection``'s ``F()``-based update + idmapper cache flush.
     """
-    NPCStanding.objects.filter(pk=standing.pk).update(
+    NPCStanding.objects.filter(pk=standing.pk).update_with_reason(
+        reason="issue #3817: intentional atomic write",
         debt=F("debt") + amount,
         debt_baseline_affection=current_affection,
         debt_baseline_missions_completed=current_missions_completed,

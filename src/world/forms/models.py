@@ -1,8 +1,9 @@
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import GuardedSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind, MarkingSource
@@ -650,7 +651,7 @@ class ActiveAlternateSelf(SharedMemoryModel):
         return f"{self.character}: {self.alternate_self or 'no active alt-self'}"
 
 
-class TemporaryFormChangeManager(models.Manager):
+class TemporaryFormChangeManager(GuardedSharedMemoryManager):
     """Manager with convenience methods for temporary changes."""
 
     def active(self):

@@ -126,8 +126,11 @@ class StaffWorkloadStaleStoriesTest(APITestCase):
         )
         # Force last_advanced_at to be stale.
         stale_time = timezone.now() - timedelta(days=STALE_STORY_DAYS + 1)
-        StoryProgressFactory._meta.model.objects.filter(pk=cls.stale_progress.pk).update(
-            last_advanced_at=stale_time
+        StoryProgressFactory._meta.model.objects.filter(
+            pk=cls.stale_progress.pk
+        ).update_with_reason(
+            reason="test fixture: simulate stale row",
+            last_advanced_at=stale_time,
         )
 
         # Recent progress: last_advanced_at is fresh (created now by factory).
@@ -471,8 +474,9 @@ def _build_workload_rows(n: int) -> list:
             current_episode=_episode_for(stale_story),
             is_active=True,
         )
-        StoryProgressFactory._meta.model.objects.filter(pk=stale_progress.pk).update(
-            last_advanced_at=stale_time
+        StoryProgressFactory._meta.model.objects.filter(pk=stale_progress.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            last_advanced_at=stale_time,
         )
 
         # Waiting-for-GM row (on an episode so it is not also a frontier row).

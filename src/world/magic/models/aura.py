@@ -11,8 +11,8 @@ from typing import ClassVar
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
 from world.magic.models.affinity import Resonance

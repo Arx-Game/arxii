@@ -20,7 +20,10 @@ class AutoAbandonSweepTests(TestCase):
     def test_day_old_ceremony_is_abandoned(self) -> None:
         ceremony = CeremonyFactory()
         stale_time = timezone.now() - timedelta(days=2)
-        type(ceremony).objects.filter(pk=ceremony.pk).update(opened_at=stale_time)
+        type(ceremony).objects.filter(pk=ceremony.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            opened_at=stale_time,
+        )
         abandon_stale_ceremonies()
         ceremony.refresh_from_db()
         self.assertEqual(ceremony.status, CeremonyStatus.ABANDONED)

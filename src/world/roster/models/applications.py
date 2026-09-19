@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.roster.managers import RosterApplicationManager
 from world.roster.models.choices import ApplicationStatus, RosterType
 

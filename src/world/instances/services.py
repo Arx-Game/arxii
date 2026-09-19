@@ -50,7 +50,11 @@ def spawn_instanced_room(  # noqa: PLR0913 — one owner-kind arg per caller (pl
         anchor_profile = anchor_room.room_profile_or_none
         if anchor_profile is not None:
             area = anchor_profile.area
-    RoomProfile.objects.filter(pk=profile.pk).update(is_public=False, area=area)
+    RoomProfile.objects.filter(pk=profile.pk).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        is_public=False,
+        area=area,
+    )
     profile.is_public = False
     profile.area = area
     display_data, _created = ObjectDisplayData.objects.get_or_create(object=room)

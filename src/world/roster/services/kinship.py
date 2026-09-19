@@ -306,7 +306,10 @@ def add_membership(
     if is_primary:
         FamilyMembership.objects.filter(
             kinsperson=kinsperson, is_primary=True, ended_at__isnull=True
-        ).exclude(pk=membership.pk).update(is_primary=False)
+        ).exclude(pk=membership.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            is_primary=False,
+        )
         kinsperson.family = family
         kinsperson.save(update_fields=["family"])
         _resync_name_aliases(kinsperson)

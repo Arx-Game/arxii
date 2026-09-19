@@ -1,8 +1,8 @@
 """Reincarnation: links a character to a past life via the Atavism gift."""
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.models.gifts import Gift
 
 

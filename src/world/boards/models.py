@@ -10,8 +10,9 @@ JSON, ADR-0007). ``BoardPost`` rows are soft-deleted only (``removed_by_persona`
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryQuerySet
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.boards.constants import DEFAULT_MAX_ACTIVE_POSTS
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -91,7 +92,7 @@ class Board(SharedMemoryModel):
         return self.organization_id is not None
 
 
-class BoardPostQuerySet(models.QuerySet):
+class BoardPostQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for BoardPost with soft-delete + display-cap helpers."""
 
     def active(self) -> BoardPostQuerySet:

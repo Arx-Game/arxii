@@ -1157,7 +1157,9 @@ def settle_obligations(organization: Organization) -> list[CurrencyTransfer]:
             )
         )
 
-    IncomeDeclaration.objects.filter(pk__in=[d.pk for d in declarations]).update(settled=True)
+    IncomeDeclaration.objects.filter(pk__in=[d.pk for d in declarations]).update_with_reason(
+        reason="issue #3817: intentional atomic write", settled=True
+    )
     return transfers
 
 

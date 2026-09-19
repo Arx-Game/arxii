@@ -152,7 +152,10 @@ def record_showing_engagement(showing: FashionShowing) -> None:
     """Bump peer engagement on an unsettled showing (endorsements etc.)."""
     if showing.settled:
         return
-    FashionShowing.objects.filter(pk=showing.pk).update(engagement_count=F("engagement_count") + 1)
+    FashionShowing.objects.filter(pk=showing.pk).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        engagement_count=F("engagement_count") + 1,
+    )
 
 
 def _settle_one(showing: FashionShowing) -> int:
@@ -183,22 +186,34 @@ def _settle_one(showing: FashionShowing) -> int:
     engaged_payout = max(0, payout - (showing.stake if showing.roll_success else 0))
     if engaged_payout > 0:
         if showing.statement_item is not None:
-            type(showing.statement_item).objects.filter(pk=showing.statement_item.pk).update(
-                acclaim=F("acclaim") + engaged_payout
+            type(showing.statement_item).objects.filter(
+                pk=showing.statement_item.pk
+            ).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                acclaim=F("acclaim") + engaged_payout,
             )
         if showing.statement_outfit is not None:
-            type(showing.statement_outfit).objects.filter(pk=showing.statement_outfit.pk).update(
-                acclaim=F("acclaim") + engaged_payout
+            type(showing.statement_outfit).objects.filter(
+                pk=showing.statement_outfit.pk
+            ).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                acclaim=F("acclaim") + engaged_payout,
             )
         push = engaged_payout * VOGUE_PUSH_PER_PAYOUT
         if showing.statement_silhouette is not None:
             row, _ = SilhouetteVogueMomentum.objects.get_or_create(
                 silhouette=showing.statement_silhouette
             )
-            SilhouetteVogueMomentum.objects.filter(pk=row.pk).update(points=F("points") + push)
+            SilhouetteVogueMomentum.objects.filter(pk=row.pk).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                points=F("points") + push,
+            )
         if showing.statement_style is not None:
             row, _ = StyleVogueMomentum.objects.get_or_create(style=showing.statement_style)
-            StyleVogueMomentum.objects.filter(pk=row.pk).update(points=F("points") + push)
+            StyleVogueMomentum.objects.filter(pk=row.pk).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                points=F("points") + push,
+            )
     return payout
 
 

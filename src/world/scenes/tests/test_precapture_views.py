@@ -35,7 +35,10 @@ def _setup_owner_with_character(account, label="Room"):
 
 
 def _backdate(interaction: Interaction, when) -> None:
-    Interaction.objects.filter(pk=interaction.pk).update(timestamp=when)
+    Interaction.objects.filter(pk=interaction.pk).update_with_reason(
+        reason="test fixture: simulate stale row",
+        timestamp=when,
+    )
 
 
 class TruncatePrecaptureViewTestCase(APITestCase):

@@ -149,8 +149,9 @@ class GroupResolutionProseTest(TestCase):
         instance, holder, p2, opt_a, opt_b, *_ = _group_vote_in_room("cron-prose")
         submit_group_pick(instance, holder, option_id=opt_a.pk)
         submit_group_pick(instance, p2, option_id=opt_b.pk)
-        MissionGroupBallot.objects.filter(instance=instance).update(
-            created_at=timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS + 1)
+        MissionGroupBallot.objects.filter(instance=instance).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS + 1),
         )
         with (
             patch("world.missions.services.multiplayer.send_narrative_message") as send,

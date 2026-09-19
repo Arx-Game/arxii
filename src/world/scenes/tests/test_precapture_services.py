@@ -40,7 +40,10 @@ def _pc_with_account(db_key: str, location=None):
 
 
 def _backdate(interaction: Interaction, when) -> None:
-    Interaction.objects.filter(pk=interaction.pk).update(timestamp=when)
+    Interaction.objects.filter(pk=interaction.pk).update_with_reason(
+        reason="test fixture: simulate stale row",
+        timestamp=when,
+    )
 
 
 class CapturePrescreneInteractionsTests(TestCase):

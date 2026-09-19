@@ -80,8 +80,10 @@ class TreatmentPowerJourneyE2ETests(CastScenarioMixin):
         from world.character_sheets.models import CharacterSheet
 
         real_sheet = CharacterSheet.objects.get(pk=self.caster.character_sheet.pk)
-        CharacterVitals.objects.filter(character_sheet=real_sheet).update(
-            health=health, max_health=max_health
+        CharacterVitals.objects.filter(character_sheet=real_sheet).update_with_reason(
+            reason="test fixture: simulate stale row",
+            health=health,
+            max_health=max_health,
         )
         CharacterVitals.flush_instance_cache()
         real_sheet._state.fields_cache.pop("vitals", None)

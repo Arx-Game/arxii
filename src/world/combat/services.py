@@ -3181,7 +3181,11 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     for reset_participant in reset_participants:
         reset_participant.reactions_used = 0
     if reset_participants:
-        CombatParticipant.objects.bulk_update(reset_participants, ["reactions_used"])
+        CombatParticipant.objects.bulk_update_with_reason(
+            reset_participants,
+            ["reactions_used"],
+            reason="issue #3817: intentional bulk write",
+        )
 
     # --- Round-start per-participant upkeep: DoT tick + engagement ensure ---
     from world.vitals.services import tick_round_for_targets  # noqa: PLC0415
@@ -7298,7 +7302,10 @@ def _process_combo_outcomes(
             ComboLearning.objects.filter(
                 combo=combo,
                 character_sheet=sheet,
-            ).update(use_count=F("use_count") + 1)
+            ).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                use_count=F("use_count") + 1,
+            )
 
     return action_outcomes
 
@@ -11920,7 +11927,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     CombatOpponent.objects.filter(
         encounter=encounter,
         vulnerability_rounds_remaining__gt=0,
-    ).update(vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1,
+    )
 
     # --- Wind-up maturation (#2637 design 5): before the round's
     # CombatOpponentAction rows are queried below, so a matured wind-up's

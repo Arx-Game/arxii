@@ -2,7 +2,113 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any
+
+from django.db import models
 from evennia.utils.idmapper.manager import SharedMemoryManager
+
+
+class SharedMemoryWriteError(RuntimeError):
+    """Raised when a queryset write would bypass the identity map."""
+
+    def __init__(self, operation: str) -> None:
+        super().__init__(
+            f"QuerySet.{operation}() is disabled for ArxSharedMemoryModel because it "
+            f"bypasses the identity map. Use {operation}_with_reason(reason=..., ...) "
+            "for an intentional cache-bypassing write."
+        )
+
+
+class SharedMemoryWriteReasonError(ValueError):
+    """Raised when an identity-map bypass has no stated reason."""
+
+    def __init__(self) -> None:
+        super().__init__("An explicit reason is required for an identity-map-bypassing write.")
+
+
+_WRITE_BYPASS_REASON: ContextVar[str | None] = ContextVar(
+    "shared_memory_write_reason", default=None
+)
+
+
+@contextmanager
+def _allow_shared_memory_write(reason: str) -> Iterator[None]:
+    """Temporarily allow one intentional cache-bypassing write operation."""
+    _require_write_reason(reason)
+    token = _WRITE_BYPASS_REASON.set(reason.strip())
+    try:
+        yield
+    finally:
+        _WRITE_BYPASS_REASON.reset(token)
+
+
+class ArxSharedMemoryQuerySet(models.QuerySet):
+    """QuerySet that requires an explicit reason for cache-bypassing writes."""
+
+    def update(self, **kwargs: Any) -> int:
+        """Reject a raw UPDATE that would leave cached instances stale."""
+        if _WRITE_BYPASS_REASON.get() is None:
+            operation = "update"
+            raise SharedMemoryWriteError(operation)
+        return super().update(**kwargs)
+
+    def bulk_update(
+        self, objs: Iterable[Any], fields: Iterable[str], batch_size: int | None = None
+    ) -> int:
+        """Reject a bulk UPDATE that would leave cached instances stale."""
+        if _WRITE_BYPASS_REASON.get() is None:
+            operation = "bulk_update"
+            raise SharedMemoryWriteError(operation)
+        return super().bulk_update(objs, fields, batch_size=batch_size)
+
+    def update_with_reason(self, *, reason: str, **kwargs: Any) -> int:
+        """Perform an intentional raw UPDATE after requiring its reason."""
+        with _allow_shared_memory_write(reason):
+            return super().update(**kwargs)
+
+    def bulk_update_with_reason(
+        self,
+        objs: Iterable[Any],
+        fields: Iterable[str],
+        batch_size: int | None = None,
+        *,
+        reason: str,
+    ) -> int:
+        """Perform an intentional bulk UPDATE after requiring its reason."""
+        with _allow_shared_memory_write(reason):
+            return super().bulk_update(objs, fields, batch_size=batch_size)
+
+
+def _require_write_reason(reason: str) -> None:
+    """Require a non-empty explanation for bypassing the identity map."""
+    if not isinstance(reason, str) or not reason.strip():
+        raise SharedMemoryWriteReasonError
+
+
+class GuardedSharedMemoryManager(SharedMemoryManager):
+    """SharedMemoryManager whose querysets require explicit write escapes."""
+
+    _queryset_class = ArxSharedMemoryQuerySet
+
+    def update_with_reason(self, *, reason: str, **kwargs: Any) -> int:
+        """Delegate the explicit raw-update escape to the guarded queryset."""
+        return self.get_queryset().update_with_reason(reason=reason, **kwargs)
+
+    def bulk_update_with_reason(
+        self,
+        objs: Iterable[Any],
+        fields: Iterable[str],
+        batch_size: int | None = None,
+        *,
+        reason: str,
+    ) -> int:
+        """Delegate the explicit bulk-update escape to the guarded queryset."""
+        return self.get_queryset().bulk_update_with_reason(
+            objs, fields, batch_size=batch_size, reason=reason
+        )
 
 
 class CachedAllMixin:
@@ -41,7 +147,7 @@ class CachedAllMixin:
         self.__dict__.pop("_all_loaded", None)
 
 
-class ArxSharedMemoryManager(CachedAllMixin, SharedMemoryManager):
+class ArxSharedMemoryManager(CachedAllMixin, GuardedSharedMemoryManager):
     """SharedMemoryManager subclass adding a pk-discovering singleton cache
     (``cached_singleton()``) and a full-table cache (``cached_all()``, via
     ``CachedAllMixin``).
@@ -63,6 +169,8 @@ class ArxSharedMemoryManager(CachedAllMixin, SharedMemoryManager):
     the instance-level cache; the test teardown walker in ``core.testing``
     calls it on every ``ArxSharedMemoryManager`` instance.
     """
+
+    _queryset_class = ArxSharedMemoryQuerySet
 
     def cached_singleton(self):
         """Return the singleton row, cached after the first call.

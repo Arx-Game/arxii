@@ -467,7 +467,10 @@ class InstallComponentsOwnershipEndpointTests(SanctumViewSetTestBase):
         # same row.
         RoomFeatureKind.objects.filter(
             service_strategy=self.sanctum.feature_instance.feature_kind.service_strategy
-        ).update(name=SANCTUM_KIND_NAME)
+        ).update_with_reason(
+            reason="test fixture: simulate stale row",
+            name=SANCTUM_KIND_NAME,
+        )
         ensure_sanctum_kind()
         ensure_sanctum_rituals()
         ensure_magic_check_content()

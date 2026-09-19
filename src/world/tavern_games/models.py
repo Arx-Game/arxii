@@ -10,9 +10,9 @@ integer, never a parallel ledger (see ``services.py``'s module docstring).
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.tavern_games.constants import GameResolutionKind, GameSessionState
 

@@ -72,7 +72,10 @@ class StatHandler:
             defaults={"value": amount},
         )
         if not created:
-            model.objects.filter(pk=tracker.pk).update(value=F("value") + amount)
+            model.objects.filter(pk=tracker.pk).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                value=F("value") + amount,
+            )
             tracker.flush_from_cache(force=True)
             tracker = model.objects.get(pk=tracker.pk)
 

@@ -112,7 +112,10 @@ class DealDamageHandlerTests(TestCase):
 
     def setUp(self) -> None:
         """Reset vitals health before each test."""
-        CharacterVitals.objects.filter(pk=self.vitals.pk).update(health=100)
+        CharacterVitals.objects.filter(pk=self.vitals.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            health=100,
+        )
         self.vitals.refresh_from_db()
 
     @patch("world.mechanics.effect_handlers.process_damage_consequences", autospec=True)

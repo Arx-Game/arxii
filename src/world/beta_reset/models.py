@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class ReleaseLatch(SharedMemoryModel):

@@ -13,10 +13,11 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
+from core.managers import ArxSharedMemoryQuerySet
 from core.mixins import DiscriminatorMixin
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.locations.constants import HolderType
 from world.room_features.constants import (
@@ -193,7 +194,7 @@ class RoomFeatureKindOwnerType(SharedMemoryModel):
         return f"{self.feature_kind.name} allows {self.get_owner_type_display()}"
 
 
-class RoomFeatureInstanceQuerySet(models.QuerySet):
+class RoomFeatureInstanceQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for RoomFeatureInstance with soft-delete helpers."""
 
     def active(self) -> RoomFeatureInstanceQuerySet:
@@ -600,7 +601,7 @@ class VaultAccessEntry(DiscriminatorMixin, SharedMemoryModel):
         return f"Vault access: {target} ({self.holder_type})"
 
 
-class DefenseDetailsQuerySet(models.QuerySet):
+class DefenseDetailsQuerySet(ArxSharedMemoryQuerySet):
     """Shared soft-delete queryset for the three #2177 defense-details models."""
 
     def active(self) -> DefenseDetailsQuerySet:

@@ -16,8 +16,8 @@ see ``boon_services.py`` and the umbrella spec #2540.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.scenes.action_constants import BoonKind, BoonSumTier
 
 

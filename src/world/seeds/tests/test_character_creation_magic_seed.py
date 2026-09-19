@@ -159,8 +159,9 @@ class EnsureTraditionTrainingDistinctionTests(TestCase):
         from world.distinctions.models import Distinction
 
         ensure_tradition_training_distinction()
-        Distinction.objects.filter(slug="tradition-training").update(
-            description="staff-edited description"
+        Distinction.objects.filter(slug="tradition-training").update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="staff-edited description",
         )
 
         ensure_tradition_training_distinction()
@@ -226,7 +227,10 @@ class EnsureUnboundDrawbackDistinctionTests(TestCase):
         from world.distinctions.models import Distinction
 
         ensure_unbound_drawback_distinction()
-        Distinction.objects.filter(slug="unbound").update(description="staff-edited description")
+        Distinction.objects.filter(slug="unbound").update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="staff-edited description",
+        )
 
         ensure_unbound_drawback_distinction()
 
@@ -402,8 +406,9 @@ class EnsureShroudwatchAcademyTests(TestCase):
         from world.societies.models import Organization
 
         ensure_shroudwatch_academy()
-        Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).update(
-            description="staff-edited description"
+        Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="staff-edited description",
         )
 
         ensure_shroudwatch_academy()
@@ -456,8 +461,9 @@ class EnsureOrphanedTraditionDistinctionTests(TestCase):
         from world.distinctions.models import Distinction
 
         ensure_orphaned_tradition_distinction()
-        Distinction.objects.filter(slug="orphaned-tradition").update(
-            description="staff-edited description"
+        Distinction.objects.filter(slug="orphaned-tradition").update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="staff-edited description",
         )
 
         ensure_orphaned_tradition_distinction()
@@ -598,8 +604,9 @@ class SeedMetallicOrderTraditionTests(TestCase):
         seed_metallic_order_tradition()
 
         # Staff clears the gate: a recovery quest restored the tradition's teachers.
-        BeginningTradition.objects.filter(tradition__name="Metallic Order").update(
-            state=TraditionState.LIVING_MASTERS
+        BeginningTradition.objects.filter(tradition__name="Metallic Order").update_with_reason(
+            reason="test fixture: simulate stale row",
+            state=TraditionState.LIVING_MASTERS,
         )
 
         seed_metallic_order_tradition()
@@ -685,8 +692,11 @@ class EnsureSomehowAlwaysBrokeDistinctionTests(TestCase):
         from world.currency.models import DistinctionPurseDrain
 
         ensure_somehow_always_broke_distinction()
-        DistinctionPurseDrain.objects.filter(distinction__slug="somehow-always-broke").update(
-            drain_percent=50
+        DistinctionPurseDrain.objects.filter(
+            distinction__slug="somehow-always-broke"
+        ).update_with_reason(
+            reason="test fixture: simulate stale row",
+            drain_percent=50,
         )
 
         ensure_somehow_always_broke_distinction()

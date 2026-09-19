@@ -13,7 +13,8 @@ uses RosterEntry (the OOC player-character link).
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class RandomSceneTarget(SharedMemoryModel):

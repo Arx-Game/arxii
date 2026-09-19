@@ -180,8 +180,14 @@ class ValidateRandomSceneClaimTest(TestCase):
             account=self.target_account,
         )
         # auto_now_add ignores passed values, so update after create
-        SceneParticipation.objects.filter(pk=p1.pk).update(joined_at=joined)
-        SceneParticipation.objects.filter(pk=p2.pk).update(joined_at=joined)
+        SceneParticipation.objects.filter(pk=p1.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            joined_at=joined,
+        )
+        SceneParticipation.objects.filter(pk=p2.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            joined_at=joined,
+        )
 
         result = validate_random_scene_claim(self.account, self.target_persona, self.game_week)
         assert result is True
@@ -193,10 +199,16 @@ class ValidateRandomSceneClaimTest(TestCase):
 
         own_persona, _own_entry, _ = _make_active_character(self.account)
         own_interaction = InteractionFactory(persona=own_persona, scene=shared_scene)
-        Interaction.objects.filter(pk=own_interaction.pk).update(timestamp=ts)
+        Interaction.objects.filter(pk=own_interaction.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=ts,
+        )
 
         target_interaction = InteractionFactory(persona=self.target_persona, scene=shared_scene)
-        Interaction.objects.filter(pk=target_interaction.pk).update(timestamp=ts)
+        Interaction.objects.filter(pk=target_interaction.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=ts,
+        )
 
         result = validate_random_scene_claim(self.account, self.target_persona, self.game_week)
         assert result is True
@@ -234,8 +246,14 @@ class ClaimRandomSceneTest(TestCase):
             scene=scene,
             account=self.target_account,
         )
-        SceneParticipation.objects.filter(pk=p1.pk).update(joined_at=joined)
-        SceneParticipation.objects.filter(pk=p2.pk).update(joined_at=joined)
+        SceneParticipation.objects.filter(pk=p1.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            joined_at=joined,
+        )
+        SceneParticipation.objects.filter(pk=p2.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            joined_at=joined,
+        )
 
     def test_awards_5_plus_5_xp(self) -> None:
         """claim_random_scene awards 5 XP to claimer and 5 XP to target."""

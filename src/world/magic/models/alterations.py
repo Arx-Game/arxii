@@ -11,8 +11,8 @@ stability; the player-facing label is "Mage Scar".
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import AlterationKind, AlterationTier, PendingAlterationStatus
 from world.magic.models.affinity import Affinity, Resonance

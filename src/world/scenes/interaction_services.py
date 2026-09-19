@@ -204,21 +204,33 @@ def reassign_persona_interactions(
 
     count = Interaction.objects.filter(
         persona=source_persona,
-    ).update(persona=target_persona)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        persona=target_persona,
+    )
 
     InteractionTargetPersona.objects.filter(
         persona=source_persona,
-    ).update(persona=target_persona)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        persona=target_persona,
+    )
 
     InteractionReceiver.objects.filter(
         persona=source_persona,
-    ).update(persona=target_persona)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        persona=target_persona,
+    )
 
     from world.scenes.models import SceneSummaryRevision  # noqa: PLC0415
 
     SceneSummaryRevision.objects.filter(
         persona=source_persona,
-    ).update(persona=target_persona)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        persona=target_persona,
+    )
 
     return count
 

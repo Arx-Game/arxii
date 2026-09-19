@@ -11,7 +11,8 @@ weekly with shortage raising unrest and lowering prosperity.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 # App-qualified model path repeated across FK references; centralized for dedup.
 _DOMAIN_MODEL = "arxii.Domain"

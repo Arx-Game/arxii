@@ -9,9 +9,9 @@ from typing import ClassVar, cast
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.roster.managers import RosterTenureManager
 

@@ -1022,7 +1022,9 @@ class AudereDuringClashTests(TestCase):
         """Force the PC's anima to 0 so the next cast overburns."""
         from world.magic.models import CharacterAnima
 
-        CharacterAnima.objects.filter(character=self.sheet).update(current=0)
+        CharacterAnima.objects.filter(character=self.sheet).update_with_reason(
+            reason="test fixture: simulate stale row", current=0
+        )
 
     def _mock_check_return(self, outcome: object) -> object:
         """Context manager: patch perform_check to return a deterministic outcome.

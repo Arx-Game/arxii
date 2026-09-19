@@ -89,7 +89,10 @@ class CombatUIRoundTripIntegrationTests(TestCase):
         """
         row = InteractionFactory(scene=self.scene, persona=self.persona, mode=mode)
         target_ts = self.base_ts + timedelta(seconds=ts_offset_seconds)
-        Interaction.objects.filter(pk=row.pk).update(timestamp=target_ts)
+        Interaction.objects.filter(pk=row.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=target_ts,
+        )
         row.timestamp = target_ts
         return row
 

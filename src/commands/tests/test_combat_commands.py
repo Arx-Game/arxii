@@ -429,7 +429,10 @@ class CmdDeclareTechniqueTargetResolverTests(TestCase):
 
     def test_resolve_target_requires_active_scene(self) -> None:
         """No active scene at the caller's location raises CommandError."""
-        Scene.objects.filter(pk=self.scene.pk).update(is_active=False)
+        Scene.objects.filter(pk=self.scene.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            is_active=False,
+        )
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache
 

@@ -37,7 +37,8 @@ class StaffInboxAggregatorTest(TestCase):
         fb1 = PlayerFeedbackFactory()
         fb2 = PlayerFeedbackFactory()
         # Force fb2 to be newer
-        PlayerFeedback.objects.filter(pk=fb2.pk).update(
+        PlayerFeedback.objects.filter(pk=fb2.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
             created_at=timezone.now() + timedelta(hours=1),
         )
         items = get_staff_inbox(categories=[SubmissionCategory.PLAYER_FEEDBACK])

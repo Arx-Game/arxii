@@ -9,8 +9,8 @@ from __future__ import annotations
 from django.db import models
 from django.db.models import CheckConstraint, Q, UniqueConstraint
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.character_sheets.models import CharacterSheet
 from world.covenants.models import Covenant, CovenantRole
 from world.magic.constants import ParticipantState, ReferenceKind

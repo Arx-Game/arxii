@@ -370,7 +370,10 @@ def gossip_decay_tick() -> int:
     """
     from django.db.models import F  # noqa: PLC0415
 
-    return SecretGossip.objects.filter(heat__gt=GOSSIP_DECAY_FLOOR).update(heat=F("heat") - 1)
+    return SecretGossip.objects.filter(heat__gt=GOSSIP_DECAY_FLOOR).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        heat=F("heat") - 1,
+    )
 
 
 def hub_region_for(room: ObjectDB) -> Area:

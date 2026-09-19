@@ -106,8 +106,9 @@ class AudereMajoraEligibilityGateTests(TestCase):
     def test_requires_active_audere_false_without_condition_returns_threshold(self) -> None:
         from world.conditions.models import ConditionInstance
 
-        AudereMajoraThreshold.objects.filter(pk=self.threshold.pk).update(
-            requires_active_audere=False
+        AudereMajoraThreshold.objects.filter(pk=self.threshold.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            requires_active_audere=False,
         )
         # flush_from_cache evicts the cached instance so the next get() re-reads from DB.
         self.threshold.flush_from_cache()

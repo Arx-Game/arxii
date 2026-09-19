@@ -1,7 +1,8 @@
 """Pre-declared next-path intent (#543). Mutable; consumed by the Crossing offer."""
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class PathIntent(SharedMemoryModel):

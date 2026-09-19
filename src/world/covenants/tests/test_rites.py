@@ -69,7 +69,10 @@ def _make_active_encounter(room, scene):
     from world.scenes.constants import RoundStatus
 
     encounter = CombatEncounterFactory(room=room, scene=scene)
-    CombatEncounter.objects.filter(pk=encounter.pk).update(status=RoundStatus.RESOLVING)
+    CombatEncounter.objects.filter(pk=encounter.pk).update_with_reason(
+        reason="test fixture: simulate stale row",
+        status=RoundStatus.RESOLVING,
+    )
     encounter.refresh_from_db()
     return encounter
 
@@ -294,7 +297,10 @@ class PerformCovenantRiteGateTests(_RiteSceneTestCase):
         from world.covenants.exceptions import NoActiveBattleError
         from world.scenes.constants import RoundStatus
 
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(status=RoundStatus.COMPLETED)
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            status=RoundStatus.COMPLETED,
+        )
         self.encounter.refresh_from_db()
 
         with self.assertRaises(NoActiveBattleError):
@@ -453,7 +459,10 @@ class FoldArrivalIntoActiveRitesTests(_RiteSceneTestCase):
         from world.combat.models import CombatEncounter
         from world.scenes.constants import RoundStatus
 
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(status=RoundStatus.COMPLETED)
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            status=RoundStatus.COMPLETED,
+        )
         self.encounter.refresh_from_db()
 
         _place_character_in_room(self.mem_c.character_sheet.character, self.room)

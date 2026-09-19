@@ -51,7 +51,10 @@ def promote_to_standing(persona: Persona, room: RoomProfile):
     character.home = room.objectdb
     character.location = room.objectdb
     character.save()
-    Functionary.objects.filter(persona=persona, is_active=True).update(is_active=False)
+    Functionary.objects.filter(persona=persona, is_active=True).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        is_active=False,
+    )
     return character
 
 

@@ -17,8 +17,8 @@ items) — how embezzlement gets *discovered* later.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.items.constants import OrgVaultEventKind, VaultTransitResolution
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.

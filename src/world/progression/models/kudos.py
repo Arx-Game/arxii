@@ -20,8 +20,8 @@ from typing import ClassVar
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.scenes.action_constants import DifficultyChoice
 

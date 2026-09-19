@@ -8,8 +8,8 @@ the session is nullable and severs rather than cascading.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.constants import AnimaContributionKind
 
 _CHARACTER_SHEET_FK = "arxii.CharacterSheet"

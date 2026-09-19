@@ -6,7 +6,8 @@ rituals) may carry one to source their CheckType and authored difficulty.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class RitualCheckConfig(SharedMemoryModel):

@@ -177,7 +177,10 @@ def process_weekly_nominations(game_week: GameWeek) -> None:
         _pay_most_nominated_prose(pieces)
         _pay_best_in_scene(pieces)
         _pay_most_nominated_journal(pieces)
-        rows.update(processed=True)
+        rows.update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            processed=True,
+        )
 
 
 def weekly_nomination_processing_task() -> None:

@@ -122,7 +122,10 @@ def set_primary_class_level(  # noqa: OBJECTDB_PARAM
     sheet = character.sheet_data
     CharacterClassLevel.objects.filter(character=sheet, is_primary=True).exclude(
         character_class=character_class
-    ).update(is_primary=False)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        is_primary=False,
+    )
     CharacterClassLevel.flush_instance_cache()
     ccl, _ = CharacterClassLevel.objects.update_or_create(
         character=sheet,

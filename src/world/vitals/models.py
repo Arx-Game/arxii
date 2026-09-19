@@ -3,9 +3,9 @@
 from decimal import Decimal
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.vitals.constants import (
     AGING_DEATH_WINDOW_IC_DAYS,
     AGING_DIFFICULTY_PER_YEAR,

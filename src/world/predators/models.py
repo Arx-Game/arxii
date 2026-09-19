@@ -7,8 +7,8 @@ buys tidings, spy targeting, crisis attribution, and history.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.predators.constants import MenaceStage
 

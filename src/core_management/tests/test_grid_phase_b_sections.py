@@ -71,7 +71,10 @@ class PhaseBSectionsRoundTripTests(TestCase):
         Place.objects.all().delete()
         AmbientEmit.objects.all().delete()
         TravelHub.objects.all().delete()
-        Functionary.objects.all().update(is_active=False)
+        Functionary.objects.all().update_with_reason(
+            reason="test fixture: simulate stale row",
+            is_active=False,
+        )
         RoomFeatureInstance.objects.all().delete()
         self.room.default_blueprint = None
         self.room.save(update_fields=["default_blueprint"])
