@@ -11,7 +11,6 @@ serializer to land on the created ``DramaticMomentSuggestion.interaction``.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
@@ -19,12 +18,15 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from evennia_extensions.factories import AccountFactory
 from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
     ensure_dramatic_entrance_content,
 )
 from world.magic.models.dramatic_moment import DramaticMomentSuggestion
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.action_views import SceneActionRequestViewSet
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
@@ -36,14 +38,14 @@ from world.scenes.tests.cast_test_helpers import (
 
 
 def _actor_user(character):
-    """A fake authenticated user whose ``puppet`` is ``character`` (mirrors
-    ``world.relationships.tests.test_update_viewset._actor_user``)."""
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=character.db_account_id,
-        puppet=character,
-    )
+    """Return a real account with ``character`` durably selected."""
+    account = AccountFactory()
+    entry = RosterEntryFactory(character_sheet=character.sheet_data)
+    tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, entry)
+    return account
 
 
 def _make_check_mock(success_level: int) -> MagicMock:
@@ -158,10 +160,7 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
             {"scene": self.scene.pk, "action_key": "entrance", "technique_id": technique.pk},
             format="json",
         )
-        force_authenticate(
-            request,
-            user=SimpleNamespace(is_authenticated=True, is_staff=False, pk=None, puppet=None),
-        )
+        force_authenticate(request, user=AccountFactory())
         view = SceneActionRequestViewSet.as_view({"post": "create"})
         response = view(request)
         assert response.status_code == status.HTTP_400_BAD_REQUEST

@@ -8573,7 +8573,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description #1111 — assume an alternate self owned by the played character. */
+    /** @description #1111 — assume an alternate self owned by the selected character. */
     post: operations['forms_alternate_selves_shift_create'];
     delete?: never;
     options?: never;
