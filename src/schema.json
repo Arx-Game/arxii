@@ -50594,13 +50594,16 @@ components:
       - outcome
       - participants
       - pending_attacks
-            - position_adjacency
+      - pending_selections
+      - position_adjacency
       - position_edges
       - position_nodes
-            - resolution_order
+      - protection_commitments
+      - resolution_order
       - scene
       - surge_beats
-            - volatile_objects
+      - sustained_actions
+      - volatile_objects
     EncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -68140,7 +68143,9 @@ components:
       - id
       - intensity_modifier
       - max_health
-                  - thumbnail_media_url
+      - reactions_remaining
+      - reactions_used
+      - thumbnail_media_url
       - thumbnail_url
     ParticipantRequest:
       type: object

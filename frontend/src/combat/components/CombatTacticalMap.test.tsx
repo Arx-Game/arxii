@@ -256,6 +256,8 @@ describe('CombatTacticalMap', () => {
             control_modifier: null,
             current_position: { id: 101, name: 'North Wall' },
             aftermath: null,
+            reactions_used: null,
+            reactions_remaining: null,
           },
         ],
         opponents: [
@@ -340,6 +342,8 @@ describe('CombatTacticalMap', () => {
       control_modifier: null,
       current_position: { id: 101, name: 'North Wall' },
       aftermath: null,
+      reactions_used: null,
+      reactions_remaining: null,
     },
     {
       id: 3,
@@ -359,6 +363,8 @@ describe('CombatTacticalMap', () => {
       control_modifier: null,
       current_position: { id: 101, name: 'North Wall' },
       aftermath: null,
+      reactions_used: null,
+      reactions_remaining: null,
     },
   ];
   const overlayOpponents = [
@@ -652,6 +658,8 @@ describe('CombatTacticalMap', () => {
             control_modifier: null,
             current_position: null,
             aftermath: null,
+            reactions_used: null,
+            reactions_remaining: null,
           },
         ],
         opponents: [],
@@ -765,6 +773,8 @@ describe('CombatTacticalMap', () => {
             intensity_modifier: null,
             control_modifier: null,
             aftermath: null,
+            reactions_used: null,
+            reactions_remaining: null,
             current_position: { id: 101, name: 'North Wall' },
           },
         ],
