@@ -1,6 +1,6 @@
 # #3917 Bridge-evacuation acceptance evidence
 
-- Reviewed revision: `61274a06f`
+- Reviewed revision: `55abb3368`
 - Reviewer: local acceptance test run
 - Reviewer verdict: PASS for the deterministic model/service composition below; NOT PASS for live browser playtest or Soulfray probability
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
@@ -16,29 +16,46 @@
 
 ## Requirement ledger
 
+The acceptance fixture composes party, scaling, specialist choice, objective rows, causal evidence, and settlement. Focused sibling journeys remain the authority for mechanics that are intentionally not duplicated in this fixture.
+
 | ID | Status | Evidence | Authorized decision |
 |---|---|---|---|
-| A01 real covenant party and named evacuation | PASS | `test_deterministic_bridge_evacuation_journey` | Four engaged covenant roles, named Envoy Maris, authored failing-bridge clock/stakes. |
-| A02 opponent level/soak and stakes activation | PASS | same test; `compute_party_profile`/`compute_opponent_stat_block` | Preview values are copied into armored boss; lieutenant is separately authored. |
-| A03 specialist weakness choice | PASS | same test; `maybe_create_weakness_selection` + `resolve_weakness_selection` | Selection is spent once and applies the authored condition. |
-| A04 cooperation surfaces | PASS | same test; `detect_available_combos`, rampart, `SustainedAction` | Support/attack slots, rampart integrity, and remaining commitment are persisted. Focused combo resolution is covered by `test_combo_journey.py`. |
-| A05 objective-first results | PASS | `test_objective_branches.py` and same test | Existing tests cover boss/NPC outcomes, rescue-with-lost-objective, and secured-then-retreat. |
-| A06 causal attribution and valid settlement | PASS | same test; `record_envoy_rescue`, `record_created_opening`, settlement adapter | Recognition labels attach to deeds without changing their value; settlement uses the authored station. |
-| A07 idempotent settlement | PASS | `src/world/stories/tests/test_legend_completion.py::OrdinaryLegendCompletionTests` | Ordinary completion replay is guarded; direct adapter remains a pure operation. |
-| A08 representative scaling matrix | PASS | `test_representative_balance_matrix_is_level_and_size_deterministic` | Party sizes 2/4/6 and average levels 2/4.25/8 produce deterministic health/soak/level previews. |
-| A09 engine pressure sample | PASS (limited) | `test_engine_balance_sample_records_failure_and_duration_metrics` | Seeded simulator sample: independent and 50% combo-rate tactics each ran 2 iterations, 4 rounds, and 2 failures; 4 participants. |
-| A10 resource trajectories, failures, rescues, Soulfray incidence, coordinated-vs-spam comparison | NOT MEASURED | No claim | Existing simulator does not model the real covenant kits, rescue tactics, authored objective outcomes, or Soulfray incidence. A live representative run is required before drawing those conclusions. |
+| A01 real covenant party and named evacuation | PASS (composed) | `test_deterministic_bridge_evacuation_journey`; `test_objective_branches.py` | Four engaged roles, named Envoy Maris, failing-bridge clock, and authored stakes are composed. |
+| A02 opponent level/soak and stakes activation | PASS (composed) | same test; `compute_party_profile`/`compute_opponent_stat_block`; `test_encounter_beat_wiring.py` | Preview values are copied into the armored boss; scaling and stake activation seams have focused coverage. |
+| A03 specialist weakness choice | PASS (composed) | same test; `world.covenants.tests.test_weakness` | Selection is spent once and applies the authored condition. |
+| A04 controller, hold, rampart, and break attribution | PASS (seam-supported) | `test_break_bar.py` suppression/hold/celebration journeys; rampart and sustained assertions in same test | Focused break-bar tests are the authority for suppression, hold, and named celebration contributors; the acceptance fixture carries the authored rampart/hold rows. |
+| A05 guardian fallback and telegraph | PASS (seam-supported) | `test_reaction_economy.py::InterposeGuardianSelectionTests`; `test_interpose_damage_path.py`; `test_guardian_reactions.py` | Fallback, damage reduction, and guardian resource/Soulfray seams are covered by real repository journeys. |
+| A06 ally support plus attack combo | PASS (seam-supported) | `test_combo_journey.py`; `test_focused_target_dispatch.py` | Combo resolution and ally-target dispatch are covered separately; the fixture records support/attack slots without claiming the opponent-target combo test proves ally preservation. |
+| A07 objective branches and causal attribution | PASS (composed) | `test_objective_branches.py`; same test; `test_causal_recognition.py` | Boss/NPC outcomes, retreat, rescue/opening evidence, and recognition labels follow authored facts. |
+| A08 Legend station and idempotency | PASS (seam-supported) | same test; `OrdinaryLegendCompletionTests.test_authored_award_is_reconciled_and_replay_is_idempotent` | Settlement attaches labels without changing value; ordinary completion replay is guarded. |
+| A09 strain/resource behavior | PASS (seam-supported) | `test_non_clash_strain.py::StrainPushedNonClashCastTests`; `test_strain_declaration.py`; same test’s #3912 conversion assertions | The authored strain curve produces an 8-point power bonus for commitment 3 and effective cost 5; focused tests cover real cast audit/Soulfray rows. |
+| A10 representative balance matrix | PASS (deterministic model sample) | `run_representative_balance_matrix`; `test_representative_balance_matrix_emits_numeric_rows` | 108 rows across sizes 2/4/6, levels 2/4/8, roles balanced/support-heavy/damage-heavy, anima 6/24, and coordinated/spam tactics. |
 
 ## Balance observations and limits
 
-The acceptance matrix verifies the authored size/level scaling formula and records the Soulfray metric as `None`, rather than treating danger or anima cost as evidence of Soulfray. It is not a win-rate or fight-length sample. It does not claim Soulfray is likely.
+The deterministic authored-model matrix emitted these aggregate values from 108 rows:
 
-The deterministic gate composes database rows and focused service seams. The engine sample uses the repository simulator with a synthetic basic-attack party and a four-round cap: independent damage and a 50% combo-rate comparison each ran 2/2 failures at 4 rounds. This is a pressure smoke sample, not a claim about real covenant kits. It does not replace a browser run with a GM and actual deployed content. The four story-result paths remain represented by the objective journey tests; this gate does not pretend one successful fixture proves every authored branch.
+| Metric | Value |
+|---|---:|
+| Rows | 108 |
+| Total estimated rounds | 1,644 |
+| Failed rows (round cap) | 54 |
+| Soulfray events from authored cost/deficit calculation | 914 |
+| Rescue outputs (support + coordinated rows) | 18 |
+| Objective-success outputs | 54 |
+| Coordinated estimated rounds | 764 |
+| Independent-damage-spam estimated rounds | 880 |
+| Strain power bonus for commitment 3 | 8 |
+| Effective cost for base 2/current anima 10/commitment 3 | 5 |
 
-The merged dependency wave includes the #3912 ordinary-cast strain-power implementation. This gate does not claim the measured engine sample exercises every strain branch; focused #3912 tests cover that seam.
+The matrix is a deterministic test-only model. It uses the production opponent scaling block, the #3912 strain conversion/cost functions, and explicit authored role/tactic factors. `soulfray_events` are numeric observed events in this model, not a probability claim about live Soulfray. `rescues` and `objective_outcomes` are scenario-model outputs, not live guardian or stake outcomes.
+
+The separate repository engine smoke sample ran two seeded iterations for each tactic under a four-round cap: independent damage and 50% combo-rate coordination each produced 2/2 failures at four rounds with four synthetic participants. The simulator uses a basic-attack synthetic party and does not model the full covenant kits, authored objective routing, or real rescue choices. The result is pressure evidence only.
+
+No browser run with a GM and deployed content was performed. The four required story-result paths remain covered by `test_objective_branches.py`, and focused guardian/combo/break/strain journeys are cited above rather than presented as one unverified mega-fixture. Soulfray incidence is recorded numerically for the deterministic model, but no claim is made that Soulfray is likely in live play.
 
 ## Unresolved findings
 
 - No live/browser acceptance run was available in this checkout.
-- Soulfray incidence and coordinated-vs-independent-damage balance remain unmeasured.
-- The engine simulator does not model the full covenant role kits, guardian rescues, authored objective outcomes, or ordinary-cast Soulfray pressure; do not generalize its 4-round failures to live balance.
+- The deterministic balance rows are model evidence, not live probability or deployed-content balance.
+- The engine simulator does not model the full covenant role kits, guardian rescues, or authored objective outcomes; do not generalize its 4-round failures to live balance.
