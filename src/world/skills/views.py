@@ -170,11 +170,19 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
     filter_backends = []  # No additional filtering on this character-scoped endpoint
 
     def _active_puppet(self, request):
-        """Return the played character, or raise a validation error if absent."""
-        try:
-            puppet = request.user.puppet
-        except AttributeError:
-            puppet = None
+        """Return the played character, or raise a validation error if absent.
+
+        Never ``request.user.puppet``: under ``MULTISESSION_MODE = 3`` that
+        property is a list, not a single object (see
+        ``missions.views._acting_character``), which is how this endpoint
+        500'd in production with ``AttributeError: 'list' object has no
+        attribute 'pk'`` (#3935, same class as Sentry ARX2-7).
+        ``character_for_request`` reads the account's durable selection
+        instead.
+        """
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        puppet = character_for_request(request, entry_id=None)
         if puppet is None:
             raise serializers.ValidationError(_NO_PUPPET_MESSAGE)
         return puppet
