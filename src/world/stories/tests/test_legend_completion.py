@@ -69,7 +69,7 @@ class OrdinaryLegendCompletionTests(EvenniaTestCase):
 
         completion_count_before = self.beat.completions.count()
         event_count_before = LegendEvent.objects.count()
-        completion = record_gm_marked_outcome(
+        record_gm_marked_outcome(
             progress=self.progress,
             beat=self.beat,
             outcome=BeatOutcome.SUCCESS,
@@ -82,5 +82,5 @@ class OrdinaryLegendCompletionTests(EvenniaTestCase):
 
         self.assertEqual(settle.call_count, 1)
         self.assertEqual(LegendEvent.objects.count(), event_count_before)
-        self.assertEqual(completion.pk, completion_count_before + 1)
+        self.assertEqual(self.beat.completions.count(), completion_count_before + 1)
         self.assertEqual(self.activation.participant_sheets.count(), 1)
