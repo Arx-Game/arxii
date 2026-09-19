@@ -472,3 +472,5 @@ class AftermathDigest:
     companions_lost: list[str]
     # Safe causal labels keyed by deed id. Source ids and check quality remain server-only.
     legend_recognitions: dict[int, list[dict[str, str]]] = field(default_factory=dict)
+    # Existing story/scenario objective and authored branch selected for this fight.
+    objective: dict[str, object] | None = None

@@ -205,7 +205,11 @@ function ParticipantRow({ participant, lockedToName, guardedByNames = [] }: Part
           ))}
         </div>
         {/* HP mini-bar */}
-        <HpBar health={participant.health} maxHealth={participant.max_health} className="mt-0.5" />
+        <HpBar
+          health={participant.health}
+          maxHealth={participant.max_health ?? null}
+          className="mt-0.5"
+        />
         {/* Condition badges — deep-link to the condition-detail modal on click. */}
         <ConditionRow conditions={participant.active_conditions} />
       </div>

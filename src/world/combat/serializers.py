@@ -19,6 +19,7 @@ from world.areas.positioning.serializers import (
 from world.checks.serializers import ConsequenceOutcomeSerializer
 from world.combat.constants import (
     NO_ROLE_SPEED_RANK,
+    REACTIONS_PER_ROUND,
     SIGNIFICANT_NPC_TIERS,
     ActionCategory,
     ClashActionSlot,
@@ -41,6 +42,8 @@ from world.combat.models import (
     DramaticSurgeRecord,
     DuelChallenge,
     EscalationCurve,
+    PendingSelection,
+    SustainedAction,
     ThreatPool,
 )
 from world.conditions.serializers import ConditionInstanceSerializer
@@ -341,6 +344,25 @@ class AftermathBeatSerializer(serializers.Serializer):
     resolution_text = serializers.CharField()
 
 
+class ObjectiveBranchSerializer(serializers.Serializer):
+    """Safe read shape for an authored objective branch (#3916)."""
+
+    key = serializers.CharField()
+    column = serializers.CharField(allow_null=True)
+    outcome = serializers.CharField(required=False)
+    label = serializers.CharField()
+
+
+class ObjectiveSnapshotSerializer(serializers.Serializer):
+    """Safe read shape for the existing objective routing primitives (#3916)."""
+
+    key = serializers.CharField()
+    source = serializers.ChoiceField(choices=["scenario", "stakes"])
+    label = serializers.CharField(allow_blank=True)
+    clock = serializers.DictField(allow_null=True)
+    branches = ObjectiveBranchSerializer(many=True)
+
+
 class AftermathDigestSerializer(serializers.Serializer):
     """Schema-only shape of ParticipantSerializer.aftermath (#3551).
 
@@ -352,6 +374,7 @@ class AftermathDigestSerializer(serializers.Serializer):
     conditions = ConditionInstanceSerializer(many=True)
     legend = AftermathLegendSerializer(many=True)
     beat = AftermathBeatSerializer(allow_null=True)
+    objective = ObjectiveSnapshotSerializer(allow_null=True)
     peril_round_active = serializers.BooleanField()
 
 
@@ -380,6 +403,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
     control_modifier = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
     aftermath = serializers.SerializerMethodField()
+    reactions_used = serializers.SerializerMethodField(required=False)
+    reactions_remaining = serializers.SerializerMethodField(required=False)
 
     class Meta:
         model = CombatParticipant
@@ -401,6 +426,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "control_modifier",
             "current_position",
             "aftermath",
+            "reactions_used",
+            "reactions_remaining",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -431,6 +458,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
             encounter = obj.encounter
             is_gm = encounter.scene.is_gm(request.user) if encounter.scene else False
         return is_gm
+
+    def get_reactions_used(self, obj: CombatParticipant) -> int | None:
+        """Return spent reactions only to the owner, GM, or staff."""
+        return obj.reactions_used if self._can_view_vitals(obj) else None
+
+    def get_reactions_remaining(self, obj: CombatParticipant) -> int | None:
+        """Return the remaining reaction availability without exposing other pools."""
+        if not self._can_view_vitals(obj):
+            return None
+        return max(REACTIONS_PER_ROUND - obj.reactions_used, 0)
 
     def get_health(self, obj: CombatParticipant) -> int | None:
         """Return current health — only if viewer has permission."""
@@ -681,6 +718,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
                 for entry in digest.legend_entries
             ],
             "beat": beat,
+            "objective": digest.objective,
             "peril_round_active": digest.peril_round_active,
         }
 
@@ -1112,6 +1150,53 @@ class PendingAttackSerializer(serializers.Serializer):
     cancelled = serializers.BooleanField()
 
 
+class PendingSelectionOptionSerializer(serializers.Serializer):
+    """A safe, authored choice shown only to its owning participant."""
+
+    id = serializers.CharField()
+    label = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+
+
+class PendingSelectionSerializer(serializers.Serializer):
+    """Read shape for a deferred specialist choice (#3915)."""
+
+    id = serializers.IntegerField()
+    participant_id = serializers.IntegerField()
+    selection_type = serializers.CharField()
+    options = PendingSelectionOptionSerializer(many=True, source="options_json")
+    selected_option_id = serializers.CharField(allow_null=True)
+    target_opponent_id = serializers.IntegerField(allow_null=True)
+    target_opponent_name = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    resolved = serializers.BooleanField(source="is_resolved")
+
+
+class SustainedActionSerializer(serializers.Serializer):
+    """Observable countdown and erosion for a multi-round commitment."""
+
+    id = serializers.IntegerField()
+    participant_id = serializers.IntegerField()
+    participant_name = serializers.CharField()
+    kind = serializers.CharField(source="sustained_kind")
+    subject = serializers.CharField(source="subject_name")
+    declared_round = serializers.IntegerField()
+    resolves_round = serializers.IntegerField()
+    rounds_until_resolution = serializers.IntegerField()
+    downgrades = serializers.IntegerField()
+    broken = serializers.BooleanField()
+
+
+class ProtectionCommitmentSerializer(serializers.Serializer):
+    """Public ally-protection declaration, without private action details."""
+
+    participant_id = serializers.IntegerField()
+    participant_name = serializers.CharField()
+    maneuver = serializers.CharField()
+    protected_participant_id = serializers.IntegerField(allow_null=True)
+    protected_participant_name = serializers.CharField(allow_null=True)
+
+
 class CompanionOrderSummarySerializer(serializers.Serializer):
     """Current-round companion directive exposed on an encounter read."""
 
@@ -1148,6 +1233,10 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     position_nodes = serializers.SerializerMethodField()
     position_edges = serializers.SerializerMethodField()
     volatile_objects = serializers.SerializerMethodField()
+    objective = serializers.SerializerMethodField(required=False)
+    pending_selections = serializers.SerializerMethodField(required=False)
+    sustained_actions = serializers.SerializerMethodField(required=False)
+    protection_commitments = serializers.SerializerMethodField(required=False)
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -1212,6 +1301,10 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "position_nodes",
             "position_edges",
             "volatile_objects",
+            "objective",
+            "pending_selections",
+            "sustained_actions",
+            "protection_commitments",
             "is_lethal",
             "duel_winner",
         ]
@@ -1239,6 +1332,78 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             p.character_sheet.character_id in character_ids
             for p in obj.participants_cached  # type: ignore[attr-defined]
         )
+
+    @extend_schema_field(PendingSelectionSerializer(many=True))
+    def get_pending_selections(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Expose specialist choices only to their owner or a GM."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return []
+        viewer_ids = self.context.get("viewer_character_ids", set())
+        is_gm = bool(self.context.get("is_gm", False) or request.user.is_staff)
+        rows = (
+            PendingSelection.objects.filter(encounter=obj)
+            .select_related("participant__character_sheet__character", "target_opponent")
+            .order_by("created_at", "pk")
+        )
+        if not is_gm:
+            rows = rows.filter(participant__character_sheet__character_id__in=viewer_ids)
+        return PendingSelectionSerializer(rows, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(SustainedActionSerializer(many=True))
+    def get_sustained_actions(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Return public countdown/erosion state, never the private budget."""
+        rows = SustainedAction.objects.filter(encounter=obj).select_related(
+            "participant__character_sheet__character"
+        )
+        return [
+            {
+                "id": row.pk,
+                "participant_id": row.participant_id,
+                "participant_name": str(row.participant.character_sheet.character),
+                "kind": row.sustained_kind,
+                "subject": row.subject_name,
+                "declared_round": row.declared_round,
+                "resolves_round": row.resolves_round,
+                "rounds_until_resolution": max(row.resolves_round - obj.round_number, 0),
+                "downgrades": row.downgrades,
+                "broken": row.downgrades >= row.absorption_budget,
+            }
+            for row in rows
+        ]
+
+    @extend_schema_field(ProtectionCommitmentSerializer(many=True))
+    def get_protection_commitments(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Expose current-round cover/interpose intent for ally coordination."""
+        rows = CombatRoundAction.objects.filter(
+            participant__encounter=obj,
+            round_number=obj.round_number,
+            maneuver__in=["cover", "interpose"],
+        ).select_related(
+            "participant__character_sheet__character",
+            "focused_ally_target__character_sheet__character",
+        )
+        return [
+            {
+                "participant_id": row.participant_id,
+                "participant_name": str(row.participant.character_sheet.character),
+                "maneuver": row.maneuver,
+                "protected_participant_id": row.focused_ally_target_id,
+                "protected_participant_name": (
+                    str(row.focused_ally_target.character_sheet.character)
+                    if row.focused_ally_target_id
+                    else None
+                ),
+            }
+            for row in rows
+        ]
+
+    @extend_schema_field(ObjectiveSnapshotSerializer(allow_null=True))
+    def get_objective(self, obj: CombatEncounter) -> dict[str, Any] | None:
+        """Expose the active authored objective and selected branch (#3916)."""
+        from world.combat.objective_branches import objective_snapshot  # noqa: PLC0415
+
+        return objective_snapshot(obj)
 
     def get_resolution_order(self, obj: CombatEncounter) -> list[int]:
         """ACTIVE PC participant PKs in initiative (speed-rank) order.

@@ -85,6 +85,21 @@ export async function fetchEncountersForScene(sceneId: number): Promise<Encounte
   return data.results ?? [];
 }
 
+/** Resolve a browser-visible specialist choice (#3915). */
+export async function resolvePendingSelection(
+  encounterId: number,
+  selectionId: number,
+  optionId: string
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/resolve-selection/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selection_id: selectionId, option_id: optionId }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to resolve specialist choice');
+  return res.json() as Promise<EncounterDetail>;
+}
+
 // ---------------------------------------------------------------------------
 // GM lifecycle (#3067) — encounter creation, NPC opponent spawn, manual round
 // control. All gated server-side by IsEncounterGMOrStaff (CombatEncounterViewSet).
