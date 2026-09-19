@@ -20,6 +20,7 @@ from world.combat.factories import (
     CombatOpponentFactory,
     CombatParticipantFactory,
     ComboDefinitionFactory,
+    ComboSlotFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
@@ -302,8 +303,25 @@ class ResolveRoundComboTests(TestCase):
             bypass_soak=True,
             bonus_damage=100,
         )
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=technique.effect_type)
+        ComboSlotFactory(combo=combo, slot_number=2, required_action_type=technique.effect_type)
         action = CombatRoundAction.objects.create(
             participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=opponent,
+        )
+        second_sheet = CharacterSheetFactory()
+        second_participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=second_sheet,
+            covenant_role=CovenantRoleFactory(speed_rank=4),
+        )
+        CharacterVitals.objects.create(character_sheet=second_sheet, health=100, max_health=100)
+        CharacterAnimaFactory(character=second_sheet, current=20, maximum=20)
+        CombatRoundAction.objects.create(
+            participant=second_participant,
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
@@ -316,12 +334,12 @@ class ResolveRoundComboTests(TestCase):
         opponent.refresh_from_db()
         # Combo with bypass_soak=True, bonus_damage=100. Boss soak=80 but bypassed.
         # So 100 damage goes through.
-        self.assertEqual(opponent.health, 400)  # 500 - 100
+        self.assertEqual(opponent.health, 400)  # 500 - the upgraded action's 100 rider
 
         # Verify combo was noted in the outcome
         pc_outcomes = [o for o in result.action_outcomes if o.entity_type == ENTITY_TYPE_PC]
-        self.assertEqual(len(pc_outcomes), 1)
-        self.assertEqual(pc_outcomes[0].combo_used, combo)
+        self.assertEqual(len(pc_outcomes), 2)
+        self.assertEqual(sum(outcome.combo_used == combo for outcome in pc_outcomes), 1)
 
 
 class ResolveRoundDefenseCheckTests(TestCase):

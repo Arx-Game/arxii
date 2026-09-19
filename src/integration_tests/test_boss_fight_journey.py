@@ -167,19 +167,20 @@ class BossFightJourneyTest(TestCase):
             self.encounter.status = RoundStatus.DECLARING
             self.encounter.save(update_fields=["round_number", "status"])
         actions = []
-        for i, (participant, technique) in enumerate(
-            zip(self.participants, self.techniques, strict=True)
-        ):
-            action = CombatRoundAction.objects.create(
-                participant=participant,
-                round_number=round_number,
-                focused_category=technique.action_category,
-                focused_action=technique,
-                focused_opponent_target=self.opponent,
+        for participant, technique in zip(self.participants, self.techniques, strict=True):
+            actions.append(
+                CombatRoundAction.objects.create(
+                    participant=participant,
+                    round_number=round_number,
+                    focused_category=technique.action_category,
+                    focused_action=technique,
+                    focused_opponent_target=self.opponent,
+                )
             )
-            if i in combo_pcs:
-                upgrade_action_to_combo(action, self.combo)
-            actions.append(action)
+        # Declare the complete composition before validating upgrade-time combo
+        # eligibility. Partial declarations cannot legitimately save a combo FK.
+        for i in combo_pcs:
+            upgrade_action_to_combo(actions[i], self.combo)
         return actions
 
     def _resolve(self) -> object:
