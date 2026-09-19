@@ -1,6 +1,6 @@
 # Review evidence
 
-- Reviewed revision: `d8d79a79db81a20797343d32057f6936c2c8d65a`
+- Reviewed revision: `c58a52edde5138e5ef1c20f6a9ac484173dc3b05`
 - Reviewer: local acceptance test run
 - Reviewer verdict: PASS
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
@@ -24,10 +24,10 @@
 | A03 | PASS | `test_deterministic_bridge_evacuation_journey`; `world.covenants.tests.test_weakness` | Weakness selection is spent once and applies the authored condition. |
 | A04 | PASS | `test_controller_suppresses_one_of_two_reinforcers_while_holding`; `test_break_bar.py` | Real HOLD and SUPPRESSION feeds are applied to two reinforcing lieutenants, with break-bar attribution and rampart/hold coverage. |
 | A05 | PASS | `test_telegraphed_attack_falls_back_to_second_interpose_guardian`; `test_interpose_damage_path.py`; `test_guardian_reactions.py` | A pending telegraphed attack matures, the first guardian is unavailable, and the second guardian absorbs the hit; resource/Soulfray seams are covered. |
-| A06 | PASS | `test_ally_support_combo_uses_target_while_combo_resolves`; #3910 combo validation tests | Ally-targeted support preserves its target while the valid attack/support combo resolves; combo rider applies only to the opponent. |
+| A06 | PASS | `test_ally_support_combo_uses_target_while_combo_resolves`; `src/world/combat/services.py` combo pipeline | Ally-targeted support condition is observed on the ally after the valid attack/support combo resolves, while the combo rider damages only the opponent. |
 | A07 | PASS | `test_objective_branches.py`; `test_causal_recognition.py`; composed acceptance test | Boss/NPC outcomes, retreat, rescue/opening evidence, and recognition labels follow authored facts. |
 | A08 | PASS | `test_legend_completion.py::OrdinaryLegendCompletionTests`; composed acceptance test | Settlement uses the authored station and ordinary completion replay is guarded. |
-| A09 | PASS | `test_real_strain_anima_and_soulfray_trajectory`; `test_non_clash_strain.py`; `test_strain_declaration.py` | Real action rows show declining anima and Soulfray pressure; commitment 3 produces an 8-point power bonus and effective cost 5. |
+| A09 | PASS | Postgres-tagged `test_real_strain_anima_and_soulfray_trajectory`; `test_non_clash_strain.py`; `test_strain_declaration.py` | Real action rows show declining anima and Soulfray pressure in the parity path; the SQLite fast tier explicitly excludes the Postgres-only progressive-condition test. |
 | A10 | PASS | `run_representative_balance_matrix`; `test_representative_balance_matrix_emits_numeric_rows` | 108 numeric model rows span sizes 2/4/6, levels 2/4/8, roles, anima 6/24, and coordinated/spam tactics; live probability is not claimed. |
 
 ## Balance observations and limits
