@@ -1,12 +1,11 @@
 import { screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
-import { ReputationTab } from './ReputationTab';
+import { ReputationTab, CovenantRoles } from './ReputationTab';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { RenownPayload, RenownCardPayload, RenownEligiblePersona } from '@/renown/types';
 import type { PersonaHeatRow } from '@/justice/api';
-import type { OrganizationReputation, OrganizationMembership } from '../api';
-import type { CharacterCovenantRole } from '@/covenants/api';
+import type { CharacterSheetStanding } from '@/character_sheets/api';
 
 vi.mock('@/renown/queries', () => ({
   useRenownEligiblePersonasQuery: vi.fn(),
@@ -16,11 +15,6 @@ vi.mock('@/renown/queries', () => ({
 vi.mock('@/justice/queries', () => ({
   usePersonaHeat: vi.fn(),
 }));
-vi.mock('../queries', () => ({
-  useOrganizationMembershipsQuery: vi.fn(),
-  useOrganizationReputationsQuery: vi.fn(),
-  useCovenantRolesQuery: vi.fn(),
-}));
 
 import {
   useRenownEligiblePersonasQuery,
@@ -28,19 +22,13 @@ import {
   usePersonaRenownCardQuery,
 } from '@/renown/queries';
 import { usePersonaHeat } from '@/justice/queries';
-import {
-  useOrganizationMembershipsQuery,
-  useOrganizationReputationsQuery,
-  useCovenantRolesQuery,
-} from '../queries';
 
 const mockPersonasQuery = vi.mocked(useRenownEligiblePersonasQuery);
 const mockRenownQuery = vi.mocked(usePersonaRenownQuery);
 const mockRenownCardQuery = vi.mocked(usePersonaRenownCardQuery);
 const mockHeatQuery = vi.mocked(usePersonaHeat);
-const mockMembershipsQuery = vi.mocked(useOrganizationMembershipsQuery);
-const mockReputationsQuery = vi.mocked(useOrganizationReputationsQuery);
-const mockCovenantRolesQuery = vi.mocked(useCovenantRolesQuery);
+
+const NO_STANDING: CharacterSheetStanding = { memberships: [], reputations: [] };
 
 function makeRenown(overrides: Partial<RenownPayload> = {}): RenownPayload {
   return {
@@ -102,33 +90,9 @@ function setHeat(rows: PersonaHeatRow[]) {
   } as unknown as UseQueryResult<PersonaHeatRow[], Error>);
 }
 
-function setMemberships(rows: OrganizationMembership[]) {
-  mockMembershipsQuery.mockReturnValue({
-    data: rows,
-    isLoading: false,
-  } as unknown as UseQueryResult<OrganizationMembership[], Error>);
-}
-
-function setReputations(rows: OrganizationReputation[]) {
-  mockReputationsQuery.mockReturnValue({
-    data: rows,
-    isLoading: false,
-  } as unknown as UseQueryResult<OrganizationReputation[], Error>);
-}
-
-function setCovenantRoles(rows: CharacterCovenantRole[]) {
-  mockCovenantRolesQuery.mockReturnValue({
-    data: rows,
-    isLoading: false,
-  } as unknown as UseQueryResult<CharacterCovenantRole[], Error>);
-}
-
 describe('ReputationTab', () => {
   beforeEach(() => {
     setPersonas([{ id: 1, name: 'Alice', persona_type: 'primary' }]);
-    setMemberships([]);
-    setReputations([]);
-    setCovenantRoles([]);
     setHeat([]);
   });
 
@@ -140,7 +104,10 @@ describe('ReputationTab', () => {
         viewerPersonaId={1}
         isMyCharacter
         viewedEntryId={1}
-        viewedPersonaId={1}
+        standing={{
+          memberships: [{ organization_id: 10, organization: 'House Valardin', title: 'Voice' }],
+          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
+        }}
       />
     );
     expect(screen.getByText('Renown')).toBeInTheDocument();
@@ -176,13 +143,15 @@ describe('ReputationTab', () => {
         viewerPersonaId={1}
         isMyCharacter
         viewedEntryId={1}
-        viewedPersonaId={1}
+        standing={NO_STANDING}
       />
     );
     expect(screen.getByText('Wanted')).toBeInTheDocument();
   });
 
-  it('renders only RenownCardPanel for a foreign view — no Standing/Covenants/Wanted', () => {
+  it('renders the standing payload on a foreign view, with the renown CARD, not the panel', () => {
+    // #3906: standing is friends-visible, so the server decides — a foreign viewer the
+    // server allowed gets the same rows. The wanted flag stays the owner's alone.
     setCard(makeCard());
     renderWithProviders(
       <ReputationTab
@@ -190,12 +159,54 @@ describe('ReputationTab', () => {
         viewerPersonaId={5}
         isMyCharacter={false}
         viewedEntryId={null}
-        viewedPersonaId={null}
+        standing={{
+          memberships: [{ organization_id: 10, organization: 'House Valardin', title: 'Voice' }],
+          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
+        }}
       />
     );
-    expect(screen.queryByText('Standing')).not.toBeInTheDocument();
-    expect(screen.queryByText('Covenants')).not.toBeInTheDocument();
+    expect(screen.getByText('House Valardin')).toBeInTheDocument();
+    expect(screen.getByText('The Iron Guard')).toBeInTheDocument();
     expect(screen.queryByText('Wanted')).not.toBeInTheDocument();
+  });
+
+  it('draws no standing group at all when the server withheld or emptied it', () => {
+    // A withheld section and an unaffiliated character arrive identically, so a line
+    // claiming they belong to nobody would be a lie on every stranger's view of
+    // someone who belongs to three houses. Vanishing is the only honest answer, and it
+    // also means a viewer cannot tell a hidden rail from an empty one.
+    setRenown(makeRenown());
+    renderWithProviders(
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        standing={NO_STANDING}
+      />
+    );
+    expect(screen.getByText('Renown')).toBeInTheDocument();
+    expect(screen.queryByText('Belongs to')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thought of as')).not.toBeInTheDocument();
+  });
+
+  it('drops only the empty half when a character belongs nowhere but is still judged', () => {
+    setRenown(makeRenown());
+    renderWithProviders(
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        standing={{
+          memberships: [],
+          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'reviled' }],
+        }}
+      />
+    );
+    expect(screen.queryByText('Belongs to')).not.toBeInTheDocument();
+    expect(screen.getByText('Thought of as')).toBeInTheDocument();
+    expect(screen.getByText('The Iron Guard')).toBeInTheDocument();
   });
 
   it('does not render the account-wide society-reputation list twice (only via RenownPanel)', () => {
@@ -210,67 +221,46 @@ describe('ReputationTab', () => {
         viewerPersonaId={1}
         isMyCharacter
         viewedEntryId={1}
-        viewedPersonaId={1}
+        standing={NO_STANDING}
       />
     );
     // "The Honest" comes from RenownPanel's own reputation card; it must appear exactly
     // once — the Standing card no longer renders a second, duplicate reputation list.
     expect(screen.getAllByText('The Honest')).toHaveLength(1);
   });
+});
 
-  it('filters organization memberships/reputation rows to the viewed persona only', () => {
-    setRenown(makeRenown());
-    setMemberships([
-      {
-        id: 1,
-        organization: 10,
-        organization_name: 'Match Org',
-        persona: 1,
-        persona_name: 'Alice',
-        rank: { id: 1, name: 'Member', tier: 5 },
-        title: 'Member',
-        joined_date: '2026-01-01T00:00:00Z',
-        is_active: true,
-      } as OrganizationMembership,
-      {
-        id: 2,
-        organization: 20,
-        organization_name: 'Other Character Org',
-        persona: 99,
-        persona_name: 'Someone Else',
-        rank: { id: 2, name: 'Member', tier: 5 },
-        title: 'Member',
-        joined_date: '2026-01-01T00:00:00Z',
-        is_active: true,
-      } as OrganizationMembership,
-    ]);
-    setReputations([
-      {
-        id: 1,
-        persona: 1,
-        organization: 10,
-        organization_name: 'Match Org',
-        tier: 'liked',
-      } as OrganizationReputation,
-      {
-        id: 2,
-        persona: 99,
-        organization: 20,
-        organization_name: 'Other Character Org',
-        tier: 'liked',
-      } as OrganizationReputation,
-    ]);
+describe('CovenantRoles', () => {
+  it('draws each role from the sheet payload, flagging the engaged one', () => {
     renderWithProviders(
-      <ReputationTab
-        entryCharacterId={1}
-        viewerPersonaId={1}
-        isMyCharacter
-        viewedEntryId={1}
-        viewedPersonaId={1}
+      <CovenantRoles
+        covenants={[
+          {
+            id: 1,
+            covenant_id: 7,
+            covenant: 'The Quiet Hand',
+            role: 'Blade',
+            rank: 'Sworn',
+            engaged: true,
+          },
+          {
+            id: 2,
+            covenant_id: 8,
+            covenant: 'The Long Watch',
+            role: 'Scribe',
+            rank: 'Novice',
+            engaged: false,
+          },
+        ]}
       />
     );
-    // Match Org appears twice: once under Memberships, once under Reputation.
-    expect(screen.getAllByText('Match Org')).toHaveLength(2);
-    expect(screen.queryByText('Other Character Org')).not.toBeInTheDocument();
+    expect(screen.getByText('Blade')).toBeInTheDocument();
+    expect(screen.getByText('Scribe')).toBeInTheDocument();
+    expect(screen.getAllByText('Engaged')).toHaveLength(1);
+  });
+
+  it('vanishes rather than drawing an empty block — most characters hold no role', () => {
+    const { container } = renderWithProviders(<CovenantRoles covenants={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

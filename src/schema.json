@@ -40141,7 +40141,6 @@ components:
           default: ''
         soak_value:
           type: integer
-          default: 0
         probing_threshold:
           type: integer
           nullable: true

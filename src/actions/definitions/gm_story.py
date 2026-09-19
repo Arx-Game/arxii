@@ -261,6 +261,7 @@ class RunBeatAction(Action):
         from world.combat.encounter_prep import spawn_opponent_lines  # noqa: PLC0415
         from world.combat.models import CombatEncounter  # noqa: PLC0415
         from world.combat.services import (  # noqa: PLC0415
+            add_participant,
             finalize_new_encounter,
             update_encounter_settings,
         )
@@ -270,6 +271,23 @@ class RunBeatAction(Action):
         encounter.story_beat = beat
         encounter.save(update_fields=["story_beat"])
         update_encounter_settings(encounter, risk_level=_RISK_MAP.get(beat.risk, "low"))
+
+        # Prepared opponents are scaled when they are spawned.  Seat the
+        # intended scene party first so the frozen stat block reflects the
+        # actual covenant party rather than an empty, newly-created encounter.
+        # Match scenario party selection: exclude the administering GM and
+        # ignore off-scene alternate characters on the same account.
+        location = scene.location
+        present_ids = {obj.pk for obj in location.contents} if location is not None else set()
+        party_sheets = {
+            persona.character_sheet_id: persona.character_sheet
+            for persona in scene.persona_handler.active_participant_personas(
+                exclude_gm_accounts=True
+            )
+            if persona.character_sheet.character_id in present_ids
+        }
+        for sheet in party_sheets.values():
+            add_participant(encounter, sheet)
 
         lines = beat.opponent_lines.select_related("creature_template").order_by("order")
         outcomes = spawn_opponent_lines(encounter, lines, acting_account=account)

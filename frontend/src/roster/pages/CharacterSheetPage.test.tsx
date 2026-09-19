@@ -184,6 +184,8 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     worn: [],
     mentors: [],
     domains: [],
+    standing: { memberships: [], reputations: [] },
+    covenants: [],
     ...overrides,
   };
 }

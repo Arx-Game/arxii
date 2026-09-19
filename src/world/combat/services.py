@@ -13,7 +13,7 @@ import random
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from django.db import transaction
-from django.db.models import F, Prefetch, Q, Sum
+from django.db.models import Case, F, Prefetch, Q, Sum, When
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -9962,7 +9962,12 @@ def _try_interpose(
     participant: CombatParticipant,
     pre_payload: DamagePreApplyPayload,
 ) -> None:
-    """Find the first eligible armed INTERPOSE this round and dispatch it.
+    """Select and dispatch the highest-precedence armed INTERPOSE this round.
+
+    Named-ally declarations precede guard-anyone declarations. Ties use the
+    guardian participant id and then declaration id. An unavailable declaration
+    is skipped, but an attempted challenge (including a failed roll) ends the
+    search so reaction and per-hit budgets retain their existing semantics.
 
     Looks for a :class:`~world.combat.models.CombatRoundAction` declaring
     ``INTERPOSE`` for *participant* (or any ally) in the current round, resolves
@@ -9977,8 +9982,8 @@ def _try_interpose(
     **Guard:** no-op when the encounter is not ``RESOLVING`` so that
     non-combat callers of :func:`apply_damage_to_participant` are unaffected.
 
-    Only the *first* eligible interposer is exercised in v1; multiple interposers
-    covering the same target is a follow-up.
+    At most one guardian is exercised for a hit. If a higher-precedence guardian
+    cannot attempt, selection falls through to the next declaration.
 
     **Technique-guardian branch (#2207):** when the declaration carries a
     validated protective technique (``action.focused_action_id`` set — see
@@ -9998,7 +10003,11 @@ def _try_interpose(
     # actually fire here, even though `ally_intercepted_for_me` and
     # `_ensure_interpose_challenges` both correctly treat it as armed cover.
     # Q(...) | Q(...) is required to express the OR NULL branch.
-    action = (
+    # Named guardians have precedence over guard-anyone declarations. Within a
+    # precedence tier, participant id and declaration id provide stable ordering
+    # rather than relying on database insertion order. Exclude self-interpose
+    # before selection so a victim's broad declaration cannot shadow a backup.
+    actions = list(
         CombatRoundAction.objects.filter(
             Q(focused_ally_target=participant) | Q(focused_ally_target__isnull=True),
             participant__encounter=encounter,
@@ -10006,18 +10015,24 @@ def _try_interpose(
             maneuver=CombatManeuver.INTERPOSE,
             participant__status=ParticipantStatus.ACTIVE,
         )
+        .exclude(participant=participant)
         .select_related("participant__character_sheet__character")
-        .first()
+        .order_by(
+            Case(When(focused_ally_target=participant, then=0), default=1),
+            "participant_id",
+            "pk",
+        )
     )
-    if action is None:
-        return
-
-    # Skip self-interpose: the interposer cannot block damage aimed at themselves.
-    if action.participant_id == participant.pk:
+    if not actions:
         return
 
     protected = participant.character_sheet.character
-    _dispatch_interpose_action(action, protected, pre_payload)
+    for action in actions:
+        # A false result means this declaration could not attempt (for example,
+        # its reaction or technique is unavailable). Only an actual attempt,
+        # including a failed roll, ends protector selection.
+        if _dispatch_interpose_action(action, protected, pre_payload):
+            return
 
 
 def _try_interpose_for_opponent(
@@ -10099,36 +10114,21 @@ def _dispatch_interpose_action(
     action: CombatRoundAction,
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
     pre_payload: DamagePreApplyPayload,
-) -> None:
-    """Resolve an armed INTERPOSE action against *protected* and mutate pre_payload.
+) -> bool:
+    """Resolve an armed INTERPOSE action and report whether it attempted.
 
-    Shared tail for both ward types (#2207): a ``CombatParticipant`` ward
-    (:func:`_try_interpose`) and an ALLY-allegiance ``CombatOpponent``/summon
-    ward (:func:`_try_interpose_for_opponent`). Handles the technique-vs-mundane
-    branch, bond bonus, and interposer fatigue charge identically for both —
-    extracted so the two callers don't duplicate this body (#2207).
-
-    **Reaction economy (#2639), shared fire seam per F-10c:** declines with
-    the same "did not fire" no-op shape (no dispatch, no fatigue, pre_payload
-    untouched), telling the guardian privately why (#3574), when either
-    budget is exhausted: the interposer has already spent their
-    ``REACTIONS_PER_ROUND`` reaction this round, or this specific payload has
-    already been answered by ``ABSORPTION_CAP_PER_MOMENT`` interceptors. Both
-    counters increment together on an actual attempt (readiness is free; only
-    firing spends the budget), regardless of whether the guardian's own roll
-    then succeeds.
+    A false result means the declaration was unavailable and selection may try
+    another guardian. A true result includes a failed challenge: once a
+    guardian actually attempts, its reaction and this hit's answer budget are
+    consumed and no later declaration is retried.
     """
     participant = action.participant
     if participant.reactions_used >= REACTIONS_PER_ROUND:
         _narrate_reaction_declined(participant.character_sheet.character, protected, cap=False)
-        return
+        return False
     if pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT:
         _narrate_reaction_declined(participant.character_sheet.character, protected, cap=True)
-        return
-
-    participant.reactions_used += 1
-    participant.save(update_fields=["reactions_used"])
-    pre_payload.answers_consumed += 1
+        return False
 
     interposer = action.participant.character_sheet.character
 
@@ -10138,24 +10138,37 @@ def _dispatch_interpose_action(
     modifiers = bond_bonus(interposer, protected)
 
     if action.focused_action_id is not None:
-        _try_technique_interpose(
+        attempted = _try_technique_interpose(
             action,
             interposer,
             protected,
             pre_payload,
             extra_modifiers=modifiers,
         )
-        return
+        if not attempted:
+            return False
+    else:
+        result = dispatch_interpose(
+            interposer,
+            protected,
+            pre_payload,
+            approach=None,
+            extra_modifiers=modifiers,
+            select_best_check_rating=True,
+        )
+        if result is None:
+            # No qualifying reaction action is an unavailable declaration, not
+            # an attempted failure. Leave both budgets untouched for fallback.
+            return False
 
-    result = dispatch_interpose(
-        interposer,
-        protected,
-        pre_payload,
-        approach=None,
-        extra_modifiers=modifiers,
-        select_best_check_rating=True,
-    )
-    if result is not None:
+    # Increment both budgets only after a dispatch/technique has truly started.
+    # This preserves the fallback path for unavailable guardians while counting
+    # failed rolls as real attempts.
+    participant.reactions_used += 1
+    participant.save(update_fields=["reactions_used"])
+    pre_payload.answers_consumed += 1
+
+    if action.focused_action_id is None:
         # Charge fatigue to the interposer ONLY on fire (readiness is free).
         # Mirror _resolve_pc_action: apply_fatigue(sheet, category, base_cost, effort).
         fatigue_category = action.focused_category or ActionCategory.PHYSICAL
@@ -10165,6 +10178,7 @@ def _dispatch_interpose_action(
             INTERPOSE_BASE_FATIGUE_COST,
             action.effort_level,
         )
+    return True
 
 
 def _guardian_can_fire_technique_interpose(
@@ -10252,7 +10266,7 @@ def _try_technique_interpose(
     pre_payload: DamagePreApplyPayload,
     *,
     extra_modifiers: int = 0,
-) -> None:
+) -> bool:
     """Resolve a technique-guardian's protective reactive-trigger technique (#2207).
 
     Runs when ``action.focused_action_id`` is set — the guardian declared a
@@ -10330,7 +10344,7 @@ def _try_technique_interpose(
         # declare_interpose already validated this at declaration time; fail
         # safe (damage proceeds unchanged) rather than crash if authored
         # content changed mid-encounter.
-        return
+        return False
     condition_template, flavor = resolved
 
     # Affordability first (mirrors _try_spend_reactive's cost<=0 free-fire rule,
@@ -10348,21 +10362,21 @@ def _try_technique_interpose(
             # no cost, damage proceeds. Not silent (#3574): the guardian learns
             # their save did not catch, and the table sees a working fail.
             _narrate_technique_interpose_fizzle(action, interposer, protected, technique)
-            return
+            return False
 
     severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
     if severity_template is None:
         # Unseeded content (mirrors _ensure_interpose_challenges' warn-and-skip
         # for the mundane path): fail safe like the resolved-is-None branch
         # above — no roll, no cost, damage proceeds unchanged.
-        return
+        return False
     severity = severity_template.severity
     check_type = resolve_cast_check_type(interposer, technique.action_template)
     if check_type is None:
         # Unprovisioned caster + template-less technique (clash.py guards the
         # same pairing) — fail safe like the resolved-is-None branch above:
         # no roll, no cost, damage proceeds to the next protection layer.
-        return
+        return False
     # #2536 Task 5 review fix: thread the live round context — action.participant
     # is already dereferenced elsewhere in this function (current_position below),
     # so the plumbing a CHECK_BONUS perk needs is trivially available; skipping it
@@ -10418,6 +10432,7 @@ def _try_technique_interpose(
     if flavor == PROTECTIVE_FLAVOR_REDIRECT:
         saved = amount_before - pre_payload.amount
         _resolve_technique_redirect(action, interposer, saved, damage_type=pre_payload.damage_type)
+    return True
 
 
 def _resolve_technique_redirect(

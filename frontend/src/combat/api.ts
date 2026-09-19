@@ -243,7 +243,7 @@ export async function postAddOpponent(
       max_health: payload.maxHealth ?? undefined,
       level: payload.level ?? undefined,
       description: payload.description ?? '',
-      soak_value: payload.soakValue ?? 0,
+      ...(payload.soakValue !== undefined ? { soak_value: payload.soakValue } : {}),
       probing_threshold: payload.probingThreshold ?? undefined,
       position_id: payload.positionId ?? undefined,
     }),

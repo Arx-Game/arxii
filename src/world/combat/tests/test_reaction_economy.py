@@ -32,7 +32,11 @@ from world.combat.factories import (
     CombatParticipantFactory,
     CombatRoundActionFactory,
 )
-from world.combat.services import _dispatch_interpose_action, begin_declaration_phase
+from world.combat.services import (
+    _dispatch_interpose_action,
+    _try_interpose,
+    begin_declaration_phase,
+)
 from world.scenes.constants import RoundStatus
 
 
@@ -56,6 +60,72 @@ def _bare_character():
     would feed a MagicMock into the ORM filter and blow up), not a mock.
     """
     return CharacterFactory()
+
+
+class InterposeGuardianSelectionTests(TestCase):
+    """Selection falls through only when a guardian cannot attempt (#3909)."""
+
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
+        self.victim = CombatParticipantFactory(encounter=self.encounter)
+
+    def _action(self, participant, *, target=None):
+        return CombatRoundActionFactory(
+            participant=participant,
+            round_number=1,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target=target,
+            is_ready=True,
+        )
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_exhausted_first_guardian_falls_through_to_fresh_backup(self, dispatch) -> None:
+        """A spent first reaction leaves the fresh guardian available."""
+        first = CombatParticipantFactory(encounter=self.encounter, reactions_used=1)
+        backup = CombatParticipantFactory(encounter=self.encounter)
+        self._action(first, target=self.victim)
+        self._action(backup, target=self.victim)
+        dispatch.return_value = MagicMock()
+
+        _try_interpose(self.victim, _payload())
+
+        self.assertEqual(dispatch.call_count, 1)
+        self.assertEqual(dispatch.call_args.args[0], backup.character_sheet.character)
+        backup.refresh_from_db()
+        self.assertEqual(backup.reactions_used, 1)
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_attempted_failure_does_not_retry_backup(self, dispatch) -> None:
+        """A real failed challenge still consumes the first guardian's attempt."""
+        first = CombatParticipantFactory(encounter=self.encounter)
+        backup = CombatParticipantFactory(encounter=self.encounter)
+        self._action(first, target=self.victim)
+        self._action(backup, target=self.victim)
+        dispatch.return_value = MagicMock()  # a resolved challenge, even if it fails
+
+        _try_interpose(self.victim, _payload())
+
+        self.assertEqual(dispatch.call_count, 1)
+        self.assertEqual(dispatch.call_args.args[0], first.character_sheet.character)
+        first.refresh_from_db()
+        backup.refresh_from_db()
+        self.assertEqual(first.reactions_used, 1)
+        self.assertEqual(backup.reactions_used, 0)
+
+    @patch("world.combat.services.dispatch_interpose")
+    def test_self_interpose_is_skipped_for_backup(self, dispatch) -> None:
+        """A victim's broad guard declaration cannot shadow another guardian."""
+        backup = CombatParticipantFactory(encounter=self.encounter)
+        self._action(self.victim)  # guard-anyone: this would be self-interpose
+        self._action(backup)
+        dispatch.return_value = MagicMock()
+
+        _try_interpose(self.victim, _payload())
+
+        self.assertEqual(dispatch.call_count, 1)
+        self.assertEqual(dispatch.call_args.args[0], backup.character_sheet.character)
+        backup.refresh_from_db()
+        self.assertEqual(backup.reactions_used, 1)
 
 
 class ReactionsPerRoundGateTests(TestCase):

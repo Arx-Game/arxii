@@ -183,9 +183,10 @@ export function CharacterSheetPage() {
             entryId={entryId}
             isMyCharacter={isMyCharacter}
             viewerPersonaId={viewerPersonaId}
-            viewedPersonaId={viewedPersonaId}
             titlesPersonaId={titlesPersonaId}
             mentors={sheet?.mentors ?? []}
+            standing={sheet?.standing ?? { memberships: [], reputations: [] }}
+            covenants={sheet?.covenants ?? []}
           />
         )}
 

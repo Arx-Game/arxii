@@ -11,6 +11,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.models import PlayerAllowList
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import BeginningsFactory, RealmFactory
@@ -39,7 +40,11 @@ from world.character_sheets.serializers import (
 from world.character_sheets.types import SheetVisibility
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
-from world.covenants.factories import CovenantFactory, MentorBondFactory
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    MentorBondFactory,
+)
 from world.covenants.models import MentorBond
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.forms.factories import (
@@ -92,7 +97,11 @@ from world.skills.factories import (
     SkillFactory,
     SpecializationFactory,
 )
-from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+from world.societies.factories import (
+    OrganizationFactory,
+    OrganizationMembershipFactory,
+    OrganizationReputationFactory,
+)
 from world.societies.houses.services import create_domain
 from world.species.factories import SpeciesFactory
 from world.tarot.constants import ArcanaType
@@ -2266,6 +2275,128 @@ class TestDomainsSection(TestCase):
         assert self._domains(self.stranger) == []
 
 
+class TestStandingAndCovenantSections(TestCase):
+    """Ties' rail (#3906): where a character stands, and the covenants they hold.
+
+    Two rulings with two different gates. Covenant is PUBLIC — a covenant role is a
+    thing a character IS in the world, the way a title is, and the Titles block beside
+    it has always been public. Standing rides ``standing_visibility``, the only sheet
+    tier defaulting to FRIENDS rather than SELF, because what a house thinks of you is
+    something your friends would know.
+
+    Both ride the payload rather than their own endpoints because every endpoint that
+    serves this data is scoped to personas the REQUESTER plays.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.friend = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="StandingChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+        cls.persona = cls.sheet.primary_persona
+
+        cls.house = OrganizationFactory(name="House du Verane")
+        cls.membership = OrganizationMembershipFactory(persona=cls.persona, organization=cls.house)
+        OrganizationReputationFactory(persona=cls.persona, organization=cls.house, value=0)
+        cls.role = CharacterCovenantRoleFactory(character_sheet=cls.sheet)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _payload(self, player) -> dict:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data
+
+    def test_a_stranger_sees_the_covenant_role(self) -> None:
+        """Apostate's ruling: Covenant is public."""
+        covenants = self._payload(self.stranger)["covenants"]
+        assert len(covenants) == 1
+        assert covenants[0]["covenant"] == self.role.covenant.name
+        assert covenants[0]["role"] == self.role.covenant_role.name
+        assert covenants[0]["rank"] == self.role.rank.name
+
+    def test_a_stranger_does_not_see_standing(self) -> None:
+        """FRIENDS is the default, and a stranger is not one."""
+        standing = self._payload(self.stranger)["standing"]
+        assert standing == {"memberships": [], "reputations": []}
+
+    def test_a_friend_sees_standing_on_an_otherwise_default_sheet(self) -> None:
+        """The middle tier, which is the whole point of the ruling (#3923).
+
+        #3906 shipped without this test and the feature did not work: the resolver's
+        short-circuit listed four visibility fields by hand and ``standing_visibility``
+        was not among them, so on a sheet whose other four tiers are all SELF -- the
+        default every character has -- it returned the PUBLIC rank without ever reading
+        the allow list, and the friend was resolved as a stranger.
+        """
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+        standing = self._payload(self.friend)["standing"]
+        assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
+        assert [row["organization"] for row in standing["reputations"]] == ["House du Verane"]
+
+    def test_every_visibility_tier_is_discoverable_from_the_model(self) -> None:
+        """The guard on #3923's recurrence shape.
+
+        ``_viewer_access_level`` asks the model which tiers exist. If a future tier is
+        declared with anything but ``SheetVisibility.choices`` it drops out of that
+        answer silently and the resolver grants MORE access than intended, so pin the
+        naming convention to the derivation: the two must name the same set.
+        """
+        by_convention = {
+            field.name
+            for field in CharacterSheet._meta.get_fields()
+            if field.name.endswith("_visibility")
+        }
+        assert set(CharacterSheet.visibility_field_names()) == by_convention
+        assert "standing_visibility" in by_convention
+
+    def test_the_owner_sees_which_houses_and_what_each_thinks(self) -> None:
+        standing = self._payload(self.player)["standing"]
+        assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
+        assert [row["organization"] for row in standing["reputations"]] == ["House du Verane"]
+
+    def test_reputation_is_the_named_tier_never_the_raw_value(self) -> None:
+        """The standing convention the org serializer sets, kept here."""
+        row = self._payload(self.player)["standing"]["reputations"][0]
+        assert isinstance(row["tier"], str)
+        assert "value" not in row
+
+    def test_opening_standing_to_everyone_shows_a_stranger(self) -> None:
+        """The option the ruling asks for: friends by default, public on request."""
+        self.sheet.standing_visibility = SheetVisibility.PUBLIC
+        self.sheet.save(update_fields=["standing_visibility"])
+        try:
+            standing = self._payload(self.stranger)["standing"]
+            assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
+        finally:
+            self.sheet.standing_visibility = SheetVisibility.FRIENDS
+            self.sheet.save(update_fields=["standing_visibility"])
+
+    def test_leaving_the_house_drops_it_from_standing(self) -> None:
+        self.membership.left_at = timezone.now()
+        self.membership.save(update_fields=["left_at"])
+        try:
+            assert self._payload(self.player)["standing"]["memberships"] == []
+        finally:
+            self.membership.left_at = None
+            self.membership.save(update_fields=["left_at"])
+
+    def test_standing_defaults_to_friends_not_self(self) -> None:
+        """The only one of the five tiers that does. Apostate's ruling."""
+        fresh = CharacterSheetFactory(character=CharacterFactory(db_key="FreshChar"))
+        assert fresh.standing_visibility == SheetVisibility.FRIENDS
+
+
 class TestProfilePictureNull(TestCase):
     """Tests for the profile_picture field when no picture is set."""
 
@@ -2578,7 +2709,10 @@ class TestCharacterSheetQueryCount(TestCase):
         # +6 (#3898): the identity beginnings prefetch, the looks strip, the worn
         # pieces and both directions of the mentor bond, per 43-48.
         # +1 (#3901): the org-domain read, per 49.
-        with self.assertNumQueries(49):
+        # +3 (#3906): the covenant-role prefetch and the two standing reads, per 50-52.
+        # The fixture's viewer is the owner, so the gated standing reads DO fire here;
+        # a viewer below the tier pays neither.
+        with self.assertNumQueries(52):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

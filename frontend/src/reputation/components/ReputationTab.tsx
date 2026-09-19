@@ -7,16 +7,17 @@
  *     with a destructive "Wanted" badge on any society currently pursuing this character.
  *   - Standing: organization memberships (rank titles) and organization reputation (tier
  *     badges) for the character being viewed.
- *   - Covenants: the character's active covenant role assignments.
  *
- * Foreign-view: unchanged `RenownCardPanel` — no Standing/Covenants/Wanted surfaced for
- * someone else's sheet.
+ * Foreign-view: `RenownCardPanel` in place of the full panel, and no wanted flag — who
+ * is hunting someone is theirs alone. Standing is drawn either way.
  *
- * Scoping note: `/api/societies/reputations/` and `/api/societies/memberships/` are
- * account-wide (span every character/persona the account plays), not sheet-scoped —
- * unlike the covenant-roles endpoint, which already filters by `character_sheet`. So the
- * membership/reputation rows are filtered client-side to `viewedPersonaId` to avoid
- * leaking a different one of the viewer's own characters' standings onto this sheet.
+ * Scoping note (#3906): standing and covenant roles arrive on the SHEET payload, built
+ * off the presented persona and already gated by `standing_visibility` server-side. The
+ * three account endpoints these blocks used to call — `/api/societies/memberships/`,
+ * `/api/societies/reputations/` and the covenant-roles list — only ever answer for the
+ * REQUESTER's own characters, so as a visitor they returned nothing, and as the owner
+ * they returned every character the account plays and had to be filtered here. Reading
+ * the payload fixes both halves at once: the server is the gate.
  *
  * Drawn in the Reference Sheet's vocabulary (#3898): subheadings over entries on
  * hairlines, with the rank or tier as the row's tag. The sheet supplies "Standing"
@@ -31,20 +32,13 @@ import { formatTier } from '@/renown/components/ReputationListCard';
 import {
   Entries,
   Entry,
-  Ledger,
   Stack,
   Subheading,
   Tag,
 } from '@/character_sheets/components/sheet/primitives';
 import { usePersonaHeat } from '@/justice/queries';
+import type { CharacterSheetCovenantRole, CharacterSheetStanding } from '@/character_sheets/api';
 import type { PersonaHeatRow } from '@/justice/api';
-import type { CharacterCovenantRole } from '@/covenants/api';
-
-import {
-  useOrganizationMembershipsQuery,
-  useOrganizationReputationsQuery,
-  useCovenantRolesQuery,
-} from '../queries';
 
 interface Props {
   /** CharacterSheet pk of the character this sheet is showing. */
@@ -60,10 +54,12 @@ interface Props {
    */
   viewedEntryId?: number | null;
   /**
-   * Persona id of the character being viewed. Own-view only — used to filter the
-   * account-wide org membership/reputation rows down to this character's persona.
+   * Where this character stands, from the sheet payload (#3906). The server has
+   * already applied `standing_visibility`, so an empty pair is all a withheld section
+   * ever looks like from here — see `OrganizationStandingBlock` for why that settles
+   * how it draws.
    */
-  viewedPersonaId?: number | null;
+  standing: CharacterSheetStanding;
 }
 
 export function ReputationTab({
@@ -71,34 +67,36 @@ export function ReputationTab({
   viewerPersonaId,
   isMyCharacter,
   viewedEntryId,
-  viewedPersonaId,
+  standing,
 }: Props) {
-  if (!isMyCharacter) {
-    return (
-      <RenownCardPanel
-        characterSheetId={entryCharacterId}
-        viewerPersonaId={viewerPersonaId ?? null}
-      />
-    );
-  }
-
+  // Renown still branches on ownership: the owner's view carries the wanted flag,
+  // which says who is hunting them and stays theirs alone. Standing no longer
+  // branches here at all — the server already emptied it for a viewer below the
+  // tier, so rendering what we are handed IS the gate (#3906).
   return (
-    <OwnReputationView
-      entryCharacterId={entryCharacterId}
-      viewedEntryId={viewedEntryId ?? null}
-      viewedPersonaId={viewedPersonaId ?? null}
-    />
+    <Stack wide>
+      {isMyCharacter ? (
+        <OwnRenownView entryCharacterId={entryCharacterId} viewedEntryId={viewedEntryId ?? null} />
+      ) : (
+        <Stack>
+          <Subheading>Renown</Subheading>
+          <RenownCardPanel
+            characterSheetId={entryCharacterId}
+            viewerPersonaId={viewerPersonaId ?? null}
+          />
+        </Stack>
+      )}
+      <OrganizationStandingBlock standing={standing} />
+    </Stack>
   );
 }
 
-function OwnReputationView({
+function OwnRenownView({
   entryCharacterId,
   viewedEntryId,
-  viewedPersonaId,
 }: {
   entryCharacterId: number;
   viewedEntryId: number | null;
-  viewedPersonaId: number | null;
 }) {
   const { data: heatRows } = usePersonaHeat(viewedEntryId);
   const wantedSocietyIds = new Set<number>(
@@ -106,13 +104,9 @@ function OwnReputationView({
   );
 
   return (
-    <Stack wide>
-      <Stack>
-        <Subheading>Renown</Subheading>
-        <RenownPanel characterSheetId={entryCharacterId} wantedSocietyIds={wantedSocietyIds} />
-      </Stack>
-
-      <OrganizationStandingBlock viewedPersonaId={viewedPersonaId} />
+    <Stack>
+      <Subheading>Renown</Subheading>
+      <RenownPanel characterSheetId={entryCharacterId} wantedSocietyIds={wantedSocietyIds} />
     </Stack>
   );
 }
@@ -121,60 +115,54 @@ function OwnReputationView({
 // Standing — org memberships/reputation, scoped to the viewed character's persona.
 // ---------------------------------------------------------------------------
 
-function OrganizationStandingBlock({ viewedPersonaId }: { viewedPersonaId: number | null }) {
-  const { data: memberships, isLoading: membershipsLoading } =
-    useOrganizationMembershipsQuery(true);
-  const { data: reputations, isLoading: reputationsLoading } =
-    useOrganizationReputationsQuery(true);
-
-  const isLoading = membershipsLoading || reputationsLoading;
-  const activeMemberships = (memberships ?? []).filter(
-    (m) => m.is_active && m.persona === viewedPersonaId
-  );
-  const scopedReputations = (reputations ?? []).filter((r) => r.persona === viewedPersonaId);
-
-  if (isLoading) {
-    return <Ledger>Reading where they stand…</Ledger>;
+/**
+ * Render-or-vanish, and here that is a correctness rule rather than a style one.
+ *
+ * A withheld section and a genuinely empty one arrive identically — the server sends
+ * an empty pair either way — so a line reading "They belong to nobody" would be a
+ * flat lie on every stranger's view of a character who belongs to three houses. And
+ * vanishing on both leaks nothing either: a viewer cannot tell a hidden rail from an
+ * unaffiliated one, which is what a privacy tier is supposed to buy.
+ *
+ * (Titles beside it speaks a line when empty, and is right to: it is never withheld,
+ * so its empty state is always the truth.)
+ */
+function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStanding }) {
+  if (standing.memberships.length === 0 && standing.reputations.length === 0) {
+    return null;
   }
-
   return (
     <Stack wide>
-      <Stack>
-        <Subheading>Belongs to</Subheading>
-        {activeMemberships.length === 0 ? (
-          <Ledger>They belong to nobody.</Ledger>
-        ) : (
+      {standing.memberships.length > 0 && (
+        <Stack>
+          <Subheading>Belongs to</Subheading>
           <Entries>
-            {activeMemberships.map((membership) => (
+            {standing.memberships.map((membership) => (
               <Entry
-                key={membership.id}
+                key={membership.organization_id}
                 name={
-                  <Link to={`/orgs/${membership.organization}`}>
-                    {membership.organization_name}
-                  </Link>
+                  <Link to={`/orgs/${membership.organization_id}`}>{membership.organization}</Link>
                 }
                 aside={<span className="refsheet-note">{membership.title}</span>}
               />
             ))}
           </Entries>
-        )}
-      </Stack>
-      <Stack>
-        <Subheading>Thought of as</Subheading>
-        {scopedReputations.length === 0 ? (
-          <Ledger>No organization has an opinion of them yet.</Ledger>
-        ) : (
+        </Stack>
+      )}
+      {standing.reputations.length > 0 && (
+        <Stack>
+          <Subheading>Thought of as</Subheading>
           <Entries>
-            {scopedReputations.map((rep) => (
+            {standing.reputations.map((rep) => (
               <Entry
-                key={rep.id}
-                name={<Link to={`/orgs/${rep.organization}`}>{rep.organization_name}</Link>}
+                key={rep.organization_id}
+                name={<Link to={`/orgs/${rep.organization_id}`}>{rep.organization}</Link>}
                 tags={<Tag accent>{formatTier(rep.tier)}</Tag>}
               />
             ))}
           </Entries>
-        )}
-      </Stack>
+        </Stack>
+      )}
     </Stack>
   );
 }
@@ -184,27 +172,27 @@ function OrganizationStandingBlock({ viewedPersonaId }: { viewedPersonaId: numbe
 // ---------------------------------------------------------------------------
 
 /**
- * The covenant roles a character holds. Exported because the sheet's Ties section gives
- * Covenant a rail block of its own, the way the spec lists it, rather than nesting it
- * under Standing.
+ * The covenant roles a character holds, from the sheet payload. PUBLIC (#3906) — a
+ * covenant role is a thing a character IS in the world, the way a title is, and the
+ * Titles block on the same rail has always been public.
+ *
+ * It reads the payload rather than `useCovenantRolesQuery` because that endpoint only
+ * answers for sheets the REQUESTER plays, so asking it as a visitor returns nothing.
+ *
+ * Vanishes when there is nothing, like the standing block above it — most characters
+ * hold no covenant role at all, so a line saying so would be the common case.
  */
-export function CovenantRoles({ characterSheetId }: { characterSheetId: number }) {
-  const { data: roles, isLoading } = useCovenantRolesQuery(characterSheetId);
-  const activeRoles = (roles ?? []).filter((r: CharacterCovenantRole) => r.is_active);
-
-  if (isLoading) {
-    return <Ledger>Reading their covenants…</Ledger>;
-  }
-  if (activeRoles.length === 0) {
-    return <Ledger>They hold no covenant role.</Ledger>;
+export function CovenantRoles({ covenants }: { covenants: CharacterSheetCovenantRole[] }) {
+  if (covenants.length === 0) {
+    return null;
   }
   return (
     <Entries>
-      {activeRoles.map((role) => (
+      {covenants.map((role) => (
         <Entry
           key={role.id}
-          name={<Link to={`/covenants/${role.covenant}`}>{role.covenant_role.name}</Link>}
-          aside={<span className="refsheet-note">{role.rank.name}</span>}
+          name={<Link to={`/covenants/${role.covenant_id}`}>{role.role}</Link>}
+          aside={<span className="refsheet-note">{role.rank}</span>}
           tags={role.engaged ? <Tag accent>Engaged</Tag> : undefined}
         />
       ))}

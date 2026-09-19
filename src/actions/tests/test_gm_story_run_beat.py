@@ -22,7 +22,8 @@ from world.combat.factories import (
     CreatureTemplateFactory,
     seed_scaling_defaults,
 )
-from world.combat.models import BossPhase, CombatEncounter, CombatOpponent
+from world.combat.models import BossPhase, CombatEncounter, CombatOpponent, CombatParticipant
+from world.combat.scaling import compute_opponent_stat_block
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.mechanics.factories import SituationTemplateFactory
@@ -149,6 +150,24 @@ class RunBeatActionEncounterJourneyTests(RunBeatActionTestBase):
 
         self.assertIn("opponents", result.data)
         self.assertTrue(all(o["success"] for o in result.data["opponents"]))
+
+    def test_prepared_opponents_scale_against_seated_party(self) -> None:
+        """RunBeat seats the scene party before freezing opponent stats."""
+        result = RunBeatAction().run(self.lead_gm_actor, beat_id=self.beat.pk)
+        self.assertTrue(result.success, result.message)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        self.assertEqual(
+            set(
+                CombatParticipant.objects.filter(encounter=encounter).values_list(
+                    "character_sheet_id", flat=True
+                )
+            ),
+            {self.player_actor.character_sheet.pk},
+        )
+        expected = compute_opponent_stat_block(OpponentTier.BOSS, encounter)
+        boss = CombatOpponent.objects.get(encounter=encounter, creature_template=self.boss_template)
+        self.assertEqual(boss.max_health, expected.max_health)
+        self.assertEqual(boss.level, expected.level)
 
     def test_rerunning_same_beat_is_idempotent(self) -> None:
         first = RunBeatAction().run(self.lead_gm_actor, beat_id=self.beat.pk)
