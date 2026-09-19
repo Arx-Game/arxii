@@ -754,7 +754,9 @@ class BridgeEvacuationAcceptanceTests(TestCase):
 
         anima.refresh_from_db()
         self.assertEqual(trajectory, [6, 1])
-        self.assertEqual(anima.current, -4)
+        # Lethal anima deduction clamps the pool at zero and reports the
+        # overburn through Soulfray rather than storing a negative balance.
+        self.assertEqual(anima.current, 0)
         self.assertEqual([cast.anima_cost.effective_cost for cast in casts], [5, 5])
         self.assertTrue(all(cast.soulfray_result is not None for cast in casts))
         self.assertGreater(
