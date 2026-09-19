@@ -14,33 +14,62 @@ scaling formula; it does not infer Soulfray likelihood.
 
 from __future__ import annotations
 
+from decimal import Decimal
 import random
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
 from world.checks.factories import CheckTypeFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
-from world.combat.constants import OpponentTier, RiskLevel
+from world.combat.constants import (
+    BreakContributionKind,
+    ClashResolution,
+    OpponentTier,
+    RiskLevel,
+)
 from world.combat.factories import (
+    ClashContributionFactory,
+    ClashRoundFactory,
     CombatEncounterFactory,
+    CombatOpponentActionFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
     ComboDefinitionFactory,
     ComboSlotFactory,
     CreatureTemplateFactory,
+    EngagementLockFactory,
+    LockClashFactory,
     SustainedActionFactory,
+    ThreatPoolEntryFactory,
     ThreatPoolFactory,
     seed_scaling_defaults,
 )
-from world.combat.models import CombatRoundAction, PendingSelection
+from world.combat.models import (
+    BreakBarContribution,
+    CombatRoundAction,
+    PendingOpponentAttack,
+    PendingSelection,
+)
 from world.combat.objective_branches import objective_snapshot
 from world.combat.scaling import compute_opponent_stat_block, compute_party_profile
-from world.combat.services import detect_available_combos
+from world.combat.services import (
+    assess_break_bar,
+    declare_interpose,
+    detect_available_combos,
+    resolve_round,
+    select_npc_actions,
+    upgrade_action_to_combo,
+)
 from world.combat.simulation import SimulationParams, run_party_vs_boss_simulation
+from world.conditions.factories import (
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+)
 from world.conditions.services import has_condition
 from world.covenants.factories import (
     CovenantFactory,
@@ -50,15 +79,18 @@ from world.covenants.factories import (
 )
 from world.covenants.weakness import maybe_create_weakness_selection, resolve_weakness_selection
 from world.fatigue.models import FatiguePool
+from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
     CharacterAnimaFactory,
     EffectTypeFactory,
     GiftFactory,
+    SoulfrayConfigFactory,
     TechniqueFactory,
     TechniqueFunctionTagFactory,
 )
-from world.magic.services import strain_to_intensity
+from world.magic.models import CharacterAnima, CharacterTechnique
+from world.magic.services import strain_to_intensity, use_technique
 from world.magic.services.techniques import calculate_effective_anima_cost
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
@@ -477,6 +509,246 @@ class BridgeEvacuationAcceptanceTests(TestCase):
         # OrdinaryLegendCompletionTests; this direct adapter intentionally remains
         # a pure settlement operation for callers that own their replay guard.
         self.assertEqual(LegendEntry.objects.filter(event=report.event).count(), entries_before)
+
+    def test_controller_suppresses_one_of_two_reinforcers_while_holding(self) -> None:
+        """Real HOLD and SUPPRESSION feeds share the lieutenant gate."""
+        from world.combat.constants import OpponentStatus
+
+        self.boss.break_bar_threshold = 100
+        self.boss.break_bar_current = 100
+        self.boss.save(update_fields=["break_bar_threshold", "break_bar_current"])
+        self.lieutenant.reinforces = self.boss
+        self.lieutenant.save(update_fields=["reinforces"])
+        lieutenant_two = CombatOpponentFactory(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            name="Second Bridge Lieutenant",
+            reinforces=self.boss,
+            status=OpponentStatus.ACTIVE,
+            threat_pool=ThreatPoolFactory(name="Second Lieutenant Threats"),
+        )
+        entry_one = ThreatPoolEntryFactory(pool=self.lieutenant.threat_pool, name="Hold the line")
+        entry_two = ThreatPoolEntryFactory(pool=lieutenant_two.threat_pool, name="Break the line")
+        CombatOpponentActionFactory(
+            opponent=self.lieutenant,
+            round_number=1,
+            threat_entry=entry_one,
+        )
+        CombatOpponentActionFactory(
+            opponent=lieutenant_two,
+            round_number=1,
+            threat_entry=entry_two,
+        )
+
+        controller = self.participants[1]
+        EngagementLockFactory(
+            encounter=self.encounter,
+            opponent=self.lieutenant,
+            participant=controller,
+            started_round=1,
+        )
+        clash = LockClashFactory(
+            encounter=self.encounter,
+            npc_opponent=self.boss,
+            resolved_round=1,
+            resolution=ClashResolution.PC_DECISIVE,
+        )
+        clash_round = ClashRoundFactory(clash=clash, round_number=1)
+        ClashContributionFactory(clash_round=clash_round, character=controller.character_sheet)
+
+        assess_break_bar(self.encounter, [])
+
+        self.boss.refresh_from_db()
+        self.assertEqual(self.boss.break_bar_current, 98)
+        self.assertEqual(
+            BreakBarContribution.objects.filter(
+                opponent=self.boss,
+                round_number=1,
+                participant=controller,
+            )
+            .values_list("kind", flat=True)
+            .count(),
+            2,
+        )
+        self.assertSetEqual(
+            set(
+                BreakBarContribution.objects.filter(
+                    opponent=self.boss,
+                    round_number=1,
+                    participant=controller,
+                ).values_list("kind", flat=True)
+            ),
+            {BreakContributionKind.HOLD, BreakContributionKind.SUPPRESSION},
+        )
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_telegraphed_attack_falls_back_to_second_interpose_guardian(self) -> None:
+        """A called-out attack resolves through the real guardian selection path."""
+        from world.combat.interpose_content import ensure_interpose_content
+        from world.magic.effect_palette_content import (
+            REFLECT_TECHNIQUE_NAME,
+            ensure_reflect_content,
+        )
+        from world.magic.models import Technique
+
+        ensure_interpose_content()
+        ensure_reflect_content()
+        mirror_ward = Technique.objects.get(name=REFLECT_TECHNIQUE_NAME)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        pool = ThreatPoolFactory(name="Telegraphed Bridge Threats")
+        ThreatPoolEntryFactory(
+            pool=pool,
+            name="Telegraphed Breaker",
+            base_damage=40,
+            weight=100,
+            windup_rounds=1,
+        )
+        opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool)
+
+        sheets = [CharacterSheetFactory() for _ in range(3)]
+        participants = []
+        for sheet in sheets:
+            sheet.character.db_location = encounter.room
+            sheet.character.save(update_fields=["db_location"])
+            CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
+            CharacterAnimaFactory(character=sheet, current=24, maximum=24)
+            CharacterEngagementFactory(character=sheet)
+            participants.append(
+                CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+            )
+        # Lowest health makes the victim selection deterministic, independent of PK ordering.
+        victim = participants[0]
+        victim_vitals = CharacterVitals.objects.get(character_sheet=victim.character_sheet)
+        victim_vitals.health = 10
+        victim_vitals.save(update_fields=["health"])
+        for guardian in participants[1:]:
+            CharacterTechnique.objects.create(
+                character=guardian.character_sheet,
+                technique=mirror_ward,
+            )
+
+        select_npc_actions(encounter)
+        windup = PendingOpponentAttack.objects.get(opponent=opponent)
+        self.assertEqual(windup.target_id, victim.pk)
+        windup.resolves_round = 2
+        windup.save(update_fields=["resolves_round"])
+        # The telegraph is the only authored attack; avoid a fresh declaration on
+        # maturation round so resolve_round drives this pending action exactly once.
+        opponent.threat_pool = None
+        opponent.save(update_fields=["threat_pool"])
+
+        encounter.round_number = 2
+        encounter.save(update_fields=["round_number"])
+        first = participants[1]
+        second = participants[2]
+        declare_interpose(first, ally=victim, technique=mirror_ward)
+        declare_interpose(second, ally=victim, technique=mirror_ward)
+        first.reactions_used = 1
+        first.save(update_fields=["reactions_used"])
+
+        with patch(
+            "world.combat.services.perform_check",
+            return_value=SimpleNamespace(success_level=2),
+        ):
+            resolve_round(encounter)
+
+        victim_vitals.refresh_from_db()
+        second_anima = CharacterAnima.objects.get(character=second.character_sheet)
+        self.assertEqual(victim_vitals.health, 10)
+        self.assertEqual(second_anima.current, 20)
+        second.refresh_from_db()
+        self.assertEqual(second.reactions_used, 1)
+        self.assertFalse(PendingOpponentAttack.objects.filter(opponent=opponent).exists())
+
+    def test_ally_support_combo_uses_target_while_combo_resolves(self) -> None:
+        """Combo resolution does not replace an ally target with its opponent target."""
+        attack_effect = EffectTypeFactory(name="Acceptance Strike", base_power=20)
+        support_effect = EffectTypeFactory(name="Acceptance Ward", base_power=None)
+        combo = ComboDefinitionFactory(name="Bridge Ward Opening", bonus_damage=25)
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=attack_effect)
+        ComboSlotFactory(combo=combo, slot_number=2, required_action_type=support_effect)
+        support = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=support_effect,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
+        attack = TechniqueFactory(
+            gift=support.gift,
+            effect_type=attack_effect,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
+        support_action = CombatRoundAction.objects.create(
+            participant=self.participants[1],
+            round_number=1,
+            focused_action=support,
+            focused_ally_target=self.participants[3],
+        )
+        attack_action = CombatRoundAction.objects.create(
+            participant=self.participants[2],
+            round_number=1,
+            focused_action=attack,
+            focused_opponent_target=self.boss,
+        )
+        available = detect_available_combos(self.encounter, 1)
+        self.assertIn(combo, [candidate.combo for candidate in available])
+        upgrade_action_to_combo(support_action, combo)
+        upgrade_action_to_combo(attack_action, combo)
+
+        result = resolve_round(self.encounter)
+
+        self.assertTrue(any(outcome.combo_used == combo for outcome in result.action_outcomes))
+        support_action.refresh_from_db()
+        self.assertEqual(support_action.focused_ally_target_id, self.participants[3].pk)
+        self.assertIsNone(support_action.focused_opponent_target_id)
+
+    @tag("postgres")  # Soulfray's progressive condition path uses DISTINCT ON.
+    def test_real_strain_anima_and_soulfray_trajectory(self) -> None:
+        """Live casts record declining anima and increasing Soulfray pressure."""
+        soulfray = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        ConditionStageFactory(condition=soulfray, stage_order=1, severity_threshold=10)
+        SoulfrayConfigFactory(
+            soulfray_threshold_ratio=Decimal("0.30"),
+            severity_scale=10,
+            deficit_scale=5,
+        )
+        strain_config = SimpleNamespace(
+            conversion_base=3,
+            diminishing_step=2,
+            diminishing_floor=1,
+        )
+        anima = CharacterAnima.objects.get(character=self.sheets[0])
+        anima.current = 6
+        anima.maximum = 6
+        anima.save(update_fields=["current", "maximum"])
+        technique = TechniqueFactory(anima_cost=2, intensity=0, control=0)
+
+        def resolve_cast(**_kwargs):
+            return "resolved"
+
+        trajectory = []
+        casts = []
+        for _ in range(2):
+            anima.refresh_from_db()
+            trajectory.append(anima.current)
+            casts.append(
+                use_technique(
+                    character=self.sheets[0].character,
+                    technique=technique,
+                    resolve_fn=resolve_cast,
+                    strain_commitment=3,
+                    strain_config=strain_config,
+                )
+            )
+
+        anima.refresh_from_db()
+        self.assertEqual(trajectory, [6, 1])
+        self.assertEqual(anima.current, -4)
+        self.assertEqual([cast.anima_cost.effective_cost for cast in casts], [5, 5])
+        self.assertTrue(all(cast.soulfray_result is not None for cast in casts))
+        self.assertGreater(
+            casts[1].soulfray_result.severity_added,
+            casts[0].soulfray_result.severity_added,
+        )
 
     def test_engine_balance_sample_records_failure_and_duration_metrics(self) -> None:
         """Run small deterministic engine samples for coordinated and spam tactics."""
