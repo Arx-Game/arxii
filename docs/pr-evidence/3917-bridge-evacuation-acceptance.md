@@ -1,6 +1,6 @@
 # #3917 Bridge-evacuation acceptance evidence
 
-- Reviewed revision: `fa9b3f067`
+- Reviewed revision: `adf8d6ba5`
 - Reviewer: local acceptance test run
 - Reviewer verdict: PASS for the deterministic model/service composition below; NOT PASS for live browser playtest or Soulfray probability
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
