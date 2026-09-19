@@ -7089,16 +7089,85 @@ def detect_available_combos(
     return [rc.as_available() for rc in scan_round_combos(encounter, round_number) if rc.complete]
 
 
+def _combo_composition_is_eligible(
+    available: AvailableCombo,
+) -> bool:
+    """Return whether every current combo contributor can still act.
+
+    Combo scanning describes declared techniques.  A contributor can become
+    dead or unconscious after declaring, so the upgrade and resolution gates
+    also check the live agency state.
+    """
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    return all(
+        match.participant.status == ParticipantStatus.ACTIVE
+        and can_act(match.participant.character_sheet)
+        for match in available.slot_matches
+    )
+
+
+def _available_combo_for_action(
+    action: CombatRoundAction,
+    combo: ComboDefinition,
+) -> AvailableCombo | None:
+    """Find a complete scanned combo that includes *action*, if one exists."""
+    encounter = action.participant.encounter
+    for available in detect_available_combos(encounter, action.round_number):
+        if available.combo.pk != combo.pk:
+            continue
+        if any(match.action.pk == action.pk for match in available.slot_matches):
+            return available if _combo_composition_is_eligible(available) else None
+    return None
+
+
+def _revalidate_combo_upgrades(
+    encounter: CombatEncounter,
+    round_number: int,
+    actions: dict[int, CombatRoundAction],
+) -> None:
+    """Clear upgrades whose complete composition is no longer valid.
+
+    This is deliberately done after all declarations and late auto-declarations
+    are loaded, rather than trusting the declaration-time upgrade.  Changed
+    targets, removed contributors, and lost agency therefore cannot grant a
+    combo rider at resolution.
+    """
+    available = {item.combo.pk: item for item in detect_available_combos(encounter, round_number)}
+    for action in actions.values():
+        combo_id = action.combo_upgrade_id
+        if combo_id is None:
+            continue
+        candidate = available.get(combo_id)
+        valid = False
+        if candidate is not None:
+            valid = any(match.action.pk == action.pk for match in candidate.slot_matches)
+            if valid:
+                valid = _combo_composition_is_eligible(candidate)
+        if not valid:
+            action.combo_upgrade = None
+            action.save(update_fields=["combo_upgrade_id"])
+
+
 def upgrade_action_to_combo(
     action: CombatRoundAction,
     combo: ComboDefinition,
 ) -> None:
-    """Mark a PC's round action as upgraded to a combo.
+    """Mark a currently eligible PC action as upgraded to a combo.
+
+    The scanner is the authoritative source for slot matching.  Callers get a
+    ``ValueError`` instead of being able to persist an arbitrary combo FK.
 
     Args:
         action: The CombatRoundAction to upgrade.
         combo: The ComboDefinition being activated.
+
+    Raises:
+        ValueError: If the current team declarations do not complete *combo*.
     """
+    if _available_combo_for_action(action, combo) is None:
+        msg = "Combo is not available for this declared action."
+        raise ValueError(msg)
     action.combo_upgrade = combo
     action.save(update_fields=["combo_upgrade_id"])
 
@@ -8758,7 +8827,12 @@ def _resolve_pc_action(
     # own technique resolves normally), AND get the combo rider appended.
     # Non-combo actions run the pipeline as before. The only case where the
     # pipeline is skipped: combo-upgraded with no target (defeated opponent).
-    run_pipeline = not action.combo_upgrade or target is not None
+    # A combo upgrade must not suppress an ally-targeted technique.  Support
+    # effects (heals, wards, and buffs) resolve through their normal geometry;
+    # only an opponent target can receive the combo's damage rider.
+    run_pipeline = (
+        not action.combo_upgrade or target is not None or action.focused_ally_target is not None
+    )
     if run_pipeline:
         combat_result = _run_combat_technique_pipeline(
             participant, action, technique, fatigue_category, offense_check_fn
@@ -11898,6 +11972,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         )
     ):
         pc_actions[action.participant_id] = action
+
+    # Upgrades are validated again after every declaration and late auto-action
+    # has been materialized.  Never let a stale FK grant a combo rider.
+    _revalidate_combo_upgrades(enc, round_number, pc_actions)
 
     npc_actions: dict[int, list[CombatOpponentAction]] = defaultdict(list)
     for npc_action in (

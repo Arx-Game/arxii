@@ -25,6 +25,7 @@ from world.combat.models import (
     ComboSlot,
 )
 from world.combat.services import (
+    _revalidate_combo_upgrades,
     detect_available_combos,
     revert_combo_upgrade,
     scan_round_combos,
@@ -405,7 +406,7 @@ class UpgradeRevertComboTests(TestCase):
         cls.technique = TechniqueFactory()
         cls.combo = ComboDefinitionFactory()
 
-    def test_upgrade_sets_combo(self) -> None:
+    def test_upgrade_rejects_combo_without_a_complete_composition(self) -> None:
         action = CombatRoundAction.objects.create(
             participant=self.participant,
             round_number=1,
@@ -413,9 +414,82 @@ class UpgradeRevertComboTests(TestCase):
             focused_action=self.technique,
         )
         self.assertIsNone(action.combo_upgrade_id)
-        upgrade_action_to_combo(action, self.combo)
+        with self.assertRaisesRegex(ValueError, "not available"):
+            upgrade_action_to_combo(action, self.combo)
         action.refresh_from_db()
-        self.assertEqual(action.combo_upgrade, self.combo)
+        self.assertIsNone(action.combo_upgrade_id)
+
+    def test_upgrade_sets_combo_for_a_scanned_complete_composition(self) -> None:
+        second_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=CharacterSheetFactory(),
+        )
+        combo = ComboDefinitionFactory(discoverable_via_combat=True)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=self.technique.effect_type,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=self.technique.effect_type,
+        )
+        action = CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=self.technique,
+        )
+        CombatRoundAction.objects.create(
+            participant=second_participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=self.technique,
+        )
+        upgrade_action_to_combo(action, combo)
+        action.refresh_from_db()
+        self.assertEqual(action.combo_upgrade, combo)
+
+    def test_resolution_revalidation_clears_stale_upgrade(self) -> None:
+        second_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=CharacterSheetFactory(),
+        )
+        combo = ComboDefinitionFactory(discoverable_via_combat=True)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=self.technique.effect_type,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=self.technique.effect_type,
+        )
+        action = CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=self.technique,
+        )
+        changed_action = CombatRoundAction.objects.create(
+            participant=second_participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=self.technique,
+        )
+        upgrade_action_to_combo(action, combo)
+        changed_action.focused_action = TechniqueFactory(effect_type=EffectTypeFactory())
+        changed_action.save(update_fields=["focused_action"])
+
+        _revalidate_combo_upgrades(
+            self.encounter,
+            1,
+            {action.participant_id: action, changed_action.participant_id: changed_action},
+        )
+        action.refresh_from_db()
+        self.assertIsNone(action.combo_upgrade_id)
 
     def test_revert_clears_combo(self) -> None:
         action = CombatRoundAction.objects.create(
