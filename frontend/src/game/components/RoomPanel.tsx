@@ -193,6 +193,16 @@ export function RoomPanel({
             >
               {retryLabel}
             </Button>
+            {isConnected && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => send(character, `@ic ${character}`)}
+              >
+                Re-enter as {character}
+              </Button>
+            )}
             <Link
               to="/hall"
               className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
