@@ -49,14 +49,20 @@ class ReviewEvidenceTests(unittest.TestCase):
         body = "Refs #3750\n\n## Review evidence\n\n"
         body += "- Report: https://github.com/Arx-Game/arxii/issues/3750#issuecomment-1\n"
         errors = validate_pr_body(body, expected_issue="3750")
-        self.assertIn("must begin with Closes", " ".join(errors))
+        self.assertIn("must include a line of the form Closes", " ".join(errors))
 
     def test_closing_issue_number_ignores_reference_only(self) -> None:
         self.assertIsNone(_VALIDATOR.closing_issue_number("Refs #3750\n"))
         self.assertEqual(_VALIDATOR.closing_issue_number("Closes #3750\n"), "3750")
 
-    def test_closing_issue_must_be_the_first_line(self) -> None:
+    def test_closing_issue_number_found_anywhere_in_the_body(self) -> None:
+        """#3938: the line need not be the first thing in the body."""
         body = "Summary\n\nCloses #3750\n"
+        self.assertEqual(_VALIDATOR.closing_issue_number(body), "3750")
+
+    def test_closing_issue_number_ignores_mid_line_occurrence(self) -> None:
+        """It must still be its own line, not merely present somewhere in one."""
+        body = "See Closes #3750 in the summary above.\n"
         self.assertIsNone(_VALIDATOR.closing_issue_number(body))
 
     def test_dependabot_accounts_are_exempt_from_closing_issue_requirement(self) -> None:

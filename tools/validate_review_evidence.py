@@ -29,7 +29,10 @@ _REQUIRED_FIELDS = (
 _LEDGER_COLUMNS = 4
 _UNRESOLVED_HEADING = "## unresolved findings"
 _ISSUE_LINK = re.compile(r"^(Refs|Closes)\s+#([0-9]+)\.?\s*$", re.MULTILINE)
-_CLOSING_ISSUE_LINK = re.compile(r"\ACloses\s+#([0-9]+)\.?\s*$", re.MULTILINE)
+# `^` (not `\A`) so the line can appear anywhere in the body, not only as the
+# very first character — the requirement is that the PR names its closing
+# issue, not that it leads with it (#3938).
+_CLOSING_ISSUE_LINK = re.compile(r"^Closes\s+#([0-9]+)\.?\s*$", re.MULTILINE)
 _DEPENDABOT_LOGINS = frozenset({"dependabot[bot]", "dependabot-preview[bot]"})
 # The PR body's report reference: a backtick-wrapped repository path, or a bare
 # https URL. The review-evidence workflow imports this rather than copying it.
@@ -75,7 +78,7 @@ def validate_pr_body(body: str, expected_issue: str | None = None) -> list[str]:
     errors: list[str] = []
     closing_issue = closing_issue_number(body)
     if closing_issue is None:
-        errors.append("PR body must begin with Closes followed by an issue number")
+        errors.append("PR body must include a line of the form Closes #<number>")
     elif expected_issue and closing_issue != expected_issue:
         errors.append(f"PR body closes issue #{closing_issue}, expected #{expected_issue}")
     if REPORT_LINE.search(body) is None:
