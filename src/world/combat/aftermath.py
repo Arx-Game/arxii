@@ -61,7 +61,7 @@ def build_aftermath_digest(
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
-    from world.societies.models import LegendEntry  # noqa: PLC0415
+    from world.societies.models import LegendEntry, LegendEntryRecognition  # noqa: PLC0415
     from world.stories.constants import BeatVisibility  # noqa: PLC0415
     from world.stories.models import BeatCompletion  # noqa: PLC0415
 
@@ -95,6 +95,15 @@ def build_aftermath_digest(
             created_at__lt=end,
         ).order_by("created_at")
     )
+    recognition_rows = LegendEntryRecognition.objects.filter(
+        entry__in=legend_entries,
+        evidence__actor_sheet=sheet,
+    ).order_by("created_at", "pk")
+    legend_recognitions: dict[int, list[dict[str, str]]] = {}
+    for row in recognition_rows:
+        legend_recognitions.setdefault(row.entry_id, []).append(
+            {"key": row.key, "label": row.label, "description": row.description}
+        )
 
     beat_completion = None
     if encounter.scenario_deed_id is None:
@@ -140,6 +149,7 @@ def build_aftermath_digest(
         consequence=consequence,
         conditions=conditions,
         legend_entries=legend_entries,
+        legend_recognitions=legend_recognitions,
         beat_completion=beat_completion,
         beat_visible_to_player=beat_visible_to_player,
         peril_round_active=has_acute_peril(sheet),
@@ -165,10 +175,12 @@ def render_aftermath_digest(digest: AftermathDigest, *, include_secret_beat: boo
     if digest.companions_lost:
         lines.append(f"You lost {join_labels(digest.companions_lost)}.")
 
-    lines.extend(
-        f"Deed remembered: {entry.title} (+{entry.base_value} legend)."
-        for entry in digest.legend_entries
-    )
+    for entry in digest.legend_entries:
+        lines.append(f"Deed remembered: {entry.title} (+{entry.base_value} legend).")
+        lines.extend(
+            f"Recognition: {recognition['label']}."
+            for recognition in digest.legend_recognitions.get(entry.pk, [])
+        )
 
     if digest.beat_completion is not None and (
         include_secret_beat or digest.beat_visible_to_player

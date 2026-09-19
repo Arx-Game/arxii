@@ -2124,6 +2124,130 @@ class LegendContribution(SharedMemoryModel):
         )
 
 
+class LegendRecognitionRule(SharedMemoryModel):
+    """Staff-authored rule for a causal recognition label (#3914).
+
+    A rule is deliberately narrower than a settlement threshold.  Evidence must
+    be written by an explicit causal source and may then be attached to the
+    ordinary shared deed without changing its value.
+    """
+
+    key = models.CharField(max_length=64, unique=True)
+    label = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    source_kind = models.CharField(
+        max_length=32,
+        help_text="Authored evidence source kind (stake, rescue, break_bar).",
+    )
+    subject_label_contains = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Optional authored stake label fragment required for objective evidence.",
+    )
+    minimum_success_level = models.SmallIntegerField(
+        default=0,
+        help_text="Minimum recorded check result for check-backed evidence.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["key"]
+
+    def __str__(self) -> str:
+        return self.key
+
+
+class LegendRecognitionEvidence(SharedMemoryModel):
+    """One explicit, successful causal act eligible for recognition (#3914).
+
+    ``source_id`` is an opaque server-side audit pointer.  It is never emitted
+    by aftermath serializers.  The uniqueness key makes retries safe while
+    allowing separate causes to receive separate labels.
+    """
+
+    activation = models.ForeignKey(
+        "arxii.StakeContractActivation",
+        on_delete=models.CASCADE,
+        related_name="legend_recognition_evidence",
+    )
+    actor_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="legend_recognition_evidence",
+    )
+    rule = models.ForeignKey(
+        LegendRecognitionRule,
+        on_delete=models.PROTECT,
+        related_name="evidence",
+    )
+    source_kind = models.CharField(max_length=32)
+    source_id = models.PositiveBigIntegerField()
+    source_action_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Opaque action-row pointer for rescue evidence; server-side only.",
+    )
+    protected_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="protected_by_recognition_evidence",
+    )
+    context = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["activation", "actor_sheet", "rule", "source_kind", "source_id"],
+                name="unique_causal_recognition_evidence",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["activation", "actor_sheet"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.rule.key}: sheet={self.actor_sheet_id} "
+            f"source={self.source_kind}/{self.source_id}"
+        )
+
+
+class LegendEntryRecognition(SharedMemoryModel):
+    """A zero-value causal label attached to an already minted deed (#3914)."""
+
+    entry = models.ForeignKey(
+        LegendEntry,
+        on_delete=models.CASCADE,
+        related_name="recognitions",
+    )
+    evidence = models.ForeignKey(
+        LegendRecognitionEvidence,
+        on_delete=models.CASCADE,
+        related_name="entry_recognitions",
+    )
+    key = models.CharField(max_length=64)
+    label = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entry", "evidence"],
+                name="unique_recognition_per_entry_evidence",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.entry_id}: {self.key}"
+
+
 class PersonaDeedKnowledge(SharedMemoryModel):
     """One persona's IC knowledge of one deed (#902).
 

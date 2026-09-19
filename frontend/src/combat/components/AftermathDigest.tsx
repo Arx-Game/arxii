@@ -73,9 +73,20 @@ export function AftermathDigest({ digest, title }: AftermathDigestProps) {
             Deed remembered
           </p>
           {legend.map((entry, index) => (
-            <p key={`${entry.title}-${index}`} className="text-xs text-foreground">
-              {entry.title} (+{entry.base_value} legend)
-            </p>
+            <div key={`${entry.title}-${index}`} className="space-y-1">
+              <p className="text-xs text-foreground">
+                {entry.title} (+{entry.base_value} legend)
+              </p>
+              {entry.recognition?.map((recognition) => (
+                <p
+                  key={`${recognition.key}-${recognition.label}`}
+                  className="pl-2 text-xs text-muted-foreground"
+                  data-testid="aftermath-recognition"
+                >
+                  {recognition.label}
+                </p>
+              ))}
+            </div>
           ))}
         </div>
       )}

@@ -316,12 +316,21 @@ class OpponentSerializer(serializers.ModelSerializer):
         return None
 
 
+class AftermathRecognitionSerializer(serializers.Serializer):
+    """Safe causal label shape; source ids and check quality are never exposed."""
+
+    key = serializers.CharField()
+    label = serializers.CharField()
+    description = serializers.CharField()
+
+
 class AftermathLegendSerializer(serializers.Serializer):
     """Schema-only shape of one legend line in an aftermath digest (#3551)."""
 
     title = serializers.CharField()
     description = serializers.CharField()
     base_value = serializers.IntegerField()
+    recognition = AftermathRecognitionSerializer(many=True)
 
 
 class AftermathBeatSerializer(serializers.Serializer):
@@ -667,6 +676,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
                     "title": entry.title,
                     "description": entry.description,
                     "base_value": entry.base_value,
+                    "recognition": digest.legend_recognitions.get(entry.pk, []),
                 }
                 for entry in digest.legend_entries
             ],

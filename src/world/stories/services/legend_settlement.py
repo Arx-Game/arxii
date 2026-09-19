@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Scene
-    from world.societies.models import LegendSourceType
+    from world.societies.causal_recognition import RecognitionLabel
+    from world.societies.models import LegendEntry, LegendSourceType
     from world.stories.models import StakeContractActivation
 
 logger = logging.getLogger(__name__)
@@ -183,3 +184,24 @@ def settle_legend_for_activation(  # noqa: PLR0913 - mirrors the seam it adapts
         story=story,
         concealed=concealed,
     )
+
+
+def attach_causal_recognition(
+    activation: StakeContractActivation, entries: Sequence[LegendEntry]
+) -> dict[int, list[RecognitionLabel]]:
+    """Attach authored causal labels to already-settled entries.
+
+    This adapter is intentionally reward-neutral: it delegates to the
+    societies recognition ledger and never creates a Legend deed or changes
+    its value. Ordinary completion calls it after ``settle_legend_for_activation``.
+
+    Args:
+        activation: The closed story stakes activation being settled.
+        entries: Existing ``LegendEntry`` rows returned by settlement.
+
+    Returns:
+        A mapping from entry primary key to safe recognition label dataclasses.
+    """
+    from world.societies.causal_recognition import attach_recognition_labels  # noqa: PLC0415
+
+    return attach_recognition_labels(list(entries), activation)
