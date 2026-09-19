@@ -86,10 +86,12 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     SoulfrayConfigFactory,
+    TechniqueAppliedConditionFactory,
     TechniqueFactory,
     TechniqueFunctionTagFactory,
 )
 from world.magic.models import CharacterAnima, CharacterTechnique
+from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services import strain_to_intensity, use_technique
 from world.magic.services.techniques import calculate_effective_anima_cost
 from world.mechanics.factories import CharacterEngagementFactory
@@ -672,6 +674,13 @@ class BridgeEvacuationAcceptanceTests(TestCase):
             effect_type=support_effect,
             action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
         )
+        support_condition = ConditionTemplateFactory(name="Bridge Ward Support")
+        TechniqueAppliedConditionFactory(
+            technique=support,
+            condition=support_condition,
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=0,
+        )
         attack = TechniqueFactory(
             gift=support.gift,
             effect_type=attack_effect,
@@ -697,6 +706,9 @@ class BridgeEvacuationAcceptanceTests(TestCase):
         result = resolve_round(self.encounter)
 
         self.assertTrue(any(outcome.combo_used == combo for outcome in result.action_outcomes))
+        self.assertLess(self.boss.health, self.boss.max_health)
+        ally_object = self.participants[3].character_sheet.character
+        self.assertTrue(has_condition(ally_object, support_condition))
         support_action.refresh_from_db()
         self.assertEqual(support_action.focused_ally_target_id, self.participants[3].pk)
         self.assertIsNone(support_action.focused_opponent_target_id)
