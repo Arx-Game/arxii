@@ -45,16 +45,26 @@ existed all meant TENANT, so migration 0147 fills them with that via
 
 **Authority and residence are separate axes.** The ladder answers "may they act here".
 `is_primary_home` answers "do they live here". A trustee may hold real authority over a
-keep they have never slept in, so stables capacity, the sheet's Tenanted Rooms card and
-prestige read residence, not a rung.
+keep they have never slept in, so the sheet's Tenanted Rooms card and prestige read
+residence, not a rung. (Stables capacity is the exception recorded under Consequences.)
 
 **Granting is authorized in the service, not deferred to callers.** `grant_tenancy`'s
 previous docstring said "Caller is responsible for permission gating (only owners
 should grant tenancy)" and callers overwhelmingly did not. It now requires `kind`,
 takes `granted_by`, and enforces the ladder: a GUEST grant needs Tenant-or-above, a
-TENANT or TRUSTEE grant needs Trustee-or-above. `granted_by=None` remains the system
-path (character generation, admin, seeds) and is now explicit rather than what happens
-when nobody thought about it.
+TENANT grant needs Trustee-or-above, and a TRUSTEE grant is the owner's alone. A trustee
+is "someone trusted by the owner", and trust a trustee could pass to a friend, who could
+pass it on again, is not the owner's trust any more; revoking a trustee was already
+owner-only, and the two halves have to agree or the owner ends up removing appointments
+they never made. `granted_by=None` remains the system path (character generation,
+admin, seeds) and is now explicit rather than what happens when nobody thought about it.
+
+**Revocation follows the chain of grants, not rank.** The first cut let anyone who
+*could have granted* a rung revoke it, which meant a tenant could pull a key the owner
+gave and a trustee could evict a tenant the owner installed, each unpicking the owner's
+arrangements from inside. `end_room_tenancy` now lets the holder depart, lets the owner
+end anything, and otherwise requires that the caller is the row's `granted_by` and
+still clears `can_grant` for that rung. This is the reason `granted_by` exists.
 
 ## Consequences
 

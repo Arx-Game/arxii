@@ -23,13 +23,14 @@ itself is documented in `src/world/locations/CLAUDE.md`.
   and may hand out GUEST keys. May NOT grant a tenancy or do structural work.
   _Avoid:_ resident (that is the other axis — see **Residence**), renter, occupant.
 - **Trustee** — trusted to act for the owner. Everything a tenant has, plus
-  structural building work ("control any home state") and granting TENANT or TRUSTEE.
+  structural building work ("control any home state") and granting TENANT. May not
+  appoint another trustee: the owner's trust in one person does not pass on.
   A trustee is authority, not residence: a seneschal may administer a keep they have
   never slept in. _Avoid:_ steward, manager, deputy owner.
 - **Owner** — the deed-holder, a `LocationOwnership` row. Deliberately **not** a
   `LocationRole` member: one active owner per location, resolved most-specific-wins
   up the area tree, with a lifecycle the ladder does not share. Clears every rung,
-  and alone may transfer the deed or revoke a trustee. _Avoid:_ landlord, holder
+  and alone may transfer the deed, appoint a trustee, or revoke a trustee. _Avoid:_ landlord, holder
   (ambiguous — `holder_type` is the persona-vs-organization discriminator).
 - **Standing** — whether a persona clears a given rung at a given room, answered by
   `has_standing(persona, room, at_least=...)`. The one gate; it composes the deed,
@@ -41,6 +42,11 @@ itself is documented in `src/world/locations/CLAUDE.md`.
   it drives prestige-from-dwellings and the sheet's Tenanted Rooms card. Authority and
   residence are independent, and conflating them is the mistake the ladder exists to
   prevent. _Avoid:_ home (ambiguous with Evennia's `home` recall location), tenancy.
+- **Granted by** — the persona recorded on a grant as having handed it over
+  (`granted_by`; NULL when the world did). Revocation follows it: apart from the
+  holder departing and the owner ending anything, only the granter may take a grant
+  back, and only while they still hold the standing to have given it. _Avoid:_
+  issuer, sponsor.
 - **Keyring** — the sheet's Estate read of every active grant a character holds,
   directly or through an organization, naming the place, where it is, the rung and who
   granted it. Its job is **discovery**: without it a new player of a roster character

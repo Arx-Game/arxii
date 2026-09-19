@@ -512,13 +512,13 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
 
     # #3902 — which rung of the access ladder this grant confers. A key is not a
     # tenancy: a trusted guest may come and go and nothing else, while a trustee may
-    # act for the owner. Defaults to TENANT because every row written before this
-    # field existed meant exactly that.
+    # act for the owner.
     #
     # This is the AUTHORITY axis. ``is_primary_home`` below is the RESIDENCE axis and
     # they are independent: a trustee (a seneschal, say) may hold real authority over
-    # a keep they have never slept in, and residence is what stables capacity, the
-    # sheet's Tenanted Rooms card and prestige actually want.
+    # a keep they have never slept in, and residence is what the sheet's Tenanted
+    # Rooms card and prestige actually want. (Stables capacity still reads TENANT as
+    # a proxy for residence; the model has no multi-place residence fact yet.)
     #
     # The default is GUEST, the LOWEST rung, deliberately. #3923's lesson is that the
     # dangerous default is the permissive one: a writer who forgets this kwarg and

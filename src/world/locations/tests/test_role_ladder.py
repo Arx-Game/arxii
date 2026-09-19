@@ -22,6 +22,7 @@ from world.areas.factories import AreaFactory
 from world.locations.constants import OWNER_RANK, HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
+    RoomEditError,
     TenancyGrantNotPermitted,
     assign_room_tenant,
     can_grant,
@@ -193,10 +194,22 @@ class GrantAuthorizationTests(TestCase):
         assert not can_grant(self.tenant, self.room, LocationRole.TENANT)
         assert not can_grant(self.tenant, self.room, LocationRole.TRUSTEE)
 
-    def test_a_trustee_may_hand_out_a_tenancy(self) -> None:
+    def test_a_trustee_may_hand_out_a_tenancy_but_not_a_trusteeship(self) -> None:
+        """Trust the owner placed in one person does not pass on to that person's friends."""
         assert can_grant(self.trustee, self.room, LocationRole.GUEST)
         assert can_grant(self.trustee, self.room, LocationRole.TENANT)
-        assert can_grant(self.trustee, self.room, LocationRole.TRUSTEE)
+        assert not can_grant(self.trustee, self.room, LocationRole.TRUSTEE)
+
+    def test_only_the_owner_appoints_a_trustee(self) -> None:
+        assert can_grant(self.owner, self.room, LocationRole.TRUSTEE)
+        with self.assertRaises(TenancyGrantNotPermitted) as caught:
+            assign_room_tenant(
+                persona=self.trustee,
+                room=self.room,
+                tenant_persona=PersonaFactory(),
+                kind=LocationRole.TRUSTEE,
+            )
+        assert "owner" in str(caught.exception).lower()
 
     def test_a_guest_may_hand_out_nothing(self) -> None:
         assert not can_grant(self.guest, self.room, LocationRole.GUEST)
@@ -237,11 +250,54 @@ class GrantAuthorizationTests(TestCase):
 
     def test_revoking_a_trustee_is_the_owners_alone(self) -> None:
         row = LocationTenancy.objects.get(tenant_persona=self.trustee)
-        with self.assertRaises(Exception) as caught:
+        with self.assertRaises(RoomEditError) as caught:
             end_room_tenancy(persona=self.tenant, tenancy=row)
-        assert "trustee" in str(caught.exception).lower()
+        assert "owner" in str(caught.exception).lower()
         assert end_room_tenancy(persona=self.owner, tenancy=row).ends_at is not None
 
-    def test_a_tenant_may_revoke_the_key_they_could_have_granted(self) -> None:
-        row = LocationTenancy.objects.get(tenant_persona=self.guest)
+    def test_a_tenant_takes_back_the_key_they_gave(self) -> None:
+        row = assign_room_tenant(
+            persona=self.tenant, room=self.room, tenant_persona=PersonaFactory(), kind="guest"
+        )
         assert end_room_tenancy(persona=self.tenant, tenancy=row).ends_at is not None
+
+    def test_a_tenant_cannot_pull_a_key_the_owner_gave(self) -> None:
+        """Revocation follows the chain of grants, not rank -- the reason granted_by exists."""
+        row = assign_room_tenant(
+            persona=self.owner, room=self.room, tenant_persona=PersonaFactory(), kind="guest"
+        )
+        with self.assertRaises(RoomEditError) as caught:
+            end_room_tenancy(persona=self.tenant, tenancy=row)
+        assert "didn't grant" in str(caught.exception)
+        assert row.ends_at is None
+
+    def test_a_trustee_cannot_evict_a_tenant_the_owner_installed(self) -> None:
+        row = LocationTenancy.objects.get(tenant_persona=self.tenant)
+        assert row.granted_by is None
+        with self.assertRaises(RoomEditError):
+            end_room_tenancy(persona=self.trustee, tenancy=row)
+        assert LocationTenancy.objects.get(pk=row.pk).ends_at is None
+
+    def test_a_trustee_evicts_the_tenant_they_installed(self) -> None:
+        row = assign_room_tenant(
+            persona=self.trustee, room=self.room, tenant_persona=PersonaFactory(), kind="tenant"
+        )
+        assert end_room_tenancy(persona=self.trustee, tenancy=row).ends_at is not None
+
+    def test_a_granter_who_lost_their_standing_cannot_reach_back_in(self) -> None:
+        """Having granted it is necessary, not sufficient: you must still be able to."""
+        key = assign_room_tenant(
+            persona=self.tenant, room=self.room, tenant_persona=PersonaFactory(), kind="guest"
+        )
+        own = LocationTenancy.objects.get(tenant_persona=self.tenant)
+        end_room_tenancy(persona=self.owner, tenancy=own)
+        with self.assertRaises(RoomEditError) as caught:
+            end_room_tenancy(persona=self.tenant, tenancy=key)
+        assert "no longer" in str(caught.exception)
+
+    def test_a_system_grant_ends_only_by_the_owner_or_the_holder(self) -> None:
+        """granted_by NULL has no granter to take it back, so the deed is the only revoker."""
+        row = LocationTenancy.objects.get(tenant_persona=self.guest)
+        with self.assertRaises(RoomEditError):
+            end_room_tenancy(persona=self.trustee, tenancy=row)
+        assert end_room_tenancy(persona=self.owner, tenancy=row).ends_at is not None

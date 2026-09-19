@@ -12,6 +12,7 @@ from rest_framework import serializers
 
 from evennia_extensions.models import RoomSizeTier
 from world.buildings.models import ArchitecturalStyle, BuildingKind, ProjectTemplate
+from world.locations.constants import LocationRole
 
 
 class CharacterContextRequestSerializer(serializers.Serializer):
@@ -26,6 +27,9 @@ class ManagerTenancySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     tenant_persona_id = serializers.IntegerField()
     tenant_name = serializers.CharField()
+    # #3902 -- which rung the grant confers, so the tenant section can show a guest
+    # key as a key rather than as someone who lives here.
+    kind = serializers.ChoiceField(choices=LocationRole.choices)
     is_primary_home = serializers.BooleanField()
     ends_at = serializers.DateTimeField(allow_null=True)
 

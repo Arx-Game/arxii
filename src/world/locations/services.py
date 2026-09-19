@@ -1252,10 +1252,15 @@ def has_standing(
 def can_grant(persona: Persona | None, room: DefaultObject, kind: str) -> bool:
     """Whether ``persona`` may hand out a grant of ``kind`` at ``room`` (#3902).
 
-    Apostate's ruling: granting ACCESS (a guest key) is a Tenant power, granting
-    TENANCY (another tenant, or a trustee) is a Trustee power. An owner clears both
-    through ``has_standing``.
+    Apostate's ruling: granting ACCESS (a guest key) is a Tenant power and granting
+    TENANCY is a Trustee power. Appointing a TRUSTEE is the owner's alone: a trustee
+    is "someone trusted by the owner", and trust that a trustee could pass on to a
+    friend, who could pass it on again, is not the owner's trust any more. Revoking
+    a trustee is owner-only for the same reason, and the two halves must agree or the
+    owner ends up removing appointments they never made.
     """
+    if kind == LocationRole.TRUSTEE:
+        return persona is not None and is_owner(persona, room)
     needed = LocationRole.TENANT if kind == LocationRole.GUEST else LocationRole.TRUSTEE
     return has_standing(persona, room, at_least=needed)
 
@@ -1450,6 +1455,15 @@ def maybe_default_residence(persona: Persona | None, room_profile: RoomProfile |
         set_current_residence(sheet, room_profile)
 
 
+def _grant_refusal(persona: Persona, room: DefaultObject, kind: str) -> str:
+    """The player-facing reason ``can_grant`` said no, naming what they CAN do."""
+    if kind == LocationRole.TRUSTEE and has_standing(persona, room, at_least=LocationRole.TRUSTEE):
+        return "Only the owner can appoint a trustee."
+    if kind != LocationRole.GUEST and has_standing(persona, room, at_least=LocationRole.TENANT):
+        return "You can hand out a key here, but not a tenancy."
+    return "You don't have the standing here to grant that."
+
+
 def assign_room_tenant(  # noqa: PLR0913
     *,
     persona: Persona,
@@ -1462,9 +1476,10 @@ def assign_room_tenant(  # noqa: PLR0913
     """The player seam over ``grant_tenancy`` (#670, ladder #3902).
 
     Was owner-only. Apostate's ruling opens it by rung: a TENANT may hand out a GUEST
-    key, and a TRUSTEE may hand out a tenancy or another trusteeship. ``can_grant``
-    holds that comparison in one place, and ``grant_tenancy`` re-checks it as a hard
-    boundary because action prerequisites are the UX gate, not the security one.
+    key and a TRUSTEE may hand out a tenancy, while appointing a trustee stays with
+    the owner. ``can_grant`` holds that comparison in one place, and ``grant_tenancy``
+    re-checks it as a hard boundary because action prerequisites are the UX gate, not
+    the security one.
 
     ``kind`` defaults to TENANT rather than to the model's GUEST: this is the seam a
     landlord uses to install a tenant, and every caller before the ladder existed
@@ -1476,13 +1491,7 @@ def assign_room_tenant(  # noqa: PLR0913
         msg = "This room can't hold tenants."
         raise RoomEditError(msg) from exc
     if not can_grant(persona, room, kind):
-        msg = (
-            "You can hand out a key here, but not a tenancy."
-            if kind != LocationRole.GUEST
-            and has_standing(persona, room, at_least=LocationRole.TENANT)
-            else "You don't have the standing here to grant that."
-        )
-        raise TenancyGrantNotPermitted(msg)
+        raise TenancyGrantNotPermitted(_grant_refusal(persona, room, kind))
     return grant_tenancy(
         kind=kind,
         room_profile=profile,
@@ -1494,18 +1503,22 @@ def assign_room_tenant(  # noqa: PLR0913
 
 
 def end_room_tenancy(*, persona: Persona, tenancy: LocationTenancy) -> LocationTenancy:
-    """End a room tenancy (#670, ladder #3902): departure, or revocation by rung.
+    """End a room tenancy (#670, ladder #3902): departure, or taking back what you gave.
 
-    Three ways this is allowed, and the third is the one the ladder added:
+    Three ways this is allowed:
 
     1. **Departure.** The holder may always end their own grant, whatever its rung.
        Nobody is trapped in a tenancy or obliged to keep a key.
-    2. **Revocation by someone who could have granted it.** Taking a key back is the
-       same authority as handing it out, so it reuses ``can_grant`` rather than
-       inventing a second comparison that could drift from it.
-    3. **Revoking a TRUSTEE is the owner's alone.** A trustee who could revoke their
-       peers could unpick the owner's arrangements from inside, and "controls all
-       forms of access" is the one thing the ruling reserves to the deed.
+    2. **The owner ends anything.** "Controls all forms of access" is the deed's one
+       reserved power, and it is the only way a system grant (``granted_by`` NULL --
+       character generation, staff) or a departed granter's grant ever ends.
+    3. **You take back what you handed out.** Revocation follows the chain of grants,
+       not rank: the row's ``granted_by`` must be this persona, and they must still
+       hold the standing to have granted it (``can_grant``), so a tenant who has since
+       been evicted cannot reach back in. This is the reason ``granted_by`` exists. A
+       tenant may not pull a key the owner gave, and a trustee may not evict a tenant
+       the owner installed -- rank alone let both happen, and both unpick the owner's
+       arrangements from inside.
     """
     room = tenancy.room_profile.objectdb if tenancy.room_profile else None
     if tenancy.tenant_persona_id == persona.pk:
@@ -1513,13 +1526,13 @@ def end_room_tenancy(*, persona: Persona, tenancy: LocationTenancy) -> LocationT
     if room is None:
         msg = "Only the room's owner or the tenant can end this tenancy."
         raise RoomEditError(msg)
-    if tenancy.kind == LocationRole.TRUSTEE:
-        if not is_owner(persona, room):
-            msg = "Only the owner can remove a trustee."
-            raise RoomEditError(msg)
+    if is_owner(persona, room):
         return end_tenancy(tenancy)
+    if tenancy.granted_by_id != persona.pk:
+        msg = "You didn't grant that, so you can't take it back. Only the owner can."
+        raise RoomEditError(msg)
     if not can_grant(persona, room, tenancy.kind):
-        msg = "You don't have the standing here to end that."
+        msg = "You no longer have the standing here to take that back."
         raise RoomEditError(msg)
     return end_tenancy(tenancy)
 

@@ -345,8 +345,8 @@ are cumulative -- each includes everything below it. Apostate's ruling:
 | --- | --- |
 | **Guest** | Visitation only: locked exits, guards, ward/alarms, reaching a portal anchor. |
 | **Tenant** | Also: the servants, room features, installing an anchor, setting a primary home, tagging resonance, editing the room, locking doors, and handing out GUEST keys. |
-| **Trustee** | Also: structural building work (`world.buildings` renovation/upgrade/extension/decoration/activation) and granting TENANT or TRUSTEE. |
-| **Owner** | Everything, plus the deed itself and revoking a trustee. Not a `LocationRole` member -- it is a `LocationOwnership` row. |
+| **Trustee** | Also: structural building work (`world.buildings` renovation/upgrade/extension/decoration/activation) and granting TENANT. |
+| **Owner** | Everything, plus the deed itself and appointing or revoking a trustee. Not a `LocationRole` member -- it is a `LocationOwnership` row. |
 
 **Two axes, not one.** The ladder is AUTHORITY. `is_primary_home` is RESIDENCE, and
 they are independent: a trustee may hold real authority over a keep they have never
@@ -357,10 +357,16 @@ multi-residence fact in the model, and inventing one is its own design question.
 
 **Granting is authorized here, not deferred to callers.** `grant_tenancy` requires
 `kind`, takes `granted_by`, and enforces the ladder when a persona is granting:
-GUEST needs Tenant-or-above, TENANT/TRUSTEE need Trustee-or-above. `granted_by=None`
-is the system path (character generation, admin, seeds) and is explicit rather than
-implied. `can_grant(persona, room, kind)` is the comparison; `end_room_tenancy`
-reuses it for revocation, with revoking a TRUSTEE reserved to the owner.
+GUEST needs Tenant-or-above, TENANT needs Trustee-or-above, and TRUSTEE is the
+owner's alone (trust the owner placed in one person does not pass on to that
+person's friends). `granted_by=None` is the system path (character generation,
+admin, seeds) and is explicit rather than implied. `can_grant(persona, room, kind)`
+is the comparison. **Revocation follows the chain of grants, not rank:**
+`end_room_tenancy` lets the holder depart, lets the owner end anything, and
+otherwise requires that the caller is the row's `granted_by` AND still clears
+`can_grant` for that rung. A tenant cannot pull a key the owner gave; a trustee
+cannot evict a tenant the owner installed; a system grant (`granted_by` NULL) ends
+only by the owner or the holder. This is what `granted_by` is for.
 
 **The model default is GUEST**, the lowest rung -- a writer who forgets the kwarg
 fails closed. Existing rows were filled with TENANT by migration 0147
@@ -590,10 +596,13 @@ builder verbs), the web action-dispatch endpoint, and the React `RoomEditorPanel
 
 - `assign_room_tenant(*, persona, room, tenant_persona, kind=LocationRole.TENANT, ends_at=None, notes="")` —
   rung-gated wrapper over `grant_tenancy` (raises `TenancyGrantNotPermitted`, a `RoomEditError`
-  subclass). A TENANT may hand out a GUEST key; a TRUSTEE may hand out a tenancy.
+  subclass). A TENANT may hand out a GUEST key; a TRUSTEE may hand out a tenancy; only
+  the owner appoints a TRUSTEE. Reached by `AssignRoomTenantAction` (kwarg `kind`),
+  the telnet `room/tenant`, `room/key` and `room/trustee` switches, and the building
+  manager's tenant section, which offers all three rungs.
 - `end_room_tenancy(*, persona, tenancy)` — the holder may always end their own
-  grant (departure); otherwise whoever could have GRANTED that rung may revoke it,
-  except a TRUSTEE grant, which only the owner may end.
+  grant (departure); the owner may end anything; otherwise only the persona recorded
+  in `granted_by` may take it back, and only while they still clear `can_grant` for it.
 - `set_primary_home(*, persona, room, notes="")` — flags the caller's own active room
   tenancy as `is_primary_home` (one active per persona; partial unique
   constraint). Also syncs the character-level residence (`set_residence`, #1514

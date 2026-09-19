@@ -179,6 +179,7 @@ class BuildingManagerViewSet(viewsets.ViewSet):
                             "id": t.pk,
                             "tenant_persona_id": t.tenant_persona_id,
                             "tenant_name": str(t.tenant_persona),
+                            "kind": t.kind,
                             "is_primary_home": t.is_primary_home,
                             "ends_at": t.ends_at,
                         }

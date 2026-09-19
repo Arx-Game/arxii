@@ -16,6 +16,7 @@ rhythm, no monster one-liner):
   room/removeexit <exit>          room/renameexit <exit>=<new name>
   room/drop confirm               room/map [floor]
   room/home                       room/tenant <character>
+  room/key <character>            room/trustee <character>
   room/evict <character>          room/extend <units>
   room/decorate <template> [here]         room/style <style name>
   room/renovate <kind name|id>
@@ -38,7 +39,8 @@ _USAGE = (
     "  room/size <tier>  ·  room/drop confirm  ·  room/map [floor]\n"
     "  room/addexit <room>=<there>,<back>  ·  room/removeexit <exit>\n"
     "  room/renameexit <exit>=<new name>\n"
-    "  room/home  ·  room/tenant <character>  ·  room/evict <character>\n"
+    "  room/home  ·  room/tenant <character>  ·  room/key <character>\n"
+    "  room/trustee <character>  ·  room/evict <character>\n"
     "  room/extend <units>  ·  room/decorate <template> [here]\n"
     "  room/style <style name>  ·  room/fixture <kind>  ·  room/removefixture <kind>\n"
     "  room/renovate <kind name|id>\n"
@@ -110,7 +112,9 @@ class CmdRoom(ArxCommand):
             "renameexit": self._renameexit,
             "map": self._map,
             "home": lambda a: self._run("set_primary_home"),  # noqa: ARG005
-            "tenant": self._tenant,
+            "tenant": lambda a: self._grant(a, kind="tenant"),
+            "key": lambda a: self._grant(a, kind="guest"),
+            "trustee": lambda a: self._grant(a, kind="trustee"),
             "evict": self._evict,
             "extend": lambda a: self._run("start_building_extension", added_budget=a),
             "decorate": self._decorate,
@@ -239,12 +243,14 @@ class CmdRoom(ArxCommand):
             raise CommandError(msg)
         return active_persona_for_sheet(sheet)
 
-    def _tenant(self, args: str) -> None:
+    def _grant(self, args: str, *, kind: str) -> None:
+        """room/tenant, room/key and room/trustee: one action, three rungs (#3902)."""
         if not args:
-            msg = "Usage: room/tenant <character>"
+            switch = {"guest": "key", "tenant": "tenant", "trustee": "trustee"}[kind]
+            msg = f"Usage: room/{switch} <character>"
             raise CommandError(msg)
         persona = self._active_persona_of(args)
-        self._run("assign_room_tenant", tenant_persona_id=persona.pk)
+        self._run("assign_room_tenant", tenant_persona_id=persona.pk, kind=kind)
 
     def _evict(self, args: str) -> None:
         from django.db.models import Q  # noqa: PLC0415

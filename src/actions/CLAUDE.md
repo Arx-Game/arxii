@@ -92,7 +92,8 @@ They do not use the command system, dispatchers, or handlers.
   tier open, throwback tier gated on codex knowledge via `can_build_style`),
   `PlaceFixtureAction`/`RemoveFixtureAction` (`"place_room_fixture"`/`"remove_room_fixture"`,
   #1514 close-out — comfort fixtures over `place_decoration`/`remove_decoration`),
-  `AssignRoomTenantAction` (`"assign_room_tenant"`), `EndRoomTenancyAction`
+  `AssignRoomTenantAction` (`"assign_room_tenant"`, kwarg `kind` = guest/tenant/trustee,
+  #3902; `IsRoomTenantPrerequisite`, the service decides the exact rung), `EndRoomTenancyAction`
   (`"end_room_tenancy"`), `SetPrimaryHomeAction` (`"set_primary_home"`,
   `IsRoomTenantPrerequisite` — widened #2036 to owner-OR-tenant standing, not a direct
   tenancy row only), `TagRoomResonanceAction`/`UntagRoomResonanceAction`

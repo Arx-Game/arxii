@@ -57783,6 +57783,8 @@ components:
           type: integer
         tenant_name:
           type: string
+        kind:
+          $ref: '#/components/schemas/ManagerTenancyKindEnum'
         is_primary_home:
           type: boolean
         ends_at:
@@ -57793,8 +57795,19 @@ components:
       - ends_at
       - id
       - is_primary_home
+      - kind
       - tenant_name
       - tenant_persona_id
+    ManagerTenancyKindEnum:
+      enum:
+      - guest
+      - tenant
+      - trustee
+      type: string
+      description: |-
+        * `guest` - Guest
+        * `tenant` - Tenant
+        * `trustee` - Trustee
     MarketSquare:
       type: object
       properties:

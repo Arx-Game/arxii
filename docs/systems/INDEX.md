@@ -1311,8 +1311,9 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   composed `is_owner or is_tenant` each name a rung now), `assign_room_tenant()`/
   `end_room_tenancy()`/
   `set_primary_home()` (#670 player tenancy seam, rung-gated since #3902 — a TENANT hands out
-  GUEST keys, a TRUSTEE hands out tenancies, the holder always departs, only the owner revokes a
-  trustee; syncs the #1514 Evennia-`home` residence + recomputes prestige). #2036 widened
+  GUEST keys, a TRUSTEE hands out tenancies, only the owner appoints a trustee; revocation follows
+  `granted_by`, not rank: the holder always departs, the owner ends anything, otherwise only the
+  granter takes it back; syncs the #1514 Evennia-`home` residence + recomputes prestige). #2036 widened
   `set_primary_home()`: it now also writes `CharacterSheet.current_residence` (via
   `world.magic.services.gain.set_residence`, the daily resonance-trickle gate) on every deliberate
   declaration, accepts org-derived owner/tenant standing (not only a direct `LocationTenancy` row)
