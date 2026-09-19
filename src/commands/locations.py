@@ -251,6 +251,7 @@ class CmdRoom(ArxCommand):
         from django.utils import timezone  # noqa: PLC0415
 
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.locations.constants import LOCATION_ROLE_RANK  # noqa: PLC0415
         from world.locations.models import LocationTenancy  # noqa: PLC0415
 
         if not args:
@@ -266,14 +267,22 @@ class CmdRoom(ArxCommand):
             msg = "You're not in a room."
             raise CommandError(msg)
         now = timezone.now()
-        tenancy = (
-            LocationTenancy.objects.filter(room_profile=profile, tenant_persona=persona)
-            .filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now))
-            .first()
+        grants = list(
+            LocationTenancy.objects.filter(room_profile=profile, tenant_persona=persona).filter(
+                Q(ends_at__isnull=True) | Q(ends_at__gt=now)
+            )
         )
-        if tenancy is None:
-            msg = f"{persona} holds no tenancy here."
+        if not grants:
+            msg = f"{persona} holds no grant here."
             raise CommandError(msg)
+        # Concurrent grants are legal by design, and since #3902 they can differ in
+        # rung -- somebody may hold a tenancy AND a guest key to the same place. The
+        # old `.first()` had no ordering, so it revoked an arbitrary one. Evicting
+        # means removing their standing, so take the STRONGEST grant; a second
+        # `room/evict` takes the next one down, which is a readable way to walk
+        # someone down the ladder. Authorization is the action's, not ours:
+        # end_room_tenancy still refuses a rung the caller could not have granted.
+        tenancy = max(grants, key=lambda row: LOCATION_ROLE_RANK.get(row.kind, -1))
         self._run("end_room_tenancy", tenancy_id=tenancy.pk)
 
     def _decorate(self, args: str) -> None:
