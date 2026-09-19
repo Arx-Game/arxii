@@ -33,16 +33,20 @@ class ServantPrepareActionTests(TestCase):
 
     def test_meal_action_fails_cleanly_with_no_servant(self):
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.has_standing", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
         ):
             result = get_action("servant_prepare_meal").run(self.actor)
         self.assertFalse(result.success)
 
     def test_bath_action_fails_cleanly_with_no_servant(self):
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.has_standing", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
         ):
             result = get_action("servant_prepare_bath").run(self.actor)
         self.assertFalse(result.success)

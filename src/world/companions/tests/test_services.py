@@ -156,7 +156,7 @@ class StablesCapacityBonusTests(TestCase):
 
         from world.companions.models import StablesDetails
         from world.companions.services import stables_capacity_bonus_for_sheet
-        from world.locations.constants import HolderType, LocationParentType
+        from world.locations.constants import HolderType, LocationParentType, LocationRole
         from world.locations.models import LocationTenancy
         from world.room_features.constants import (
             RoomFeatureInstallMechanism,
@@ -192,6 +192,7 @@ class StablesCapacityBonusTests(TestCase):
         )
         # Grant the sheet's persona tenancy in the room.
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=room_profile,
             tenant_type=HolderType.PERSONA,
@@ -258,7 +259,7 @@ class CompanionCapacityWithStablesTests(TestCase):
         from evennia import create_object
 
         from world.companions.models import StablesDetails
-        from world.locations.constants import HolderType, LocationParentType
+        from world.locations.constants import HolderType, LocationParentType, LocationRole
         from world.locations.models import LocationTenancy
         from world.room_features.constants import (
             RoomFeatureInstallMechanism,
@@ -301,6 +302,7 @@ class CompanionCapacityWithStablesTests(TestCase):
             capacity_bonus_per_level=3,
         )
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=room_profile,
             tenant_type=HolderType.PERSONA,

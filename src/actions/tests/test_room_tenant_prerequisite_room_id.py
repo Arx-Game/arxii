@@ -9,7 +9,7 @@ from django.test import TestCase, tag
 from actions.prerequisites import IsRoomTenantPrerequisite
 from actions.tests.room_test_helpers import character_in_room
 from evennia_extensions.factories import RoomProfileFactory
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership, LocationTenancy
 
 
@@ -51,6 +51,7 @@ class RoomIdAnchoringTests(TestCase):
     def test_tenant_standing_via_room_id(self) -> None:
         sheet, character = character_in_room(self.elsewhere_profile)
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.target_profile,
             tenant_type=HolderType.PERSONA,

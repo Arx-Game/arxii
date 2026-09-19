@@ -9,7 +9,7 @@ from actions.registry import get_action
 from actions.tests.room_test_helpers import character_in_room
 from evennia_extensions.factories import RoomProfileFactory
 from evennia_extensions.models import ObjectDisplayData
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership, LocationTenancy
 
 
@@ -22,6 +22,7 @@ class RoomEditActionTenantTests(TestCase):
     def test_tenant_can_edit_name_and_description(self) -> None:
         sheet, character = character_in_room(self.profile)
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -61,6 +62,7 @@ class RoomEditActionTenantTests(TestCase):
         elsewhere = RoomProfileFactory()
         sheet, character = character_in_room(elsewhere)
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
