@@ -3255,8 +3255,9 @@ class TestEstateKeyring(TestCase):
         assert self._keyring(self.stranger) == []
 
     def test_an_expired_grant_leaves_the_keyring(self) -> None:
-        LocationTenancy.objects.filter(tenant_persona=self.persona).update(
-            ends_at=timezone.now() - timedelta(days=1)
+        LocationTenancy.objects.filter(tenant_persona=self.persona).update_with_reason(
+            reason="test fixture: simulate stale row",
+            ends_at=timezone.now() - timedelta(days=1),
         )
         places = {row["place"] for row in self._keyring(self.player)}
         assert "The Pawnshop Back Room" not in places
@@ -3264,7 +3265,10 @@ class TestEstateKeyring(TestCase):
         assert "Thornmere Keep" in places
 
     def test_leaving_the_house_drops_the_keep_from_the_keyring(self) -> None:
-        OrganizationMembership.objects.filter(persona=self.persona).update(left_at=timezone.now())
+        OrganizationMembership.objects.filter(persona=self.persona).update_with_reason(
+            reason="test fixture: simulate stale row",
+            left_at=timezone.now(),
+        )
         places = {row["place"] for row in self._keyring(self.player)}
         assert "Thornmere Keep" not in places
         assert "The Pawnshop Back Room" in places
