@@ -74,9 +74,12 @@ def check_guard_detection(character: ObjectDB, room: ObjectDB) -> None:
         return
 
     # Authorized entrants don't trigger detection.
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
 
-    if is_owner(persona, room) or is_tenant(persona, room):
+    # GUEST (#3902): a guard who challenges the friend the owner gave a key to is a
+    # guard doing the wrong job.
+    if has_standing(persona, room, at_least=LocationRole.GUEST):
         return
 
     # #3288: detection branches on the sneak stance. A loud (non-sneaking)

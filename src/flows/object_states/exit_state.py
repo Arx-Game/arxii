@@ -34,14 +34,17 @@ class ExitState(BaseState):
         persona resolution, the ``is_owner(...) or is_tenant(...)`` check) is
         deduplicated. An actor with no ``sheet_data`` counts as lacking standing.
         """
-        from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+        from world.locations.constants import LocationRole  # noqa: PLC0415
+        from world.locations.services import has_standing  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         sheet = actor.obj.character_sheet
         if sheet is None:
             return True
         persona = active_persona_for_sheet(sheet)
-        return not (is_owner(persona, room) or is_tenant(persona, room))
+        # GUEST (#3902): walking through a door you hold a key to is the whole of what
+        # a key is for. Any active grant clears this; an owner clears it too.
+        return not has_standing(persona, room, at_least=LocationRole.GUEST)
 
     def _bars_block_actor(self, profile: "ExitProfile", actor: "BaseState") -> bool:
         """True when an active ``ExitBarsDetails`` gate blocks ``actor``.

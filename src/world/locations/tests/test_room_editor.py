@@ -12,7 +12,7 @@ from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import RoomEditError, set_room_display_data
 from world.scenes.constants import ScenePrivacyMode
@@ -68,6 +68,7 @@ class SetRoomDisplayDataTests(TestCase):
     def test_tenant_with_no_ownership_can_set_name_description_and_privacy(self) -> None:
         tenant = PersonaFactory()
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,

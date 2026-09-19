@@ -9,7 +9,6 @@ from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
     _persona_organization_ids,
     is_owner,
-    is_tenant,
     ownership_for,
     tenancies_for,
 )
@@ -18,6 +17,18 @@ from world.societies.factories import (
     OrganizationFactory,
     OrganizationMembershipFactory,
 )
+
+
+def _holds_a_grant(persona, room) -> bool:
+    """What ``is_tenant`` used to mean: holds any active grant here, of any rung.
+
+    #3902 removed ``is_tenant`` rather than redefining it, because after the ladder
+    landed the name would have answered a question nobody was asking -- "holds
+    something, we are not saying what". Call sites now name their rung through
+    ``has_standing``. These tests are about the CASCADE and the org-membership bridge,
+    not about rungs, so they keep the old any-grant predicate spelled out locally.
+    """
+    return tenancies_for(persona, room).exists()
 
 
 class PersonaOrganizationIdsTests(TestCase):
@@ -247,7 +258,7 @@ class TenanciesForTests(TestCase):
             tenant_persona=tenant,
         )
         self.assertEqual(list(tenancies_for(tenant, self.room)), [row])
-        self.assertTrue(is_tenant(tenant, self.room))
+        self.assertTrue(_holds_a_grant(tenant, self.room))
 
     def test_unrelated_persona_returns_empty(self) -> None:
         tenant = PersonaFactory()
@@ -259,7 +270,7 @@ class TenanciesForTests(TestCase):
             tenant_persona=tenant,
         )
         self.assertEqual(list(tenancies_for(stranger, self.room)), [])
-        self.assertFalse(is_tenant(stranger, self.room))
+        self.assertFalse(_holds_a_grant(stranger, self.room))
 
     def test_org_member_has_tenant_standing(self) -> None:
         org = OrganizationFactory()
@@ -272,7 +283,7 @@ class TenanciesForTests(TestCase):
             tenant_organization=org,
         )
         self.assertEqual(list(tenancies_for(member, self.room)), [row])
-        self.assertTrue(is_tenant(member, self.room))
+        self.assertTrue(_holds_a_grant(member, self.room))
 
     def test_org_non_member_returns_empty(self) -> None:
         org = OrganizationFactory()
@@ -284,7 +295,7 @@ class TenanciesForTests(TestCase):
             tenant_organization=org,
         )
         self.assertEqual(list(tenancies_for(non_member, self.room)), [])
-        self.assertFalse(is_tenant(non_member, self.room))
+        self.assertFalse(_holds_a_grant(non_member, self.room))
 
     def test_multiple_tenancies_partial_match(self) -> None:
         """Room has 1 building-org tenancy + 2 room-level persona tenancies.
@@ -343,8 +354,8 @@ class TenanciesForTests(TestCase):
             tenant_type=HolderType.PERSONA,
             tenant_persona=primary,
         )
-        self.assertTrue(is_tenant(primary, self.room))
-        self.assertFalse(is_tenant(alt_persona, self.room))
+        self.assertTrue(_holds_a_grant(primary, self.room))
+        self.assertFalse(_holds_a_grant(alt_persona, self.room))
 
 
 class TenanciesForQueryBudgetTests(TestCase):

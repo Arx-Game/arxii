@@ -121,10 +121,16 @@ def _anchor_reachable(anchor: PortalAnchor, persona: Persona | None) -> bool:
     if persona is None:
         return False
 
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
 
     room = anchor.room_profile.objectdb
-    return is_owner(persona, room) or is_tenant(persona, room)
+    # GUEST (#3902). The function already has a public escape hatch above
+    # (is_network_open), so this branch is exactly "people with standing here" -- and a
+    # key that admits you at the front door but not by the door the household actually
+    # uses is a strange key. Recorded as the least certain of the passage calls in
+    # #3902's spec; moving it to TENANT is a one-word change if Apostate rules so.
+    return has_standing(persona, room, at_least=LocationRole.GUEST)
 
 
 def travel_anchor_kinds_for(character: ObjectDB) -> list[PortalAnchorKind]:
@@ -323,10 +329,12 @@ def install_portal_anchor(
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
     from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
 
-    if not (is_owner(persona, room) or is_tenant(persona, room)):
-        msg = f"persona={persona.pk} has no owner/tenant standing at room={room.pk}."
+    # TENANT (#3902): installing an anchor is furnishing the place, not visiting it.
+    if not has_standing(persona, room, at_least=LocationRole.TENANT):
+        msg = f"persona={persona.pk} has no tenant standing at room={room.pk}."
         raise PortalAnchorStandingRequired(msg)
 
     room_profile = _room_profile_for(room)

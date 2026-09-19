@@ -34,7 +34,7 @@ class ServantPrepareActionTests(TestCase):
     def test_meal_action_fails_cleanly_with_no_servant(self):
         with (
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
         ):
             result = get_action("servant_prepare_meal").run(self.actor)
         self.assertFalse(result.success)
@@ -42,7 +42,7 @@ class ServantPrepareActionTests(TestCase):
     def test_bath_action_fails_cleanly_with_no_servant(self):
         with (
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
         ):
             result = get_action("servant_prepare_bath").run(self.actor)
         self.assertFalse(result.success)

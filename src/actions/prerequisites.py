@@ -526,7 +526,8 @@ class IsRoomTenantPrerequisite(Prerequisite):
     ) -> tuple[bool, str]:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+        from world.locations.constants import LocationRole  # noqa: PLC0415
+        from world.locations.services import has_standing  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         room, error = _resolve_room_from_kwarg_or_location(actor, context)
@@ -537,7 +538,9 @@ class IsRoomTenantPrerequisite(Prerequisite):
         except (AttributeError, ObjectDoesNotExist):
             return False, ONLY_CHARACTERS_MESSAGE
         persona = active_persona_for_sheet(sheet)
-        if is_owner(persona, room) or is_tenant(persona, room):
+        # TENANT (#3902): declaring a place your home, tagging its resonance and
+        # editing it are things a resident does. A guest key confers none of them.
+        if has_standing(persona, room, at_least=LocationRole.TENANT):
             return True, ""
         return False, "You have no standing in this room."
 
@@ -593,7 +596,8 @@ class IsExitRoomOwnerPrerequisite(Prerequisite):
     ) -> tuple[bool, str]:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+        from world.locations.constants import LocationRole  # noqa: PLC0415
+        from world.locations.services import has_standing  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         exit_obj = (context or {}).get("kwargs", {}).get("exit")
@@ -607,7 +611,9 @@ class IsExitRoomOwnerPrerequisite(Prerequisite):
         except (AttributeError, ObjectDoesNotExist):
             return False, ONLY_CHARACTERS_MESSAGE
         persona = active_persona_for_sheet(sheet)
-        if is_owner(persona, room) or is_tenant(persona, room):
+        # TENANT (#3902): locking and unlocking a door is access control, which the
+        # ruling gives to a tenant and withholds from a guest.
+        if has_standing(persona, room, at_least=LocationRole.TENANT):
             return True, ""
         return False, "You don't have standing in that room."
 

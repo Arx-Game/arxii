@@ -160,7 +160,7 @@ class CanServantFetchTests(TestCase):
         """Owner + servant + item in another room → True."""
         with (
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,
@@ -176,7 +176,7 @@ class CanServantFetchTests(TestCase):
         """Owner but no servant → False."""
         with (
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=None,
@@ -195,7 +195,7 @@ class CanServantFetchTests(TestCase):
         self.item_instance.game_object.save()
         with (
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,
@@ -211,7 +211,7 @@ class CanServantFetchTests(TestCase):
         """Actor without owner/tenant standing → False."""
         with (
             patch("world.locations.services.is_owner", return_value=False),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,
@@ -228,7 +228,7 @@ class CanServantFetchTests(TestCase):
         no_game_obj = ItemInstanceFactory()
         with (
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,

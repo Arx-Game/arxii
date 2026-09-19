@@ -957,13 +957,17 @@ def _grant_cg_residence_tenancy(
     if starting_area is None or not starting_area.grants_residence_tenancy:
         return
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
     from world.locations.services import grant_tenancy  # noqa: PLC0415
 
     try:
         room_profile = starting_room.room_profile
     except RoomProfile.DoesNotExist:
         return
+    # A starting residence is a TENANT grant, not a key: the character lives there.
+    # granted_by stays None because the world granted it, not a persona (#3902).
     grant_tenancy(
+        kind=LocationRole.TENANT,
         room_profile=room_profile,
         tenant_persona=primary_persona,
         notes="Academy enrollment",

@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from evennia_extensions.models import ExitProfile, RoomProfile
+from world.locations.constants import LocationRole
 from world.room_features.constants import (
     EXIT_BARS_MAX_LEVEL,
     ROOM_ALARM_MAX_LEVEL,
@@ -392,7 +393,9 @@ class ReactToUnauthorizedEntryTests(TestCase):
         room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
         tenant_sheet = CharacterSheetFactory()
         tenant_persona = PersonaFactory(character_sheet=tenant_sheet)
-        grant_tenancy(room_profile=room_profile, tenant_persona=tenant_persona)
+        grant_tenancy(
+            kind=LocationRole.TENANT, room_profile=room_profile, tenant_persona=tenant_persona
+        )
         RoomAlarmDetails.objects.create(room_profile=room_profile)
 
         intruder = ObjectDBFactory(
