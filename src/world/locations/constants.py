@@ -297,3 +297,44 @@ class HolderType(models.TextChoices):
 
     PERSONA = "persona", "Persona"
     ORGANIZATION = "organization", "Organization"
+
+
+class LocationRole(models.TextChoices):
+    """Which rung of the access ladder a ``LocationTenancy`` grant confers (#3902).
+
+    A ladder, not a set of flags: every rung includes everything below it. Apostate's
+    ruling, in his words —
+
+    - GUEST: "granted access by any of the three above but has no access aside from
+      visitation". A key to the front door and nothing else.
+    - TENANT: "someone with temporary ownership, can change a house, grant access".
+      Everything a resident does, and may hand out guest keys.
+    - TRUSTEE: "someone trusted by the owner that can grant access and tenancy to
+      someone in a home, control any home state". Adds exactly two powers over TENANT:
+      granting *tenancy* (as opposed to *access*), and structural building work.
+
+    OWNER is deliberately NOT a member. It lives on ``LocationOwnership`` — the deed is
+    a different row with a different lifecycle (one active holder per location, cascade
+    most-specific-wins) and folding it in here would invite a second source of truth for
+    who owns a place. ``LOCATION_ROLE_RANK`` and ``role_at_least`` in the service layer
+    carry the comparison across both models.
+    """
+
+    GUEST = "guest", "Guest"
+    TENANT = "tenant", "Tenant"
+    TRUSTEE = "trustee", "Trustee"
+
+
+# Rung order for the access ladder. Higher = more authority. Owner is not a
+# ``LocationRole`` member (it lives on ``LocationOwnership``) but it is the top of the
+# ladder, so it gets a rank here for the comparison to be total.
+#
+# Keep this in one place. The lesson is #3923: a resolver that carried its own
+# hand-written copy of an enumerated set granted MORE access than intended when the set
+# grew, and failed open, so nothing raised and no test went red.
+OWNER_RANK = 3
+LOCATION_ROLE_RANK: dict[str, int] = {
+    LocationRole.GUEST: 0,
+    LocationRole.TENANT: 1,
+    LocationRole.TRUSTEE: 2,
+}

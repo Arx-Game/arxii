@@ -142,18 +142,20 @@ class LocationOwnershipAdmin(admin.ModelAdmin):
 class LocationTenancyAdmin(admin.ModelAdmin):
     list_display = (
         "__str__",
+        "kind",
         "parent_type",
         "tenant_type",
         "started_at",
         "ends_at",
     )
-    list_filter = ("parent_type", "tenant_type")
+    list_filter = ("kind", "parent_type", "tenant_type")
     search_fields = ("notes",)
     autocomplete_fields = (
         "area",
         "room_profile",
         "tenant_persona",
         "tenant_organization",
+        "granted_by",
     )
     fieldsets = (
         (
@@ -171,6 +173,20 @@ class LocationTenancyAdmin(admin.ModelAdmin):
             "Who",
             {
                 "fields": ("tenant_type", "tenant_persona", "tenant_organization"),
+            },
+        ),
+        (
+            "What it grants",
+            {
+                "fields": ("kind", "granted_by"),
+                "description": (
+                    "Guest: visitation only — they may come and go, and guards and "
+                    "wards let them past. Tenant: also lives here, uses the servants, "
+                    "furnishes the place and may hand out guest keys. Trustee: also "
+                    "structural building work and granting tenancy. The deed itself "
+                    "is a LocationOwnership row, not a rung here. Leave granted_by "
+                    "empty for a staff or system grant."
+                ),
             },
         ),
         (
