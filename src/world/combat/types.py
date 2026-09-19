@@ -470,3 +470,5 @@ class AftermathDigest:
     beat_visible_to_player: bool
     peril_round_active: bool
     companions_lost: list[str]
+    # Safe causal labels keyed by deed id. Source ids and check quality remain server-only.
+    legend_recognitions: dict[int, list[dict[str, str]]] = field(default_factory=dict)

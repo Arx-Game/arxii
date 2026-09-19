@@ -40210,10 +40210,30 @@ components:
           type: string
         base_value:
           type: integer
+        recognition:
+          type: array
+          items:
+            $ref: '#/components/schemas/AftermathRecognition'
       required:
       - base_value
       - description
+      - recognition
       - title
+    AftermathRecognition:
+      type: object
+      description: Safe causal label shape; source ids and check quality are never
+        exposed.
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - key
+      - label
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.

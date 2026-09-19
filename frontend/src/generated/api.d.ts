@@ -24641,10 +24641,16 @@ export interface components {
       peril_round_active: boolean;
     };
     /** @description Schema-only shape of one legend line in an aftermath digest (#3551). */
+    AftermathRecognition: {
+      key: string;
+      label: string;
+      description: string;
+    };
     AftermathLegend: {
       title: string;
       description: string;
       base_value: number;
+      recognition: components['schemas']['AftermathRecognition'][];
     };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
