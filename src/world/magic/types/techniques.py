@@ -97,3 +97,8 @@ class TechniqueUseResult:
     was_audere: bool = False  # True if the character was in Audere during the cast
     resonance_involvements: tuple[ResonanceInvolvement, ...] = ()
     corruption_summary: object | None = None  # Placeholder for Task 3 CorruptionAccrualSummary
+    # Strain audit is carried by the inner result so every caller uses one source
+    # of truth, including non-lethal clamping and clash contributions.
+    declared_strain_commitment: int = 0
+    effective_strain_commitment: int = 0
+    strain_power_bonus: int = 0

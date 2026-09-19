@@ -1126,6 +1126,27 @@ def request_technique_cast(  # noqa: PLR0913
             technique that requires consent or is hostile (deferred paths).
     """
     from actions.constants import ActionTargetType  # noqa: PLC0415
+    from world.magic.models import CharacterAnima  # noqa: PLC0415
+
+    if isinstance(strain_commitment, bool) or not isinstance(strain_commitment, int):
+        raise ValidationError({"strain_commitment": "Strain commitment must be an integer."})
+    if strain_commitment < 0:
+        raise ValidationError({"strain_commitment": "Strain commitment cannot be negative."})
+    anima_current = (
+        CharacterAnima.objects.filter(character=initiator_persona.character_sheet)
+        .values_list("current", flat=True)
+        .first()
+        or 0
+    )
+    if strain_commitment > anima_current:
+        raise ValidationError(
+            {
+                "strain_commitment": (
+                    f"Strain commitment ({strain_commitment}) exceeds available "
+                    f"anima ({anima_current})."
+                )
+            }
+        )
 
     knows_technique = CharacterTechnique.objects.filter(
         character_id=initiator_persona.character_sheet_id,

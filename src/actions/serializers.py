@@ -133,6 +133,10 @@ class StrainAvailabilitySerializer(serializers.Serializer):
 
     cap = serializers.IntegerField(read_only=True)
     default = serializers.IntegerField(read_only=True)
+    base_effective_cost = serializers.IntegerField(read_only=True)
+    conversion_base = serializers.IntegerField(read_only=True)
+    diminishing_step = serializers.IntegerField(read_only=True)
+    diminishing_floor = serializers.IntegerField(read_only=True)
 
 
 class PlayerActionSerializer(serializers.Serializer):

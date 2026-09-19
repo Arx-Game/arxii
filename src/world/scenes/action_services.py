@@ -359,6 +359,32 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
         raise ValidationError(msg)
 
 
+def _validate_direct_strain_commitment(initiator_persona: Persona, strain_commitment: int) -> None:
+    """Validate direct-service strain declarations, not only REST payloads."""
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    if isinstance(strain_commitment, bool) or not isinstance(strain_commitment, int):
+        raise ValidationError({"strain_commitment": "Strain commitment must be an integer."})
+    if strain_commitment < 0:
+        raise ValidationError({"strain_commitment": "Strain commitment cannot be negative."})
+    from world.magic.models import CharacterAnima  # noqa: PLC0415
+
+    current = (
+        CharacterAnima.objects.filter(character=initiator_persona.character_sheet)
+        .values_list("current", flat=True)
+        .first()
+        or 0
+    )
+    if strain_commitment > current:
+        raise ValidationError(
+            {
+                "strain_commitment": (
+                    f"Strain commitment ({strain_commitment}) exceeds available anima ({current})."
+                )
+            }
+        )
+
+
 def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     *,
     scene: Scene,
@@ -454,6 +480,8 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
             target's bucket holds none of (#2540 slice 3 honest unavailability —
             NOT a validation error; no row is created either way).
     """
+    _validate_direct_strain_commitment(initiator_persona, strain_commitment)
+
     _validate_request_preconditions(
         initiator_persona=initiator_persona,
         target_persona=target_persona,
@@ -1427,6 +1455,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         pull_target=context.target,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
+        strain_power_enabled=False,
     )
 
     resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]

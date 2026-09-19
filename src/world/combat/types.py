@@ -252,6 +252,24 @@ class CombatTechniqueResult:
     fury_committed: FuryTier | None = None
     removed_conditions: list[RemovedConditionResult] = field(default_factory=list)
 
+    @property
+    def declared_strain_commitment(self) -> int:
+        """Return the requested strain from the shared magic result."""
+        value = self.technique_use_result.declared_strain_commitment
+        return value if isinstance(value, int) else 0
+
+    @property
+    def effective_strain_commitment(self) -> int:
+        """Return the amount actually paid after a non-lethal clamp."""
+        value = self.technique_use_result.effective_strain_commitment
+        return value if isinstance(value, int) else 0
+
+    @property
+    def strain_power_bonus(self) -> int:
+        """Return the one-time authored power bonus from strain."""
+        value = self.technique_use_result.strain_power_bonus
+        return value if isinstance(value, int) else 0
+
 
 # ---------------------------------------------------------------------------
 # Clash pipeline types (Task 2.3)

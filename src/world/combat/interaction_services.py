@@ -95,6 +95,8 @@ def create_action_interaction(  # noqa: PLR0913 - one arg per resolved-action fi
     round_number: int,
     summary_label: str,
     strain_committed: int = 0,
+    strain_effective: int = 0,
+    strain_power_bonus: int = 0,
     fury_committed: FuryTier | None = None,
     target_personas: list[Persona] | None = None,
 ) -> Interaction | None:
@@ -148,6 +150,8 @@ def create_action_interaction(  # noqa: PLR0913 - one arg per resolved-action fi
         scene=scene,
         summary_label=summary_label,
         strain_committed=strain_committed,
+        strain_effective=strain_effective,
+        strain_power_bonus=strain_power_bonus,
         fury_committed=fury_committed,
         target_personas=target_personas,
     )

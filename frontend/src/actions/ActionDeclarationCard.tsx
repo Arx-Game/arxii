@@ -86,11 +86,30 @@ export interface ActionDeclarationCardProps {
    * ActionPanel carries its own slider; passive slots never overcommit).
    */
   strainMax?: number;
+  /** Server-derived ordinary-cast preview. Omitted for scene actions. */
+  strainPreview?: PlayerAction['strain'];
 }
 
 // ---------------------------------------------------------------------------
 // Effort pills sub-component
 // ---------------------------------------------------------------------------
+
+function strainPowerBonus(
+  preview: NonNullable<PlayerAction['strain']>,
+  commitment: number
+): number {
+  let remaining = Math.max(commitment, 0);
+  let rate = preview.conversion_base;
+  let bonus = 0;
+  const step = Math.max(preview.diminishing_step, 1);
+  while (remaining > 0) {
+    const take = Math.min(remaining, step);
+    bonus += take * rate;
+    remaining -= take;
+    rate = Math.max(rate - 1, preview.diminishing_floor);
+  }
+  return bonus;
+}
 
 const EFFORT_LABELS: Record<EffortLevel, string> = {
   VERY_LOW: 'Very Low',
@@ -642,6 +661,7 @@ export function ActionDeclarationCard({
   castPosition,
   onCastPositionChange,
   strainMax,
+  strainPreview,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
   const { data, isLoading } = useAvailableActionsQuery(characterId);
@@ -855,6 +875,11 @@ export function ActionDeclarationCard({
               <span className="font-mono text-xs text-foreground">
                 {actionContext.strainCommitment}
               </span>
+              {strainPreview && (
+                <span className="text-[10px] text-muted-foreground">
+                  +{strainPowerBonus(strainPreview, actionContext.strainCommitment)} power
+                </span>
+              )}
             </div>
             <input
               type="range"
@@ -869,6 +894,22 @@ export function ActionDeclarationCard({
               className="w-full accent-primary"
               aria-label="Strain commitment"
             />
+            {strainPreview && (
+              <div className="space-y-0.5 text-[10px] text-muted-foreground">
+                <div>
+                  {actionContext.strainCommitment === 0
+                    ? 'No push: baseline power'
+                    : `Projected cost: ${strainPreview.base_effective_cost + actionContext.strainCommitment} anima (base ${strainPreview.base_effective_cost})`}
+                </div>
+                {strainPreview.base_effective_cost + actionContext.strainCommitment >
+                  strainPreview.cap && (
+                  <div className="text-amber-500">
+                    This push empties anima and can add Soulfray and fatigue-collapse risk when
+                    resolved.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Section>

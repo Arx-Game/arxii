@@ -1128,6 +1128,14 @@ class Interaction(SharedMemoryModel):
             "committed for this action. Populated for both clash and non-clash."
         ),
     )
+    strain_effective = models.PositiveIntegerField(
+        default=0,
+        help_text="Strain actually paid after non-lethal resource clamping.",
+    )
+    strain_power_bonus = models.PositiveIntegerField(
+        default=0,
+        help_text="One-time power bonus derived from effective strain.",
+    )
     fury_committed = models.ForeignKey(
         "arxii.FuryTier",
         null=True,

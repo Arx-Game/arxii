@@ -35580,6 +35580,8 @@ export interface components {
       effects: components['schemas']['EffectRow'][];
       power_ledger?: components['schemas']['PowerLedger'] | null;
       strain_committed?: number | null;
+      strain_effective?: number | null;
+      strain_power_bonus?: number | null;
       power?: number | null;
       progress_delta?: number | null;
     };
@@ -45519,6 +45521,10 @@ export interface components {
     StrainAvailability: {
       readonly cap: number;
       readonly default: number;
+      readonly base_effective_cost: number;
+      readonly conversion_base: number;
+      readonly diminishing_step: number;
+      readonly diminishing_floor: number;
     };
     /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */
     Style: {
