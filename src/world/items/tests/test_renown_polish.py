@@ -28,10 +28,11 @@ def _make_primary_persona():
 
 def _home_in(room, persona) -> None:
     """Give ``persona`` a primary-home tenancy in ``room`` (#670 home-anchored prestige)."""
-    from world.locations.constants import HolderType, LocationParentType
+    from world.locations.constants import HolderType, LocationParentType, LocationRole
     from world.locations.models import LocationTenancy
 
     LocationTenancy.objects.create(
+        kind=LocationRole.TENANT,
         parent_type=LocationParentType.ROOM,
         room_profile=room,
         tenant_type=HolderType.PERSONA,

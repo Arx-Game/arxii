@@ -4,7 +4,7 @@ from django.utils import timezone
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
     _persona_organization_ids,
@@ -252,6 +252,7 @@ class TenanciesForTests(TestCase):
     def test_direct_persona_tenant_matches(self) -> None:
         tenant = PersonaFactory()
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -264,6 +265,7 @@ class TenanciesForTests(TestCase):
         tenant = PersonaFactory()
         stranger = PersonaFactory()
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -277,6 +279,7 @@ class TenanciesForTests(TestCase):
         member = PersonaFactory()
         OrganizationMembershipFactory(persona=member, organization=org)
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=self.building,
             tenant_type=HolderType.ORGANIZATION,
@@ -289,6 +292,7 @@ class TenanciesForTests(TestCase):
         org = OrganizationFactory()
         non_member = PersonaFactory()
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=self.building,
             tenant_type=HolderType.ORGANIZATION,
@@ -308,18 +312,21 @@ class TenanciesForTests(TestCase):
         room_tenant_b = PersonaFactory()
 
         org_row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=self.building,
             tenant_type=HolderType.ORGANIZATION,
             tenant_organization=org,
         )
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
             tenant_persona=room_tenant_a,
         )
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -349,6 +356,7 @@ class TenanciesForTests(TestCase):
         primary = sheet.primary_persona
         alt_persona = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -364,6 +372,7 @@ class TenanciesForQueryBudgetTests(TestCase):
         profile = RoomProfileFactory(area=building)
         persona = PersonaFactory()
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=profile,
             tenant_type=HolderType.PERSONA,

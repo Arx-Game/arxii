@@ -11,7 +11,7 @@ from world.areas.factories import AreaFactory
 import world.areas.models as areas_models
 from world.character_sheets.factories import CharacterSheetFactory
 from world.estates.services import resolve_escheat_org, resolve_intestate_heir
-from world.locations.constants import LocationParentType
+from world.locations.constants import LocationParentType, LocationRole
 from world.locations.models import HolderType, LocationTenancy
 from world.roster.constants import MembershipBasis
 from world.roster.factories import (
@@ -164,6 +164,7 @@ class EscheatTests(TestCase):
 
         room = RoomProfileFactory(area=domain_area)
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=room,
             tenant_type=HolderType.PERSONA,
