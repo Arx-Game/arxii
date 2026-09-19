@@ -1,6 +1,6 @@
 # Review evidence
 
-- Reviewed revision: `1e15f9c660dc76a3e608a46bb7735842b5090f25`
+- Reviewed revision: `2969e0984e647044dc517d30d15cdf4b42c4a121`
 - Reviewer: local acceptance test run (7/7 SQLite-fast acceptance tests)
 - Reviewer verdict: PASS
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
