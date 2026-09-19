@@ -301,27 +301,71 @@ substrate. Specific permission checks (`can_decorate`, `can_evict`,
 naturally belong.
 
 ```python
+from world.locations.constants import LocationRole
 from world.locations.services import (
-    ownership_for,
+    has_standing,
     is_owner,
+    ownership_for,
+    role_at,
     tenancies_for,
-    is_tenant,
 )
 
 # Returns the LocationOwnership row, or None
 row = ownership_for(persona, room)
 
-# Same but boolean
+# Same but boolean. The DEED only -- still the right call for deed operations.
 if is_owner(persona, room):
     ...
 
-# QuerySet of currently-active tenancies that give this persona standing
+# QuerySet of currently-active grants that give this persona standing, any rung
 for tenancy in tenancies_for(persona, room):
     ...
 
-if is_tenant(persona, room):
+# THE GATE (#3902). Name the rung you mean.
+if has_standing(persona, room, at_least=LocationRole.TENANT):
     ...
+
+# The highest rank held, or None. OWNER_RANK sits above every LocationRole.
+rank = role_at(persona, room)
 ```
+
+**`is_tenant` is gone (#3902).** It used to mean "holds any tenancy row", and the
+moment grants gained a rung that became "holds something, we are not saying what" --
+so every call site that read `is_owner(p, r) or is_tenant(p, r)` silently started
+meaning "guest included". It was removed rather than redefined, and the eleven sites
+that used it now each name a rung. If you want the old any-grant predicate, it is
+`tenancies_for(persona, room).exists()`.
+
+### The access ladder (#3902)
+
+A grant carries a **rung** (`LocationTenancy.kind`, a `LocationRole`), and the rungs
+are cumulative -- each includes everything below it. Apostate's ruling:
+
+| Rung | What it clears |
+| --- | --- |
+| **Guest** | Visitation only: locked exits, guards, ward/alarms, reaching a portal anchor. |
+| **Tenant** | Also: the servants, room features, installing an anchor, setting a primary home, tagging resonance, editing the room, locking doors, and handing out GUEST keys. |
+| **Trustee** | Also: structural building work (`world.buildings` renovation/upgrade/extension/decoration/activation) and granting TENANT or TRUSTEE. |
+| **Owner** | Everything, plus the deed itself and revoking a trustee. Not a `LocationRole` member -- it is a `LocationOwnership` row. |
+
+**Two axes, not one.** The ladder is AUTHORITY. `is_primary_home` is RESIDENCE, and
+they are independent: a trustee may hold real authority over a keep they have never
+slept in. Stables capacity, the sheet's Tenanted Rooms card and prestige want
+residence, not a rung. (Today `stables_capacity_bonus_for_sheet` uses TENANT-or-above
+as the best available proxy and says so in its docstring -- there is no
+multi-residence fact in the model, and inventing one is its own design question.)
+
+**Granting is authorized here, not deferred to callers.** `grant_tenancy` requires
+`kind`, takes `granted_by`, and enforces the ladder when a persona is granting:
+GUEST needs Tenant-or-above, TENANT/TRUSTEE need Trustee-or-above. `granted_by=None`
+is the system path (character generation, admin, seeds) and is explicit rather than
+implied. `can_grant(persona, room, kind)` is the comparison; `end_room_tenancy`
+reuses it for revocation, with revoking a TRUSTEE reserved to the owner.
+
+**The model default is GUEST**, the lowest rung -- a writer who forgets the kwarg
+fails closed. Existing rows were filled with TENANT by migration 0144
+(`preserve_default=False`), because that is what every row written before the field
+existed meant.
 
 ### Standing rules
 
@@ -362,7 +406,7 @@ are a separate concern.
 - `is_owner` / `ownership_for` with PERSONA-holder match: **2 queries**
   (the org_ids fetch is short-circuited via early return)
 - `is_owner` / `ownership_for` with ORGANIZATION-holder match: **3 queries**
-- `is_tenant` / `tenancies_for`: **3 queries** (org_ids + closure walk
+- `has_standing` / `tenancies_for`: **3 queries** (org_ids + closure walk
   + tenancy fetch)
 
 Budgets are locked via `assertNumQueries` tests.
@@ -528,7 +572,7 @@ over `RoomProfile` / `ObjectDisplayData`.
 the #1287 scene-privacy re-check always runs, and `persona` may be `None` only in
 bypass mode. It:
 
-- re-checks `is_owner(persona, room) or is_tenant(persona, room)` as a hard
+- re-checks `has_standing(persona, room, at_least=LocationRole.TENANT)` as a hard
   boundary (raises `RoomEditError`, which carries a player-facing
   `user_message` — never surface `str(exc)`);
 - refuses to flip `is_public`→True while a non-public scene is live in the room
@@ -544,10 +588,12 @@ builder verbs), the web action-dispatch endpoint, and the React `RoomEditorPanel
 
 ## Player tenancy seam + primary home (#670)
 
-- `assign_room_tenant(*, persona, room, tenant_persona, ends_at=None, notes="")` —
-  owner-gated wrapper over `grant_tenancy` (raises `RoomEditError`).
-- `end_room_tenancy(*, persona, tenancy)` — the room's owner (eviction) or the
-  tenant (departure).
+- `assign_room_tenant(*, persona, room, tenant_persona, kind=LocationRole.TENANT, ends_at=None, notes="")` —
+  rung-gated wrapper over `grant_tenancy` (raises `TenancyGrantNotPermitted`, a `RoomEditError`
+  subclass). A TENANT may hand out a GUEST key; a TRUSTEE may hand out a tenancy.
+- `end_room_tenancy(*, persona, tenancy)` — the holder may always end their own
+  grant (departure); otherwise whoever could have GRANTED that rung may revoke it,
+  except a TRUSTEE grant, which only the owner may end.
 - `set_primary_home(*, persona, room, notes="")` — flags the caller's own active room
   tenancy as `is_primary_home` (one active per persona; partial unique
   constraint). Also syncs the character-level residence (`set_residence`, #1514
@@ -557,7 +603,7 @@ builder verbs), the web action-dispatch endpoint, and the React `RoomEditorPanel
   daily resonance-trickle gate, see `world/magic/CLAUDE.md`) on every deliberate
   declaration, and accepts org-derived owner/tenant standing, not only a direct persona
   tenancy — when the persona has no direct `LocationTenancy` row on the room but has
-  owner or tenant standing (composed via org membership by `is_owner`/`is_tenant`), a
+  TENANT-or-above standing (composed via org membership by `has_standing`), a
   personal tenancy is minted first via `grant_tenancy` (`notes` forwarded to it, e.g.
   authoring "may be charged rent") — the only way "one residence per character" stays
   meaningful when access comes from a shared family/org/Academy grant. `end_tenancy`

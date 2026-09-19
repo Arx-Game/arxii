@@ -56,7 +56,7 @@ from world.buildings.upkeep_services import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import get_or_create_purse, transfer
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership
 
 
@@ -448,6 +448,7 @@ class PrestigeModulationTests(TestCase):
 
         home = RoomProfileFactory(area=building.area)
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=home,
             tenant_type=HolderType.PERSONA,

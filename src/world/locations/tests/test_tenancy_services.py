@@ -6,7 +6,7 @@ from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
     RoomEditError,
@@ -130,6 +130,7 @@ class SetPrimaryHomeOrgStandingTests(TenancyServiceBase):
         super().setUpTestData()
         cls.org = OrganizationFactory()
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=cls.room,
             tenant_type=HolderType.ORGANIZATION,

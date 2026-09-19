@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.factories import AreaFactory
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
     _validate_holder_kwargs,
@@ -135,7 +135,7 @@ class GrantTenancyTests(TestCase):
     def test_persona_tenant_on_room(self) -> None:
         room = RoomProfileFactory()
         persona = PersonaFactory()
-        row = grant_tenancy(room_profile=room, tenant_persona=persona)
+        row = grant_tenancy(kind=LocationRole.TENANT, room_profile=room, tenant_persona=persona)
         self.assertEqual(row.room_profile, room)
         self.assertEqual(row.tenant_persona, persona)
         self.assertEqual(row.parent_type, LocationParentType.ROOM)
@@ -145,7 +145,7 @@ class GrantTenancyTests(TestCase):
     def test_organization_tenant_on_area(self) -> None:
         area = AreaFactory()
         org = OrganizationFactory()
-        row = grant_tenancy(area=area, tenant_organization=org)
+        row = grant_tenancy(kind=LocationRole.TENANT, area=area, tenant_organization=org)
         self.assertEqual(row.area, area)
         self.assertEqual(row.tenant_organization, org)
         self.assertEqual(row.parent_type, LocationParentType.AREA)
@@ -154,24 +154,32 @@ class GrantTenancyTests(TestCase):
     def test_with_planned_ends_at(self) -> None:
         room = RoomProfileFactory()
         expiry = timezone.now() + timedelta(days=30)
-        row = grant_tenancy(room_profile=room, tenant_persona=PersonaFactory(), ends_at=expiry)
+        row = grant_tenancy(
+            kind=LocationRole.TENANT,
+            room_profile=room,
+            tenant_persona=PersonaFactory(),
+            ends_at=expiry,
+        )
         self.assertEqual(row.ends_at, expiry)
 
     def test_multiple_concurrent_tenancies_allowed(self) -> None:
         room = RoomProfileFactory()
         for _ in range(3):
-            grant_tenancy(room_profile=room, tenant_persona=PersonaFactory())
+            grant_tenancy(
+                kind=LocationRole.TENANT, room_profile=room, tenant_persona=PersonaFactory()
+            )
         self.assertEqual(LocationTenancy.objects.filter(room_profile=room).count(), 3)
 
 
 class GrantTenancyValidationTests(TestCase):
     def test_missing_parent_raises(self) -> None:
         with self.assertRaises(ValueError):
-            grant_tenancy(tenant_persona=PersonaFactory())
+            grant_tenancy(kind=LocationRole.TENANT, tenant_persona=PersonaFactory())
 
     def test_both_parents_raises(self) -> None:
         with self.assertRaises(ValueError):
             grant_tenancy(
+                kind=LocationRole.TENANT,
                 area=AreaFactory(),
                 room_profile=RoomProfileFactory(),
                 tenant_persona=PersonaFactory(),
@@ -179,11 +187,12 @@ class GrantTenancyValidationTests(TestCase):
 
     def test_missing_tenant_raises(self) -> None:
         with self.assertRaises(ValueError):
-            grant_tenancy(room_profile=RoomProfileFactory())
+            grant_tenancy(kind=LocationRole.TENANT, room_profile=RoomProfileFactory())
 
     def test_both_tenants_raises(self) -> None:
         with self.assertRaises(ValueError):
             grant_tenancy(
+                kind=LocationRole.TENANT,
                 room_profile=RoomProfileFactory(),
                 tenant_persona=PersonaFactory(),
                 tenant_organization=OrganizationFactory(),
@@ -192,7 +201,11 @@ class GrantTenancyValidationTests(TestCase):
 
 class EndTenancyTests(TestCase):
     def test_defaults_to_now(self) -> None:
-        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        tenancy = grant_tenancy(
+            kind=LocationRole.TENANT,
+            room_profile=RoomProfileFactory(),
+            tenant_persona=PersonaFactory(),
+        )
         before = timezone.now()
         result = end_tenancy(tenancy)
         after = timezone.now()
@@ -201,18 +214,30 @@ class EndTenancyTests(TestCase):
         self.assertLessEqual(result.ends_at, after)
 
     def test_honors_supplied_ended_at(self) -> None:
-        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        tenancy = grant_tenancy(
+            kind=LocationRole.TENANT,
+            room_profile=RoomProfileFactory(),
+            tenant_persona=PersonaFactory(),
+        )
         explicit = timezone.now() - timedelta(hours=2)
         result = end_tenancy(tenancy, ended_at=explicit)
         self.assertEqual(result.ends_at, explicit)
 
     def test_returns_same_instance(self) -> None:
-        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        tenancy = grant_tenancy(
+            kind=LocationRole.TENANT,
+            room_profile=RoomProfileFactory(),
+            tenant_persona=PersonaFactory(),
+        )
         result = end_tenancy(tenancy)
         self.assertIs(result, tenancy)
 
     def test_idempotent_re_end_overwrites(self) -> None:
-        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        tenancy = grant_tenancy(
+            kind=LocationRole.TENANT,
+            room_profile=RoomProfileFactory(),
+            tenant_persona=PersonaFactory(),
+        )
         first = timezone.now() - timedelta(days=2)
         second = timezone.now() - timedelta(days=1)
         end_tenancy(tenancy, ended_at=first)

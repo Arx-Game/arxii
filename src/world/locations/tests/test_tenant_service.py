@@ -6,7 +6,7 @@ from django.utils import timezone
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationTenancy
 from world.locations.services import current_tenants
 from world.scenes.factories import PersonaFactory
@@ -23,6 +23,7 @@ class CurrentTenantsTests(TestCase):
 
     def test_room_level_tenancy_returned(self) -> None:
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -32,6 +33,7 @@ class CurrentTenantsTests(TestCase):
 
     def test_area_level_tenancy_returned_for_room_within(self) -> None:
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=self.building,
             tenant_type=HolderType.PERSONA,
@@ -41,18 +43,21 @@ class CurrentTenantsTests(TestCase):
 
     def test_multiple_concurrent_tenancies_all_returned(self) -> None:
         building_tenant = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=self.building,
             tenant_type=HolderType.PERSONA,
             tenant_persona=PersonaFactory(),
         )
         room_tenant_1 = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
             tenant_persona=PersonaFactory(),
         )
         room_tenant_2 = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -63,6 +68,7 @@ class CurrentTenantsTests(TestCase):
 
     def test_expired_tenancy_excluded(self) -> None:
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -73,6 +79,7 @@ class CurrentTenantsTests(TestCase):
 
     def test_future_ends_at_included(self) -> None:
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
             tenant_type=HolderType.PERSONA,
@@ -90,6 +97,7 @@ class CurrentTenantsTests(TestCase):
         ``t.tenant_persona`` is satisfied by select_related.
         """
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=self.building,
             tenant_type=HolderType.PERSONA,
@@ -106,6 +114,7 @@ class CurrentTenantsTests(TestCase):
     def test_unrelated_area_tenancy_not_returned(self) -> None:
         other_building = AreaFactory(level=AreaLevel.BUILDING)
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=other_building,
             tenant_type=HolderType.PERSONA,
@@ -126,6 +135,7 @@ class CurrentTenantsEdgeCaseTests(TestCase):
         profile = RoomProfileFactory()  # area defaults to None
         self.assertIsNone(profile.area)
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=profile,
             tenant_type=HolderType.PERSONA,

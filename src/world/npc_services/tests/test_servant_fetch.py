@@ -159,8 +159,10 @@ class CanServantFetchTests(TestCase):
     def test_eligible_when_owner_with_servant_and_item_in_other_room(self):
         """Owner + servant + item in another room → True."""
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,
@@ -175,8 +177,10 @@ class CanServantFetchTests(TestCase):
     def test_no_servant_returns_false(self):
         """Owner but no servant → False."""
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=None,
@@ -194,8 +198,10 @@ class CanServantFetchTests(TestCase):
         self.item_instance.game_object.location = self.room
         self.item_instance.game_object.save()
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,
@@ -211,7 +217,7 @@ class CanServantFetchTests(TestCase):
         """Actor without owner/tenant standing → False."""
         with (
             patch("world.locations.services.is_owner", return_value=False),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,
@@ -227,8 +233,10 @@ class CanServantFetchTests(TestCase):
         """Item with no game_object → False."""
         no_game_obj = ItemInstanceFactory()
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
             patch(
                 "world.npc_services.servant_fetch.find_servant",
                 return_value=self.servant,

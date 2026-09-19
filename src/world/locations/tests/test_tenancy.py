@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.factories import AreaFactory
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationTenancy
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory
@@ -17,6 +17,7 @@ class LocationTenancyCreateTests(TestCase):
         room = RoomProfileFactory()
         persona = PersonaFactory()
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=room,
             tenant_type=HolderType.PERSONA,
@@ -31,6 +32,7 @@ class LocationTenancyCreateTests(TestCase):
         org = OrganizationFactory()
         ends = timezone.now() + timedelta(days=30)
         row = LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.AREA,
             area=area,
             tenant_type=HolderType.ORGANIZATION,
@@ -89,6 +91,7 @@ class LocationTenancyConcurrentTests(TestCase):
         room = RoomProfileFactory()
         for _ in range(2):
             LocationTenancy.objects.create(
+                kind=LocationRole.TENANT,
                 parent_type=LocationParentType.ROOM,
                 room_profile=room,
                 tenant_type=HolderType.PERSONA,

@@ -13,7 +13,13 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
+from world.locations.constants import (
+    HolderType,
+    KeyType,
+    LocationParentType,
+    LocationRole,
+    StatKey,
+)
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 AREA_MODEL = "arxii.Area"
@@ -502,6 +508,46 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
         blank=True,
         on_delete=models.PROTECT,
         related_name="tenancies",
+    )
+
+    # #3902 — which rung of the access ladder this grant confers. A key is not a
+    # tenancy: a trusted guest may come and go and nothing else, while a trustee may
+    # act for the owner. Defaults to TENANT because every row written before this
+    # field existed meant exactly that.
+    #
+    # This is the AUTHORITY axis. ``is_primary_home`` below is the RESIDENCE axis and
+    # they are independent: a trustee (a seneschal, say) may hold real authority over
+    # a keep they have never slept in, and residence is what stables capacity, the
+    # sheet's Tenanted Rooms card and prestige actually want.
+    #
+    # The default is GUEST, the LOWEST rung, deliberately. #3923's lesson is that the
+    # dangerous default is the permissive one: a writer who forgets this kwarg and
+    # mints a Guest produces "my key does not work", which someone reports; one who
+    # forgets and mints a Tenant produces a silent over-grant nobody sees. Existing
+    # rows are a separate question and the migration answers it — they were all
+    # written meaning TENANT, so 0144 fills them with that via preserve_default=False
+    # and the model default reverts to GUEST for everything after.
+    kind = models.CharField(
+        max_length=10,
+        choices=LocationRole.choices,
+        default=LocationRole.GUEST,
+        help_text=(
+            "What this grant lets the holder do. Guest: visitation only. Tenant: live "
+            "here, furnish it, hand out guest keys. Trustee: also structural work and "
+            "granting tenancy."
+        ),
+    )
+    # #3902 — who handed this grant over. Nullable and deliberately so: a system grant
+    # has no granting persona (character generation's starting residence, admin, seeds,
+    # and every row that predates this field). NULL means "the world granted this",
+    # never "unknown".
+    granted_by = models.ForeignKey(
+        "arxii.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="tenancies_granted",
+        help_text="The persona who granted this. NULL for system/staff grants.",
     )
 
     started_at = models.DateTimeField(default=timezone.now)

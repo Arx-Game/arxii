@@ -38,6 +38,7 @@ import { formatCoppers } from '@/lib/currency';
 import type {
   CharacterSheetCovenantRole,
   CharacterSheetDomain,
+  CharacterSheetKeyringEntry,
   CharacterSheetMentor,
   CharacterSheetPayload,
   CharacterSheetStanding,
@@ -258,6 +259,7 @@ export function EstatePanel({
   isActiveCharacter,
   viewerEntryId,
   domains,
+  keyring,
 }: {
   sheetId: number;
   viewedPersonaId: number | null;
@@ -265,6 +267,8 @@ export function EstatePanel({
   viewerEntryId: number | null;
   /** Land the character's organizations hold. Empty for most characters (#3901). */
   domains: CharacterSheetDomain[];
+  /** Every place they may walk into, and on whose authority (#3902). Owner-only. */
+  keyring: CharacterSheetKeyringEntry[];
 }) {
   const { data: purse } = useCharacterPurse(sheetId);
 
@@ -312,6 +316,39 @@ export function EstatePanel({
                     name={domain.name}
                     aside={<span className="refsheet-note">{domain.where}</span>}
                     tags={<Tag>{domain.organization}</Tag>}
+                  />
+                ))}
+              </Entries>
+            </Stack>
+          )}
+          {/* The keyring (#3902). Render-or-vanish for the same reason as the block
+              above: plenty of characters hold no grant anywhere. Its job is DISCOVERY
+              -- a friend gave this character a key and nothing else on the sheet could
+              say the house exists, so a new player of the character never learns it.
+              A family keep reached through an organization is the same row, differing
+              only in what `through` says. */}
+          {keyring.length > 0 && (
+            <Stack>
+              <Heading>Keyring</Heading>
+              <Ledger>Where they may walk in, and on whose say-so.</Ledger>
+              <Entries>
+                {keyring.map((key) => (
+                  <Entry
+                    key={key.id}
+                    name={key.place}
+                    aside={
+                      key.where ? <span className="refsheet-note">{key.where}</span> : undefined
+                    }
+                    tags={
+                      <>
+                        <Tag accent>{key.rung}</Tag>
+                        {key.through ? <Tag>{key.through}</Tag> : null}
+                      </>
+                    }
+                    /* The "on whose say-so" half of the line above. Absent for a grant
+                       the world made (character generation, staff) or one an
+                       organization holds, where no persona handed anything over. */
+                    gloss={key.granted_by ? `Given by ${key.granted_by}.` : undefined}
                   />
                 ))}
               </Entries>

@@ -88,7 +88,8 @@ def can_servant_fetch(*, actor: ObjectDB, item_instance: ItemInstance) -> bool:
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     # Resolve the actor's active persona.
@@ -103,7 +104,9 @@ def can_servant_fetch(*, actor: ObjectDB, item_instance: ItemInstance) -> bool:
     # Check owner/tenant standing.
     if actor.location is None:
         return False
-    if not (is_owner(persona, actor.location) or is_tenant(persona, actor.location)):
+    # TENANT (#3902): the staff work for the household, and a guest key is not
+    # membership of it. A host who wants a visitor waited on grants them a tenancy.
+    if not has_standing(persona, actor.location, at_least=LocationRole.TENANT):
         return False
 
     # Check servant exists in the estate.

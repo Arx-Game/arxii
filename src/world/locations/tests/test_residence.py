@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.locations.constants import LocationRole
 from world.locations.services import (
     grant_tenancy,
     set_residence,
@@ -29,7 +30,7 @@ class ResidenceTests(TestCase):
     def test_renting_a_room_defaults_it_as_home(self) -> None:
         character, persona = self._character_and_persona()
         room_profile = RoomProfileFactory()
-        grant_tenancy(room_profile=room_profile, tenant_persona=persona)
+        grant_tenancy(kind=LocationRole.TENANT, room_profile=room_profile, tenant_persona=persona)
         assert character.home == room_profile.objectdb
 
     def test_acquiring_a_room_defaults_it_as_home(self) -> None:
@@ -43,7 +44,9 @@ class ResidenceTests(TestCase):
         chosen = RoomProfileFactory().objectdb
         set_residence(character=character, room=chosen)  # the player picked this one
 
-        grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=persona)
+        grant_tenancy(
+            kind=LocationRole.TENANT, room_profile=RoomProfileFactory(), tenant_persona=persona
+        )
         assert character.home == chosen  # a later rental doesn't move their home
 
     def test_org_and_area_grants_do_not_set_a_personal_home(self) -> None:
@@ -53,7 +56,9 @@ class ResidenceTests(TestCase):
         from world.areas.factories import AreaFactory
 
         before = character.home
-        grant_tenancy(area=AreaFactory(level=AreaLevel.WARD), tenant_persona=persona)
+        grant_tenancy(
+            kind=LocationRole.TENANT, area=AreaFactory(level=AreaLevel.WARD), tenant_persona=persona
+        )
         assert character.home == before
 
 
@@ -67,7 +72,7 @@ class CurrentResidenceAutoDefaultTests(TestCase):
     def test_renting_a_room_defaults_current_residence(self) -> None:
         character, persona = self._character_and_persona()
         room_profile = RoomProfileFactory()
-        grant_tenancy(room_profile=room_profile, tenant_persona=persona)
+        grant_tenancy(kind=LocationRole.TENANT, room_profile=room_profile, tenant_persona=persona)
         persona.character_sheet.refresh_from_db()
         character.refresh_from_db()
         assert persona.character_sheet.current_residence == room_profile
@@ -87,7 +92,9 @@ class CurrentResidenceAutoDefaultTests(TestCase):
         chosen = RoomProfileFactory()
         set_current_residence(persona.character_sheet, chosen)  # the player picked this one
 
-        grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=persona)
+        grant_tenancy(
+            kind=LocationRole.TENANT, room_profile=RoomProfileFactory(), tenant_persona=persona
+        )
         persona.character_sheet.refresh_from_db()
         assert persona.character_sheet.current_residence == chosen
 
@@ -96,7 +103,11 @@ class CurrentResidenceAutoDefaultTests(TestCase):
         from world.societies.factories import OrganizationFactory
 
         room_profile = RoomProfileFactory()
-        grant_tenancy(room_profile=room_profile, tenant_organization=OrganizationFactory())
+        grant_tenancy(
+            kind=LocationRole.TENANT,
+            room_profile=room_profile,
+            tenant_organization=OrganizationFactory(),
+        )
         # No exception, and no personal sheet was ever touched — nothing to assert on
         # a specific sheet, but this exercises the persona=None no-op branch cleanly.
 
@@ -111,7 +122,7 @@ class CurrentResidenceAutoDefaultTests(TestCase):
         CharacterResonanceFactory(character_sheet=persona.character_sheet, resonance=resonance)
         tag_room_resonance(room_profile, resonance)
 
-        grant_tenancy(room_profile=room_profile, tenant_persona=persona)
+        grant_tenancy(kind=LocationRole.TENANT, room_profile=room_profile, tenant_persona=persona)
 
         persona.character_sheet.refresh_from_db()
         assert get_residence_resonances(persona.character_sheet) == {resonance}

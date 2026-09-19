@@ -110,10 +110,11 @@ class ConditionLabelTests(TestCase):
 
 def _tenancy_in(room, persona, *, is_primary_home=False) -> None:
     """Active room tenancy for ``persona`` (#670 — LocationTenancy is the one model)."""
-    from world.locations.constants import HolderType, LocationParentType
+    from world.locations.constants import HolderType, LocationParentType, LocationRole
     from world.locations.models import LocationTenancy
 
     LocationTenancy.objects.create(
+        kind=LocationRole.TENANT,
         parent_type=LocationParentType.ROOM,
         room_profile=room,
         tenant_type=HolderType.PERSONA,

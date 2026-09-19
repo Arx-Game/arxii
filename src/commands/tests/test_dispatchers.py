@@ -33,7 +33,7 @@ from world.items.factories import (
     ItemTemplateFactory,
     OutfitFactory,
 )
-from world.locations.constants import HolderType, LocationParentType
+from world.locations.constants import HolderType, LocationParentType, LocationRole
 from world.locations.models import LocationTenancy
 from world.roster.factories import RosterEntryFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
@@ -897,6 +897,9 @@ class CmdHomeTests(TestCase):
             room_profile=room_profile,
             tenant_type=HolderType.ORGANIZATION,
             tenant_organization=org,
+            # TENANT (#3902): declaring a place your home needs a resident's rung. If
+            # the house had only granted the org a guest key, this claim SHOULD fail.
+            kind=LocationRole.TENANT,
         )
         caller = CharacterFactory(location=room)
         sheet = CharacterSheetFactory(character=caller)

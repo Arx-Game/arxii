@@ -50,8 +50,10 @@ class CanServantPamperTests(TestCase):
 
     def test_eligible_when_owner_with_servant(self):
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
             patch(
                 "world.npc_services.servant_ambience.find_servant",
                 return_value=self.servant,
@@ -65,8 +67,10 @@ class CanServantPamperTests(TestCase):
 
     def test_no_servant_returns_false(self):
         with (
+            # #3902: has_standing subsumes ownership -- an owner clears every rung --
+            # so the old "is_owner=True, is_tenant=False" pair collapses to this.
             patch("world.locations.services.is_owner", return_value=True),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=True),
             patch(
                 "world.npc_services.servant_ambience.find_servant",
                 return_value=None,
@@ -81,7 +85,7 @@ class CanServantPamperTests(TestCase):
     def test_no_standing_returns_false(self):
         with (
             patch("world.locations.services.is_owner", return_value=False),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch(
                 "world.scenes.services.active_persona_for_sheet",
                 return_value=self.owner_persona,
