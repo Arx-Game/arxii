@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -90,15 +91,14 @@ export function RoomPanel({
   viewerPersonaId = null,
   viewerThumbnailUrl = null,
 }: RoomPanelProps) {
-  const { send, requestRoomState } = useGameSocket();
+  const { send, connect, requestRoomState } = useGameSocket();
   const dispatch = useAppDispatch();
-  const roomStateResyncStatus = useAppSelector(
-    (state) =>
-      (character ? state.game.sessions[character]?.roomStateResyncStatus : undefined) ?? 'idle'
+  const session = useAppSelector((state) =>
+    character ? state.game.sessions[character] : undefined
   );
-  const roomStateResyncError = useAppSelector((state) =>
-    character ? state.game.sessions[character]?.roomStateResyncError : undefined
-  );
+  const isConnected = session?.isConnected ?? false;
+  const roomStateResyncStatus = session?.roomStateResyncStatus ?? 'idle';
+  const roomStateResyncError = session?.roomStateResyncError;
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -148,9 +148,79 @@ export function RoomPanel({
   });
 
   if (!room || !character) {
+    const locationTitle = character
+      ? 'Location not confirmed yet'
+      : 'Choose a character to enter the world';
+    let locationCopy = 'Select a character above to see room information.';
+    if (character) {
+      locationCopy = isConnected
+        ? `Connected as ${character}, but the game has not confirmed your location yet.`
+        : `${character} is selected, but the game connection is not ready.`;
+    }
+    let retryLabel = 'Reconnect';
+    if (roomStateResyncStatus === 'pending') {
+      retryLabel = 'Refreshing location…';
+    } else if (isConnected) {
+      retryLabel = 'Refresh location';
+    }
+
+    const retryLocation = () => {
+      if (!character) return;
+      if (isConnected) {
+        requestRoomState(character);
+      } else {
+        void connect(character).catch(() => {});
+      }
+    };
+
     return (
-      <div className="p-4 text-sm text-muted-foreground">
-        No location data available. Connect a character to see room information.
+      <div
+        className="flex flex-col gap-3 p-4 text-sm"
+        role={roomStateResyncStatus === 'failure' ? 'alert' : 'status'}
+      >
+        <div>
+          <h3 className="font-semibold">{locationTitle}</h3>
+          <p className="mt-1 text-muted-foreground">{locationCopy}</p>
+        </div>
+        {character && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={retryLocation}
+              disabled={roomStateResyncStatus === 'pending'}
+            >
+              {retryLabel}
+            </Button>
+            {isConnected && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => send(character, `@ic ${character}`)}
+              >
+                Re-enter as {character}
+              </Button>
+            )}
+            <Link
+              to="/hall"
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
+            >
+              Return to Hall
+            </Link>
+          </div>
+        )}
+        {roomStateResyncStatus !== 'idle' && (
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {roomStateResyncStatus === 'pending' && 'Waiting for the location response…'}
+            {roomStateResyncStatus === 'success' && 'Location refreshed.'}
+            {roomStateResyncStatus === 'partial' &&
+              'Location arrived, but confirmation was lost. Try again.'}
+            {roomStateResyncStatus === 'failure' &&
+              (session?.roomStateResyncError ?? 'Location refresh failed. Try again.')}
+          </p>
+        )}
       </div>
     );
   }

@@ -12,6 +12,7 @@ import { store } from '@/store/store';
 import {
   resetGame,
   startSession,
+  setSessionConnectionStatus,
   addSceneInteraction,
   addSessionMessage,
   setSceneBaseline,
@@ -117,6 +118,16 @@ describe('GameTopBar', () => {
     renderWithProviders(<GameTopBar characters={[rosterEntry]} />);
 
     expect(screen.queryByText(/no characters yet/i)).not.toBeInTheDocument();
+  });
+
+  it('distinguishes a connected session that has no confirmed location yet', () => {
+    store.dispatch(startSession('Aria'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Aria', status: true }));
+
+    renderWithProviders(<GameTopBar characters={[rosterEntry]} />);
+
+    expect(screen.getByText('Waiting for location')).toBeInTheDocument();
+    expect(screen.queryByText('In world')).not.toBeInTheDocument();
   });
 
   describe('background-session attention badge (#2166)', () => {

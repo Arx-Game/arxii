@@ -179,6 +179,7 @@ interface GameWindowStatusProps {
   active: string | null;
   sessions: Record<string, Session>;
   onTabClick: (name: MyRosterEntry['name']) => void;
+  onRetryLocation: () => void;
   /** What the player's chips say should badge a puppet tab (#3856). */
   attentionOptionsFor: (name: string) => AttentionOptions;
 }
@@ -195,8 +196,19 @@ function GameWindowStatus({
   active,
   sessions,
   onTabClick,
+  onRetryLocation,
   attentionOptionsFor,
 }: GameWindowStatusProps) {
+  const entryCopy = session.isConnected
+    ? 'Connected, but your location has not been confirmed yet.'
+    : 'Connection lost. Your draft is safe while we reconnect.';
+  let retryLabel = 'Reconnect';
+  if (session.roomStateResyncStatus === 'pending') {
+    retryLabel = 'Refreshing…';
+  } else if (session.isConnected) {
+    retryLabel = 'Refresh location';
+  }
+
   return (
     <>
       {reference && (
@@ -216,12 +228,21 @@ function GameWindowStatus({
       )}
       {awaitingRoom && (
         <div
-          className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
           role="status"
         >
-          {session.isConnected
-            ? 'Entering the world… waiting for a confirmed location. You can write while you wait.'
-            : 'Connection lost. Your draft is safe; you can keep writing while we reconnect.'}
+          <span>{entryCopy}</span>
+          <button
+            type="button"
+            className="rounded border px-2 py-1 font-medium text-foreground"
+            onClick={onRetryLocation}
+            disabled={session.roomStateResyncStatus === 'pending'}
+          >
+            {retryLabel}
+          </button>
+          <Link to="/hall" className="rounded border px-2 py-1 font-medium text-foreground">
+            Return to Hall
+          </Link>
         </div>
       )}
       {!awaitingRoom &&
@@ -531,7 +552,7 @@ export function GameWindow({
   // conversation tab is its own audience and is identified by its own key.
   const draftConversation = conversationTabs?.activeKey ?? ROOM_ANCHOR_CONVERSATION;
   const dispatch = useAppDispatch();
-  const { connect } = useGameSocket();
+  const { connect, requestRoomState } = useGameSocket();
   const selectCharacter = useSelectCharacterMutation();
   const { sessions, active } = useAppSelector((state) => state.game);
 
@@ -763,6 +784,14 @@ export function GameWindow({
           active={active}
           sessions={sessions}
           onTabClick={handleTabClick}
+          onRetryLocation={() => {
+            if (!active) return;
+            if (session.isConnected) {
+              requestRoomState(active);
+            } else {
+              connect(active).catch(() => {});
+            }
+          }}
           attentionOptionsFor={attentionOptionsFor}
         />
         <GameWindowFeed
