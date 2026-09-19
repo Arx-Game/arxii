@@ -9,3 +9,6 @@
 # generates the nonce randomly at runtime; this entry covers the original
 # commit. Verified 2026-07-12 (#2236 Phase 3 review).
 9fbc438f24d5028311c770b26e110b557a31ceb2:infra/scripts/smoke.sh:generic-api-key:136
+# CSS class value named `secret`, not a credential (VisibilityBadge.tsx).
+# Verified 2026-09-18: the flagged line is static Tailwind styling.
+66e75e951c7544a21532169b46e1c18a027516d1:frontend/src/pantheon/components/VisibilityBadge.tsx:generic-api-key:14
