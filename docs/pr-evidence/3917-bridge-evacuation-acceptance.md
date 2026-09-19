@@ -1,10 +1,10 @@
 # Review evidence
 
-- Reviewed revision: `ae5bdb4d3caefea2a933a59976898b65a108e12d`
+- Reviewed revision: `1e15f9c660dc76a3e608a46bb7735842b5090f25`
 - Reviewer: local acceptance test run (7/7 SQLite-fast acceptance tests)
 - Reviewer verdict: PASS
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
-- Full-suite verification: `just test-fast world.combat` passed 2,306 tests in 296.140s on the reviewed revision.
+- Full-suite verification: `just test-fast world.combat` passed 2,308 tests in 304.277s on the reviewed revision.
 - Environment: SQLite fast tier; Python/Evennia versions from `uv.lock`; Postgres-tagged strain path is covered by CI configuration
 - Viewports/themes: Not applicable; this is a backend acceptance gate
 - Approved design: [#3917](https://github.com/Arx-Game/arxii/issues/3917), parent [#3899](https://github.com/Arx-Game/arxii/issues/3899)
