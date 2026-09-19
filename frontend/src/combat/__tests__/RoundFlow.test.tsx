@@ -67,6 +67,7 @@ function makeEncounter(
     round_number: roundNumber,
     is_participant: true,
     is_gm: false,
+    objective: null,
     participants,
     opponents: [],
     current_round_actions: currentRoundActions,

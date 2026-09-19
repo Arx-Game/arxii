@@ -24638,6 +24638,7 @@ export interface components {
       conditions: components['schemas']['ConditionInstance'][];
       legend: components['schemas']['AftermathLegend'][];
       beat: components['schemas']['AftermathBeat'] | null;
+      objective: components['schemas']['ObjectiveSnapshot'] | null;
       peril_round_active: boolean;
     };
     /** @description Schema-only shape of one legend line in an aftermath digest (#3551). */
@@ -29434,6 +29435,7 @@ export interface components {
       readonly position_nodes: components['schemas']['PositionNode'][];
       readonly position_edges: components['schemas']['PositionEdge'][];
       readonly volatile_objects: components['schemas']['VolatileObject'][];
+      readonly objective: components['schemas']['ObjectiveSnapshot'] | null;
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -34686,6 +34688,29 @@ export interface components {
     NotificationLevelEnum: 'personal' | 'room' | 'gamewide';
     /** @enum {unknown} */
     NullEnum: null;
+    /** @description Safe read shape for an authored objective branch (#3916). */
+    ObjectiveBranch: {
+      key: string;
+      column: string | null;
+      outcome?: string;
+      label: string;
+    };
+    /** @description Safe read shape for the existing objective routing primitives (#3916). */
+    ObjectiveSnapshot: {
+      key: string;
+      source: components['schemas']['ObjectiveSnapshotSourceEnum'];
+      label: string;
+      clock: {
+        [key: string]: unknown;
+      } | null;
+      branches: components['schemas']['ObjectiveBranch'][];
+    };
+    /**
+     * @description * `scenario` - scenario
+     *     * `stakes` - stakes
+     * @enum {string}
+     */
+    ObjectiveSnapshotSourceEnum: 'scenario' | 'stakes';
     ObligationRow: {
       id: number;
       name: string;

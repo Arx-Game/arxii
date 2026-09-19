@@ -227,6 +227,24 @@ export function CombatTurnPanel({
         )}
       </div>
 
+      {encounter.objective && (
+        <div
+          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs"
+          data-testid="combat-objective"
+        >
+          <p className="font-semibold text-foreground">Objective</p>
+          <p className="text-muted-foreground">
+            {encounter.objective.label || encounter.objective.key}
+          </p>
+          {encounter.objective.clock && (
+            <p className="text-muted-foreground">
+              Time pressure: {String(encounter.objective.clock.filled ?? 0)}/
+              {String(encounter.objective.clock.size ?? 0)}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Forced-escape banner — Hero Killer on field; victory impossible (#875). */}
       {encounter.forced_escape && <ForcedEscapeBanner />}
 
