@@ -2802,6 +2802,12 @@ class StakeContractActivation(SharedMemoryModel):
         help_text="Readiness verdict at activation; False forced effective NONE."
     )
     readiness_notes = models.TextField(blank=True, default="")
+    participant_sheets = models.ManyToManyField(
+        CHARACTER_SHEET_MODEL,
+        blank=True,
+        related_name="stake_contract_activations",
+        help_text="Character sheets committed when this contract was activated.",
+    )
 
     class Meta:
         ordering = ["-locked_at"]

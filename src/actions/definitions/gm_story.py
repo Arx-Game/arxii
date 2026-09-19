@@ -245,6 +245,15 @@ class RunBeatAction(Action):
                 instance = start_scenario_for_scene(beat, scene)
                 data["scenario_instance_id"] = instance.pk
         data["beat_id"] = beat.pk
+        activation = self._activate_stakes_for_run(beat, scene)
+        if activation is not None:
+            data["stakes_activation"] = {
+                "id": activation.pk,
+                "effective_risk": activation.effective_risk,
+                "participant_sheet_ids": [
+                    sheet.pk for sheet in self._run_participant_sheets(scene)
+                ],
+            }
         if clock is not None:
             data["clock"] = {"size": clock.size, "filled": clock.filled}
 
@@ -253,6 +262,39 @@ class RunBeatAction(Action):
             message=f"Beat #{beat.pk} is now running in this scene.",
             data=data,
         )
+
+    @staticmethod
+    def _run_participant_sheets(scene: Scene) -> list[Any]:
+        """Return present, non-GM character sheets committing to a run."""
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        location_ids = {obj.pk for obj in scene.location.contents} if scene.location else set()
+        sheets: dict[int, Any] = {}
+        participations = scene.participations.filter(
+            is_gm=False, left_at__isnull=True
+        ).select_related("account")
+        for participation in participations:
+            for entry in RosterEntry.objects.for_account(participation.account):
+                sheet = entry.character_sheet
+                if sheet.character_id in location_ids:
+                    sheets[sheet.pk] = sheet
+        return list(sheets.values())
+
+    def _activate_stakes_for_run(self, beat: Beat, scene: Scene):
+        """Lock this beat's stakes when GM run begins with a committed party."""
+        if beat.risk == RenownRisk.NONE or not beat.stakes.exists():
+            return None
+        sheets = self._run_participant_sheets(scene)
+        if not sheets:
+            logger.info("run_beat: beat %s has no present party for stake activation", beat.pk)
+            return None
+        from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
+        from world.stories.services.stakes import activate_stakes_contract  # noqa: PLC0415
+
+        if not check_stake_boundaries(beat.stakes.all(), sheets).cleared:
+            logger.info("run_beat: beat %s stakes blocked by participant boundary", beat.pk)
+            return None
+        return activate_stakes_contract(beat, sheets)
 
     def _run_encounter_beat(
         self, beat: Beat, scene: Scene, account: AccountDB | None
