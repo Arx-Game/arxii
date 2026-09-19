@@ -40191,6 +40191,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/AftermathBeat'
           nullable: true
+        objective:
+          allOf:
+          - $ref: '#/components/schemas/ObjectiveSnapshot'
+          nullable: true
         peril_round_active:
           type: boolean
       required:
@@ -40198,6 +40202,7 @@ components:
       - conditions
       - consequence
       - legend
+      - objective
       - outcome
       - peril_round_active
     AftermathLegend:
@@ -50512,6 +50517,11 @@ components:
           items:
             $ref: '#/components/schemas/VolatileObject'
           readOnly: true
+        objective:
+          allOf:
+          - $ref: '#/components/schemas/ObjectiveSnapshot'
+          nullable: true
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -50536,6 +50546,7 @@ components:
       - is_gm
       - is_lethal
       - is_participant
+      - objective
       - opponents
       - outcome
       - participants
@@ -60978,6 +60989,55 @@ components:
     NullEnum:
       enum:
       - null
+    ObjectiveBranch:
+      type: object
+      description: Safe read shape for an authored objective branch (#3916).
+      properties:
+        key:
+          type: string
+        column:
+          type: string
+          nullable: true
+        outcome:
+          type: string
+        label:
+          type: string
+      required:
+      - column
+      - key
+      - label
+    ObjectiveSnapshot:
+      type: object
+      description: Safe read shape for the existing objective routing primitives (#3916).
+      properties:
+        key:
+          type: string
+        source:
+          $ref: '#/components/schemas/ObjectiveSnapshotSourceEnum'
+        label:
+          type: string
+        clock:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        branches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectiveBranch'
+      required:
+      - branches
+      - clock
+      - key
+      - label
+      - source
+    ObjectiveSnapshotSourceEnum:
+      enum:
+      - scenario
+      - stakes
+      type: string
+      description: |-
+        * `scenario` - scenario
+        * `stakes` - stakes
     ObligationRow:
       type: object
       properties:

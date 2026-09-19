@@ -34,7 +34,14 @@ function capitalizeFirst(value: string): string {
 }
 
 export function AftermathDigest({ digest, title }: AftermathDigestProps) {
-  const { consequence, conditions, legend, beat, peril_round_active: perilRoundActive } = digest;
+  const {
+    consequence,
+    conditions,
+    legend,
+    beat,
+    objective,
+    peril_round_active: perilRoundActive,
+  } = digest;
   const beatText = beat
     ? `${beat.resolution_text || 'The beat is resolved'} (${beat.tier_name ?? 'ungraded'}, ${capitalizeFirst(beat.outcome)})`
     : null;
@@ -87,6 +94,22 @@ export function AftermathDigest({ digest, title }: AftermathDigestProps) {
                 </p>
               ))}
             </div>
+          ))}
+        </div>
+      )}
+
+      {objective && objective.branches.length > 0 && (
+        <div className="space-y-1" data-testid="aftermath-objective">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Objective result
+          </p>
+          {objective.branches.map((branch) => (
+            <p
+              key={`${branch.key}-${branch.column ?? 'route'}`}
+              className="text-xs text-foreground"
+            >
+              {branch.label || branch.key}
+            </p>
           ))}
         </div>
       )}

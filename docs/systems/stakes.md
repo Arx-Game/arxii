@@ -622,6 +622,27 @@ Three same-shaped-but-unrelated concepts share vocabulary; do not conflate them.
 
 (Codified in [ADR-0067](../adr/0067-beat-risk-is-the-stakes-wager-declaration.md).)
 
+## Objective-specific encounter recipes (#3916)
+
+Encounter objectives reuse the existing stakes contract, scenario graph, and
+scene clock. They do not add an objective model and they do not change
+`classify_battle_outcome`, which remains only the `(EncounterOutcome,
+risk_level)` mapping for the fight itself.
+
+Authors should model each independent result as its own signal:
+
+| Journey result | Existing signal and authored branch |
+| --- | --- |
+| Boss beaten, NPC saved | A WIN stake for the boss plus an `NPC_FATE` stake. The NPC stake's `WIN` branch is matched to `ALIVE`. |
+| Boss beaten, NPC lost | Keep the boss WIN stake. Add an NPC `machine_match_lifecycle_state=DEAD` branch; lifecycle matching can select its LOSS consequence even when the encounter wins. |
+| Objective secured, then retreat | Use an ENCOUNTER scenario option. Author the `FLED` mapping and route it to the secured/retreat node. FLED is a scenario route here, not a combat victory. |
+| Objective lost despite a rescue | Record the rescue through the existing causal evidence writer, but let the objective stake's lifecycle/LOSS branch resolve independently. A rescue record cannot turn a lost stake into a win. |
+
+The encounter API exposes the active objective (`source=scenario` or
+`source=stakes`), its scene-clock fill, and the selected route/stake branches.
+The aftermath uses the same payload. An empty `branches` list means that no
+route has resolved yet; a clock fill is never treated as an enemy-clear signal.
+
 ## Player Visibility
 
 Per the mechanics app's **risk transparency** tenet

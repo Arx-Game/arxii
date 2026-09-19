@@ -341,6 +341,25 @@ class AftermathBeatSerializer(serializers.Serializer):
     resolution_text = serializers.CharField()
 
 
+class ObjectiveBranchSerializer(serializers.Serializer):
+    """Safe read shape for an authored objective branch (#3916)."""
+
+    key = serializers.CharField()
+    column = serializers.CharField(allow_null=True)
+    outcome = serializers.CharField(required=False)
+    label = serializers.CharField()
+
+
+class ObjectiveSnapshotSerializer(serializers.Serializer):
+    """Safe read shape for the existing objective routing primitives (#3916)."""
+
+    key = serializers.CharField()
+    source = serializers.ChoiceField(choices=["scenario", "stakes"])
+    label = serializers.CharField(allow_blank=True)
+    clock = serializers.DictField(allow_null=True)
+    branches = ObjectiveBranchSerializer(many=True)
+
+
 class AftermathDigestSerializer(serializers.Serializer):
     """Schema-only shape of ParticipantSerializer.aftermath (#3551).
 
@@ -352,6 +371,7 @@ class AftermathDigestSerializer(serializers.Serializer):
     conditions = ConditionInstanceSerializer(many=True)
     legend = AftermathLegendSerializer(many=True)
     beat = AftermathBeatSerializer(allow_null=True)
+    objective = ObjectiveSnapshotSerializer(allow_null=True)
     peril_round_active = serializers.BooleanField()
 
 
@@ -681,6 +701,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
                 for entry in digest.legend_entries
             ],
             "beat": beat,
+            "objective": digest.objective,
             "peril_round_active": digest.peril_round_active,
         }
 
@@ -1148,6 +1169,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     position_nodes = serializers.SerializerMethodField()
     position_edges = serializers.SerializerMethodField()
     volatile_objects = serializers.SerializerMethodField()
+    objective = serializers.SerializerMethodField(required=False)
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -1212,6 +1234,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "position_nodes",
             "position_edges",
             "volatile_objects",
+            "objective",
             "is_lethal",
             "duel_winner",
         ]
@@ -1239,6 +1262,13 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             p.character_sheet.character_id in character_ids
             for p in obj.participants_cached  # type: ignore[attr-defined]
         )
+
+    @extend_schema_field(ObjectiveSnapshotSerializer(allow_null=True))
+    def get_objective(self, obj: CombatEncounter) -> dict[str, Any] | None:
+        """Expose the active authored objective and selected branch (#3916)."""
+        from world.combat.objective_branches import objective_snapshot  # noqa: PLC0415
+
+        return objective_snapshot(obj)
 
     def get_resolution_order(self, obj: CombatEncounter) -> list[int]:
         """ACTIVE PC participant PKs in initiative (speed-rank) order.
