@@ -567,3 +567,12 @@ Scan executed 2026-05-28 against the codebase. Outcome:
 - `src/world/scenes/action_services.py` (`create_action_request`, `_resolve_enhanced_action`)
 - `src/world/combat/clash.py` (`commit_to_clash`)
 - Memory: [[feedback-no-polymorphic-models]], [[feedback-no-parallel-implementations]], [[feedback-abstract-base-classes-for-dry]]
+
+
+## Ordinary-cast push (issue #3912)
+
+Ordinary technique casts use the shared strain contract in ADR-0304. A declared
+push is charged once and converted to an immediate power bonus through
+`use_technique`; it does not alter the check. Scene-action enhancement resolution
+continues to expose strain as cost/Soulfray risk only because its current closure
+does not consume technique power.

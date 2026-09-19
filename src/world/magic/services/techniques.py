@@ -28,6 +28,7 @@ from world.magic.services.soulfray import (
     get_soulfray_warning,
     select_mishap_pool,
 )
+from world.magic.services.strain import strain_to_intensity
 from world.magic.types import (
     AnimaCostResult,
     ResonanceInvolvement,
@@ -996,7 +997,7 @@ def _charge_cast_pull(
     return pull_flat_bonus, effective_power, pull_result.resolved_effects
 
 
-def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small responsibilities
+def use_technique(  # noqa: C901, PLR0912, PLR0913, PLR0915 — orchestrator; multiple small responsibilities
     *,
     character: ObjectDB,
     technique: Technique,
@@ -1015,6 +1016,8 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
     preferred_resonance=None,
     situation_ctx: object | None = None,
     target_sheet: CharacterSheet | None = None,
+    strain_config: object | None = None,
+    strain_power_enabled: bool = True,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -1054,6 +1057,12 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
     from ``targets``/``pull_target`` on purpose, same rationale as
     ``pull_target`` above (different downstream consumers, different shapes).
 
+    ``strain_config`` optionally supplies the authored curve for callers such as
+    clash. Ordinary casts use the shared ``StrainConfig`` singleton. Strain is
+    converted into power exactly once at this seam. ``strain_power_enabled`` is
+    false only for scene-action enhancement paths whose resolver does not consume
+    technique power.
+
     ``pull_target`` is the live cast target forwarded to ``_charge_cast_pull`` (which
     threads it onto ``PullActionContext.target`` for ``court_regard_modulation``,
     #1831). It is decoupled from ``targets`` on purpose: ``targets`` also drives
@@ -1068,6 +1077,13 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
     """
     from world.magic.models import SoulfrayConfig  # noqa: PLC0415
 
+    if isinstance(strain_commitment, bool) or not isinstance(strain_commitment, int):
+        msg = "Strain commitment must be an integer."
+        raise ValueError(msg)
+    if strain_commitment < 0:
+        msg = "Strain commitment cannot be negative."
+        raise ValueError(msg)
+
     # Step 1: Calculate runtime stats
     stats = get_runtime_technique_stats(
         technique,
@@ -1078,20 +1094,21 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
     if control_penalty:
         stats = replace(stats, control=max(stats.control - control_penalty, 0))
 
-    # Step 2: Calculate effective anima cost. A sheet-less caster (GM puppet,
-    # companion) holds no anima row — treat as zero available.
+    # Step 2: Calculate the final no-strain cost, then add the declared push.
+    # Keeping the push outside the variant/base-form reconciliation makes C0 the
+    # same value shown in the preview and ensures strain is charged once.
     anima = CharacterAnima.objects.filter(character_id=character.pk).first()
     anima_current = anima.current if anima is not None else 0
-    cost = calculate_effective_anima_cost(
+    runtime_cost = calculate_effective_anima_cost(
         base_cost=technique.anima_cost,
         runtime_intensity=stats.intensity,
         runtime_control=stats.control,
         current_anima=anima_current,
-        strain_commitment=strain_commitment,
-        lethal=lethal,
+        strain_commitment=0,
+        lethal=True,
     )
 
-    # #1581 strict bonus: a variant must never cost more anima than the base form.
+    # #1581 strict bonus: a variant must never cost more anima than its base form.
     base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
     if control_penalty:
         base_stats = replace(base_stats, control=max(base_stats.control - control_penalty, 0))
@@ -1100,11 +1117,47 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
         runtime_intensity=base_stats.intensity,
         runtime_control=base_stats.control,
         current_anima=anima_current,
-        strain_commitment=strain_commitment,
-        lethal=lethal,
+        strain_commitment=0,
+        lethal=True,
     )
-    if base_cost.effective_cost < cost.effective_cost:
-        cost = base_cost
+    no_strain_cost = min(runtime_cost.effective_cost, base_cost.effective_cost)
+    declared_strain = strain_commitment
+    requested_cost = no_strain_cost + declared_strain
+    actual_cost = min(requested_cost, anima_current) if not lethal else requested_cost
+    cost = AnimaCostResult(
+        base_cost=technique.anima_cost,
+        effective_cost=actual_cost,
+        control_delta=runtime_cost.control_delta,
+        current_anima=anima_current,
+        deficit=max(actual_cost - anima_current, 0),
+    )
+
+    # A non-lethal cast pays only what remains in the pool. This effective
+    # commitment is used consistently by power conversion, fatigue, deduction,
+    # and audit metadata; lethal casts intentionally preserve the declaration
+    # so focused clash overburn remains visible.
+    effective_strain = min(declared_strain, actual_cost) if not lethal else declared_strain
+
+    # Resolve the curve at the shared seam. Clash callers pass their authored
+    # config override, while ordinary casts use the singleton. Zero strain keeps
+    # the legacy path query-free and has no conversion work to perform.
+    strain_power_bonus = 0
+    if effective_strain > 0:
+        if strain_config is None:
+            from world.combat.models import StrainConfig  # noqa: PLC0415
+
+            try:
+                strain_config = StrainConfig.objects.cached_singleton()
+            except StrainConfig.DoesNotExist:
+                strain_config = None
+            if strain_config is None:
+                strain_config = StrainConfig(
+                    conversion_base=10, diminishing_step=5, diminishing_floor=1
+                )
+        if strain_power_enabled:
+            strain_power_bonus = strain_to_intensity(
+                strain_commitment=effective_strain, config=strain_config
+            )
 
     # Step 3: Safety checkpoint (Soulfray stage-driven)
     soulfray_warning = get_soulfray_warning(character)
@@ -1115,6 +1168,9 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
             soulfray_warning=soulfray_warning,
             confirmed=False,
             technique=technique,
+            declared_strain_commitment=declared_strain,
+            effective_strain_commitment=effective_strain,
+            strain_power_bonus=strain_power_bonus,
         )
 
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
@@ -1127,7 +1183,7 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
     room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
 
     seed_ledger = _derive_power(
-        channeled_intensity=stats.intensity + max(power_intensity_bonus, 0),
+        channeled_intensity=(stats.intensity + max(power_intensity_bonus, 0) + strain_power_bonus),
         technique=technique,
         character=character,
         applicable_threads=applicable_threads,
@@ -1154,6 +1210,9 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
                 anima_cost=cost,
                 confirmed=False,
                 technique=technique,
+                declared_strain_commitment=declared_strain,
+                effective_strain_commitment=effective_strain,
+                strain_power_bonus=strain_power_bonus,
             )
 
     # Read back power after any pre-cast MODIFY_PAYLOAD hooks (mutable payload) and
@@ -1215,7 +1274,7 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
         character=character,
         technique=technique,
         cost=cost,
-        strain_commitment=strain_commitment,
+        strain_commitment=effective_strain,
     )
 
     # Step 8c/9: apply ASSUME_ALTERNATE_SELF pull effects post-resolution.
@@ -1243,6 +1302,9 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
         was_mishap=mishap is not None,
         was_audere=_character_is_in_audere(character),
         resonance_involvements=resonance_involvements,
+        declared_strain_commitment=declared_strain,
+        effective_strain_commitment=effective_strain,
+        strain_power_bonus=strain_power_bonus,
     )
 
     # Step 8c (#873): surface the Audere gate the moment it opens. Runs after

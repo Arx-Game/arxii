@@ -685,6 +685,11 @@ function ClashContributionRow({
             className="w-full accent-primary"
             aria-label="Strain commitment"
           />
+          <div className="text-[10px] text-muted-foreground">
+            {strainCommitment === 0
+              ? 'No push: baseline power'
+              : `+${strainCommitment} anima; power increases with diminishing returns`}
+          </div>
         </div>
       )}
     </div>
@@ -2511,6 +2516,7 @@ export function YourTurn({
           castPosition={castPosition}
           onCastPositionChange={setCastPosition}
           strainMax={strainMax}
+          strainPreview={focusedCastDescriptor?.strain}
         />
         {soulfrayWarning !== null && (
           <SoulfrayAcceptGate

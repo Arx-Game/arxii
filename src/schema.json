@@ -62860,6 +62860,12 @@ components:
         strain_committed:
           type: integer
           nullable: true
+        strain_effective:
+          type: integer
+          nullable: true
+        strain_power_bonus:
+          type: integer
+          nullable: true
         power:
           type: integer
           nullable: true
@@ -81085,9 +81091,25 @@ components:
         default:
           type: integer
           readOnly: true
+        base_effective_cost:
+          type: integer
+          readOnly: true
+        conversion_base:
+          type: integer
+          readOnly: true
+        diminishing_step:
+          type: integer
+          readOnly: true
+        diminishing_floor:
+          type: integer
+          readOnly: true
       required:
+      - base_effective_cost
       - cap
+      - conversion_base
       - default
+      - diminishing_floor
+      - diminishing_step
     Style:
       type: object
       description: Serializer for the Style catalog (#2030 — player-facing Motif style-binding).

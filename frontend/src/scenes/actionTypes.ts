@@ -60,6 +60,10 @@ export interface TargetSpec {
 export interface StrainAvailability {
   cap: number;
   default: number;
+  base_effective_cost: number;
+  conversion_base: number;
+  diminishing_step: number;
+  diminishing_floor: number;
 }
 
 export interface SoulfrayWarningData {

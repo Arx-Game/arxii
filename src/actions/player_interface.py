@@ -1426,6 +1426,14 @@ def _enrich_player_actions(
     )
 
     strain_cap = anima.current if anima is not None else None
+    from world.combat.models import StrainConfig  # noqa: PLC0415
+
+    try:
+        strain_config = StrainConfig.objects.cached_singleton()
+    except StrainConfig.DoesNotExist:
+        strain_config = None
+    if strain_config is None:
+        strain_config = StrainConfig(conversion_base=0, diminishing_step=1, diminishing_floor=0)
 
     for action in actions:
         enhancements = _enhancements_for_action(
@@ -1436,7 +1444,13 @@ def _enrich_player_actions(
         action.target_spec = _target_spec_for_action(action, character=character)
         action.action_category = _action_category_for_action(action)
         if enhancements and strain_cap is not None:
-            action.strain = StrainAvailability(cap=strain_cap)
+            action.strain = StrainAvailability(
+                cap=strain_cap,
+                base_effective_cost=min((item.effective_cost for item in enhancements), default=0),
+                conversion_base=strain_config.conversion_base,
+                diminishing_step=strain_config.diminishing_step,
+                diminishing_floor=strain_config.diminishing_floor,
+            )
 
 
 def _build_enhancement_index(

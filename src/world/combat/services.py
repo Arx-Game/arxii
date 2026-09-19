@@ -8387,6 +8387,21 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         participant=participant,
         round_number=action.round_number,
         summary_label=render_action_declaration_label(action),
+        strain_committed=(
+            combat_result.declared_strain_commitment
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
+        strain_effective=(
+            combat_result.effective_strain_commitment
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
+        strain_power_bonus=(
+            combat_result.strain_power_bonus
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
         fury_committed=fury_committed,
         target_personas=target_personas,
     )

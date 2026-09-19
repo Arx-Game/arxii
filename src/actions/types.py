@@ -454,10 +454,14 @@ class TargetSpec:
 
 @dataclass(frozen=True)
 class StrainAvailability:
-    """Per-character strain cap snapshot for a single GET of available actions."""
+    """Server-derived strain commitment preview for an available action."""
 
     cap: int
     default: int = 0
+    base_effective_cost: int = 0
+    conversion_base: int = 0
+    diminishing_step: int = 1
+    diminishing_floor: int = 0
 
 
 @dataclass(frozen=True)

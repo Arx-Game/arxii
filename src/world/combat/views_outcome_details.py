@@ -30,6 +30,7 @@ from world.scenes.action_serializers import PowerLedgerSerializer
 
 if TYPE_CHECKING:
     from world.magic.types.power_ledger import PowerLedger
+    from world.scenes.models import Interaction
 
 _ERR_NON_INTEGER_IDS = "action_interaction_ids must be comma-separated integers."
 
@@ -68,6 +69,8 @@ class ActionOutcomeDetail:
     power_ledger: PowerLedger | None = None
     # Clash-contribution fields — None on non-clash details.
     strain_committed: int | None = None
+    strain_effective: int | None = None
+    strain_power_bonus: int | None = None
     power: int | None = None
     progress_delta: int | None = None
 
@@ -115,6 +118,8 @@ class OutcomeDetailSerializer(serializers.Serializer):
     power_ledger = PowerLedgerSerializer(allow_null=True, required=False)
     # Clash-only fields; None when the detail is for a CombatRoundAction.
     strain_committed = serializers.IntegerField(allow_null=True, required=False)
+    strain_effective = serializers.IntegerField(allow_null=True, required=False)
+    strain_power_bonus = serializers.IntegerField(allow_null=True, required=False)
     power = serializers.IntegerField(allow_null=True, required=False)
     progress_delta = serializers.IntegerField(allow_null=True, required=False)
 
@@ -320,7 +325,12 @@ def _build_outcome_detail(
             )
         effects = _RoundActionEffects(action).rows
         return ActionOutcomeDetail(
-            action_interaction_id=action_interaction_id, effects=effects, power_ledger=ledger
+            action_interaction_id=action_interaction_id,
+            effects=effects,
+            power_ledger=ledger,
+            strain_committed=_interaction.strain_committed if _interaction else None,
+            strain_effective=_interaction.strain_effective if _interaction else None,
+            strain_power_bonus=_interaction.strain_power_bonus if _interaction else None,
         )
 
     # Fall back to ClashContribution.
@@ -341,7 +351,9 @@ def _build_outcome_detail(
             return ActionOutcomeDetail(
                 action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
             )
-        return _build_clash_contribution_detail(contribution, action_interaction_id, ledger)
+        return _build_clash_contribution_detail(
+            contribution, action_interaction_id, ledger, interaction=_interaction
+        )
 
     return ActionOutcomeDetail(
         action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
@@ -352,6 +364,8 @@ def _build_clash_contribution_detail(
     contribution: ClashContribution,
     action_interaction_id: int,
     ledger: PowerLedger | None,
+    *,
+    interaction: Interaction | None = None,
 ) -> ActionOutcomeDetail:
     """Render rows directly from ClashContribution fields.
 
@@ -404,7 +418,17 @@ def _build_clash_contribution_detail(
         action_interaction_id=action_interaction_id,
         effects=effects,
         power_ledger=ledger,
-        strain_committed=contribution.anima_committed,
+        strain_committed=(
+            interaction.strain_committed
+            if interaction is not None and interaction.strain_committed
+            else contribution.anima_committed
+        ),
+        strain_effective=(
+            interaction.strain_effective
+            if interaction is not None and interaction.strain_effective
+            else contribution.anima_committed
+        ),
+        strain_power_bonus=(interaction.strain_power_bonus if interaction is not None else 0),
         power=power,
         progress_delta=contribution.progress_delta,
     )
