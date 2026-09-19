@@ -238,9 +238,12 @@ def can_modify_room_features(persona: Persona, room: DefaultObject) -> bool:
     ``BuildingManager`` lands, extend this gate before broadening UI
     surfaces that rely on it.
     """
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
 
-    return is_owner(persona, room) or is_tenant(persona, room)
+    # TENANT (#3902): "can change a house" in Apostate's words. Furnishing is the
+    # tenant's business; the STRUCTURAL work in world.buildings is a Trustee power.
+    return has_standing(persona, room, at_least=LocationRole.TENANT)
 
 
 def _install_or_level_feature(project: Project, target_level: int) -> RoomFeatureProgressionDetails:
@@ -730,14 +733,17 @@ def react_to_unauthorized_entry(actor, room) -> None:
     lock check (Decision 5). Called from
     flows.service_functions.movement.traverse_exit after a successful move.
     """
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     sheet = actor.character_sheet
     if sheet is None:
         return
     persona = active_persona_for_sheet(sheet)
-    if is_owner(persona, room) or is_tenant(persona, room):
+    # GUEST (#3902): same rung as the guard above. A key-holder entering is invited,
+    # so the ward stays quiet for them.
+    if has_standing(persona, room, at_least=LocationRole.GUEST):
         return
 
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
@@ -790,7 +796,11 @@ def _trigger_alarm(actor, room, room_profile: RoomProfile) -> None:
     actor_state = sdm.initialize_state_for_object(actor)
     message_location(actor_state, "An alarm flares to life -- someone has entered uninvited!")
 
-    from world.locations.constants import HolderType  # noqa: PLC0415
+    from world.locations.constants import (  # noqa: PLC0415
+        LOCATION_ROLE_RANK,
+        HolderType,
+        LocationRole,
+    )
     from world.locations.services import current_tenants, effective_owner  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
@@ -820,8 +830,15 @@ def _trigger_alarm(actor, room, room_profile: RoomProfile) -> None:
         sheet = ownership.holder_persona.character_sheet
         recipient_sheets[sheet.pk] = sheet
 
+    # TENANT and above (#3902, Apostate's ruling): a guest holds a key, not
+    # responsibility for the house, and is not woken because somewhere they visit was
+    # burgled. This is a NOTIFICATION filter, not a permission one -- the rung that
+    # silences the alarm for an entrant is GUEST, two blocks up, and the two questions
+    # deliberately have different answers.
     for tenancy in current_tenants(room):
         if tenancy.tenant_type != HolderType.PERSONA or tenancy.tenant_persona is None:
+            continue
+        if LOCATION_ROLE_RANK.get(tenancy.kind, -1) < LOCATION_ROLE_RANK[LocationRole.TENANT]:
             continue
         sheet = tenancy.tenant_persona.character_sheet
         recipient_sheets[sheet.pk] = sheet

@@ -19,7 +19,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 
 import { EstatePanel } from '../panels';
-import type { CharacterSheetDomain } from '@/character_sheets/api';
+import type { CharacterSheetDomain, CharacterSheetKeyringEntry } from '@/character_sheets/api';
 
 vi.mock('@/justice/components/CrimeTab', () => ({ CrimeTab: () => <div /> }));
 vi.mock('@/locations/components/LocationsTab', () => ({ LocationsTab: () => <div /> }));
@@ -35,7 +35,7 @@ const THORNMERE: CharacterSheetDomain = {
   where: 'The Lantern Ward',
 };
 
-function renderEstate(domains: CharacterSheetDomain[]) {
+function renderEstate(domains: CharacterSheetDomain[], keyring: CharacterSheetKeyringEntry[] = []) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -46,6 +46,7 @@ function renderEstate(domains: CharacterSheetDomain[]) {
           isActiveCharacter
           viewerEntryId={1}
           domains={domains}
+          keyring={keyring}
         />
       </MemoryRouter>
     </QueryClientProvider>
@@ -70,5 +71,59 @@ describe('Estate domains', () => {
   it('does not claim the land is the character’s own', () => {
     renderEstate([THORNMERE]);
     expect(screen.getByText(/land their organizations hold/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The keyring (#3902) — the discovery read. Its whole job is that a new player of a
+ * roster character can learn a friend's house is open to them, and that their family
+ * holds a keep, neither of which any other part of the sheet could say.
+ */
+describe('Estate keyring', () => {
+  const BACK_ROOM: CharacterSheetKeyringEntry = {
+    id: 1,
+    place: 'The Pawnshop Back Room',
+    where: 'The Lantern Ward',
+    rung: 'Guest',
+    through: '',
+    granted_by: 'Maelis',
+  };
+  const KEEP: CharacterSheetKeyringEntry = {
+    id: 2,
+    place: 'Thornmere Keep',
+    where: 'The Lantern Ward',
+    rung: 'Tenant',
+    through: 'House du Verane',
+    granted_by: '',
+  };
+
+  it('vanishes when they hold no grant anywhere', () => {
+    renderEstate([], []);
+    expect(screen.queryByText('Keyring')).not.toBeInTheDocument();
+    expect(screen.queryByText(/no keys/i)).not.toBeInTheDocument();
+  });
+
+  it('names the place, where it is, and the rung', () => {
+    renderEstate([], [BACK_ROOM]);
+    expect(screen.getByText('Keyring')).toBeInTheDocument();
+    expect(screen.getByText('The Pawnshop Back Room')).toBeInTheDocument();
+    expect(screen.getByText('The Lantern Ward')).toBeInTheDocument();
+    expect(screen.getByText('Guest')).toBeInTheDocument();
+  });
+
+  it('says who handed the key over, and stays silent when nobody did', () => {
+    // The block's own line promises "and on whose say-so", so a row that cannot say
+    // it would be copy writing a cheque the markup does not cash. An org-held grant
+    // has no granting persona and correctly shows nothing.
+    renderEstate([], [BACK_ROOM, KEEP]);
+    expect(screen.getByText('Given by Maelis.')).toBeInTheDocument();
+    expect(screen.queryByText(/Given by\s*\./)).not.toBeInTheDocument();
+  });
+
+  it('names the organization that reaches an org-held grant, and only then', () => {
+    renderEstate([], [BACK_ROOM, KEEP]);
+    expect(screen.getByText('House du Verane')).toBeInTheDocument();
+    // The personal key carries no organization tag beside its rung.
+    expect(screen.getAllByText('Guest')).toHaveLength(1);
   });
 });

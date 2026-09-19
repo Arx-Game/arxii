@@ -32928,10 +32928,18 @@ export interface components {
       id: number;
       tenant_persona_id: number;
       tenant_name: string;
+      kind: components['schemas']['ManagerTenancyKindEnum'];
       is_primary_home: boolean;
       /** Format: date-time */
       ends_at: string | null;
     };
+    /**
+     * @description * `guest` - Guest
+     *     * `tenant` - Tenant
+     *     * `trustee` - Trustee
+     * @enum {string}
+     */
+    ManagerTenancyKindEnum: 'guest' | 'tenant' | 'trustee';
     MarketSquare: {
       readonly id: number;
       readonly name: string;

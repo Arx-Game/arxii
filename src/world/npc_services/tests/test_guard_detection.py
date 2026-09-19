@@ -172,7 +172,7 @@ class CheckGuardDetectionTests(TestCase):
                 return_value=PersonaFactory(),
             ),
             patch("world.locations.services.is_owner", return_value=False),
-            patch("world.locations.services.is_tenant", return_value=False),
+            patch("world.locations.services.has_standing", return_value=False),
             patch.object(self.room, "msg_contents") as mock_echo,
         ):
             check_guard_detection(char, self.room)

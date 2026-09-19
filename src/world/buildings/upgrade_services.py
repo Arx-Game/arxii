@@ -75,7 +75,8 @@ def start_building_upgrade(
         RoomBuildError: If *persona* does not own the building.
     """
     from world.buildings.models import BuildingUpgradeDetails  # noqa: PLC0415
-    from world.locations.services import is_owner  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
@@ -87,8 +88,11 @@ def start_building_upgrade(
         raise BuildingUpgradeError(msg)
 
     entry = building.entry_room
-    if entry is None or not is_owner(persona, entry.objectdb):
-        msg = "Only the building's owner can commission an upgrade."
+    # TRUSTEE (#3902): structural work is "control any home state", which the
+    # ruling gives to a trustee as well as the owner. A tenant may furnish the
+    # place (room features) but not restructure the building it sits in.
+    if entry is None or not has_standing(persona, entry.objectdb, at_least=LocationRole.TRUSTEE):
+        msg = "Only the building's owner or a trustee can commission an upgrade."
         raise RoomBuildError(msg)
 
     now = timezone.now()

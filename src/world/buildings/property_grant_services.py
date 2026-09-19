@@ -114,13 +114,17 @@ def start_building_activation(*, persona: Persona, building: Building) -> Projec
     already has an open activation project.
     """
     from world.buildings.models import BuildingActivationDetails  # noqa: PLC0415
-    from world.locations.services import is_owner  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
     entry = building.entry_room
-    if entry is None or not is_owner(persona, entry.objectdb):
-        msg = "Only the building's owner can commission its activation."
+    # TRUSTEE (#3902): structural work is "control any home state", which the
+    # ruling gives to a trustee as well as the owner. A tenant may furnish the
+    # place (room features) but not restructure the building it sits in.
+    if entry is None or not has_standing(persona, entry.objectdb, at_least=LocationRole.TRUSTEE):
+        msg = "Only the building's owner or a trustee can commission its activation."
         raise RoomBuildError(msg)
     if building.property_granted_at is None:
         msg = "This building wasn't a property grant — there's nothing to activate."

@@ -4,13 +4,18 @@ Tests for the character sheets API viewset.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    RoomProfileFactory,
+)
 from evennia_extensions.models import PlayerAllowList
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
@@ -58,6 +63,8 @@ from world.forms.models import FormType
 from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import EquippedItemFactory, ItemInstanceFactory
+from world.locations.constants import HolderType, LocationParentType, LocationRole
+from world.locations.models import LocationTenancy
 from world.magic.constants import GlimpseState, GlimpseTagAxis, RitualExecutionKind
 from world.magic.factories import (
     CharacterAuraFactory,
@@ -103,6 +110,7 @@ from world.societies.factories import (
     OrganizationReputationFactory,
 )
 from world.societies.houses.services import create_domain
+from world.societies.models import OrganizationMembership
 from world.species.factories import SpeciesFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -2431,20 +2439,37 @@ class TestProfilePictureNull(TestCase):
 
 
 def _seed_house_holding_land(persona) -> None:
-    """Put the persona in a house that owns a domain, for the query-count fixture.
+    """Put the persona in a house that owns a domain and holds land, for the fixture.
 
     Its own function so the fixture stays under the statement cap, and seeded at all
     because the domains read joins through membership: with no membership the join
     returns nothing, and the bound would pass without ever measuring the query it
     claims to count (#3901).
+
+    The same reasoning added the grants (#3902): two of them, one held directly and
+    one reached through the house, so the keyring's fixed two-query cost is measured
+    against rows that actually come back rather than against an empty result. Two
+    also proves the cost does not scale with how many places a character can enter.
     """
     house = OrganizationFactory(name="QCHouse")
-    create_domain(
-        area=AreaFactory(level=AreaLevel.REGION, name="QCRegion"),
-        name="QCKeep",
-        owner_org=house,
-    )
+    region = AreaFactory(level=AreaLevel.REGION, name="QCRegion")
+    create_domain(area=region, name="QCKeep", owner_org=house)
     OrganizationMembershipFactory(persona=persona, organization=house)
+
+    LocationTenancy.objects.create(
+        parent_type=LocationParentType.ROOM,
+        room_profile=RoomProfileFactory(area=region),
+        tenant_type=HolderType.PERSONA,
+        tenant_persona=persona,
+        kind=LocationRole.GUEST,
+    )
+    LocationTenancy.objects.create(
+        parent_type=LocationParentType.ROOM,
+        room_profile=RoomProfileFactory(area=region),
+        tenant_type=HolderType.ORGANIZATION,
+        tenant_organization=house,
+        kind=LocationRole.TENANT,
+    )
 
 
 class TestCharacterSheetQueryCount(TestCase):
@@ -2708,6 +2733,11 @@ class TestCharacterSheetQueryCount(TestCase):
                The fixture seeds a house that HOLDS land on purpose. With no membership
                the join returns nothing and the bound would pass without ever measuring
                what it claims to.
+        53-54. the keyring, #3902 (every place the character may walk into, for Estate's
+               Keyring block). TWO queries: the organization ids their personas belong
+               to, then every active grant reaching any of them, directly or through
+               those organizations. Fixed however many grants they hold -- the fixture
+               seeds one of each holder kind to prove the pair is measured.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
@@ -2718,7 +2748,12 @@ class TestCharacterSheetQueryCount(TestCase):
         # +3 (#3906): the covenant-role prefetch and the two standing reads, per 50-52.
         # The fixture's viewer is the owner, so the gated standing reads DO fire here;
         # a viewer below the tier pays neither.
-        with self.assertNumQueries(52):
+        # +2 (#3902): the keyring, per 53-54. One query for the organization ids the
+        # character's personas belong to, one for every active grant reaching any of
+        # them -- directly or through those organizations. FIXED: the fixture seeds two
+        # grants of different holder kinds and the pair still costs two queries,
+        # however many places a character can walk into.
+        with self.assertNumQueries(54):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -3137,3 +3172,103 @@ class TestWorshipSincerePrivacy(TestCase):
     def test_foreign_viewer_never_sees_worship_sincere(self) -> None:
         identity = self._get_identity(self.foreign_player.account)
         assert identity["worship_sincere"] is None
+
+
+@tag("postgres")
+class TestEstateKeyring(TestCase):
+    """Estate's Keyring (#3902): every place they may walk into, and on whose say-so.
+
+    The discovery read. A friend hands this character a key and nothing else on the
+    sheet could say the house exists, so the next player of the character never learns
+    it; a family keep reached through an organization has the same problem and is the
+    same row, differing only in what ``through`` says.
+
+    Postgres, because the grant lookup composes the ``AreaClosure`` cascade.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.stranger = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="KeyringChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        RosterTenureFactory(player_data=cls.player, roster_entry=cls.roster_entry, player_number=1)
+        cls.persona = cls.sheet.primary_persona
+
+        cls.ward = AreaFactory(level=AreaLevel.REGION, name="The Lantern Ward")
+        cls.friends_house = RoomProfileFactory(area=cls.ward)
+        cls.friends_house.objectdb.db_key = "The Pawnshop Back Room"
+        cls.friends_house.objectdb.save()
+        cls.host = PersonaFactory()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=cls.friends_house,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=cls.persona,
+            kind=LocationRole.GUEST,
+            granted_by=cls.host,
+        )
+
+        # The family keep, reached through the house rather than held personally.
+        cls.house = OrganizationFactory(name="House du Verane")
+        OrganizationMembershipFactory(persona=cls.persona, organization=cls.house)
+        cls.keep = RoomProfileFactory(area=cls.ward)
+        cls.keep.objectdb.db_key = "Thornmere Keep"
+        cls.keep.objectdb.save()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=cls.keep,
+            tenant_type=HolderType.ORGANIZATION,
+            tenant_organization=cls.house,
+            kind=LocationRole.TENANT,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _keyring(self, player) -> list[dict]:
+        self.client.force_authenticate(user=player.account)
+        response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
+        assert response.status_code == 200
+        return response.data["keyring"]
+
+    def test_a_guest_key_names_the_place_the_rung_and_who_gave_it(self) -> None:
+        rows = {row["place"]: row for row in self._keyring(self.player)}
+        key = rows["The Pawnshop Back Room"]
+        assert key["rung"] == "Guest"
+        assert key["where"] == "The Lantern Ward"
+        assert key["through"] == ""
+        assert key["granted_by"] == self.host.name
+
+    def test_an_org_held_grant_says_which_organization_reaches_it(self) -> None:
+        """The other half of discovery: a new player learns their family holds a keep."""
+        rows = {row["place"]: row for row in self._keyring(self.player)}
+        keep = rows["Thornmere Keep"]
+        assert keep["rung"] == "Tenant"
+        assert keep["through"] == "House du Verane"
+        # Nobody handed it over -- the organization holds it.
+        assert keep["granted_by"] == ""
+
+    def test_a_stranger_gets_no_keyring_at_all(self) -> None:
+        """Estate is owner and staff only, and the keyring is part of Estate."""
+        assert self._keyring(self.stranger) == []
+
+    def test_an_expired_grant_leaves_the_keyring(self) -> None:
+        LocationTenancy.objects.filter(tenant_persona=self.persona).update_with_reason(
+            reason="test fixture: simulate stale row",
+            ends_at=timezone.now() - timedelta(days=1),
+        )
+        places = {row["place"] for row in self._keyring(self.player)}
+        assert "The Pawnshop Back Room" not in places
+        # The org-held keep is untouched by the persona grant expiring.
+        assert "Thornmere Keep" in places
+
+    def test_leaving_the_house_drops_the_keep_from_the_keyring(self) -> None:
+        OrganizationMembership.objects.filter(persona=self.persona).update_with_reason(
+            reason="test fixture: simulate stale row",
+            left_at=timezone.now(),
+        )
+        places = {row["place"] for row in self._keyring(self.player)}
+        assert "Thornmere Keep" not in places
+        assert "The Pawnshop Back Room" in places

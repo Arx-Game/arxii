@@ -12,6 +12,7 @@ from flows.object_states.character_state import CharacterState
 from flows.object_states.exit_state import ExitState
 from flows.object_states.room_state import RoomState
 from world.character_sheets.factories import CharacterSheetFactory
+from world.locations.constants import LocationRole
 from world.locations.services import grant_tenancy, transfer_ownership
 from world.scenes.factories import PersonaFactory
 
@@ -136,7 +137,7 @@ class ObjectStatePermissionTests(TestCase):
         room_profile = RoomProfile.objects.filter(objectdb=self.room).first()
         if room_profile is None:
             room_profile = RoomProfile.objects.create(objectdb=self.room)
-        grant_tenancy(room_profile=room_profile, tenant_persona=persona)
+        grant_tenancy(kind=LocationRole.TENANT, room_profile=room_profile, tenant_persona=persona)
 
         exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
         actor_state = self.context.get_state_by_pk(self.char.pk)

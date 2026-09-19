@@ -1283,11 +1283,16 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   `RoomProfile.tenant_persona` pointer — with `is_primary_home` (the Arx-1
   `addhome`; one active per persona via partial unique constraint; drives
   home-anchored `prestige_from_dwellings` and syncs the #1514 Evennia-`home`
-  residence))
+  residence), plus `kind` and `granted_by` (#3902 — which rung of the access ladder the grant
+  confers, and who handed it over; `granted_by` is NULL for a system grant, meaning "the world
+  granted this" rather than "unknown"))
 - **Enums:** `StatKey` (CRIME/ORDER/LIGHTING/NOISE/AMENITY/COLD/HEAT/WET/WIND/DRY/…),
   `LocationParentType` (AREA/ROOM), `key_type` discriminator (STAT/RESONANCE/DAMAGE_TYPE — selects
   `stat_key` CharField vs `resonance` FK (`magic.Resonance`) vs `damage_type` FK
-  (`conditions.DamageType`)), `HolderType` (PERSONA/ORGANIZATION)
+  (`conditions.DamageType`)), `HolderType` (PERSONA/ORGANIZATION), `LocationRole`
+  (GUEST/TENANT/TRUSTEE — #3902's access ladder, cumulative; OWNER is deliberately NOT a member
+  because the deed is a `LocationOwnership` row, and `OWNER_RANK` tops `LOCATION_ROLE_RANK` so the
+  comparison stays total across both models)
 - **Damage-type axis (#1744):** hazard shelter per room, generic across any `conditions.DamageType`
   row — adding a new hazard needs zero new discriminator code, only new `LocationValueModifier`/
   `LocationValueOverride` rows. `hazard_is_covered(room, damage_type, *, threshold=1)` is the
@@ -1300,9 +1305,15 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   `ObjectDisplayData.thumbnail` wins outright, else most-specific-wins up `Area.art`, mirroring
   `get_effective_climate`), `character_comfort_summary()`/`comfort_mitigation()` (per-character
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
-  `is_tenant()` (ownership/tenancy lookups), `assign_room_tenant()`/`end_room_tenancy()`/
-  `set_primary_home()` (#670 player tenancy seam — owner grants/evicts, tenant departs or
-  designates home; syncs the #1514 Evennia-`home` residence + recomputes prestige). #2036 widened
+  `has_standing(persona, room, at_least=LocationRole.…)`/`role_at()`/`can_grant()` (ownership and
+  access-ladder lookups; **`is_tenant()` was REMOVED in #3902** — it meant "holds any grant" and
+  became a silent "guest included" once grants gained a rung, so the eleven call sites that
+  composed `is_owner or is_tenant` each name a rung now), `assign_room_tenant()`/
+  `end_room_tenancy()`/
+  `set_primary_home()` (#670 player tenancy seam, rung-gated since #3902 — a TENANT hands out
+  GUEST keys, a TRUSTEE hands out tenancies, only the owner appoints a trustee; revocation follows
+  `granted_by`, not rank: the holder always departs, the owner ends anything, otherwise only the
+  granter takes it back; syncs the #1514 Evennia-`home` residence + recomputes prestige). #2036 widened
   `set_primary_home()`: it now also writes `CharacterSheet.current_residence` (via
   `world.magic.services.gain.set_residence`, the daily resonance-trickle gate) on every deliberate
   declaration, accepts org-derived owner/tenant standing (not only a direct `LocationTenancy` row)

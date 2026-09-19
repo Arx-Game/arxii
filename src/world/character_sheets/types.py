@@ -387,6 +387,29 @@ class LookEntry(TypedDict):
     is_current: bool
 
 
+class KeyringEntry(TypedDict):
+    """One place this character may enter, and on whose authority (#3902).
+
+    The keyring is the discovery half of the guest-key ruling. A friend hands Player A's
+    character a key to their house; a new player picking up that character has nowhere
+    to learn the house exists, let alone where it is. This is that page, and a family
+    keep reached through an organization is the same row with a different holder, so
+    the noble's new player is answered by the same read.
+
+    ``rung`` is the label of the ``LocationRole`` the grant confers, not the raw value.
+    ``through`` names the organization when the grant is held by one rather than by the
+    persona directly, and is empty for a personal grant. ``granted_by`` names whoever
+    handed it over and is empty when the world did (character generation, staff, seeds).
+    """
+
+    id: int
+    place: str
+    where: str
+    rung: str
+    through: str
+    granted_by: str
+
+
 class OrgDomainEntry(TypedDict):
     """One landholding an organization this character belongs to owns (#3901).
 

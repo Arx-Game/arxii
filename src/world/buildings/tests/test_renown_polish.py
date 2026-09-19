@@ -66,12 +66,13 @@ def _make_building(area=None, owner=None):
 
 def _make_room(area=None, tenant=None):
     """RoomProfile inside ``area``; ``tenant`` gets a primary-home tenancy here (#670)."""
-    from world.locations.constants import HolderType, LocationParentType
+    from world.locations.constants import HolderType, LocationParentType, LocationRole
     from world.locations.models import LocationTenancy
 
     profile = RoomProfileFactory(area=area)
     if tenant is not None:
         LocationTenancy.objects.create(
+            kind=LocationRole.TENANT,
             parent_type=LocationParentType.ROOM,
             room_profile=profile,
             tenant_type=HolderType.PERSONA,

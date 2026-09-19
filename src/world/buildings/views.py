@@ -50,6 +50,7 @@ from world.buildings.serializers import (
     RoomSizeTierSerializer,
 )
 from world.character_sheets.models import CharacterSheet
+from world.locations.constants import LOCATION_ROLE_RANK, LocationRole
 from world.locations.models import LocationTenancy
 from world.locations.services import is_owner, tenancies_for
 from world.projects.constants import ProjectKind
@@ -178,6 +179,7 @@ class BuildingManagerViewSet(viewsets.ViewSet):
                             "id": t.pk,
                             "tenant_persona_id": t.tenant_persona_id,
                             "tenant_name": str(t.tenant_persona),
+                            "kind": t.kind,
                             "is_primary_home": t.is_primary_home,
                             "ends_at": t.ends_at,
                         }
@@ -214,10 +216,16 @@ class BuildingManagerViewSet(viewsets.ViewSet):
         room_obj = profile.objectdb
         building = building_for_room(room_obj)
         my_tenancies = list(tenancies_for(persona, room_obj))
+        # #3902: RESIDENTS, not "holds any grant". This flag drives the RoomPanel's
+        # tenant affordances, and a guest key is not a tenancy -- reading it as any-grant
+        # would hand a visitor the resident's controls. `is_owner` stays the deed.
         payload = {
             "building_id": building.pk if building is not None else None,
             "is_owner": is_owner(persona, room_obj),
-            "is_tenant": bool(my_tenancies),
+            "is_tenant": any(
+                LOCATION_ROLE_RANK.get(t.kind, -1) >= LOCATION_ROLE_RANK[LocationRole.TENANT]
+                for t in my_tenancies
+            ),
             "is_primary_home_here": any(
                 t.is_primary_home and t.tenant_persona_id == persona.pk for t in my_tenancies
             ),

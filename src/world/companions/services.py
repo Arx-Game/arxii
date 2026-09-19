@@ -41,15 +41,29 @@ def _companion_thread(character_sheet: CharacterSheet, gift: Gift):
 
 
 def stables_capacity_bonus_for_sheet(character_sheet: CharacterSheet) -> int:
-    """Flat Companion Capacity bonus from all Stables the sheet has standing in.
+    """Flat Companion Capacity bonus from every Stables the sheet keeps a household at.
 
-    Derive-on-read: queries active Stables RoomFeatureInstances on rooms
-    where the sheet's primary persona is owner or tenant, sums
-    ``StablesDetails.capacity_bonus_per_level * instance.level`` across all
-    matches. Returns 0 if the character has no Stables or no primary persona.
+    Derive-on-read: queries active Stables RoomFeatureInstances on rooms where the
+    sheet's primary persona owns or RESIDES, sums
+    ``StablesDetails.capacity_bonus_per_level * instance.level`` across all matches.
+    Returns 0 if the character has no Stables or no primary persona.
+
+    Residence, not authority (#3902). Your mounts are stabled where you keep your
+    household, so a guest with a key gets no stalls off a friend's stables -- which is
+    the behavioural change this issue makes here.
+
+    The rung is the best available proxy, not the real question. TENANT-or-above is
+    read as "lives here" because a tenant grant IS a resident's grant, but a TRUSTEE
+    who administers a keep they have never slept in also clears it, and strictly
+    should not. Distinguishing them needs a residence fact the model does not have:
+    ``is_primary_home`` and ``CharacterSheet.current_residence`` are both one-per-
+    persona, and a character may plausibly keep a household in more than one place.
+    Recorded rather than invented -- adding a multi-residence flag is its own design
+    question, and guessing at one here would be the reinvention the repo warns about.
     """
     from world.companions.models import StablesDetails  # noqa: PLC0415
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
     from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
@@ -70,7 +84,7 @@ def stables_capacity_bonus_for_sheet(character_sheet: CharacterSheet) -> int:
         room = instance.room_profile.objectdb
         if room is None:
             continue
-        if is_owner(persona, room) or is_tenant(persona, room):
+        if has_standing(persona, room, at_least=LocationRole.TENANT):
             try:
                 details = instance.stables_details
             except StablesDetails.DoesNotExist:

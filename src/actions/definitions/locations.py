@@ -541,13 +541,34 @@ class SetBuildingStyleAction(_RoomBuilderAction):
         )
 
 
+# What the actor is told after handing out each rung (#3902). Keyed by the raw
+# ``LocationRole`` value so the action never imports the enum at module import time.
+_GRANT_MESSAGES: dict[str, str] = {
+    "guest": "{tenant} now holds a key here.",
+    "tenant": "{tenant} is now a tenant here.",
+    "trustee": "{tenant} is now a trustee here.",
+}
+
+
 @dataclass
 class AssignRoomTenantAction(_RoomBuilderAction):
-    """Owner grants a persona tenancy of the current room. Kwarg: ``tenant_persona_id``."""
+    """Hand a persona a grant of the current room (#670, ladder #3902).
+
+    Kwargs: ``tenant_persona_id`` and ``kind`` (a ``LocationRole`` value; defaults to
+    ``tenant``, which is what every caller meant before rungs existed). This is the
+    one player surface that mints a grant, so it is where a key, a tenancy or a
+    trusteeship is actually given; the service decides whether the actor may.
+    """
 
     key: str = "assign_room_tenant"
     name: str = "Assign Tenant"
     icon: str = "user-plus"
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        # TENANT-or-above, not owner-only (#3902): a tenant hands out guest keys. The
+        # exact rung the actor may give is the service's decision (``can_grant``);
+        # this is only the "has any say here" UX gate.
+        return [IsRoomTenantPrerequisite()]
 
     def execute(
         self,
@@ -555,6 +576,7 @@ class AssignRoomTenantAction(_RoomBuilderAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.locations.constants import LocationRole  # noqa: PLC0415
         from world.locations.services import RoomEditError, assign_room_tenant  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -564,16 +586,26 @@ class AssignRoomTenantAction(_RoomBuilderAction):
         tenant = Persona.objects.filter(pk=kwargs.get("tenant_persona_id")).first()
         if tenant is None:
             return ActionResult(success=False, message="No such persona.")
+        kind = str(kwargs.get("kind") or LocationRole.TENANT).lower()
+        if kind not in LocationRole.values:
+            return ActionResult(
+                success=False, message="Grant a guest key, a tenancy or a trusteeship."
+            )
         try:
-            assign_room_tenant(persona=_persona_for(actor), room=room, tenant_persona=tenant)
+            assign_room_tenant(
+                persona=_persona_for(actor), room=room, tenant_persona=tenant, kind=kind
+            )
         except RoomEditError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message=f"{tenant} is now a tenant here.")
+        return ActionResult(success=True, message=_GRANT_MESSAGES[kind].format(tenant=tenant))
 
 
 @dataclass
 class EndRoomTenancyAction(Action):
-    """End a room tenancy (owner evicts, or the tenant departs). Kwarg: ``tenancy_id``."""
+    """End a room grant: the holder departs, the owner or whoever granted it revokes.
+
+    Kwarg: ``tenancy_id``.
+    """
 
     key: str = "end_room_tenancy"
     name: str = "End Tenancy"

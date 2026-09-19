@@ -62,13 +62,17 @@ def start_building_renovation(
             is already the building's current kind.
     """
     from world.buildings.models import BuildingRenovationDetails  # noqa: PLC0415
-    from world.locations.services import is_owner  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
     entry = building.entry_room
-    if entry is None or not is_owner(persona, entry.objectdb):
-        msg = "Only the building's owner can commission a renovation."
+    # TRUSTEE (#3902): structural work is "control any home state", which the
+    # ruling gives to a trustee as well as the owner. A tenant may furnish the
+    # place (room features) but not restructure the building it sits in.
+    if entry is None or not has_standing(persona, entry.objectdb, at_least=LocationRole.TRUSTEE):
+        msg = "Only the building's owner or a trustee can commission a renovation."
         raise RoomBuildError(msg)
     if target_kind == building.kind:
         msg = "The building is already of that kind."

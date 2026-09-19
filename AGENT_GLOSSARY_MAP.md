@@ -58,6 +58,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [areas](src/world/areas/AGENT_GLOSSARY.md)
 - [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
+- [locations](src/world/locations/AGENT_GLOSSARY.md)
 - [forms](src/world/forms/AGENT_GLOSSARY.md)
 - [ships](src/world/ships/AGENT_GLOSSARY.md)
 - [assets](src/world/assets/AGENT_GLOSSARY.md)

@@ -13,8 +13,10 @@ import calendar
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import models
 from django.db.models import Model, QuerySet
 from django.db.models.query import Prefetch
+from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.request import Request
@@ -43,6 +45,7 @@ from world.character_sheets.types import (
     IdentitySection,
     IdNameRef,
     IntroductionEntry,
+    KeyringEntry,
     LookEntry,
     MagicSection,
     MentorBondEntry,
@@ -81,6 +84,8 @@ from world.forms.models import (
 from world.goals.models import CharacterGoal
 from world.items.models import EquippedItem
 from world.items.services.visibility import compute_worn_visibility
+from world.locations.constants import LocationRole
+from world.locations.models import LocationTenancy
 from world.magic.constants import GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
@@ -1636,6 +1641,87 @@ def _build_domains(sheet: CharacterSheet, *, privileged: bool) -> list[OrgDomain
     ]
 
 
+def _build_keyring(sheet: CharacterSheet, *, privileged: bool) -> list[KeyringEntry]:
+    """Estate's Keyring: every place this character may walk into, and on whose say-so.
+
+    The discovery half of #3902, and the reason the issue exists. A friend gives this
+    character a key to their house; nothing on the sheet could say the house exists,
+    so the next player of that character never learns it. A family keep reached
+    through an organization has the same problem and the same answer, so both are rows
+    here, differing only in who holds the grant.
+
+    Owner and staff only, because the whole Estate section is. Render-or-vanish is the
+    frontend's job: an empty list draws no block at all, never a line saying so.
+
+    ONE query, for the same reason ``_build_domains`` is one (#3901): a top-level
+    ``personas__tenancies`` prefetch cannot reuse the ``cached_personas`` Prefetch, so
+    Django re-fetches every persona to redescend. Organization-held grants are folded
+    into the same filter rather than fetched separately -- the cost of the keyring is
+    the org-id lookup plus this, whatever the character holds.
+    """
+    if not privileged:
+        return []
+
+    persona_ids = [
+        persona.pk
+        for persona in (
+            sheet.cached_personas if hasattr(sheet, "cached_personas") else sheet.personas.all()
+        )
+    ]
+    if not persona_ids:
+        return []
+
+    org_ids = set(
+        OrganizationMembership.objects.filter(
+            persona_id__in=persona_ids, left_at__isnull=True, exiled_at__isnull=True
+        ).values_list("organization_id", flat=True)
+    )
+
+    now = timezone.now()
+    grants = (
+        LocationTenancy.objects.filter(
+            models.Q(tenant_persona_id__in=persona_ids)
+            | models.Q(tenant_organization_id__in=org_ids)
+        )
+        .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now))
+        .select_related(
+            "room_profile__objectdb",
+            "room_profile__area",
+            "area",
+            "tenant_organization",
+            "granted_by",
+        )
+        .order_by("room_profile__objectdb__db_key", "area__name")
+    )
+
+    entries: list[KeyringEntry] = []
+    for grant in grants:
+        if grant.room_profile is not None:
+            place = grant.room_profile.objectdb.db_key
+            where = grant.room_profile.area.name if grant.room_profile.area else ""
+        elif grant.area is not None:
+            # An area-level grant covers every room inside it, so the area IS the place.
+            place = grant.area.name
+            where = ""
+        else:
+            continue
+        entries.append(
+            KeyringEntry(
+                id=grant.pk,
+                place=place,
+                where=where,
+                rung=LocationRole(grant.kind).label,
+                through=grant.tenant_organization.name if grant.tenant_organization else "",
+                granted_by=(
+                    grant.granted_by.name
+                    if grant.granted_by is not None and hasattr(grant.granted_by, "name")
+                    else ""
+                ),
+            )
+        )
+    return entries
+
+
 _MENTORS_SELECT_RELATED: tuple[str, ...] = ()
 # Both directions of the vow, each with the covenant it was sworn in and the other
 # party's ObjectDB, so naming a bond costs nothing further. No ``to_attr`` (ADR-0278).
@@ -1912,6 +1998,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             # active membership alone (#3901) — the land is the organization's, and
             # whether this character may enter it is a tenancy question, not this one.
             "domains": _build_domains(sheet, privileged=privileged),
+            "keyring": _build_keyring(sheet, privileged=privileged),
         }
 
 

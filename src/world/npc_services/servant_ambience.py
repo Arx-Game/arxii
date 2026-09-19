@@ -55,7 +55,8 @@ def can_servant_pamper(*, actor: ObjectDB) -> bool:
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     try:
@@ -68,7 +69,9 @@ def can_servant_pamper(*, actor: ObjectDB) -> bool:
 
     if actor.location is None:
         return False
-    if not (is_owner(persona, actor.location) or is_tenant(persona, actor.location)):
+    # TENANT (#3902): same rung as fetching, and prepare_bath recovers fatigue, so
+    # this rung hands over a real mechanical benefit rather than only flavour.
+    if not has_standing(persona, actor.location, at_least=LocationRole.TENANT):
         return False
 
     return find_servant(actor.location) is not None

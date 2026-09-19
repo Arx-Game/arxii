@@ -2780,7 +2780,7 @@
 - `release_companion(companion: 'Companion') -> 'None' - Release a bonded companion: destroy its live object, keep the row.`
 - `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
-- `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from all Stables the sheet has standing in.`
+- `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from every Stables the sheet keeps a household at.`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Companion Capacity currently consumed by character_sheet's active companions via gift.`
 
 
@@ -5075,6 +5075,7 @@
   - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
   - tenant_persona -> scenes.Persona [FK] (nullable)
   - tenant_organization -> societies.Organization [FK] (nullable)
+  - granted_by -> scenes.Persona [FK] (nullable)
 
 ### LocationValueModifier
 **Foreign Keys:**
@@ -5094,7 +5095,8 @@
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' - The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
 - `area_order_difficulty(area: 'Area | None') -> 'int' - Check difficulty implied by an area's order versus crime (#696 items 1 and 8).`
 - `area_stat_total(area: 'Area | None', stat_key: 'str') -> 'int' - Summed area-level modifier rows for *stat_key* on *area* + ancestors (#2862).`
-- `assign_room_tenant(*, persona: 'Persona', room: 'DefaultObject', tenant_persona: 'Persona', ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' - Owner-gated grant of a room tenancy (#670) — the player seam over grant_tenancy.`
+- `assign_room_tenant(*, persona: 'Persona', room: 'DefaultObject', tenant_persona: 'Persona', kind: 'str' = LocationRole.TENANT, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' - The player seam over ``grant_tenancy`` (#670, ladder #3902).`
+- `can_grant(persona: 'Persona | None', room: 'DefaultObject', kind: 'str') -> 'bool' - Whether ``persona`` may hand out a grant of ``kind`` at ``room`` (#3902).`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' - Delete LocationValueModifier rows whose current_value() has`
 - `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' - A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
 - `comfort_level(room: 'DefaultObject', *, comfort_offset: 'int' = 0) -> 'int' - A room's comfort level (1–10) for an occupant (#1514).`
@@ -5110,19 +5112,20 @@
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' - Bulk-resolve stats for many rooms in one pass.`
 - `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None, damage_type: 'DamageType | None' = None) -> 'int' - Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.`
 - `effective_values_for_rooms(rooms: 'Iterable[DefaultObject]', *, stat_keys: 'Iterable[StatKey] | None' = None, resonances: 'Iterable[Resonance] | None' = None) -> 'dict[int, dict[StatKey | Resonance, int]]' - Bulk-resolve cascade values across many rooms for one axis.`
-- `end_room_tenancy(*, persona: 'Persona', tenancy: 'LocationTenancy') -> 'LocationTenancy' - End a room tenancy (#670): the room's owner (eviction) or the tenant (departure).`
+- `end_room_tenancy(*, persona: 'Persona', tenancy: 'LocationTenancy') -> 'LocationTenancy' - End a room tenancy (#670, ladder #3902): departure, or revocation by rung.`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' - End a tenancy by setting ``ends_at``.`
 - `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' - A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' - Walk up the area hierarchy to the nearest climate assignment (#1522).`
-- `grant_tenancy(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' - Create a new LocationTenancy row.`
+- `grant_tenancy(*, kind: 'str', area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, granted_by: 'Persona | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' - Create a new LocationTenancy row at rung ``kind`` (#3902).`
+- `has_standing(persona: 'Persona | None', room: 'DefaultObject', *, at_least: 'str' = LocationRole.GUEST) -> 'bool' - Whether ``persona`` holds at least ``at_least`` at ``room`` (#3902).`
 - `hazard_is_covered(room: 'DefaultObject', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' - Whether *room* grants shelter against *damage_type* (#1744).`
 - `hazard_is_covered_for(character: 'DefaultObject', room: 'DefaultObject | None', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' - Whether *character* in *room* is sheltered against *damage_type*.`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' - True when ``ownership_for(persona, room)`` returns a row.`
-- `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' - True when ``tenancies_for(persona, room)`` has any rows.`
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' - Default a persona's character home to this room when it has none yet (#1514, #2036).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' - Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' - Return ALL LocationOwnership rows (active and ended) for a`
 - `resolve_area_art(room_profile: 'RoomProfile | None', *, thumbnail_url: 'object' = <object object>) -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
+- `role_at(persona: 'Persona | None', room: 'DefaultObject') -> 'int | None' - The highest rank this persona holds at this room, or ``None`` for no standing.`
 - `room_discomfort(room: 'DefaultObject') -> 'int' - Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' - The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' - Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
@@ -8416,6 +8419,7 @@
   - exile_decrees <- justice.ExileDecree
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
+  - tenancies_granted <- locations.LocationTenancy
   - mission_invites_received <- missions.MissionInvite
   - mission_invites_sent <- missions.MissionInvite
   - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement

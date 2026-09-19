@@ -3,7 +3,13 @@ import factory.django
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.factories import AreaFactory
-from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
+from world.locations.constants import (
+    HolderType,
+    KeyType,
+    LocationParentType,
+    LocationRole,
+    StatKey,
+)
 from world.locations.models import (
     LocationOwnership,
     LocationTenancy,
@@ -100,9 +106,16 @@ class LocationTenancyFactory(factory.django.DjangoModelFactory):
     tenant_type = HolderType.PERSONA
     tenant_persona = factory.SubFactory(PersonaFactory)
     tenant_organization = None
+    # The model default is GUEST (fail closed, #3902), but a factory exists to build
+    # the ordinary case, and the ordinary grant is a tenant's. Tests that want a key
+    # say `kind=LocationRole.GUEST` or use the `as_guest` trait below.
+    kind = LocationRole.TENANT
+    granted_by = None
     ends_at = None  # indefinite / revocable
 
     class Params:
+        as_guest = factory.Trait(kind=LocationRole.GUEST)
+        as_trustee = factory.Trait(kind=LocationRole.TRUSTEE)
         on_area = factory.Trait(
             parent_type=LocationParentType.AREA,
             area=factory.SubFactory(AreaFactory),

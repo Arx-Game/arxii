@@ -18,12 +18,15 @@ from world.locations.constants import (
     COMFORT_LEVEL_MIN,
     ENCLOSURE_SHELTERED_AXES,
     EXPOSURE_STAT_KEYS,
+    LOCATION_ROLE_RANK,
+    OWNER_RANK,
     STAT_CLAMPS,
     STAT_DEFAULTS,
     WEATHER_EXPOSURE_AXES,
     HolderType,
     KeyType,
     LocationParentType,
+    LocationRole,
     StatKey,
 )
 from world.locations.models import (
@@ -1183,9 +1186,83 @@ def tenancies_for(persona: Persona, room: DefaultObject) -> QuerySet[LocationTen
     )
 
 
-def is_tenant(persona: Persona, room: DefaultObject) -> bool:
-    """True when ``tenancies_for(persona, room)`` has any rows."""
-    return tenancies_for(persona, room).exists()
+def _kinds_at_or_above(role: str) -> list[str]:
+    """Every ``LocationRole`` whose rank meets or beats ``role``.
+
+    Derived from ``LOCATION_ROLE_RANK`` rather than written out, so adding a fourth
+    rung cannot leave a stale list behind. #3923 is the precedent: a hand-written copy
+    of an enumerated set went stale when the set grew, granted MORE access than
+    intended, and raised nothing.
+    """
+    threshold = LOCATION_ROLE_RANK[role]
+    return [kind for kind, rank in LOCATION_ROLE_RANK.items() if rank >= threshold]
+
+
+def role_at(persona: Persona | None, room: DefaultObject) -> int | None:
+    """The highest rank this persona holds at this room, or ``None`` for no standing.
+
+    Ranks are the ints in ``LOCATION_ROLE_RANK`` plus ``OWNER_RANK`` on top. Returns a
+    rank rather than a ``LocationRole`` because OWNER is not a member of that enum --
+    the deed is a ``LocationOwnership`` row, a different model with a different
+    lifecycle (see the enum's docstring).
+
+    Multiple concurrent grants are legal by design (a married couple, a lease holder
+    plus a roommate), and a persona can hold one directly and another through an
+    organization, so the answer is the MAXIMUM rung they hold, not the first one found.
+    """
+    if persona is None:
+        return None
+    if is_owner(persona, room):
+        return OWNER_RANK
+    ranks = [
+        LOCATION_ROLE_RANK[tenancy.kind]
+        for tenancy in tenancies_for(persona, room)
+        if tenancy.kind in LOCATION_ROLE_RANK
+    ]
+    return max(ranks) if ranks else None
+
+
+def has_standing(
+    persona: Persona | None,
+    room: DefaultObject,
+    *,
+    at_least: str = LocationRole.GUEST,
+) -> bool:
+    """Whether ``persona`` holds at least ``at_least`` at ``room`` (#3902).
+
+    The one gate for "may this persona do a thing here". It replaced the
+    ``is_owner(p, r) or is_tenant(p, r)`` spelling that used to be copied across
+    eleven call sites: that expression silently started meaning "guest included" the
+    moment grants gained a rung, and every one of those sites wanted a different
+    answer. Naming the rung at the call site is the point.
+
+    An owner clears every rung -- the deed outranks any grant -- so owner-only checks
+    keep using ``is_owner`` directly rather than asking for a rung above TRUSTEE.
+    """
+    if persona is None:
+        return False
+    if is_owner(persona, room):
+        return True
+    if LOCATION_ROLE_RANK[at_least] == LOCATION_ROLE_RANK[LocationRole.GUEST]:
+        # The floor: any active grant clears it, so skip building the kind filter.
+        return tenancies_for(persona, room).exists()
+    return tenancies_for(persona, room).filter(kind__in=_kinds_at_or_above(at_least)).exists()
+
+
+def can_grant(persona: Persona | None, room: DefaultObject, kind: str) -> bool:
+    """Whether ``persona`` may hand out a grant of ``kind`` at ``room`` (#3902).
+
+    Apostate's ruling: granting ACCESS (a guest key) is a Tenant power and granting
+    TENANCY is a Trustee power. Appointing a TRUSTEE is the owner's alone: a trustee
+    is "someone trusted by the owner", and trust that a trustee could pass on to a
+    friend, who could pass it on again, is not the owner's trust any more. Revoking
+    a trustee is owner-only for the same reason, and the two halves must agree or the
+    owner ends up removing appointments they never made.
+    """
+    if kind == LocationRole.TRUSTEE:
+        return persona is not None and is_owner(persona, room)
+    needed = LocationRole.TENANT if kind == LocationRole.GUEST else LocationRole.TRUSTEE
+    return has_standing(persona, room, at_least=needed)
 
 
 def transfer_ownership(  # noqa: PLR0913
@@ -1254,21 +1331,47 @@ def transfer_ownership(  # noqa: PLR0913
 
 def grant_tenancy(  # noqa: PLR0913
     *,
+    kind: str,
     area: Area | None = None,
     room_profile: RoomProfile | None = None,
     tenant_persona: Persona | None = None,
     tenant_organization: Organization | None = None,
+    granted_by: Persona | None = None,
     ends_at: datetime | None = None,
     notes: str = "",
 ) -> LocationTenancy:
-    """Create a new LocationTenancy row.
+    """Create a new LocationTenancy row at rung ``kind`` (#3902).
 
-    Multiple concurrent tenancies on the same location are valid by
-    design — no conflict check. Caller is responsible for permission
-    gating (only owners should grant tenancy).
+    Multiple concurrent tenancies on the same location are valid by design — no
+    conflict check. A married couple, a lease holder plus a roommate and a communal
+    bunkroom are all several rows, and so is a resident who also holds a guest key
+    somewhere inside the same area.
+
+    ``kind`` is REQUIRED and has no default here even though the model has one. The
+    model's default is a safety net for rows written by other paths; a caller of this
+    function is deciding what to hand someone and should have to say it. The old
+    signature took no rung at all, and its docstring deferred authorization to callers
+    who overwhelmingly did not do it:
+
+        Caller is responsible for permission gating (only owners should grant tenancy).
+
+    ``granted_by`` now closes that. When it is a persona, the ladder is enforced here
+    as a hard boundary: granting a GUEST needs Tenant-or-above, granting a TENANT or a
+    TRUSTEE needs Trustee-or-above. When it is None the grant is a system or staff act
+    — character generation's starting residence, the admin, seeds — which is a real
+    case and stays allowed, but it is now spelled out at the call site rather than
+    being what happens when nobody thought about it.
     """
     _validate_location_kwargs(area, room_profile)
     _validate_holder_kwargs(tenant_persona, tenant_organization)
+    if kind not in LOCATION_ROLE_RANK:
+        msg = f"Unknown grant kind {kind!r}."
+        raise ValueError(msg)
+    if granted_by is not None:
+        target = room_profile.objectdb if room_profile is not None else None
+        if target is None or not can_grant(granted_by, target, kind):
+            msg = "You do not have the standing here to grant that."
+            raise TenancyGrantNotPermitted(msg)
 
     parent_type = LocationParentType.AREA if area is not None else LocationParentType.ROOM
     tenant_type = HolderType.PERSONA if tenant_persona is not None else HolderType.ORGANIZATION
@@ -1279,6 +1382,8 @@ def grant_tenancy(  # noqa: PLR0913
         tenant_type=tenant_type,
         tenant_persona=tenant_persona,
         tenant_organization=tenant_organization,
+        kind=kind,
+        granted_by=granted_by,
         ends_at=ends_at,
         notes=notes,
     )
@@ -1350,38 +1455,84 @@ def maybe_default_residence(persona: Persona | None, room_profile: RoomProfile |
         set_current_residence(sheet, room_profile)
 
 
-def assign_room_tenant(
+def _grant_refusal(persona: Persona, room: DefaultObject, kind: str) -> str:
+    """The player-facing reason ``can_grant`` said no, naming what they CAN do."""
+    if kind == LocationRole.TRUSTEE and has_standing(persona, room, at_least=LocationRole.TRUSTEE):
+        return "Only the owner can appoint a trustee."
+    if kind != LocationRole.GUEST and has_standing(persona, room, at_least=LocationRole.TENANT):
+        return "You can hand out a key here, but not a tenancy."
+    return "You don't have the standing here to grant that."
+
+
+def assign_room_tenant(  # noqa: PLR0913
     *,
     persona: Persona,
     room: DefaultObject,
     tenant_persona: Persona,
+    kind: str = LocationRole.TENANT,
     ends_at: datetime | None = None,
     notes: str = "",
 ) -> LocationTenancy:
-    """Owner-gated grant of a room tenancy (#670) — the player seam over grant_tenancy.
+    """The player seam over ``grant_tenancy`` (#670, ladder #3902).
 
-    Re-checks ownership as a hard boundary (action prerequisites are the
-    primary UX gate).
+    Was owner-only. Apostate's ruling opens it by rung: a TENANT may hand out a GUEST
+    key and a TRUSTEE may hand out a tenancy, while appointing a trustee stays with
+    the owner. ``can_grant`` holds that comparison in one place, and ``grant_tenancy``
+    re-checks it as a hard boundary because action prerequisites are the UX gate, not
+    the security one.
+
+    ``kind`` defaults to TENANT rather than to the model's GUEST: this is the seam a
+    landlord uses to install a tenant, and every caller before the ladder existed
+    meant exactly that. A key-giving surface passes ``LocationRole.GUEST`` explicitly.
     """
-    if not is_owner(persona, room):
-        msg = "Only the building's owner can assign tenants."
-        raise RoomEditError(msg)
     try:
         profile = room.room_profile
     except RoomProfile.DoesNotExist as exc:
         msg = "This room can't hold tenants."
         raise RoomEditError(msg) from exc
+    if not can_grant(persona, room, kind):
+        raise TenancyGrantNotPermitted(_grant_refusal(persona, room, kind))
     return grant_tenancy(
-        room_profile=profile, tenant_persona=tenant_persona, ends_at=ends_at, notes=notes
+        kind=kind,
+        room_profile=profile,
+        tenant_persona=tenant_persona,
+        granted_by=persona,
+        ends_at=ends_at,
+        notes=notes,
     )
 
 
 def end_room_tenancy(*, persona: Persona, tenancy: LocationTenancy) -> LocationTenancy:
-    """End a room tenancy (#670): the room's owner (eviction) or the tenant (departure)."""
+    """End a room tenancy (#670, ladder #3902): departure, or taking back what you gave.
+
+    Three ways this is allowed:
+
+    1. **Departure.** The holder may always end their own grant, whatever its rung.
+       Nobody is trapped in a tenancy or obliged to keep a key.
+    2. **The owner ends anything.** "Controls all forms of access" is the deed's one
+       reserved power, and it is the only way a system grant (``granted_by`` NULL --
+       character generation, staff) or a departed granter's grant ever ends.
+    3. **You take back what you handed out.** Revocation follows the chain of grants,
+       not rank: the row's ``granted_by`` must be this persona, and they must still
+       hold the standing to have granted it (``can_grant``), so a tenant who has since
+       been evicted cannot reach back in. This is the reason ``granted_by`` exists. A
+       tenant may not pull a key the owner gave, and a trustee may not evict a tenant
+       the owner installed -- rank alone let both happen, and both unpick the owner's
+       arrangements from inside.
+    """
     room = tenancy.room_profile.objectdb if tenancy.room_profile else None
-    is_self = tenancy.tenant_persona_id == persona.pk
-    if not is_self and (room is None or not is_owner(persona, room)):
+    if tenancy.tenant_persona_id == persona.pk:
+        return end_tenancy(tenancy)
+    if room is None:
         msg = "Only the room's owner or the tenant can end this tenancy."
+        raise RoomEditError(msg)
+    if is_owner(persona, room):
+        return end_tenancy(tenancy)
+    if tenancy.granted_by_id != persona.pk:
+        msg = "You didn't grant that, so you can't take it back. Only the owner can."
+        raise RoomEditError(msg)
+    if not can_grant(persona, room, tenancy.kind):
+        msg = "You no longer have the standing here to take that back."
         raise RoomEditError(msg)
     return end_tenancy(tenancy)
 
@@ -1396,9 +1547,9 @@ def set_primary_home(*, persona: Persona, room: DefaultObject, notes: str = "") 
     multiple consumers.
 
     Accepts org-derived tenant standing, not only a direct persona tenancy (#2036):
-    when the persona has no direct tenancy row on this room but has owner or tenant
-    standing (composed via org membership by ``is_owner``/``is_tenant``), a personal
-    tenancy is minted first — this is the only way "one residence per character"
+    when the persona has no direct tenancy row on this room but holds TENANT-or-above
+    standing (composed via org membership by ``has_standing``), a personal tenancy is
+    minted first — this is the only way "one residence per character"
     stays meaningful when access to the room comes from a shared family/org/Academy
     grant (multiple tenants of the same shared row can each declare their own home).
     ``notes`` is forwarded to the minted tenancy (e.g. authoring "may be charged rent").
@@ -1416,10 +1567,19 @@ def set_primary_home(*, persona: Persona, room: DefaultObject, notes: str = "") 
         .first()
     )
     if tenancy is None:
-        if not (is_owner(persona, room) or is_tenant(persona, room)):
+        # TENANT (#3902): a guest key is not a claim to live somewhere. The minted row
+        # is a TENANT grant for the same reason -- it is the persona's own residence,
+        # not a key someone handed them -- and granted_by stays None because the world
+        # is minting it off existing standing rather than anyone handing it over.
+        if not has_standing(persona, room, at_least=LocationRole.TENANT):
             msg = "You'd need standing here first — this room isn't yours to live in."
             raise RoomEditError(msg)
-        tenancy = grant_tenancy(room_profile=profile, tenant_persona=persona, notes=notes)
+        tenancy = grant_tenancy(
+            kind=LocationRole.TENANT,
+            room_profile=profile,
+            tenant_persona=persona,
+            notes=notes,
+        )
     with transaction.atomic():
         LocationTenancy.objects.filter(
             tenant_persona=persona, is_primary_home=True
@@ -1648,6 +1808,20 @@ class RoomEditError(Exception):
         self.user_message = user_message
 
 
+class TenancyGrantNotPermitted(RoomEditError):
+    """A persona tried to hand out a grant they do not have the standing to give (#3902).
+
+    A subclass of ``RoomEditError`` so every seam that already maps that to a
+    player-facing response keeps working unchanged, and so ``user_message`` stays the
+    only thing that ever reaches a response body.
+
+    Defined here, below ``RoomEditError``, and referenced from ``grant_tenancy`` further
+    up the module: Python resolves the name when the function runs, not when it is
+    defined, and moving ``RoomEditError`` up to satisfy declaration order would churn a
+    class several other modules import.
+    """
+
+
 def _has_active_non_public_scene(room: DefaultObject) -> bool:
     """Whether an active, non-PUBLIC scene is running in this room.
 
@@ -1694,9 +1868,9 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
     """
     from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
 
-    if not bypass_ownership and (
-        persona is None or not (is_owner(persona, room) or is_tenant(persona, room))
-    ):
+    # TENANT (#3902): editing the room is "change a house", a resident's power. Staff
+    # still bypass entirely via bypass_ownership.
+    if not bypass_ownership and not has_standing(persona, room, at_least=LocationRole.TENANT):
         msg = "You don't own this room."
         raise RoomEditError(msg)
     if is_public is True and _has_active_non_public_scene(room):
