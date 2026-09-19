@@ -34,6 +34,8 @@ import { RoundFlow } from './sections/RoundFlow';
 import { EncounterOutcomeBanner } from './components/EncounterOutcomeBanner';
 import type { AftermathDigest } from './components/AftermathDigest';
 import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
+import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
+import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import type { components } from '@/generated/api';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
@@ -244,6 +246,12 @@ export function CombatTurnPanel({
           )}
         </div>
       )}
+
+      <SpecialistChoicePanel
+        encounterId={encounterId}
+        selections={encounter.pending_selections ?? []}
+      />
+      <CommitmentPanel encounter={encounter} />
 
       {/* Forced-escape banner — Hero Killer on field; victory impossible (#875). */}
       {encounter.forced_escape && <ForcedEscapeBanner />}

@@ -78,6 +78,18 @@ function useEncounterMutation<TData, TArgs = void>(
   });
 }
 
+/** Resolve one deferred specialist choice and refresh its encounter. */
+export function useResolvePendingSelection(encounterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { selectionId: number; optionId: string }) =>
+      api.resolvePendingSelection(encounterId, args.selectionId, args.optionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Encounter read hook
 // ---------------------------------------------------------------------------
@@ -118,6 +130,8 @@ export function useCombatEncounter(encounterId: number) {
  */
 export function useEncounterForScene(sceneId: number): {
   data: EncounterListItem | null | undefined;
+  /** All active encounters, allowing callers to present a chooser. */
+  encounters: EncounterListItem[];
   isLoading: boolean;
   isError: boolean;
 } {
@@ -133,11 +147,13 @@ export function useEncounterForScene(sceneId: number): {
   // so taking index 0 is deterministic: it is always the most-recent non-completed
   // encounter. Using .find() was equally correct here but index 0 makes the
   // intent explicit.
-  const nonCompleted = result.data?.filter((e: EncounterListItem) => e.status !== 'completed');
+  const nonCompleted =
+    result.data?.filter((e: EncounterListItem) => e.status !== 'completed') ?? [];
   const activeEncounter = nonCompleted && nonCompleted.length > 0 ? nonCompleted[0] : null;
 
   return {
     data: result.isLoading ? undefined : activeEncounter,
+    encounters: nonCompleted,
     isLoading: result.isLoading,
     isError: result.isError,
   };

@@ -29436,6 +29436,9 @@ export interface components {
       readonly position_edges: components['schemas']['PositionEdge'][];
       readonly volatile_objects: components['schemas']['VolatileObject'][];
       readonly objective: components['schemas']['ObjectiveSnapshot'] | null;
+      readonly pending_selections?: components['schemas']['PendingSelection'][];
+      readonly sustained_actions?: components['schemas']['SustainedAction'][];
+      readonly protection_commitments?: components['schemas']['ProtectionCommitment'][];
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -34711,6 +34714,42 @@ export interface components {
      * @enum {string}
      */
     ObjectiveSnapshotSourceEnum: 'scenario' | 'stakes';
+    PendingSelectionOption: {
+      id: string;
+      label: string;
+      description: string;
+    };
+    PendingSelection: {
+      id: number;
+      participant_id: number;
+      selection_type: string;
+      options: components['schemas']['PendingSelectionOption'][];
+      selected_option_id: string | null;
+      target_opponent_id: number | null;
+      target_opponent_name: string | null;
+      /** Format: date-time */
+      created_at: string;
+      resolved: boolean;
+    };
+    SustainedAction: {
+      id: number;
+      participant_id: number;
+      participant_name: string;
+      kind: string;
+      subject: string;
+      declared_round: number;
+      resolves_round: number;
+      rounds_until_resolution: number;
+      downgrades: number;
+      broken: boolean;
+    };
+    ProtectionCommitment: {
+      participant_id: number;
+      participant_name: string;
+      maneuver: string;
+      protected_participant_id: number | null;
+      protected_participant_name: string | null;
+    };
     ObligationRow: {
       id: number;
       name: string;
@@ -38909,6 +38948,10 @@ export interface components {
       readonly control_modifier: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly aftermath: components['schemas']['AftermathDigest'] | null;
+      /** Return spent reactions only to the owner, GM, or staff. */
+      readonly reactions_used?: number | null;
+      /** Return the remaining reaction availability without exposing other pools. */
+      readonly reactions_remaining?: number | null;
     };
     /**
      * @description Read serializer for combat participants.
