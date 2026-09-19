@@ -209,6 +209,7 @@ export function CharacterSheetPage() {
             isActiveCharacter={isActiveCharacter}
             viewerEntryId={viewerEntryId}
             domains={sheet?.domains ?? []}
+            keyring={sheet?.keyring ?? []}
           />
         )}
 

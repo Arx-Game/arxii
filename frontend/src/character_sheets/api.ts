@@ -381,6 +381,7 @@ export interface CharacterSheetPayload {
   mentors: CharacterSheetMentor[];
   /** #3901 — land the character's organizations hold. Empty for anyone but the owner. */
   domains: CharacterSheetDomain[];
+  keyring: CharacterSheetKeyringEntry[];
   /** #3906 — where the presented face stands. Gated by `standing_visibility`. */
   standing: CharacterSheetStanding;
   /** #3906 — active covenant roles. Public. */
@@ -424,6 +425,28 @@ export interface CharacterSheetDomain {
   name: string;
   organization: string;
   where: string;
+}
+
+/**
+ * Mirrors `world.character_sheets.types.KeyringEntry` (#3902) — one place this
+ * character may walk into, and on whose authority.
+ *
+ * The discovery half of the guest-key ruling: a friend hands this character a key and
+ * nothing on the sheet could say the house exists, so the next player of that
+ * character never learns it. A family keep reached through an organization is the
+ * same row with `through` filled in.
+ *
+ * `rung` is the human label of the grant's role (Guest / Tenant / Trustee), never a
+ * raw value. `through` and `granted_by` are empty strings rather than null when they
+ * do not apply — an org-less grant and a world-granted one respectively.
+ */
+export interface CharacterSheetKeyringEntry {
+  id: number;
+  place: string;
+  where: string;
+  rung: string;
+  through: string;
+  granted_by: string;
 }
 
 /**
