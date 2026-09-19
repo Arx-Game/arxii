@@ -345,6 +345,10 @@ export function EstatePanel({
                         {key.through ? <Tag>{key.through}</Tag> : null}
                       </>
                     }
+                    /* The "on whose say-so" half of the line above. Absent for a grant
+                       the world made (character generation, staff) or one an
+                       organization holds, where no persona handed anything over. */
+                    gloss={key.granted_by ? `Given by ${key.granted_by}.` : undefined}
                   />
                 ))}
               </Entries>

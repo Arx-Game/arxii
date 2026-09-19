@@ -111,6 +111,15 @@ describe('Estate keyring', () => {
     expect(screen.getByText('Guest')).toBeInTheDocument();
   });
 
+  it('says who handed the key over, and stays silent when nobody did', () => {
+    // The block's own line promises "and on whose say-so", so a row that cannot say
+    // it would be copy writing a cheque the markup does not cash. An org-held grant
+    // has no granting persona and correctly shows nothing.
+    renderEstate([], [BACK_ROOM, KEEP]);
+    expect(screen.getByText('Given by Maelis.')).toBeInTheDocument();
+    expect(screen.queryByText(/Given by\s*\./)).not.toBeInTheDocument();
+  });
+
   it('names the organization that reaches an org-held grant, and only then', () => {
     renderEstate([], [BACK_ROOM, KEEP]);
     expect(screen.getByText('House du Verane')).toBeInTheDocument();
