@@ -34,7 +34,14 @@ function capitalizeFirst(value: string): string {
 }
 
 export function AftermathDigest({ digest, title }: AftermathDigestProps) {
-  const { consequence, conditions, legend, beat, peril_round_active: perilRoundActive } = digest;
+  const {
+    consequence,
+    conditions,
+    legend,
+    beat,
+    objective,
+    peril_round_active: perilRoundActive,
+  } = digest;
   const beatText = beat
     ? `${beat.resolution_text || 'The beat is resolved'} (${beat.tier_name ?? 'ungraded'}, ${capitalizeFirst(beat.outcome)})`
     : null;
@@ -73,8 +80,35 @@ export function AftermathDigest({ digest, title }: AftermathDigestProps) {
             Deed remembered
           </p>
           {legend.map((entry, index) => (
-            <p key={`${entry.title}-${index}`} className="text-xs text-foreground">
-              {entry.title} (+{entry.base_value} legend)
+            <div key={`${entry.title}-${index}`} className="space-y-1">
+              <p className="text-xs text-foreground">
+                {entry.title} (+{entry.base_value} legend)
+              </p>
+              {entry.recognition?.map((recognition) => (
+                <p
+                  key={`${recognition.key}-${recognition.label}`}
+                  className="pl-2 text-xs text-muted-foreground"
+                  data-testid="aftermath-recognition"
+                >
+                  {recognition.label}
+                </p>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {objective && objective.branches.length > 0 && (
+        <div className="space-y-1" data-testid="aftermath-objective">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Objective result
+          </p>
+          {objective.branches.map((branch) => (
+            <p
+              key={`${branch.key}-${branch.column ?? 'route'}`}
+              className="text-xs text-foreground"
+            >
+              {branch.label || branch.key}
             </p>
           ))}
         </div>

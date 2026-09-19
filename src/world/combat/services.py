@@ -8387,6 +8387,21 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         participant=participant,
         round_number=action.round_number,
         summary_label=render_action_declaration_label(action),
+        strain_committed=(
+            combat_result.declared_strain_commitment
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
+        strain_effective=(
+            combat_result.effective_strain_commitment
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
+        strain_power_bonus=(
+            combat_result.strain_power_bonus
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
         fury_committed=fury_committed,
         target_personas=target_personas,
     )
@@ -10137,6 +10152,7 @@ def _dispatch_interpose_action(
 
     modifiers = bond_bonus(interposer, protected)
 
+    amount_before = pre_payload.amount
     if action.focused_action_id is not None:
         attempted = _try_technique_interpose(
             action,
@@ -10160,6 +10176,9 @@ def _dispatch_interpose_action(
             # No qualifying reaction action is an unavailable declaration, not
             # an attempted failure. Leave both budgets untouched for fallback.
             return False
+
+    if pre_payload.amount < amount_before:
+        _record_story_envoy_rescue(action, protected)
 
     # Increment both budgets only after a dispatch/technique has truly started.
     # This preserves the fallback path for unavailable guardians while counting
@@ -11346,9 +11365,65 @@ def _assess_boss_break_bar(
     boss.save(update_fields=["break_bar_current", "vulnerability_rounds_remaining"])
     if broke_this_round:
         _broadcast_break_celebration(encounter, boss)
+        _record_story_break_recognition(encounter, boss, round_number)
         from world.combat.escalation import apply_boss_break_surge  # noqa: PLC0415
 
         apply_boss_break_surge(opponent=boss)
+
+
+def _record_story_envoy_rescue(action: CombatRoundAction, protected: ObjectDB) -> None:
+    """Persist a successful PC guardian rescue for an active story contract."""
+    encounter = action.participant.encounter
+    beat = encounter.story_beat
+    if beat is None:
+        return
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    activation = get_open_activation(beat)
+    if activation is None:
+        return
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    protected_sheet = CharacterSheet.objects.filter(character_id=protected.pk).first()
+    if protected_sheet is None:
+        return
+    from world.societies.causal_recognition import record_envoy_rescue  # noqa: PLC0415
+
+    record_envoy_rescue(
+        activation,
+        action.participant.character_sheet,
+        source_id=action.pk,
+        source_action_id=action.pk,
+        protected_sheet=protected_sheet,
+    )
+
+
+def _record_story_break_recognition(
+    encounter: CombatEncounter, boss: CombatOpponent, round_number: int
+) -> None:
+    """Persist authored opening causes when this boss break reaches zero (#3914)."""
+    beat = encounter.story_beat
+    if beat is None:
+        return
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    activation = get_open_activation(beat)
+    if activation is None:
+        return
+    from world.societies.causal_recognition import record_created_opening  # noqa: PLC0415
+
+    rows = BreakBarContribution.objects.filter(
+        opponent=boss,
+        round_number=round_number,
+        participant__isnull=False,
+    ).select_related("participant__character_sheet")
+    for row in rows:
+        record_created_opening(
+            activation,
+            row.participant.character_sheet,
+            source_id=row.pk,
+            contribution_kind=row.kind,
+        )
 
 
 def _break_bar_events_this_round(

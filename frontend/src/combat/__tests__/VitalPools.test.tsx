@@ -72,6 +72,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     control_modifier: null,
     current_position: null,
     aftermath: null,
+    reactions_used: null,
+    reactions_remaining: null,
     ...overrides,
   };
 }
@@ -83,6 +85,7 @@ function makeEncounter(participants: Participant[] = []): EncounterDetail {
     round_number: 1,
     is_participant: true,
     is_gm: false,
+    objective: null,
     participants,
     opponents: [],
     current_round_actions: [],

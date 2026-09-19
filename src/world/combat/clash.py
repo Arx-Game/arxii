@@ -52,6 +52,7 @@ from world.combat.types import (
 from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
+from world.magic.services.strain import strain_to_intensity as _strain_to_intensity
 from world.magic.types.power_ledger import PowerLedger
 from world.traits.models import CheckOutcome
 
@@ -88,32 +89,8 @@ def can_clash(
 
 
 def strain_to_intensity(*, strain_commitment: int, config: StrainConfig) -> int:
-    """Convert a strain commitment (anima poured in past the floor) to an intensity bonus.
-
-    Diminishing-returns curve: the first points convert efficiently, deep strain
-    converts poorly.  Knobs come from ``StrainConfig``:
-
-    - ``conversion_base``: the per-anima conversion at the start of the curve
-    - ``diminishing_step``: every ``diminishing_step`` anima reduces the per-anima
-      conversion by 1
-    - ``diminishing_floor``: the conversion never drops below this per-anima value
-
-    The returned value is passed as ``power_intensity_bonus`` to ``use_technique``,
-    so committed strain scales power (and thus progress delta) without affecting
-    the check roll itself — the check reflects only skill + affinity + conditions.
-
-    ``strain_commitment`` is treated as ``0`` when negative (defensive guard).
-    Returns exactly ``0`` when ``strain_commitment`` is ``0``.
-    """
-    remaining = max(strain_commitment, 0)
-    bonus = 0
-    rate = config.conversion_base
-    while remaining > 0:
-        take = min(remaining, config.diminishing_step)
-        bonus += take * rate
-        remaining -= take
-        rate = max(rate - 1, config.diminishing_floor)
-    return bonus
+    """Compatibility wrapper for the shared strain conversion curve."""
+    return _strain_to_intensity(strain_commitment=strain_commitment, config=config)
 
 
 def outcome_to_delta(*, check_outcome: CheckOutcome, power: int, config: ClashConfig) -> int:
@@ -234,15 +211,6 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
 
     check_type = resolve_cast_check_type(objectdb, template)
 
-    # 2. Convert strain commitment to a power_intensity_bonus (diminishing-returns curve).
-    #    Strain no longer modifies the check roll — the check reflects skill + affinity +
-    #    conditions only.  Instead, committed strain scales power via use_technique's
-    #    power_intensity_bonus kwarg, so heavier strain → higher power → higher progress delta.
-    power_intensity_bonus = strain_to_intensity(
-        strain_commitment=strain_commitment,
-        config=config_strain,
-    )
-
     # 2b. Express the affinity tilt as a labeled ModifierContribution and route it
     #     through the shared collect_check_modifiers seam so the clash check honors
     #     condition + rollmod sources (the #851 individualization lever).
@@ -326,8 +294,8 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         strain_commitment=strain_commitment,
         targets=targets,
         confirm_soulfray_risk=True,
-        power_intensity_bonus=power_intensity_bonus,
         lethal=clash.encounter.is_lethal,
+        strain_config=config_strain,
         # #2536 Task 4 review fix: thread the live round context (when a
         # CombatParticipant resolves — see step 0b above) so situational-perk
         # POWER_BONUS providers can read combat-positioning situations
@@ -395,7 +363,9 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
             participant=participant,
             round_number=clash.started_round,
             summary_label=f"{technique.name} → clash contribution",
-            strain_committed=strain_commitment,
+            strain_committed=technique_use_result.declared_strain_commitment,
+            strain_effective=technique_use_result.effective_strain_commitment,
+            strain_power_bonus=technique_use_result.strain_power_bonus,
         )
         if clash_interaction is not None:
             from world.scenes.interaction_services import (  # noqa: PLC0415

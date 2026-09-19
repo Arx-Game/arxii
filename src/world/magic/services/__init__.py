@@ -50,6 +50,7 @@ from world.magic.services.soulfray import (
     get_soulfray_warning,
     select_mishap_pool,
 )
+from world.magic.services.strain import strain_to_intensity
 from world.magic.services.techniques import (
     calculate_effective_anima_cost,
     get_runtime_technique_stats,
@@ -133,6 +134,7 @@ __all__ = [
     "spend_resonance_for_imbuing",
     "spend_resonance_for_pull",
     "staff_clear_alteration",
+    "strain_to_intensity",
     "survivability_baseline",
     "survivability_save_baselines",
     "threads_blocked_by_cap",

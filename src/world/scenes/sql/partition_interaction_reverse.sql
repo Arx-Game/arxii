@@ -21,6 +21,8 @@ CREATE TABLE arxii_interaction (
     pose_kind        varchar(16) NOT NULL DEFAULT 'standard',
     vote_count            integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
     strain_committed      integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
+    strain_effective      integer NOT NULL DEFAULT 0 CHECK (strain_effective >= 0),
+    strain_power_bonus    integer NOT NULL DEFAULT 0 CHECK (strain_power_bonus >= 0),
     -- NOTE: fury_committed_id is intentionally absent here -- see the matching
     -- note in partition_interaction_forward.sql. It is a post-partition column
     -- (FK to magic.FuryTier, added by scenes/0024). On reverse, the column was
@@ -37,8 +39,8 @@ CREATE TABLE arxii_interaction (
 
 -- 3. Copy data — explicit column list (drift-checked vs. the CREATE TABLE above)
 INSERT INTO arxii_interaction
-    (id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id)
-    SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id
+    (id, content, mode, visibility, pose_kind, vote_count, strain_committed, strain_effective, strain_power_bonus, "timestamp", persona_id, scene_id, place_id)
+    SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, strain_effective, strain_power_bonus, "timestamp", persona_id, scene_id, place_id
     FROM arxii_interaction_partitioned;
 
 -- 4. Drop partitioned table

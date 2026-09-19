@@ -611,3 +611,11 @@ without `--keepdb` before pushing (integration tests create encounters →
   — the `AffinityInteraction` matrix Clash reuses
 - `docs/architecture/unified-player-action.md` —
   the `get_player_actions` / `PlayerAction` seam clash contributions surface through
+
+
+## Shared strain seam (issue #3912)
+
+Clash and ordinary casts now use the same `use_technique` strain conversion.
+`commit_to_clash` passes its authored curve configuration but does not precompute a
+power bonus, preventing double conversion. Clash passive-cap and focused overburn
+validation remain unchanged.

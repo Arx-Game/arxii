@@ -286,6 +286,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     receivers: list[Persona] | None = None,
     target_personas: list[Persona] | None = None,
     strain_committed: int = 0,
+    strain_effective: int = 0,
+    strain_power_bonus: int = 0,
     fury_committed: FuryTier | None = None,
     pose_kind: str = PoseKind.STANDARD,
     visibility: str = InteractionVisibility.DEFAULT,
@@ -338,6 +340,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             scene=scene,
             place=place,
             strain_committed=strain_committed,
+            strain_effective=strain_effective,
+            strain_power_bonus=strain_power_bonus,
             fury_committed=fury_committed,
             pose_kind=pose_kind,
             visibility=visibility,
@@ -458,6 +462,8 @@ def create_action_interaction_core(  # noqa: PLR0913 - one arg per resolved-acti
     scene: Scene | None,
     summary_label: str,
     strain_committed: int = 0,
+    strain_effective: int = 0,
+    strain_power_bonus: int = 0,
     fury_committed: FuryTier | None = None,
     target_personas: list[Persona] | None = None,
 ) -> Interaction:
@@ -479,6 +485,8 @@ def create_action_interaction_core(  # noqa: PLR0913 - one arg per resolved-acti
         content=summary_label,
         mode=InteractionMode.ACTION,
         strain_committed=strain_committed,
+        strain_effective=strain_effective,
+        strain_power_bonus=strain_power_bonus,
         fury_committed=fury_committed,
     )
     if target_personas:

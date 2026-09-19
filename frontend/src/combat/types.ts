@@ -31,7 +31,13 @@ export type PositionNode = components['schemas']['PositionNode'];
 export type PositionEdgeInfo = components['schemas']['PositionEdge'];
 
 /** Cached encounter fixtures may predate the companion-order projection. */
-export type EncounterDetail = Omit<components['schemas']['EncounterDetail'], 'companion_orders'> & {
+export type EncounterDetail = Omit<
+  components['schemas']['EncounterDetail'],
+  'companion_orders' | 'pending_selections' | 'sustained_actions' | 'protection_commitments'
+> & {
+  pending_selections?: components['schemas']['EncounterDetail']['pending_selections'];
+  sustained_actions?: components['schemas']['EncounterDetail']['sustained_actions'];
+  protection_commitments?: components['schemas']['EncounterDetail']['protection_commitments'];
   companion_orders?: components['schemas']['EncounterDetail']['companion_orders'];
 };
 
