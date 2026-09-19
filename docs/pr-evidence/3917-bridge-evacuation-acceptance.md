@@ -1,7 +1,7 @@
 # Review evidence
 
 - Reviewed revision: `d93924fa0c9e97bdf6610f2a046b539ee2506d28`
-- Reviewer: local acceptance test run
+- Reviewer: local acceptance test run (7/7 SQLite-fast acceptance tests)
 - Reviewer verdict: PASS
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
 - Environment: SQLite fast tier; Python/Evennia versions from `uv.lock`; Postgres-tagged strain path is covered by CI configuration
