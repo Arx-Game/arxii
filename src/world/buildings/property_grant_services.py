@@ -175,7 +175,10 @@ def complete_building_activation(project, outcome_tier: object | None = None) ->
     with transaction.atomic():
         claimed = BuildingActivationDetails.objects.filter(
             project=project, applied_at__isnull=True
-        ).update(applied_at=timezone.now())
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            applied_at=timezone.now(),
+        )
         if not claimed:
             return
         details = BuildingActivationDetails.objects.get(project=project)

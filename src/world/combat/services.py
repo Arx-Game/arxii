@@ -3181,7 +3181,11 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     for reset_participant in reset_participants:
         reset_participant.reactions_used = 0
     if reset_participants:
-        CombatParticipant.objects.bulk_update(reset_participants, ["reactions_used"])
+        CombatParticipant.objects.bulk_update_with_reason(
+            reset_participants,
+            ["reactions_used"],
+            reason="issue #3817: intentional bulk write",
+        )
 
     # --- Round-start per-participant upkeep: DoT tick + engagement ensure ---
     from world.vitals.services import tick_round_for_targets  # noqa: PLC0415
@@ -7089,16 +7093,85 @@ def detect_available_combos(
     return [rc.as_available() for rc in scan_round_combos(encounter, round_number) if rc.complete]
 
 
+def _combo_composition_is_eligible(
+    available: AvailableCombo,
+) -> bool:
+    """Return whether every current combo contributor can still act.
+
+    Combo scanning describes declared techniques.  A contributor can become
+    dead or unconscious after declaring, so the upgrade and resolution gates
+    also check the live agency state.
+    """
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    return all(
+        match.participant.status == ParticipantStatus.ACTIVE
+        and can_act(match.participant.character_sheet)
+        for match in available.slot_matches
+    )
+
+
+def _available_combo_for_action(
+    action: CombatRoundAction,
+    combo: ComboDefinition,
+) -> AvailableCombo | None:
+    """Find a complete scanned combo that includes *action*, if one exists."""
+    encounter = action.participant.encounter
+    for available in detect_available_combos(encounter, action.round_number):
+        if available.combo.pk != combo.pk:
+            continue
+        if any(match.action.pk == action.pk for match in available.slot_matches):
+            return available if _combo_composition_is_eligible(available) else None
+    return None
+
+
+def _revalidate_combo_upgrades(
+    encounter: CombatEncounter,
+    round_number: int,
+    actions: dict[int, CombatRoundAction],
+) -> None:
+    """Clear upgrades whose complete composition is no longer valid.
+
+    This is deliberately done after all declarations and late auto-declarations
+    are loaded, rather than trusting the declaration-time upgrade.  Changed
+    targets, removed contributors, and lost agency therefore cannot grant a
+    combo rider at resolution.
+    """
+    available = {item.combo.pk: item for item in detect_available_combos(encounter, round_number)}
+    for action in actions.values():
+        combo_id = action.combo_upgrade_id
+        if combo_id is None:
+            continue
+        candidate = available.get(combo_id)
+        valid = False
+        if candidate is not None:
+            valid = any(match.action.pk == action.pk for match in candidate.slot_matches)
+            if valid:
+                valid = _combo_composition_is_eligible(candidate)
+        if not valid:
+            action.combo_upgrade = None
+            action.save(update_fields=["combo_upgrade_id"])
+
+
 def upgrade_action_to_combo(
     action: CombatRoundAction,
     combo: ComboDefinition,
 ) -> None:
-    """Mark a PC's round action as upgraded to a combo.
+    """Mark a currently eligible PC action as upgraded to a combo.
+
+    The scanner is the authoritative source for slot matching.  Callers get a
+    ``ValueError`` instead of being able to persist an arbitrary combo FK.
 
     Args:
         action: The CombatRoundAction to upgrade.
         combo: The ComboDefinition being activated.
+
+    Raises:
+        ValueError: If the current team declarations do not complete *combo*.
     """
+    if _available_combo_for_action(action, combo) is None:
+        msg = "Combo is not available for this declared action."
+        raise ValueError(msg)
     action.combo_upgrade = combo
     action.save(update_fields=["combo_upgrade_id"])
 
@@ -7229,7 +7302,10 @@ def _process_combo_outcomes(
             ComboLearning.objects.filter(
                 combo=combo,
                 character_sheet=sheet,
-            ).update(use_count=F("use_count") + 1)
+            ).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                use_count=F("use_count") + 1,
+            )
 
     return action_outcomes
 
@@ -8387,6 +8463,21 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         participant=participant,
         round_number=action.round_number,
         summary_label=render_action_declaration_label(action),
+        strain_committed=(
+            combat_result.declared_strain_commitment
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
+        strain_effective=(
+            combat_result.effective_strain_commitment
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
+        strain_power_bonus=(
+            combat_result.strain_power_bonus
+            if isinstance(combat_result, CombatTechniqueResult)
+            else 0
+        ),
         fury_committed=fury_committed,
         target_personas=target_personas,
     )
@@ -8743,7 +8834,12 @@ def _resolve_pc_action(
     # own technique resolves normally), AND get the combo rider appended.
     # Non-combo actions run the pipeline as before. The only case where the
     # pipeline is skipped: combo-upgraded with no target (defeated opponent).
-    run_pipeline = not action.combo_upgrade or target is not None
+    # A combo upgrade must not suppress an ally-targeted technique.  Support
+    # effects (heals, wards, and buffs) resolve through their normal geometry;
+    # only an opponent target can receive the combo's damage rider.
+    run_pipeline = (
+        not action.combo_upgrade or target is not None or action.focused_ally_target is not None
+    )
     if run_pipeline:
         combat_result = _run_combat_technique_pipeline(
             participant, action, technique, fatigue_category, offense_check_fn
@@ -10137,6 +10233,7 @@ def _dispatch_interpose_action(
 
     modifiers = bond_bonus(interposer, protected)
 
+    amount_before = pre_payload.amount
     if action.focused_action_id is not None:
         attempted = _try_technique_interpose(
             action,
@@ -10160,6 +10257,9 @@ def _dispatch_interpose_action(
             # No qualifying reaction action is an unavailable declaration, not
             # an attempted failure. Leave both budgets untouched for fallback.
             return False
+
+    if pre_payload.amount < amount_before:
+        _record_story_envoy_rescue(action, protected)
 
     # Increment both budgets only after a dispatch/technique has truly started.
     # This preserves the fallback path for unavailable guardians while counting
@@ -11346,9 +11446,65 @@ def _assess_boss_break_bar(
     boss.save(update_fields=["break_bar_current", "vulnerability_rounds_remaining"])
     if broke_this_round:
         _broadcast_break_celebration(encounter, boss)
+        _record_story_break_recognition(encounter, boss, round_number)
         from world.combat.escalation import apply_boss_break_surge  # noqa: PLC0415
 
         apply_boss_break_surge(opponent=boss)
+
+
+def _record_story_envoy_rescue(action: CombatRoundAction, protected: ObjectDB) -> None:
+    """Persist a successful PC guardian rescue for an active story contract."""
+    encounter = action.participant.encounter
+    beat = encounter.story_beat
+    if beat is None:
+        return
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    activation = get_open_activation(beat)
+    if activation is None:
+        return
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    protected_sheet = CharacterSheet.objects.filter(character_id=protected.pk).first()
+    if protected_sheet is None:
+        return
+    from world.societies.causal_recognition import record_envoy_rescue  # noqa: PLC0415
+
+    record_envoy_rescue(
+        activation,
+        action.participant.character_sheet,
+        source_id=action.pk,
+        source_action_id=action.pk,
+        protected_sheet=protected_sheet,
+    )
+
+
+def _record_story_break_recognition(
+    encounter: CombatEncounter, boss: CombatOpponent, round_number: int
+) -> None:
+    """Persist authored opening causes when this boss break reaches zero (#3914)."""
+    beat = encounter.story_beat
+    if beat is None:
+        return
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    activation = get_open_activation(beat)
+    if activation is None:
+        return
+    from world.societies.causal_recognition import record_created_opening  # noqa: PLC0415
+
+    rows = BreakBarContribution.objects.filter(
+        opponent=boss,
+        round_number=round_number,
+        participant__isnull=False,
+    ).select_related("participant__character_sheet")
+    for row in rows:
+        record_created_opening(
+            activation,
+            row.participant.character_sheet,
+            source_id=row.pk,
+            contribution_kind=row.kind,
+        )
 
 
 def _break_bar_events_this_round(
@@ -11771,7 +11927,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     CombatOpponent.objects.filter(
         encounter=encounter,
         vulnerability_rounds_remaining__gt=0,
-    ).update(vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1,
+    )
 
     # --- Wind-up maturation (#2637 design 5): before the round's
     # CombatOpponentAction rows are queried below, so a matured wind-up's
@@ -11823,6 +11982,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         )
     ):
         pc_actions[action.participant_id] = action
+
+    # Upgrades are validated again after every declaration and late auto-action
+    # has been materialized.  Never let a stale FK grant a combo rider.
+    _revalidate_combo_upgrades(enc, round_number, pc_actions)
 
     npc_actions: dict[int, list[CombatOpponentAction]] = defaultdict(list)
     for npc_action in (

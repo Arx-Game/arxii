@@ -7,8 +7,8 @@ Both are proper domain models replacing the old ModifierTarget-based pattern.
 
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 

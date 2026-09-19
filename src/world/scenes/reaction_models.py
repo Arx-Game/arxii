@@ -17,8 +17,8 @@ from __future__ import annotations
 from typing import ClassVar
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.scenes.constants import ReactionWindowKind

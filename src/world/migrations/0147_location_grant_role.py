@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0143_standing_visibility"),
-    ]
+    dependencies = [("arxii", "0146_interaction_strain_metadata")]
 
     operations = [
         migrations.AddField(

@@ -62,7 +62,10 @@ class CharacterDataHandlerTests(TestCase):
         age1 = self.handler.age
 
         # Modify sheet directly in database, bypassing identity mapper
-        CharacterSheet.objects.filter(character=self.character).update(matured_years=30)
+        CharacterSheet.objects.filter(character=self.character).update_with_reason(
+            reason="test fixture: simulate stale row",
+            matured_years=30,
+        )
 
         # Second access should return cached value (handler holds reference to
         # the identity-mapped instance, which was not updated by .update())
@@ -80,7 +83,10 @@ class CharacterDataHandlerTests(TestCase):
         age1 = self.handler.age
 
         # Modify sheet directly in DB, bypassing identity mapper
-        CharacterSheet.objects.filter(character=self.character).update(matured_years=30)
+        CharacterSheet.objects.filter(character=self.character).update_with_reason(
+            reason="test fixture: simulate stale row",
+            matured_years=30,
+        )
         # Flush identity mapper so the handler re-fetches fresh data
         CharacterSheet.flush_instance_cache()
 

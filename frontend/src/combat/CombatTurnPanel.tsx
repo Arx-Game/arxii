@@ -34,6 +34,8 @@ import { RoundFlow } from './sections/RoundFlow';
 import { EncounterOutcomeBanner } from './components/EncounterOutcomeBanner';
 import type { AftermathDigest } from './components/AftermathDigest';
 import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
+import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
+import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import type { components } from '@/generated/api';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
@@ -226,6 +228,30 @@ export function CombatTurnPanel({
           </span>
         )}
       </div>
+
+      {encounter.objective && (
+        <div
+          className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs"
+          data-testid="combat-objective"
+        >
+          <p className="font-semibold text-foreground">Objective</p>
+          <p className="text-muted-foreground">
+            {encounter.objective.label || encounter.objective.key}
+          </p>
+          {encounter.objective.clock && (
+            <p className="text-muted-foreground">
+              Time pressure: {String(encounter.objective.clock.filled ?? 0)}/
+              {String(encounter.objective.clock.size ?? 0)}
+            </p>
+          )}
+        </div>
+      )}
+
+      <SpecialistChoicePanel
+        encounterId={encounterId}
+        selections={encounter.pending_selections ?? []}
+      />
+      <CommitmentPanel encounter={encounter} />
 
       {/* Forced-escape banner — Hero Killer on field; victory impossible (#875). */}
       {encounter.forced_escape && <ForcedEscapeBanner />}

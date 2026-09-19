@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from django.db import models, transaction
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 

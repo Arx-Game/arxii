@@ -8,9 +8,9 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
 from world.contributors.models import CreditedContent

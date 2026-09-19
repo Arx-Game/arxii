@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import EnhancementSourceType
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 if TYPE_CHECKING:

@@ -16,11 +16,11 @@ from django.core.validators import MaxValueValidator, MinValueValidator, RegexVa
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import TargetKind
 from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind

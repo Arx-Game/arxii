@@ -169,12 +169,8 @@ export function GameTopBar({
   let connectionLabel = 'Disconnected';
   let connectionColor = 'bg-red-500';
   if (isConnected) {
-    connectionLabel = 'Entering world';
-    connectionColor = 'bg-amber-500';
-  }
-  if (isReady) {
-    connectionLabel = 'In world';
-    connectionColor = 'bg-green-500';
+    connectionLabel = isReady ? 'In world' : 'Waiting for location';
+    connectionColor = isReady ? 'bg-green-500' : 'bg-amber-500';
   }
 
   const handleSelectCharacter = async (name: MyRosterEntry['name']) => {

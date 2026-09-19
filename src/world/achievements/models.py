@@ -9,8 +9,8 @@ and awards achievements when thresholds are met.
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.constants import (
     ComparisonType,

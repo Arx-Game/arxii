@@ -1568,8 +1568,11 @@ def set_primary_home(*, persona: Persona, room: DefaultObject, notes: str = "") 
             notes=notes,
         )
     with transaction.atomic():
-        LocationTenancy.objects.filter(tenant_persona=persona, is_primary_home=True).update(
-            is_primary_home=False
+        LocationTenancy.objects.filter(
+            tenant_persona=persona, is_primary_home=True
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            is_primary_home=False,
         )
         tenancy.is_primary_home = True
         tenancy.save(update_fields=["is_primary_home"])

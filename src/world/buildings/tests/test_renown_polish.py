@@ -303,5 +303,8 @@ class RecomputePrestigeFromDwellingsTests(TestCase):
         home = _make_room(tenant=persona)
         op = PolishCategory.objects.create(name="Opulence")
         RoomPolish.objects.create(room=home, category=op, value=400)
-        LocationTenancy.objects.filter(tenant_persona=persona).update(ends_at=timezone.now())
+        LocationTenancy.objects.filter(tenant_persona=persona).update_with_reason(
+            reason="test fixture: simulate stale row",
+            ends_at=timezone.now(),
+        )
         self.assertEqual(recompute_persona_prestige_from_dwellings(persona), 0)

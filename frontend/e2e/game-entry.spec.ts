@@ -54,7 +54,7 @@ test('a quiet-room entry preserves an editable draft until structured presence a
   await page.goto('/game');
   const editor = page.getByRole('textbox');
   await expect(editor).toBeEnabled();
-  await expect(page.getByText('Entering world', { exact: true })).toBeVisible();
+  await expect(page.getByText('Waiting for location', { exact: true })).toBeVisible();
   await editor.fill('A quiet beginning.\n\nThe draft stays here.');
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   // Enter sends (#3818); Shift+Enter is the line break. Both `\n`s above came

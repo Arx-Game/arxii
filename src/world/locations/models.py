@@ -10,9 +10,9 @@ from datetime import datetime
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.locations.constants import (
     HolderType,
     KeyType,
@@ -525,7 +525,7 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
     # mints a Guest produces "my key does not work", which someone reports; one who
     # forgets and mints a Tenant produces a silent over-grant nobody sees. Existing
     # rows are a separate question and the migration answers it — they were all
-    # written meaning TENANT, so 0144 fills them with that via preserve_default=False
+    # written meaning TENANT, so 0147 fills them with that via preserve_default=False
     # and the model default reverts to GUEST for everything after.
     kind = models.CharField(
         max_length=10,

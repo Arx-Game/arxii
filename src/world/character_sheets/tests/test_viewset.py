@@ -2192,11 +2192,17 @@ class TestMentorsSection(TestCase):
         assert rows["Maelis"]["covenant"] == "The Lantern Vigil"
 
     def test_a_dissolved_vow_is_not_a_bond(self) -> None:
-        MentorBond.objects.filter(sidekick_sheet=self.student).update(dissolved_at=timezone.now())
+        MentorBond.objects.filter(sidekick_sheet=self.student).update_with_reason(
+            reason="test fixture: simulate stale row",
+            dissolved_at=timezone.now(),
+        )
         try:
             assert [row["name"] for row in self._mentors(self.player)] == ["Maelis"]
         finally:
-            MentorBond.objects.filter(sidekick_sheet=self.student).update(dissolved_at=None)
+            MentorBond.objects.filter(sidekick_sheet=self.student).update_with_reason(
+                reason="test fixture: simulate stale row",
+                dissolved_at=None,
+            )
 
     def test_a_stranger_is_told_nothing_of_their_vows(self) -> None:
         assert self._mentors(self.stranger) == []

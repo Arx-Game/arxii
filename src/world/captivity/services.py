@@ -229,7 +229,9 @@ def resolve_captivity(captivity: Captivity, *, status: str) -> None:
     # Last one out: detach any remaining (already-resolved) captivities from
     # the cell, then tear the now-empty cell down.
     room = cell.room.objectdb
-    Captivity.objects.filter(cell=cell).update(cell=None)
+    Captivity.objects.filter(cell=cell).update_with_reason(
+        reason="issue #3817: intentional atomic write", cell=None
+    )
     complete_instanced_room(room)
 
 

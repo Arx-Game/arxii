@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.classes.models import PathStage
 from world.classes.services import stage_for_level
 from world.magic.constants import TargetKind

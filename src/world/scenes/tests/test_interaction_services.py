@@ -409,7 +409,10 @@ class TestDeleteInteraction(TestCase):
             persona=self.writer_persona,
         )
         old_time = timezone.now() - timedelta(days=31)
-        Interaction.objects.filter(pk=interaction.pk).update(timestamp=old_time)
+        Interaction.objects.filter(pk=interaction.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=old_time,
+        )
         Interaction.flush_cached_instance(interaction, force=True)
         interaction = Interaction.objects.get(pk=interaction.pk)
         result = delete_interaction(interaction, self.writer_persona)

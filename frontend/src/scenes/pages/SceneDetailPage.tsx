@@ -102,9 +102,21 @@ export function SceneDetailPage() {
   // CombatScenePage's C-frame grid) only while an active encounter exists;
   // single column otherwise.
   const sceneIdNum = id ? Number(id) : 0;
-  const { data: encounterListItem, isLoading: encounterLoading } = useEncounterForScene(sceneIdNum);
-  const hasActiveEncounter = !encounterLoading && encounterListItem != null;
-  const encounterId = encounterListItem?.id ?? 0;
+  const {
+    data: encounterListItem,
+    encounters: activeEncounterList = [],
+    isLoading: encounterLoading,
+  } = useEncounterForScene(sceneIdNum);
+  const [selectedEncounterId, setSelectedEncounterId] = useState(0);
+  useEffect(() => {
+    if (selectedEncounterId > 0 && activeEncounterList.some((e) => e.id === selectedEncounterId))
+      return;
+    setSelectedEncounterId(activeEncounterList[0]?.id ?? encounterListItem?.id ?? 0);
+  }, [activeEncounterList, encounterListItem?.id, selectedEncounterId]);
+  const selectedEncounter =
+    activeEncounterList.find((e) => e.id === selectedEncounterId) ?? encounterListItem;
+  const hasActiveEncounter = !encounterLoading && selectedEncounter != null;
+  const encounterId = selectedEncounter?.id ?? 0;
   // The scene's active-encounter list poll drops a completed encounter within
   // 15s (useEncounterForScene), but the outcome banner and aftermath digest
   // have to outlive that drop until the player dismisses them, otherwise the
@@ -139,6 +151,28 @@ export function SceneDetailPage() {
   }, [sceneIdNum, encounterId]);
   const railEncounterId = encounterId || lingeringEncounterId;
   const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
+  const encounterChooser =
+    activeEncounterList.length > 1 ? (
+      <div className="mb-2 flex flex-wrap gap-1" data-testid="encounter-chooser">
+        <span className="self-center px-1 text-xs text-muted-foreground">Encounters:</span>
+        {activeEncounterList.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => setSelectedEncounterId(entry.id)}
+            className={cn(
+              'rounded border px-2 py-1 text-xs',
+              entry.id === encounterId
+                ? 'border-primary bg-primary/10 font-semibold'
+                : 'border-border'
+            )}
+            aria-pressed={entry.id === encounterId}
+          >
+            #{entry.id} · {(entry.encounter_type ?? 'encounter').replace(/_/g, ' ')}
+          </button>
+        ))}
+      </div>
+    ) : null;
   const handleDismissOutcome = useCallback(() => {
     setDismissedEncounterId(railEncounterId);
     setLingeringEncounterId(0);
@@ -468,19 +502,18 @@ export function SceneDetailPage() {
           >
             {showStoryRail && scene && <GMStoryRail scene={scene} />}
             {showCombatRail && (
-              /* The rail lingers past the encounter's end so the aftermath digest
-                 and outcome banner stay readable (#3551), but the GM tab's levers
-                 only make sense on a still-active fight -- and once the fight is
-                 over the page-level GMEncounterControls is back, so leaving the tab
-                 on would give those levers two homes (ADR-0272). hasActiveEncounter
-                 gates the tab separately from the rail itself. */
-              <CombatRail
-                sceneId={sceneIdNum}
-                encounterId={railEncounterId}
-                viewerCanGm={hasActiveEncounter && (scene?.viewer_can_gm ?? false)}
-                scene={scene}
-                onDismissOutcome={handleDismissOutcome}
-              />
+              <>
+                {/* The rail lingers past the encounter's end so the aftermath digest
+                    and outcome banner stay readable (#3551). */}
+                {encounterChooser}
+                <CombatRail
+                  sceneId={sceneIdNum}
+                  encounterId={railEncounterId}
+                  viewerCanGm={hasActiveEncounter && (scene?.viewer_can_gm ?? false)}
+                  scene={scene}
+                  onDismissOutcome={handleDismissOutcome}
+                />
+              </>
             )}
           </div>
         )}

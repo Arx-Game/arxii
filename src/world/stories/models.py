@@ -4,8 +4,9 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import GuardedSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.battles.constants import BattleSideRole
 from world.character_sheets.types import LifecycleState
 from world.societies.constants import RenownRisk
@@ -540,7 +541,7 @@ class TrustCategoryFeedbackRating(SharedMemoryModel):
         )
 
 
-class EraManager(models.Manager):
+class EraManager(GuardedSharedMemoryManager):
     def get_active(self) -> "Era | None":
         """Return the currently ACTIVE Era, or None if none is active."""
         return self.filter(status=EraStatus.ACTIVE).first()
@@ -1375,7 +1376,7 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         )
 
 
-class AggregateBeatContributionManager(models.Manager):
+class AggregateBeatContributionManager(GuardedSharedMemoryManager):
     def total_for_beat(self, beat: "Beat") -> int:
         """Sum contributions for a beat; returns 0 when no rows exist."""
         return self.filter(beat=beat).aggregate(total=models.Sum("points"))["total"] or 0
@@ -2802,6 +2803,12 @@ class StakeContractActivation(SharedMemoryModel):
         help_text="Readiness verdict at activation; False forced effective NONE."
     )
     readiness_notes = models.TextField(blank=True, default="")
+    participant_sheets = models.ManyToManyField(
+        CHARACTER_SHEET_MODEL,
+        blank=True,
+        related_name="stake_contract_activations",
+        help_text="Character sheets committed when this contract was activated.",
+    )
 
     class Meta:
         ordering = ["-locked_at"]

@@ -22,8 +22,8 @@ and pays four paths on one stepped curve; see ``constants.NOMINATION_*``.
 
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.progression.constants import NominationTargetType
 
 

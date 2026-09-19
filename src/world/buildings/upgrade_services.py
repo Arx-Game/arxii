@@ -141,7 +141,10 @@ def complete_building_upgrade(project, outcome_tier: object | None = None) -> No
         # applied_at and no-ops even though the cached instance is stale.
         claimed = BuildingUpgradeDetails.objects.filter(
             project=project, applied_at__isnull=True
-        ).update(applied_at=timezone.now())
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            applied_at=timezone.now(),
+        )
         if not claimed:
             return
         details = BuildingUpgradeDetails.objects.get(project=project)

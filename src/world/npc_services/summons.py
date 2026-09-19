@@ -286,7 +286,10 @@ def _reset_refusal_streak(target_persona: Persona, role: NPCRole) -> None:
         persona=target_persona,
         npc_persona=npc_persona,
         consecutive_refused_summons__gt=0,
-    ).update(consecutive_refused_summons=0)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        consecutive_refused_summons=0,
+    )
     if updated:
         # Flush the cached SharedMemoryModel instance.
         NPCStanding.objects.filter(

@@ -363,7 +363,7 @@ implied. `can_grant(persona, room, kind)` is the comparison; `end_room_tenancy`
 reuses it for revocation, with revoking a TRUSTEE reserved to the owner.
 
 **The model default is GUEST**, the lowest rung -- a writer who forgets the kwarg
-fails closed. Existing rows were filled with TENANT by migration 0144
+fails closed. Existing rows were filled with TENANT by migration 0147
 (`preserve_default=False`), because that is what every row written before the field
 existed meant.
 

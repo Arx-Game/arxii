@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 from django.db import models, transaction
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.areas.services import area_for_scene
 from world.classes.models import PathStage
 from world.magic.audere import (

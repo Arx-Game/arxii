@@ -15,8 +15,8 @@ from decimal import Decimal
 
 from django.core.validators import MaxValueValidator
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 # App-qualified model paths repeated across FK references; centralized for dedup.

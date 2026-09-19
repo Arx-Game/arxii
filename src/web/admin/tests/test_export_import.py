@@ -215,7 +215,10 @@ class MergeExecutionTests(TestCase):
         cat = ModifierCategoryFactory(name="MergeUpdateCat", description="Original")
         fixture_data = _serialize_objects([cat])
         # Modify the DB record so it differs from fixture
-        ModifierCategory.objects.filter(name="MergeUpdateCat").update(description="Modified in DB")
+        ModifierCategory.objects.filter(name="MergeUpdateCat").update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="Modified in DB",
+        )
 
         result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.MERGE})
 
@@ -271,7 +274,10 @@ class ReplaceExecutionTests(TestCase):
         cat = ModifierCategoryFactory(name="ReplaceCat", description="Fixture value")
         fixture_data = _serialize_objects([cat])
         # Modify description in DB after serialization
-        ModifierCategory.objects.filter(name="ReplaceCat").update(description="Will be replaced")
+        ModifierCategory.objects.filter(name="ReplaceCat").update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="Will be replaced",
+        )
 
         result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.REPLACE})
 
@@ -593,7 +599,10 @@ class SelfReferentialNaturalKeyTests(TestCase):
         fixture_data = _serialize_objects([category, root, mid, leaf])
 
         # Modify a field so merge has something to update
-        CodexSubject.objects.filter(name="MergeWolf").update(description="Modified")
+        CodexSubject.objects.filter(name="MergeWolf").update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="Modified",
+        )
 
         result = execute_import(fixture_data, {"arxii.codexsubject": ImportAction.MERGE})
 

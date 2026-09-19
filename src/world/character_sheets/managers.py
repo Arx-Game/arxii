@@ -18,8 +18,8 @@ from datetime import timedelta
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
-from evennia.utils.idmapper.manager import SharedMemoryManager
 
+from core.managers import ArxSharedMemoryQuerySet, GuardedSharedMemoryManager
 from world.character_sheets.types import (
     DECAY_TIER_THRESHOLDS_DAYS,
     ActivityState,
@@ -28,7 +28,7 @@ from world.character_sheets.types import (
 )
 
 
-class CharacterSheetQuerySet(models.QuerySet):
+class CharacterSheetQuerySet(ArxSharedMemoryQuerySet):
     """Absence vocabulary. See ``managers`` module docstring for why it lives here."""
 
     def active(self) -> CharacterSheetQuerySet:
@@ -123,7 +123,7 @@ class CharacterSheetQuerySet(models.QuerySet):
         return annotated.filter(low_stale | other_stale | no_entry_stale)
 
 
-class CharacterSheetManager(SharedMemoryManager, models.Manager):
+class CharacterSheetManager(GuardedSharedMemoryManager, models.Manager):
     """CharacterSheet's manager, carrying the absence vocabulary.
 
     Based on ``SharedMemoryManager`` so ``.get(pk=N)`` keeps hitting Evennia's

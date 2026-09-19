@@ -79,8 +79,11 @@ class SummonGhostTutorTests(TestCase):
         from world.magic.models.gifts import CharacterTradition
 
         # Mark the membership as left
-        CharacterTradition.objects.filter(character=self.sheet, tradition=self.tradition).update(
-            left_at="2026-01-01T00:00:00Z"
+        CharacterTradition.objects.filter(
+            character=self.sheet, tradition=self.tradition
+        ).update_with_reason(
+            reason="test fixture: simulate stale row",
+            left_at="2026-01-01T00:00:00Z",
         )
 
         with pytest.raises(NotTraditionMemberError):

@@ -96,7 +96,9 @@ def disband_army(*, army: Army) -> None:
         army: The Army to disband.
     """
     now = timezone.now()
-    ArmyMembership.objects.filter(army=army, left_at__isnull=True).update(left_at=now)
+    ArmyMembership.objects.filter(army=army, left_at__isnull=True).update_with_reason(
+        reason="issue #3817: intentional atomic write", left_at=now
+    )
     army.disbanded_at = now
     army.save(update_fields=["disbanded_at"])
 
@@ -137,4 +139,7 @@ def remove_unit_from_army(*, army: Army, military_unit: MilitaryUnit) -> None:
         army=army,
         military_unit=military_unit,
         left_at__isnull=True,
-    ).update(left_at=timezone.now())
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        left_at=timezone.now(),
+    )

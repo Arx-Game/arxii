@@ -88,8 +88,11 @@ def complete_city_defense(project: Project, outcome_tier: CheckOutcome | None) -
 
     # The claim filter hits the DB, so a second call sees the non-null
     # applied_at and no-ops even though the cached instance is stale.
-    claimed = CityDefenseDetails.objects.filter(project=project, applied_at__isnull=True).update(
-        applied_at=timezone.now()
+    claimed = CityDefenseDetails.objects.filter(
+        project=project, applied_at__isnull=True
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        applied_at=timezone.now(),
     )
     if not claimed:
         return

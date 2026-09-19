@@ -90,7 +90,7 @@ async function reachReadySession(page: Page): Promise<WebSocketRoute> {
 
   await page.goto('/game');
   await expect(page.getByRole('textbox')).toBeEnabled();
-  await expect(page.getByText('Entering world', { exact: true })).toBeVisible();
+  await expect(page.getByText('Waiting for location', { exact: true })).toBeVisible();
 
   routes[0].send(
     JSON.stringify([

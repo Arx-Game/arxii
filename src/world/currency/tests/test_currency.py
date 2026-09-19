@@ -323,7 +323,9 @@ class DebtTests(TestCase):
     def _drain_treasury(self):
         from world.currency.models import OrganizationTreasury
 
-        OrganizationTreasury.objects.filter(organization=self.debtor).update(balance=0)
+        OrganizationTreasury.objects.filter(organization=self.debtor).update_with_reason(
+            reason="test fixture: simulate stale row", balance=0
+        )
         OrganizationTreasury.flush_instance_cache()
 
     def _stream(self, gross=1000):
@@ -648,7 +650,10 @@ class ProfessionTests(TestCase):
         from world.action_points.models import ActionPointPool
 
         pool = ActionPointPool.get_or_create_for_character(self.sheet.character)
-        ActionPointPool.objects.filter(pk=pool.pk).update(current=current)
+        ActionPointPool.objects.filter(pk=pool.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            current=current,
+        )
         ActionPointPool.flush_instance_cache()
         return pool
 

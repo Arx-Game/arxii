@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import models, transaction
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB

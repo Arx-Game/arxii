@@ -8,9 +8,9 @@ ordered by execution_order.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import TransformType
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 CHECK_TYPE_FK = "arxii.CheckType"
 CONDITION_TEMPLATE_FK = "arxii.ConditionTemplate"

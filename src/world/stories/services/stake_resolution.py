@@ -231,6 +231,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     explicit_participants: list[Persona] | None = None,
     outcome_tier: CheckOutcome | None = None,
     outcome_key: str = "",
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> list[StakeOutcome]:
     """Grade every open stake on a completing beat and fire the chosen branches.
 
@@ -299,6 +300,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
                 scope=scope,
                 participants=participants,
                 outcome_tier=outcome_tier,
+                skip_effect_types=skip_effect_types,
             )
         )
     return outcomes
@@ -541,6 +543,7 @@ def _fire_branch_and_record(  # noqa: PLR0913
     scope: str,
     participants: list[Persona],
     outcome_tier: CheckOutcome | None = None,
+    skip_effect_types: frozenset[str] = frozenset(),
     resolved_by: GMProfile | None = None,
     gm_notes: str = "",
 ) -> StakeOutcome:
@@ -593,6 +596,7 @@ def _fire_branch_and_record(  # noqa: PLR0913
                 scope=scope,
                 participants=participants,
                 outcome_tier=outcome_tier,
+                skip_effect_types=skip_effect_types,
             )
         _apply_branch_writers(resolution, stake, participants)
         if column == StakeResolutionColumn.WIN:

@@ -632,7 +632,10 @@ class TestInteractionThreadAssignment(TestCase):
             holder_id=scene.pk,
             scene_id=scene.pk,
         )
-        Interaction.objects.filter(pk=target.pk).update(thread=live_thread)
+        Interaction.objects.filter(pk=target.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            thread=live_thread,
+        )
         assert target.thread_id is None, "the cached instance must still be stale"
 
         thread = assign_interaction_thread(

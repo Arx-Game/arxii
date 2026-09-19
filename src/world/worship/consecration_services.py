@@ -155,7 +155,10 @@ def _bump_counter(
     points: int,
 ) -> None:
     rows = model.objects.filter(pk=site.pk)
-    rows.update(consecration_points=F("consecration_points") + points)
+    rows.update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        consecration_points=F("consecration_points") + points,
+    )
     site.consecration_points = rows.values_list("consecration_points", flat=True).get()
 
 

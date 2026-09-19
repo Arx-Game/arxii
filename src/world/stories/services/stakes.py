@@ -534,6 +534,9 @@ def activate_stakes_contract(
 
     existing = get_open_activation(beat)
     if existing is not None:
+        # A party may join after the first commit. Preserve all committed
+        # provenance without reopening or repricing the locked contract.
+        existing.participant_sheets.add(*participants)
         return existing
 
     report = validate_stakes_readiness(beat)
@@ -562,7 +565,9 @@ def activate_stakes_contract(
         activation = get_open_activation(beat)
         if activation is None:
             raise
+        activation.participant_sheets.add(*participants)
         return activation
+    activation.participant_sheets.set(participants)
     if report.is_staked and not report.is_ready:
         logger.warning(
             "Stakes contract on beat %s activated UNREADY (effective NONE): %s",

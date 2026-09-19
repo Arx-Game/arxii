@@ -1,10 +1,12 @@
 """Models for custom admin functionality."""
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.managers import GuardedSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
-class AdminPinnedModelManager(models.Manager):
+class AdminPinnedModelManager(GuardedSharedMemoryManager):
     """Manager with natural key support for AdminPinnedModel."""
 
     def get_by_natural_key(self, app_label: str, model_name: str):
@@ -39,7 +41,7 @@ class AdminPinnedModel(SharedMemoryModel):
         return (self.app_label, self.model_name)
 
 
-class AdminExcludedModelManager(models.Manager):
+class AdminExcludedModelManager(GuardedSharedMemoryManager):
     """Manager with natural key support for AdminExcludedModel."""
 
     def get_by_natural_key(self, app_label: str, model_name: str):

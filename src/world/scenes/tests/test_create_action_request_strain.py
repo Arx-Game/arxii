@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from world.magic.factories import CharacterAnimaFactory
 from world.scenes.action_services import create_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
 
@@ -11,6 +12,7 @@ class CreateActionRequestStrainTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
+        CharacterAnimaFactory(character=cls.initiator.character_sheet, current=3, maximum=3)
         cls.target = PersonaFactory()
 
     def test_strain_commitment_persisted_on_request(self) -> None:

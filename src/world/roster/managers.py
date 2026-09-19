@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 from django.db import models
 from django.utils import timezone
 
+from core.managers import ArxSharedMemoryQuerySet, GuardedSharedMemoryManager
+
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
@@ -17,7 +19,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
 
 
-class RosterEntryQuerySet(models.QuerySet):
+class RosterEntryQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for RosterEntry with filtering methods."""
 
     def active_rosters(self) -> RosterEntryQuerySet:
@@ -114,7 +116,7 @@ class RosterEntryQuerySet(models.QuerySet):
         return queryset
 
 
-class RosterEntryManager(models.Manager):
+class RosterEntryManager(GuardedSharedMemoryManager):
     """Custom manager for RosterEntry."""
 
     def get_queryset(self) -> RosterEntryQuerySet:
@@ -145,7 +147,7 @@ class RosterEntryManager(models.Manager):
         return self.get_queryset().exclude_characters_for_player(player_data)
 
 
-class RosterApplicationQuerySet(models.QuerySet):
+class RosterApplicationQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for RosterApplication."""
 
     def pending(self) -> RosterApplicationQuerySet:
@@ -169,7 +171,7 @@ class RosterApplicationQuerySet(models.QuerySet):
         return self.filter(status="denied")
 
 
-class RosterApplicationManager(models.Manager):
+class RosterApplicationManager(GuardedSharedMemoryManager):
     """Custom manager for RosterApplication."""
 
     def get_queryset(self) -> RosterApplicationQuerySet:
@@ -200,7 +202,7 @@ class RosterApplicationManager(models.Manager):
         return self.get_queryset().filter(reviewed_date__gte=cutoff_date).exclude(status="pending")
 
 
-class RosterTenureQuerySet(models.QuerySet):
+class RosterTenureQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for RosterTenure."""
 
     def current(self) -> RosterTenureQuerySet:
@@ -220,7 +222,7 @@ class RosterTenureQuerySet(models.QuerySet):
         return self.filter(character=character)
 
 
-class RosterTenureManager(models.Manager):
+class RosterTenureManager(GuardedSharedMemoryManager):
     """Custom manager for RosterTenure."""
 
     def get_queryset(self) -> RosterTenureQuerySet:

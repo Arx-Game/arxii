@@ -356,6 +356,13 @@ verify-regeneration tag="":
 # have worked. Hence the explicit third case below: a stale copy-paste of the
 # old form now says what to type instead of bottoming out in the script's
 # generic "flag required" refusal.
+# Read recent production tracebacks through the gated, read-only arxops account.
+# Keep this recipe argument-free: variadic just interpolation is not shell-safe.
+# Use the script directly when changing bounded defaults, e.g.
+#   python3 infra/scripts/scan_prod_logs.py --days 2 --json
+scan-prod-logs:
+    python3 infra/scripts/scan_prod_logs.py
+
 pull-prod confirm="no":
     #!/usr/bin/env bash
     set -euo pipefail

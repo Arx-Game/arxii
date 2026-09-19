@@ -7230,6 +7230,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/resolve-selection/:
+    post:
+      operationId: combat_resolve_selection_create
+      description: Resolve a player-owned specialist choice from the browser (#3915).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/resolve_round/:
     post:
       operationId: combat_resolve_round_create
@@ -40191,6 +40219,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/AftermathBeat'
           nullable: true
+        objective:
+          allOf:
+          - $ref: '#/components/schemas/ObjectiveSnapshot'
+          nullable: true
         peril_round_active:
           type: boolean
       required:
@@ -40198,6 +40230,7 @@ components:
       - conditions
       - consequence
       - legend
+      - objective
       - outcome
       - peril_round_active
     AftermathLegend:
@@ -40210,10 +40243,30 @@ components:
           type: string
         base_value:
           type: integer
+        recognition:
+          type: array
+          items:
+            $ref: '#/components/schemas/AftermathRecognition'
       required:
       - base_value
       - description
+      - recognition
       - title
+    AftermathRecognition:
+      type: object
+      description: Safe causal label shape; source ids and check quality are never
+        exposed.
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - key
+      - label
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -50492,6 +50545,26 @@ components:
           items:
             $ref: '#/components/schemas/VolatileObject'
           readOnly: true
+        objective:
+          allOf:
+          - $ref: '#/components/schemas/ObjectiveSnapshot'
+          nullable: true
+          readOnly: true
+        pending_selections:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingSelection'
+          readOnly: true
+        sustained_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SustainedAction'
+          readOnly: true
+        protection_commitments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProtectionCommitment'
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -50516,16 +50589,20 @@ components:
       - is_gm
       - is_lethal
       - is_participant
+      - objective
       - opponents
       - outcome
       - participants
       - pending_attacks
+      - pending_selections
       - position_adjacency
       - position_edges
       - position_nodes
+      - protection_commitments
       - resolution_order
       - scene
       - surge_beats
+      - sustained_actions
       - volatile_objects
     EncounterDetailRequest:
       type: object
@@ -60958,6 +61035,55 @@ components:
     NullEnum:
       enum:
       - null
+    ObjectiveBranch:
+      type: object
+      description: Safe read shape for an authored objective branch (#3916).
+      properties:
+        key:
+          type: string
+        column:
+          type: string
+          nullable: true
+        outcome:
+          type: string
+        label:
+          type: string
+      required:
+      - column
+      - key
+      - label
+    ObjectiveSnapshot:
+      type: object
+      description: Safe read shape for the existing objective routing primitives (#3916).
+      properties:
+        key:
+          type: string
+        source:
+          $ref: '#/components/schemas/ObjectiveSnapshotSourceEnum'
+        label:
+          type: string
+        clock:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        branches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectiveBranch'
+      required:
+      - branches
+      - clock
+      - key
+      - label
+      - source
+    ObjectiveSnapshotSourceEnum:
+      enum:
+      - scenario
+      - stakes
+      type: string
+      description: |-
+        * `scenario` - scenario
+        * `stakes` - stakes
     ObligationRow:
       type: object
       properties:
@@ -62732,6 +62858,12 @@ components:
           - $ref: '#/components/schemas/PowerLedger'
           nullable: true
         strain_committed:
+          type: integer
+          nullable: true
+        strain_effective:
+          type: integer
+          nullable: true
+        strain_power_bonus:
           type: integer
           nullable: true
         power:
@@ -67991,6 +68123,17 @@ components:
           - $ref: '#/components/schemas/AftermathDigest'
           nullable: true
           readOnly: true
+        reactions_used:
+          type: integer
+          nullable: true
+          description: Return spent reactions only to the owner, GM, or staff.
+          readOnly: true
+        reactions_remaining:
+          type: integer
+          nullable: true
+          description: Return the remaining reaction availability without exposing
+            other pools.
+          readOnly: true
       required:
       - active_conditions
       - aftermath
@@ -68006,6 +68149,8 @@ components:
       - id
       - intensity_modifier
       - max_health
+      - reactions_remaining
+      - reactions_used
       - thumbnail_media_url
       - thumbnail_url
     ParticipantRequest:
@@ -71589,6 +71734,58 @@ components:
       - interaction_id
       - kind
       - scene_id
+    PendingSelection:
+      type: object
+      description: Read shape for a deferred specialist choice (#3915).
+      properties:
+        id:
+          type: integer
+        participant_id:
+          type: integer
+        selection_type:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingSelectionOption'
+        selected_option_id:
+          type: string
+          nullable: true
+        target_opponent_id:
+          type: integer
+          nullable: true
+        target_opponent_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        resolved:
+          type: boolean
+      required:
+      - created_at
+      - id
+      - options
+      - participant_id
+      - resolved
+      - selected_option_id
+      - selection_type
+      - target_opponent_id
+      - target_opponent_name
+    PendingSelectionOption:
+      type: object
+      description: A safe, authored choice shown only to its owning participant.
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - label
     PendingStageAdvanceOffer:
       type: object
       description: |-
@@ -73627,6 +73824,28 @@ components:
         * `elite` - elite
         * `boss` - boss
         * `hero_killer` - hero_killer
+    ProtectionCommitment:
+      type: object
+      description: Public ally-protection declaration, without private action details.
+      properties:
+        participant_id:
+          type: integer
+        participant_name:
+          type: string
+        maneuver:
+          type: string
+        protected_participant_id:
+          type: integer
+          nullable: true
+        protected_participant_name:
+          type: string
+          nullable: true
+      required:
+      - maneuver
+      - participant_id
+      - participant_name
+      - protected_participant_id
+      - protected_participant_name
     ProvenanceEnum:
       enum:
       - gm
@@ -80872,9 +81091,25 @@ components:
         default:
           type: integer
           readOnly: true
+        base_effective_cost:
+          type: integer
+          readOnly: true
+        conversion_base:
+          type: integer
+          readOnly: true
+        diminishing_step:
+          type: integer
+          readOnly: true
+        diminishing_floor:
+          type: integer
+          readOnly: true
       required:
+      - base_effective_cost
       - cap
+      - conversion_base
       - default
+      - diminishing_floor
+      - diminishing_step
     Style:
       type: object
       description: Serializer for the Style catalog (#2030 — player-facing Motif style-binding).
@@ -81092,6 +81327,41 @@ components:
       description: |-
         * `pattern` - pattern
         * `gem` - gem
+    SustainedAction:
+      type: object
+      description: Observable countdown and erosion for a multi-round commitment.
+      properties:
+        id:
+          type: integer
+        participant_id:
+          type: integer
+        participant_name:
+          type: string
+        kind:
+          type: string
+        subject:
+          type: string
+        declared_round:
+          type: integer
+        resolves_round:
+          type: integer
+        rounds_until_resolution:
+          type: integer
+        downgrades:
+          type: integer
+        broken:
+          type: boolean
+      required:
+      - broken
+      - declared_round
+      - downgrades
+      - id
+      - kind
+      - participant_id
+      - participant_name
+      - resolves_round
+      - rounds_until_resolution
+      - subject
     SystemErrorReportDetail:
       type: object
       description: |-

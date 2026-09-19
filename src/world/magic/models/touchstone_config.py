@@ -4,9 +4,9 @@ Singleton (pk=1) config for the touchstone combat resonance bonus.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 _VERBOSE_NAME = "Touchstone Cast Config"
 

@@ -143,8 +143,9 @@ class LevelOpposedSocialJourneyTests(TestCase):
         )
         from world.scenes.action_models import SceneActionRequest
 
-        SceneActionRequest.objects.filter(pk=request.pk).update(
-            action_template=self.action_template
+        SceneActionRequest.objects.filter(pk=request.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            action_template=self.action_template,
         )
         request.action_template = self.action_template
 

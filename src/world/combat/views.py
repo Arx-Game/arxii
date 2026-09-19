@@ -49,6 +49,7 @@ from world.combat.models import (
     DuelChallenge,
     EngagementLock,
     EscalationCurve,
+    PendingSelection,
     ThreatPool,
 )
 from world.combat.permissions import (
@@ -308,6 +309,8 @@ class CombatEncounterViewSet(ModelViewSet):
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
             return [IsAuthenticated()]
+        if self.action == "resolve_selection":
+            return [IsAuthenticated()]
         if self.action in (
             "ready",
             "my_action",
@@ -323,6 +326,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "demoralize",
             "taunt",
             "parley",
+            "resolve_selection",
         ):
             return [IsAuthenticated(), IsEncounterParticipant()]
         if self.action == "join":
@@ -1181,6 +1185,38 @@ class CombatEncounterViewSet(ModelViewSet):
             return Response(
                 {"detail": _ERR_DECLARE_FAILED},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="resolve-selection")
+    def resolve_selection(self, request: Request, pk: int | None = None) -> Response:
+        """Resolve a player-owned specialist choice from the browser (#3915)."""
+        encounter = self.get_object()
+        selection_id = request.data.get("selection_id")
+        option_id = request.data.get("option_id")
+        if not isinstance(selection_id, int) or not isinstance(option_id, str):
+            return Response({"detail": "A selection and option are required."}, status=400)
+        selection = get_object_or_404(
+            PendingSelection.objects.select_related("participant__character_sheet"),
+            pk=selection_id,
+            encounter=encounter,
+        )
+        participant = self._get_participant(request, encounter)
+        if participant is None or (
+            not request.user.is_staff
+            and not encounter.scene.is_gm(request.user)
+            and selection.participant_id != participant.pk
+        ):
+            return Response({"detail": _ERR_NOT_PARTICIPANT}, status=status.HTTP_403_FORBIDDEN)
+        from world.combat.constants import SelectionType  # noqa: PLC0415
+
+        if selection.selection_type != SelectionType.WEAKNESS:
+            return Response({"detail": "This selection cannot be resolved here."}, status=400)
+        from world.covenants.weakness import resolve_weakness_selection  # noqa: PLC0415
+
+        if not resolve_weakness_selection(selection, option_id):
+            return Response(
+                {"detail": "That specialist choice is no longer available."}, status=400
             )
         return self._serialize_encounter(request, encounter)
 

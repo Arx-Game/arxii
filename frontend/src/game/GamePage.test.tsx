@@ -114,6 +114,7 @@ vi.mock('@/hooks/useGameSocket', () => ({
     sendConsole: vi.fn(),
     disconnectAll: vi.fn(),
     executeAction: vi.fn(),
+    requestRoomState: vi.fn(),
   }),
 }));
 
@@ -1828,7 +1829,7 @@ describe('GamePage', () => {
       renderWithProviders(<GamePage />);
 
       expect(screen.queryByTestId('dreamspace-panel')).not.toBeInTheDocument();
-      expect(screen.getByText(/no location data available/i)).toBeInTheDocument();
+      expect(screen.getByText(/location not confirmed yet/i)).toBeInTheDocument();
     });
 
     // Review finding 2: GamePage stays mounted across a sleep/knockout

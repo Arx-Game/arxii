@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import ClassVar
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 
 CHARACTER_SHEET_FK = "arxii.CharacterSheet"

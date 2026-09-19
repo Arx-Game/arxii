@@ -380,7 +380,10 @@ class StoryDigRoomAction(_StoryBuilderAction):
         )
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
-        RoomProfile.objects.filter(pk=profile_row.pk).update(is_public=False)
+        RoomProfile.objects.filter(pk=profile_row.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            is_public=False,
+        )
         profile_row.is_public = False
         return ActionResult(
             success=True,

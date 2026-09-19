@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from django.core.validators import MinValueValidator
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.travel.constants import TravelMode, VoyageStatus
 
 # Cross-app FK string constants — centralized per the buildings/models.py convention.

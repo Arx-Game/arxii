@@ -224,7 +224,10 @@ def end_plummet(faller: ObjectDB, *, caught: bool = False) -> None:  # noqa: OBJ
         template__name=CATCH_THE_FALLER_NAME,
         target_object=faller,
         is_active=True,
-    ).update(is_active=False)
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        is_active=False,
+    )
     _narrate_plummet_end(faller, caught=caught)
 
 

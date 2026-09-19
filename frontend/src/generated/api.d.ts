@@ -4953,6 +4953,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/resolve-selection/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Resolve a player-owned specialist choice from the browser (#3915). */
+    post: operations['combat_resolve_selection_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/resolve_round/': {
     parameters: {
       query?: never;
@@ -24638,6 +24655,7 @@ export interface components {
       conditions: components['schemas']['ConditionInstance'][];
       legend: components['schemas']['AftermathLegend'][];
       beat: components['schemas']['AftermathBeat'] | null;
+      objective: components['schemas']['ObjectiveSnapshot'] | null;
       peril_round_active: boolean;
     };
     /** @description Schema-only shape of one legend line in an aftermath digest (#3551). */
@@ -24645,6 +24663,13 @@ export interface components {
       title: string;
       description: string;
       base_value: number;
+      recognition: components['schemas']['AftermathRecognition'][];
+    };
+    /** @description Safe causal label shape; source ids and check quality are never exposed. */
+    AftermathRecognition: {
+      key: string;
+      label: string;
+      description: string;
     };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
@@ -29427,6 +29452,10 @@ export interface components {
       readonly position_nodes: components['schemas']['PositionNode'][];
       readonly position_edges: components['schemas']['PositionEdge'][];
       readonly volatile_objects: components['schemas']['VolatileObject'][];
+      readonly objective: components['schemas']['ObjectiveSnapshot'] | null;
+      readonly pending_selections: components['schemas']['PendingSelection'][];
+      readonly sustained_actions: components['schemas']['SustainedAction'][];
+      readonly protection_commitments: components['schemas']['ProtectionCommitment'][];
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -34679,6 +34708,29 @@ export interface components {
     NotificationLevelEnum: 'personal' | 'room' | 'gamewide';
     /** @enum {unknown} */
     NullEnum: null;
+    /** @description Safe read shape for an authored objective branch (#3916). */
+    ObjectiveBranch: {
+      key: string;
+      column: string | null;
+      outcome?: string;
+      label: string;
+    };
+    /** @description Safe read shape for the existing objective routing primitives (#3916). */
+    ObjectiveSnapshot: {
+      key: string;
+      source: components['schemas']['ObjectiveSnapshotSourceEnum'];
+      label: string;
+      clock: {
+        [key: string]: unknown;
+      } | null;
+      branches: components['schemas']['ObjectiveBranch'][];
+    };
+    /**
+     * @description * `scenario` - scenario
+     *     * `stakes` - stakes
+     * @enum {string}
+     */
+    ObjectiveSnapshotSourceEnum: 'scenario' | 'stakes';
     ObligationRow: {
       id: number;
       name: string;
@@ -35528,6 +35580,8 @@ export interface components {
       effects: components['schemas']['EffectRow'][];
       power_ledger?: components['schemas']['PowerLedger'] | null;
       strain_committed?: number | null;
+      strain_effective?: number | null;
+      strain_power_bonus?: number | null;
       power?: number | null;
       progress_delta?: number | null;
     };
@@ -38877,6 +38931,10 @@ export interface components {
       readonly control_modifier: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly aftermath: components['schemas']['AftermathDigest'] | null;
+      /** @description Return spent reactions only to the owner, GM, or staff. */
+      readonly reactions_used: number | null;
+      /** @description Return the remaining reaction availability without exposing other pools. */
+      readonly reactions_remaining: number | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -40982,6 +41040,25 @@ export interface components {
         [key: string]: string;
       }[];
     };
+    /** @description Read shape for a deferred specialist choice (#3915). */
+    PendingSelection: {
+      id: number;
+      participant_id: number;
+      selection_type: string;
+      options: components['schemas']['PendingSelectionOption'][];
+      selected_option_id: string | null;
+      target_opponent_id: number | null;
+      target_opponent_name: string | null;
+      /** Format: date-time */
+      created_at: string;
+      resolved: boolean;
+    };
+    /** @description A safe, authored choice shown only to its owning participant. */
+    PendingSelectionOption: {
+      id: string;
+      label: string;
+      description: string;
+    };
     /**
      * @description Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
      *
@@ -41962,6 +42039,14 @@ export interface components {
      * @enum {string}
      */
     ProposeLethalDuelTierEnum: 'elite' | 'boss' | 'hero_killer';
+    /** @description Public ally-protection declaration, without private action details. */
+    ProtectionCommitment: {
+      participant_id: number;
+      participant_name: string;
+      maneuver: string;
+      protected_participant_id: number | null;
+      protected_participant_name: string | null;
+    };
     /**
      * @description * `gm` - GM/Staff authored (canon)
      *     * `action` - Action-anchored (minted by play)
@@ -45436,6 +45521,10 @@ export interface components {
     StrainAvailability: {
       readonly cap: number;
       readonly default: number;
+      readonly base_effective_cost: number;
+      readonly conversion_base: number;
+      readonly diminishing_step: number;
+      readonly diminishing_floor: number;
     };
     /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */
     Style: {
@@ -45559,6 +45648,19 @@ export interface components {
      * @enum {string}
      */
     SupportDeclareRequestSourceKindEnum: 'pattern' | 'gem';
+    /** @description Observable countdown and erosion for a multi-round commitment. */
+    SustainedAction: {
+      id: number;
+      participant_id: number;
+      participant_name: string;
+      kind: string;
+      subject: string;
+      declared_round: number;
+      resolves_round: number;
+      rounds_until_resolution: number;
+      downgrades: number;
+      broken: boolean;
+    };
     /**
      * @description Staff read + status-update view of an auto-captured error (#1164).
      *
@@ -54143,6 +54245,32 @@ export interface operations {
     };
   };
   combat_remove_participant_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_resolve_selection_create: {
     parameters: {
       query?: never;
       header?: never;

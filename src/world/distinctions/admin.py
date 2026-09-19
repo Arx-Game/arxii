@@ -194,7 +194,10 @@ class CharacterDistinctionOtherAdmin(admin.ModelAdmin):
 
     @admin.action(description="Mark selected entries as approved")
     def mark_approved(self, request, queryset):
-        updated = queryset.update(status=OtherStatus.APPROVED)
+        updated = queryset.update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            status=OtherStatus.APPROVED,
+        )
         self.message_user(request, f"{updated} entries marked as approved.")
 
 

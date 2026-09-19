@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.character_sheets.models import CharacterSheet
 from world.journals.constants import JournalKind, PosthumousOverride, ResponseType

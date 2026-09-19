@@ -10,9 +10,9 @@ for where the gate is enforced.
 
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.registration.constants import InviteStatus
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.

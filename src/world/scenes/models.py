@@ -9,9 +9,9 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import LedgerOp, PowerStage
@@ -1127,6 +1127,14 @@ class Interaction(SharedMemoryModel):
             "Canonical post-resolution audit of strain the player actually "
             "committed for this action. Populated for both clash and non-clash."
         ),
+    )
+    strain_effective = models.PositiveIntegerField(
+        default=0,
+        help_text="Strain actually paid after non-lethal resource clamping.",
+    )
+    strain_power_bonus = models.PositiveIntegerField(
+        default=0,
+        help_text="One-time power bonus derived from effective strain.",
     )
     fury_committed = models.ForeignKey(
         "arxii.FuryTier",

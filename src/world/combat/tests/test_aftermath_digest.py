@@ -126,8 +126,9 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         character = participant.character_sheet.character
 
         old_condition = ConditionInstanceFactory(target=character)
-        ConditionInstance.objects.filter(pk=old_condition.pk).update(
-            applied_at=encounter.created_at - timedelta(hours=1)
+        ConditionInstance.objects.filter(pk=old_condition.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            applied_at=encounter.created_at - timedelta(hours=1),
         )
         new_condition = ConditionInstanceFactory(target=character)
 
@@ -135,8 +136,9 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         encounter.refresh_from_db()
 
         later_fight_condition = ConditionInstanceFactory(target=character)
-        ConditionInstance.objects.filter(pk=later_fight_condition.pk).update(
-            applied_at=encounter.completed_at + timedelta(minutes=5)
+        ConditionInstance.objects.filter(pk=later_fight_condition.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            applied_at=encounter.completed_at + timedelta(minutes=5),
         )
 
         digest = build_aftermath_digest(encounter, participant)
@@ -152,8 +154,9 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
 
         in_window_entry = LegendEntryFactory(persona=sheet.primary_persona)
         out_of_window_entry = LegendEntryFactory(persona=sheet.primary_persona)
-        LegendEntry.objects.filter(pk=out_of_window_entry.pk).update(
-            created_at=encounter.completed_at + timedelta(minutes=2)
+        LegendEntry.objects.filter(pk=out_of_window_entry.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            created_at=encounter.completed_at + timedelta(minutes=2),
         )
 
         digest = build_aftermath_digest(encounter, participant)
@@ -262,8 +265,9 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         encounter.refresh_from_db()
 
         companion = CompanionFactory(owner=sheet, name="Ember")
-        Companion.objects.filter(pk=companion.pk).update(
-            released_at=encounter.completed_at + timedelta(seconds=30)
+        Companion.objects.filter(pk=companion.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            released_at=encounter.completed_at + timedelta(seconds=30),
         )
 
         digest = build_aftermath_digest(encounter, participant)
@@ -280,8 +284,9 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         encounter.refresh_from_db()
 
         companion = CompanionFactory(owner=sheet, name="Ashfoot")
-        Companion.objects.filter(pk=companion.pk).update(
-            released_at=encounter.completed_at - timedelta(minutes=1)
+        Companion.objects.filter(pk=companion.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            released_at=encounter.completed_at - timedelta(minutes=1),
         )
 
         digest = build_aftermath_digest(encounter, participant)
@@ -304,8 +309,9 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         encounter.refresh_from_db()
 
         companion = CompanionFactory(owner=sheet, name="Duskwing")
-        Companion.objects.filter(pk=companion.pk).update(
-            released_at=encounter.completed_at + AFTERMATH_ATTRIBUTION_WINDOW
+        Companion.objects.filter(pk=companion.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            released_at=encounter.completed_at + AFTERMATH_ATTRIBUTION_WINDOW,
         )
 
         digest = build_aftermath_digest(encounter, participant)

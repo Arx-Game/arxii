@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 from django.db import models
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.game_clock.constants import DEFAULT_TIME_RATIO
 
 

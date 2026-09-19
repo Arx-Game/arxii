@@ -1,8 +1,8 @@
 """Abstract base model for round/encounter lifecycle shared by SceneRound and CombatEncounter."""
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.scenes.constants import RoundStatus
 
 

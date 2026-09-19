@@ -13,8 +13,8 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.constants import ExitKind, RoomEnclosure
 from evennia_extensions.mixins import RelatedCacheClearingMixin

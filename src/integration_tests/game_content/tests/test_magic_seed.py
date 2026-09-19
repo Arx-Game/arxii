@@ -250,7 +250,10 @@ class TestSeedMagicConfigPreservesEdits(TestCase):
         seed_magic_config()
 
         # Simulate a staff edit via bulk update (bypasses identity map)
-        AnimaConfig.objects.filter(pk=1).update(daily_regen_amount=15)
+        AnimaConfig.objects.filter(pk=1).update_with_reason(
+            reason="test fixture: simulate stale row",
+            daily_regen_amount=15,
+        )
 
         # Re-run the seed — must not overwrite the staff edit
         seed_magic_config()
@@ -302,7 +305,10 @@ class TestSeedCanonicalRituals(TestCase):
         seed_canonical_rituals()
 
         # Simulate a staff edit via bulk update (bypasses identity map)
-        Ritual.objects.filter(name="Rite of Imbuing").update(description="custom description")
+        Ritual.objects.filter(name="Rite of Imbuing").update_with_reason(
+            reason="test fixture: simulate stale row",
+            description="custom description",
+        )
 
         # Re-run the seed — must not overwrite the staff edit
         seed_canonical_rituals()
@@ -504,7 +510,10 @@ class TestSeedThreadPullCatalogPreservesEdits(TestCase):
         flat_pk = first.pull_effects[EffectKind.FLAT_BONUS].pk
 
         # Simulate a staff edit via bulk update (bypasses identity map)
-        ThreadPullEffect.objects.filter(pk=flat_pk).update(flat_bonus_amount=99)
+        ThreadPullEffect.objects.filter(pk=flat_pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            flat_bonus_amount=99,
+        )
 
         # Re-run the seed — must not overwrite the staff edit
         seed_thread_pull_catalog()
@@ -1984,7 +1993,10 @@ class SeedAffinityInteractionsTests(TestCase):
         AffinityInteraction.objects.filter(
             source_affinity=celestial,
             environment_affinity=primal,
-        ).update(severity_multiplier=Decimal("0.99"))
+        ).update_with_reason(
+            reason="test fixture: simulate stale row",
+            severity_multiplier=Decimal("0.99"),
+        )
 
         _seed_affinity_interactions()
 

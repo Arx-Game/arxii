@@ -86,8 +86,9 @@ class NominateTest(TestCase):
 
     def test_only_this_weeks_prose_counts(self) -> None:
         pose = InteractionFactory(persona=self.writer_persona)
-        Interaction.objects.filter(pk=pose.pk).update(
-            timestamp=self.week.started_at - timedelta(days=1)
+        Interaction.objects.filter(pk=pose.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=self.week.started_at - timedelta(days=1),
         )
         Interaction.flush_instance_cache()
 
@@ -145,7 +146,10 @@ class WithdrawNominationTest(TestCase):
 
     def test_a_settled_nomination_stands(self) -> None:
         row = nominate(self.nominator, NominationTargetType.INTERACTION, self.pose.pk)
-        Nomination.objects.filter(pk=row.pk).update(processed=True)
+        Nomination.objects.filter(pk=row.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            processed=True,
+        )
         Nomination.flush_instance_cache()
 
         with self.assertRaises(ProgressionError) as ctx:

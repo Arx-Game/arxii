@@ -20,9 +20,9 @@ and any future one must already skip inactive characters).
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.captivity.constants import CaptivityStatus
 
 _MISSION_TEMPLATE_FK = "arxii.MissionTemplate"

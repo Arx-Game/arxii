@@ -11,9 +11,9 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import SoulTetherRole

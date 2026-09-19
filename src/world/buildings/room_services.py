@@ -429,7 +429,10 @@ def remove_room(*, persona: Persona, room: DefaultObject) -> None:
     with transaction.atomic():
         LocationTenancy.objects.filter(room_profile=profile).filter(
             models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now)
-        ).update(ends_at=now)
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            ends_at=now,
+        )
         if entry_obj is not None:
             for obj in list(room.contents):
                 obj.move_to(entry_obj, quiet=True)
@@ -512,7 +515,10 @@ def complete_building_extension(project, outcome_tier: object | None = None) -> 
         # applied_at and no-ops even though the cached instance is stale.
         claimed = BuildingExtensionDetails.objects.filter(
             project=project, applied_at__isnull=True
-        ).update(applied_at=timezone.now())
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            applied_at=timezone.now(),
+        )
         if not claimed:
             return
         details = BuildingExtensionDetails.objects.get(project=project)
@@ -630,7 +636,10 @@ def complete_interior_design(project, outcome_tier: object | None = None) -> Non
     with transaction.atomic():
         claimed = InteriorDesignDetails.objects.filter(
             project=project, applied_at__isnull=True
-        ).update(applied_at=timezone.now())
+        ).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            applied_at=timezone.now(),
+        )
         if not claimed:
             return
         details = InteriorDesignDetails.objects.select_related("template", "building", "room").get(

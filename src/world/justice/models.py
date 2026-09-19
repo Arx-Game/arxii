@@ -10,8 +10,8 @@ only mints inside the enforcing society's dominion (ADR: heat jurisdiction).
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.justice.constants import (
     DEFAULT_HEAT_WEIGHT,
     EVIDENCE_BASE_QUALITY,

@@ -125,14 +125,18 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
         event.full_clean()
         event.save()
 
-        NpcRegard.objects.filter(pk=regard.pk).update(
+        NpcRegard.objects.filter(pk=regard.pk).update_with_reason(
+            reason="issue #3817: intentional atomic write",
             value=F("value") + clamped_amount,
         )
         regard.flush_from_cache(force=True)
         regard.refresh_from_db()
         if regard.value > REGARD_MAX or regard.value < REGARD_MIN:
             clamped_value = max(REGARD_MIN, min(REGARD_MAX, regard.value))
-            NpcRegard.objects.filter(pk=regard.pk).update(value=clamped_value)
+            NpcRegard.objects.filter(pk=regard.pk).update_with_reason(
+                reason="issue #3817: intentional atomic write",
+                value=clamped_value,
+            )
             regard.flush_from_cache(force=True)
             regard.refresh_from_db()
 

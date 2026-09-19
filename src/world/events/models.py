@@ -1,9 +1,9 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.events.constants import (
     EventStatus,
     GrandeurCategory,

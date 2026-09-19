@@ -1,4 +1,4 @@
-# ADR-0304: Location access is a four-rung ladder carried on the grant
+# ADR-0305: Location access is a four-rung ladder carried on the grant
 
 **Status:** Accepted (2026-09-19, #3902)
 
@@ -40,7 +40,7 @@ through a predicate that cannot express the growth, fails open and raises nothin
 **The model default is the LOWEST rung.** A writer who forgets the kwarg mints a Guest,
 which surfaces as "my key does not work" and gets reported. The opposite default mints
 a Tenant, which is a silent over-grant nobody sees. Rows written before the field
-existed all meant TENANT, so migration 0144 fills them with that via
+existed all meant TENANT, so migration 0147 fills them with that via
 `preserve_default=False` and the model default reverts to GUEST afterwards.
 
 **Authority and residence are separate axes.** The ladder answers "may they act here".

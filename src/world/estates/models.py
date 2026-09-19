@@ -9,8 +9,8 @@ first wins; debts before bequests; estate-heir fall-through chain) lives in
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.estates.constants import BequestKind, SettlementDoor, SettlementStatus
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.

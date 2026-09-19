@@ -152,7 +152,10 @@ class AccountAttentionTests(TestCase):
             mode=InteractionMode.WHISPER,
         )
         old = timezone.now() - timedelta(days=DIRECTED_UNREAD_DAYS + 1)
-        Interaction.objects.filter(pk=whisper.pk).update(timestamp=old)
+        Interaction.objects.filter(pk=whisper.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            timestamp=old,
+        )
         Interaction.flush_cached_instance(whisper, force=True)
         InteractionReceiver.objects.create(
             interaction=whisper,

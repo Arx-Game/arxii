@@ -27,7 +27,10 @@ class NarratorPersonaTest(TestCase):
     def test_existing_narrator_healed_to_system(self) -> None:
         """A Narrator row predating is_system is healed to is_system=True."""
         persona = get_or_create_narrator_persona()
-        Persona.objects.filter(pk=persona.pk).update(is_system=False)
+        Persona.objects.filter(pk=persona.pk).update_with_reason(
+            reason="test fixture: simulate stale row",
+            is_system=False,
+        )
 
         healed = get_or_create_narrator_persona()
 

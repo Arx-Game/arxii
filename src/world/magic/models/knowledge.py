@@ -5,7 +5,8 @@ knows and how they came to know them.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class CharacterRitualKnowledge(SharedMemoryModel):

@@ -204,7 +204,8 @@ class CloudinaryGalleryService:
         """
         try:
             for index, media_id in enumerate(media_ids):
-                TenureMedia.objects.filter(id=media_id, tenure=tenure).update(
+                TenureMedia.objects.filter(id=media_id, tenure=tenure).update_with_reason(
+                    reason="issue #3817: intentional atomic write",
                     sort_order=index,
                 )
             return True

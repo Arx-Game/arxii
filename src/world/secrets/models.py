@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.secrets.constants import SecretLevel, SecretProvenance
 
 # App-qualified model path repeated across FK references; centralized for dedup.

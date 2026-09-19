@@ -126,7 +126,8 @@ def award_check_development(
                 character_sheet=character_sheet,
                 trait=trait,
                 game_week=game_week,
-            ).update(
+            ).update_with_reason(
+                reason="issue #3817: intentional atomic write",
                 points_earned=F("points_earned") + dp,
                 check_count=F("check_count") + 1,
             )
@@ -331,7 +332,10 @@ def process_weekly_skill_development(game_week: GameWeek) -> None:
     if audit_records:
         DevelopmentTransaction.objects.bulk_create(audit_records)
     if usage_pks:
-        WeeklySkillUsage.objects.filter(pk__in=usage_pks).update(processed=True)
+        WeeklySkillUsage.objects.filter(pk__in=usage_pks).update_with_reason(
+            reason="issue #3817: intentional atomic write",
+            processed=True,
+        )
 
     # --- Step 2: Apply rust to unused skills ---
     rust_count = _apply_weekly_rust(game_week, used_pairs)

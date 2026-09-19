@@ -18,8 +18,8 @@ without an account and has no natural key to export by. See ADR-0196.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 

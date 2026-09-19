@@ -1,15 +1,15 @@
 """Dream realm models — the parallel dream layer on the room graph."""
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import CachedAllMixin
+from core.managers import CachedAllMixin, GuardedSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 # App-qualified model path repeated across FK references; centralized for dedup.
 _ROOM_PROFILE_MODEL = "arxii.RoomProfile"
 
 
-class DreamReflectionManager(CachedAllMixin, models.Manager):
+class DreamReflectionManager(CachedAllMixin, GuardedSharedMemoryManager):
     """Manager with cached_all() and a for_waking_room convenience lookup."""
 
     def for_waking_room(self, room):

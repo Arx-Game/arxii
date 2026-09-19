@@ -77,7 +77,8 @@ if TYPE_CHECKING:
     from world.checks.types import ResolutionContext
     from world.gm.models import GMProfile
     from world.scenes.models import Persona, Scene as SceneModel
-    from world.stories.models import Episode, Story
+    from world.societies.models import LegendSourceType
+    from world.stories.models import Episode, StakeContractActivation, Story
     from world.traits.models import CheckOutcome
 
 
@@ -249,6 +250,132 @@ def _scope_completion_kwargs(  # noqa: PLR0913
     return kwargs
 
 
+def _settlement_scene(beat: Beat) -> SceneModel | None:
+    """Return the active scene running or linked to ``beat`` for witness context."""
+    from world.scenes.models import Scene  # noqa: PLC0415
+    from world.stories.models import EpisodeScene  # noqa: PLC0415
+
+    scene = Scene.objects.filter(running_beat=beat, is_active=True).first()
+    if scene is not None:
+        return scene
+    link = (
+        EpisodeScene.objects.filter(episode=beat.episode, scene__is_active=True)
+        .select_related("scene")
+        .order_by("order")
+        .first()
+    )
+    return link.scene if link is not None else None
+
+
+def _settlement_sheets(
+    *,
+    activation: StakeContractActivation,
+    completion: BeatCompletion,
+    progress: AnyStoryProgress | None,
+    scope: str,
+    explicit_participants: list[Persona] | None,
+) -> list[CharacterSheet]:
+    """Resolve every participant sheet with provenance for an activation.
+
+    Explicit completion participants are authoritative for combat and GM runs.
+    The contribution ledger and active scene participants fill in actors who did
+    not make a check, so a quiet participant still receives their shared deed.
+    """
+    personas = _resolve_participants_for_pool(
+        completion=completion,
+        progress=progress,
+        scope=scope,
+        explicit_participants=explicit_participants,
+    )
+    sheets: dict[int, CharacterSheet] = {
+        sheet.pk: sheet for sheet in activation.participant_sheets.all()
+    }
+    for persona in personas:
+        sheets[persona.character_sheet_id] = persona.character_sheet
+    for sheet in CharacterSheet.objects.filter(
+        legend_contributions__activation=activation
+    ).distinct():
+        sheets[sheet.pk] = sheet
+    scene = _settlement_scene(completion.beat)
+    if scene is not None:
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        location_ids = {obj.pk for obj in scene.location.contents} if scene.location else set()
+        for participation in scene.participations.filter(
+            is_gm=False, left_at__isnull=True
+        ).select_related("account"):
+            for entry in RosterEntry.objects.for_account(participation.account):
+                sheet = entry.character_sheet
+                if sheet.character_id in location_ids:
+                    sheets[sheet.pk] = sheet
+    return list(sheets.values())
+
+
+def _authored_legend_context(
+    pool: ConsequencePool | None, beat: Beat
+) -> tuple[LegendSourceType, str]:
+    """Return authored source/title text for settlement, if present."""
+    from world.societies.models import LegendSourceType  # noqa: PLC0415
+
+    if pool is not None:
+        from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+        from world.checks.constants import EffectType  # noqa: PLC0415
+
+        for consequence in resolve_pool_consequences(pool):
+            effect = (
+                consequence.effects.filter(effect_type=EffectType.LEGEND_AWARD)
+                .select_related("legend_source_type")
+                .first()
+            )
+            if effect is not None:
+                description = effect.legend_description_template or beat.player_resolution_text
+                return effect.legend_source_type, description or beat.internal_description
+
+    source, _ = LegendSourceType.objects.get_or_create(
+        name="Story",
+        defaults={"description": "Legend earned by completing a story beat."},
+    )
+    description = beat.player_resolution_text or beat.internal_description
+    return source, description
+
+
+def _settle_completion_legend(  # noqa: PLR0913
+    *,
+    activation: StakeContractActivation | None,
+    completion: BeatCompletion,
+    progress: AnyStoryProgress | None,
+    scope: str,
+    explicit_participants: list[Persona] | None,
+    pool: ConsequencePool | None,
+) -> None:
+    """Settle one ordinary story completion through the authoritative seam."""
+    if activation is None:
+        return
+    from world.stories.services.legend_settlement import (  # noqa: PLC0415
+        settle_legend_for_activation,
+    )
+
+    source_type, description = _authored_legend_context(pool, completion.beat)
+    scene = _settlement_scene(completion.beat)
+    sheets = _settlement_sheets(
+        activation=activation,
+        completion=completion,
+        progress=progress,
+        scope=scope,
+        explicit_participants=explicit_participants,
+    )
+    report = settle_legend_for_activation(
+        activation,
+        sheets=sheets,
+        source_type=source_type,
+        title=description,
+        description=description,
+        scene=scene,
+    )
+    if not report.minted:
+        logger.info("Beat %s settled no Legend: %s", completion.beat_id, report.reason)
+
+
 def _create_completion_and_fire_pool(  # noqa: PLR0913
     *,
     beat: Beat,
@@ -304,12 +431,27 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     resolves through the separate resolve_stakes_for_withdrawal instead,
     leaving the beat's own outcome untouched (#3559).
     """
+    from world.checks.constants import EffectType  # noqa: PLC0415
     from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
     from world.stories.services.stake_resolution import (  # noqa: PLC0415
         resolve_stakes_for_completion,
     )
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
     with transaction.atomic():
+        # Lock the beat so a replay or racing completion returns the existing
+        # ledger row before any consequence or Legend can fire twice.
+        locked_beat = Beat.objects.select_for_update().get(pk=beat.pk)
+        if locked_beat.outcome != BeatOutcome.UNSATISFIED:
+            existing = BeatCompletion.objects.filter(beat=locked_beat).order_by("-pk").first()
+            if existing is not None:
+                return existing
+        beat = locked_beat
+        activation = get_open_activation(beat)
+        settlement_pool = _pool_for_outcome(beat, outcome)
+        completion_skip = skip_effect_types
+        if activation is not None:
+            completion_skip |= frozenset({EffectType.LEGEND_AWARD})
         beat.outcome = outcome
         beat.outcome_key = outcome_key
         beat.save(update_fields=["outcome", "outcome_key", "updated_at"])
@@ -322,7 +464,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
-            skip_effect_types=skip_effect_types,
+            skip_effect_types=completion_skip,
         )
 
         resolve_stakes_for_completion(
@@ -334,7 +476,22 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
             outcome_key=completion.outcome_key,
+            skip_effect_types=(
+                frozenset({EffectType.LEGEND_AWARD}) if activation is not None else frozenset()
+            ),
         )
+
+        # Expiry is a routing loss, not a completed perilous deed; retain the
+        # existing no-Legend expiry rule even though it closes the activation.
+        if outcome != BeatOutcome.EXPIRED:
+            _settle_completion_legend(
+                activation=activation,
+                completion=completion,
+                progress=progress,
+                scope=scope,
+                explicit_participants=explicit_participants,
+                pool=settlement_pool,
+            )
 
         from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
 

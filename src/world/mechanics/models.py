@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import ArxSharedMemoryManager
+from core.managers import ArxSharedMemoryManager, ArxSharedMemoryQuerySet
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 if TYPE_CHECKING:
@@ -369,7 +369,7 @@ class ModifierSource(SharedMemoryModel):
         return self.source_display
 
 
-class CharacterModifierQuerySet(models.QuerySet):
+class CharacterModifierQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for CharacterModifier with batch aggregation methods."""
 
     def totals_by_character_for_targets(

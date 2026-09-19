@@ -166,8 +166,11 @@ def complete_cleanup(project: Project, outcome_tier: CheckOutcome | None) -> Non
     if threshold is None or threshold.quality_delta <= 0:
         return
 
-    claimed = CleanupProjectDetails.objects.filter(project=project, applied_at__isnull=True).update(
-        applied_at=timezone.now()
+    claimed = CleanupProjectDetails.objects.filter(
+        project=project, applied_at__isnull=True
+    ).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        applied_at=timezone.now(),
     )
     if not claimed:
         return

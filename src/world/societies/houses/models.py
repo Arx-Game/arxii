@@ -10,8 +10,8 @@ union-bound (CK2 rule: a spouse dies, the pact dies) with coded commitments.
 """
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.currency.constants import IncomeStreamKind

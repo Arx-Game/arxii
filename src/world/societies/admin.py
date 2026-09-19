@@ -20,9 +20,12 @@ from world.societies.models import (
     GangTurfTierThreshold,
     LegendDeedStory,
     LegendEntry,
+    LegendEntryRecognition,
     LegendEvent,
     LegendHonor,
     LegendLevelCalibration,
+    LegendRecognitionEvidence,
+    LegendRecognitionRule,
     LegendSettlementConfig,
     LegendSourceType,
     LegendSpread,
@@ -752,6 +755,35 @@ class LegendSourceTypeAdmin(admin.ModelAdmin):
     list_filter = ["is_active"]
     search_fields = ["name"]
     ordering = ["display_order", "name"]
+
+
+@admin.register(LegendRecognitionRule)
+class LegendRecognitionRuleAdmin(admin.ModelAdmin):
+    """Staff-authored causal recognition policy rows (#3914)."""
+
+    list_display = ("key", "source_kind", "minimum_success_level", "is_active")
+    list_filter = ("source_kind", "is_active")
+    search_fields = ("key", "label", "description")
+
+
+@admin.register(LegendRecognitionEvidence)
+class LegendRecognitionEvidenceAdmin(admin.ModelAdmin):
+    """Read-only audit ledger for successful causal evidence."""
+
+    list_display = ("activation", "actor_sheet", "rule", "source_kind", "source_id")
+    list_filter = ("source_kind", "rule")
+    raw_id_fields = ("activation", "actor_sheet", "protected_sheet")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(LegendEntryRecognition)
+class LegendEntryRecognitionAdmin(admin.ModelAdmin):
+    """Read-only zero-value labels attached to settled deeds."""
+
+    list_display = ("entry", "key", "label", "created_at")
+    search_fields = ("key", "label", "description")
+    raw_id_fields = ("entry", "evidence")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(LegendEvent)

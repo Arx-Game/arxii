@@ -10,8 +10,9 @@ technique that moves the caster between anchors of that kind.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryQuerySet
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 
@@ -60,7 +61,7 @@ class PortalAnchorKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.name
 
 
-class PortalAnchorQuerySet(models.QuerySet):
+class PortalAnchorQuerySet(ArxSharedMemoryQuerySet):
     """Custom queryset for PortalAnchor with soft-delete helpers."""
 
     def active(self) -> PortalAnchorQuerySet:

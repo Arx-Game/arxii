@@ -101,8 +101,9 @@ def place_functionary(
 
 def remove_functionary(*, role: NPCRole, room: RoomProfile) -> bool:
     """Soft-remove the (role, room) functionary (set inactive). True if one was present."""
-    updated = Functionary.objects.filter(role=role, room=room, is_active=True).update(
-        is_active=False
+    updated = Functionary.objects.filter(role=role, room=room, is_active=True).update_with_reason(
+        reason="issue #3817: intentional atomic write",
+        is_active=False,
     )
     return updated > 0
 

@@ -9,7 +9,8 @@ tier-crossing case is Audere Majora. Backend names stay Class/Level.
 from __future__ import annotations
 
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
