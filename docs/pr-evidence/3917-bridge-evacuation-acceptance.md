@@ -1,9 +1,10 @@
 # #3917 Bridge-evacuation acceptance evidence
 
-- Reviewed revision: `61274a06f`
+- Reviewed revision: `f4a1ec73dad34e2823fa6f1ea9cf97d01df97e85`
 - Reviewer: local acceptance test run
 - Reviewer verdict: PASS for the deterministic model/service composition below; NOT PASS for live browser playtest or Soulfray probability
 - Application/build identity: Arx II repository test environment (`uv run arx test --sqlite`)
+- Full-suite verification: `just test-fast world.combat` passed 2,306 tests in 296.140s on the reviewed revision.
 - Environment: SQLite fast tier; Python/Evennia versions from `uv.lock`; no browser run
 - Viewports/themes: Not applicable; this gate is backend/model acceptance
 - Approved design: [#3917](https://github.com/Arx-Game/arxii/issues/3917), parent [#3899](https://github.com/Arx-Game/arxii/issues/3899)
