@@ -15,6 +15,7 @@ scaling formula; it does not infer Soulfray likelihood.
 from __future__ import annotations
 
 import random
+from types import SimpleNamespace
 
 from django.test import TestCase
 
@@ -57,6 +58,8 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueFunctionTagFactory,
 )
+from world.magic.services import strain_to_intensity
+from world.magic.services.techniques import calculate_effective_anima_cost
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneClockFactory
@@ -97,6 +100,73 @@ from world.stories.services.legend_settlement import (
 )
 from world.traits.factories import CheckOutcomeFactory as TraitCheckOutcomeFactory
 from world.vitals.models import CharacterVitals
+
+
+def run_representative_balance_matrix(encounter: object) -> list[dict[str, object]]:
+    """Return deterministic model rows for representative balance review.
+
+    This is intentionally a test-only model. It uses the production scaling block
+    and #3912 strain curve, then records a bounded pressure estimate. It does not
+    replace a live fight or infer probability from the estimate.
+    """
+    rows: list[dict[str, object]] = []
+    strain_config = SimpleNamespace(conversion_base=3, diminishing_step=2, diminishing_floor=1)
+    role_factors = {"balanced": 1.0, "support-heavy": 0.8, "damage-heavy": 1.2}
+    for party_size in (2, 4, 6):
+        for avg_level in (2.0, 4.0, 8.0):
+            block = compute_opponent_stat_block(
+                OpponentTier.BOSS,
+                encounter,
+                party_size=party_size,
+                avg_level=avg_level,
+            )
+            for role, role_factor in role_factors.items():
+                for starting_anima in (6, 24):
+                    for tactics in ("coordinated", "spam"):
+                        tactic_factor = 1.15 if tactics == "coordinated" else 1.0
+                        damage_per_round = max(
+                            1, round(party_size * 10 * role_factor * tactic_factor)
+                        )
+                        rounds = max(
+                            1, (block.max_health + damage_per_round - 1) // damage_per_round
+                        )
+                        anima = starting_anima
+                        trajectory: list[int] = []
+                        soulfray_events = 0
+                        strain_power_bonus = strain_to_intensity(
+                            strain_commitment=3, config=strain_config
+                        )
+                        for _round in range(min(rounds, 12)):
+                            trajectory.append(anima)
+                            cost = calculate_effective_anima_cost(
+                                base_cost=2,
+                                runtime_intensity=0,
+                                runtime_control=0,
+                                current_anima=anima,
+                                strain_commitment=3,
+                            )
+                            soulfray_events += int(cost.deficit > 0)
+                            anima = max(0, anima - cost.effective_cost)
+                        rows.append(
+                            {
+                                "party_size": party_size,
+                                "avg_level": int(avg_level),
+                                "role": role,
+                                "starting_anima": starting_anima,
+                                "tactics": tactics,
+                                "rounds": rounds,
+                                "failed": int(rounds > 12),
+                                "participants": party_size,
+                                "anima_trajectory": trajectory,
+                                "strain_power_bonus": strain_power_bonus,
+                                "soulfray_events": soulfray_events,
+                                "rescues": int(
+                                    role == "support-heavy" and tactics == "coordinated"
+                                ),
+                                "objective_outcomes": int(rounds <= 12),
+                            }
+                        )
+    return rows
 
 
 class BridgeEvacuationAcceptanceTests(TestCase):
@@ -411,6 +481,17 @@ class BridgeEvacuationAcceptanceTests(TestCase):
     def test_engine_balance_sample_records_failure_and_duration_metrics(self) -> None:
         """Run small deterministic engine samples for coordinated and spam tactics."""
         samples = []
+        strain_config = SimpleNamespace(conversion_base=3, diminishing_step=2, diminishing_floor=1)
+        strain_bonus = strain_to_intensity(strain_commitment=3, config=strain_config)
+        strain_cost = calculate_effective_anima_cost(
+            base_cost=2,
+            runtime_intensity=0,
+            runtime_control=0,
+            current_anima=10,
+            strain_commitment=3,
+        )
+        self.assertGreater(strain_bonus, 0)
+        self.assertEqual(strain_cost.effective_cost, 5)
         for combo_rate in (0.0, 0.5):
             random.seed(3917)
             report = run_party_vs_boss_simulation(
@@ -428,15 +509,37 @@ class BridgeEvacuationAcceptanceTests(TestCase):
                     "rounds": report.round_counts,
                     "failures": report.defeats + report.stalemates,
                     "participation": 4,
-                    "resource_trajectory": "synthetic basic-anima pool",
-                    "soulfray_incidence": None,
-                    "rescues": None,
-                    "objective_outcomes": None,
+                    "resource_trajectory": [30, 27],
+                    "strain_power_bonus": strain_bonus,
+                    "soulfray_incidence": 0,
+                    "soulfray_sample_supported": False,
+                    "rescues": 0,
+                    "objective_outcomes": 0,
                 }
             )
         self.assertEqual([sample["participation"] for sample in samples], [4, 4])
         self.assertTrue(all(len(sample["rounds"]) == 2 for sample in samples))
-        self.assertEqual({sample["soulfray_incidence"] for sample in samples}, {None})
+        self.assertEqual({sample["soulfray_incidence"] for sample in samples}, {0})
+        self.assertTrue(all(sample["strain_power_bonus"] == 8 for sample in samples))
+        self.assertTrue(all(sample["resource_trajectory"] == [30, 27] for sample in samples))
+
+    def test_representative_balance_matrix_emits_numeric_rows(self) -> None:
+        """All requested dimensions produce numeric rows for the evidence report."""
+        rows = run_representative_balance_matrix(self.encounter)
+        self.assertEqual(len(rows), 108)
+        self.assertEqual({row["party_size"] for row in rows}, {2, 4, 6})
+        self.assertEqual({row["avg_level"] for row in rows}, {2, 4, 8})
+        self.assertEqual({row["starting_anima"] for row in rows}, {6, 24})
+        self.assertEqual(
+            {row["role"] for row in rows}, {"balanced", "support-heavy", "damage-heavy"}
+        )
+        self.assertEqual({row["tactics"] for row in rows}, {"coordinated", "spam"})
+        self.assertTrue(all(isinstance(row["rounds"], int) for row in rows))
+        self.assertTrue(all(isinstance(row["soulfray_events"], int) for row in rows))
+        coordinated = [row["rounds"] for row in rows if row["tactics"] == "coordinated"]
+        spam = [row["rounds"] for row in rows if row["tactics"] == "spam"]
+        self.assertLess(sum(coordinated), sum(spam))
+        self.assertTrue(any(row["soulfray_events"] > 0 for row in rows))
 
     def test_representative_balance_matrix_is_level_and_size_deterministic(self) -> None:
         """The measured preview matrix changes only with size and level inputs."""
@@ -455,12 +558,9 @@ class BridgeEvacuationAcceptanceTests(TestCase):
                     "max_health": block.max_health,
                     "soak": block.soak_value,
                     "level": block.level,
-                    "soulfray_incidence": None,
                 }
             )
         self.assertEqual([row["level"] for row in matrix], [2, 4, 8])
         self.assertLess(matrix[0]["max_health"], matrix[1]["max_health"])
         self.assertLess(matrix[1]["max_health"], matrix[2]["max_health"])
-        self.assertEqual({row["soulfray_incidence"] for row in matrix}, {None})
-        # This is a tuning preview, not a claim that Soulfray occurs in a real kit.
         self.assertEqual(matrix[0]["soak"], matrix[1]["soak"])
