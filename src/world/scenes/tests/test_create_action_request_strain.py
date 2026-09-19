@@ -16,11 +16,6 @@ class CreateActionRequestStrainTests(TestCase):
         cls.target = PersonaFactory()
 
     def test_strain_commitment_persisted_on_request(self) -> None:
-        CharacterAnimaFactory(
-            character=self.initiator.character_sheet,
-            current=3,
-            maximum=3,
-        )
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
