@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import PropertyMock, patch
-
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
@@ -13,6 +11,8 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import TrackSign, TrackSystemKey
 from world.relationships.factories import RelationshipTrackFactory
 from world.relationships.models import RelationshipBump
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.constants import ReactionValence
 from world.scenes.factories import InteractionFactory
 from world.scenes.interaction_views import InteractionReactionViewSet, ReactionEmojiViewSet
@@ -41,6 +41,14 @@ class ValencedReactionBumpTests(TestCase):
         self.account = AccountFactory()
         self.reactor_character = CharacterFactory()
         self.reactor_sheet = CharacterSheetFactory(character=self.reactor_character)
+        self.reactor_entry = RosterEntryFactory(character_sheet=self.reactor_sheet)
+        self.reactor_tenure = RosterTenureFactory(
+            player_data__account=self.account,
+            roster_entry=self.reactor_entry,
+        )
+        self.reactor_character.db_account = self.account
+        self.reactor_character.save(update_fields=["db_account"])
+        set_selected_entry(self.reactor_tenure.player_data, self.reactor_entry)
         self.author_sheet = CharacterSheetFactory()
         self.interaction = InteractionFactory(persona=self.author_sheet.primary_persona)
         self.factory = APIRequestFactory()
@@ -54,13 +62,7 @@ class ValencedReactionBumpTests(TestCase):
             format="json",
         )
         force_authenticate(request, user=self.account)
-        with patch.object(
-            type(self.account),
-            "puppet",
-            new_callable=PropertyMock,
-            return_value=self.reactor_character,
-        ):
-            return InteractionReactionViewSet.as_view({"post": "create"})(request)
+        return InteractionReactionViewSet.as_view({"post": "create"})(request)
 
     def test_valenced_emoji_applies_bump(self) -> None:
         response = self._post_reaction("❤️")

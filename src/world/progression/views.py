@@ -75,7 +75,6 @@ from world.progression.serializers.unlocks import (
 from world.progression.services.nominations import nominations_by_account
 from world.progression.services.spends import get_available_unlocks_for_character
 from world.roster.models import RosterEntry
-from world.roster.selectors import puppeted_sheet_for
 from world.skills.services import skills_at_boundary
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -533,9 +532,11 @@ class SelectPathViewSet(CharacterContextMixin, viewsets.ViewSet):
 
 
 def _resolve_puppet_sheet(request: Request) -> tuple[Any, CharacterSheet]:
-    """Return the played character and its sheet, or raise ValidationError."""
-    puppet = request.user.puppet
-    sheet = puppeted_sheet_for(request.user)
+    """Return the selected character and its sheet, or raise ValidationError."""
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+    puppet = character_for_request(request, entry_id=None)
+    sheet = puppet.character_sheet if puppet is not None else None
     if puppet is None or sheet is None:
         msg = "You must be playing a character to view or purchase unlocks."
         raise serializers.ValidationError(msg)

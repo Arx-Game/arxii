@@ -33,7 +33,6 @@ from world.forms.serializers import (
     ShiftFormRequestSerializer,
 )
 from world.forms.services import get_apparent_form, get_cg_builds, get_cg_height_bands
-from world.roster.selectors import puppeted_sheet_for
 
 
 class FormTraitViewSet(viewsets.ReadOnlyModelViewSet):
@@ -74,7 +73,9 @@ class CharacterFormViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def apparent(self, request):
         """Get the apparent form for the user's active character."""
-        character = request.user.puppet if hasattr(request.user, "puppet") else None
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        character = character_for_request(request, entry_id=None)
         if not character:
             return Response({"detail": "No active character"}, status=400)
 
@@ -148,7 +149,10 @@ class AlternateSelfViewSet(
         keeping it on itself.
         """
         context = super().get_serializer_context()
-        sheet = puppeted_sheet_for(self.request.user)
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        character = character_for_request(self.request, entry_id=None)
+        sheet = character.character_sheet if character is not None else None
         active = sheet.active_alternate_self_or_none if sheet is not None else None
         context["active_alternate_self_id"] = (
             active.alternate_self_id if active is not None else None
@@ -157,8 +161,10 @@ class AlternateSelfViewSet(
 
     def get_queryset(self):
         """Filter to alternate selves belonging to the played character's sheet."""
-        user = self.request.user
-        sheet = puppeted_sheet_for(user)
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        character = character_for_request(self.request, entry_id=None)
+        sheet = character.character_sheet if character is not None else None
         queryset = AlternateSelf.objects.select_related(
             "persona", "form", "combat_profile"
         ).prefetch_related("techniques")  # noqa: PREFETCH_STRING
@@ -178,11 +184,13 @@ class AlternateSelfViewSet(
         permission_classes=[permissions.IsAuthenticated],
     )
     def shift(self, request: Request) -> Response:
-        """#1111 — assume an alternate self owned by the played character."""
+        """#1111 — assume an alternate self owned by the selected character."""
         body = ShiftFormRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        puppet = request.user.puppet
-        sheet = puppeted_sheet_for(request.user)
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        puppet = character_for_request(request, entry_id=None)
+        sheet = puppet.character_sheet if puppet is not None else None
         if puppet is None or sheet is None:
             msg = "You must be playing a character to shift forms."
             raise serializers.ValidationError(msg)
@@ -212,8 +220,10 @@ class AlternateSelfViewSet(
     )
     def revert(self, request: Request) -> Response:
         """#1111 — revert the active alternate self (blocked while not in control)."""
-        puppet = request.user.puppet
-        sheet = puppeted_sheet_for(request.user)
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        puppet = character_for_request(request, entry_id=None)
+        sheet = puppet.character_sheet if puppet is not None else None
         if puppet is None or sheet is None:
             msg = "You must be playing a character to revert forms."
             raise serializers.ValidationError(msg)

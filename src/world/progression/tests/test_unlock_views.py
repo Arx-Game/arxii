@@ -1,6 +1,5 @@
 """Tests for the progression unlock shop API."""
 
-from types import SimpleNamespace
 from typing import cast
 
 from django.test import TestCase
@@ -24,6 +23,8 @@ from world.progression.models import (
     XPCostChart,
     XPCostEntry,
 )
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.skills.factories import CharacterSkillValueFactory, SkillFactory
 
 
@@ -40,15 +41,17 @@ class UnlockShopViewTests(TestCase):
         cls.character = cast(ObjectDB, cls.sheet.character)
         cls.character.db_account = cls.account
         cls.character.save()
+        cls.entry = RosterEntryFactory(character_sheet=cls.sheet)
+        cls.tenure = RosterTenureFactory(
+            player_data__account=cls.account,
+            roster_entry=cls.entry,
+        )
+        set_selected_entry(cls.tenure.player_data, cls.entry)
 
     def setUp(self):
-        fake_user = SimpleNamespace(
-            is_authenticated=True,
-            is_staff=False,
-            puppet=self.character,
-        )
+        set_selected_entry(self.tenure.player_data, self.tenure.roster_entry)
         self.client = APIClient()
-        self.client.force_authenticate(user=fake_user)  # type: ignore[arg-type]
+        self.client.force_authenticate(user=self.account)
 
     def _create_class_level_unlock(self, *, xp_cost: int):
         """Create a class-level unlock with an XP cost chart."""
@@ -146,8 +149,7 @@ class UnlockShopViewTests(TestCase):
 
     def test_list_requires_played_character(self):
         """Listing unlocks fails when the request has no played character."""
-        fake_user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=None)
-        self.client.force_authenticate(user=fake_user)
+        set_selected_entry(self.tenure.player_data, None)
         response = self.client.get("/api/progression/unlocks/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 

@@ -13,8 +13,10 @@ from types import SimpleNamespace
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.scenes.services import (
@@ -85,6 +87,13 @@ class ActivePersonaServiceTests(TestCase):
 class SetActivePersonaEndpointTests(TestCase):
     def setUp(self):
         self.character, self.sheet = _sheet()
+        self.account = AccountFactory()
+        self.entry = RosterEntryFactory(character_sheet=self.sheet)
+        self.tenure = RosterTenureFactory(
+            player_data__account=self.account,
+            roster_entry=self.entry,
+        )
+        set_selected_entry(self.tenure.player_data, self.entry)
         self.alt = PersonaFactory(character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED)
         self.factory = APIRequestFactory()
         self.view = PersonaViewSet.as_view({"post": "set_active"})
@@ -93,8 +102,10 @@ class SetActivePersonaEndpointTests(TestCase):
         request = self.factory.post(
             "/api/scenes/personas/set-active/", {"persona_id": persona_id}, format="json"
         )
-        user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=puppet)
-        force_authenticate(request, user=user)
+        set_selected_entry(
+            self.tenure.player_data, self.tenure.roster_entry if puppet is not None else None
+        )
+        force_authenticate(request, user=self.account)
         return self.view(request)
 
     def test_sets_active_for_played_character(self):
@@ -121,9 +132,13 @@ class ConvertedResolverTests(TestCase):
     def test_books_viewer_persona_follows_active_face(self):
         from world.currency.views import _viewer_persona
 
-        character, sheet = _sheet()
+        _character, sheet = _sheet()
         alt = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
-        request = SimpleNamespace(user=SimpleNamespace(puppet=character))
+        account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+        set_selected_entry(tenure.player_data, entry)
+        request = SimpleNamespace(user=account)
 
         # Default: on primary.
         self.assertEqual(_viewer_persona(request), sheet.primary_persona)

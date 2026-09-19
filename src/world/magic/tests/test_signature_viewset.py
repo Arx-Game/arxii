@@ -7,8 +7,8 @@ Exercises the endpoints the way the web frontend hits them:
   • cross-character thread id → 400
   • no puppet → 400 "No active character."
 
-Uses ``force_authenticate`` + a ``SimpleNamespace`` puppet-bearing user, mirroring
-``world/magic/tests/test_sanctum_viewset.py``. Unlike the sanctum tests, the
+Uses ``force_authenticate`` with real accounts and durable roster selections,
+mirroring ``world/magic/tests/test_sanctum_viewset.py``. Unlike the sanctum tests, the
 Actions are NOT mocked here — real ``SignatureSetAction``/``SignatureClearAction``/
 ``SignatureListAction`` run against real service-layer state, per the Task 4 brief
 (assert via ``signature_bonus_for``/the ``Thread`` row).
@@ -16,12 +16,10 @@ Actions are NOT mocked here — real ``SignatureSetAction``/``SignatureClearActi
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import (
@@ -37,21 +35,33 @@ from world.magic.factories import (
 from world.magic.models import SignatureMotifBonus, Thread
 from world.magic.services.signature import signature_bonus_for
 from world.magic.views_signature import SignatureViewSet
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 
 
 def _actor_user(character):
-    """Fake authenticated user whose ``puppet`` is ``character``."""
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=character.db_account_id,
-        puppet=character,
+    """Return a real account with ``character`` durably selected."""
+    from world.roster.models import RosterTenure
+
+    tenure = (
+        RosterTenure.objects.filter(roster_entry__character_sheet__character=character)
+        .select_related("player_data__account", "roster_entry")
+        .first()
     )
+    if tenure is None:
+        account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=character.sheet_data)
+        tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    account = tenure.player_data.account
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, tenure.roster_entry)
+    return account
 
 
 def _no_puppet_user():
-    """Fake authenticated user with no puppet — actor cannot be resolved."""
-    return SimpleNamespace(is_authenticated=True, is_staff=False, pk=None, puppet=None)
+    """Return a real account with no selected character."""
+    return AccountFactory()
 
 
 class SignatureViewSetTestBase(TestCase):

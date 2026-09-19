@@ -6,7 +6,6 @@ Mirrors the setUp pattern of ``test_convene_site.py`` (the service-layer tests f
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import cast
 from unittest import mock
 
@@ -27,6 +26,8 @@ from world.magic.factories import IntensityTierFactory, RitualOfTheDuranceFactor
 from world.magic.models.sessions import RitualSession
 from world.progression.factories import DuranceTrainingSiteFactory
 from world.progression.models import CharacterPathHistory, CharacterUnlock, ClassLevelUnlock
+from world.roster.factories import RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 
 _CHECK_PATH = "world.progression.services.spends.check_requirements_for_unlock"
 
@@ -73,14 +74,14 @@ class _DuranceApiTestCase(TestCase):
         self.character = cast(ObjectDB, self.sheet.character)
         self.character.db_account = self.account
         self.character.save()
-
-        fake_user = SimpleNamespace(
-            is_authenticated=True,
-            is_staff=False,
-            puppet=self.character,
+        self.tenure = RosterTenureFactory(
+            player_data__account=self.account,
+            roster_entry__character_sheet=self.sheet,
         )
+        set_selected_entry(self.tenure.player_data, self.tenure.roster_entry)
+
         self.client = APIClient()
-        self.client.force_authenticate(user=fake_user)  # type: ignore[arg-type]
+        self.client.force_authenticate(user=self.account)
 
 
 class DuranceStatusViewTests(_DuranceApiTestCase):
@@ -88,8 +89,7 @@ class DuranceStatusViewTests(_DuranceApiTestCase):
 
     def test_requires_played_character(self):
         """A request with no puppeted character is refused."""
-        fake_user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=None)
-        self.client.force_authenticate(user=fake_user)
+        self.client.force_authenticate(user=AccountFactory())
         response = self.client.get("/api/progression/durance/status/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -230,8 +230,7 @@ class DuranceConveneViewTests(_DuranceApiTestCase):
 
     def test_requires_played_character(self):
         """A request with no puppeted character is refused."""
-        fake_user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=None)
-        self.client.force_authenticate(user=fake_user)
+        self.client.force_authenticate(user=AccountFactory())
         response = self.client.post("/api/progression/durance/convene/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 

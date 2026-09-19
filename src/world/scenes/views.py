@@ -16,7 +16,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from world.roster.selectors import puppeted_sheet_for
 from world.scenes.constants import SceneAction, ScenePrivacyMode
 from world.scenes.filters import (
     PersonaFilter,
@@ -704,8 +703,10 @@ class PersonaViewSet(
         """
         body = SetActivePersonaRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        puppet = request.user.puppet
-        sheet = puppeted_sheet_for(request.user)
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        puppet = character_for_request(request, entry_id=None)
+        sheet = puppet.character_sheet if puppet is not None else None
         if puppet is None or sheet is None:
             msg = "You must be playing a character to switch identities."
             # #3412 task 2 — dict payload so DRF's exception handler emits
@@ -738,8 +739,11 @@ class PersonaViewSet(
         )
 
     def _played_sheet(self, request: Request) -> "CharacterSheet":
-        """The played character's sheet, or raise a uniform validation error (#1127)."""
-        sheet = puppeted_sheet_for(request.user)
+        """The selected character's sheet, or raise a uniform validation error (#1127)."""
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        character = character_for_request(request, entry_id=None)
+        sheet = character.character_sheet if character is not None else None
         if sheet is None:
             msg = "You must be playing a character to create an identity."
             raise serializers.ValidationError(msg)

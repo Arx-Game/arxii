@@ -401,11 +401,12 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         # GMs see all (they create and manage summonses).
         if user.gm_profile_or_none is not None:
             return qs
-        # Non-staff: scope to the caller's puppeted sheet via the canonical
-        # resolver (handles AnonymousUser and truthy non-character puppets).
-        from world.roster.selectors import puppeted_sheet_for  # noqa: PLC0415
+        # Non-staff: scope to the caller's selected sheet via the canonical
+        # resolver (handles AnonymousUser and sessionless accounts).
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
 
-        sheet_data = puppeted_sheet_for(user)
+        character = character_for_request(self.request, entry_id=None)
+        sheet_data = character.character_sheet if character is not None else None
         if sheet_data is None:
             return qs.none()
         # Private self-view: summonses addressed to any of the caller's
@@ -468,7 +469,9 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         body = SummonsRespondSerializer(data=request.data)
         body.is_valid(raise_exception=True)
 
-        puppet = request.user.puppet
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        puppet = character_for_request(request, entry_id=None)
         if puppet is None:
             msg = "No puppeted character — log in and assume a character."
             raise ValidationError(msg)

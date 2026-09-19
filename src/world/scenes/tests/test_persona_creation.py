@@ -6,11 +6,10 @@ privacy invariant (#1109): a freshly created persona starts with a blank descrip
 copied from a sibling face.
 """
 
-from types import SimpleNamespace
-
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.forms.factories import (
     CharacterFormFactory,
@@ -20,6 +19,8 @@ from world.forms.factories import (
     PersonaTraitDescriptorFactory,
 )
 from world.forms.models import CharacterFormState, FormType, PersonaTraitDescriptor
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.scenes.services import (
@@ -30,6 +31,17 @@ from world.scenes.services import (
     set_persona_profile,
 )
 from world.scenes.views import PersonaViewSet
+
+
+def _selected_account(sheet):
+    """Return a real account with the sheet's roster entry selected."""
+    account = AccountFactory()
+    entry = RosterEntryFactory(character_sheet=sheet)
+    tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    set_selected_entry(tenure.player_data, entry)
+    sheet.character.db_account = account
+    sheet.character.save(update_fields=["db_account"])
+    return account, tenure
 
 
 class CreatePersonaTests(TestCase):
@@ -163,12 +175,16 @@ class CreatePersonaEndpointTests(TestCase):
     def setUp(self):
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
+        self.account, self.tenure = _selected_account(self.sheet)
         self.factory = APIRequestFactory()
 
     def _post(self, action_name, url, body, *, puppet, is_staff=False):
         request = self.factory.post(url, body, format="json")
-        user = SimpleNamespace(is_authenticated=True, is_staff=is_staff, puppet=puppet)
-        force_authenticate(request, user=user)
+        self.account.is_staff = is_staff
+        set_selected_entry(
+            self.tenure.player_data, self.tenure.roster_entry if puppet is not None else None
+        )
+        force_authenticate(request, user=self.account)
         return PersonaViewSet.as_view({"post": action_name})(request)
 
     def test_create_established_endpoint(self):
@@ -236,13 +252,16 @@ class SetPersonaProfileEndpointTests(TestCase):
     def setUp(self):
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
+        self.account, self.tenure = _selected_account(self.sheet)
         self.cover = create_persona(self.sheet, name="Cover Face", persona_type="established")
         self.factory = APIRequestFactory()
 
     def _post(self, body, *, puppet):
         request = self.factory.post(self.URL, body, format="json")
-        user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=puppet)
-        force_authenticate(request, user=user)
+        set_selected_entry(
+            self.tenure.player_data, self.tenure.roster_entry if puppet is not None else None
+        )
+        force_authenticate(request, user=self.account)
         return PersonaViewSet.as_view({"post": "set_profile"})(request)
 
     def test_authors_the_guise_bio(self):
