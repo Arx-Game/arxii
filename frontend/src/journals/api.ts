@@ -39,6 +39,12 @@ export type PosthumousJournalDisposition = 'reveal' | 'seal';
  */
 export type RetortConsent = 'rivals' | 'anyone';
 
+/**
+ * What an entry is (`world.journals.constants.JournalKind`): an ordinary entry, or one
+ * of the CG Introductions, which wear their own name in the row's band (#3941, #3621).
+ */
+export type JournalKind = 'entry' | 'first_journal' | 'application' | 'whispers';
+
 export interface JournalTag {
   id: number;
   name: string;
@@ -72,6 +78,14 @@ export interface JournalEntrySummary {
   can_retort: boolean;
   /** True when the viewer's active character wrote this entry (#3941). */
   is_own: boolean;
+  /**
+   * What the entry is (#3941). Optional because the feed serializer does not send it
+   * yet: `JournalEntryListSerializer.Meta.fields` has no `"kind"` entry, so the row's
+   * Introduction band ("First Journal", "Application", "The Whispers") stays dark until
+   * that one field is added. The Search panel's Introductions filter already works — it
+   * filters server-side on the same column.
+   */
+  kind?: JournalKind;
 }
 
 /** Shape returned by retrieve/create/respond (`JournalEntryDetailSerializer`). */
@@ -97,6 +111,14 @@ export interface JournalEntryDetail {
   ic_timestamp: string | null;
   can_retort: boolean;
   is_own: boolean;
+  /**
+   * What the entry is (#3941). Optional because the feed serializer does not send it
+   * yet: `JournalEntryListSerializer.Meta.fields` has no `"kind"` entry, so the row's
+   * Introduction band ("First Journal", "Application", "The Whispers") stays dark until
+   * that one field is added. The Search panel's Introductions filter already works — it
+   * filters server-side on the same column.
+   */
+  kind?: JournalKind;
 }
 
 export interface PaginatedJournalEntries {

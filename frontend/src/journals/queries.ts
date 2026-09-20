@@ -12,7 +12,6 @@ import type {
   EditJournalEntryRequest,
   JournalEntryListFilters,
   PatchJournalSettingsRequest,
-  PosthumousJournalDisposition,
   RespondToJournalRequest,
 } from './api';
 
@@ -125,28 +124,6 @@ export function usePatchJournalSettings() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: PatchJournalSettingsRequest) => api.patchJournalSettings(body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
-    },
-  });
-}
-
-/**
- * @deprecated Use `useJournalSettings` (#3941) — kept only so `JournalsPage.tsx` still
- * compiles until Task 7 rewrites it, which removes this wrapper.
- */
-export const useJournalDisposition = useJournalSettings;
-
-/**
- * @deprecated Use `usePatchJournalSettings` (#3941) — kept only so `JournalsPage.tsx`
- * still compiles until Task 7 rewrites it, which removes this wrapper. Preserves the old
- * call shape (a bare disposition value, not an object).
- */
-export function useSetJournalDisposition() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (disposition: PosthumousJournalDisposition) =>
-      api.patchJournalSettings({ disposition }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
     },

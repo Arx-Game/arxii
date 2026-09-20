@@ -1,0 +1,191 @@
+/**
+ * JournalsPage tests (#3941) — the Reading Room's four screens off one route.
+ *
+ * `/journals` is the stream; `?writer=<sheetId>` is one writer's journal;
+ * `?mine=1` is your own. Everything the page reads is mocked, so these assert
+ * the page's own decisions: the visit mark is stamped once and never again,
+ * Search is a panel rather than a mode, and the desk carries no help text.
+ */
+import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type { JournalEntrySummary, PaginatedJournalEntries } from '../api';
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('@/roster/queries', () => ({ useMyRosterEntriesQuery: () => ({ data: [] }) }));
+vi.mock('@/roster/usePersonaSearch', () => ({
+  usePersonaSearch: () => ({ results: [], isFetching: false }),
+}));
+vi.mock('@/progression/nominationQueries', () => ({
+  useMyNominationsQuery: () => ({ data: [] }),
+  useNominateMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useWithdrawNominationMutation: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('@/social/queries', () => ({
+  useCreateMute: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateBlock: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+interface StaffState {
+  auth: { account: { is_staff: boolean } };
+}
+vi.mock('@/store/hooks', () => ({
+  useAppSelector: (selector: (state: StaffState) => unknown) =>
+    selector({ auth: { account: { is_staff: false } } }),
+}));
+vi.mock('@/roster/useBrowsingIdentity', () => ({
+  useBrowsingIdentity: () => ({
+    entryId: 1,
+    name: 'Ilsavet du Verane',
+    entry: { id: 1, name: 'Ilsavet du Verane', character_id: 10, active_persona_id: 5 },
+  }),
+}));
+
+const useJournalEntriesMock = vi.fn();
+const useMyJournalEntriesMock = vi.fn();
+vi.mock('../queries', () => ({
+  useJournalEntries: (filters: unknown) => useJournalEntriesMock(filters),
+  useMyJournalEntries: (page: number) => useMyJournalEntriesMock(page),
+  useJournalEntry: () => ({ data: undefined }),
+  useRespondToJournal: () => ({ mutate: vi.fn(), isPending: false }),
+  useEditJournalEntry: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateJournalEntry: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useJournalSettings: () => ({
+    data: {
+      posthumous_journal_disposition: 'reveal',
+      retort_consent: 'rivals',
+      posts_this_week: 1,
+      rewarded_posts_per_week: 3,
+    },
+  }),
+  usePatchJournalSettings: () => ({ mutate: vi.fn(), isPending: false }),
+  journalsKeys: { lists: () => ['journals', 'list'] },
+}));
+
+import { JournalsPage } from '../pages/JournalsPage';
+
+function entry(over: Partial<JournalEntrySummary> = {}): JournalEntrySummary {
+  return {
+    id: 1,
+    author: 10,
+    author_name: 'Ilsavet du Verane',
+    title: 'On the matter of the harbor tolls',
+    is_public: true,
+    response_type: null,
+    parent: null,
+    created_at: '2026-09-17T10:00:00Z',
+    edited_at: null,
+    tags: [],
+    response_count: 0,
+    posthumous_override: 'inherit',
+    revealed_at: null,
+    is_posthumous: false,
+    about: 20,
+    about_name: 'Corvin Ashe',
+    author_persona_id: 99,
+    ic_timestamp: null,
+    can_retort: false,
+    is_own: false,
+    ...over,
+  };
+}
+
+function page(results: JournalEntrySummary[]): PaginatedJournalEntries {
+  return { count: results.length, next: null, previous: null, results, since_visit_count: 4 };
+}
+
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <JournalsPage />
+    </MemoryRouter>
+  );
+}
+
+describe('JournalsPage (#3941)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useJournalEntriesMock.mockReturnValue({
+      data: page([entry()]),
+      isLoading: false,
+      isSuccess: true,
+    });
+    useMyJournalEntriesMock.mockReturnValue({
+      data: page([entry({ id: 7, title: 'A private page', is_own: true })]),
+      isLoading: false,
+      isSuccess: true,
+    });
+  });
+
+  it('renders the stream and marks the visit on the first load only', () => {
+    renderAt('/journals');
+
+    expect(screen.getByRole('heading', { name: 'Journals' })).toBeInTheDocument();
+    expect(screen.getByText('On the matter of the harbor tolls')).toBeInTheDocument();
+    expect(useJournalEntriesMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ mark_visit: 1 })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.click(screen.getByText('Post mortems'));
+
+    const lastFilters = useJournalEntriesMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(lastFilters.mark_visit).toBeUndefined();
+    expect(lastFilters.post_mortem).toBe(1);
+  });
+
+  it('toggles the Search panel without leaving the stream', () => {
+    renderAt('/journals');
+
+    const search = screen.getByRole('button', { name: 'Search' });
+    expect(search).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
+    fireEvent.click(search);
+    expect(search).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    // The stream is still there behind the panel: Search is never a mode. The
+    // title is a heading in the stream and a button in the index, so the role
+    // is what tells the two apart.
+    expect(
+      screen.getByRole('heading', { name: 'On the matter of the harbor tolls' })
+    ).toBeInTheDocument();
+
+    fireEvent.click(search);
+    expect(search).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('?mine=1 shows your journal header and reads the mine feed', () => {
+    renderAt('/journals?mine=1');
+
+    expect(screen.getByText('Your journal')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ilsavet du Verane' })).toBeInTheDocument();
+    expect(screen.getByText('Rivals only')).toBeInTheDocument();
+    expect(screen.getByText('Anyone')).toBeInTheDocument();
+    expect(useMyJournalEntriesMock).toHaveBeenCalledWith(1);
+    expect(screen.getByText('A private page')).toBeInTheDocument();
+  });
+
+  it("?writer= shows the writer's plate and its three filters", () => {
+    renderAt('/journals?writer=10');
+
+    expect(screen.getByRole('heading', { name: 'Ilsavet du Verane' })).toBeInTheDocument();
+    expect(screen.getByText('Journal of')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'About Corvin Ashe · 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Written about them' })).toBeInTheDocument();
+    expect(useJournalEntriesMock.mock.calls[0][0]).toEqual(expect.objectContaining({ author: 10 }));
+  });
+
+  it('Write opens the desk, which offers the two journals and no help text', () => {
+    renderAt('/journals');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+
+    expect(screen.getByText('White journal · Public')).toBeInTheDocument();
+    expect(screen.getByText('Black journal · Private')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Post entry' })).toBeInTheDocument();
+    expect(screen.queryByText(/Read by anyone/)).toBeNull();
+    expect(screen.queryByText(/visible only to you/i)).toBeNull();
+  });
+});
