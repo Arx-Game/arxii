@@ -1,5 +1,7 @@
 """Type definitions for the journal system."""
 
+from dataclasses import dataclass
+
 _JOURNAL_ERROR_MESSAGES: dict[str, str] = {
     "PRIVATE_PARENT": "Cannot respond to a private journal entry.",
     "SELF_RESPONSE": "Cannot respond to your own journal entry.",
@@ -9,6 +11,7 @@ _JOURNAL_ERROR_MESSAGES: dict[str, str] = {
     # many innocent causes (deleted, locked, moderation, ...). Never says "blocked."
     "UNAVAILABLE": "This entry is not available to respond to right now.",
     "INVALID_DISPOSITION": "That is not a valid posthumous disposition.",
+    "INVALID_CONSENT": "That is not a valid retort consent.",
 }
 
 
@@ -25,6 +28,7 @@ class JournalError(Exception):
     EDIT_RESPONSE = _JOURNAL_ERROR_MESSAGES["EDIT_RESPONSE"]
     UNAVAILABLE = _JOURNAL_ERROR_MESSAGES["UNAVAILABLE"]
     INVALID_DISPOSITION = _JOURNAL_ERROR_MESSAGES["INVALID_DISPOSITION"]
+    INVALID_CONSENT = _JOURNAL_ERROR_MESSAGES["INVALID_CONSENT"]
 
     @property
     def user_message(self) -> str:
@@ -32,3 +36,13 @@ class JournalError(Exception):
         if msg in _JOURNAL_ERROR_MESSAGES.values():
             return msg
         return "An unexpected journal error occurred."
+
+
+@dataclass(frozen=True)
+class JournalSettings:
+    """The owner's journal preferences plus the weekly writing count (#3941)."""
+
+    posthumous_journal_disposition: str
+    retort_consent: str
+    posts_this_week: int
+    rewarded_posts_per_week: int

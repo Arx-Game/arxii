@@ -1,12 +1,18 @@
 """Tests for journal service functions."""
 
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.types import RetortConsent
+from world.game_clock.factories import GameClockFactory
 from world.journals.constants import (
+    CONDEMN_GIVEN_XP,
+    CONDEMN_RECEIVED_XP,
     JOURNAL_POST_XP,
     PRAISE_GIVEN_XP,
     PRAISE_RECEIVED_XP,
@@ -15,13 +21,25 @@ from world.journals.constants import (
     JournalKind,
     ResponseType,
 )
+from world.journals.factories import JournalEntryFactory
 from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
 from world.journals.services import (
+    can_retort,
     create_journal_entry,
     create_journal_response,
     edit_journal_entry,
+    journal_settings,
+    mark_journals_visited,
+    set_retort_consent,
+    visible_entries_q,
 )
 from world.journals.types import JournalError
+from world.relationships.constants import TrackSign
+from world.relationships.factories import (
+    CharacterRelationshipFactory,
+    RelationshipTrackFactory,
+    RelationshipTrackProgressFactory,
+)
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Block, Mute
@@ -295,6 +313,11 @@ class CreateJournalResponseTest(TestCase):
         cls.responder = CharacterSheetFactory()
         cls.responder.character.db_account = cls.responder_account
         cls.responder.character.save()
+        # ADR-0306 (#3941): Retort/Condemn are consent-gated. This class predates the
+        # gate and exercises the XP/stat plumbing, not the gate itself — open the door
+        # so its existing retort tests keep testing what they always tested.
+        cls.author.retort_consent = RetortConsent.ANYONE
+        cls.author.save(update_fields=["retort_consent"])
 
     def _make_public_entry(self) -> JournalEntry:
         return JournalEntry.objects.create(
@@ -661,3 +684,179 @@ class EditJournalEntryTests(TestCase):
         )
         with self.assertRaises(JournalError):
             edit_journal_entry(entry=response, body="Changed.")
+
+
+def _with_account(sheet):
+    sheet.character.db_account = AccountFactory()
+    sheet.character.save()
+    return sheet
+
+
+class VisibleEntriesQTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.writer = CharacterSheetFactory()
+        cls.reader = CharacterSheetFactory()
+        cls.white = JournalEntryFactory(author=cls.writer, is_public=True)
+        cls.black = JournalEntryFactory(author=cls.writer, is_public=False)
+        cls.revealed = JournalEntryFactory(
+            author=cls.writer, is_public=False, revealed_at=timezone.now()
+        )
+
+    def _ids(self, viewer, is_staff=False):
+        q = visible_entries_q(viewer_sheet=viewer, is_staff=is_staff)
+        return set(JournalEntry.objects.filter(q).values_list("id", flat=True))
+
+    def test_stranger_sees_white_and_revealed(self) -> None:
+        self.assertEqual(self._ids(self.reader), {self.white.id, self.revealed.id})
+
+    def test_author_sees_own_black(self) -> None:
+        self.assertEqual(self._ids(self.writer), {self.white.id, self.black.id, self.revealed.id})
+
+    def test_staff_sees_everything(self) -> None:
+        self.assertEqual(
+            self._ids(self.reader, is_staff=True),
+            {self.white.id, self.black.id, self.revealed.id},
+        )
+
+    def test_no_character_sees_white_and_revealed(self) -> None:
+        self.assertEqual(self._ids(None), {self.white.id, self.revealed.id})
+
+
+class CanRetortTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.writer = CharacterSheetFactory()
+        cls.viewer = CharacterSheetFactory()
+        cls.negative = RelationshipTrackFactory(name="Rivalry", sign=TrackSign.NEGATIVE)
+        cls.positive = RelationshipTrackFactory(name="Friendship", sign=TrackSign.POSITIVE)
+
+    def test_default_consent_and_no_relationship_is_closed(self) -> None:
+        self.assertFalse(can_retort(viewer_sheet=self.viewer, author=self.writer))
+
+    def test_anyone_consent_opens_it(self) -> None:
+        self.writer.retort_consent = RetortConsent.ANYONE
+        self.writer.save(update_fields=["retort_consent"])
+        self.assertTrue(can_retort(viewer_sheet=self.viewer, author=self.writer))
+
+    def test_negative_track_either_direction_opens_it(self) -> None:
+        rel = CharacterRelationshipFactory(
+            source=self.writer, target=self.viewer, is_pending=False, is_active=True
+        )
+        RelationshipTrackProgressFactory(relationship=rel, track=self.negative)
+        self.assertTrue(can_retort(viewer_sheet=self.viewer, author=self.writer))
+
+    def test_positive_track_does_not(self) -> None:
+        rel = CharacterRelationshipFactory(
+            source=self.viewer, target=self.writer, is_pending=False, is_active=True
+        )
+        RelationshipTrackProgressFactory(relationship=rel, track=self.positive)
+        self.assertFalse(can_retort(viewer_sheet=self.viewer, author=self.writer))
+
+    def test_pending_relationship_does_not(self) -> None:
+        rel = CharacterRelationshipFactory(
+            source=self.viewer, target=self.writer, is_pending=True, is_active=True
+        )
+        RelationshipTrackProgressFactory(relationship=rel, track=self.negative)
+        self.assertFalse(can_retort(viewer_sheet=self.viewer, author=self.writer))
+
+    def test_no_viewer_is_closed(self) -> None:
+        self.assertFalse(can_retort(viewer_sheet=None, author=self.writer))
+
+
+@patch("world.journals.services.increment_stat")
+@patch("world.journals.services.award_xp")
+class CondemnAndConsentGateTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.writer = _with_account(CharacterSheetFactory())
+        cls.responder = _with_account(CharacterSheetFactory())
+        cls.entry = JournalEntryFactory(author=cls.writer, is_public=True)
+
+    def test_retort_refused_without_consent(self, mock_award, mock_stat) -> None:  # noqa: ARG002
+        with self.assertRaises(JournalError) as ctx:
+            create_journal_response(
+                author=self.responder,
+                parent=self.entry,
+                response_type=ResponseType.RETORT,
+                title="t",
+                body="b",
+            )
+        self.assertEqual(ctx.exception.user_message, JournalError.UNAVAILABLE)
+
+    def test_condemn_awards_the_retort_schedule_when_open(self, mock_award, mock_stat) -> None:  # noqa: ARG002
+        self.writer.retort_consent = RetortConsent.ANYONE
+        self.writer.save(update_fields=["retort_consent"])
+        response = create_journal_response(
+            author=self.responder,
+            parent=self.entry,
+            response_type=ResponseType.CONDEMN,
+            title="t",
+            body="b",
+        )
+        self.assertEqual(response.response_type, ResponseType.CONDEMN)
+        amounts = sorted(call.kwargs["amount"] for call in mock_award.call_args_list)
+        self.assertEqual(amounts, sorted([CONDEMN_GIVEN_XP, CONDEMN_RECEIVED_XP]))
+
+    def test_praise_is_never_gated(self, mock_award, mock_stat) -> None:  # noqa: ARG002
+        response = create_journal_response(
+            author=self.responder,
+            parent=self.entry,
+            response_type=ResponseType.PRAISE,
+            title="t",
+            body="b",
+        )
+        self.assertEqual(response.response_type, ResponseType.PRAISE)
+
+
+@patch("world.journals.services.increment_stat")
+@patch("world.journals.services.award_xp")
+class AboutAndIcStampTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.author = _with_account(CharacterSheetFactory())
+        cls.subject = CharacterSheetFactory()
+
+    def test_about_is_stored_and_editable(self, mock_award, mock_stat) -> None:  # noqa: ARG002
+        entry = create_journal_entry(
+            author=self.author, title="t", body="b", is_public=True, about=self.subject
+        )
+        self.assertEqual(entry.about_id, self.subject.pk)
+        edit_journal_entry(entry=entry, clear_about=True)
+        entry.refresh_from_db()
+        self.assertIsNone(entry.about_id)
+        self.assertIsNone(entry.edited_at)  # about is metadata, not editorial content
+
+    def test_ic_timestamp_stamped_from_the_clock(self, mock_award, mock_stat) -> None:  # noqa: ARG002
+        GameClockFactory()
+        entry = create_journal_entry(author=self.author, title="t", body="b", is_public=True)
+        self.assertIsNotNone(entry.ic_timestamp)
+
+    def test_ic_timestamp_null_without_a_clock(self, mock_award, mock_stat) -> None:  # noqa: ARG002
+        entry = create_journal_entry(author=self.author, title="t", body="b", is_public=True)
+        self.assertIsNone(entry.ic_timestamp)
+
+
+class SettingsAndVisitTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+
+    def test_set_retort_consent(self) -> None:
+        set_retort_consent(sheet=self.sheet, consent=RetortConsent.ANYONE)
+        self.sheet.refresh_from_db()
+        self.assertEqual(self.sheet.retort_consent, RetortConsent.ANYONE)
+
+    def test_invalid_consent_raises(self) -> None:
+        with self.assertRaises(JournalError):
+            set_retort_consent(sheet=self.sheet, consent="everyone")
+
+    def test_mark_visited_and_settings(self) -> None:
+        at = timezone.now() - timedelta(minutes=1)
+        mark_journals_visited(sheet=self.sheet, at=at)
+        self.sheet.refresh_from_db()
+        self.assertEqual(self.sheet.journals_visited_at, at)
+        settings = journal_settings(sheet=self.sheet)
+        self.assertEqual(settings.retort_consent, RetortConsent.RIVALS)
+        self.assertEqual(settings.posts_this_week, 0)
+        self.assertEqual(settings.rewarded_posts_per_week, 3)

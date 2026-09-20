@@ -11,8 +11,11 @@ from evennia.accounts.models import AccountDB
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
-from world.character_sheets.types import PosthumousJournalDisposition
+from world.character_sheets.types import PosthumousJournalDisposition, RetortConsent
+from world.game_clock.services import get_ic_now
 from world.journals.constants import (
+    CONDEMN_GIVEN_XP,
+    CONDEMN_RECEIVED_XP,
     JOURNAL_POST_XP,
     PRAISE_GIVEN_XP,
     PRAISE_RECEIVED_XP,
@@ -23,10 +26,12 @@ from world.journals.constants import (
     ResponseType,
 )
 from world.journals.models import JournalBequestGrant, JournalEntry, JournalTag, WeeklyJournalXP
-from world.journals.types import JournalError
+from world.journals.types import JournalError, JournalSettings
 from world.progression.services.awards import award_xp
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from django.db.models import QuerySet
 
     from evennia_extensions.models import PlayerData
@@ -96,6 +101,77 @@ def exclude_blocked_and_muted_authors(
     )
 
 
+def visible_entries_q(*, viewer_sheet: CharacterSheet | None, is_staff: bool) -> Q:
+    """The one visibility rule (#3941 Decision 1) as a ``Q`` for list-style reads.
+
+    Public, or revealed at settlement, or the viewer's own, or (staff) everything. The
+    bequest read is a separate path (``JournalEntryFilter.filter_deceased``) and stays so.
+    """
+    if is_staff:
+        return Q()
+    q = Q(is_public=True) | Q(revealed_at__isnull=False)
+    if viewer_sheet is not None:
+        q |= Q(author_id=viewer_sheet.pk)
+    return q
+
+
+def can_retort(*, viewer_sheet: CharacterSheet | None, author: CharacterSheet) -> bool:
+    """Whether ``viewer_sheet`` may Retort or Condemn ``author``'s entries (ADR-0306).
+
+    True when the author's ``retort_consent`` is ANYONE, or when an active, non-pending
+    ``CharacterRelationship`` in EITHER direction carries progress on a negative-sign
+    track. This is the whole rivalry predicate today; when the relationships pass names a
+    Rivalry kind it narrows here and nowhere else.
+    """
+    if viewer_sheet is None or viewer_sheet.pk == author.pk:
+        return False
+    if author.retort_consent == RetortConsent.ANYONE:
+        return True
+    from world.relationships.constants import TrackSign
+    from world.relationships.models import CharacterRelationship
+
+    pair = Q(source_id=viewer_sheet.pk, target_id=author.pk) | Q(
+        source_id=author.pk, target_id=viewer_sheet.pk
+    )
+    return CharacterRelationship.objects.filter(
+        pair,
+        is_active=True,
+        is_pending=False,
+        track_progress__track__sign=TrackSign.NEGATIVE,
+    ).exists()
+
+
+def set_retort_consent(*, sheet: CharacterSheet, consent: str) -> CharacterSheet:
+    """Set who may Retort or Condemn this character's entries (#3941)."""
+    if consent not in RetortConsent.values:
+        raise JournalError(JournalError.INVALID_CONSENT)
+    sheet.retort_consent = consent
+    sheet.save(update_fields=["retort_consent"])
+    return sheet
+
+
+def mark_journals_visited(*, sheet: CharacterSheet, at: datetime) -> None:
+    """Record that this character opened the stream at ``at`` (#3941)."""
+    sheet.journals_visited_at = at
+    sheet.save(update_fields=["journals_visited_at"])
+
+
+def journal_settings(*, sheet: CharacterSheet) -> JournalSettings:
+    """The owner's preferences and this week's writing count, for the page header/desk."""
+    tracker = WeeklyJournalXP.objects.filter(character_sheet=sheet).first()
+    from world.game_clock.week_services import get_current_game_week
+
+    posts = 0
+    if tracker is not None and not tracker.needs_reset(get_current_game_week()):
+        posts = tracker.posts_this_week
+    return JournalSettings(
+        posthumous_journal_disposition=sheet.posthumous_journal_disposition,
+        retort_consent=sheet.retort_consent,
+        posts_this_week=posts,
+        rewarded_posts_per_week=len(JOURNAL_POST_XP),
+    )
+
+
 def _get_or_reset_weekly_tracker(
     character_sheet: CharacterSheet,
 ) -> WeeklyJournalXP:
@@ -129,6 +205,7 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
     posthumous_override: str = PosthumousOverride.INHERIT,
     award_weekly_xp: bool = True,
     kind: str = JournalKind.ENTRY,
+    about: CharacterSheet | None = None,
 ) -> JournalEntry:
     """
     Create a journal entry, optionally awarding weekly XP.
@@ -144,6 +221,7 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
             (and its tracker write) entirely. An honoring journal written as
             part of the Rite of Honors is not the author's own weekly post and
             must not consume their post-count XP.
+        about: The character this entry is about, if any (#3941).
 
     Returns:
         The created JournalEntry.
@@ -160,6 +238,8 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
             is_public=is_public,
             posthumous_override=posthumous_override,
             kind=kind,
+            about=about,
+            ic_timestamp=get_ic_now(),
         )
         if cached_introductions is not None and kind != JournalKind.ENTRY:
             author.introductions = [*cached_introductions, entry]
@@ -243,6 +323,12 @@ def create_journal_response(
     if parent.author_id == author.pk:
         raise JournalError(JournalError.SELF_RESPONSE)
 
+    if response_type in (ResponseType.RETORT, ResponseType.CONDEMN) and not can_retort(
+        viewer_sheet=author, author=parent.author
+    ):
+        # ADR-0306: neutral, same message as a block — a refusal never says why.
+        raise JournalError(JournalError.UNAVAILABLE)
+
     # #2996 Decision 2 — an account-level block between the responder and the parent's author
     # rejects the response with the shared neutral UNAVAILABLE message (never names blocking;
     # "closed to you" already has many innocent causes here). Fail-open when either side has no
@@ -293,7 +379,7 @@ def create_journal_response(
             )
             _emit_stats(author, "journals.praises_given")
             _emit_stats(parent.author, "journals.praises_received")
-        else:
+        elif response_type == ResponseType.RETORT:
             _award_response_xp(
                 author_tracker,
                 "retorted_this_week",
@@ -312,22 +398,45 @@ def create_journal_response(
             )
             _emit_stats(author, "journals.retorts_given")
             _emit_stats(parent.author, "journals.retorts_received")
+        else:
+            # CONDEMN shares retort's weekly flags and stats (Decision 13): it is the
+            # same weekly antagonism budget, not a separate one.
+            _award_response_xp(
+                author_tracker,
+                "retorted_this_week",
+                author_account,
+                CONDEMN_GIVEN_XP,
+                f"Condemned: {parent.title}",
+                author,
+            )
+            _award_response_xp(
+                receiver_tracker,
+                "was_retorted_this_week",
+                receiver_account,
+                CONDEMN_RECEIVED_XP,
+                f"Received condemnation on: {parent.title}",
+                parent.author,
+            )
+            _emit_stats(author, "journals.retorts_given")
+            _emit_stats(parent.author, "journals.retorts_received")
 
     return entry
 
 
-def edit_journal_entry(
+def edit_journal_entry(  # noqa: PLR0913 - explicit content/metadata kwargs, mirrors create
     *,
     entry: JournalEntry,
     title: str | None = None,
     body: str | None = None,
     posthumous_override: str | None = None,
+    about: CharacterSheet | None = None,
+    clear_about: bool = False,
 ) -> JournalEntry:
     """
     Edit an existing journal entry. Sets edited_at timestamp for title/body edits.
 
-    ``posthumous_override`` (#3287) is metadata, not editorial content — changing it alone
-    does not stamp ``edited_at``.
+    ``posthumous_override`` (#3287) and ``about``/``clear_about`` (#3941) are metadata,
+    not editorial content — changing them alone never stamps ``edited_at``.
 
     Raises:
         ValueError: If the entry is a response (praise/retort).
@@ -348,6 +457,12 @@ def edit_journal_entry(
     if posthumous_override is not None:
         entry.posthumous_override = posthumous_override
         update_fields.append("posthumous_override")
+    if clear_about:
+        entry.about = None
+        update_fields.append("about")
+    elif about is not None:
+        entry.about = about
+        update_fields.append("about")
     if update_fields:
         entry.save(update_fields=update_fields)
     return entry
