@@ -1,6 +1,6 @@
 # Issue #3947 exact-revision evidence
 
-Reviewed head revision: `8cd7fce46` (`Keep temporary pose reads tab local`).
+Reviewed head revision: `b4d365db2` (`Keep temporary pose reads tab local`).
 
 Core implementation revision: `fc22fa2ad` (`Authorize narrative play read receipts and counts`).
 
