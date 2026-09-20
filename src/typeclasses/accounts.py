@@ -29,6 +29,7 @@ from evennia.utils.utils import make_iter
 
 from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
+from core.wire_options import LifecycleEvent, TextFrameType
 from evennia_extensions.account_setup import heal_account_setup
 
 TELNET_BLOCKED_BY_2FA_MESSAGE = (
@@ -474,10 +475,10 @@ class Account(DefaultAccount):
     def puppet_character_in_session(self, character, session):
         """Puppet ``character`` in ``session``; ``@ic`` and login both come through here.
 
-        Idempotent for the session's own puppet: the web client sends
-        ``@ic <name>`` on every socket open, after login has usually puppeted
-        that character already, and a repeat must be a no-op rather than a
-        refusal (#3812).
+        Idempotent for the session's own puppet: the web client sends a
+        structured ``puppet`` request on every socket open rather than
+        ``@ic <name>``, so the same-puppet repeat is the common case and stays
+        a no-op. Telnet's ``@ic`` comes through the same path (#3812).
         """
         if session.puppet is character:
             return True, f"Already controlling {character.name}."
@@ -489,7 +490,15 @@ class Account(DefaultAccount):
 
         # If session is already puppeting something, unpuppet first
         if session.puppet:
-            session.msg(f"Switching from {session.puppet.name} to {character.name}.")
+            session.msg(
+                (
+                    f"Switching from {session.puppet.name} to {character.name}.",
+                    {
+                        "type": TextFrameType.LIFECYCLE.value,
+                        "event": LifecycleEvent.SWITCH.value,
+                    },
+                )
+            )
             self.unpuppet_object(session)
 
         # Puppet the new character — broadcast handled by puppet_object override
@@ -540,17 +549,23 @@ class Account(DefaultAccount):
         """The character a fresh session should puppet, or ``None`` (#3812).
 
         In order: the durable selection (``PlayerData.selected_entry``, which
-        puppeting also records), Evennia's ``_last_puppet`` (written by
-        ``DefaultCharacter.at_post_puppet`` on every puppet; covers accounts
-        from before selection followed puppeting), then a sole character.
-        Several characters and nothing recorded is ``None`` — never a silent
-        first pick.
+        puppeting also records), Evennia's ``_last_puppet``, then a sole
+        character. Several characters and nothing recorded is ``None`` — never
+        a silent first pick.
+
+        ``_last_puppet`` is NOT written on every puppet:
+        ``DefaultCharacter.at_post_puppet`` does not call ``super()``, so the
+        write in ``DefaultObject.at_post_puppet`` never ran on our MRO. Its only
+        writers are ``DefaultAccount.at_post_create_character`` (the account's
+        first character) and Evennia's own ``CmdIC``, which we do not use. The
+        tier therefore mostly covers accounts created before selection existed.
+        Kept as a fallback: dropping it is a behaviour decision for a human.
         """
         by_pk = {character.pk: character for character in available}
         entry = self.player_data.selected_entry
         if entry is not None and (chosen := by_pk.get(entry.character_sheet_id)) is not None:
             return chosen
-        # Evennia's own attribute (DefaultCharacter.at_post_puppet writes it);
+        # Evennia's own attribute (see the docstring for who actually writes it);
         # read through the handler rather than `self.db._last_puppet` so the
         # private-name access is explicit about whose name it is.
         last = self.attributes.get("_last_puppet")
@@ -609,8 +624,19 @@ class Account(DefaultAccount):
             names = ", ".join(char.name for char in available)
             session.msg(f"Which character? {names}. Type @ic <name> to play.")
             return
-        _ok, message = self.puppet_character_in_session(character, session)
-        session.msg(message)
+        puppeted, message = self.puppet_character_in_session(character, session)
+        if not puppeted:
+            # A refusal (retired, locked, a lock failure) is the reason login
+            # stopped, so it goes out as the error frame the web client surfaces;
+            # a lifecycle frame is dropped there as a milestone note (#3933).
+            session.msg(command_error={"error": message, "command": "puppet"})
+            return
+        session.msg(
+            (
+                message,
+                {"type": TextFrameType.LIFECYCLE.value, "event": LifecycleEvent.PUPPET.value},
+            )
+        )
 
     def at_post_create_character(self, character, **kwargs):
         """

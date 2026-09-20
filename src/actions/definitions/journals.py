@@ -260,7 +260,7 @@ class SetJournalDispositionAction(_BaseJournalAction):
 
 @dataclass
 class SetRetortConsentAction(_BaseJournalAction):
-    """Set who may Retort or Condemn the actor's entries (#3941, ADR-0306)."""
+    """Set who may Retort or Condemn the actor's entries (#3941, ADR-0307)."""
 
     key: str = "set_retort_consent"
     name: str = "Set Retort Consent"

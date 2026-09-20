@@ -5,7 +5,7 @@
  * Both are the writer's, and both live here because they are answered once:
  * what becomes of your black journal after your death (the sheet-level
  * default a single entry may still override), and who may Retort or Condemn
- * you (ADR-0306 — rivals, or anyone). Praise and Nominate are never gated by
+ * you (ADR-0307 — rivals, or anyone). Praise and Nominate are never gated by
  * the second one, so it says nothing about them.
  *
  * Write trails the two switch groups in the same wrapping row (demo screen 4):

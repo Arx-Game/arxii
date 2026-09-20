@@ -573,7 +573,11 @@ class CompanionEmoteAction(Action):
         def _broadcast() -> None:
             # The companion is the actor in the line (#3858); a pose the player
             # already opened with the companion's name is left alone.
-            message_location(caller_state, render_line(companion.name, InteractionMode.POSE, text))
+            message_location(
+                caller_state,
+                render_line(companion.name, InteractionMode.POSE, text),
+                echo_of=InteractionMode.POSE,
+            )
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:

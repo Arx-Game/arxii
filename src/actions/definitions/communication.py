@@ -256,9 +256,15 @@ def _deliver_say_to_object(  # noqa: PLR0913 - cohesive per-recipient say-delive
         # Speaker's own echo stays second-person, matching the
         # $You() $conj(say) voice of the universal-language branch
         # above (#2993 final-review M2).
-        send_message(obj_state, f'You say in {language.name}, "{rendered}"')
+        send_message(
+            obj_state, f'You say in {language.name}, "{rendered}"', echo_of=InteractionMode.SAY
+        )
     else:
-        send_message(obj_state, f'{actor.key} says in {language.name}, "{rendered}"')
+        send_message(
+            obj_state,
+            f'{actor.key} says in {language.name}, "{rendered}"',
+            echo_of=InteractionMode.SAY,
+        )
 
 
 def _deliver_language_tagged_say(
@@ -377,7 +383,11 @@ def _deliver_mutter(
     receiver_ids = {receiver.pk for receiver in receivers}
     for receiver in receivers:
         receiver_state = sdm.initialize_state_for_object(receiver)
-        send_message(receiver_state, render_line(actor.key, InteractionMode.MUTTER, text))
+        send_message(
+            receiver_state,
+            render_line(actor.key, InteractionMode.MUTTER, text),
+            echo_of=InteractionMode.MUTTER,
+        )
     location = actor.location
     if location is None:
         return
@@ -387,7 +397,11 @@ def _deliver_mutter(
         if not hasattr(obj, "msg"):
             continue
         bystander_state = sdm.initialize_state_for_object(obj)
-        send_message(bystander_state, render_line(actor.key, InteractionMode.MUTTER, fragment))
+        send_message(
+            bystander_state,
+            render_line(actor.key, InteractionMode.MUTTER, fragment),
+            echo_of=InteractionMode.MUTTER,
+        )
 
 
 @dataclass
@@ -423,7 +437,9 @@ class SayAction(Action):
 
         def _broadcast() -> None:
             if language is None or language.is_universal:
-                message_location(caller_state, f'$You() $conj(say) "{text}"')
+                message_location(
+                    caller_state, f'$You() $conj(say) "{text}"', echo_of=InteractionMode.SAY
+                )
             else:
                 _deliver_language_tagged_say(actor, text, language, sdm)
 
@@ -494,7 +510,14 @@ class PoseAction(Action):
             # The actor is in the line on telnet too (#3858): ``{caller}`` is
             # resolved per looker by message_location's mapping, so a disguise
             # reads as whatever that looker sees.
-            message_location(caller_state, render_line("{caller}", InteractionMode.POSE, text))
+            # A place-scoped row is receiver-scoped (record_interaction fills its
+            # receivers from PlacePresence) while this room line is not, so the
+            # line stays untagged there until room delivery is place-aware (#3933).
+            message_location(
+                caller_state,
+                render_line("{caller}", InteractionMode.POSE, text),
+                echo_of=InteractionMode.POSE if place is None else None,
+            )
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
@@ -565,8 +588,13 @@ class EmitAction(Action):
 
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        # Broadcast raw text — no funcparser, no name prepend
-        message_location(caller_state, text)
+        # Broadcast raw text — no funcparser, no name prepend.
+        # A place-scoped row is receiver-scoped (record_interaction fills its
+        # receivers from PlacePresence) while this room line is not, so the line
+        # stays untagged there until room delivery is place-aware (#3933).
+        message_location(
+            caller_state, text, echo_of=InteractionMode.EMIT if place is None else None
+        )
         record_interaction(
             character=actor,
             content=text,
@@ -688,7 +716,7 @@ class PemitAction(Action):
         # Direct delivery to each receiver only — never the whole room.
         for receiver in receivers:
             receiver_state = sdm.initialize_state_for_object(receiver)
-            send_message(receiver_state, text)
+            send_message(receiver_state, text, echo_of=InteractionMode.EMIT)
 
         record_interaction(
             character=actor,
@@ -753,6 +781,7 @@ class WhisperAction(Action):
                     if language is None or language.is_universal
                     else language.name,
                 ),
+                echo_of=InteractionMode.WHISPER,
             )
 
         client_request_id = kwargs.get("client_request_id")

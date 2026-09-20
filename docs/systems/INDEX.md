@@ -1654,8 +1654,8 @@ weekly XP — read at **World › Journals**, the Reading Room (#3941).
 - **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`
   / `set_retort_consent` / `mark_journals_visited` / `journal_settings` (#3941); read helpers
   `visible_entries_q` (the one visibility rule, #3941 Decision 1) and `can_retort` (the
-  rivalry-or-consent predicate, ADR-0306); `JournalError` user-safe exception in `types.py`
-- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` / `set_journal_disposition` (#3287) / `set_retort_consent` (#3941, ADR-0306) Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit|disposition|consent`) converge on `action.run()`
+  rivalry-or-consent predicate, ADR-0307); `JournalError` user-safe exception in `types.py`
+- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` / `set_journal_disposition` (#3287) / `set_retort_consent` (#3941, ADR-0307) Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit|disposition|consent`) converge on `action.run()`
 - **Web surface — the Reading Room (#3941, replaces the #2160 two-list page):** `/journals` is
   one centered stream, newest first, of every entry the viewer may read (public, revealed,
   their own, or, for staff, everything — banded when black or a post mortem). A row opens in
@@ -1669,7 +1669,7 @@ weekly XP — read at **World › Journals**, the Reading Room (#3941).
   `JournalTab` quick-compose panel remains in the in-scene sidebar. `/journal` (singular) stays
   freed from the missions ledger (moved to `/missions/journal` in #2160) — see Missions below
   and `journals/AGENT_GLOSSARY.md`'s disambiguation entry for the "journal" homonym across apps.
-- **Integrates with:** progression (weekly XP awards, nominations), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M), estates (posthumous reveal + writings bequest, #3287), relationships (the rivalry predicate behind Retort/Condemn, ADR-0306)
+- **Integrates with:** progression (weekly XP awards, nominations), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M), estates (posthumous reveal + writings bequest, #3287), relationships (the rivalry predicate behind Retort/Condemn, ADR-0307)
 - **Account block/mute (#2996):** the public feed excludes an account-level-blocked account's
   entries both directions, and an account-level-muted account's entries from the muter's own
   feed only (`services.exclude_blocked_and_muted_authors`); a praise/retort/condemn response
@@ -1688,7 +1688,7 @@ weekly XP — read at **World › Journals**, the Reading Room (#3941).
   Praise/Retort/Condemn/Nomination. Read paths: the public feed includes `revealed_at`-stamped
   entries (`is_public` is never mutated by a reveal); a bequest recipient browses the deceased's
   non-sealed private corpus via `GET /api/journals/entries/?deceased=<sheet_id>`.
-- **Retort/Condemn consent gate (#3941, ADR-0306):** `ResponseType.CONDEMN` joins praise/retort
+- **Retort/Condemn consent gate (#3941, ADR-0307):** `ResponseType.CONDEMN` joins praise/retort
   (XP mirrors retort: `CONDEMN_GIVEN_XP`/`CONDEMN_RECEIVED_XP`). Both are offered only when the
   author's `retort_consent` is ANYONE, or the viewer is a rival — an active, non-pending
   `CharacterRelationship` in either direction with progress on a negative-sign track
@@ -9004,7 +9004,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
 - **New Flow Action Steps:** `CANCEL_EVENT`, `MODIFY_PAYLOAD`, `PROMPT_PLAYER`, `EMIT_FLOW_EVENT` (routes through `emit_event()`), `EMIT_FLOW_EVENT_FOR_EACH` (in `FlowActionChoices`). `DEAL_DAMAGE` / `REMOVE_CONDITION` steps are deferred — emit a flow event that calls the relevant service function instead.
 - **Typeclass Hooks:** `Character.at_attacked`, `Character/Room/Object.at_pre_move`/`at_post_move` — wired in `typeclasses/` to call `emit_event`. The `trigger_handler` cached property is installed via `ObjectParent` mixin. EXAMINE_PRE/EXAMINED are the one exception — they emit from the action layer (`actions.definitions.examine_extras.gather_examine_extras`, the `LookAction` seam), not a typeclass hook; see ADR-0213.
 - **Object States:** `BaseState`, `CharacterState`, `RoomState`, `ExitState` — ephemeral wrappers with permission methods (`can_move`, `can_traverse`) and appearance rendering
-- **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency)
+- **Service Functions:** `send_message(recipient, text, caller=None, target=None, mapping=None, echo_of=None)`, `message_location(caller, text, target=None, mapping=None, location_state=None, echo_of=None)`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency). `echo_of` is an `InteractionMode` set by a caller that also records the line as an Interaction (#3933, ADR-0306): the frame then carries `{"type": <mode>, "interaction_echo": True}` so telnet prints the text and the web client drops the duplicate note. A place-scoped pose or emit passes `None`, because its Interaction is receiver-scoped to the Place while the room line is not.
 - **Where events are emitted:** `world/combat/services.py` (damage/attack/incap/death), `world/conditions/services.py` (apply/stage-change/remove), `world/magic/services.py` (technique pre-cast/cast/affected), and the typeclass move/examine hooks
 - **Critical Note:** `FlowDefinition`/`FlowStepDefinition`/`TriggerDefinition` are content-exportable via `NaturalKeyMixin` + `CONTENT_MODELS` (#2663), so the lore repo can author the trigger→flow→step wiring that `ConditionTemplate.reactive_triggers` references. The `ensure_*` palette seeds in `world/magic/effect_palette_content.py` remain test/E2E fixtures only; real content ships as lore-repo fixtures. Flow step parameters use name-based lookups (e.g. `threat_pool_name`) rather than raw PKs so they are identity-stable across environments.
 - **Authoring API (#3417):** `flows.catalog` (`STEP_ACTION_SPECS`, `event_catalog()`, `service_function_catalog()`, `FILTER_OPS`) is the hand-declared single source of truth for the step-parameter schemas that only exist implicitly in handler bodies; `flows.step_validation.validate_step_tree` (no DRF import) enforces it against an authored step tree. DRF CRUD mounted at `api/flows/` (`catalog/`, `flows/`, `trigger-definitions/`, `triggers/`) via `FlowDefinitionViewSet`/`TriggerDefinitionViewSet`/`TriggerViewSet`/`DslCatalogViewSet`; reads are `IsGMOrStaff`, writes `IsAdminUser` (staff-only v1). `FlowDefinitionWriteSerializer.steps` does a full-tree replace keyed on author-chosen `client_id`/`parent_client_id` (not DB pks); zero-step drafts and exactly-one-root are the only shape rules. `FlowDefinitionDetailSerializer.interactions` (`flows.interactions.flow_interactions`) cross-references what runs a flow, what it emits and who listens, and what it calls. Staff wire `ConditionTemplate.reactive_triggers` via `PATCH api/conditions/templates/{id}/set_reactive_triggers/`. Frontend: `/staff/flows-builder`. Zero new models. Details: [flows.md](flows.md#authoring-api-3417).
@@ -9491,6 +9491,17 @@ WebSocket-based game interface for MUD interaction.
 
 - **Key Components:** `GamePage`, `CommandInput`, `OutputDisplay`
 - **Hooks:** `useWebSocket()`, `useGameState()`
+- **Wire vocabulary (#3933, ADR-0306):** `src/core/wire_options.py` is the home of the
+  `text`-frame option keys and type values every layer shares: `TextFrameOption`
+  (`console`, `interaction_echo`, `on_entry`), `TextFrameType` (`lifecycle`, `arrive`),
+  `TextFrameType` (`lifecycle`, `arrive`) and `LifecycleEvent` (`become`, `switch`, `puppet`). It lives in
+  `core` because none of it is protocol-specific and `flows` sits below `web`;
+  `src/web/webclient/message_types.py` re-exports the names through `__all__` and keeps
+  the websocket frame names themselves. `WebsocketMessageType` gained `PUPPET` (the web
+  client's puppet handshake, replacing the `@ic` line it used to send on every socket
+  open), `CHARACTER_DIED`, `ESTATE_SETTLEMENT_OPENED` and `OOB`.
+  `src/web/tests/test_message_type_parity.py` fails when a server type has no case in
+  `frontend/src/hooks/types.ts`.
 - **Source:** `frontend/src/game/`
 
 ### Roster UI

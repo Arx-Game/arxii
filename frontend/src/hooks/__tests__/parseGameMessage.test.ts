@@ -86,32 +86,6 @@ describe('parseGameMessage', () => {
     });
   });
 
-  describe('LOGGED_IN messages', () => {
-    it('returns fixed success content', () => {
-      const input: IncomingMessage = [WS_MESSAGE_TYPE.LOGGED_IN, [], {}];
-
-      const result = parseGameMessage(input);
-
-      expect(result.content).toBe('Successfully logged in!');
-      expect(result.type).toBe(GAME_MESSAGE_TYPE.SYSTEM);
-      expect(result.timestamp).toBe(MOCK_TIMESTAMP);
-    });
-
-    it('ignores args and kwargs', () => {
-      const input: IncomingMessage = [
-        WS_MESSAGE_TYPE.LOGGED_IN,
-        ['ignored', 'data'],
-        { also: 'ignored' },
-      ];
-
-      const result = parseGameMessage(input);
-
-      expect(result.content).toBe('Successfully logged in!');
-      expect(result.type).toBe(GAME_MESSAGE_TYPE.SYSTEM);
-      expect(result.timestamp).toBe(MOCK_TIMESTAMP);
-    });
-  });
-
   describe('VN_MESSAGE messages', () => {
     it('extracts text from kwargs', () => {
       const input: IncomingMessage = [WS_MESSAGE_TYPE.VN_MESSAGE, [], { text: 'Hello from VN' }];

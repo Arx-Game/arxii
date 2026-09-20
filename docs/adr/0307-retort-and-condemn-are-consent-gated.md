@@ -1,4 +1,4 @@
-# ADR-0306: Retort and Condemn are consent-gated by rivalry or by choice; Praise and Nominate never are
+# ADR-0307: Retort and Condemn are consent-gated by rivalry or by choice; Praise and Nominate never are
 
 **Status:** Accepted (2026-09-20, #3941).
 

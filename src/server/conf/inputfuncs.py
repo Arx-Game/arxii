@@ -33,7 +33,9 @@ import uuid
 from django.core.exceptions import ObjectDoesNotExist
 from evennia.server.inputfuncs import text as _evennia_text
 
+from core.wire_options import TextFrameOption
 from server.conf.mush_markup import normalize_mush_markup
+from web.webclient.message_types import WebsocketMessageType
 
 # def oob_echo(session, *args, **kwargs):
 #     """
@@ -71,24 +73,65 @@ def text(session, *args, **kwargs):
     default ``text`` handler rather than re-implementing command handling.
 
     A line the web client sends from its staff Commands mode carries
-    ``console=True`` (#3857). While Evennia runs that line, the session is
-    marked so ``ServerSession.data_out`` tags every ``text`` frame it sends
-    ``{"console": True}``; the client routes those to its console sheet and
-    never to the column. Command execution is synchronous for the commands
-    this exists for; output a command schedules for later is not tagged and
-    lands where it always did.
+    ``console=True`` (#3857). While Evennia runs that line, the session's
+    ``ndb.text_frame_options`` is set to ``{"console": True}`` so
+    ``ServerSession.data_out`` merges that option into every ``text`` frame
+    it sends; the client routes those to its console sheet and never to the
+    column. Command execution is synchronous for the commands this exists
+    for; output a command schedules for later is not tagged and lands where
+    it always did.
     """
-    console = bool(kwargs.pop("console", False))
+    console = bool(kwargs.pop(TextFrameOption.CONSOLE.value, False))
     if args and str(session.protocol_key or "").startswith("telnet"):
         args = (normalize_mush_markup(args[0]), *args[1:])
     if not console:
         _evennia_text(session, *args, **kwargs)
         return
-    session.ndb.console_capture = True
+    # The slot has more than one writer (``Character.at_post_puppet`` is the
+    # other), so the previous value is restored rather than cleared.
+    previous = session.ndb.text_frame_options
+    session.ndb.text_frame_options = {TextFrameOption.CONSOLE.value: True}
     try:
         _evennia_text(session, *args, **kwargs)
     finally:
-        session.ndb.console_capture = False
+        session.ndb.text_frame_options = previous
+
+
+PUPPET_COMMAND = WebsocketMessageType.PUPPET.value
+
+
+def _puppet_error(session, error: str) -> None:
+    session.msg(command_error={"error": error, "command": PUPPET_COMMAND})
+
+
+def puppet(session, *args, **kwargs):  # noqa: ARG001 - Evennia's inputfunc signature
+    """The web client's puppet handshake (#3933).
+
+    ``["puppet", [], {"character": name}]`` replaces the ``@ic <name>`` line the
+    client used to send on every socket open. It reaches the same idempotent
+    ``Account.puppet_character_in_session`` and sends no text: success is the
+    ``puppet_changed`` broadcast that puppeting already emits, a refusal is a
+    ``command_error`` frame. Telnet keeps ``@ic``.
+    """
+    character = kwargs.get("character")
+    account = session.account
+    if account is None:
+        _puppet_error(session, "Not logged in.")
+        return
+    if not isinstance(character, str) or not character.strip():
+        _puppet_error(session, "Which character?")
+        return
+    wanted = character.strip().lower()
+    # #2393 — a retired honoree with an accepted, open seance offer is
+    # reachable too, even though get_available_characters() excludes them.
+    reachable = account.get_available_characters() + account.get_seance_manifestable_characters()
+    matches = [char for char in reachable if char.key.lower() == wanted]
+    if len(matches) != 1:
+        _puppet_error(session, f"Character '{character.strip()}' is not one of yours.")
+        return
+    ok, message = account.puppet_character_in_session(matches[0], session)
+    if not ok:
+        _puppet_error(session, message)
 
 
 _RESYNC_REQUEST_ID_LENGTH = 36

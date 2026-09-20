@@ -7,16 +7,18 @@ import {
   endSession,
   resetGame,
   setSessionConnectionStatus,
+  setSessionPuppetConfirmed,
   setSessionLifecycle,
   resetSessionRoomRevision,
   setRoomStateResyncStatus,
 } from '@/store/gameSlice';
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
-import { WS_MESSAGE_TYPE } from './types';
+import { WS_MESSAGE_TYPE, EVENNIA_CONTROL_TYPES } from './types';
 import { classifyText } from '@/game/feedKinds';
 import { emitActionResult } from './actionResultBus';
 import { emitHazardPrompt } from './hazardPromptBus';
+import { recordUnknownFrame } from './unknownFrames';
 
 import type {
   ActionResultPayload,
@@ -319,11 +321,40 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
     case WS_MESSAGE_TYPE.COMMANDS:
       return ({ character, args }) => handleCommandPayload(character, args as CommandSpec[]);
 
-    // Broadcast to every account session on each successful puppet - nothing to
-    // do client-side (the open handler already re-puppets), but without this
-    // case the frame fell through to parseGameMessage and rendered as raw
-    // JSON noise in the system lane (2026-07 audit).
+    // Broadcast to every account session on each successful puppet (#3933).
+    // The frame carries a `session_id`, but a socket does not know its own, so
+    // the match is on `character_name` alone. What that proves is narrower than
+    // "my request landed": SOME session of this account now puppets this
+    // socket's character. In the common single-tab case that is this socket's
+    // own open-time request; with two tabs on the same character, the sibling's
+    // puppet confirms this one too. A per-session confirmation needs the server
+    // to echo a request id back on the frame, which #3934's connection-recorder
+    // work adds. A puppet_changed for another character (a sibling tab on a
+    // different character) is never this socket's confirmation and is ignored.
     case WS_MESSAGE_TYPE.PUPPET_CHANGED:
+      return ({ character, kwargs, dispatch }) => {
+        if (kwargs?.character_name === character) {
+          dispatch(setSessionPuppetConfirmed({ character }));
+        }
+      };
+
+    // The death condolence line (#3933): toast it, the way command_error's
+    // refusal is already toasted.
+    case WS_MESSAGE_TYPE.CHARACTER_DIED:
+      return ({ kwargs }) => {
+        if (typeof kwargs?.body === 'string') toast(kwargs.body);
+      };
+
+    // The REST view owns the estate settlement surface; nothing to do here (#3933).
+    case WS_MESSAGE_TYPE.ESTATE_SETTLEMENT_OPENED:
+      return () => undefined;
+
+    // Evennia's own out-of-band echo; no Arx meaning (#3933).
+    case WS_MESSAGE_TYPE.OOB:
+      return () => undefined;
+
+    // Evennia's client-settings frame; no Arx meaning (#3933).
+    case WS_MESSAGE_TYPE.WEBCLIENT_OPTIONS:
       return () => undefined;
 
     default:
@@ -377,12 +408,27 @@ function dispatchLegacyText(
   dispatch: AppDispatch
 ): boolean {
   if (!LEGACY_TEXT_TYPES.has(msgType)) return false;
+  // A milestone the server marks with the puppet handshake, nothing to
+  // render (#3933) - `logged_in` used to land in the message lane below.
+  if (msgType === WS_MESSAGE_TYPE.LOGGED_IN) return true;
   const message = parseGameMessage(parsed);
   if (msgType === WS_MESSAGE_TYPE.TEXT) {
     // A frame the server tagged for the staff console (#3857) is the answer
     // to a Commands-mode line; it belongs to the console, never the column.
     if (kwargs?.console === true) {
       dispatch(addConsoleLine({ character, content: message.content }));
+      return true;
+    }
+    // Three tags a `text` frame carries for a compatibility line that has
+    // its own render elsewhere, so no note is added for it (#3933):
+    // `interaction_echo` (the structured Interaction pushed alongside it is
+    // the render), `type: 'lifecycle'` (a login milestone, not story), and
+    // `on_entry` (the room panel already shows the entry look).
+    if (
+      kwargs?.interaction_echo === true ||
+      kwargs?.type === 'lifecycle' ||
+      kwargs?.on_entry === true
+    ) {
       return true;
     }
     const subject = typeof kwargs?.subject === 'string' ? kwargs.subject : undefined;
@@ -440,12 +486,11 @@ function dispatchIncomingMessage(
     return;
   }
   if (dispatchLegacyText(character, parsed, msgType, kwargs, dispatch)) return;
-  dispatch(
-    addSessionDiagnostic({
-      character,
-      message: 'A connection message was not recognized. Try again.',
-    })
-  );
+  // An Evennia protocol frame (channel, ping, ...) has no Arx meaning and is
+  // never story content; anything else is a genuine gap in this client's
+  // coverage, recorded for a developer rather than alarmed at a player (#3933).
+  if (EVENNIA_CONTROL_TYPES.has(msgType)) return;
+  recordUnknownFrame(msgType, generation);
 }
 
 export function useGameSocket() {
@@ -519,16 +564,17 @@ export function useGameSocket() {
         dispatch(resetSessionRoomRevision({ character }));
         dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
 
-        // Step 1: reauthorize. Re-puppet immediately — everything downstream
+        // Step 1: reauthorize. Puppet immediately — everything downstream
         // (room state, the ability to send) depends on this landing first.
-        // Since #3812 the server already puppets the durable selection when the
-        // socket authenticates, so for the selected character this `@ic` is an
-        // idempotent safety net ("Already controlling X."); it still does the
-        // work when this socket's character differs from the selection.
+        // Since #3812 the server already puppets the durable selection at
+        // login, so for the selected character this is an idempotent no-op;
+        // for a socket opening on another character, this is what puppets it
+        // here. The reply is `puppet_changed`, not text (#3933) - see
+        // `handlerFor`'s PUPPET_CHANGED case, which confirms the handshake.
         // `setSessionConnectionStatus` (connected=true) is intentionally NOT
         // dispatched here — see Step 3 below, which fires it only after
         // reconciliation, not on the raw socket 'open' event.
-        const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [`@ic ${character}`], {}];
+        const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.PUPPET, [], { character }];
         socket.send(JSON.stringify(puppet));
 
         // Step 2: reconcile (#3760 Task 12). A reconnect means any send

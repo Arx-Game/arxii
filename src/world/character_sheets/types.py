@@ -579,7 +579,7 @@ class PosthumousJournalDisposition(models.TextChoices):
 
 
 class RetortConsent(models.TextChoices):
-    """Who may Retort or Condemn this character's journal entries (#3941, ADR-0306).
+    """Who may Retort or Condemn this character's journal entries (#3941, ADR-0307).
 
     RIVALS (default): only a character with an active relationship on a negative-sign
     track, either direction. ANYONE: the writer has opened the door. Praise and Nominate

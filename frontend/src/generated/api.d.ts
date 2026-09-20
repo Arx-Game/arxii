@@ -11421,7 +11421,7 @@ export interface paths {
      *     ``posts_this_week``, and ``rewarded_posts_per_week``. PATCH accepts
      *     ``disposition`` and/or ``retort_consent`` (at least one required) and applies
      *     each through its own action — ``set_journal_disposition`` (#3287) and
-     *     ``set_retort_consent`` (ADR-0306) — the same seams telnet's ``journal
+     *     ``set_retort_consent`` (ADR-0307) — the same seams telnet's ``journal
      *     disposition``/``journal consent`` commands use.
      */
     get: operations['journals_entries_disposition_retrieve'];
@@ -11437,7 +11437,7 @@ export interface paths {
      *     ``posts_this_week``, and ``rewarded_posts_per_week``. PATCH accepts
      *     ``disposition`` and/or ``retort_consent`` (at least one required) and applies
      *     each through its own action — ``set_journal_disposition`` (#3287) and
-     *     ``set_retort_consent`` (ADR-0306) — the same seams telnet's ``journal
+     *     ``set_retort_consent`` (ADR-0307) — the same seams telnet's ``journal
      *     disposition``/``journal consent`` commands use.
      */
     patch: operations['journals_entries_disposition_partial_update'];

@@ -75,14 +75,14 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   entries in the same stream, banded, with no separate tool (`is_staff`, the Codex precedent).
   Linked from the World menu, the Hall (relabelled "Your journal"), and every character sheet
   (the link shows for every viewer; it leads only to what they may read). The user-ratified
-  decisions the demo settled are ADR-0306 and issue #3941's Decisions list.
+  decisions the demo settled are ADR-0307 and issue #3941's Decisions list.
 - **Relationship journals (#3941)** — `JournalEntry.about`, a nullable FK to `CharacterSheet`
   (`SET_NULL`, indexed with `-created_at`), names the one character an entry is about; settable
   on write and edit, filterable from both sides (`?about=<id>` alone is everything written about
   that sheet; with `?writer=<id>` it is one writer's entries about someone). Not a tag — a tag
   has no identity and `CharacterRelationship` needs the subject's mutual consent, which an entry
   about someone must not require.
-- **Retort/Condemn consent gate (#3941, ADR-0306)** — `ResponseType.CONDEMN` (praise's
+- **Retort/Condemn consent gate (#3941, ADR-0307)** — `ResponseType.CONDEMN` (praise's
   antagonistic opposite; XP mirrors retort) joins praise/retort. Retort and Condemn are offered
   only when the writer's `CharacterSheet.retort_consent` (`RetortConsent`: `RIVALS` default /
   `ANYONE`) is `ANYONE`, or the viewer is a rival — for now, an active, non-pending
@@ -135,7 +135,7 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Great Archive IC location gating** — writing a First Journal at the Great Archive in play
   still needs no non-standard access point; a standard entry never requires being in-game there
   (#3941 confirms this stays out of scope; needs world building)
-- **Rivalry as a specific relationship kind (#3941, ADR-0306)** — `can_retort`'s rivalry
+- **Rivalry as a specific relationship kind (#3941, ADR-0307)** — `can_retort`'s rivalry
   predicate is structural today (an active, non-pending `CharacterRelationship` in either
   direction on a negative-sign track); a dedicated Rivalry relationship kind is a later
   relationships pass, and `can_retort` narrows to it there without any caller changing

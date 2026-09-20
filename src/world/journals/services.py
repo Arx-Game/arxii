@@ -116,7 +116,7 @@ def visible_entries_q(*, viewer_sheet: CharacterSheet | None, is_staff: bool) ->
 
 
 def can_retort(*, viewer_sheet: CharacterSheet | None, author: CharacterSheet) -> bool:
-    """Whether ``viewer_sheet`` may Retort or Condemn ``author``'s entries (ADR-0306).
+    """Whether ``viewer_sheet`` may Retort or Condemn ``author``'s entries (ADR-0307).
 
     True when the author's ``retort_consent`` is ANYONE, or when an active, non-pending
     ``CharacterRelationship`` in EITHER direction carries progress on a negative-sign
@@ -362,7 +362,7 @@ def create_journal_response(
     if response_type in (ResponseType.RETORT, ResponseType.CONDEMN) and not can_retort(
         viewer_sheet=author, author=parent.author
     ):
-        # ADR-0306: neutral, same message as a block — a refusal never says why.
+        # ADR-0307: neutral, same message as a block — a refusal never says why.
         raise JournalError(JournalError.UNAVAILABLE)
 
     # #2996 Decision 2 — an account-level block between the responder and the parent's author

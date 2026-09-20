@@ -993,7 +993,7 @@ class NewFiltersAndFieldsTests(TestCase):
 class CanRetortAnnotationTests(TestCase):
     """#3941 — the ``viewer_can_retort`` annotation is ``services.can_retort`` in SQL.
 
-    Two spellings of one rule (ADR-0306), so they are held against each other on every
+    Two spellings of one rule (ADR-0307), so they are held against each other on every
     case the rule distinguishes: no viewer, the viewer's own entry, a writer open to
     anyone, and a negative-track relationship held from either side.
     """
@@ -1137,7 +1137,7 @@ class CreateEditWithAboutTests(TestCase):
 
 
 class SettingsEndpointTests(TestCase):
-    """#3941, ADR-0306 — GET/PATCH the settings endpoint."""
+    """#3941, ADR-0307 — GET/PATCH the settings endpoint."""
 
     @classmethod
     def setUpTestData(cls) -> None:

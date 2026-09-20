@@ -32,11 +32,11 @@ Per-character weekly XP tracking. Resets after 7 days.
 
 - `create_journal_entry()` — Creates entry (accepts `about`), awards weekly XP, emits achievement stats
 - `create_journal_response()` — Creates praise/retort/condemn, awards XP to giver and receiver;
-  raises `JournalError.UNAVAILABLE` for retort/condemn when `can_retort()` fails (ADR-0306)
+  raises `JournalError.UNAVAILABLE` for retort/condemn when `can_retort()` fails (ADR-0307)
 - `edit_journal_entry()` — Edits title/body/about, sets edited_at (about/clear_about alone does not)
 - `visible_entries_q(*, viewer_sheet, is_staff)` — the one visibility rule (#3941 Decision 1) as
   a `Q`: public, or revealed at settlement, or the viewer's own, or (staff) everything
-- `can_retort(*, viewer_sheet, author)` — ADR-0306 predicate: True when `author.retort_consent`
+- `can_retort(*, viewer_sheet, author)` — ADR-0307 predicate: True when `author.retort_consent`
   is ANYONE, or an active, non-pending `CharacterRelationship` exists between the two (either
   direction) with progress on a negative-sign track
 - `annotate_can_retort(queryset, viewer_sheet)` — the same predicate as one `Case` + `Exists`
@@ -106,7 +106,7 @@ antagonism budget, not two.
 - **Achievements**: Emits `journals.total_written`, `journals.total_public` stats
 - **Progression**: Awards XP via `award_xp()` service
 - **Fame**: Praises should emit fame signal (not yet built)
-- **Relationships (#3941, ADR-0306)**: Retort and Condemn are enforced against
+- **Relationships (#3941, ADR-0307)**: Retort and Condemn are enforced against
   `world.relationships.models.CharacterRelationship` in `can_retort()` — an active, non-pending
   relationship in either direction with progress on a negative-sign track counts as a rival;
   `retort_consent=ANYONE` bypasses the relationship check entirely. This structural "rival" is

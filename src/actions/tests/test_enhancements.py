@@ -352,7 +352,9 @@ class LoudDistinctionScenarioTests(TestCase):
         # The enhancement should have uppercased the text before execute() saw it.
         # msg_contents receives the formatted string — verify it contains "HELLO FRIENDS"
         mock_msg.assert_called_once()
-        broadcast_text = mock_msg.call_args[0][0]
+        # The say echoes an Interaction, so the text arrives as Evennia's
+        # (text, {options}) form (#3933).
+        broadcast_text, _broadcast_options = mock_msg.call_args[0][0]
         assert "HELLO FRIENDS" in broadcast_text
 
 

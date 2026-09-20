@@ -254,6 +254,21 @@ class SayActionTests(TestCase):
             result = action.run(actor, text="hello")
         assert result.success is True
 
+    def test_say_universal_broadcast_is_tagged_as_an_interaction_echo(self):
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        with patch("actions.definitions.communication.message_location") as broadcast:
+            result = SayAction().run(actor, text="hello")
+        assert result.success is True
+        assert broadcast.call_args.kwargs["echo_of"] == InteractionMode.SAY
+
     def test_say_without_text_fails(self):
         room = ObjectDBFactory(
             db_key="Room",
@@ -285,9 +300,96 @@ class PoseActionTests(TestCase):
             result = action.run(actor, text="stretches.")
         assert result.success is True
         # The actor is in the line on telnet (#3858); msg_contents resolves
-        # ``{caller}`` per looker from message_location's mapping.
-        assert mock_contents.call_args.args[0] == "{caller} stretches."
+        # ``{caller}`` per looker from message_location's mapping. The pose
+        # echoes an Interaction, so the text arrives as Evennia's
+        # ``(text, {options})`` form (#3933).
+        sent_text, sent_options = mock_contents.call_args.args[0]
+        assert sent_text == "{caller} stretches."
+        assert sent_options["type"] == InteractionMode.POSE.value
         assert mock_contents.call_args.kwargs["mapping"]["caller"].obj is actor
+
+    def test_pose_broadcast_is_tagged_as_an_interaction_echo(self):
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        with patch("actions.definitions.communication.message_location") as broadcast:
+            result = PoseAction().run(actor, text="stretches.")
+        assert result.success is True
+        assert broadcast.call_args.kwargs["echo_of"] == InteractionMode.POSE
+
+    def test_place_scoped_pose_leaves_the_room_line_untagged(self):
+        """#3933 review C1 — a place-scoped Interaction reaches only the personas
+        present at that Place, while the compatibility line still goes to the whole
+        room. Tagging it would leave a room occupant outside the Place with the line
+        dropped and no Interaction to replace it."""
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        place = PlaceFactory()
+        with (
+            patch("actions.definitions.communication.message_location") as broadcast,
+            patch("actions.definitions.communication.record_interaction"),
+            patch(
+                "actions.definitions.communication._resolve_pose_place",
+                return_value=(place, None),
+            ),
+        ):
+            result = PoseAction().run(actor, text="stretches.")
+        assert result.success is True
+        assert broadcast.call_args.kwargs["echo_of"] is None
+
+
+class EmitActionTests(TestCase):
+    def test_emit_broadcast_is_tagged_as_an_interaction_echo(self):
+        from actions.definitions.communication import EmitAction
+
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        with patch("actions.definitions.communication.message_location") as broadcast:
+            result = EmitAction().run(actor, text="A bell tolls.")
+        assert result.success is True
+        assert broadcast.call_args.kwargs["echo_of"] == InteractionMode.EMIT
+
+    def test_place_scoped_emit_leaves_the_room_line_untagged(self):
+        """#3933 review C1 — same asymmetry as the place-scoped pose above."""
+        from actions.definitions.communication import EmitAction
+
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        place = PlaceFactory()
+        with (
+            patch("actions.definitions.communication.message_location") as broadcast,
+            patch("actions.definitions.communication.record_interaction"),
+        ):
+            result = EmitAction().run(actor, text="A bell tolls.", place=place)
+        assert result.success is True
+        assert broadcast.call_args.kwargs["echo_of"] is None
 
 
 class WhisperActionTests(TestCase):
@@ -320,6 +422,26 @@ class WhisperActionTests(TestCase):
         target = ObjectDBFactory(db_key="Bob")
         result = action.run(actor, target=target, text="")
         assert result.success is False
+
+    def test_whisper_message_is_tagged_as_an_interaction_echo(self):
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        target = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        with patch("actions.definitions.communication.send_message") as mock_send:
+            result = WhisperAction().run(actor, target=target, text="secret")
+        assert result.success is True
+        assert mock_send.call_args.kwargs["echo_of"] == InteractionMode.WHISPER
 
 
 class SayActionIdempotencyTests(TestCase):
@@ -747,6 +869,22 @@ class PemitActionTests(TestCase):
         assert result.success is True
         recv_msg.assert_called_once()
         bystander_msg.assert_not_called()
+
+    def test_pemit_message_is_tagged_as_an_interaction_echo(self):
+        from actions.definitions.communication import PemitAction
+
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        actor = self._staff_actor(room)
+        receiver = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        CharacterSheetFactory(character=receiver)
+        with patch("actions.definitions.communication.send_message") as mock_send:
+            result = PemitAction().run(actor, receivers=[receiver], text="A chill wind finds you.")
+        assert result.success is True
+        assert mock_send.call_args.kwargs["echo_of"] == InteractionMode.EMIT
 
     def test_pemit_rejects_non_staff_non_gm(self):
         from actions.definitions.communication import PemitAction

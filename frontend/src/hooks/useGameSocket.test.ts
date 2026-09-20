@@ -45,9 +45,18 @@ vi.mock('@/scenes/queries', () => ({
   fetchPoseSubmission: mockFetchPoseSubmission,
 }));
 
+const { mockToast } = vi.hoisted(() => ({
+  mockToast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+}));
+
+vi.mock('sonner', () => ({
+  toast: mockToast,
+}));
+
 import { useGameSocket, __resetGameSocketModuleStateForTests } from './useGameSocket';
 import { queryClient } from '@/queryClient';
 import { draftStorageKey, type Draft } from '@/game/useDraftStore';
+import { recordedUnknownFrames, __resetUnknownFramesForTests } from './unknownFrames';
 
 type Listener = (event: unknown) => void;
 
@@ -243,10 +252,10 @@ describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () =
       socket.dispatch('open');
     });
 
-    // Reauthorize: the puppet text is sent immediately, before reconciliation
+    // Reauthorize: the puppet frame is sent immediately, before reconciliation
     // is even asked to start.
     expect(socket.sent).toHaveLength(1);
-    expect(JSON.parse(socket.sent[0])).toEqual(['text', [`@ic ${character}`], {}]);
+    expect(JSON.parse(socket.sent[0])).toEqual(['puppet', [], { character }]);
 
     // Reconcile: the lookup for the stranded draft has been dispatched...
     expect(mockFetchPoseSubmission).toHaveBeenCalledWith('req-1');
@@ -481,7 +490,10 @@ describe('useGameSocket text frames become feed notes (#3856)', () => {
   });
 
   it('does not make a note out of a non-text legacy frame', async () => {
-    await deliver(['logged_in', [], {}]);
+    // vn_message, not logged_in (#3933): logged_in is now a dropped
+    // milestone tag with no message of its own - see the control-frames
+    // describe block below.
+    await deliver(['vn_message', [], { text: 'A voice speaks.' }]);
 
     expect(noteDispatches()).toEqual([]);
     expect(dispatchedTypes()).toContain('game/addSessionMessage');
@@ -544,5 +556,285 @@ describe('useGameSocket staff console (#3857)', () => {
     const types = mockDispatch.mock.calls.map(([action]) => (action as { type: string }).type);
     expect(types).toContain('game/addConsoleLine');
     expect(types).not.toContain('game/addFeedNote');
+  });
+});
+
+describe('useGameSocket puppet handshake (#3933)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function dispatchedTypes(): string[] {
+    return mockDispatch.mock.calls.map(([action]) => (action as { type: string }).type);
+  }
+
+  function confirmDispatches(): unknown[] {
+    return mockDispatch.mock.calls
+      .map(([action]) => action as { type?: string; payload?: unknown })
+      .filter((action) => action.type === 'game/setSessionPuppetConfirmed')
+      .map((action) => action.payload);
+  }
+
+  it('sends a puppet frame on open, never @ic', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Aria';
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+
+    act(() => {
+      socket.dispatch('open');
+    });
+
+    const frames = socket.sent.map((raw) => JSON.parse(raw) as unknown[]);
+    expect(frames).toContainEqual(['puppet', [], { character }]);
+    const textFrames = frames.filter((frame) => frame[0] === 'text');
+    const hasIcCommand = textFrames.some((frame) => {
+      const args = frame[1] as unknown[];
+      return typeof args[0] === 'string' && args[0].startsWith('@ic');
+    });
+    expect(hasIcCommand).toBe(false);
+  });
+
+  it('a puppet_changed naming this socket character confirms the puppet', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Aria';
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+    act(() => {
+      socket.dispatch('open');
+    });
+
+    act(() => {
+      socket.dispatch('message', {
+        data: JSON.stringify([
+          'puppet_changed',
+          [],
+          { session_id: 1, character_id: 42, character_name: character },
+        ]),
+      });
+    });
+
+    expect(confirmDispatches()).toEqual([{ character }]);
+  });
+
+  it('a puppet_changed for another character does not', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Aria';
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+    act(() => {
+      socket.dispatch('open');
+    });
+
+    act(() => {
+      socket.dispatch('message', {
+        data: JSON.stringify([
+          'puppet_changed',
+          [],
+          { session_id: 2, character_id: 7, character_name: 'SomeoneElse' },
+        ]),
+      });
+    });
+
+    expect(confirmDispatches()).toEqual([]);
+    expect(dispatchedTypes()).not.toContain('game/setSessionPuppetConfirmed');
+  });
+
+  it('a close clears the confirmation', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Aria';
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+    act(() => {
+      socket.dispatch('open');
+    });
+    act(() => {
+      socket.dispatch('message', {
+        data: JSON.stringify([
+          'puppet_changed',
+          [],
+          { session_id: 1, character_id: 42, character_name: character },
+        ]),
+      });
+    });
+    expect(confirmDispatches()).toEqual([{ character }]);
+
+    // A close dispatches setSessionConnectionStatus(status: false); the
+    // reducer clears puppetConfirmed on that transition (gameSlice.ts).
+    act(() => {
+      socket.dispatch('close', { code: 1000 });
+    });
+
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'game/setSessionConnectionStatus',
+      payload: { character, status: false },
+    });
+  });
+});
+
+describe('useGameSocket drops tagged compatibility text (#3933)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-19T12:00:00.000Z'));
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function noteDispatches(): unknown[] {
+    return mockDispatch.mock.calls
+      .map(([action]) => action as { type?: string; payload?: unknown })
+      .filter((action) => action.type === 'game/addFeedNote')
+      .map((action) => action.payload);
+  }
+
+  function dispatchedTypes(): string[] {
+    return mockDispatch.mock.calls.map(([action]) => (action as { type: string }).type);
+  }
+
+  async function deliver(frame: unknown): Promise<void> {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+    act(() => {
+      MockWebSocket.instances[0].dispatch('message', { data: JSON.stringify(frame) });
+    });
+  }
+
+  it('an interaction_echo frame adds no note', async () => {
+    await deliver(['text', ['Aria waves.'], { type: 'pose', interaction_echo: true }]);
+
+    expect(noteDispatches()).toEqual([]);
+  });
+
+  it('a lifecycle frame adds no note and no message', async () => {
+    await deliver(['text', ['You become Aria.'], { type: 'lifecycle', event: 'become' }]);
+
+    expect(noteDispatches()).toEqual([]);
+    expect(dispatchedTypes()).not.toContain('game/addSessionMessage');
+  });
+
+  it('an on_entry look adds no note', async () => {
+    await deliver(['text', ['Limbo...'], { type: 'look', on_entry: true }]);
+
+    expect(noteDispatches()).toEqual([]);
+  });
+
+  it('an ordinary look still becomes a note', async () => {
+    await deliver(['text', ['A quiet room.'], { type: 'look' }]);
+
+    expect(noteDispatches()).toEqual([
+      {
+        character: 'Aria',
+        note: { kind: 'look', content: 'A quiet room.', timestamp: '2026-09-19T12:00:00.000Z' },
+      },
+    ]);
+  });
+});
+
+describe('useGameSocket control frames (#3933)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    __resetUnknownFramesForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function dispatchedTypes(): string[] {
+    return mockDispatch.mock.calls.map(([action]) => (action as { type: string }).type);
+  }
+
+  async function deliver(frame: unknown): Promise<void> {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+    act(() => {
+      MockWebSocket.instances[0].dispatch('message', { data: JSON.stringify(frame) });
+    });
+  }
+
+  it('logged_in adds no message', async () => {
+    await deliver(['logged_in', [], {}]);
+
+    expect(dispatchedTypes()).not.toContain('game/addSessionMessage');
+  });
+
+  it('character_died toasts the condolence', async () => {
+    await deliver(['character_died', [], { character: 'Aria', body: 'Aria has died.' }]);
+
+    expect(mockToast).toHaveBeenCalledWith('Aria has died.');
+  });
+
+  it('webclient_options, oob and estate_settlement_opened add nothing and no diagnostic', async () => {
+    await deliver(['webclient_options', [], {}]);
+    await deliver(['oob', [], {}]);
+    await deliver(['estate_settlement_opened', [], {}]);
+
+    expect(dispatchedTypes()).not.toContain('game/addSessionDiagnostic');
+    expect(recordedUnknownFrames()).toEqual([]);
+  });
+
+  it('an Evennia protocol frame such as channel adds nothing and no diagnostic', async () => {
+    await deliver(['channel', ['General', 'hello'], {}]);
+
+    expect(dispatchedTypes()).not.toContain('game/addSessionDiagnostic');
+    expect(recordedUnknownFrames()).toEqual([]);
+  });
+
+  it('an unknown type adds no diagnostic and is recorded', async () => {
+    await deliver(['mystery', [], {}]);
+
+    expect(dispatchedTypes()).not.toContain('game/addSessionDiagnostic');
+    expect(recordedUnknownFrames()).toEqual([expect.objectContaining({ type: 'mystery' })]);
+  });
+
+  it('unparseable data still adds the diagnostic', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+    act(() => {
+      MockWebSocket.instances[0].dispatch('message', { data: '{not json' });
+    });
+
+    expect(dispatchedTypes()).toContain('game/addSessionDiagnostic');
   });
 });

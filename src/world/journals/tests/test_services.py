@@ -313,7 +313,7 @@ class CreateJournalResponseTest(TestCase):
         cls.responder = CharacterSheetFactory()
         cls.responder.character.db_account = cls.responder_account
         cls.responder.character.save()
-        # ADR-0306 (#3941): Retort/Condemn are consent-gated. This class predates the
+        # ADR-0307 (#3941): Retort/Condemn are consent-gated. This class predates the
         # gate and exercises the XP/stat plumbing, not the gate itself — open the door
         # so its existing retort tests keep testing what they always tested.
         cls.author.retort_consent = RetortConsent.ANYONE

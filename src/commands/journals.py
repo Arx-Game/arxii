@@ -74,7 +74,7 @@ class CmdJournal(ArxCommand):
     to your private entries after death (#3287) — ``sheet=`` sets your
     character's overall default, ``entry=``/``value=`` overrides a single
     entry. ``consent`` sets who may Retort or Condemn your entries
-    (ADR-0306) — ``rivals`` (default) or ``anyone``.
+    (ADR-0307) — ``rivals`` (default) or ``anyone``.
     """
 
     key = "journal"
@@ -211,7 +211,7 @@ class CmdJournal(ArxCommand):
 
         value = rest.strip().lower()
         # Validated against the enum rather than a literal pair, so a new consent level
-        # is accepted here the moment it exists on the sheet (ADR-0306).
+        # is accepted here the moment it exists on the sheet (ADR-0307).
         if value not in RetortConsent.values:
             msg = "Usage: journal consent rivals|anyone"
             raise CommandError(msg)

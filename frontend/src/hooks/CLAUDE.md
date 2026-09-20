@@ -23,6 +23,30 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   `{console: true}` in its kwargs; the server tags every
   `text` frame it sends back while that line runs with `console: true`, and
   `dispatchLegacyText` routes such a frame to `addConsoleLine`, never to a note.
+- **The puppet handshake** (#3933): on every socket open `useGameSocket` sends
+  `['puppet', [], { character }]`, not the `@ic <name>` text line it used to send.
+  The reply is structured, never text: a `puppet_changed` naming **this** socket's
+  character sets `session.puppetConfirmed`, a `puppet_changed` for another
+  character (a sibling tab switching) is ignored, and a refusal arrives as
+  `command_error` and is toasted. Readiness still gates on `room_state`.
+- **Three tags drop a `text` frame** (#3933, ADR-0306). `dispatchLegacyText` adds no
+  note when the frame's kwargs carry `interaction_echo: true` (the structured
+  Interaction pushed alongside it is the render), `type: 'lifecycle'` (a puppet
+  milestone, not story), or `on_entry: true` (the room panel already shows the entry
+  look). `logged_in` is silent for the same reason, so it no longer lands in the
+  message lane.
+- **Every frame type has a case** (#3933). `handlerFor` covers ours, including
+  `character_died` (toast), `estate_settlement_opened` (the REST view owns that
+  surface), `oob` and `webclient_options` (no Arx meaning).
+  `EVENNIA_CONTROL_TYPES` in `types.ts` lists Evennia's own protocol frames
+  (channel, ping, ...), which are ignored silently. Anything left is a genuine gap
+  in this client: `unknownFrames.ts` records the type name in a bounded in-memory
+  list (50 entries, no payload) and `console.warn`s it. It never becomes a feed
+  diagnostic, because a protocol gap is for a developer to close and a player
+  cannot act on it.
+  **The server side pins this:** `src/web/tests/test_message_type_parity.py` fails
+  when a `WebsocketMessageType` member is not named in `types.ts`, so adding a
+  server frame type forces a client case.
 - **`handleCommandPayload.ts`**: Processes command-related message payloads
 - **`handleRoomStatePayload.ts`**: Updates room state from server messages
 - **`handleScenePayload.ts`**: Processes scene-related updates

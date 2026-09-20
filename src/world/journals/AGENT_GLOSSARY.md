@@ -37,11 +37,11 @@ live in `AGENT_GLOSSARY_MAP.md`.
   is worth less than retort received — see `journals/CLAUDE.md`'s XP schedule). Consent-gated —
   see Retort Consent below.
 - **Condemn** — a `JournalEntry` with `response_type=condemn` (`ResponseType.CONDEMN`, #3941,
-  ADR-0306): Praise's antagonistic opposite, a threaded response via `parent` exactly like
+  ADR-0307): Praise's antagonistic opposite, a threaded response via `parent` exactly like
   Retort. Gated by the same Retort Consent rule and awards the same weekly XP
   (`CONDEMN_GIVEN_XP`/`CONDEMN_RECEIVED_XP` alias `RETORT_GIVEN_XP`/`RETORT_RECEIVED_XP`).
 - **Retort Consent** — `CharacterSheet.retort_consent` (`RetortConsent`: RIVALS default /
-  ANYONE, #3941, ADR-0306): who may Retort or Condemn this character's entries. RIVALS means an
+  ANYONE, #3941, ADR-0307): who may Retort or Condemn this character's entries. RIVALS means an
   active, non-pending `CharacterRelationship` in either direction carrying progress on a
   negative-sign track (`journals.services.can_retort` — one function, so a future dedicated
   Rivalry relationship kind narrows it there without touching callers); ANYONE opens the door to

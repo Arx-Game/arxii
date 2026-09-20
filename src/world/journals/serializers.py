@@ -53,7 +53,7 @@ class _ViewerFieldsMixin(serializers.Serializer):
             return None
 
     def get_can_retort(self, obj: JournalEntry) -> bool:
-        """ADR-0306 predicate for the requesting viewer; False without a viewer.
+        """ADR-0307 predicate for the requesting viewer; False without a viewer.
 
         Prefers the ``viewer_can_retort`` annotation (``services.annotate_can_retort``)
         that the list reads carry, so a page of rows costs no extra query. The detail
@@ -238,7 +238,7 @@ class JournalSettingsSerializer(serializers.Serializer):
 
     ``GET /entries/disposition/`` returns the full ``JournalSettings`` shape (including the
     read-only weekly-post counters); this serializer only validates the two writable fields
-    a ``PATCH`` may carry, at least one of which is required (#3941, ADR-0306).
+    a ``PATCH`` may carry, at least one of which is required (#3941, ADR-0307).
     """
 
     disposition = serializers.ChoiceField(

@@ -33,7 +33,7 @@ export type PosthumousOverride = 'inherit' | 'reveal' | 'seal';
 export type PosthumousJournalDisposition = 'reveal' | 'seal';
 
 /**
- * Who may Retort or Condemn this character's journal entries (#3941, ADR-0306). RIVALS
+ * Who may Retort or Condemn this character's journal entries (#3941, ADR-0307). RIVALS
  * (default): only an active rival relationship, either direction. ANYONE: the writer has
  * opened the door. Praise and Nominate are never gated by this.
  */
