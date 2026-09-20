@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from evennia.utils import funcparser
 
+from core.wire_options import TextFrameOption
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.perception_registry import (
@@ -11,7 +12,6 @@ from flows.service_functions.perception_registry import (
     resolve_broadcast_exclusions,
 )
 from flows.service_functions.serializers.room_state import build_room_state_payload
-from web.webclient.message_types import TextFrameOption
 from world.scenes.constants import InteractionMode
 
 if TYPE_CHECKING:

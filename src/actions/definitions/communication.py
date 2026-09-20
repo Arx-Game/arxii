@@ -510,10 +510,13 @@ class PoseAction(Action):
             # The actor is in the line on telnet too (#3858): ``{caller}`` is
             # resolved per looker by message_location's mapping, so a disguise
             # reads as whatever that looker sees.
+            # A place-scoped row is receiver-scoped (record_interaction fills its
+            # receivers from PlacePresence) while this room line is not, so the
+            # line stays untagged there until room delivery is place-aware (#3933).
             message_location(
                 caller_state,
                 render_line("{caller}", InteractionMode.POSE, text),
-                echo_of=InteractionMode.POSE,
+                echo_of=InteractionMode.POSE if place is None else None,
             )
 
         client_request_id = kwargs.get("client_request_id")
@@ -585,8 +588,13 @@ class EmitAction(Action):
 
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        # Broadcast raw text — no funcparser, no name prepend
-        message_location(caller_state, text, echo_of=InteractionMode.EMIT)
+        # Broadcast raw text — no funcparser, no name prepend.
+        # A place-scoped row is receiver-scoped (record_interaction fills its
+        # receivers from PlacePresence) while this room line is not, so the line
+        # stays untagged there until room delivery is place-aware (#3933).
+        message_location(
+            caller_state, text, echo_of=InteractionMode.EMIT if place is None else None
+        )
         record_interaction(
             character=actor,
             content=text,

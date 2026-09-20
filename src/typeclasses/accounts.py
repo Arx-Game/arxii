@@ -29,8 +29,8 @@ from evennia.utils.utils import make_iter
 
 from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
+from core.wire_options import LIFECYCLE_TEXT_TYPE, LifecycleEvent
 from evennia_extensions.account_setup import heal_account_setup
-from web.webclient.message_types import LIFECYCLE_TEXT_TYPE, LifecycleEvent
 
 TELNET_BLOCKED_BY_2FA_MESSAGE = (
     "This account refuses telnet sign-in while two-factor authentication is on. "
@@ -546,17 +546,23 @@ class Account(DefaultAccount):
         """The character a fresh session should puppet, or ``None`` (#3812).
 
         In order: the durable selection (``PlayerData.selected_entry``, which
-        puppeting also records), Evennia's ``_last_puppet`` (written by
-        ``DefaultCharacter.at_post_puppet`` on every puppet; covers accounts
-        from before selection followed puppeting), then a sole character.
-        Several characters and nothing recorded is ``None`` — never a silent
-        first pick.
+        puppeting also records), Evennia's ``_last_puppet``, then a sole
+        character. Several characters and nothing recorded is ``None`` — never
+        a silent first pick.
+
+        ``_last_puppet`` is NOT written on every puppet:
+        ``DefaultCharacter.at_post_puppet`` does not call ``super()``, so the
+        write in ``DefaultObject.at_post_puppet`` never ran on our MRO. Its only
+        writers are ``DefaultAccount.at_post_create_character`` (the account's
+        first character) and Evennia's own ``CmdIC``, which we do not use. The
+        tier therefore mostly covers accounts created before selection existed.
+        Kept as a fallback: dropping it is a behaviour decision for a human.
         """
         by_pk = {character.pk: character for character in available}
         entry = self.player_data.selected_entry
         if entry is not None and (chosen := by_pk.get(entry.character_sheet_id)) is not None:
             return chosen
-        # Evennia's own attribute (DefaultCharacter.at_post_puppet writes it);
+        # Evennia's own attribute (see the docstring for who actually writes it);
         # read through the handler rather than `self.db._last_puppet` so the
         # private-name access is explicit about whose name it is.
         last = self.attributes.get("_last_puppet")

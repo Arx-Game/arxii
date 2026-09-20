@@ -33,8 +33,9 @@ import uuid
 from django.core.exceptions import ObjectDoesNotExist
 from evennia.server.inputfuncs import text as _evennia_text
 
+from core.wire_options import TextFrameOption
 from server.conf.mush_markup import normalize_mush_markup
-from web.webclient.message_types import TextFrameOption, WebsocketMessageType
+from web.webclient.message_types import WebsocketMessageType
 
 # def oob_echo(session, *args, **kwargs):
 #     """

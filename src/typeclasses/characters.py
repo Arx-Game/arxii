@@ -18,18 +18,20 @@ from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
+from core.wire_options import (
+    LIFECYCLE_TEXT_TYPE,
+    LifecycleEvent,
+    TextFrameOption,
+    TextFrameType,
+)
 from flows.constants import EventName
 from flows.emit import emit_event
 from flows.events.payloads import AttackLandedPayload, MovedPayload, MovePreDepartPayload
 from flows.object_states.character_state import CharacterState
+from flows.service_functions.perception_registry import resolve_broadcast_exclusions
 from flows.service_functions.serializers import build_room_state_payload
 from flows.types import RoomStateSendResult
 from typeclasses.mixins import ObjectParent
-from web.webclient.message_types import (
-    LIFECYCLE_TEXT_TYPE,
-    LifecycleEvent,
-    TextFrameOption,
-)
 from world.magic.services.resonance_environment import (
     clear_resonance_alignment,
     refresh_resonance_alignment,
@@ -59,12 +61,13 @@ class Character(ObjectParent, DefaultCharacter):
                     to the room.
     at_pre_puppet - Just before Account re-connects, retrieves the character's
                     prelogout_location Attribute and move it back on the grid.
-    at_post_puppet - Sends a tagged "You become <name>" lifecycle frame, then
-                    the joining session's own look (tagged on_entry), then a
-                    room broadcast tagged "arrive" (#3933); Evennia's stock
-                    output (an untaggable "You become", a stock look over the
-                    Evennia desc attribute, and an untyped room line) is
-                    replaced rather than sent first.
+    at_post_puppet - Sends a tagged "You become <name>" lifecycle frame on
+                    every puppet, a room broadcast tagged "arrive" on the
+                    first session only, and the joining session's own look
+                    (tagged on_entry) (#3933); Evennia's stock output (an
+                    untaggable "You become", a stock look over the Evennia
+                    desc attribute, and an untyped room line) is replaced
+                    rather than sent first.
 
     """
 
@@ -479,13 +482,16 @@ class Character(ObjectParent, DefaultCharacter):
         the first).
 
         Evennia's own ``at_post_puppet`` is not called: its "You become", stock
-        look and room line are all untaggable, so ``_announce_puppet`` sends the
-        same information tagged instead (#3933).
+        look and room line are all untaggable, so ``_announce_become`` and
+        ``_announce_arrival`` send the same information tagged instead (#3933).
+        The "You become" line is per window (the new window has not seen it);
+        the room arrival is a came-online announcement, so it fires on the
+        first session only.
 
         Args:
             **kwargs: Arbitrary, optional arguments passed by Evennia.
         """
-        self._announce_puppet()
+        self._announce_become()
         sessions = list(self.sessions.all())
         first_session = len(sessions) <= 1
         joining = sessions[-1] if sessions else None
@@ -507,6 +513,8 @@ class Character(ObjectParent, DefaultCharacter):
             session.msg(commands=(payload, {}))
 
         if first_session:
+            self._announce_arrival()
+
             # Stories login catch-up: re-evaluate active stories and deliver
             # any queued narrative messages that accumulated while offline.
             from world.stories.services.login import catch_up_character_stories
@@ -527,22 +535,27 @@ class Character(ObjectParent, DefaultCharacter):
         # previous value is restored rather than cleared.
         previous = joining.ndb.text_frame_options if joining is not None else None
         if joining is not None:
-            joining.ndb.text_frame_options = {TextFrameOption.ON_ENTRY.value: True}
+            # Merged, not replaced: a console-mode ``@ic`` keeps its ``console``
+            # tag on the entry look. The ``finally`` still restores ``previous``.
+            joining.ndb.text_frame_options = {
+                **(previous or {}),
+                TextFrameOption.ON_ENTRY.value: True,
+            }
         try:
             self.execute_cmd("look", session=joining)
         finally:
             if joining is not None:
                 joining.ndb.text_frame_options = previous
 
-    def _announce_puppet(self) -> None:
-        """Evennia's post-puppet output, tagged (#3933).
+    def _announce_become(self) -> None:
+        """The per-window ``You become`` line, tagged ``lifecycle`` (#3933).
 
-        ``DefaultCharacter.at_post_puppet`` sends ``You become`` and a stock look
-        that renders the Evennia ``desc`` attribute, neither taggable, and an
-        untyped room line. This sends the same information with metadata, so a
-        structured client can decide what to show: telnet prints them all, the
-        web client keeps only the arrival. The look itself is the joining
-        session's ``look`` below, tagged ``on_entry``.
+        ``DefaultCharacter.at_post_puppet`` sends this and a stock look over the
+        Evennia ``desc`` attribute, neither taggable. This sends the same
+        information with metadata, so a structured client can decide what to
+        show. Every puppet gets it: the window that just opened has not seen it.
+        The look itself is the joining session's own ``look``, tagged
+        ``on_entry``.
         """
         self.msg(
             (
@@ -550,13 +563,24 @@ class Character(ObjectParent, DefaultCharacter):
                 {"type": LIFECYCLE_TEXT_TYPE, "event": LifecycleEvent.BECOME.value},
             )
         )
-        if self.location:
-            self.location.msg_contents(
-                ("{name} has entered the game.", {"type": "arrive"}),
-                exclude=[self],
-                from_obj=self,
-                mapping={"name": self},
-            )
+
+    def _announce_arrival(self) -> None:
+        """The room's came-online broadcast, tagged ``arrive`` (#3933).
+
+        First session only (#3812): a second tab opening is not the character
+        entering the game, so this lives inside ``at_post_puppet``'s
+        ``first_session`` branch rather than firing on every puppet. Routed
+        through the broadcast-exclusion seam (#2997) like every other room
+        broadcast, so a dreamside occupant does not hear the waking room.
+        """
+        if not self.location:
+            return
+        self.location.msg_contents(
+            ("{name} has entered the game.", {"type": TextFrameType.ARRIVE.value}),
+            exclude=[self, *(resolve_broadcast_exclusions(self.location) or [])],
+            from_obj=self,
+            mapping={"name": self},
+        )
 
     def announce_move_from(self, destination, msg=None, mapping=None, **kwargs):
         """Departure broadcast — suppressed entirely while sneaking (#3288).
@@ -594,13 +618,13 @@ class Character(ObjectParent, DefaultCharacter):
                 self.location.msg_contents(
                     (
                         "PLACEHOLDER An unseen presence arrived, stealthily avoiding notice.",
-                        {"type": "arrive"},
+                        {"type": TextFrameType.ARRIVE.value},
                     ),
                     exclude=self,
                 )
             self.msg("PLACEHOLDER You slip in, keeping to the shadows.")
             return
-        kwargs["move_type"] = "arrive"
+        kwargs["move_type"] = TextFrameType.ARRIVE.value
         super().announce_move_to(source_location, msg=msg, mapping=mapping, **kwargs)
 
     def send_room_state(  # noqa: C901

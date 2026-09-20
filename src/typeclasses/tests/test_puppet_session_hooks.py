@@ -98,16 +98,18 @@ class LifecycleOutputTests(TestCase):
 
     ``at_post_puppet`` no longer calls the base hook (it sent an untaggable
     ``You become`` line, a stock look over the Evennia ``desc`` attribute, and
-    an untyped room broadcast); ``_announce_puppet`` sends the same
-    information tagged ``lifecycle``/``arrive``, and the joining session's own
-    look runs with ``on_entry`` set so a client showing the room can drop it.
+    an untyped room broadcast); ``_announce_become`` and ``_announce_arrival``
+    send the same information tagged ``lifecycle``/``arrive``, and the joining
+    session's own look runs with ``on_entry`` set so a client showing the room
+    can drop it.
     """
 
-    def _puppet(self, held: dict | None = None):
+    def _puppet(self, held: dict | None = None, extra_sessions: int = 0):
         char = ObjectDBFactory(db_typeclass_path=CHARACTER)
         joining = MagicMock()
         joining.ndb.text_frame_options = held
-        char.sessions.all = MagicMock(return_value=[joining])
+        sessions = [MagicMock() for _ in range(extra_sessions)] + [joining]
+        char.sessions.all = MagicMock(return_value=sessions)
         char.msg = MagicMock()
         char.send_room_state = MagicMock()
         seen_options = []
@@ -146,11 +148,12 @@ class LifecycleOutputTests(TestCase):
         assert seen_options == [{"on_entry": True}]
         assert joining.ndb.text_frame_options is None
 
-    def test_the_entry_look_restores_an_option_the_session_already_held(self) -> None:
-        """The slot has two writers, so the entry look puts back what it found (#3933)."""
+    def test_the_entry_look_merges_with_an_option_the_session_already_held(self) -> None:
+        """The slot has two writers, so the entry look merges and then puts back
+        what it found (#3933 review M2): a console-mode ``@ic`` keeps its tag."""
         _char, joining, _room, seen_options = self._puppet(held={"console": True})
 
-        assert seen_options == [{"on_entry": True}]
+        assert seen_options == [{"console": True, "on_entry": True}]
         assert joining.ndb.text_frame_options == {"console": True}
 
     def test_the_room_hears_a_typed_arrival(self) -> None:
@@ -163,3 +166,36 @@ class LifecycleOutputTests(TestCase):
         assert "has entered the game" in text
         assert kwargs["exclude"] == [char]
         assert kwargs["mapping"] == {"name": char}
+
+    def test_a_second_window_does_not_re_announce_the_arrival(self) -> None:
+        """#3933 review I2 — the room broadcast means "came online" (#3812), so a
+        second tab opening must not tell the room the character entered again."""
+        _char, _joining, room, _seen_options = self._puppet(extra_sessions=1)
+
+        room.msg_contents.assert_not_called()
+
+    def test_the_arrival_honours_the_broadcast_exclusion_seam(self) -> None:
+        """#3933 review M3 — a dreamside occupant does not hear the waking room."""
+        char = ObjectDBFactory(db_typeclass_path=CHARACTER)
+        joining = MagicMock()
+        joining.ndb.text_frame_options = None
+        char.sessions.all = MagicMock(return_value=[joining])
+        char.msg = MagicMock()
+        char.send_room_state = MagicMock()
+        char.execute_cmd = MagicMock()
+        room = MagicMock()
+        excluded = MagicMock()
+        with (
+            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=room),
+            patch("world.scenes.friend_services.notify_friends_of_status"),
+            patch("world.stories.services.login.catch_up_character_stories"),
+            patch(
+                "typeclasses.characters.resolve_broadcast_exclusions",
+                return_value={excluded},
+            ),
+        ):
+            char.at_post_puppet()
+
+        _args, kwargs = room.msg_contents.call_args
+        assert kwargs["exclude"] == [char, excluded]
