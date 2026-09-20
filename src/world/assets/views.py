@@ -168,7 +168,9 @@ class NPCAssetViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        puppet = request.user.puppet if hasattr(request.user, "puppet") else None
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        puppet = character_for_request(request, entry_id=None)
         if puppet is None:
             return Response(
                 {"detail": "No puppeted character."},

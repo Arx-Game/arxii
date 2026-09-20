@@ -289,13 +289,13 @@ class OrgBooksActivePersonaLeakTests(TestCase):
     """#981 end-to-end: books follow the worn face, never leak the other faces."""
 
     def setUp(self) -> None:
-        from types import SimpleNamespace
-
         from rest_framework.test import APIRequestFactory, force_authenticate
 
         from evennia_extensions.factories import CharacterFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.currency.views import OrgBooksViewSet
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.roster.services.selection import set_selected_entry
         from world.scenes.constants import PersonaType
         from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 
@@ -307,15 +307,20 @@ class OrgBooksActivePersonaLeakTests(TestCase):
         )  # member
         self.org = OrganizationFactory()
         OrganizationMembershipFactory(persona=self.alt, organization=self.org, rank=3)
+        self.account = AccountFactory()
+        self.entry = RosterEntryFactory(character_sheet=self.sheet)
+        self.tenure = RosterTenureFactory(
+            player_data__account=self.account,
+            roster_entry=self.entry,
+        )
+        set_selected_entry(self.tenure.player_data, self.entry)
         self._factory = APIRequestFactory()
         self._view = OrgBooksViewSet.as_view({"get": "retrieve"})
-        self._SimpleNamespace = SimpleNamespace
         self._force_authenticate = force_authenticate
 
     def _get_books(self):
         request = self._factory.get(f"/api/currency/org-books/{self.org.pk}/")
-        user = self._SimpleNamespace(is_authenticated=True, is_staff=False, puppet=self.character)
-        self._force_authenticate(request, user=user)
+        self._force_authenticate(request, user=self.account)
         return self._view(request, pk=str(self.org.pk))
 
     def test_primary_face_cannot_see_the_alts_org_books(self):

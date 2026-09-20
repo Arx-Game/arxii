@@ -27,13 +27,12 @@ def _viewer_sheet(request: Request) -> CharacterSheet | None:
     """The viewer's active ``CharacterSheet``, or ``None`` (fail-closed).
 
     TradeSession is CharacterSheet-keyed (#684 — the body owns items, not
-    the account or a persona), so the read feed scopes to the puppeted
+    the account or a persona), so the read feed scopes to the selected
     character's sheet directly — no persona resolution needed.
     """
-    try:
-        puppet = request.user.puppet
-    except AttributeError:
-        return None
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+    puppet = character_for_request(request, entry_id=None)
     if puppet is None:
         return None
     return puppet.character_sheet

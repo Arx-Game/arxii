@@ -18,12 +18,11 @@ this viewset dispatches through) for the check-content + meter seeding.
 from __future__ import annotations
 
 from decimal import Decimal
-from types import SimpleNamespace
 
 from django.test import TestCase
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
@@ -37,6 +36,8 @@ from world.magic.models import (
     TrainingOutcomeAward,
 )
 from world.magic.views_technique_progress import TechniqueProgressViewSet
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.traits.models import CheckOutcome
 
 # Canonical outcome tiers (name -> success_level), matching seeds/checks.py.
@@ -57,28 +58,33 @@ def _ensure_outcome(name: str, success_level: int) -> CheckOutcome:
 
 
 def _actor_user(character, *, available_characters=None):
-    """Fake authenticated user whose ``puppet`` is ``character``.
+    """Return a real account with ``character`` durably selected."""
+    from world.roster.models import RosterTenure
 
-    Mirrors ``test_motif_style_views._actor_user``.
-    """
-    owned = available_characters if available_characters is not None else [character]
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=character.db_account_id,
-        puppet=character,
-        get_available_characters=lambda: owned,
+    tenure = (
+        RosterTenure.objects.filter(roster_entry__character_sheet__character=character)
+        .select_related("player_data__account", "roster_entry")
+        .first()
     )
+    if tenure is None:
+        account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=character.sheet_data)
+        tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    account = tenure.player_data.account
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, tenure.roster_entry)
+    owned = available_characters if available_characters is not None else [character]
+    account.get_available_characters = lambda: owned
+    return account
 
 
 def _no_puppet_user(*, available_characters=None):
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=None,
-        puppet=None,
-        get_available_characters=lambda: available_characters or [],
-    )
+    """Return a real account with no selected character."""
+    account = AccountFactory()
+    owned = available_characters or []
+    account.get_available_characters = lambda: owned
+    return account
 
 
 class TechniqueProgressViewSetTestBase(TestCase):

@@ -1,7 +1,5 @@
 """Tests for relationships API views."""
 
-from types import SimpleNamespace
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework import status
@@ -20,6 +18,7 @@ from world.relationships.factories import (
 )
 from world.relationships.views import RelationshipUpdateViewSet
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 
 
 class RelationshipTrackViewSetTests(TestCase):
@@ -431,29 +430,21 @@ class CompanionTargetWriteEndpointTests(TestCase):
         cls.tenure = RosterTenureFactory()
         cls.user = cls.tenure.player_data.account
         cls.sheet = cls.tenure.roster_entry.character_sheet
+        cls.sheet.character.db_account = cls.user
+        cls.sheet.character.save(update_fields=["db_account"])
+        set_selected_entry(cls.tenure.player_data, cls.tenure.roster_entry)
         cls.companion = CompanionFactory(owner=cls.sheet, name="Ash")
         cls.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE)
 
     def setUp(self) -> None:
+        set_selected_entry(self.tenure.player_data, self.tenure.roster_entry)
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         self.factory = APIRequestFactory()
 
     def _actor_user(self):
-        """Fake authenticated user whose ``puppet`` is the tenure-owned character.
-
-        Mirrors ``RelationshipUpdateViewSetTests``'s ``_actor_user`` (#1485): ``pk``
-        matches the character's ``db_account_id`` (unset on a factory-built
-        character) so ``_resolve_actor``'s ownership check passes without wiring a
-        real Evennia puppet session.
-        """
-        character = self.sheet.character
-        return SimpleNamespace(
-            is_authenticated=True,
-            is_staff=False,
-            pk=character.db_account_id,
-            puppet=character,
-        )
+        """Return the real account with its durable roster selection."""
+        return self.user
 
     def _post(self, action: str, payload: dict):
         url = f"/api/relationships/relationship-updates/{action}/"

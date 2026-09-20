@@ -18,7 +18,6 @@ check (``action.run()`` called directly, bypassing the web layer entirely).
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -36,7 +35,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
 from world.conditions.factories import ConditionInstanceFactory, UnconsciousConditionFactory
 from world.goals.factories import GoalDomainFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.activity import set_lifecycle_state
+from world.roster.services.selection import set_selected_entry
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.scenes.views import PersonaViewSet
@@ -52,6 +53,14 @@ class SetActivePersonaOffscreenGateTests(TestCase):
     def setUp(self) -> None:
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
+        self.account = AccountFactory()
+        self.entry = RosterEntryFactory(character_sheet=self.sheet)
+        self.tenure = RosterTenureFactory(
+            player_data__account=self.account, roster_entry=self.entry
+        )
+        self.character.db_account = self.account
+        self.character.save(update_fields=["db_account"])
+        set_selected_entry(self.tenure.player_data, self.entry)
         self.alt = PersonaFactory(character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED)
         self.factory = APIRequestFactory()
         self.view = PersonaViewSet.as_view({"post": "set_active"})
@@ -60,8 +69,7 @@ class SetActivePersonaOffscreenGateTests(TestCase):
         request = self.factory.post(
             "/api/scenes/personas/set-active/", {"persona_id": self.alt.pk}, format="json"
         )
-        user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=self.character)
-        force_authenticate(request, user=user)
+        force_authenticate(request, user=self.account)
         return self.view(request)
 
     def test_captured_refused_with_smuggle_text(self) -> None:
@@ -116,6 +124,9 @@ class OffscreenGatePayloadShapeTests(TestCase):
         self.character.db_account = self.user
         self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
+        self.entry = RosterEntryFactory(character_sheet=self.sheet)
+        self.tenure = RosterTenureFactory(player_data__account=self.user, roster_entry=self.entry)
+        set_selected_entry(self.tenure.player_data, self.entry)
         self.sheet.lifecycle_state = LifecycleState.CAPTURED
         self.sheet.save(update_fields=["lifecycle_state"])
         self.alt = PersonaFactory(character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED)
@@ -164,8 +175,7 @@ class OffscreenGatePayloadShapeTests(TestCase):
         request = factory.post(
             "/api/scenes/personas/set-active/", {"persona_id": self.alt.pk}, format="json"
         )
-        user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=self.character)
-        force_authenticate(request, user=user)
+        force_authenticate(request, user=self.user)
         response = view(request)
         self._assert_uniform_captured_refusal(response)
 

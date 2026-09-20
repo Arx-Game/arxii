@@ -733,7 +733,9 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
         catalog_entry = ReactionEmoji.objects.filter(emoji=emoji, is_active=True).first()
         if catalog_entry is None or catalog_entry.valence == 0:
             return False, None
-        actor = request.user.puppet
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        actor = character_for_request(request, entry_id=None)
         if actor is None:
             return False, None
         author_persona = interaction.persona

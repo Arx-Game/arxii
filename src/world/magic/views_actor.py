@@ -11,16 +11,18 @@ from django.core.exceptions import ObjectDoesNotExist
 
 
 class PuppetActorMixin:
-    """Resolve the caller's active puppet ObjectDB, verifying sheet ownership."""
+    """Resolve the caller's selected character, verifying sheet ownership."""
 
     def _resolve_actor(self, request):
-        """Return the caller's active puppet ObjectDB if they own its sheet.
+        """Return the caller's selected character if they own its sheet.
 
         Mirrors ``world.relationships.views.RelationshipUpdateViewSet._resolve_actor``.
         Returns the ObjectDB character (puppet) or ``None`` when resolution
         fails — caller should respond with HTTP 400.
         """
-        actor = request.user.puppet
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        actor = character_for_request(request, entry_id=None)
         if actor is None:
             return None
         try:

@@ -13568,7 +13568,7 @@ paths:
   /api/forms/alternate-selves/shift/:
     post:
       operationId: forms_alternate_selves_shift_create
-      description: '#1111 — assume an alternate self owned by the played character.'
+      description: '#1111 — assume an alternate self owned by the selected character.'
       tags:
       - alternate-selves
       requestBody:

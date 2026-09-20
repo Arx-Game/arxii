@@ -2,33 +2,34 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from actions.types import ActionResult
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.factories import CompanionArchetypeFactory, CompanionFactory
 from world.companions.views import CompanionViewSet
-from world.roster.factories import RosterTenureFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 
 
 def _actor_user(character):
-    """Fake authenticated user whose ``puppet`` is ``character``."""
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=character.db_account_id,
-        puppet=character,
-    )
+    """Return a real account with ``character`` durably selected."""
+    account = AccountFactory()
+    entry = RosterEntryFactory(character_sheet=character.sheet_data)
+    tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, entry)
+    return account
 
 
 def _no_puppet_user():
-    """Fake authenticated user with no puppet — actor cannot be resolved."""
-    return SimpleNamespace(is_authenticated=True, is_staff=False, pk=None, puppet=None)
+    """Return a real account with no selected character."""
+    return AccountFactory()
 
 
 class CompanionViewSetTests(APITestCase):

@@ -42,6 +42,8 @@ from world.relationships.models import RelationshipUpdate, WriteupComplaint, Wri
 from world.relationships.serializers import RelationshipUpdateSerializer
 from world.relationships.views import RelationshipUpdateViewSet
 from world.roster.factories import RosterTenureFactory
+from world.roster.models import RosterTenure
+from world.roster.services.selection import set_selected_entry
 
 
 def _make_cmd(caller: Any, args: str = "") -> CmdRelationship:
@@ -55,27 +57,33 @@ def _make_cmd(caller: Any, args: str = "") -> CmdRelationship:
 
 
 def _puppet_user(character):
-    """Fake authenticated user whose ``puppet`` is ``character``.
-
-    Sets ``pk`` to ``character.db_account_id`` (typically None in factory-built
-    characters) to satisfy ``_resolve_actor``'s identity check: the comparison
-    ``sheet.character.db_account_id != request.user.pk`` evaluates to
-    ``None != None`` → False (passes) when both are None.
-
-    The actual account used by ``get_account_for_character`` is resolved via
-    RosterTenure, independently of this pk.
-    """
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=character.db_account_id,
-        puppet=character,
+    """Return the real account with ``character`` durably selected."""
+    tenure = (
+        RosterTenure.objects.filter(roster_entry__character_sheet__character=character)
+        .select_related("player_data__account", "roster_entry")
+        .first()
     )
+    account = tenure.player_data.account if tenure is not None else None
+    if tenure is None:
+        account = RosterTenureFactory(
+            roster_entry__character_sheet__character=character
+        ).player_data.account
+        tenure = RosterTenure.objects.select_related("roster_entry", "player_data__account").get(
+            player_data__account=account,
+            roster_entry__character_sheet__character=character,
+        )
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, tenure.roster_entry)
+    return account
 
 
 def _make_linked_account(character_sheet):
     """Create a RosterTenure linking character_sheet.character to a fresh account."""
     tenure = RosterTenureFactory(roster_entry__character_sheet__character=character_sheet.character)
+    set_selected_entry(tenure.player_data, tenure.roster_entry)
+    character_sheet.character.db_account = tenure.player_data.account
+    character_sheet.character.save(update_fields=["db_account"])
     return tenure.player_data.account
 
 

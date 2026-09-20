@@ -9,12 +9,10 @@ caller's puppet and dispatches through the relationship Actions. Mirrors the
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import TrackSign
 from world.relationships.factories import (
@@ -28,17 +26,29 @@ from world.relationships.models import (
     RelationshipUpdate,
 )
 from world.relationships.views import RelationshipUpdateViewSet
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.factories import PersonaFactory
 
 
 def _actor_user(character):
-    """A fake authenticated user whose ``puppet`` is ``character``."""
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=character.db_account_id,
-        puppet=character,
+    """Return a real account with ``character`` durably selected."""
+    from world.roster.models import RosterTenure
+
+    tenure = (
+        RosterTenure.objects.filter(roster_entry__character_sheet__character=character)
+        .select_related("player_data__account", "roster_entry")
+        .first()
     )
+    if tenure is None:
+        account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=character.sheet_data)
+        tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    account = tenure.player_data.account
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, tenure.roster_entry)
+    return account
 
 
 class RelationshipUpdateViewSetTests(TestCase):
@@ -51,6 +61,15 @@ class RelationshipUpdateViewSetTests(TestCase):
         # Caller (source): a character with a primary persona.
         self.actor_character = CharacterFactory()
         self.actor_sheet = CharacterSheetFactory(character=self.actor_character)
+        self.actor_account = AccountFactory()
+        self.actor_entry = RosterEntryFactory(character_sheet=self.actor_sheet)
+        self.actor_tenure = RosterTenureFactory(
+            player_data__account=self.actor_account,
+            roster_entry=self.actor_entry,
+        )
+        self.actor_character.db_account = self.actor_account
+        self.actor_character.save(update_fields=["db_account"])
+        set_selected_entry(self.actor_tenure.player_data, self.actor_entry)
         self.actor_persona = self.actor_sheet.primary_persona
         # Target (a second character + sheet + persona).
         self.target_character = CharacterFactory()
@@ -204,8 +223,8 @@ class RelationshipUpdateViewSetTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_no_puppet_returns_400(self) -> None:
-        # User with no puppet — the actor cannot be resolved.
-        user = SimpleNamespace(is_authenticated=True, is_staff=False, pk=None, puppet=None)
+        # Account with no selected character — the actor cannot be resolved.
+        user = AccountFactory()
         request = self.factory.post(
             "/api/relationships/relationship-updates/first_impression/",
             {

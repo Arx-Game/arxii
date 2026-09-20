@@ -16,46 +16,47 @@ against real service-layer state (nothing mocked).
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.factories import StyleFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
 from world.magic.models import MotifResonanceStyle
 from world.magic.views_motif_style import MotifStyleViewSet
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 
 
 def _actor_user(character, *, available_characters=None):
-    """Fake authenticated user whose ``puppet`` is ``character``.
+    """Return a real account with ``character`` durably selected."""
+    from world.roster.models import RosterTenure
 
-    ``available_characters`` backs ``get_available_characters()`` — the
-    ownership check ``CharacterContextMixin._get_character`` runs against an
-    ``X-Character-ID`` header. Defaults to ``[character]`` (the puppet owns
-    itself) when not given.
-    """
-    owned = available_characters if available_characters is not None else [character]
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=character.db_account_id,
-        puppet=character,
-        get_available_characters=lambda: owned,
+    tenure = (
+        RosterTenure.objects.filter(roster_entry__character_sheet__character=character)
+        .select_related("player_data__account", "roster_entry")
+        .first()
     )
+    if tenure is None:
+        account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=character.sheet_data)
+        tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    account = tenure.player_data.account
+    character.db_account = account
+    character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, tenure.roster_entry)
+    owned = available_characters if available_characters is not None else [character]
+    account.get_available_characters = lambda: owned
+    return account
 
 
 def _no_puppet_user(*, available_characters=None):
-    """Fake authenticated user with no puppet — actor cannot be resolved."""
-    return SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        pk=None,
-        puppet=None,
-        get_available_characters=lambda: available_characters or [],
-    )
+    """Return a real account with no selected character."""
+    account = AccountFactory()
+    owned = available_characters or []
+    account.get_available_characters = lambda: owned
+    return account
 
 
 class MotifStyleViewSetTestBase(TestCase):

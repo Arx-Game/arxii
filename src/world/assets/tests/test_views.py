@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from evennia.utils.test_resources import EvenniaTestCase
 from rest_framework.test import APIClient
 
@@ -10,6 +12,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.factories import PersonaFactory
 from world.stories.factories import StoryFactory, StoryParticipationFactory
 
@@ -22,6 +25,7 @@ class NPCAssetViewSetTests(EvenniaTestCase):
         # an explicit player_number=1 RosterTenure to resolve.
         self.tenure = RosterTenureFactory(roster_entry=self.entry, player_number=1)
         self.account = self.tenure.player_data.account
+        set_selected_entry(self.tenure.player_data, self.tenure.roster_entry)
         self.client = APIClient()
         self.client.force_authenticate(user=self.account)
 
@@ -32,6 +36,33 @@ class NPCAssetViewSetTests(EvenniaTestCase):
         self.assertEqual(response.status_code, 200)
         ids = [row["id"] for row in response.data["results"]]
         self.assertEqual(ids, [mine.pk])
+
+    @patch("actions.registry.get_action")
+    def test_introduce_uses_selected_character(self, get_action) -> None:
+        """Introduce passes the selected character, not Account.puppet's list."""
+        action = MagicMock()
+        action.run.return_value = MagicMock(success=True, message="Introduced.")
+        get_action.return_value = action
+
+        response = self.client.post(
+            "/api/assets/introduce/",
+            {"asset_id": 1, "ally_persona_id": 2},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(action.run.call_args.kwargs["actor"].pk, self.sheet.character.pk)
+
+    def test_introduce_without_selection_returns_400(self) -> None:
+        set_selected_entry(self.tenure.player_data, None)
+
+        response = self.client.post(
+            "/api/assets/introduce/",
+            {"asset_id": 1, "ally_persona_id": 2},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_unauthenticated_rejected(self) -> None:
         # DRF returns 403, not 401, here: SessionAuthentication is the only

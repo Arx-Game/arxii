@@ -490,8 +490,10 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
         )
 
     def _resolve_actor(self, request):
-        """Return the caller's active puppet ObjectDB if they own its sheet."""
-        actor = request.user.puppet
+        """Return the caller's selected character if they own its sheet."""
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        actor = character_for_request(request, entry_id=None)
         if actor is None:
             return None, NO_ACTIVE_CHARACTER_MESSAGE
         try:

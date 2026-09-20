@@ -1,7 +1,5 @@
 """API tests for the /api/consent/ endpoints."""
 
-from types import SimpleNamespace
-
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -21,23 +19,23 @@ from world.consent.models import (
     SocialConsentWhitelist,
 )
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.roster.models import RosterEntry
+from world.roster.services.selection import set_selected_entry
 
 
 def _force_api_user(client: APIClient, player_data, character) -> None:
-    """Authenticate the client with a user that has a player_data and a puppet character.
+    """Authenticate the client with a real account and selected roster entry.
 
     The viewset dispatches consent actions through the shared player-action seam, which
-    needs an ObjectDB character whose account matches the owning player. Tests wire the
-    character.account to the player account and expose the character as request.user.puppet.
+    needs an ObjectDB character whose account matches the owning player. The selected
+    roster entry mirrors the web identity path used in production; ``Account.puppet``
+    is intentionally not part of this fixture because it is list-shaped in multi-session
+    mode.
     """
     character.account = player_data.account
-    user = SimpleNamespace(
-        is_authenticated=True,
-        is_staff=False,
-        player_data=player_data,
-        puppet=character,
-    )
-    client.force_authenticate(user=user)
+    entry = RosterEntry.objects.get(character_sheet__character=character)
+    set_selected_entry(player_data, entry)
+    client.force_authenticate(user=player_data.account)
 
 
 class SocialConsentCategoryViewSetTests(TestCase):
@@ -61,6 +59,7 @@ class SocialConsentCategoryViewSetTests(TestCase):
         tenure = RosterTenureFactory(player_data=player_data)
         character = tenure.roster_entry.character_sheet.character
         character.account = player_data.account
+        set_selected_entry(player_data, tenure.roster_entry)
         return character
 
     def test_unauthenticated_returns_401_or_403(self):

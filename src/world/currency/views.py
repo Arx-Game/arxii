@@ -235,15 +235,13 @@ def _viewer_persona(request: Request):
     Gates books on whichever persona the player's character is currently
     presenting as — PRIMARY, an ESTABLISHED alt, or a TEMPORARY mask — so an
     ESTABLISHED persona's org books are reachable while that face is worn, and a
-    player's *other* faces never leak. Fail-closed: no puppet / no sheet / a
+    player's *other* faces never leak. Fail-closed: no selected character / no sheet / a
     broken PRIMARY invariant all return None and the viewset denies.
     """
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    try:
-        puppet = request.user.puppet
-    except AttributeError:
-        return None
+    puppet = character_for_request(request, entry_id=None)
     if puppet is None:
         return None
     sheet = puppet.character_sheet

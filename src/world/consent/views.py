@@ -37,8 +37,10 @@ class ConsentPagination(PageNumberPagination):
 
 
 def _get_actor(request: Request) -> Any:
-    """Return the currently played character from the authenticated account."""
-    puppet = request.user.puppet
+    """Return the selected character from the authenticated account."""
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+    puppet = character_for_request(request, entry_id=None)
     if puppet is None:
         raise serializers.ValidationError(
             {"detail": "You must be playing a character to manage consent."}

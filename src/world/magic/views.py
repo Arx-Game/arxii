@@ -1087,25 +1087,21 @@ class RitualViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Visibility IS eligibility (#3001): quiescent viewers see hedge rites only.
 
-        Staff and accounts with no active puppet see everything (backoffice
-        reads); a puppeted character with no magical profile browses only
+        Staff and accounts with no selected character see everything (backoffice
+        reads); a selected character with no magical profile browses only
         ``hedge_accessible`` rituals — the same predicate the perform and
         draft seams enforce (``ritual_visible_to``).
         """
         from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
 
         queryset = super().get_queryset()
         user = self.request.user
         if user.is_staff:
             return queryset
-        try:
-            puppet = user.puppet
-            sheet = puppet.sheet_data if puppet is not None else None
-        except AttributeError:
-            # Plain AccountDB rows (API-only auth, tests) carry no puppet
-            # machinery — fail open to the unfiltered catalog, same as an
-            # account browsing with no active character.
-            return queryset
+        puppet = character_for_request(self.request, entry_id=None)
+        # Accounts without a selected character browse the unfiltered catalog.
+        sheet = puppet.sheet_data if puppet is not None else None
         if sheet is None or magical_profile(sheet) is not None:
             return queryset
         return queryset.filter(hedge_accessible=True)

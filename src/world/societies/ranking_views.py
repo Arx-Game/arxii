@@ -82,13 +82,10 @@ def _viewer_persona(request: Request):
     cloaked state on gated ones — same posture as a telnet examine with no
     persona context. Fail-closed on any resolution fault.
     """
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    try:
-        puppet = request.user.puppet
-    except AttributeError:
-        # AnonymousUser has no puppet attribute.
-        return None
+    puppet = character_for_request(request, entry_id=None)
     if puppet is None:
         return None
     sheet = puppet.character_sheet
