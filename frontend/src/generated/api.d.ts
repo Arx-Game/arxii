@@ -11330,18 +11330,31 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
+     * @description List visible journal entries, or (with ``?deceased=``) a bequeathed corpus.
      *
      *     Supports query params (all handled by ``JournalEntryFilter``):
-     *     - ?author=<character_id> — filter by author
+     *     - ?author=<character_id> / ?writer=<name substring> — filter by author
      *     - ?tag=<tag_name> — filter by tag name
+     *     - ?about=<character_sheet_id> — entries about that character (#3941)
+     *     - ?kind=<JournalKind|introductions> — the CG Introductions alias (#3941)
+     *     - ?post_mortem=1 — only entries revealed by an estate settlement (#3941)
+     *     - ?since=<iso timestamp> — only entries created after that moment (#3941). The
+     *       client passes back the ``visited_at`` this endpoint returned, which is the
+     *       viewer's visit mark AS IT WAS before the request that opened the stream
+     *       advanced it.
+     *     - ?black_only=1 — staff-only: just the private entries (#3941)
+     *     - ?mark_visit=1 — after computing ``since_visit_count`` and ``visited_at``, stamp
+     *       the viewer's visit
      *     - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
      *       entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
      *       (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
      *       ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
      *       error, so a probing id can't confirm whether a grant exists for someone else.
+     *       This response's shape is unchanged from pre-#3941: no ``since_visit_count`` and
+     *       no ``visited_at`` key, and ``?mark_visit=`` is ignored — the since-visit
+     *       machinery only applies to the viewer's own stream, never the bequest corpus.
      *
-     *     See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
+     *     See ``get_queryset()`` for the visibility contract (#3941 Decision 1, block/mute).
      */
     get: operations['journals_entries_retrieve'];
     put?: never;
@@ -11363,9 +11376,9 @@ export interface paths {
     /**
      * @description Retrieve a single journal entry.
      *
-     *     Visible when: public, revealed by an estate settlement, authored by the caller, or
-     *     (#3287 Decision 3) the caller holds a bequest grant over the author's writings and
-     *     this entry's effective disposition isn't SEAL.
+     *     Visible when: public, revealed by an estate settlement, staff, authored by the
+     *     caller, or (#3287 Decision 3) the caller holds a bequest grant over the author's
+     *     writings and this entry's effective disposition isn't SEAL (#3941 Decision 1).
      */
     get: operations['journals_entries_retrieve_2'];
     put?: never;
@@ -11402,10 +11415,14 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     * @description Read or set the owner's journal settings (#3287, #3941).
      *
-     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
-     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     *     GET returns ``posthumous_journal_disposition``, ``retort_consent``,
+     *     ``posts_this_week``, and ``rewarded_posts_per_week``. PATCH accepts
+     *     ``disposition`` and/or ``retort_consent`` (at least one required) and applies
+     *     each through its own action — ``set_journal_disposition`` (#3287) and
+     *     ``set_retort_consent`` (ADR-0306) — the same seams telnet's ``journal
+     *     disposition``/``journal consent`` commands use.
      */
     get: operations['journals_entries_disposition_retrieve'];
     put?: never;
@@ -11414,10 +11431,14 @@ export interface paths {
     options?: never;
     head?: never;
     /**
-     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     * @description Read or set the owner's journal settings (#3287, #3941).
      *
-     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
-     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     *     GET returns ``posthumous_journal_disposition``, ``retort_consent``,
+     *     ``posts_this_week``, and ``rewarded_posts_per_week``. PATCH accepts
+     *     ``disposition`` and/or ``retort_consent`` (at least one required) and applies
+     *     each through its own action — ``set_journal_disposition`` (#3287) and
+     *     ``set_retort_consent`` (ADR-0306) — the same seams telnet's ``journal
+     *     disposition``/``journal consent`` commands use.
      */
     patch: operations['journals_entries_disposition_partial_update'];
     trace?: never;
