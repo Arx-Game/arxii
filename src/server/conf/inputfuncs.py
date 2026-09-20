@@ -34,6 +34,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from evennia.server.inputfuncs import text as _evennia_text
 
 from server.conf.mush_markup import normalize_mush_markup
+from web.webclient.message_types import TextFrameOption
 
 # def oob_echo(session, *args, **kwargs):
 #     """
@@ -79,17 +80,20 @@ def text(session, *args, **kwargs):
     for; output a command schedules for later is not tagged and lands where
     it always did.
     """
-    console = bool(kwargs.pop("console", False))
+    console = bool(kwargs.pop(TextFrameOption.CONSOLE.value, False))
     if args and str(session.protocol_key or "").startswith("telnet"):
         args = (normalize_mush_markup(args[0]), *args[1:])
     if not console:
         _evennia_text(session, *args, **kwargs)
         return
-    session.ndb.text_frame_options = {"console": True}
+    # The slot has more than one writer (``Character.at_post_puppet`` is the
+    # other), so the previous value is restored rather than cleared.
+    previous = session.ndb.text_frame_options
+    session.ndb.text_frame_options = {TextFrameOption.CONSOLE.value: True}
     try:
         _evennia_text(session, *args, **kwargs)
     finally:
-        session.ndb.text_frame_options = None
+        session.ndb.text_frame_options = previous
 
 
 _RESYNC_REQUEST_ID_LENGTH = 36

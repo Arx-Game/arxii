@@ -27,6 +27,27 @@ class WebsocketMessageType(str, Enum):
     STATE_RESYNC_ERROR = "state_resync_error"
 
 
+class TextFrameOption(str, Enum):
+    """Keys a ``text`` frame's kwargs may carry beyond ``type`` (#3856, #3857, #3933)."""
+
+    CONSOLE = "console"
+    INTERACTION_ECHO = "interaction_echo"
+    ON_ENTRY = "on_entry"
+
+
+# The ``type`` on a text frame that reports a puppet-lifecycle milestone rather
+# than story text (#3933); telnet prints the line and ignores the options.
+LIFECYCLE_TEXT_TYPE = "lifecycle"
+
+
+class LifecycleEvent(str, Enum):
+    """``event`` values on a ``type: "lifecycle"`` text frame (#3933)."""
+
+    BECOME = "become"
+    SWITCH = "switch"
+    PUPPET = "puppet"
+
+
 @dataclass
 class WebsocketMessage:
     """Message transmitted over the websocket.

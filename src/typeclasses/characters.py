@@ -25,6 +25,11 @@ from flows.object_states.character_state import CharacterState
 from flows.service_functions.serializers import build_room_state_payload
 from flows.types import RoomStateSendResult
 from typeclasses.mixins import ObjectParent
+from web.webclient.message_types import (
+    LIFECYCLE_TEXT_TYPE,
+    LifecycleEvent,
+    TextFrameOption,
+)
 from world.magic.services.resonance_environment import (
     clear_resonance_alignment,
     refresh_resonance_alignment,
@@ -34,8 +39,6 @@ from world.roster.models import RosterEntry
 logger = logging.getLogger(__name__)
 # Process epoch distinguishes revision counters after a server restart.
 ROOM_STATE_EPOCH = uuid.uuid4().hex
-# Tag for the puppet-lifecycle frames sent in place of Evennia's stock output (#3933).
-LIFECYCLE_TYPE = "lifecycle"
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -519,14 +522,17 @@ class Character(ObjectParent, DefaultCharacter):
         # so web entry does not depend on moving rooms or having an active scene.
         self.send_room_state(session=joining)
         # The joining session's look is tagged on_entry so a client that already
-        # shows the room (the web room panel) can drop it (#3933).
+        # shows the room (the web room panel) can drop it (#3933). The slot has
+        # more than one writer (the console inputfunc is the other), so the
+        # previous value is restored rather than cleared.
+        previous = joining.ndb.text_frame_options if joining is not None else None
         if joining is not None:
-            joining.ndb.text_frame_options = {"on_entry": True}
+            joining.ndb.text_frame_options = {TextFrameOption.ON_ENTRY.value: True}
         try:
             self.execute_cmd("look", session=joining)
         finally:
             if joining is not None:
-                joining.ndb.text_frame_options = None
+                joining.ndb.text_frame_options = previous
 
     def _announce_puppet(self) -> None:
         """Evennia's post-puppet output, tagged (#3933).
@@ -538,7 +544,12 @@ class Character(ObjectParent, DefaultCharacter):
         web client keeps only the arrival. The look itself is the joining
         session's ``look`` below, tagged ``on_entry``.
         """
-        self.msg((f"You become {self.key}.", {"type": LIFECYCLE_TYPE, "event": "become"}))
+        self.msg(
+            (
+                f"You become {self.key}.",
+                {"type": LIFECYCLE_TEXT_TYPE, "event": LifecycleEvent.BECOME.value},
+            )
+        )
         if self.location:
             self.location.msg_contents(
                 ("{name} has entered the game.", {"type": "arrive"}),

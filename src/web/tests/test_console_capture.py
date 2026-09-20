@@ -48,6 +48,20 @@ class ConsoleFlagOnInputTests(TestCase):
             text_inputfunc(session, "@dig East", console=True)
         self.assertIsNone(session.ndb.text_frame_options)
 
+    def test_a_console_line_restores_the_option_the_session_already_held(self) -> None:
+        """The slot has two writers, so a console line puts back what it found (#3933)."""
+        session = _session()
+        session.ndb.text_frame_options = {"on_entry": True}
+        seen: list[dict | None] = []
+
+        def record(passed_session, *_args, **_kwargs):
+            seen.append(passed_session.ndb.text_frame_options)
+
+        with patch("server.conf.inputfuncs._evennia_text", side_effect=record):
+            text_inputfunc(session, "@dig East", console=True)
+        self.assertEqual(seen, [{"console": True}])
+        self.assertEqual(session.ndb.text_frame_options, {"on_entry": True})
+
     def test_a_plain_line_never_marks_the_session(self) -> None:
         session = _session()
         with patch("server.conf.inputfuncs._evennia_text") as delegate:

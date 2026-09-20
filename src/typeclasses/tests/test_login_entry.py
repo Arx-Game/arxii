@@ -148,6 +148,21 @@ class LoginResolvesTheCharacterTests(LoginEntryTestCase):
         sent = [call.args[0] for call in self.session.msg.call_args_list if call.args]
         self.assertIn(("Now controlling Aria.", {"type": "lifecycle", "event": "puppet"}), sent)
 
+    def test_a_refused_puppet_reaches_the_web_as_a_command_error(self) -> None:
+        """The web client drops lifecycle frames, so a refusal cannot ride on one (#3933)."""
+        set_selected_entry(self.account.player_data, self.entry_a)
+        self.puppet_mock.side_effect = lambda *_a, **_kw: (False, "That character is retired.")
+
+        self._login()
+
+        self.session.msg.assert_any_call(
+            command_error={"error": "That character is retired.", "command": "puppet"}
+        )
+        sent = [call.args[0] for call in self.session.msg.call_args_list if call.args]
+        self.assertFalse(
+            [line for line in sent if isinstance(line, tuple) and line[1].get("event") == "puppet"]
+        )
+
 
 class PuppetCharacterInSessionTests(LoginEntryTestCase):
     """``puppet_character_in_session`` itself, unmocked, is exercised here."""

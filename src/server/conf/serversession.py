@@ -23,7 +23,7 @@ settings file:
 
 from evennia.server.serversession import ServerSession as BaseServerSession
 
-# The send-command whose options the console tag rides on.
+# The send-command whose options carry every per-session text-frame tag.
 TEXT_KEY = "text"
 
 

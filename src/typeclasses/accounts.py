@@ -30,10 +30,7 @@ from evennia.utils.utils import make_iter
 from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
 from evennia_extensions.account_setup import heal_account_setup
-
-# These lines are metadata-tagged so a structured client can treat them as
-# milestones rather than story text (#3933); telnet ignores the options.
-LIFECYCLE_TYPE = "lifecycle"
+from web.webclient.message_types import LIFECYCLE_TEXT_TYPE, LifecycleEvent
 
 TELNET_BLOCKED_BY_2FA_MESSAGE = (
     "This account refuses telnet sign-in while two-factor authentication is on. "
@@ -478,10 +475,10 @@ class Account(DefaultAccount):
     def puppet_character_in_session(self, character, session):
         """Puppet ``character`` in ``session``; ``@ic`` and login both come through here.
 
-        Idempotent for the session's own puppet: the web client no longer sends
-        ``@ic <name>`` on every socket open (it sends a structured ``puppet``
-        request instead, a later task), but the idempotent same-puppet path
-        stays for telnet's ``@ic`` and any repeat request (#3812).
+        Idempotent for the session's own puppet: the web client sends a
+        structured ``puppet`` request on every socket open rather than
+        ``@ic <name>``, so the same-puppet repeat is the common case and stays
+        a no-op. Telnet's ``@ic`` comes through the same path (#3812).
         """
         if session.puppet is character:
             return True, f"Already controlling {character.name}."
@@ -496,7 +493,7 @@ class Account(DefaultAccount):
             session.msg(
                 (
                     f"Switching from {session.puppet.name} to {character.name}.",
-                    {"type": LIFECYCLE_TYPE, "event": "switch"},
+                    {"type": LIFECYCLE_TEXT_TYPE, "event": LifecycleEvent.SWITCH.value},
                 )
             )
             self.unpuppet_object(session)
@@ -618,8 +615,14 @@ class Account(DefaultAccount):
             names = ", ".join(char.name for char in available)
             session.msg(f"Which character? {names}. Type @ic <name> to play.")
             return
-        _ok, message = self.puppet_character_in_session(character, session)
-        session.msg((message, {"type": LIFECYCLE_TYPE, "event": "puppet"}))
+        puppeted, message = self.puppet_character_in_session(character, session)
+        if not puppeted:
+            # A refusal (retired, locked, a lock failure) is the reason login
+            # stopped, so it goes out as the error frame the web client surfaces;
+            # a lifecycle frame is dropped there as a milestone note (#3933).
+            session.msg(command_error={"error": message, "command": "puppet"})
+            return
+        session.msg((message, {"type": LIFECYCLE_TEXT_TYPE, "event": LifecycleEvent.PUPPET.value}))
 
     def at_post_create_character(self, character, **kwargs):
         """

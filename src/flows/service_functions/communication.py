@@ -11,6 +11,7 @@ from flows.service_functions.perception_registry import (
     resolve_broadcast_exclusions,
 )
 from flows.service_functions.serializers.room_state import build_room_state_payload
+from web.webclient.message_types import TextFrameOption
 from world.scenes.constants import InteractionMode
 
 if TYPE_CHECKING:
@@ -18,17 +19,17 @@ if TYPE_CHECKING:
 
 _PARSER = funcparser.FuncParser(funcparser.ACTOR_STANCE_CALLABLES)
 
-# The options a compatibility line carries when the same submission is also
-# recorded and pushed as a structured Interaction (#3933). Telnet prints the
-# text; the web client drops the note because the Interaction is the render.
-INTERACTION_ECHO_OPTION = "interaction_echo"
-
 
 def _echo_text(text: str, echo_of: InteractionMode | None) -> str | tuple[str, dict[str, object]]:
-    """Return ``text`` as Evennia's ``(text, {options})`` form when it echoes an Interaction."""
+    """Return ``text`` as Evennia's ``(text, {options})`` form when it echoes an Interaction.
+
+    The options mark a compatibility line whose submission is also recorded and
+    pushed as a structured Interaction (#3933). Telnet prints the text; the web
+    client drops the note because the Interaction is the render.
+    """
     if echo_of is None:
         return text
-    return (text, {"type": echo_of.value, INTERACTION_ECHO_OPTION: True})
+    return (text, {"type": echo_of.value, TextFrameOption.INTERACTION_ECHO.value: True})
 
 
 def send_message(  # noqa: PLR0913 - all keyword, optional, and each independently meaningful

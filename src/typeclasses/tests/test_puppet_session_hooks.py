@@ -103,9 +103,10 @@ class LifecycleOutputTests(TestCase):
     look runs with ``on_entry`` set so a client showing the room can drop it.
     """
 
-    def _puppet(self):
+    def _puppet(self, held: dict | None = None):
         char = ObjectDBFactory(db_typeclass_path=CHARACTER)
         joining = MagicMock()
+        joining.ndb.text_frame_options = held
         char.sessions.all = MagicMock(return_value=[joining])
         char.msg = MagicMock()
         char.send_room_state = MagicMock()
@@ -144,6 +145,13 @@ class LifecycleOutputTests(TestCase):
         char.execute_cmd.assert_called_once_with("look", session=joining)
         assert seen_options == [{"on_entry": True}]
         assert joining.ndb.text_frame_options is None
+
+    def test_the_entry_look_restores_an_option_the_session_already_held(self) -> None:
+        """The slot has two writers, so the entry look puts back what it found (#3933)."""
+        _char, joining, _room, seen_options = self._puppet(held={"console": True})
+
+        assert seen_options == [{"on_entry": True}]
+        assert joining.ndb.text_frame_options == {"console": True}
 
     def test_the_room_hears_a_typed_arrival(self) -> None:
         char, _joining, room, _seen_options = self._puppet()
