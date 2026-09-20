@@ -71,12 +71,13 @@ def text(session, *args, **kwargs):
     default ``text`` handler rather than re-implementing command handling.
 
     A line the web client sends from its staff Commands mode carries
-    ``console=True`` (#3857). While Evennia runs that line, the session is
-    marked so ``ServerSession.data_out`` tags every ``text`` frame it sends
-    ``{"console": True}``; the client routes those to its console sheet and
-    never to the column. Command execution is synchronous for the commands
-    this exists for; output a command schedules for later is not tagged and
-    lands where it always did.
+    ``console=True`` (#3857). While Evennia runs that line, the session's
+    ``ndb.text_frame_options`` is set to ``{"console": True}`` so
+    ``ServerSession.data_out`` merges that option into every ``text`` frame
+    it sends; the client routes those to its console sheet and never to the
+    column. Command execution is synchronous for the commands this exists
+    for; output a command schedules for later is not tagged and lands where
+    it always did.
     """
     console = bool(kwargs.pop("console", False))
     if args and str(session.protocol_key or "").startswith("telnet"):
@@ -84,11 +85,11 @@ def text(session, *args, **kwargs):
     if not console:
         _evennia_text(session, *args, **kwargs)
         return
-    session.ndb.console_capture = True
+    session.ndb.text_frame_options = {"console": True}
     try:
         _evennia_text(session, *args, **kwargs)
     finally:
-        session.ndb.console_capture = False
+        session.ndb.text_frame_options = None
 
 
 _RESYNC_REQUEST_ID_LENGTH = 36
