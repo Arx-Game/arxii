@@ -30,7 +30,20 @@ Database-driven workflow engine that replaces hardcoded command logic. All game 
 - **`exit_state.py`**: `ExitState` - exit lock/unlock mechanics
 
 ### `service_functions/`
-- **`communication.py`**: message sending, pose formatting, channels
+- **`communication.py`**: message sending, pose formatting, channels.
+  **`send_message` and `message_location` take `echo_of: InteractionMode | None`**
+  (#3933, ADR-0306). Set it when the same submission is also recorded and pushed
+  as a structured Interaction: the line then goes out as Evennia's `(text,
+{options})` form carrying `{"type": <mode>, "interaction_echo": True}`, so
+  telnet prints the text while the web client drops the note (the Interaction is
+  its render). Leave it `None` for everything else, which keeps the ordinary feed
+  note. Say, pose, emit, pemit, whisper, mutter and companion poses pass it.
+  **The place-scoped exception:** a pose or emit with a Place set passes `None`.
+  `record_interaction` fills a place-scoped row's receivers from `PlacePresence`,
+  so the Interaction reaches only personas at that Place, while the room line
+  reaches the whole room; tagging it would leave a room occupant outside the
+  Place with no render at all. Personas at the Place see both, which is a
+  mitigation, not the fix. The real fix is place-aware room delivery.
 - **`movement.py`**: room traversal, following, arrival/departure messages
 - **`perception.py`**: looking, searching, inventory, object examination
 - **`perception_registry.py`** (#2997): broadcast-exclusion registry —

@@ -138,7 +138,7 @@ test.describe('typed text frames become notes in the column (#3856)', () => {
     const editor = page.getByRole('textbox');
 
     // The player looks at the room; the server answers with the appearance typed look.
-    await editor.fill('look');
+    await editor.fill('/look');
     await editor.press('Enter');
     expect(sentCommands(connection)).toContain('look');
     connection.route.send(
@@ -150,7 +150,7 @@ test.describe('typed text frames become notes in the column (#3856)', () => {
     await expect(reader.getByText('Rain rests on the stones. Nyx is here.')).toBeVisible();
 
     // A mistyped command is Evennia's own wording, typed error, never silent.
-    await editor.fill('lok');
+    await editor.fill('/lok');
     await editor.press('Enter');
     expect(sentCommands(connection)).toContain('lok');
     connection.route.send(

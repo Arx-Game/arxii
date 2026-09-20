@@ -51,14 +51,43 @@ Evennia server configuration and customization. Contains settings and hooks for 
 - **Web Interface**: Bridges Evennia and React frontend
 - **Security**: CORS, authentication, and permission configuration
 
-## The staff console's tag (#3857)
+## The `text_frame_options` seam (#3857, #3933)
 
-`conf/inputfuncs.py:text` reads a `console` keyword off a websocket `text` frame (the
-web composer's Commands mode sends it), marks `session.ndb.console_capture` for the
-duration of Evennia's own handler (cleared in a `finally`), and
-`conf/serversession.py:ServerSession.data_out` (now wired by `SERVER_SESSION_CLASS`)
-merges `{"console": True}` into the options of every `text` frame sent meanwhile,
-coercing a bare string to the tuple form and keeping an option a command already set
-(#3856's `type`). The client routes tagged frames to its console sheet, never the
-column. Output a command schedules for later is not tagged and lands where it always
-did. Tests: `web/tests/test_console_capture.py`.
+`conf/serversession.py:ServerSession.data_out` (wired by `SERVER_SESSION_CLASS`) is the
+one place a per-session tag reaches a `text` frame. While `session.ndb.text_frame_options`
+holds a dict, every `text` frame leaving that session carries those options merged into
+its own. `merge_text_options` coerces a bare string to Evennia's `(text, {options})`
+tuple form, and **the frame's own keys win** over the session's, so an option a command
+already set (#3856's `type`) survives the merge.
+
+The slot has two writers, so both save the previous value and restore it in a `finally`,
+and both merge rather than replace:
+
+- `conf/inputfuncs.py:text` sets `{"console": True}` for a line the web composer's
+  Commands mode sends (`console=True` on the inbound frame). The client routes tagged
+  frames to its console sheet, never the column.
+- `typeclasses/characters.py:Character.at_post_puppet` sets `{"on_entry": True}` around
+  the joining session's own `look`. The web client drops that frame because the room
+  panel already shows the room; telnet still prints the entry look. Merging is what
+  keeps a console-mode `@ic` tagged `console` on that look as well.
+
+Command execution is synchronous for the commands this exists for. Output a command
+schedules for later is not tagged and lands where it always did. The option keys live in
+`core/wire_options.py:TextFrameOption`, never as free strings (ADR-0306).
+Tests: `web/tests/test_console_capture.py`.
+
+## The `puppet` inputfunc (#3933)
+
+`conf/inputfuncs.py:puppet` is the web client's puppet handshake. The client sends
+`["puppet", [], {"character": <name>}]` on every socket open, in place of the `@ic <name>`
+text line it used to send, and the inputfunc reaches the same idempotent
+`Account.puppet_character_in_session`. It sends no text of its own:
+
+- **Success** is the `puppet_changed` broadcast that puppeting already emits. The client
+  treats a `puppet_changed` naming this socket's character as its confirmation.
+- **Refusal** is `session.msg(command_error={"error": <reason>, "command": "puppet"})`,
+  the existing `command_error` frame shape, which the client toasts. Three refusals
+  reach it: no account on the session, a missing or blank `character`, and a name that is
+  not exactly one of `account.get_available_characters()`.
+
+`@ic` stays the telnet spelling and is unchanged.

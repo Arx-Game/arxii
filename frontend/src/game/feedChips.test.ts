@@ -155,14 +155,15 @@ describe('normalizeFeedChips', () => {
   });
 
   it('leaves a layout that already owns system elsewhere alone', () => {
-    const stored = DEFAULT_FEED_CHIPS.map((c) => {
-      if (c.id === 'sy') return { ...c, kinds: ['look', 'item', 'error'] };
-      if (c.id === 'am') return { ...c, kinds: ['ambience', 'system'] };
-      return c;
-    });
+    const stored = [
+      ...DEFAULT_FEED_CHIPS.map((c) =>
+        c.id === 'sy' ? { ...c, kinds: ['look', 'item', 'error'] } : c
+      ),
+      { id: 'c1', label: 'Chatter', kinds: ['system'], on: true, wake: false, custom: true },
+    ];
     const chips = normalizeFeedChips(stored);
     expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual(['look', 'item', 'error']);
-    expect(chips.find((c) => c.id === 'am')?.kinds).toEqual(['ambience', 'system']);
+    expect(chips.find((c) => c.id === 'c1')?.kinds).toEqual(['system']);
   });
 
   it('leaves a re-kinded System chip alone', () => {
