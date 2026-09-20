@@ -34,7 +34,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from evennia.server.inputfuncs import text as _evennia_text
 
 from server.conf.mush_markup import normalize_mush_markup
-from web.webclient.message_types import TextFrameOption
+from web.webclient.message_types import TextFrameOption, WebsocketMessageType
 
 # def oob_echo(session, *args, **kwargs):
 #     """
@@ -94,6 +94,40 @@ def text(session, *args, **kwargs):
         _evennia_text(session, *args, **kwargs)
     finally:
         session.ndb.text_frame_options = previous
+
+
+PUPPET_COMMAND = WebsocketMessageType.PUPPET.value
+
+
+def _puppet_error(session, error: str) -> None:
+    session.msg(command_error={"error": error, "command": PUPPET_COMMAND})
+
+
+def puppet(session, *args, **kwargs):  # noqa: ARG001 - Evennia's inputfunc signature
+    """The web client's puppet handshake (#3933).
+
+    ``["puppet", [], {"character": name}]`` replaces the ``@ic <name>`` line the
+    client used to send on every socket open. It reaches the same idempotent
+    ``Account.puppet_character_in_session`` and sends no text: success is the
+    ``puppet_changed`` broadcast that puppeting already emits, a refusal is a
+    ``command_error`` frame. Telnet keeps ``@ic``.
+    """
+    character = kwargs.get("character")
+    account = session.account
+    if account is None:
+        _puppet_error(session, "Not logged in.")
+        return
+    if not isinstance(character, str) or not character.strip():
+        _puppet_error(session, "Which character?")
+        return
+    wanted = character.strip().lower()
+    matches = [char for char in account.get_available_characters() if char.key.lower() == wanted]
+    if len(matches) != 1:
+        _puppet_error(session, f"Character '{character.strip()}' is not one of yours.")
+        return
+    ok, message = account.puppet_character_in_session(matches[0], session)
+    if not ok:
+        _puppet_error(session, message)
 
 
 _RESYNC_REQUEST_ID_LENGTH = 36

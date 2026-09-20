@@ -25,6 +25,10 @@ class WebsocketMessageType(str, Enum):
     REQUEST_ROOM_STATE = "request_room_state"
     STATE_RESYNC = "state_resync"
     STATE_RESYNC_ERROR = "state_resync_error"
+    PUPPET = "puppet"
+    CHARACTER_DIED = "character_died"
+    ESTATE_SETTLEMENT_OPENED = "estate_settlement_opened"
+    OOB = "oob"
 
 
 class TextFrameOption(str, Enum):
