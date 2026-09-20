@@ -54,7 +54,9 @@ over the author and the entry is not sealed (`entry_visible_via_bequest`, unchan
 uses the same four plus the bequest branch. `?deceased=<id>` (`JournalEntryFilter.filter_deceased`)
 replaces the queryset outright for bequest browsing rather than narrowing it — a different shape
 (the deceased's non-sealed private+public corpus). Block/mute exclusion
-(`exclude_blocked_and_muted_authors`) applies on top of all of this.
+(`exclude_blocked_and_muted_authors`) applies only to the list/feed path (`get_queryset()`) —
+`retrieve()` (detail) never calls it; a mute's only effect at the detail path is the separate
+response-list filtering described under Integration Points below.
 
 ## XP Schedule (weekly reset)
 

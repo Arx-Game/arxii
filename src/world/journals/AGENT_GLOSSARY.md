@@ -8,7 +8,7 @@ live in `AGENT_GLOSSARY_MAP.md`.
   player-voiced, no mechanical parsing. Web surface: **World › Journals** at `/journals` — one
   stream, newest first, opened in place, with a Search panel, a character-journal view
   (`?writer=<id>`), and "Your journal" (`?mine=1`), #3941 — plus a `JournalTab` quick-compose in
-  the in-scene sidebar; telnet: `journal write|respond|edit|consent`. _Avoid:_ **the journal**
+  the in-scene sidebar; telnet: `journal write|respond|edit|disposition|consent`. _Avoid:_ **the journal**
   unqualified when another app's homonym is in scope — see Disambiguation below.
 - **White journal / Black journal** — the interface's words for the public/private axis
   (`JournalEntry.is_public`, #3941); the model field itself keeps its name, never renamed to

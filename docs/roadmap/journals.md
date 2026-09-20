@@ -74,8 +74,8 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   after-death choice for Black, with the week's rewarded-post count shown. Staff read black
   entries in the same stream, banded, with no separate tool (`is_staff`, the Codex precedent).
   Linked from the World menu, the Hall (relabelled "Your journal"), and every character sheet
-  (the link shows for every viewer; it leads only to what they may read). See "Rulings" below
-  for user-ratified decisions the demo settled.
+  (the link shows for every viewer; it leads only to what they may read). The user-ratified
+  decisions the demo settled are ADR-0306 and issue #3941's Decisions list.
 - **Relationship journals (#3941)** — `JournalEntry.about`, a nullable FK to `CharacterSheet`
   (`SET_NULL`, indexed with `-created_at`), names the one character an entry is about; settable
   on write and edit, filterable from both sides (`?about=<id>` alone is everything written about
@@ -144,6 +144,8 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 
 ## Notes
 - Retorts award more XP to receiver (3) than giver (1) to incentivize dramatic conflict
+- Condemn (#3941) mirrors Retort's XP asymmetry exactly (given 1, received 3) and shares its
+  weekly flags (`retorted_this_week`/`was_retorted_this_week`) — one antagonism budget, not two
 - Praises award more XP to giver (2) than receiver (1) to incentivize community engagement
 - Party adventure logs deferred — may be better as a scene/story integration feature
 - Journal categories (relationship notes, adventure logs) replaced by freeform tags
