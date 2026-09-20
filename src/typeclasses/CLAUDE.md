@@ -21,6 +21,24 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
   Evennia, and the stealth unseen-presence echo carries the same tuple-form
   option; the departure keeps Evennia's `move`. Nothing else reads `move_type` on
   this path. `tests/test_move_announcements.py` pins both.
+- **`at_post_puppet` sends its own tagged output and never calls Evennia's hook**
+  (#3933, ADR-0306). `DefaultCharacter.at_post_puppet`'s three outputs are all
+  untaggable, and all three showed up in the web feed as story text: an untyped
+  "You become", a stock look that renders the Evennia `desc` attribute rather
+  than our room state, and an untyped room line. The override replaces them:
+  - `_announce_become` sends "You become <name>." tagged `{"type": "lifecycle",
+"event": "become"}`, **per window**, because a second tab has not seen it.
+  - `_announce_arrival` broadcasts "<name> has entered the game." tagged
+    `{"type": "arrive"}`, **on the first session only** (#3812: a second tab is
+    not the character entering the game), through
+    `resolve_broadcast_exclusions` like every other room broadcast, so a
+    dreamside occupant does not hear it.
+  - The joining session's own `look` runs with `{"on_entry": True}` merged into
+    `session.ndb.text_frame_options` and restored in a `finally` (see
+    `src/server/CLAUDE.md`). Telnet keeps its entry look; the web client drops
+    the frame because the room panel already shows the room.
+
+  `tests/test_puppet_session_hooks.py` pins the tags and the first-session rule.
 
 ### `rooms.py`
 - **`Room`**: Extends `DefaultRoom`
@@ -44,9 +62,20 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
   Evennia's `_last_puppet`, then a sole character — several with nothing
   recorded gets a one-line list, never a silent first pick. It does NOT call
   `super().at_post_login`, which renders the stock OOC screen unconditionally
-  on this path. `@ic` (`puppet_character_in_session`) stays for switching and is
-  a no-op for the session's own puppet, which is what the web client sends on
-  every socket open.
+  on this path. `@ic` (`puppet_character_in_session`) stays as the telnet
+  spelling for switching and is a no-op for the session's own puppet. **The web
+  client no longer sends `@ic` on socket open** (#3933): it sends the structured
+  `puppet` frame instead (`server/conf/inputfuncs.py:puppet`, which reaches the
+  same idempotent method). The same-puppet no-op stays, for telnet and for any
+  repeated request.
+- **The puppet lines are lifecycle frames, not story text** (#3933, ADR-0306).
+  `puppet_character_in_session`'s "Switching from A to B." and `at_post_login`'s
+  puppet result line ("Now controlling X." / "Already controlling X.") go out as
+  Evennia's `(text, {options})` tuple tagged `{"type": "lifecycle", "event":
+"switch" | "puppet"}`. Telnet prints them; the web client treats them as
+  milestones and adds no feed note. The tag values come from
+  `core.wire_options` (`TextFrameType`, `LifecycleEvent`), never a free
+  string.
 - **Sessions share a character** (`MULTISESSION_MODE = 3`). `can_puppet_character`
   never refuses "another of your sessions has it"; two windows are one
   `Character`. Any hook that means "came online"/"went offline" fires on the

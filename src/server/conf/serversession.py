@@ -23,7 +23,7 @@ settings file:
 
 from evennia.server.serversession import ServerSession as BaseServerSession
 
-# The send-command whose options the console tag rides on.
+# The send-command whose options carry every per-session text-frame tag.
 TEXT_KEY = "text"
 
 
@@ -36,33 +36,32 @@ class ServerSession(BaseServerSession):
     to the game server. All communication between game and account goes
     through their session(s).
 
-    Wired by ``settings.SERVER_SESSION_CLASS``. Its one override tags the
-    output of a staff console line (#3857): while ``ndb.console_capture`` is
-    set (the ``text`` inputfunc sets it for the duration of a ``console=True``
-    line), every ``text`` frame leaving this session carries
-    ``{"console": True}`` in its options, so the web client can keep it out
-    of the player-facing column.
+    Wired by ``settings.SERVER_SESSION_CLASS``. Its one override merges per-session
+    text-frame options: while ``ndb.text_frame_options`` holds a dict, every
+    ``text`` frame leaving this session carries those options merged into its own.
+    The ``text`` inputfunc sets ``{"console": True}`` for a staff console line
+    (#3857); ``Character.at_post_puppet`` sets ``{"on_entry": True}`` around the
+    joining session's look (#3933). The frame's own keys win over the session's.
     """
 
     def data_out(self, **kwargs):
-        """Tag a ``text`` frame with the console option while a console line runs."""
+        """Merge the session's text-frame options into a ``text`` frame."""
         # An unset ndb attribute reads as None, so no getattr default is needed.
-        if self.ndb.console_capture and TEXT_KEY in kwargs:
-            kwargs[TEXT_KEY] = _tag_console(kwargs[TEXT_KEY])
+        options = self.ndb.text_frame_options
+        if options and TEXT_KEY in kwargs:
+            kwargs[TEXT_KEY] = merge_text_options(kwargs[TEXT_KEY], options)
         super().data_out(**kwargs)
 
 
-def _tag_console(text: object) -> object:
-    """Return ``text`` in the tuple form with ``console`` merged into its options.
+def merge_text_options(text: object, options: dict[str, object]) -> object:
+    """Return ``text`` in tuple form with ``options`` merged in; the frame's own keys win.
 
     Evennia accepts a bare string or ``(string, {options})``; the session handler
     turns the dict into the frame's kwargs, which is where the client reads it.
-    An existing option, such as the ``type`` a command sets (#3856), is kept.
     """
     if isinstance(text, tuple):
         body = text[0] if text else ""
-        options = dict(text[1]) if len(text) > 1 and isinstance(text[1], dict) else {}
+        existing = dict(text[1]) if len(text) > 1 and isinstance(text[1], dict) else {}
     else:
-        body, options = text, {}
-    options["console"] = True
-    return (body, options)
+        body, existing = text, {}
+    return (body, {**options, **existing})

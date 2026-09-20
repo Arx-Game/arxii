@@ -353,4 +353,5 @@ treat those names as hints to confirm, not gospel.
 - [0302 - Browsing identity is per tab; the account column is the default](0302-browsing-identity-is-per-tab-the-account-column-is-the-default.md) (#3479; amends ADR-0241; reconciled with ADR-0294; related ADR-0247)
 - [0303 - A codex entry is public or reached by a path, and the admin leads with who knows it](0303-a-codex-entry-is-public-or-reached-by-a-path.md) (#3775; relates ADR-0221, ADR-0222)
 - [0305 - Location access is a four-rung ladder carried on the grant](0305-location-access-is-a-four-rung-ladder-on-the-grant.md) (#3902; guest/tenant/trustee on `LocationTenancy.kind`, owner stays on `LocationOwnership`; `is_tenant` removed; relates ADR-0010)
+- [0306 - Compatibility text is tagged, and every frontend decides what to render](0306-tagged-compatibility-text-frontends-decide.md) (#3933; `core.wire_options` tags the frame, no per-protocol filter in `ServerSession.data_out`; related ADR-0294, #3856, #3857)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

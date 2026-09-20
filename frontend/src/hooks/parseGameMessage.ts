@@ -7,6 +7,8 @@ export function parseGameMessage(parsed: IncomingMessage): GameMessage {
     const [msgType, args, kwargs = {}] = parsed;
     let content = '';
     let messageType: GameMessageType = GAME_MESSAGE_TYPE.SYSTEM;
+    // `logged_in` has no branch below: `dispatchLegacyText` short-circuits it
+    // as a silent milestone (#3933), so it never reaches this parser.
     if (msgType === WS_MESSAGE_TYPE.TEXT && Array.isArray(args) && args.length > 0) {
       content = String(args[0]);
       const kw = kwargs as Record<string, unknown>;
@@ -19,8 +21,6 @@ export function parseGameMessage(parsed: IncomingMessage): GameMessage {
       } else {
         messageType = GAME_MESSAGE_TYPE.TEXT;
       }
-    } else if (msgType === WS_MESSAGE_TYPE.LOGGED_IN) {
-      content = 'Successfully logged in!';
     } else if (msgType === WS_MESSAGE_TYPE.VN_MESSAGE) {
       content = toDisplayString((kwargs as Record<string, unknown>).text);
       messageType = GAME_MESSAGE_TYPE.ACTION;

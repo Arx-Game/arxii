@@ -13,7 +13,8 @@ from flows.factories import (
     FlowStepDefinitionFactory,
 )
 from flows.scene_data_manager import SceneDataManager
-from flows.service_functions.communication import message_location
+from flows.service_functions.communication import message_location, send_message
+from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
 
@@ -266,3 +267,68 @@ class TestMessageLocation(TestCase):
             )
 
         assert Interaction.objects.filter(scene=scene).count() == 0
+
+
+class InteractionEchoTagTests(TestCase):
+    def test_message_location_tags_an_echo_with_its_mode(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = CharacterFactory(location=room)
+
+        sdm = SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(caller)
+        room_state = sdm.initialize_state_for_object(room)
+
+        with patch.object(room, "msg_contents") as msg_contents:
+            message_location(
+                caller_state,
+                "$You() $conj(wave).",
+                location_state=room_state,
+                echo_of=InteractionMode.POSE,
+            )
+
+        text = msg_contents.call_args.args[0]
+        self.assertEqual(
+            text,
+            ("$You() $conj(wave).", {"type": "pose", "interaction_echo": True}),
+        )
+
+    def test_message_location_without_echo_sends_a_bare_string(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = CharacterFactory(location=room)
+
+        sdm = SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(caller)
+        room_state = sdm.initialize_state_for_object(room)
+
+        with patch.object(room, "msg_contents") as msg_contents:
+            message_location(caller_state, "A door creaks.", location_state=room_state)
+
+        self.assertEqual(msg_contents.call_args.args[0], "A door creaks.")
+
+    def test_send_message_tags_an_echo_with_its_mode(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        recipient = CharacterFactory(location=room)
+
+        sdm = SceneDataManager()
+        recipient_state = sdm.initialize_state_for_object(recipient)
+
+        with patch.object(recipient, "msg") as msg:
+            send_message(
+                recipient_state,
+                "Tehom whispers: hi",
+                echo_of=InteractionMode.WHISPER,
+            )
+
+        self.assertEqual(
+            msg.call_args.args[0],
+            ("Tehom whispers: hi", {"type": "whisper", "interaction_echo": True}),
+        )

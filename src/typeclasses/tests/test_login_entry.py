@@ -9,6 +9,7 @@ telnet - so login resolves that and puppets it. ``@ic`` stays for switching.
 
 from __future__ import annotations
 
+import contextlib
 from unittest.mock import Mock, create_autospec, patch
 
 from django.conf import settings
@@ -50,11 +51,17 @@ class LoginEntryTestCase(TestCase):
             self.puppeted.append((character, session))
             return True, f"Now controlling {character.name}."
 
-        patcher = patch.object(
+        self._puppet_patcher = patch.object(
             type(self.account), "puppet_character_in_session", autospec=True, side_effect=record
         )
-        self.puppet_mock = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.puppet_mock = self._puppet_patcher.start()
+
+        def _stop_puppet_patch() -> None:
+            # already stopped by a test exercising the real method
+            with contextlib.suppress(RuntimeError):
+                self._puppet_patcher.stop()
+
+        self.addCleanup(_stop_puppet_patch)
 
     def _playable(self, name: str):
         character = CharacterFactory(db_key=name)
@@ -132,6 +139,53 @@ class LoginResolvesTheCharacterTests(LoginEntryTestCase):
 
         self.assertEqual(self.puppeted, [])
         self.assertIn(settings.FRONTEND_URL, _texts(self.session))
+
+    def test_the_login_puppet_line_is_a_lifecycle_frame(self) -> None:
+        set_selected_entry(self.account.player_data, self.entry_a)
+
+        self._login()
+
+        sent = [call.args[0] for call in self.session.msg.call_args_list if call.args]
+        self.assertIn(("Now controlling Aria.", {"type": "lifecycle", "event": "puppet"}), sent)
+
+    def test_a_refused_puppet_reaches_the_web_as_a_command_error(self) -> None:
+        """The web client drops lifecycle frames, so a refusal cannot ride on one (#3933)."""
+        set_selected_entry(self.account.player_data, self.entry_a)
+        self.puppet_mock.side_effect = lambda *_a, **_kw: (False, "That character is retired.")
+
+        self._login()
+
+        self.session.msg.assert_any_call(
+            command_error={"error": "That character is retired.", "command": "puppet"}
+        )
+        sent = [call.args[0] for call in self.session.msg.call_args_list if call.args]
+        self.assertFalse(
+            [line for line in sent if isinstance(line, tuple) and line[1].get("event") == "puppet"]
+        )
+
+
+class PuppetCharacterInSessionTests(LoginEntryTestCase):
+    """``puppet_character_in_session`` itself, unmocked, is exercised here."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._puppet_patcher.stop()
+
+    def test_switching_puppets_sends_a_lifecycle_frame(self) -> None:
+        self.session.puppet = self.char_a
+
+        with (
+            patch.object(type(self.account), "can_puppet_character", return_value=(True, "")),
+            patch.object(type(self.account), "unpuppet_object"),
+            patch.object(type(self.account), "puppet_object"),
+        ):
+            self.account.puppet_character_in_session(self.char_b, self.session)
+
+        sent = [call.args[0] for call in self.session.msg.call_args_list if call.args]
+        self.assertIn(
+            ("Switching from Aria to Bianca.", {"type": "lifecycle", "event": "switch"}),
+            sent,
+        )
 
 
 class LoginNeverShowsTheOOCScreenTests(LoginEntryTestCase):

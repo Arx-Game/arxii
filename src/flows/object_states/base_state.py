@@ -329,7 +329,7 @@ class BaseState:
 
     def msg(  # noqa: PLR0913 - Mirrors Evennia msg signature for compatibility
         self,
-        text: str | None = None,
+        text: str | tuple[str, dict[str, object]] | None = None,
         from_obj: object | None = None,
         session: object | None = None,
         options: object | None = None,
@@ -341,7 +341,9 @@ class BaseState:
         """Send a message to the underlying Evennia object.
 
         This mirrors ``DefaultObject.msg`` so that service functions can work
-        transparently with states or raw objects.
+        transparently with states or raw objects. ``text`` may be Evennia's
+        ``(text, {options})`` tuple form, which is forwarded unchanged; the
+        session handler turns that dict into the outgoing frame's kwargs.
         """
 
         params: dict[str, object] = {}

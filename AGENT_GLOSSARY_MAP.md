@@ -130,6 +130,17 @@ permissions and scene state. _Avoid_: proxy, adapter.
 A reusable package of game logic attached to an object that supplies actions/handlers
 it can participate in. _Avoid_: mixin, component.
 
+**Interaction Echo**:
+The plain compatibility text line a producer sends for telnet alongside a submission it
+also records as a structured **Interaction**. It is tagged `{"type": <mode>,
+"interaction_echo": True}` (`core.wire_options`, ADR-0306) so a structured client drops
+it and renders the Interaction instead. _Avoid_: duplicate pose, legacy line.
+
+**Lifecycle Frame**:
+A `text` frame typed `lifecycle` that reports a puppet milestone (`become`, `switch`,
+`puppet`) rather than story content; the web client treats it as a session state change
+and adds no feed note. _Avoid_: system message, login text.
+
 **Enhancement / Effect**:
 An `ActionEnhancement` links a source (item, condition, technique) to a base Action and
 contributes typed **Effects** (handlers in `actions/effects/`) that modify how the action

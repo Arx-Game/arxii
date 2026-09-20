@@ -78,7 +78,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
 kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
   are the demo's five plus Visions (#3779) (Roleplay, Whispers and Visions wake;
-  Movement, Ambience, System do not; `system` unowned). Rules: `isKindShown` (All off hides everything; an unowned
+  Movement, Ambience, System do not). **System owns the `system` kind** (#3933): it is
+  the hide-system button, so pressing it has to hide login and connection chatter, not
+  just look/item/error. `normalizeFeedChips` migrates a stored layout once, and only
+  under both guards: the `sy` chip still has exactly the pre-#3933 default kinds
+  (a re-kinded chip is the player's own choice and is left alone) and nothing else
+  owns `system`. Rules: `isKindShown` (All off hides everything; an unowned
   kind shows), `wakingKinds` (on and wake), `toggleChip` (with All off, a press turns
   All on with only that chip), `toggleAll`, `setKindOwner` (moves a kind between
   chips), `renameChip`, `setChipWake`, `addCustomChip` (cap 3), `deleteChip` (its

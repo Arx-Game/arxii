@@ -138,7 +138,7 @@ test.describe('typed text frames become notes in the column (#3856)', () => {
     const editor = page.getByRole('textbox');
 
     // The player looks at the room; the server answers with the appearance typed look.
-    await editor.fill('look');
+    await editor.fill('/look');
     await editor.press('Enter');
     expect(sentCommands(connection)).toContain('look');
     connection.route.send(
@@ -150,7 +150,7 @@ test.describe('typed text frames become notes in the column (#3856)', () => {
     await expect(reader.getByText('Rain rests on the stones. Nyx is here.')).toBeVisible();
 
     // A mistyped command is Evennia's own wording, typed error, never silent.
-    await editor.fill('lok');
+    await editor.fill('/lok');
     await editor.press('Enter');
     expect(sentCommands(connection)).toContain('lok');
     connection.route.send(
@@ -269,6 +269,29 @@ test.describe('typed text frames become notes in the column (#3856)', () => {
       path: '../docs/reviews/3856/notes-scene-dark-1280.png',
       fullPage: true,
     });
+
+    expect(errors).toEqual([]);
+  });
+
+  test('tagged lifecycle, echo and entry-look text adds no notes (#3933)', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const connection = await reachReadySession(page, false);
+
+    connection.route.send(text('You become Tehom.', { type: 'lifecycle', event: 'become' }));
+    connection.route.send(text('Tehom waves.', { type: 'pose', interaction_echo: true }));
+    connection.route.send(text('Limbo. This is a room.', { type: 'look', on_entry: true }));
+    // An ordinary look, untagged, is the control: it still lands as a note.
+    connection.route.send(
+      text('Quiet courtyard<br>Moss grows between the flagstones.', { type: 'look' })
+    );
+
+    const reader = page.getByTestId('exploration-reader');
+    await expect(reader.getByText('Moss grows between the flagstones.')).toBeVisible();
+    expect(await noteKinds(page)).toEqual(['look']);
+    await expect(page.getByText('You become Tehom.')).toHaveCount(0);
+    await expect(page.getByText('Tehom waves.')).toHaveCount(0);
+    await expect(page.getByText('Limbo. This is a room.')).toHaveCount(0);
 
     expect(errors).toEqual([]);
   });

@@ -103,6 +103,16 @@ export interface Session {
   /** Character-scoped same-connection room-state recovery status. */
   roomStateResyncStatus?: RoomStateResyncStatus;
   roomStateResyncError?: string;
+  /**
+   * Set when `puppet_changed` names this session's character after the
+   * open-time puppet request (#3933) — confirms the handshake landed, rather
+   * than just assuming it from the absence of a `command_error`.
+   *
+   * Its consumer is the #3934 connection recorder, which reads it as the
+   * "puppet confirmed" readiness milestone in the entry timeline. Nothing
+   * gates on it today: readiness stays `room_state`.
+   */
+  puppetConfirmed?: boolean;
 }
 
 interface GameState {
@@ -199,7 +209,18 @@ export const gameSlice = createSlice({
       const session = state.sessions[character];
       if (session) {
         session.isConnected = status;
+        // A closed connection's handshake no longer holds (#3933): the next
+        // open sends a fresh puppet request and must re-earn confirmation.
+        if (!status) session.puppetConfirmed = undefined;
       }
+    },
+    /** `puppet_changed` named this session's own character (#3933): the open-time puppet landed. */
+    setSessionPuppetConfirmed: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name'] }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) session.puppetConfirmed = true;
     },
     setSessionLifecycle: (
       state,
@@ -650,6 +671,7 @@ export const {
   endSession,
   setActiveSession,
   setSessionConnectionStatus,
+  setSessionPuppetConfirmed,
   setSessionLifecycle,
   resetSessionRoomRevision,
   setRoomStateResyncStatus,

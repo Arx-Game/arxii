@@ -45,12 +45,22 @@ export const DEFAULT_FEED_CHIPS: readonly FeedChip[] = [
   {
     id: 'sy',
     label: 'System',
-    kinds: ['look', 'item', 'error'],
+    // System owns the untyped `system` kind too (#3933): it is the hide-system
+    // button (#3856's ruling), so pressing it must actually hide login/connection
+    // chatter, not just look/item/error.
+    kinds: ['look', 'item', 'error', 'system'],
     on: true,
     wake: false,
     custom: false,
   },
 ];
+
+/**
+ * The pre-#3933 default System chip's kinds. A stored layout that still has
+ * exactly this set on the `sy` chip, with `system` unowned, is one that never
+ * saw the fix; `normalizeFeedChips` gives it `system` once.
+ */
+const LEGACY_SYSTEM_KINDS: readonly FeedKind[] = ['look', 'item', 'error'];
 
 /** The editor's label for each kind, in the order it lists them. */
 export const KIND_LABELS: Record<FeedKind, string> = {
@@ -198,7 +208,19 @@ export function normalizeFeedChips(value: unknown): FeedChip[] {
     seenIds.add(id);
     if (custom) customCount += 1;
   }
-  return chips.length ? chips : DEFAULT_FEED_CHIPS.map((c) => ({ ...c }));
+  if (!chips.length) return DEFAULT_FEED_CHIPS.map((c) => ({ ...c }));
+  // #3933: accounts that stored the pre-#3933 default System chip never got
+  // `system`; give it to them once, only when nothing else owns it and the chip
+  // still has exactly the old default kinds (a re-kinded chip is the player's).
+  const system = chips.find((chip) => chip.id === 'sy' && !chip.custom);
+  if (system && !seenKinds.has('system') && sameKinds(system.kinds, LEGACY_SYSTEM_KINDS)) {
+    system.kinds = [...system.kinds, 'system'];
+  }
+  return chips;
+}
+
+function sameKinds(a: readonly FeedKind[], b: readonly FeedKind[]): boolean {
+  return a.length === b.length && b.every((kind) => a.includes(kind));
 }
 
 /** The key minimise and dismiss are recorded under, per viewer. */
