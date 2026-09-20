@@ -1,6 +1,6 @@
 # Issue #3948 evidence
 
-Implementation revision: branch commit after context-cursor hardening (based on PR #3953 revision `e548f12b6`).
+Implementation revision: `e86e58909` (context-cursor hardening; based on PR #3953 revision `e548f12b6`).
 
 ## Fixture-backed checks
 
