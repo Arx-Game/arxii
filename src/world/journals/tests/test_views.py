@@ -62,6 +62,15 @@ class JournalEntryListTests(TestCase):
         for entry in response.data["results"]:
             self.assertIn("response_count", entry)
 
+    def test_list_rows_carry_body_and_kind(self) -> None:
+        """Collapsed rows carry body (first-lines preview) and kind (banding) (#3941)."""
+        response = self.client.get("/api/journals/entries/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for entry in response.data["results"]:
+            self.assertEqual(entry["kind"], JournalKind.ENTRY)
+        rows = {e["id"]: e for e in response.data["results"]}
+        self.assertEqual(rows[self.public_entry.pk]["body"], self.public_entry.body)
+
     def test_unauthenticated_rejected(self) -> None:
         """Unauthenticated requests are rejected."""
         self.client.force_authenticate(user=None)
