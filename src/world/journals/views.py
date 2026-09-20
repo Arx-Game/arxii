@@ -44,6 +44,18 @@ _DISPOSITION_FIELD = "disposition"
 _RETORT_CONSENT_FIELD = "retort_consent"
 
 
+def _truthy_param(value: str | None) -> bool:
+    """Parse a raw query-string flag the way the FilterSet's booleans do (#3941).
+
+    ``mark_visit`` is a one-shot side effect (see ``list()``), not a FilterSet field, so
+    it never goes through ``django_filters.rest_framework.filters.BooleanFilter``'s own
+    widget parsing. Matching that parsing here (rather than plain Python truthiness on
+    the string) matters because ``bool("0")`` is ``True`` — a bare truthiness check
+    would treat ``?mark_visit=0`` as a request to mark the visit.
+    """
+    return value is not None and value.lower() in ("1", "true", "yes")
+
+
 class JournalEntryPagination(PageNumberPagination):
     """Pagination for journal entries."""
 
@@ -143,6 +155,9 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
           (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
           ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
           error, so a probing id can't confirm whether a grant exists for someone else.
+          This response's shape is unchanged from pre-#3941: no ``since_visit_count``
+          key, and ``?mark_visit=`` is ignored — the since-visit machinery only applies
+          to the viewer's own stream, never the bequest corpus.
 
         See ``get_queryset()`` for the visibility contract (#3941 Decision 1, block/mute).
         """
@@ -150,19 +165,27 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         # A one-shot side-effect trigger (stamps the visit mark below), not a queryset
         # filter, so it has no FilterSet field to live on.
         mark_visit = request.query_params.get("mark_visit")  # noqa: USE_FILTERSET
+        # ``?deceased=`` swaps in an entirely different corpus (the bequest read,
+        # ``JournalEntryFilter.filter_deceased``) whose response keeps its pre-#3941
+        # shape exactly — no ``since_visit_count`` key, no mark advance. Detecting the
+        # raw param here (rather than teaching the since-visit concept to
+        # filter_deceased) keeps that branch's contract unchanged.
+        is_bequest_listing = request.query_params.get("deceased") is not None  # noqa: USE_FILTERSET
 
         queryset = self.filter_queryset(self.get_queryset())
 
-        # Since-visit count and the mark itself: count against the mark AS IT WAS, then
-        # advance it — never the other way around, or a mark_visit=1 request would count
-        # against its own freshly-stamped mark and always report zero.
-        count_qs = self.get_queryset()
-        if sheet is not None and sheet.journals_visited_at is not None:
-            count_qs = count_qs.filter(created_at__gt=sheet.journals_visited_at)
-        since_visit_count = count_qs.count()
+        since_visit_count = None
+        if not is_bequest_listing:
+            # Since-visit count and the mark itself: count against the mark AS IT WAS,
+            # then advance it — never the other way around, or a mark_visit=1 request
+            # would count against its own freshly-stamped mark and always report zero.
+            count_qs = self.get_queryset()
+            if sheet is not None and sheet.journals_visited_at is not None:
+                count_qs = count_qs.filter(created_at__gt=sheet.journals_visited_at)
+            since_visit_count = count_qs.count()
 
-        if mark_visit and sheet is not None:
-            mark_journals_visited(sheet=sheet, at=timezone.now())
+            if _truthy_param(mark_visit) and sheet is not None:
+                mark_journals_visited(sheet=sheet, at=timezone.now())
 
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -170,7 +193,8 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 page, many=True, context={"viewer_sheet": sheet}
             )
             response = self.get_paginated_response(serializer.data)
-            response.data["since_visit_count"] = since_visit_count
+            if since_visit_count is not None:
+                response.data["since_visit_count"] = since_visit_count
             return response
 
         return Response(

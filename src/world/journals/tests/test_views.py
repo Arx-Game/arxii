@@ -722,6 +722,38 @@ class JournalPosthumousLeakTableTests(TestCase):
         self.assertNotIn("Sealed Forever", titles)
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_deceased_listing_shape_is_unchanged(self, mock_get_char: object) -> None:
+        """#3941 regression: ``?deceased=`` must keep its pre-#3941 response shape.
+
+        No ``since_visit_count`` key (the bequest corpus isn't the viewer's own
+        stream), and ``mark_visit=1`` must not stamp the viewer's ``journals_visited_at``
+        -- covers both the no-grant (empty) and granted (non-empty) cases.
+        """
+        mock_get_char.return_value = self.viewer_character
+        self.assertIsNone(self.viewer_sheet.journals_visited_at)
+
+        no_grant = self.client.get(
+            f"/api/journals/entries/?deceased={self.deceased_sheet.pk}&mark_visit=1"
+        )
+        self.assertEqual(no_grant.status_code, status.HTTP_200_OK)
+        self.assertNotIn("since_visit_count", no_grant.data)
+        self.viewer_sheet.refresh_from_db()
+        self.assertIsNone(self.viewer_sheet.journals_visited_at)
+
+        JournalBequestGrantFactory(
+            recipient_sheet=self.viewer_sheet,
+            deceased_sheet=self.deceased_sheet,
+            created_by_settlement=self.settlement,
+        )
+        granted = self.client.get(
+            f"/api/journals/entries/?deceased={self.deceased_sheet.pk}&mark_visit=1"
+        )
+        self.assertEqual(granted.status_code, status.HTTP_200_OK)
+        self.assertNotIn("since_visit_count", granted.data)
+        self.viewer_sheet.refresh_from_db()
+        self.assertIsNone(self.viewer_sheet.journals_visited_at)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_granted_recipient_can_retrieve_non_sealed_entry(self, mock_get_char: object) -> None:
         JournalBequestGrantFactory(
             recipient_sheet=self.viewer_sheet,
@@ -913,6 +945,13 @@ class NewFiltersAndFieldsTests(TestCase):
         data = self._get(since_visit=1)
         self.assertEqual(data["results"], [])
         self.assertEqual(data["since_visit_count"], 0)
+
+    def test_mark_visit_zero_does_not_mark(self) -> None:
+        """``?mark_visit=0`` must not be parsed as truthy (Python's bool("0") is True)."""
+        self.assertIsNone(self.reader.journals_visited_at)
+        self._get(mark_visit=0)
+        self.reader.refresh_from_db()
+        self.assertIsNone(self.reader.journals_visited_at)
 
 
 class CreateEditWithAboutTests(TestCase):
