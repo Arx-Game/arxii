@@ -48,10 +48,14 @@ If any leg is missing, it isn't an ADR — it's a code comment, a glossary entry
 nothing. Most decisions are not ADRs.
 
 When it qualifies, write to `docs/adr/` in the existing one-paragraph format (see
-`docs/adr/README.md` and entries like `0001`): a short title, the decision and the
+`docs/adr/README.md` and representative entries): a short title, the decision and the
 rejected alternative in prose, then a `> Status: … · Source: …` line cross-referencing
-the issue/roadmap. **Number = highest existing ADR + 1** (read the directory; don't
-compute from memory).
+the issue/roadmap. The directory is the index: list files with
+`find docs/adr -maxdepth 1 -type f -name '*.md' | sort`, then search titles and bodies with
+`rg -n -i '<term>|ADR-<issue>|issue #<issue>' docs/adr --glob '*.md'`. Do not maintain a
+second per-ADR catalog in the README. New ADR filenames begin `adr-<issue>-<slug>.md` and use
+`ADR-<issue>` as the stable identifier; use `adr-<issue>-a-<slug>.md`, `adr-<issue>-b-<slug>.md`,
+etc. (and identifiers `ADR-<issue>-A`, `ADR-<issue>-B`, etc.) when one issue yields multiple ADRs. Existing sequential identifiers stay unchanged and are never renumbered.
 
 ## Spoiler wall
 
