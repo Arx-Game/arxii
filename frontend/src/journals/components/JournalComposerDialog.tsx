@@ -31,6 +31,10 @@ import type { CreateJournalEntryRequest } from '../api';
 import { useCreateJournalEntry } from '../queries';
 import { EMPTY_ENTRY_FIELDS, type JournalEntryFieldsValue } from '../entryFields';
 import { JournalEntryFields } from './JournalEntryFields';
+// The dialog renders through a portal, outside the page's `.journals` root, and is
+// opened from the sidebar on routes that never load `JournalsPage`. Importing the
+// stylesheet here is what puts the `jr-*` rules in the document for those routes.
+import '../journals.css';
 
 interface JournalComposerDialogProps {
   open: boolean;
