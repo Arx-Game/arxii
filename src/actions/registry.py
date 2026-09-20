@@ -258,6 +258,7 @@ from actions.definitions.journals import (
     EditJournalEntryAction,
     RespondToJournalAction,
     SetJournalDispositionAction,
+    SetRetortConsentAction,
 )
 from actions.definitions.language import SetLanguageAction, TrainLanguageAction
 from actions.definitions.locations import (
@@ -838,6 +839,7 @@ _ALL_ACTIONS: list[Action] = [
     RespondToJournalAction(),
     EditJournalEntryAction(),
     SetJournalDispositionAction(),
+    SetRetortConsentAction(),
     SetCharacterGoalsAction(),
     LogGoalProgressAction(),
     GiveWriteupKudosAction(),

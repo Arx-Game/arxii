@@ -41,6 +41,14 @@ class RetortFactory(JournalEntryFactory):
     title = factory.Sequence(lambda n: f"Retort {n}")
 
 
+class CondemnFactory(JournalEntryFactory):
+    """Factory for creating condemn response entries (#3941)."""
+
+    parent = factory.SubFactory(JournalEntryFactory)
+    response_type = ResponseType.CONDEMN
+    title = factory.Sequence(lambda n: f"Condemn {n}")
+
+
 class JournalTagFactory(DjangoModelFactory):
     """Factory for creating JournalTag instances."""
 

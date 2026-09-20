@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.test import TestCase
+from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
@@ -63,6 +64,16 @@ class NominateTest(TestCase):
 
     def test_a_private_journal_cannot_be_nominated(self) -> None:
         entry = JournalEntryFactory(author=self.writer_sheet, is_public=False)
+
+        with self.assertRaises(ProgressionError) as ctx:
+            nominate(self.nominator, NominationTargetType.JOURNAL, entry.pk)
+        assert ctx.exception.user_message == ProgressionError.NOT_VISIBLE
+
+    def test_a_post_mortem_is_not_nominable(self) -> None:
+        """A revealed post mortem is still not public, so it stays un-nominable (Decision 16)."""
+        entry = JournalEntryFactory(
+            author=self.writer_sheet, is_public=False, revealed_at=timezone.now()
+        )
 
         with self.assertRaises(ProgressionError) as ctx:
             nominate(self.nominator, NominationTargetType.JOURNAL, entry.pk)

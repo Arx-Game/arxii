@@ -1641,26 +1641,41 @@ Goal domain allocation and journal-based XP progression.
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md)
 ### Journals
-Character journal entries (public/private), praises, retorts, freeform tags, weekly XP.
+Character journal entries (public/private), praises, retorts, condemnations, freeform tags,
+weekly XP — read at **World › Journals**, the Reading Room (#3941).
 
-- **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses;
+- **Models:** `JournalEntry` (FK CharacterSheet author; `about` FK CharacterSheet, nullable,
+  `SET_NULL`, the entry's subject, #3941; self-FK parent for responses;
   `posthumous_override`/`revealed_at`/`revealed_by_settlement` #3287), `JournalTag`,
   `WeeklyJournalXP`, `JournalBequestGrant` (recipient_sheet/deceased_sheet FKs CharacterSheet,
-  created_by_settlement FK estates.EstateSettlement, #3287)
-- **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
-- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` / `set_journal_disposition` (#3287) Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit|disposition`) converge on `action.run()`
-- **Web surface (#2160):** previously zero web frontend (telnet-only); now `/journals`
-  (composer, public feed, own-entries tab) plus a `JournalTab` quick-compose panel in the
-  in-scene sidebar. `/journal` (singular) was freed from the missions ledger, which moved to
-  `/missions/journal` in the same PR — see Missions below and `journals/AGENT_GLOSSARY.md`'s
-  disambiguation entry for the "journal" homonym across apps.
-- **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M), estates (posthumous reveal + writings bequest, #3287)
+  created_by_settlement FK estates.EstateSettlement, #3287). Two new `CharacterSheet` columns
+  (#3941): `retort_consent` (`RetortConsent`: RIVALS default / ANYONE) and `journals_visited_at`
+  (one since-last-visit timestamp per character).
+- **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`
+  / `set_retort_consent` / `mark_journals_visited` / `journal_settings` (#3941); read helpers
+  `visible_entries_q` (the one visibility rule, #3941 Decision 1) and `can_retort` (the
+  rivalry-or-consent predicate, ADR-0307); `JournalError` user-safe exception in `types.py`
+- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` / `set_journal_disposition` (#3287) / `set_retort_consent` (#3941, ADR-0307) Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit|disposition|consent`) converge on `action.run()`
+- **Web surface — the Reading Room (#3941, replaces the #2160 two-list page):** `/journals` is
+  one centered stream, newest first, of every entry the viewer may read (public, revealed,
+  their own, or, for staff, everything — banded when black or a post mortem). A row opens in
+  place on click; the IC date (`ic_timestamp`) flips to the posting date on click. A Search
+  panel folds under the header: find a writer by name, filter About someone or by tag, Show
+  (newest / since-your-last-visit-with-a-count / Introductions / post mortems / staff-only
+  black-only), plus an index table. `?writer=<id>` opens a character's journal (pills: All,
+  About &lt;name&gt; per subject, Written about them); `?mine=1` opens **Your journal** — white
+  and black entries together, the after-death and retort-consent switches, and Write. Linked
+  from the World menu, the Hall (relabelled "Your journal"), and every character sheet. A
+  `JournalTab` quick-compose panel remains in the in-scene sidebar. `/journal` (singular) stays
+  freed from the missions ledger (moved to `/missions/journal` in #2160) — see Missions below
+  and `journals/AGENT_GLOSSARY.md`'s disambiguation entry for the "journal" homonym across apps.
+- **Integrates with:** progression (weekly XP awards, nominations), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M), estates (posthumous reveal + writings bequest, #3287), relationships (the rivalry predicate behind Retort/Condemn, ADR-0307)
 - **Account block/mute (#2996):** the public feed excludes an account-level-blocked account's
   entries both directions, and an account-level-muted account's entries from the muter's own
-  feed only (`services.exclude_blocked_and_muted_authors`); a praise/retort response between a
-  blocked pair is rejected with a neutral shared failure, a muted pair's response persists but
-  is hidden from the entry author's own read only — see `world/scenes/CLAUDE.md`'s Block/Mute
-  entries and ADR-0204
+  feed only (`services.exclude_blocked_and_muted_authors`); a praise/retort/condemn response
+  between a blocked pair is rejected with a neutral shared failure, a muted pair's response
+  persists but is hidden from the entry author's own read only — see `world/scenes/CLAUDE.md`'s
+  Block/Mute entries and ADR-0204
 - **Posthumous afterlife (#3287, ADR-0229):** a `CharacterSheet.posthumous_journal_disposition`
   (REVEAL default / SEAL) plus a per-entry `JournalEntry.posthumous_override`
   (INHERIT default / REVEAL / SEAL) decide what happens to a character's private entries at
@@ -1668,14 +1683,35 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
   called explicitly from `estates.services.execute_settlement` (no signals) — the reveal always
   runs; the grant only when the will carries a `BequestKind.WRITINGS` line. SEAL always wins,
   even over a bequest grant (enforced at the read path via `services.sealed_effective_q` /
-  `entry_visible_via_bequest`, never by excluding sealed rows from the grant itself). Read
-  paths: the public feed includes `revealed_at`-stamped entries (`is_public` is never mutated
-  by a reveal); a bequest recipient browses the deceased's non-sealed private corpus via
-  `GET /api/journals/entries/?deceased=<sheet_id>`; `GET/PATCH /api/journals/entries/disposition/`
-  reads/sets the caller's sheet-level default.
+  `entry_visible_via_bequest`, never by excluding sealed rows from the grant itself). A revealed
+  entry — a **post mortem** (#3941's interface word) — is not public and so takes no
+  Praise/Retort/Condemn/Nomination. Read paths: the public feed includes `revealed_at`-stamped
+  entries (`is_public` is never mutated by a reveal); a bequest recipient browses the deceased's
+  non-sealed private corpus via `GET /api/journals/entries/?deceased=<sheet_id>`.
+- **Retort/Condemn consent gate (#3941, ADR-0307):** `ResponseType.CONDEMN` joins praise/retort
+  (XP mirrors retort: `CONDEMN_GIVEN_XP`/`CONDEMN_RECEIVED_XP`). Both are offered only when the
+  author's `retort_consent` is ANYONE, or the viewer is a rival — an active, non-pending
+  `CharacterRelationship` in either direction with progress on a negative-sign track
+  (`services.can_retort`, one function so a later dedicated Rivalry relationship kind narrows it
+  there). Enforced in `create_journal_response`, not only the UI; a refusal is the neutral
+  shared `JournalError.UNAVAILABLE`. Praise and Nominate are never gated.
 - **Kinds (#3621):** `JournalEntry.kind` (`JournalKind`: entry, first_journal, application,
   whispers) marks the three CG Introductions so the sheet and, later, an institution's reading
-  room can find them; `create_journal_entry(kind=...)`.
+  room can find them; `create_journal_entry(kind=...)`; findable via `?kind=<JournalKind>` or
+  the `?kind=introductions` alias (#3941).
+- **API (#3941):** `GET /api/journals/entries/` filters — `writer` (name contains), `about`
+  (sheet id), `kind` (a `JournalKind` or `introductions`), `post_mortem=1`,
+  `since=<iso timestamp>`, `black_only=1` (staff only), plus the existing
+  `author`/`tag`/`deceased`; `?mark_visit=1` stamps the viewer's visit after computing
+  `since_visit_count` and `visited_at` against the prior mark, and the response carries both
+  (absent on a `?deceased=` listing) so the client can ask for that cut later via `?since=`.
+  Rows gain `about`, `about_name`, `ic_timestamp`, `can_retort`, `is_own`; the list reads
+  answer `can_retort` from the `viewer_can_retort` annotation
+  (`services.annotate_can_retort`, the query-shaped twin of `services.can_retort`) so the
+  predicate costs one EXISTS per page rather than one per row. `GET/PATCH
+  /api/journals/entries/disposition/` is now the owner's full journal settings: reads/writes
+  `posthumous_journal_disposition` and `retort_consent`, plus read-only `posts_this_week`/
+  `rewarded_posts_per_week`.
 - **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
   `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points

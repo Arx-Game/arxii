@@ -2,20 +2,30 @@
 
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase, tag
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.character_sheets.types import PosthumousJournalDisposition
+from world.character_sheets.types import PosthumousJournalDisposition, RetortConsent
 from world.estates.factories import EstateSettlementFactory
-from world.journals.constants import PosthumousOverride, ResponseType
+from world.journals.constants import JournalKind, PosthumousOverride, ResponseType
 from world.journals.factories import (
     JournalBequestGrantFactory,
     JournalEntryFactory,
     JournalTagFactory,
+)
+from world.journals.services import annotate_can_retort, base_entries_queryset, can_retort
+from world.relationships.constants import TrackSign
+from world.relationships.factories import (
+    CharacterRelationshipFactory,
+    RelationshipTrackFactory,
+    RelationshipTrackProgressFactory,
 )
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
@@ -61,6 +71,15 @@ class JournalEntryListTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         for entry in response.data["results"]:
             self.assertIn("response_count", entry)
+
+    def test_list_rows_carry_body_and_kind(self) -> None:
+        """Collapsed rows carry body (first-lines preview) and kind (banding) (#3941)."""
+        response = self.client.get("/api/journals/entries/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for entry in response.data["results"]:
+            self.assertEqual(entry["kind"], JournalKind.ENTRY)
+        rows = {e["id"]: e for e in response.data["results"]}
+        self.assertEqual(rows[self.public_entry.pk]["body"], self.public_entry.body)
 
     def test_unauthenticated_rejected(self) -> None:
         """Unauthenticated requests are rejected."""
@@ -722,6 +741,41 @@ class JournalPosthumousLeakTableTests(TestCase):
         self.assertNotIn("Sealed Forever", titles)
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_deceased_listing_shape_is_unchanged(self, mock_get_char: object) -> None:
+        """#3941 regression: ``?deceased=`` must keep its pre-#3941 response shape.
+
+        No ``since_visit_count`` and no ``visited_at`` key (the bequest corpus isn't the
+        viewer's own stream), and ``mark_visit=1`` must not stamp the viewer's
+        ``journals_visited_at`` -- covers both the no-grant (empty) and granted
+        (non-empty) cases.
+        """
+        mock_get_char.return_value = self.viewer_character
+        self.assertIsNone(self.viewer_sheet.journals_visited_at)
+
+        no_grant = self.client.get(
+            f"/api/journals/entries/?deceased={self.deceased_sheet.pk}&mark_visit=1"
+        )
+        self.assertEqual(no_grant.status_code, status.HTTP_200_OK)
+        self.assertNotIn("since_visit_count", no_grant.data)
+        self.assertNotIn("visited_at", no_grant.data)
+        self.viewer_sheet.refresh_from_db()
+        self.assertIsNone(self.viewer_sheet.journals_visited_at)
+
+        JournalBequestGrantFactory(
+            recipient_sheet=self.viewer_sheet,
+            deceased_sheet=self.deceased_sheet,
+            created_by_settlement=self.settlement,
+        )
+        granted = self.client.get(
+            f"/api/journals/entries/?deceased={self.deceased_sheet.pk}&mark_visit=1"
+        )
+        self.assertEqual(granted.status_code, status.HTTP_200_OK)
+        self.assertNotIn("since_visit_count", granted.data)
+        self.assertNotIn("visited_at", granted.data)
+        self.viewer_sheet.refresh_from_db()
+        self.assertIsNone(self.viewer_sheet.journals_visited_at)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_granted_recipient_can_retrieve_non_sealed_entry(self, mock_get_char: object) -> None:
         JournalBequestGrantFactory(
             recipient_sheet=self.viewer_sheet,
@@ -785,3 +839,327 @@ class JournalPosthumousDispositionEndpointTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class VisibilityRuleTests(TestCase):
+    """#3941 Decision 1 — the one visibility rule, exercised through the list/retrieve API."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.staff = AccountFactory(is_staff=True)
+        cls.writer = CharacterSheetFactory()
+        cls.reader = CharacterSheetFactory()
+        cls.white = JournalEntryFactory(author=cls.writer, title="White", is_public=True)
+        cls.black = JournalEntryFactory(author=cls.writer, title="Black", is_public=False)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _titles(self, user, character, **params):
+        self.client.force_authenticate(user=user)
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character", return_value=character
+        ):
+            response = self.client.get("/api/journals/entries/", params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return {e["title"] for e in response.data["results"]}
+
+    def test_reader_sees_white_only(self) -> None:
+        self.assertEqual(self._titles(self.user, self.reader.character), {"White"})
+
+    def test_author_sees_own_black_in_the_stream(self) -> None:
+        self.assertEqual(self._titles(self.user, self.writer.character), {"White", "Black"})
+
+    def test_staff_sees_black(self) -> None:
+        self.assertEqual(self._titles(self.staff, self.reader.character), {"White", "Black"})
+
+    def test_black_only_is_staff_only(self) -> None:
+        self.assertEqual(self._titles(self.staff, self.reader.character, black_only=1), {"Black"})
+        self.assertEqual(self._titles(self.user, self.reader.character, black_only=1), {"White"})
+
+    def test_staff_retrieves_a_black_entry(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character",
+            return_value=self.reader.character,
+        ):
+            response = self.client.get(f"/api/journals/entries/{self.black.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_reader_cannot_retrieve_a_black_entry(self) -> None:
+        self.client.force_authenticate(user=self.user)
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character",
+            return_value=self.reader.character,
+        ):
+            response = self.client.get(f"/api/journals/entries/{self.black.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class NewFiltersAndFieldsTests(TestCase):
+    """#3941 — writer/about/kind/post_mortem filters and the new row fields."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.reader = CharacterSheetFactory()
+        cls.ilsavet = CharacterSheetFactory()
+        cls.ilsavet.character.db_key = "Ilsavet"
+        cls.ilsavet.character.save()
+        cls.corvin = CharacterSheetFactory()
+        cls.corvin.character.db_key = "Corvin"
+        cls.corvin.character.save()
+        cls.about_corvin = JournalEntryFactory(
+            author=cls.ilsavet, title="About Corvin", is_public=True, about=cls.corvin
+        )
+        cls.plain = JournalEntryFactory(author=cls.ilsavet, title="Plain", is_public=True)
+        cls.intro = JournalEntryFactory(
+            author=cls.corvin, title="First", is_public=True, kind=JournalKind.FIRST_JOURNAL
+        )
+        cls.post_mortem = JournalEntryFactory(
+            author=cls.corvin, title="Dead", is_public=False, revealed_at=timezone.now()
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _get(self, **params):
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character",
+            return_value=self.reader.character,
+        ):
+            response = self.client.get("/api/journals/entries/", params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data
+
+    def test_writer_name_search(self) -> None:
+        titles = {e["title"] for e in self._get(writer="ilsa")["results"]}
+        self.assertEqual(titles, {"About Corvin", "Plain"})
+
+    def test_about_filter_and_fields(self) -> None:
+        rows = self._get(about=self.corvin.pk)["results"]
+        self.assertEqual([r["title"] for r in rows], ["About Corvin"])
+        self.assertEqual(rows[0]["about"], self.corvin.pk)
+        self.assertEqual(rows[0]["about_name"], "Corvin")
+        self.assertFalse(rows[0]["can_retort"])
+        self.assertFalse(rows[0]["is_own"])
+        self.assertIn("ic_timestamp", rows[0])
+        self.assertIn("author_persona_id", rows[0])
+
+    def test_kind_and_introductions_alias(self) -> None:
+        first_journal_titles = {e["title"] for e in self._get(kind="first_journal")["results"]}
+        self.assertEqual(first_journal_titles, {"First"})
+        introductions_titles = {e["title"] for e in self._get(kind="introductions")["results"]}
+        self.assertEqual(introductions_titles, {"First"})
+
+    def test_post_mortem_filter(self) -> None:
+        self.assertEqual({e["title"] for e in self._get(post_mortem=1)["results"]}, {"Dead"})
+
+    def test_visited_at_names_the_previous_visit_and_since_cuts_on_it(self) -> None:
+        """The stream hands back the mark it is about to move, and ``?since=`` reads it.
+
+        The reader cannot ask the server for "since my last visit" once the server has
+        stamped the mark to now -- so the response names the moment instead, and the cut
+        is the client passing that same moment back.
+        """
+        # No mark yet: nothing to point at, everything counts as new, and this request marks.
+        first = self._get(mark_visit=1)
+        self.assertIsNone(first["visited_at"])
+        self.assertEqual(first["since_visit_count"], 4)
+        self.reader.refresh_from_db()
+        mark = self.reader.journals_visited_at
+        self.assertIsNotNone(mark)
+
+        # A later request reports the mark as stored, and nothing is newer than it yet.
+        second = self._get()
+        self.assertEqual(parse_datetime(second["visited_at"]), mark)
+        self.assertEqual(second["since_visit_count"], 0)
+
+        # One entry written after that moment, and the cut returns exactly it.
+        JournalEntryFactory(author=self.ilsavet, title="Written since", is_public=True)
+        cut = self._get(since=second["visited_at"])
+        self.assertEqual([row["title"] for row in cut["results"]], ["Written since"])
+
+    def test_mark_visit_zero_does_not_mark(self) -> None:
+        """``?mark_visit=0`` must not be parsed as truthy (Python's bool("0") is True)."""
+        self.assertIsNone(self.reader.journals_visited_at)
+        self._get(mark_visit=0)
+        self.reader.refresh_from_db()
+        self.assertIsNone(self.reader.journals_visited_at)
+
+
+class CanRetortAnnotationTests(TestCase):
+    """#3941 — the ``viewer_can_retort`` annotation is ``services.can_retort`` in SQL.
+
+    Two spellings of one rule (ADR-0307), so they are held against each other on every
+    case the rule distinguishes: no viewer, the viewer's own entry, a writer open to
+    anyone, and a negative-track relationship held from either side.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.viewer = CharacterSheetFactory()
+        cls.negative = RelationshipTrackFactory(name="Rivalry", sign=TrackSign.NEGATIVE)
+
+        stranger = CharacterSheetFactory()
+        open_writer = CharacterSheetFactory()
+        open_writer.retort_consent = RetortConsent.ANYONE
+        open_writer.save(update_fields=["retort_consent"])
+        rival_of_viewer = CharacterSheetFactory()
+        viewers_rival = CharacterSheetFactory()
+        # The rivalry counts from either side of the pair, so one of each direction.
+        RelationshipTrackProgressFactory(
+            relationship=CharacterRelationshipFactory(
+                source=rival_of_viewer, target=cls.viewer, is_pending=False, is_active=True
+            ),
+            track=cls.negative,
+        )
+        RelationshipTrackProgressFactory(
+            relationship=CharacterRelationshipFactory(
+                source=cls.viewer, target=viewers_rival, is_pending=False, is_active=True
+            ),
+            track=cls.negative,
+        )
+
+        cls.expected = {
+            JournalEntryFactory(author=stranger, is_public=True).pk: False,
+            JournalEntryFactory(author=open_writer, is_public=True).pk: True,
+            JournalEntryFactory(author=rival_of_viewer, is_public=True).pk: True,
+            JournalEntryFactory(author=viewers_rival, is_public=True).pk: True,
+            # Own entry: never retortable, whatever the consent or the rivalries say.
+            JournalEntryFactory(author=cls.viewer, is_public=True).pk: False,
+        }
+
+    def _annotated(self, viewer: object) -> dict:
+        rows = annotate_can_retort(base_entries_queryset(), viewer)
+        return {entry.pk: bool(entry.viewer_can_retort) for entry in rows}
+
+    def _predicate(self, viewer: object) -> dict:
+        return {
+            entry.pk: can_retort(viewer_sheet=viewer, author=entry.author)
+            for entry in base_entries_queryset()
+        }
+
+    def test_annotation_and_service_agree_for_a_viewer(self) -> None:
+        self.assertEqual(self._annotated(self.viewer), self.expected)
+        self.assertEqual(self._predicate(self.viewer), self.expected)
+
+    def test_annotation_and_service_agree_without_a_viewer(self) -> None:
+        closed = dict.fromkeys(self.expected, False)
+        self.assertEqual(self._annotated(None), closed)
+        self.assertEqual(self._predicate(None), closed)
+
+
+class JournalListQueryCountTests(TestCase):
+    """#3941 — the feed's query count must not grow with the number of rows.
+
+    Five entries by five different writers, all on the default RIVALS consent, which is
+    the case that has to ask the database: serialized one row at a time it was one EXISTS
+    per row, and the annotation is why it is now one for the page.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.reader = CharacterSheetFactory()
+        for index in range(5):
+            JournalEntryFactory(
+                author=CharacterSheetFactory(), title=f"Entry {index}", is_public=True
+            )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _get(self, page_size: int) -> dict:
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character",
+            return_value=self.reader.character,
+        ):
+            response = self.client.get("/api/journals/entries/", {"page_size": page_size})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data
+
+    def test_query_count_is_flat_across_page_sizes(self) -> None:
+        # Warm first: the row-independent lookups (the viewer's sheet, each author's
+        # primary persona) are idmapper-cached, and it is the per-ROW cost being measured.
+        self.assertEqual(len(self._get(5)["results"]), 5)
+        self._get(2)
+
+        with CaptureQueriesContext(connection) as two_rows:
+            self.assertEqual(len(self._get(2)["results"]), 2)
+        with CaptureQueriesContext(connection) as five_rows:
+            self.assertEqual(len(self._get(5)["results"]), 5)
+
+        self.assertEqual(
+            len(five_rows.captured_queries),
+            len(two_rows.captured_queries),
+            f"the feed runs a query per row: {[q['sql'] for q in five_rows.captured_queries]}",
+        )
+
+
+class CreateEditWithAboutTests(TestCase):
+    """#3941 — POST/PATCH accept and clear ``about``."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.author = CharacterSheetFactory()
+        cls.author.character.db_account = cls.user
+        cls.author.character.save()
+        cls.subject = CharacterSheetFactory()
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    @patch("world.journals.services.award_xp")
+    @patch("world.journals.services.increment_stat")
+    def test_create_then_clear_about(self, mock_stat, mock_award) -> None:
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character",
+            return_value=self.author.character,
+        ):
+            created = self.client.post(
+                "/api/journals/entries/",
+                {"title": "t", "body": "b", "is_public": True, "about": self.subject.pk},
+                format="json",
+            )
+            self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(created.data["about"], self.subject.pk)
+            edited = self.client.patch(
+                f"/api/journals/entries/{created.data['id']}/", {"about": None}, format="json"
+            )
+        self.assertEqual(edited.status_code, status.HTTP_200_OK)
+        self.assertIsNone(edited.data["about"])
+
+
+class SettingsEndpointTests(TestCase):
+    """#3941, ADR-0307 — GET/PATCH the settings endpoint."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.sheet = CharacterSheetFactory()
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_get_and_patch_consent(self) -> None:
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character",
+            return_value=self.sheet.character,
+        ):
+            got = self.client.get("/api/journals/entries/disposition/")
+            self.assertEqual(got.data["retort_consent"], "rivals")
+            self.assertEqual(got.data["rewarded_posts_per_week"], 3)
+            self.assertEqual(got.data["posts_this_week"], 0)
+            patched = self.client.patch(
+                "/api/journals/entries/disposition/", {"retort_consent": "anyone"}, format="json"
+            )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched.data["retort_consent"], "anyone")
+        self.assertEqual(patched.data["posthumous_journal_disposition"], "reveal")

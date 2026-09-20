@@ -1,0 +1,108 @@
+/**
+ * The Reading Room (#3941) — the small part of the page Tailwind's realm tokens
+ * cannot say.
+ *
+ * Everything else on this page is Tailwind on the `arx` realm tokens (see
+ * `index.css`), exactly as the Gatefold and the Reference Sheet do
+ * (`frontend/src/home/home.css`, `frontend/src/character_sheets/sheet.css`).
+ * Three things are left here because a token cannot express them:
+ *
+ * - the black journal's band, painted in night literals in BOTH themes — a
+ *   private entry is the same dark object whichever way the reader has the
+ *   lights, the same argument the Reference Sheet's plate makes;
+ * - the writer's plate, likewise always night;
+ * - the seven-line clamp, which needs the `-webkit-box` trio alongside the
+ *   `white-space: pre-line` that keeps an entry's own paragraphing.
+ *
+ * Every selector is scoped under `.journals` so none of it leaks.
+ */
+
+.journals {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+
+  /* Instruments (meta, labels, the index) keep the UI sans; everything read is Garamond. */
+  --jr-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.journals a:focus-visible,
+.journals button:focus-visible,
+.journals [role='button']:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 3px;
+}
+
+/* The sans voice: meta lines, bands, labels, the index. */
+.journals .jr-sans {
+  font-family: var(--jr-sans);
+}
+
+/* An entry keeps the line breaks its writer typed. */
+.journals .jr-body {
+  white-space: pre-line;
+}
+
+/* Seven lines of a collapsed entry, then the fold. */
+.journals .jr-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 7;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---------- the black journal: always night, in both themes ---------- */
+
+.journals .jr-black {
+  background: #1f1a17;
+  color: #e3dccd;
+  border: 1px solid #38302a;
+}
+.journals .jr-black .jr-soft {
+  color: #e3dccd;
+  opacity: 0.75;
+}
+.journals .jr-black .jr-strong {
+  color: #e3dccd;
+  opacity: 1;
+}
+.journals .jr-black .jr-chip {
+  border-color: #38302a;
+  color: #e3dccd;
+}
+/* A field inside a black row: the shared field classes paint text in
+   `--foreground`, which in light mode is near-black ink on this near-black
+   ground. The row's own writing surfaces (its editor, its block reason) take the
+   band's ink instead. */
+.journals .jr-black input,
+.journals .jr-black textarea,
+.journals .jr-black select {
+  color: #e3dccd;
+  border-color: #38302a;
+}
+.journals .jr-black input::placeholder,
+.journals .jr-black textarea::placeholder {
+  color: #e3dccd;
+  opacity: 0.5;
+}
+
+.journals .jr-black .jr-pill[aria-pressed='true'] {
+  background: #e3dccd;
+  color: #1f1a17;
+  border-color: #e3dccd;
+}
+
+/* ---------- the writer's plate: always night, in both themes ---------- */
+
+.journals .jr-plate {
+  background: #0e1116;
+  color: #e8e2d4;
+}
+.journals .jr-plate .jr-plate-soft {
+  color: #b9b2a2;
+}
+.journals .jr-plate .jr-plate-strong {
+  color: #e8e2d4;
+}

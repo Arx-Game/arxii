@@ -21,7 +21,7 @@ import { readErrorDetail } from '@/lib/errors';
 
 const ENTRIES_URL = '/api/journals/entries';
 
-export type JournalResponseType = 'praise' | 'retort';
+export type JournalResponseType = 'praise' | 'retort' | 'condemn';
 
 /**
  * Posthumous disposition (#3287) — the black journal afterlife. INHERIT falls through to
@@ -31,6 +31,19 @@ export type PosthumousOverride = 'inherit' | 'reveal' | 'seal';
 
 /** The character-sheet-level default (`CharacterSheet.posthumous_journal_disposition`). */
 export type PosthumousJournalDisposition = 'reveal' | 'seal';
+
+/**
+ * Who may Retort or Condemn this character's journal entries (#3941, ADR-0307). RIVALS
+ * (default): only an active rival relationship, either direction. ANYONE: the writer has
+ * opened the door. Praise and Nominate are never gated by this.
+ */
+export type RetortConsent = 'rivals' | 'anyone';
+
+/**
+ * What an entry is (`world.journals.constants.JournalKind`): an ordinary entry, or one
+ * of the CG Introductions, which wear their own name in the row's band (#3941, #3621).
+ */
+export type JournalKind = 'entry' | 'first_journal' | 'application' | 'whispers';
 
 export interface JournalTag {
   id: number;
@@ -43,6 +56,12 @@ export interface JournalEntrySummary {
   author: number;
   author_name: string;
   title: string;
+  /**
+   * The entry's full text. The feed sends it (`JournalEntryListSerializer.Meta.fields`)
+   * so a collapsed row can show its first seven lines without a request of its own — the
+   * list queryset has already narrowed to entries this viewer may read.
+   */
+  body: string;
   is_public: boolean;
   response_type: JournalResponseType | null;
   parent: number | null;
@@ -54,6 +73,27 @@ export interface JournalEntrySummary {
   revealed_at: string | null;
   /** True once this entry has surfaced through an estate settlement. */
   is_posthumous: boolean;
+  /** CharacterSheet id of the relationship-journal subject, if any (#3941). */
+  about: number | null;
+  about_name: string | null;
+  /**
+   * The author's PRIMARY persona id (#3941) — the face the entry is signed with, and the
+   * target the row's Mute and Block links act on. Not a viewer-gated read: the entry is
+   * already published under the character's true name, so the active-persona rule (#981,
+   * which governs what a viewer may learn about who is present) has nothing to hide here.
+   */
+  author_persona_id: number | null;
+  /** In-character timestamp the entry was written at, if the author has one (#3941). */
+  ic_timestamp: string | null;
+  /** Whether the viewer may Retort/Condemn this entry right now (#3941). */
+  can_retort: boolean;
+  /** True when the viewer's active character wrote this entry (#3941). */
+  is_own: boolean;
+  /**
+   * What the entry is (#3941) — an ordinary entry, or one of the CG Introductions, whose
+   * name the row wears in its band ("First Journal", "Application", "The Whispers").
+   */
+  kind: JournalKind;
 }
 
 /** Shape returned by retrieve/create/respond (`JournalEntryDetailSerializer`). */
@@ -73,6 +113,17 @@ export interface JournalEntryDetail {
   posthumous_override: PosthumousOverride;
   revealed_at: string | null;
   is_posthumous: boolean;
+  about: number | null;
+  about_name: string | null;
+  author_persona_id: number | null;
+  ic_timestamp: string | null;
+  can_retort: boolean;
+  is_own: boolean;
+  /**
+   * What the entry is (#3941) — an ordinary entry, or one of the CG Introductions, whose
+   * name the row wears in its band ("First Journal", "Application", "The Whispers").
+   */
+  kind: JournalKind;
 }
 
 export interface PaginatedJournalEntries {
@@ -80,6 +131,17 @@ export interface PaginatedJournalEntries {
   next: string | null;
   previous: string | null;
   results: JournalEntrySummary[];
+  /**
+   * Count of entries newer than the viewer's last visit mark (#3941). Absent from `mine/`
+   * and from a `?deceased=` bequest listing, neither of which is the viewer's own stream.
+   */
+  since_visit_count?: number;
+  /**
+   * The viewer's visit mark as it stood BEFORE this request advanced it, or null when they
+   * have never opened the stream (#3941). Pass it back as `since` to read the entries
+   * written since then. Absent alongside `since_visit_count` on the two feeds above.
+   */
+  visited_at?: string | null;
 }
 
 // A `type` alias (not `interface`) so it structurally satisfies `buildQuery`'s
@@ -96,6 +158,24 @@ export type JournalEntryListFilters = {
    * an error (so a probing id can't confirm a grant exists for someone else).
    */
   deceased?: number;
+  /** Author name — Search's "writer" filter (#3941). */
+  writer?: string;
+  /** CharacterSheet id — entries about this character (#3941). */
+  about?: number;
+  /** A `JournalKind` value, or `"introductions"` for the three CG Introduction kinds (#3941). */
+  kind?: string;
+  /** 1 to restrict to entries revealed posthumously (#3941). */
+  post_mortem?: 1;
+  /**
+   * ISO timestamp — only entries created after it (#3941). This is how "Since your last
+   * visit" is asked for: the page passes back the `visited_at` the stream's first response
+   * carried, because by then the server has already moved the mark to now.
+   */
+  since?: string;
+  /** 1 to restrict to private ("black journal") entries (#3941). */
+  black_only?: 1;
+  /** 1 to stamp the viewer's visit mark as part of this request (#3941). */
+  mark_visit?: 1;
   page?: number;
   page_size?: number;
 };
@@ -108,6 +188,8 @@ export interface CreateJournalEntryRequest {
   tags: string[];
   /** Omit to leave the backend default (INHERIT) — only send when the author overrides it. */
   posthumous_override?: PosthumousOverride;
+  /** CharacterSheet id this entry is about, or null for none (#3941). */
+  about?: number | null;
 }
 
 export interface RespondToJournalRequest {
@@ -120,6 +202,8 @@ export interface EditJournalEntryRequest {
   title?: string;
   body?: string;
   posthumous_override?: PosthumousOverride;
+  /** CharacterSheet id this entry is about, or null to clear it (#3941). */
+  about?: number | null;
 }
 
 function jsonHeaders(): HeadersInit {
@@ -138,9 +222,13 @@ function buildQuery(params: Record<string, string | number | undefined>): string
 /**
  * GET /api/journals/entries/
  *
- * Public feed. Supports `?author=`, `?tag=`, and `?deceased=` filters, paginated
- * (page_size default 20, per `JournalEntryPagination`). `?deceased=` switches to browsing a
+ * The Reading Room feed (#3941), paginated (page_size default 20, per
+ * `JournalEntryPagination`). See `JournalEntryListFilters` for the full filter set
+ * (`writer`, `about`, `kind`, `post_mortem`, `since`, `black_only`, `mark_visit`,
+ * plus the pre-existing `author`/`tag`/`deceased`). `?deceased=` switches to browsing a
  * bequeathed corpus (#3287) — empty unless the caller holds a grant for that sheet.
+ * The response's `since_visit_count` and `visited_at` both describe the viewer's PREVIOUS
+ * visit, whatever filters were passed; `mark_visit=1` advances the mark after reading them.
  */
 export async function listJournalEntries(
   filters: JournalEntryListFilters = {}
@@ -223,30 +311,47 @@ export async function editJournalEntry(
   return res.json();
 }
 
-export interface JournalDispositionResponse {
+/**
+ * The caller's journal settings (#3941), formerly just the posthumous disposition:
+ * their sheet-level posthumous default, who may Retort/Condemn them, and the weekly
+ * posting-XP tracker (surfaced so the composer can show "N of M rewarded posts used").
+ */
+export interface JournalSettings {
   posthumous_journal_disposition: PosthumousJournalDisposition;
+  retort_consent: RetortConsent;
+  posts_this_week: number;
+  rewarded_posts_per_week: number;
 }
 
-/** GET /api/journals/entries/disposition/ — the caller's sheet-level default (#3287). */
-export async function getJournalDisposition(): Promise<JournalDispositionResponse> {
+export interface PatchJournalSettingsRequest {
+  disposition?: PosthumousJournalDisposition;
+  retort_consent?: RetortConsent;
+}
+
+/** GET /api/journals/entries/disposition/ — the caller's journal settings (#3941, was #3287). */
+export async function getJournalSettings(): Promise<JournalSettings> {
   const res = await apiFetch(`${ENTRIES_URL}/disposition/`);
   if (!res.ok) {
-    await readErrorDetail(res, 'Failed to load posthumous journal disposition');
+    await readErrorDetail(res, 'Failed to load journal settings');
   }
   return res.json();
 }
 
-/** PATCH /api/journals/entries/disposition/ — set the caller's sheet-level default (#3287). */
-export async function setJournalDisposition(
-  disposition: PosthumousJournalDisposition
-): Promise<JournalDispositionResponse> {
+/**
+ * PATCH /api/journals/entries/disposition/ — update the caller's journal settings
+ * (#3941, was #3287). Sends only the keys given, so a partial update (e.g. just
+ * `retort_consent`) never clobbers the other setting.
+ */
+export async function patchJournalSettings(
+  body: PatchJournalSettingsRequest
+): Promise<JournalSettings> {
   const res = await apiFetch(`${ENTRIES_URL}/disposition/`, {
     method: 'PATCH',
     headers: jsonHeaders(),
-    body: JSON.stringify({ disposition }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await readErrorDetail(res, 'Failed to update posthumous journal disposition');
+    await readErrorDetail(res, 'Failed to update journal settings');
   }
   return res.json();
 }

@@ -38,6 +38,19 @@ class JournalEntry(RelatedCacheClearingMixin, SharedMemoryModel):
         help_text="An ordinary entry, or one of the CG Introductions (#3621).",
     )
 
+    # Relationship journal (#3941): the one character this entry is about. A tag cannot
+    # carry this (no identity, no machinery) and CharacterRelationship cannot either (it
+    # needs the subject's consent; an entry about someone must not). SET_NULL: a deleted
+    # sheet never deletes the writer's entry.
+    about = models.ForeignKey(
+        CharacterSheet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="journal_entries_about",
+        help_text="The character this entry is about, if any (#3941).",
+    )
+
     # Response linking
     parent = models.ForeignKey(
         "self",
@@ -103,6 +116,7 @@ class JournalEntry(RelatedCacheClearingMixin, SharedMemoryModel):
             models.Index(fields=["is_public", "-created_at"]),
             models.Index(fields=["author", "kind"]),
             models.Index(fields=["revealed_at"]),
+            models.Index(fields=["about", "-created_at"]),
         ]
         constraints = [
             models.CheckConstraint(
