@@ -38,14 +38,8 @@ from world.scenes.tests.cast_test_helpers import (
 
 
 def _actor_user(character):
-    """Return a real account with ``character`` durably selected."""
-    account = AccountFactory()
-    entry = RosterEntryFactory(character_sheet=character.sheet_data)
-    tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
-    character.db_account = account
-    character.save(update_fields=["db_account"])
-    set_selected_entry(tenure.player_data, entry)
-    return account
+    """Return the account already selected for ``character``."""
+    return character.db_account
 
 
 def _make_check_mock(success_level: int) -> MagicMock:
@@ -91,7 +85,12 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
         # world/buildings/tests/test_manager_api.py for the same trap).
         character = self.caster.character_sheet.character
         character.db_location = self.scene.location
+        self.account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=character.sheet_data)
+        tenure = RosterTenureFactory(player_data__account=self.account, roster_entry=entry)
+        character.db_account = self.account
         character.save()
+        set_selected_entry(tenure.player_data, entry)
 
     def _post(self, payload: dict):
         factory = APIRequestFactory()
