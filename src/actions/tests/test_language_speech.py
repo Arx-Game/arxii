@@ -51,8 +51,9 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
         assert result.success is True
         # The telnet text delivery is the first msg() call; a second call carries
         # the structured WS interaction payload (push_interaction, Task 4) and is
-        # out of scope here.
-        sent_text = mock_msg.call_args_list[0].args[0]
+        # out of scope here. The line echoes an Interaction, so it arrives as
+        # Evennia's ``(text, {options})`` form (#3933).
+        sent_text, _sent_options = mock_msg.call_args_list[0].args[0]
         assert sent_text == f'{speaker.key} says in {self.language.name}, "{self.TEXT}"'
 
     def test_zero_fluency_listener_sees_garbled_text(self) -> None:
@@ -64,7 +65,7 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
             result = SayAction().run(speaker, text=self.TEXT, language_id=self.language.pk)
 
         assert result.success is True
-        sent_text = mock_msg.call_args_list[0].args[0]
+        sent_text, _sent_options = mock_msg.call_args_list[0].args[0]
         assert self.TEXT not in sent_text
         assert "..." in sent_text
 
@@ -115,7 +116,7 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
             result = SayAction().run(speaker, text=self.TEXT, language_id=self.language.pk)
 
         assert result.success is True
-        sent_text = mock_msg.call_args_list[0].args[0]
+        sent_text, _sent_options = mock_msg.call_args_list[0].args[0]
         assert sent_text == f'You say in {self.language.name}, "{self.TEXT}"'
 
     def test_dreamside_occupant_excluded_from_language_say(self) -> None:
@@ -184,6 +185,19 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
         text_calls = [c for c in mock_msg.call_args_list if c.args]
         assert not text_calls, f"haunted listener received telnet text delivery: {text_calls}"
 
+    def test_language_tagged_delivery_is_tagged_as_an_interaction_echo(self) -> None:
+        room = _make_room()
+        speaker, _ = self._sheeted_character(room, key="Speaker", fluency=100)
+        self._sheeted_character(room, key="Listener", fluency=100)
+
+        with patch("actions.definitions.communication.send_message") as mock_send:
+            result = SayAction().run(speaker, text=self.TEXT, language_id=self.language.pk)
+
+        assert result.success is True
+        assert mock_send.call_count == 2
+        for call in mock_send.call_args_list:
+            assert call.kwargs["echo_of"] == InteractionMode.SAY
+
     def test_language_id_kwarg_beats_current_language(self) -> None:
         room = _make_room()
         other_trait = Trait.objects.create(
@@ -245,7 +259,7 @@ class WhisperActionLanguageTests(LanguageSpeechTestCase):
             )
 
         assert result.success is True
-        sent_text = mock_msg.call_args_list[0].args[0]
+        sent_text, _sent_options = mock_msg.call_args_list[0].args[0]
         assert "secret" in sent_text
         interaction = Interaction.objects.get(content="secret")
         assert interaction.language_id == self.language.pk
@@ -282,6 +296,22 @@ class MutterActionLanguageTests(LanguageSpeechTestCase):
         assert full.content == "the plan is set"
         assert full.language_id == self.language.pk
         assert fragment.language_id is None
+
+    def test_mutter_delivery_is_tagged_as_an_interaction_echo(self) -> None:
+        room = _make_room()
+        speaker, _ = self._sheeted_character(room, key="Speaker", fluency=100)
+        receiver, _ = self._sheeted_character(room, key="Receiver")
+        self._sheeted_character(room, key="Bystander")
+
+        with patch("actions.definitions.communication.send_message") as mock_send:
+            result = MutterAction().run(
+                speaker, text="the plan is set", receivers=[receiver], language_id=self.language.pk
+            )
+
+        assert result.success is True
+        assert mock_send.call_count == 2
+        for call in mock_send.call_args_list:
+            assert call.kwargs["echo_of"] == InteractionMode.MUTTER
 
     def test_mutter_speaker_without_the_language_fails(self) -> None:
         room = _make_room()

@@ -153,6 +153,20 @@ class CompanionEmoteActionTests(TestCase):
         # never the companion — the FK is purely cosmetic feed attribution.
         self.assertEqual(interaction.persona.character_sheet_id, self.sheet.pk)
 
+    def test_companion_pose_broadcast_is_tagged_as_an_interaction_echo(self) -> None:
+        from actions.definitions.companions import CompanionEmoteAction
+        from world.scenes.constants import InteractionMode
+
+        with patch("flows.service_functions.communication.message_location") as broadcast:
+            result = CompanionEmoteAction().run(
+                actor=self.sheet.character,
+                companion_id=self.companion.pk,
+                text="growls.",
+            )
+
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(broadcast.call_args.kwargs["echo_of"], InteractionMode.POSE)
+
 
 class CompanionEmoteActionIdempotencyTests(TestCase):
     """#3782 — CompanionEmoteAction routes through idempotent_record_interaction
