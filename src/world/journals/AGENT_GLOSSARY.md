@@ -5,10 +5,24 @@ live in `AGENT_GLOSSARY_MAP.md`.
 
 - **Journal Entry** — a `JournalEntry`: a character's own diary/reflection writing, public or
   private, authored by their `CharacterSheet`. This is the canonical "journal" — free-text,
-  player-voiced, no mechanical parsing. Web surface: `/journals` (composer, feed, own-entries
-  tab) plus a `JournalTab` quick-compose in the in-scene sidebar; telnet: `journal
-  write|respond|edit`. _Avoid:_ **the journal** unqualified when another app's homonym is in
-  scope — see Disambiguation below.
+  player-voiced, no mechanical parsing. Web surface: **World › Journals** at `/journals` — one
+  stream, newest first, opened in place, with a Search panel, a character-journal view
+  (`?writer=<id>`), and "Your journal" (`?mine=1`), #3941 — plus a `JournalTab` quick-compose in
+  the in-scene sidebar; telnet: `journal write|respond|edit|consent`. _Avoid:_ **the journal**
+  unqualified when another app's homonym is in scope — see Disambiguation below.
+- **White journal / Black journal** — the interface's words for the public/private axis
+  (`JournalEntry.is_public`, #3941); the model field itself keeps its name, never renamed to
+  match. **White**: everyone who can reach the entry reads it. **Black**: only the writer and
+  staff do — staff simply aren't filtered on the same stream, never routed to a separate read
+  surface. _Avoid:_ "public"/"private" as interface copy — those are the model's words, not the
+  reader's; the band on a black row says only "Black journal," nothing more.
+- **About** — `JournalEntry.about`, a nullable FK to `CharacterSheet` naming the one character an
+  entry is about (#3941), so the record of a tie reads as a sequence instead of being
+  reconstructed from tags. Not a tag (no identity, no machinery) and not a
+  `CharacterRelationship` (that needs the subject's mutual consent, which an entry written about
+  someone must never require). Filterable from both sides: `?about=<id>` alone is everything
+  written about that sheet; combined with the writer filter it narrows to one writer's entries
+  about that subject.
 - **Introductions** — the three white journals character generation writes in the
   character's own voice (#3621), found by `JournalEntry.kind` (`JournalKind`): the **First
   Journal** (to the Great Archive of Vellichor; offered on an Arx start, otherwise written at
@@ -20,7 +34,19 @@ live in `AGENT_GLOSSARY_MAP.md`.
   receiver.
 - **Retort** — a `JournalEntry` with `response_type=retort`, the antagonistic counterpart to
   Praise. Also a threaded response via `parent`; awards weekly XP asymmetrically (retort given
-  is worth less than retort received — see `journals/CLAUDE.md`'s XP schedule).
+  is worth less than retort received — see `journals/CLAUDE.md`'s XP schedule). Consent-gated —
+  see Retort Consent below.
+- **Condemn** — a `JournalEntry` with `response_type=condemn` (`ResponseType.CONDEMN`, #3941,
+  ADR-0306): Praise's antagonistic opposite, a threaded response via `parent` exactly like
+  Retort. Gated by the same Retort Consent rule and awards the same weekly XP
+  (`CONDEMN_GIVEN_XP`/`CONDEMN_RECEIVED_XP` alias `RETORT_GIVEN_XP`/`RETORT_RECEIVED_XP`).
+- **Retort Consent** — `CharacterSheet.retort_consent` (`RetortConsent`: RIVALS default /
+  ANYONE, #3941, ADR-0306): who may Retort or Condemn this character's entries. RIVALS means an
+  active, non-pending `CharacterRelationship` in either direction carrying progress on a
+  negative-sign track (`journals.services.can_retort` — one function, so a future dedicated
+  Rivalry relationship kind narrows it there without touching callers); ANYONE opens the door to
+  every reader. Praise and a Nomination are never gated by this. _Avoid:_ a per-entry toggle —
+  the dial is about who may address the writer, not about any one piece of writing.
 - **Weekly Journal XP** — `WeeklyJournalXP`, a per-character rolling 7-day counter
   (`posts_this_week`, praise/retort given/received flags) gating the diminishing per-post XP
   award. Resets on a timestamp check, not a scheduled job — same pattern as `relationships`.
@@ -36,6 +62,12 @@ live in `AGENT_GLOSSARY_MAP.md`.
   execute_settlement`, #3287). Never mutates `is_public` — a revealed entry stays a *private*
   entry that has surfaced, not a converted-to-public one; the public feed includes it via
   `revealed_at__isnull=False`, not `is_public=True`.
+- **Post Mortem** — the interface's word (#3941) for a revealed `JournalEntry` (`revealed_at` set
+  — see Reveal); the band on its row and the Search filter (`?post_mortem=1`) both say "Post
+  mortem." Not public, so it takes no Praise, Retort, Condemn, or Nomination — the response and
+  nomination paths both check `is_public`, which a reveal never sets. _Avoid:_ "revealed after
+  death" as interface copy — that phrasing stays fine in developer prose (this file, ADR-0229),
+  but the reader-facing word is "Post mortem."
 - **Journal Bequest Grant** — `JournalBequestGrant` (#3287): a recipient_sheet/deceased_sheet
   pair minted by `services.grant_journal_bequest` only when a will carries an
   `estates.BequestKind.WRITINGS` line, giving the recipient read access to the deceased's

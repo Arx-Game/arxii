@@ -1581,6 +1581,8 @@
   - enemies <- character_sheets.CharacterEnemy
   - audere_offers <- magic.PendingAudereOffer
   - legend_contributions <- societies.LegendContribution
+  - legend_recognition_evidence <- societies.LegendRecognitionEvidence
+  - protected_by_recognition_evidence <- societies.LegendRecognitionEvidence
   - org_obligations <- societies.OrganizationObligation
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
@@ -1718,6 +1720,7 @@
   - reclamation_claims <- items.ReclamationClaim
   - original_reclamation_claims <- items.ReclamationClaim
   - journal_entries <- journals.JournalEntry
+  - journal_entries_about <- journals.JournalEntry
   - weekly_journal_xp <- journals.WeeklyJournalXP
   - journal_bequests_received <- journals.JournalBequestGrant
   - journal_bequests_granted <- journals.JournalBequestGrant
@@ -1753,6 +1756,7 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
+  - stake_contract_activations <- stories.StakeContractActivation
   - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
   - vitals <- vitals.CharacterVitals
   - carrying_body <- vitals.CarriedBody
@@ -1954,7 +1958,7 @@
   - selected_consequence -> checks.Consequence [FK] (nullable)
   - combat_interaction -> scenes.Interaction [FK] (nullable)
   - challenge_record -> mechanics.CharacterChallengeRecord [FK] (nullable)
-  - action_interaction -> scenes.Interaction [FK] (nullable; partition timestamp companion)
+  - action_interaction -> scenes.Interaction [FK] (nullable)
 **Pointed to by:**
   - modifiers <- checks.ConsequenceOutcomeModifier
 
@@ -2704,7 +2708,7 @@
 - `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' - Flip the ready flag on a round action and persist it.`
 - `try_declare_sustained_ritual(*, sheet: 'CharacterSheet', ritual: 'Ritual', kwargs: 'dict[str, Any]') -> 'SustainedAction | None' - Defer a combat-cast ritual across rounds instead of dispatching now (#2705, Task 5).`
 - `update_encounter_settings(encounter: 'CombatEncounter', *, stakes_level: 'str | None' = None, risk_level: 'str | None' = None, pace_mode: 'str | None' = None, pace_timer_minutes: 'int | None' = None, escalation_curve: 'EscalationCurve | None | object' = <object object>) -> 'CombatEncounter' - GM-driven mid-encounter settings change (#3383, curve #3552).`
-- `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' - Mark a PC's round action as upgraded to a combo.`
+- `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' - Mark a currently eligible PC action as upgraded to a combo.`
 - `wind_penalty(felt: int) -> int - The missile check penalty for a room's felt WIND exposure (#1555).`
 - `windup_damage_scale(downgrades: 'int') -> 'float' - The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3).`
 
@@ -4897,6 +4901,7 @@
 ### JournalEntry
 **Foreign Keys:**
   - author -> character_sheets.CharacterSheet [FK]
+  - about -> character_sheets.CharacterSheet [FK] (nullable)
   - parent -> journals.JournalEntry [FK] (nullable)
   - revealed_by_settlement -> estates.EstateSettlement [FK] (nullable)
   - related_threads -> magic.Thread [M2M]
@@ -4917,18 +4922,24 @@
 ### Service Functions
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `base_entries_queryset() -> 'QuerySet[JournalEntry]' - The annotated/prefetched base queryset every list-style journal read builds on.`
-- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True, kind: 'str' = JournalKind.ENTRY) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
+- `can_retort(*, viewer_sheet: 'CharacterSheet | None', author: 'CharacterSheet') -> 'bool' - Whether ``viewer_sheet`` may Retort or Condemn ``author``'s entries (ADR-0306).`
+- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True, kind: 'str' = JournalKind.ENTRY, about: 'CharacterSheet | None' = None) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
-- `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
+- `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None, about: 'CharacterSheet | None' = None, clear_about: 'bool' = False) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
 - `entry_visible_via_bequest(entry: 'JournalEntry', viewer_sheet: 'CharacterSheet | None') -> 'bool' - Whether ``viewer_sheet`` may read ``entry`` under a bequest grant (retrieve path).`
 - `exclude_blocked_and_muted_authors(queryset: 'QuerySet[JournalEntry]', *, viewer_account: 'Any') -> 'QuerySet[JournalEntry]' - Exclude blocked/muted authors' entries from a journal feed queryset (#2996 Decision 2).`
+- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None - Return the current IC datetime, or None if no clock exists.`
 - `grant_journal_bequest(*, recipient_sheet: 'CharacterSheet', deceased_sheet: 'CharacterSheet', settlement: 'EstateSettlement') -> 'JournalBequestGrant' - Grant read access to a deceased sheet's non-sealed private entries (#3287 Decision 3).`
 - `has_journal_bequest_grant(*, recipient_sheet: 'CharacterSheet', deceased_sheet_id: 'int') -> 'bool' - Whether ``recipient_sheet`` holds a bequest grant over ``deceased_sheet_id``'s writings.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
+- `journal_settings(*, sheet: 'CharacterSheet') -> 'JournalSettings' - The owner's preferences and this week's writing count, for the page header/desk.`
+- `mark_journals_visited(*, sheet: 'CharacterSheet', at: 'datetime') -> 'None' - Record that this character opened the stream at ``at`` (#3941).`
 - `player_for_sheet(sheet: 'CharacterSheet') -> 'PlayerData | None' - The PlayerData currently playing this character sheet, or None (#2996).`
 - `reveal_journals_for_settlement(sheet: 'CharacterSheet', settlement: 'EstateSettlement') -> 'int' - Stamp ``revealed_at``/``revealed_by_settlement`` on the sheet's REVEAL-effective`
 - `sealed_effective_q() -> 'Q' - A ``Q`` matching ``JournalEntry`` rows whose EFFECTIVE posthumous disposition is SEAL.`
+- `set_retort_consent(*, sheet: 'CharacterSheet', consent: 'str') -> 'CharacterSheet' - Set who may Retort or Condemn this character's entries (#3941).`
 - `set_sheet_posthumous_disposition(*, sheet: 'CharacterSheet', disposition: 'str') -> 'CharacterSheet' - Set a character's sheet-level default posthumous journal disposition (#3287).`
+- `visible_entries_q(*, viewer_sheet: 'CharacterSheet | None', is_staff: 'bool') -> 'Q' - The one visibility rule (#3941 Decision 1) as a ``Q`` for list-style reads.`
 
 
 ## world.justice
@@ -5112,7 +5123,7 @@
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' - Bulk-resolve stats for many rooms in one pass.`
 - `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None, damage_type: 'DamageType | None' = None) -> 'int' - Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.`
 - `effective_values_for_rooms(rooms: 'Iterable[DefaultObject]', *, stat_keys: 'Iterable[StatKey] | None' = None, resonances: 'Iterable[Resonance] | None' = None) -> 'dict[int, dict[StatKey | Resonance, int]]' - Bulk-resolve cascade values across many rooms for one axis.`
-- `end_room_tenancy(*, persona: 'Persona', tenancy: 'LocationTenancy') -> 'LocationTenancy' - End a room tenancy (#670, ladder #3902): departure, or revocation by rung.`
+- `end_room_tenancy(*, persona: 'Persona', tenancy: 'LocationTenancy') -> 'LocationTenancy' - End a room tenancy (#670, ladder #3902): departure, or taking back what you gave.`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' - End a tenancy by setting ``ends_at``.`
 - `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' - A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' - Walk up the area hierarchy to the nearest climate assignment (#1522).`
@@ -6250,11 +6261,12 @@
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' - Deduct resonance balance and greedily advance thread level.`
 - `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None) -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' - Clear a PendingAlteration without resolving it. Staff escape hatch.`
+- `strain_to_intensity(*, strain_commitment: 'int', config: 'StrainCurve') -> 'int' - Convert committed anima into a diminishing-return power bonus.`
 - `survivability_baseline(character: 'ObjectDB', vital_target: 'str') -> 'int' - Universal soft-capped survivability baseline from thread investment (#1175),`
 - `survivability_save_baselines(character: 'ObjectDB') -> 'ThreadSurvivabilitySaves' - Per-tier survivability save modifiers from thread investment (#1250).`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True) -> 'TechniqueUseResult' - Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
@@ -9155,6 +9167,7 @@
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
   - honors <- societies.LegendHonor
+  - recognitions <- societies.LegendEntryRecognition
   - knowledge_rows <- societies.PersonaDeedKnowledge
   - covenant_credits <- societies.CovenantLegendCredit
   - audere_majora_crossing <- magic.AudereMajoraCrossing
@@ -9167,6 +9180,11 @@
   - mission_deeds <- missions.MissionDeedRecord
   - spread_action_requests <- scenes.SceneActionRequest
   - explaining_secrets <- secrets.Secret
+
+### LegendEntryRecognition
+**Foreign Keys:**
+  - entry -> societies.LegendEntry [FK]
+  - evidence -> societies.LegendRecognitionEvidence [FK]
 
 ### LegendEvent
 **Foreign Keys:**
@@ -9186,6 +9204,19 @@
   - hares -> currency.FavorTokenDetails [M2M]
 
 ### LegendLevelCalibration
+
+### LegendRecognitionEvidence
+**Foreign Keys:**
+  - activation -> stories.StakeContractActivation [FK]
+  - actor_sheet -> character_sheets.CharacterSheet [FK]
+  - rule -> societies.LegendRecognitionRule [FK]
+  - protected_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+**Pointed to by:**
+  - entry_recognitions <- societies.LegendEntryRecognition
+
+### LegendRecognitionRule
+**Pointed to by:**
+  - evidence <- societies.LegendRecognitionEvidence
 
 ### LegendSettlementConfig
 
@@ -9867,8 +9898,10 @@
 ### StakeContractActivation
 **Foreign Keys:**
   - beat -> stories.Beat [FK]
+  - participant_sheets -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - legend_contributions <- societies.LegendContribution
+  - legend_recognition_evidence <- societies.LegendRecognitionEvidence
   - stake_outcomes <- stories.StakeOutcome
 
 ### StakeOutcome
