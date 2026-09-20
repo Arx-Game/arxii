@@ -60,7 +60,14 @@ test('a quiet-room entry preserves an editable draft until structured presence a
   // Enter sends (#3818); Shift+Enter is the line break. Both `\n`s above came
   // in through fill(), not the key.
   await editor.press('Enter');
-  expect(sent.map((frame) => JSON.parse(frame)[1][0])).toEqual(['@ic Tehom']);
+  // Entry sends the puppet frame, not a typed `@ic` command (#3933).
+  const parsedSent = sent.map((frame) => JSON.parse(frame));
+  expect(parsedSent).toContainEqual(['puppet', [], { character: 'Tehom' }]);
+  expect(
+    parsedSent.some(
+      ([type, args]) => type === 'text' && typeof args[0] === 'string' && args[0].startsWith('@ic')
+    )
+  ).toBe(false);
 
   socket!.send(
     JSON.stringify([
