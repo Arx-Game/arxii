@@ -4920,6 +4920,7 @@
   - game_week -> game_clock.GameWeek [FK] (nullable)
 
 ### Service Functions
+- `annotate_can_retort(queryset: 'QuerySet[JournalEntry]', viewer_sheet: 'CharacterSheet | None') -> 'QuerySet[JournalEntry]' - ``can_retort`` as a ``viewer_can_retort`` annotation, for list-style reads (#3941).`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `base_entries_queryset() -> 'QuerySet[JournalEntry]' - The annotated/prefetched base queryset every list-style journal read builds on.`
 - `can_retort(*, viewer_sheet: 'CharacterSheet | None', author: 'CharacterSheet') -> 'bool' - Whether ``viewer_sheet`` may Retort or Condemn ``author``'s entries (ADR-0306).`

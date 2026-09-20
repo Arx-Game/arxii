@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import BooleanField, Case, Count, Exists, OuterRef, Prefetch, Q, Value, When
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -121,7 +121,8 @@ def can_retort(*, viewer_sheet: CharacterSheet | None, author: CharacterSheet) -
     True when the author's ``retort_consent`` is ANYONE, or when an active, non-pending
     ``CharacterRelationship`` in EITHER direction carries progress on a negative-sign
     track. This is the whole rivalry predicate today; when the relationships pass names a
-    Rivalry kind it narrows here and nowhere else.
+    Rivalry kind it narrows here and nowhere else -- and in ``annotate_can_retort`` below,
+    the same rule written as SQL for a whole page of rows at once.
     """
     if viewer_sheet is None or viewer_sheet.pk == author.pk:
         return False
@@ -139,6 +140,41 @@ def can_retort(*, viewer_sheet: CharacterSheet | None, author: CharacterSheet) -
         is_pending=False,
         track_progress__track__sign=TrackSign.NEGATIVE,
     ).exists()
+
+
+def annotate_can_retort(
+    queryset: QuerySet[JournalEntry], viewer_sheet: CharacterSheet | None
+) -> QuerySet[JournalEntry]:
+    """``can_retort`` as a ``viewer_can_retort`` annotation, for list-style reads (#3941).
+
+    The query-shaped twin of ``can_retort`` above, which stays the single source of the
+    predicate's MEANING: change the rule there and change it here in the same breath (
+    ``world.journals.tests.test_views.CanRetortAnnotationTests`` asserts the two agree).
+    A feed serializing the predicate per row would otherwise run one EXISTS per entry;
+    this folds all of them into the list query itself, so the query count no longer grows
+    with the page size.
+    """
+    if viewer_sheet is None:
+        return queryset.annotate(viewer_can_retort=Value(False, output_field=BooleanField()))
+
+    from world.relationships.constants import TrackSign
+    from world.relationships.models import CharacterRelationship
+
+    rivalry = CharacterRelationship.objects.filter(
+        Q(source_id=viewer_sheet.pk, target_id=OuterRef("author_id"))
+        | Q(source_id=OuterRef("author_id"), target_id=viewer_sheet.pk),
+        is_active=True,
+        is_pending=False,
+        track_progress__track__sign=TrackSign.NEGATIVE,
+    )
+    return queryset.annotate(
+        viewer_can_retort=Case(
+            When(author_id=viewer_sheet.pk, then=Value(False)),
+            When(author__retort_consent=RetortConsent.ANYONE, then=Value(True)),
+            default=Exists(rivalry),
+            output_field=BooleanField(),
+        )
+    )
 
 
 def set_retort_consent(*, sheet: CharacterSheet, consent: str) -> CharacterSheet:

@@ -97,9 +97,12 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   public, so it takes no Praise, Retort, Condemn, or Nomination (see `character-progression.md`).
 - **Since-your-last-visit (#3941)** — `CharacterSheet.journals_visited_at`, one timestamp per
   character (not per-entry read tracking, a deliberately rejected finer-grained alternative);
-  `?since_visit=1` filters to entries newer than the mark, and the paginated list response
-  carries `since_visit_count` computed against the mark as it stood before `?mark_visit=1`
-  advances it at the end of the same request (`journals.services.mark_journals_visited`).
+  the paginated list response carries `since_visit_count` AND `visited_at`, both computed
+  against the mark as it stood before `?mark_visit=1` advances it at the end of the same
+  request (`journals.services.mark_journals_visited`). The cut itself is `?since=<iso
+  timestamp>`, the client passing that `visited_at` back: a server-side `since_visit=1` flag
+  cannot work, because opening the stream has already moved the mark to now, so by the time
+  the reader presses the option every entry is older than it.
 - **Widened settings endpoint (#3941)** — `GET/PATCH /api/journals/entries/disposition/` now
   reads/writes both `posthumous_journal_disposition` and `retort_consent` (either or both on a
   PATCH), plus read-only `posts_this_week`/`rewarded_posts_per_week`

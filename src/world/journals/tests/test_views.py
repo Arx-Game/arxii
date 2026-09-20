@@ -2,20 +2,30 @@
 
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase, tag
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.character_sheets.types import PosthumousJournalDisposition
+from world.character_sheets.types import PosthumousJournalDisposition, RetortConsent
 from world.estates.factories import EstateSettlementFactory
 from world.journals.constants import JournalKind, PosthumousOverride, ResponseType
 from world.journals.factories import (
     JournalBequestGrantFactory,
     JournalEntryFactory,
     JournalTagFactory,
+)
+from world.journals.services import annotate_can_retort, base_entries_queryset, can_retort
+from world.relationships.constants import TrackSign
+from world.relationships.factories import (
+    CharacterRelationshipFactory,
+    RelationshipTrackFactory,
+    RelationshipTrackProgressFactory,
 )
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
@@ -734,9 +744,10 @@ class JournalPosthumousLeakTableTests(TestCase):
     def test_deceased_listing_shape_is_unchanged(self, mock_get_char: object) -> None:
         """#3941 regression: ``?deceased=`` must keep its pre-#3941 response shape.
 
-        No ``since_visit_count`` key (the bequest corpus isn't the viewer's own
-        stream), and ``mark_visit=1`` must not stamp the viewer's ``journals_visited_at``
-        -- covers both the no-grant (empty) and granted (non-empty) cases.
+        No ``since_visit_count`` and no ``visited_at`` key (the bequest corpus isn't the
+        viewer's own stream), and ``mark_visit=1`` must not stamp the viewer's
+        ``journals_visited_at`` -- covers both the no-grant (empty) and granted
+        (non-empty) cases.
         """
         mock_get_char.return_value = self.viewer_character
         self.assertIsNone(self.viewer_sheet.journals_visited_at)
@@ -746,6 +757,7 @@ class JournalPosthumousLeakTableTests(TestCase):
         )
         self.assertEqual(no_grant.status_code, status.HTTP_200_OK)
         self.assertNotIn("since_visit_count", no_grant.data)
+        self.assertNotIn("visited_at", no_grant.data)
         self.viewer_sheet.refresh_from_db()
         self.assertIsNone(self.viewer_sheet.journals_visited_at)
 
@@ -759,6 +771,7 @@ class JournalPosthumousLeakTableTests(TestCase):
         )
         self.assertEqual(granted.status_code, status.HTTP_200_OK)
         self.assertNotIn("since_visit_count", granted.data)
+        self.assertNotIn("visited_at", granted.data)
         self.viewer_sheet.refresh_from_db()
         self.assertIsNone(self.viewer_sheet.journals_visited_at)
 
@@ -944,16 +957,30 @@ class NewFiltersAndFieldsTests(TestCase):
     def test_post_mortem_filter(self) -> None:
         self.assertEqual({e["title"] for e in self._get(post_mortem=1)["results"]}, {"Dead"})
 
-    def test_since_visit_and_mark_visit(self) -> None:
-        # No mark yet: everything counts as new, and the first stream request marks.
-        data = self._get(mark_visit=1)
-        self.assertEqual(data["since_visit_count"], 4)
+    def test_visited_at_names_the_previous_visit_and_since_cuts_on_it(self) -> None:
+        """The stream hands back the mark it is about to move, and ``?since=`` reads it.
+
+        The reader cannot ask the server for "since my last visit" once the server has
+        stamped the mark to now -- so the response names the moment instead, and the cut
+        is the client passing that same moment back.
+        """
+        # No mark yet: nothing to point at, everything counts as new, and this request marks.
+        first = self._get(mark_visit=1)
+        self.assertIsNone(first["visited_at"])
+        self.assertEqual(first["since_visit_count"], 4)
         self.reader.refresh_from_db()
-        self.assertIsNotNone(self.reader.journals_visited_at)
-        # Marked just now: nothing is newer.
-        data = self._get(since_visit=1)
-        self.assertEqual(data["results"], [])
-        self.assertEqual(data["since_visit_count"], 0)
+        mark = self.reader.journals_visited_at
+        self.assertIsNotNone(mark)
+
+        # A later request reports the mark as stored, and nothing is newer than it yet.
+        second = self._get()
+        self.assertEqual(parse_datetime(second["visited_at"]), mark)
+        self.assertEqual(second["since_visit_count"], 0)
+
+        # One entry written after that moment, and the cut returns exactly it.
+        JournalEntryFactory(author=self.ilsavet, title="Written since", is_public=True)
+        cut = self._get(since=second["visited_at"])
+        self.assertEqual([row["title"] for row in cut["results"]], ["Written since"])
 
     def test_mark_visit_zero_does_not_mark(self) -> None:
         """``?mark_visit=0`` must not be parsed as truthy (Python's bool("0") is True)."""
@@ -961,6 +988,116 @@ class NewFiltersAndFieldsTests(TestCase):
         self._get(mark_visit=0)
         self.reader.refresh_from_db()
         self.assertIsNone(self.reader.journals_visited_at)
+
+
+class CanRetortAnnotationTests(TestCase):
+    """#3941 — the ``viewer_can_retort`` annotation is ``services.can_retort`` in SQL.
+
+    Two spellings of one rule (ADR-0306), so they are held against each other on every
+    case the rule distinguishes: no viewer, the viewer's own entry, a writer open to
+    anyone, and a negative-track relationship held from either side.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.viewer = CharacterSheetFactory()
+        cls.negative = RelationshipTrackFactory(name="Rivalry", sign=TrackSign.NEGATIVE)
+
+        stranger = CharacterSheetFactory()
+        open_writer = CharacterSheetFactory()
+        open_writer.retort_consent = RetortConsent.ANYONE
+        open_writer.save(update_fields=["retort_consent"])
+        rival_of_viewer = CharacterSheetFactory()
+        viewers_rival = CharacterSheetFactory()
+        # The rivalry counts from either side of the pair, so one of each direction.
+        RelationshipTrackProgressFactory(
+            relationship=CharacterRelationshipFactory(
+                source=rival_of_viewer, target=cls.viewer, is_pending=False, is_active=True
+            ),
+            track=cls.negative,
+        )
+        RelationshipTrackProgressFactory(
+            relationship=CharacterRelationshipFactory(
+                source=cls.viewer, target=viewers_rival, is_pending=False, is_active=True
+            ),
+            track=cls.negative,
+        )
+
+        cls.expected = {
+            JournalEntryFactory(author=stranger, is_public=True).pk: False,
+            JournalEntryFactory(author=open_writer, is_public=True).pk: True,
+            JournalEntryFactory(author=rival_of_viewer, is_public=True).pk: True,
+            JournalEntryFactory(author=viewers_rival, is_public=True).pk: True,
+            # Own entry: never retortable, whatever the consent or the rivalries say.
+            JournalEntryFactory(author=cls.viewer, is_public=True).pk: False,
+        }
+
+    def _annotated(self, viewer: object) -> dict:
+        rows = annotate_can_retort(base_entries_queryset(), viewer)
+        return {entry.pk: bool(entry.viewer_can_retort) for entry in rows}
+
+    def _predicate(self, viewer: object) -> dict:
+        return {
+            entry.pk: can_retort(viewer_sheet=viewer, author=entry.author)
+            for entry in base_entries_queryset()
+        }
+
+    def test_annotation_and_service_agree_for_a_viewer(self) -> None:
+        self.assertEqual(self._annotated(self.viewer), self.expected)
+        self.assertEqual(self._predicate(self.viewer), self.expected)
+
+    def test_annotation_and_service_agree_without_a_viewer(self) -> None:
+        closed = dict.fromkeys(self.expected, False)
+        self.assertEqual(self._annotated(None), closed)
+        self.assertEqual(self._predicate(None), closed)
+
+
+class JournalListQueryCountTests(TestCase):
+    """#3941 — the feed's query count must not grow with the number of rows.
+
+    Five entries by five different writers, all on the default RIVALS consent, which is
+    the case that has to ask the database: serialized one row at a time it was one EXISTS
+    per row, and the annotation is why it is now one for the page.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.reader = CharacterSheetFactory()
+        for index in range(5):
+            JournalEntryFactory(
+                author=CharacterSheetFactory(), title=f"Entry {index}", is_public=True
+            )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _get(self, page_size: int) -> dict:
+        with patch(
+            "world.journals.views.JournalEntryViewSet._get_character",
+            return_value=self.reader.character,
+        ):
+            response = self.client.get("/api/journals/entries/", {"page_size": page_size})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data
+
+    def test_query_count_is_flat_across_page_sizes(self) -> None:
+        # Warm first: the row-independent lookups (the viewer's sheet, each author's
+        # primary persona) are idmapper-cached, and it is the per-ROW cost being measured.
+        self.assertEqual(len(self._get(5)["results"]), 5)
+        self._get(2)
+
+        with CaptureQueriesContext(connection) as two_rows:
+            self.assertEqual(len(self._get(2)["results"]), 2)
+        with CaptureQueriesContext(connection) as five_rows:
+            self.assertEqual(len(self._get(5)["results"]), 5)
+
+        self.assertEqual(
+            len(five_rows.captured_queries),
+            len(two_rows.captured_queries),
+            f"the feed runs a query per row: {[q['sql'] for q in five_rows.captured_queries]}",
+        )
 
 
 class CreateEditWithAboutTests(TestCase):

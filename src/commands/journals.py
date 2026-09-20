@@ -165,7 +165,7 @@ class CmdJournal(ArxCommand):
         about_id = None if clear_about else self._parse_about(about_raw)
 
         if _KEY_TITLE not in kwargs and _KEY_BODY not in kwargs and about_raw is None:
-            msg = "Provide at least one of title or body to edit."
+            msg = "Provide at least one of title, body or about to edit."
             raise CommandError(msg)
         result = get_action("edit_journal_entry").run(
             actor=self.caller,
@@ -207,9 +207,12 @@ class CmdJournal(ArxCommand):
 
     def _consent(self, rest: str) -> None:
         from actions.registry import get_action  # noqa: PLC0415
+        from world.character_sheets.types import RetortConsent  # noqa: PLC0415
 
         value = rest.strip().lower()
-        if value not in ("rivals", "anyone"):
+        # Validated against the enum rather than a literal pair, so a new consent level
+        # is accepted here the moment it exists on the sheet (ADR-0306).
+        if value not in RetortConsent.values:
             msg = "Usage: journal consent rivals|anyone"
             raise CommandError(msg)
         result = get_action("set_retort_consent").run(actor=self.caller, consent=value)

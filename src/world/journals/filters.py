@@ -61,7 +61,12 @@ class JournalEntryFilter(django_filters.FilterSet):
     about = django_filters.NumberFilter(field_name="about_id")
     kind = django_filters.CharFilter(method="filter_kind")
     post_mortem = RestBooleanFilter(field_name="revealed_at", lookup_expr="isnull", exclude=True)
-    since_visit = RestBooleanFilter(method="filter_since_visit")
+    # The "Since your last visit" cut (#3941). The client names the moment: it sends back
+    # the ``visited_at`` the stream's first response carried -- the mark as it was BEFORE
+    # that request advanced it. A server-side ``since_visit=1`` flag cannot work, because
+    # opening the stream stamps the mark to now, so by the time the reader presses the
+    # option every entry is older than the mark and the cut is always empty.
+    since = django_filters.IsoDateTimeFilter(field_name="created_at", lookup_expr="gt")
     black_only = RestBooleanFilter(method="filter_black_only")
     # Browse a deceased sheet's bequeathed corpus (#3287) instead of the public feed. Gated
     # here — not read from request.query_params in the view — per
@@ -81,7 +86,7 @@ class JournalEntryFilter(django_filters.FilterSet):
             "about",
             "kind",
             "post_mortem",
-            "since_visit",
+            "since",
             "black_only",
             "deceased",
         ]
@@ -99,18 +104,6 @@ class JournalEntryFilter(django_filters.FilterSet):
         if value == INTRODUCTION_KINDS_ALIAS:
             return queryset.filter(kind__in=INTRODUCTION_KINDS)
         return queryset.filter(kind=value)
-
-    def filter_since_visit(
-        self, queryset: QuerySet[JournalEntry], name: str, value: bool
-    ) -> QuerySet[JournalEntry]:
-        """Entries newer than the viewer's last stream visit; no mark means everything."""
-        del name
-        if not value:
-            return queryset
-        sheet = self.view.get_character_sheet(self.request) if self.view is not None else None
-        if sheet is None or sheet.journals_visited_at is None:
-            return queryset
-        return queryset.filter(created_at__gt=sheet.journals_visited_at)
 
     def filter_black_only(
         self, queryset: QuerySet[JournalEntry], name: str, value: bool

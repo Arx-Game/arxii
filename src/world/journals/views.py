@@ -8,6 +8,7 @@ from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.fields import DateTimeField
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -27,6 +28,7 @@ from world.journals.serializers import (
     JournalSettingsSerializer,
 )
 from world.journals.services import (
+    annotate_can_retort,
     base_entries_queryset,
     entry_visible_via_bequest,
     exclude_blocked_and_muted_authors,
@@ -42,6 +44,12 @@ _NOT_FOUND_DETAIL = "Not found."
 _ABOUT_FIELD = "about"
 _DISPOSITION_FIELD = "disposition"
 _RETORT_CONSENT_FIELD = "retort_consent"
+
+# The visit mark goes out through DRF's own DateTimeField so ``visited_at`` is spelled like
+# every other timestamp in the payload (a trailing "Z" rather than "+00:00") -- the client
+# hands it straight back as ``?since=``, and a literal "+" in a query string decodes as a
+# space.
+_VISIT_MARK_FIELD = DateTimeField()
 
 
 def _truthy_param(value: str | None) -> bool:
@@ -130,12 +138,17 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         narrowing it — the bequest corpus is a different shape (the deceased's non-sealed
         private+public entries), so this restriction is moot for that branch but harmless to
         compute either way (querysets are lazy).
+
+        Carries the ``viewer_can_retort`` annotation (``services.annotate_can_retort``) the
+        row serializer reads, so the Retort/Condemn predicate costs one EXISTS for the page
+        rather than one per row.
         """
         sheet = self.get_character_sheet(self.request)
         queryset = self._get_base_queryset().filter(
             visible_entries_q(viewer_sheet=sheet, is_staff=self.request.user.is_staff)
         )
-        return exclude_blocked_and_muted_authors(queryset, viewer_account=self.request.user)
+        queryset = exclude_blocked_and_muted_authors(queryset, viewer_account=self.request.user)
+        return annotate_can_retort(queryset, sheet)
 
     def list(self, request: Request) -> Response:
         """
@@ -147,17 +160,21 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         - ?about=<character_sheet_id> — entries about that character (#3941)
         - ?kind=<JournalKind|introductions> — the CG Introductions alias (#3941)
         - ?post_mortem=1 — only entries revealed by an estate settlement (#3941)
-        - ?since_visit=1 — only entries newer than the viewer's last stream visit (#3941)
+        - ?since=<iso timestamp> — only entries created after that moment (#3941). The
+          client passes back the ``visited_at`` this endpoint returned, which is the
+          viewer's visit mark AS IT WAS before the request that opened the stream
+          advanced it.
         - ?black_only=1 — staff-only: just the private entries (#3941)
-        - ?mark_visit=1 — after computing ``since_visit_count``, stamp the viewer's visit
+        - ?mark_visit=1 — after computing ``since_visit_count`` and ``visited_at``, stamp
+          the viewer's visit
         - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
           entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
           (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
           ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
           error, so a probing id can't confirm whether a grant exists for someone else.
-          This response's shape is unchanged from pre-#3941: no ``since_visit_count``
-          key, and ``?mark_visit=`` is ignored — the since-visit machinery only applies
-          to the viewer's own stream, never the bequest corpus.
+          This response's shape is unchanged from pre-#3941: no ``since_visit_count`` and
+          no ``visited_at`` key, and ``?mark_visit=`` is ignored — the since-visit
+          machinery only applies to the viewer's own stream, never the bequest corpus.
 
         See ``get_queryset()`` for the visibility contract (#3941 Decision 1, block/mute).
         """
@@ -175,14 +192,21 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         queryset = self.filter_queryset(self.get_queryset())
 
         since_visit_count = None
+        visited_at = None
         if not is_bequest_listing:
-            # Since-visit count and the mark itself: count against the mark AS IT WAS,
-            # then advance it — never the other way around, or a mark_visit=1 request
-            # would count against its own freshly-stamped mark and always report zero.
+            # Both of these describe the reader's PREVIOUS visit, so both are read from the
+            # mark as it was before this request advances it — never the other way around,
+            # or a mark_visit=1 request would count against its own freshly-stamped mark
+            # and always report zero. ``visited_at`` goes out so the client can ask for
+            # that cut later (``?since=``): once the mark has moved to now, the server can
+            # no longer name the moment the reader means by "since my last visit".
+            previous_visit = sheet.journals_visited_at if sheet is not None else None
             count_qs = self.get_queryset()
-            if sheet is not None and sheet.journals_visited_at is not None:
-                count_qs = count_qs.filter(created_at__gt=sheet.journals_visited_at)
+            if previous_visit is not None:
+                count_qs = count_qs.filter(created_at__gt=previous_visit)
             since_visit_count = count_qs.count()
+            if previous_visit is not None:
+                visited_at = _VISIT_MARK_FIELD.to_representation(previous_visit)
 
             if _truthy_param(mark_visit) and sheet is not None:
                 mark_journals_visited(sheet=sheet, at=timezone.now())
@@ -193,8 +217,9 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 page, many=True, context={"viewer_sheet": sheet}
             )
             response = self.get_paginated_response(serializer.data)
-            if since_visit_count is not None:
+            if not is_bequest_listing:
                 response.data["since_visit_count"] = since_visit_count
+                response.data["visited_at"] = visited_at
             return response
 
         return Response(
@@ -211,7 +236,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        queryset = self._get_base_queryset().filter(author=sheet)
+        queryset = annotate_can_retort(self._get_base_queryset().filter(author=sheet), sheet)
 
         page = self.paginate_queryset(queryset)
         if page is not None:

@@ -1700,10 +1700,15 @@ weekly XP — read at **World › Journals**, the Reading Room (#3941).
   room can find them; `create_journal_entry(kind=...)`; findable via `?kind=<JournalKind>` or
   the `?kind=introductions` alias (#3941).
 - **API (#3941):** `GET /api/journals/entries/` filters — `writer` (name contains), `about`
-  (sheet id), `kind` (a `JournalKind` or `introductions`), `post_mortem=1`, `since_visit=1`,
-  `black_only=1` (staff only), plus the existing `author`/`tag`/`deceased`; `?mark_visit=1`
-  stamps the viewer's visit after computing `since_visit_count` against the prior mark. Rows
-  gain `about`, `about_name`, `ic_timestamp`, `can_retort`, `is_own`. `GET/PATCH
+  (sheet id), `kind` (a `JournalKind` or `introductions`), `post_mortem=1`,
+  `since=<iso timestamp>`, `black_only=1` (staff only), plus the existing
+  `author`/`tag`/`deceased`; `?mark_visit=1` stamps the viewer's visit after computing
+  `since_visit_count` and `visited_at` against the prior mark, and the response carries both
+  (absent on a `?deceased=` listing) so the client can ask for that cut later via `?since=`.
+  Rows gain `about`, `about_name`, `ic_timestamp`, `can_retort`, `is_own`; the list reads
+  answer `can_retort` from the `viewer_can_retort` annotation
+  (`services.annotate_can_retort`, the query-shaped twin of `services.can_retort`) so the
+  predicate costs one EXISTS per page rather than one per row. `GET/PATCH
   /api/journals/entries/disposition/` is now the owner's full journal settings: reads/writes
   `posthumous_journal_disposition` and `retort_consent`, plus read-only `posts_this_week`/
   `rewarded_posts_per_week`.

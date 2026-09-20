@@ -53,9 +53,20 @@ class _ViewerFieldsMixin(serializers.Serializer):
             return None
 
     def get_can_retort(self, obj: JournalEntry) -> bool:
-        """ADR-0306 predicate for the requesting viewer; False without a viewer."""
-        viewer = self.context.get("viewer_sheet")
-        return can_retort(viewer_sheet=viewer, author=obj.author)
+        """ADR-0306 predicate for the requesting viewer; False without a viewer.
+
+        Prefers the ``viewer_can_retort`` annotation (``services.annotate_can_retort``)
+        that the list reads carry, so a page of rows costs no extra query. The detail
+        read and the nested responses have no annotation to carry -- they are single
+        objects, where one EXISTS is the cheapest thing available -- so they fall back
+        to ``services.can_retort``, which is where the predicate's meaning lives either
+        way.
+        """
+        try:
+            return bool(obj.viewer_can_retort)
+        except AttributeError:
+            viewer = self.context.get("viewer_sheet")
+            return can_retort(viewer_sheet=viewer, author=obj.author)
 
     def get_is_own(self, obj: JournalEntry) -> bool:
         """Whether the requesting viewer wrote this entry; False without a viewer."""
