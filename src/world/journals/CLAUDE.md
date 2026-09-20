@@ -39,6 +39,9 @@ Per-character weekly XP tracking. Resets after 7 days.
 - `can_retort(*, viewer_sheet, author)` — ADR-0306 predicate: True when `author.retort_consent`
   is ANYONE, or an active, non-pending `CharacterRelationship` exists between the two (either
   direction) with progress on a negative-sign track
+- `annotate_can_retort(queryset, viewer_sheet)` — the same predicate as one `Case` + `Exists`
+  annotation (`viewer_can_retort`) on the stream and `mine/` querysets, so a page costs one
+  query, not one per row; the serializer prefers the annotation and falls back to `can_retort()`
 - `set_retort_consent()` — Sets the caller's `retort_consent`
 - `mark_journals_visited()` — Stamps `journals_visited_at` at `at`
 - `journal_settings()` — Returns the owner's `JournalSettings` (disposition, retort_consent,
@@ -78,10 +81,13 @@ antagonism budget, not two.
 - `GET /api/journals/entries/` — Visible-entries stream (see Visibility rule above). Filters:
   `author` (id), `writer` (name contains, #3941), `tag`, `about` (sheet id, #3941), `kind`
   (`JournalKind` value or the `introductions` alias, #3941), `post_mortem=1` (revealed entries,
-  #3941), `since_visit=1` (newer than the caller's mark, #3941), `black_only=1` (staff only,
-  #3941), `deceased=<sheet_id>` (bequest browsing, #3287). `?mark_visit=1` computes
-  `since_visit_count` against the mark as it stood, then advances the mark. Rows carry `about`,
-  `about_name`, `ic_timestamp`, `can_retort`, `is_own` (#3941).
+  #3941), `since=<iso datetime>` (entries created after that moment, #3941), `black_only=1`
+  (staff only, #3941), `deceased=<sheet_id>` (bequest browsing, #3287). The response carries
+  `visited_at` (the caller's visit mark as it stood before this request) and `since_visit_count`
+  (entries newer than that mark); `?mark_visit=1` then advances the mark, so the client filters
+  its "since your last visit" cut with `since=<visited_at>`. Both keys are absent on a
+  `?deceased=` listing. Rows carry `about`, `about_name`, `author_persona_id`, `ic_timestamp`,
+  `can_retort`, `is_own` (#3941).
 - `GET /api/journals/entries/mine/` — Own entries (includes private)
 - `GET /api/journals/entries/<id>/` — Single entry detail
 - `POST /api/journals/entries/` — Create entry (accepts `about`, #3941)
