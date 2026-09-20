@@ -34,6 +34,8 @@ from world.roster.models import RosterEntry
 logger = logging.getLogger(__name__)
 # Process epoch distinguishes revision counters after a server restart.
 ROOM_STATE_EPOCH = uuid.uuid4().hex
+# Tag for the puppet-lifecycle frames sent in place of Evennia's stock output (#3933).
+LIFECYCLE_TYPE = "lifecycle"
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -54,7 +56,12 @@ class Character(ObjectParent, DefaultCharacter):
                     to the room.
     at_pre_puppet - Just before Account re-connects, retrieves the character's
                     prelogout_location Attribute and move it back on the grid.
-    at_post_puppet - Echoes "AccountName has entered the game" to the room.
+    at_post_puppet - Sends a tagged "You become <name>" lifecycle frame, then
+                    the joining session's own look (tagged on_entry), then a
+                    room broadcast tagged "arrive" (#3933); Evennia's stock
+                    output (an untaggable "You become", a stock look over the
+                    Evennia desc attribute, and an untyped room line) is
+                    replaced rather than sent first.
 
     """
 
@@ -456,7 +463,7 @@ class Character(ObjectParent, DefaultCharacter):
                 self.home = fallback
         super().at_pre_puppet(account, session=session, **kwargs)
 
-    def at_post_puppet(self, **kwargs):
+    def at_post_puppet(self, **kwargs):  # noqa: ARG002 -- Evennia's hook contract requires it
         """Handle actions after a session puppets this character.
 
         Sessions share a character (#3812): a second window opening is not the
@@ -468,10 +475,14 @@ class Character(ObjectParent, DefaultCharacter):
         last in ``sessions.all()`` (a session-less call, as in tests, counts as
         the first).
 
+        Evennia's own ``at_post_puppet`` is not called: its "You become", stock
+        look and room line are all untaggable, so ``_announce_puppet`` sends the
+        same information tagged instead (#3933).
+
         Args:
             **kwargs: Arbitrary, optional arguments passed by Evennia.
         """
-        super().at_post_puppet(**kwargs)
+        self._announce_puppet()
         sessions = list(self.sessions.all())
         first_session = len(sessions) <= 1
         joining = sessions[-1] if sessions else None
@@ -507,7 +518,34 @@ class Character(ObjectParent, DefaultCharacter):
         # Look now returns prose only. Confirm structured presence independently
         # so web entry does not depend on moving rooms or having an active scene.
         self.send_room_state(session=joining)
-        self.execute_cmd("look", session=joining)
+        # The joining session's look is tagged on_entry so a client that already
+        # shows the room (the web room panel) can drop it (#3933).
+        if joining is not None:
+            joining.ndb.text_frame_options = {"on_entry": True}
+        try:
+            self.execute_cmd("look", session=joining)
+        finally:
+            if joining is not None:
+                joining.ndb.text_frame_options = None
+
+    def _announce_puppet(self) -> None:
+        """Evennia's post-puppet output, tagged (#3933).
+
+        ``DefaultCharacter.at_post_puppet`` sends ``You become`` and a stock look
+        that renders the Evennia ``desc`` attribute, neither taggable, and an
+        untyped room line. This sends the same information with metadata, so a
+        structured client can decide what to show: telnet prints them all, the
+        web client keeps only the arrival. The look itself is the joining
+        session's ``look`` below, tagged ``on_entry``.
+        """
+        self.msg((f"You become {self.key}.", {"type": LIFECYCLE_TYPE, "event": "become"}))
+        if self.location:
+            self.location.msg_contents(
+                ("{name} has entered the game.", {"type": "arrive"}),
+                exclude=[self],
+                from_obj=self,
+                mapping={"name": self},
+            )
 
     def announce_move_from(self, destination, msg=None, mapping=None, **kwargs):
         """Departure broadcast — suppressed entirely while sneaking (#3288).
