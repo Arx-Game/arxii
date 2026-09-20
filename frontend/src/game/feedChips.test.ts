@@ -35,15 +35,15 @@ describe('default chips (#3856)', () => {
       ['Ambience', 'ambience', false],
       // A vision is rare and prized (#3779): it shows and it wakes.
       ['Visions', 'vision', true],
-      ['System', 'look,item,error', false],
+      ['System', 'look,item,error,system', false],
     ]);
     expect(DEFAULT_FEED_CHIPS.every((c) => c.on && !c.custom)).toBe(true);
   });
 
-  it('leave system unowned, so it shows unless All is off', () => {
-    expect(chipFor('system', DEFAULT_FEED_CHIPS)).toBeNull();
+  it('the System chip owns system, so pressing System hides it (#3933)', () => {
+    expect(chipFor('system', DEFAULT_FEED_CHIPS)?.id).toBe('sy');
     expect(isKindShown('system', defaults())).toBe(true);
-    expect(isKindShown('system', { ...defaults(), all: false })).toBe(false);
+    expect(isKindShown('system', toggleChip(defaults(), 'sy'))).toBe(false);
   });
 });
 
@@ -145,6 +145,36 @@ describe('normalizeFeedChips', () => {
       ['d', 'D', [], true, false, true],
     ]);
   });
+
+  it('migrates a stored default System chip to own system (#3933)', () => {
+    const stored = DEFAULT_FEED_CHIPS.map((c) =>
+      c.id === 'sy' ? { ...c, kinds: ['look', 'item', 'error'] } : c
+    );
+    const chips = normalizeFeedChips(stored);
+    expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual(['look', 'item', 'error', 'system']);
+  });
+
+  it('leaves a layout that already owns system elsewhere alone', () => {
+    const stored = DEFAULT_FEED_CHIPS.map((c) => {
+      if (c.id === 'sy') return { ...c, kinds: ['look', 'item', 'error'] };
+      if (c.id === 'am') return { ...c, kinds: ['ambience', 'system'] };
+      return c;
+    });
+    const chips = normalizeFeedChips(stored);
+    expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual(['look', 'item', 'error']);
+    expect(chips.find((c) => c.id === 'am')?.kinds).toEqual(['ambience', 'system']);
+  });
+
+  it('leaves a re-kinded System chip alone', () => {
+    const stored = DEFAULT_FEED_CHIPS.map((c) => (c.id === 'sy' ? { ...c, kinds: ['look'] } : c));
+    const chips = normalizeFeedChips(stored);
+    expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual(['look']);
+  });
+
+  it('leaves a System chip that already owns system alone', () => {
+    const chips = normalizeFeedChips(DEFAULT_FEED_CHIPS);
+    expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual(['look', 'item', 'error', 'system']);
+  });
 });
 
 const note = (id: string, kind: FeedNote['kind']): FeedNote => ({
@@ -173,11 +203,12 @@ describe('visible items', () => {
     const dismissed = new Set([feedItemKey('note', 'n2'), feedItemKey('interaction', 2)]);
     expect(
       visibleNotes(
+        // n4 is 'system': owned by System (#3933), so pressing System hides it too.
         [note('n1', 'look'), note('n2', 'arrive'), note('n3', 'move'), note('n4', 'system')],
         state,
         dismissed
       ).map((n) => n.id)
-    ).toEqual(['n3', 'n4']);
+    ).toEqual(['n3']);
     expect(
       visibleInteractions(
         [interaction(1, 'pose'), interaction(2, 'pose'), interaction(3, 'whisper')],
