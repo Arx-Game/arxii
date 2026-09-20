@@ -3,9 +3,10 @@
 A single ``ArxCommand`` routes the journal write verbs through ``action.run()``
 — the same seam the web ``JournalEntryViewSet`` now uses. Subverbs:
 
-- ``journal write title=<text> body=<text> [public] [tags=a,b,c]``
-- ``journal respond <id|#> type=praise|retort title=<text> body=<text>``
-- ``journal edit <id|#> [title=<text>] [body=<text>]``
+- ``journal write title=<text> body=<text> [public] [tags=a,b,c] [about=<id>]``
+- ``journal respond <id|#> type=praise|retort|condemn title=<text> body=<text>``
+- ``journal edit <id|#> [title=<text>] [body=<text>] [about=<id>|about=none]``
+- ``journal consent rivals|anyone``
 
 Long-form authoring is web-first; this thin surface keeps the authoring loop
 integration-testable. Bare ``journal`` lists the caller's recent entries.
@@ -25,6 +26,7 @@ _SUBVERB_RESPOND = "respond"
 _SUBVERB_EDIT = "edit"
 _SUBVERB_LIST = "list"
 _SUBVERB_DISPOSITION = "disposition"
+_SUBVERB_CONSENT = "consent"
 # Telnet key=value argument keys.
 _KEY_TYPE = "type"
 _KEY_TITLE = "title"
@@ -33,7 +35,9 @@ _KEY_TAGS = "tags"
 _KEY_SHEET = "sheet"
 _KEY_ENTRY = "entry"
 _KEY_VALUE = "value"
+_KEY_ABOUT = "about"
 _FLAG_PUBLIC = "public"
+_VALUE_ABOUT_NONE = "none"
 
 # Multi-word value keys — their value runs until the next ``key=`` token or a
 # known bare flag (so ``body=Hello public`` does not swallow ``public``).
@@ -56,17 +60,21 @@ class CmdJournal(ArxCommand):
     Usage:
         journal                         - list your recent entries
         journal list                    - same as bare ``journal``
-        journal write title=<text> body=<text> [public] [tags=a,b,c]
-        journal respond <id|#> type=praise|retort title=<text> body=<text>
-        journal edit <id|#> [title=<text>] [body=<text>]
+        journal write title=<text> body=<text> [public] [tags=a,b,c] [about=<id>]
+        journal respond <id|#> type=praise|retort|condemn title=<text> body=<text>
+        journal edit <id|#> [title=<text>] [body=<text>] [about=<id>|about=none]
         journal disposition sheet=<reveal|seal>
         journal disposition entry=<id|#> value=<inherit|reveal|seal>
+        journal consent rivals|anyone
 
     ``title`` / ``body`` are free text - their values run to the next
     ``key=`` token. ``public`` is a bare flag (entries are private by default).
-    ``disposition`` controls what happens to your private entries after
-    death (#3287) — ``sheet=`` sets your character's overall default,
-    ``entry=``/``value=`` overrides a single entry.
+    ``about=<id>`` names the character sheet an entry is about (#3941);
+    ``about=none`` on ``edit`` clears it. ``disposition`` controls what happens
+    to your private entries after death (#3287) — ``sheet=`` sets your
+    character's overall default, ``entry=``/``value=`` overrides a single
+    entry. ``consent`` sets who may Retort or Condemn your entries
+    (ADR-0306) — ``rivals`` (default) or ``anyone``.
     """
 
     key = "journal"
@@ -91,6 +99,8 @@ class CmdJournal(ArxCommand):
                 self._edit(rest)
             elif subverb == _SUBVERB_DISPOSITION:
                 self._disposition(rest)
+            elif subverb == _SUBVERB_CONSENT:
+                self._consent(rest)
             else:
                 self.msg(self._usage())
         except CommandError as err:
@@ -108,6 +118,7 @@ class CmdJournal(ArxCommand):
         body = _require(kwargs.get(_KEY_BODY), _KEY_BODY)
         tags_raw = kwargs.get(_KEY_TAGS)
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else None
+        about_id = self._parse_about(kwargs.get(_KEY_ABOUT))
 
         result = get_action("create_journal_entry").run(
             actor=self.caller,
@@ -115,6 +126,7 @@ class CmdJournal(ArxCommand):
             body=body,
             is_public=_FLAG_PUBLIC in flags,
             tags=tags,
+            about_id=about_id,
         )
         if result.message:
             self.msg(result.message)
@@ -122,7 +134,9 @@ class CmdJournal(ArxCommand):
     def _respond(self, rest: str) -> None:
         target_id, kwargs = self._split_positional_and_kwargs(rest)
         if target_id is None:
-            msg = "Usage: journal respond <id|#> type=praise|retort title=<text> body=<text>"
+            msg = (
+                "Usage: journal respond <id|#> type=praise|retort|condemn title=<text> body=<text>"
+            )
             raise CommandError(msg)
         from actions.registry import get_action  # noqa: PLC0415
 
@@ -142,11 +156,15 @@ class CmdJournal(ArxCommand):
     def _edit(self, rest: str) -> None:
         target_id, kwargs = self._split_positional_and_kwargs(rest)
         if target_id is None:
-            msg = "Usage: journal edit <id|#> [title=<text>] [body=<text>]"
+            msg = "Usage: journal edit <id|#> [title=<text>] [body=<text>] [about=<id>|about=none]"
             raise CommandError(msg)
         from actions.registry import get_action  # noqa: PLC0415
 
-        if _KEY_TITLE not in kwargs and _KEY_BODY not in kwargs:
+        about_raw = kwargs.get(_KEY_ABOUT)
+        clear_about = about_raw is not None and about_raw.strip().lower() == _VALUE_ABOUT_NONE
+        about_id = None if clear_about else self._parse_about(about_raw)
+
+        if _KEY_TITLE not in kwargs and _KEY_BODY not in kwargs and about_raw is None:
             msg = "Provide at least one of title or body to edit."
             raise CommandError(msg)
         result = get_action("edit_journal_entry").run(
@@ -154,6 +172,8 @@ class CmdJournal(ArxCommand):
             entry_id=target_id,
             title=kwargs.get(_KEY_TITLE),
             body=kwargs.get(_KEY_BODY),
+            about_id=about_id,
+            clear_about=clear_about,
         )
         if result.message:
             self.msg(result.message)
@@ -182,6 +202,17 @@ class CmdJournal(ArxCommand):
                 actor=self.caller,
                 disposition=sheet_value,
             )
+        if result.message:
+            self.msg(result.message)
+
+    def _consent(self, rest: str) -> None:
+        from actions.registry import get_action  # noqa: PLC0415
+
+        value = rest.strip().lower()
+        if value not in ("rivals", "anyone"):
+            msg = "Usage: journal consent rivals|anyone"
+            raise CommandError(msg)
+        result = get_action("set_retort_consent").run(actor=self.caller, consent=value)
         if result.message:
             self.msg(result.message)
 
@@ -222,6 +253,16 @@ class CmdJournal(ArxCommand):
         return int(first), kwargs
 
     @staticmethod
+    def _parse_about(value: str | None) -> int | None:
+        """Parse an ``about=<id>`` kwarg into an int, or ``None`` when absent."""
+        if value is None:
+            return None
+        if not value.isdigit():
+            msg = "about must be a character id."
+            raise CommandError(msg)
+        return int(value)
+
+    @staticmethod
     def _actor_sheet(caller: Any) -> Any:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -237,9 +278,11 @@ class CmdJournal(ArxCommand):
 
     def _usage(self) -> str:
         return (
-            "Usage: journal [list|write title=<text> body=<text> [public] [tags=...]|"
-            "respond <id|#> type=praise|retort title=<text> body=<text>|"
-            "edit <id|#> [title=<text>] [body=<text>]|"
+            "Usage: journal [list|write title=<text> body=<text> [public] [tags=...] "
+            "[about=<id>]|"
+            "respond <id|#> type=praise|retort|condemn title=<text> body=<text>|"
+            "edit <id|#> [title=<text>] [body=<text>] [about=<id>|about=none]|"
             "disposition sheet=<reveal|seal>|"
-            "disposition entry=<id|#> value=<inherit|reveal|seal>]"
+            "disposition entry=<id|#> value=<inherit|reveal|seal>|"
+            "consent rivals|anyone]"
         )

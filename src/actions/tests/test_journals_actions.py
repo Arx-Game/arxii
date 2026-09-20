@@ -17,6 +17,7 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.factories import JournalEntryFactory
 from world.journals.models import JournalEntry
+from world.journals.types import JournalError
 
 
 @patch("world.journals.services.increment_stat")
@@ -151,3 +152,44 @@ class EditJournalEntryActionTests(TestCase):
             actor=other, entry_id=self.entry.pk, body="hacked"
         )
         assert not result.success
+
+
+@patch("world.journals.services.increment_stat")
+@patch("world.journals.services.award_xp")
+class JournalAboutAndConsentActionTests(TestCase):
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+    def test_create_with_about(self, mock_award, mock_stat) -> None:
+        subject = CharacterSheetFactory()
+        result = get_action("create_journal_entry").run(
+            actor=self.character, title="t", body="b", is_public=True, about_id=subject.pk
+        )
+        self.assertTrue(result.success)
+        self.assertEqual(JournalEntry.objects.get(pk=result.data["entry_id"]).about_id, subject.pk)
+
+    def test_create_with_unknown_about_fails(self, mock_award, mock_stat) -> None:
+        result = get_action("create_journal_entry").run(
+            actor=self.character, title="t", body="b", is_public=True, about_id=999999
+        )
+        self.assertFalse(result.success)
+
+    def test_set_retort_consent(self, mock_award, mock_stat) -> None:
+        result = get_action("set_retort_consent").run(actor=self.character, consent="anyone")
+        self.assertTrue(result.success)
+        self.sheet.refresh_from_db()
+        self.assertEqual(self.sheet.retort_consent, "anyone")
+
+    def test_respond_accepts_condemn_type(self, mock_award, mock_stat) -> None:
+        # Refused by the consent gate, but the type itself is accepted (not "must be
+        # praise or retort").
+        parent = JournalEntryFactory(is_public=True)
+        result = get_action("respond_to_journal").run(
+            actor=self.character, parent=parent, response_type="condemn", title="t", body="b"
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, JournalError.UNAVAILABLE)

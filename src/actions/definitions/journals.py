@@ -24,6 +24,20 @@ _MSG_NO_ACTIVE_CHARACTER = "No active character."
 _MSG_ENTRY_NOT_FOUND = "That journal entry was not found."
 _MSG_INVALID_DISPOSITION = "disposition must be reveal or seal."
 _MSG_INVALID_OVERRIDE = "override must be inherit, reveal, or seal."
+_MSG_ABOUT_NOT_FOUND = "That character was not found."
+_MSG_INVALID_CONSENT = "consent must be rivals or anyone."
+
+
+def _resolve_about(about_id: Any) -> tuple[Any, str | None]:
+    """Resolve an ``about_id`` kwarg to a CharacterSheet, or an error message."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    if about_id is None:
+        return None, None
+    try:
+        return CharacterSheet.objects.get(pk=int(about_id)), None
+    except (CharacterSheet.DoesNotExist, TypeError, ValueError):
+        return None, _MSG_ABOUT_NOT_FOUND
 
 
 @dataclass
@@ -66,6 +80,10 @@ class CreateJournalEntryAction(_BaseJournalAction):
         if posthumous_override not in PosthumousOverride.values:
             return ActionResult(success=False, message=_MSG_INVALID_OVERRIDE)
 
+        about, error = _resolve_about(kwargs.get("about_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+
         entry = create_journal_entry(
             author=sheet,
             title=kwargs.get("title", ""),
@@ -73,6 +91,7 @@ class CreateJournalEntryAction(_BaseJournalAction):
             is_public=bool(kwargs.get("is_public", False)),
             tags=kwargs.get("tags"),
             posthumous_override=posthumous_override,
+            about=about,
         )
         return ActionResult(
             success=True,
@@ -120,7 +139,7 @@ class RespondToJournalAction(_BaseJournalAction):
         if response_type not in ResponseType.values:
             return ActionResult(
                 success=False,
-                message="response_type must be praise or retort.",
+                message="response_type must be praise, retort, or condemn.",
             )
 
         try:
@@ -182,12 +201,18 @@ class EditJournalEntryAction(_BaseJournalAction):
         if posthumous_override is not None and posthumous_override not in PosthumousOverride.values:
             return ActionResult(success=False, message=_MSG_INVALID_OVERRIDE)
 
+        about, error = _resolve_about(kwargs.get("about_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+
         try:
             updated = edit_journal_entry(
                 entry=entry,
                 title=kwargs.get("title"),
                 body=kwargs.get("body"),
                 posthumous_override=posthumous_override,
+                about=about,
+                clear_about=bool(kwargs.get("clear_about", False)),
             )
         except JournalError as exc:
             return ActionResult(success=False, message=exc.user_message)
@@ -230,4 +255,37 @@ class SetJournalDispositionAction(_BaseJournalAction):
             success=True,
             message=f"Your private journals will {disposition} after death by default.",
             data={"disposition": disposition},
+        )
+
+
+@dataclass
+class SetRetortConsentAction(_BaseJournalAction):
+    """Set who may Retort or Condemn the actor's entries (#3941, ADR-0306)."""
+
+    key: str = "set_retort_consent"
+    name: str = "Set Retort Consent"
+    icon: str = "shield"
+    category: str = "journals"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.character_sheets.types import RetortConsent  # noqa: PLC0415
+        from world.journals.services import set_retort_consent  # noqa: PLC0415
+
+        sheet = self._sheet(actor)
+        if sheet is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        consent = kwargs.get("consent")
+        if consent not in RetortConsent.values:
+            return ActionResult(success=False, message=_MSG_INVALID_CONSENT)
+        set_retort_consent(sheet=sheet, consent=consent)
+        who = "anyone" if consent == RetortConsent.ANYONE else "rivals only"
+        return ActionResult(
+            success=True,
+            message=f"Retorts and condemnation of your journals: {who}.",
+            data={"consent": consent},
         )

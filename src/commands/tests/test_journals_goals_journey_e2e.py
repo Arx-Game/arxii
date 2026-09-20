@@ -161,6 +161,15 @@ class JournalCommandErrorTests(TestCase):
         self.assertIn("private", _capture(self.caller).lower())
         self.assertFalse(JournalEntry.objects.filter(parent=entry, response_type="praise").exists())
 
+    def test_consent_anyone_updates_sheet(self) -> None:
+        _make_journal_cmd(self.caller, "consent anyone").func()
+        self.caller_sheet.refresh_from_db()
+        self.assertEqual(self.caller_sheet.retort_consent, "anyone")
+
+    def test_consent_invalid_value_shows_usage(self) -> None:
+        _make_journal_cmd(self.caller, "consent everyone").func()
+        self.assertIn("Usage", _capture(self.caller))
+
 
 class GoalCommandErrorTests(TestCase):
     def setUp(self) -> None:
