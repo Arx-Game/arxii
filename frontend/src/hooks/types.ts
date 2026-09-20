@@ -40,9 +40,40 @@ export const WS_MESSAGE_TYPE = {
   REQUEST_ROOM_STATE: 'request_room_state',
   STATE_RESYNC: 'state_resync',
   STATE_RESYNC_ERROR: 'state_resync_error',
+  /** Outbound: puppet a character on this socket's session (#3933). */
+  PUPPET: 'puppet',
+  /** Inbound: the death condolence line, kwargs `{character, body}` (#3933). */
+  CHARACTER_DIED: 'character_died',
+  /** Inbound: an estate settlement opened; the REST view owns it (#3933). */
+  ESTATE_SETTLEMENT_OPENED: 'estate_settlement_opened',
+  /** Inbound: Evennia's own out-of-band echo (#3933). */
+  OOB: 'oob',
+  /** Inbound: Evennia's client-settings frame (#3933). */
+  WEBCLIENT_OPTIONS: 'webclient_options',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
+
+/** Evennia's own client-protocol frames; no Arx meaning, never story content (#3933). */
+export const EVENNIA_CONTROL_TYPES: ReadonlySet<string> = new Set([
+  'channel',
+  'ping',
+  'heartbeat',
+  'reconnect',
+  'nickname',
+  'subscribe',
+  'unsubscribe',
+  'repeat',
+  'monitored',
+  'send',
+  'role',
+  'session',
+  'privmsg',
+  'request_nicklist',
+  'reportable_variables',
+  'reported_variables',
+  'sendable_variables',
+]);
 
 export interface GameMessage {
   content: string;
@@ -84,7 +115,8 @@ export type IncomingMessage = [SocketMessageType, unknown[], Record<string, unkn
 export type OutgoingMessage =
   | [typeof WS_MESSAGE_TYPE.TEXT, [string], Record<string, unknown>]
   | [typeof WS_MESSAGE_TYPE.EXECUTE_ACTION, [], { action: string; kwargs: Record<string, unknown> }]
-  | [typeof WS_MESSAGE_TYPE.REQUEST_ROOM_STATE, [], { client_request_id: string }];
+  | [typeof WS_MESSAGE_TYPE.REQUEST_ROOM_STATE, [], { client_request_id: string }]
+  | [typeof WS_MESSAGE_TYPE.PUPPET, [], { character: string }];
 
 /**
  * Result payload for an `execute_action` round-trip. Mirrors the dataclass
