@@ -240,26 +240,40 @@ export function SceneDetailPage() {
   const queryClient = useQueryClient();
 
   const submitAction = useMutation({
-    mutationFn: (action: ActionAttachmentInfo) =>
+    mutationFn: ({ action }: { action: ActionAttachmentInfo; clientRequestId: string }) =>
       createActionRequest(id, {
         action_key: action.actionKey,
         target_persona_id: action.targetPersonaId,
         technique_id: action.techniqueId,
       }),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
+      attachedActionsInFlight.current.delete(variables.clientRequestId);
+      attachedActionsCompleted.current.add(variables.clientRequestId);
       setActionAttachment(null);
       // 2026-07 audit: 'scene-messages' matched no query — the feed key is 'scene-interactions'.
       queryClient.invalidateQueries({ queryKey: ['scene-interactions', id] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', id] });
     },
-    onError: () => {
+    onError: (_error, variables) => {
+      attachedActionsInFlight.current.delete(variables.clientRequestId);
       // Keep the attachment so user can retry
     },
   });
 
+  const attachedActionsInFlight = useRef(new Set<string>());
+  const attachedActionsCompleted = useRef(new Set<string>());
+
   const handleSubmitAction = useCallback(
-    (action: ActionAttachmentInfo) => {
-      submitAction.mutate(action);
+    (action: ActionAttachmentInfo, clientRequestId?: string) => {
+      const correlationId =
+        clientRequestId ?? `${action.actionKey}:${action.targetPersonaId ?? ''}`;
+      if (
+        attachedActionsInFlight.current.has(correlationId) ||
+        attachedActionsCompleted.current.has(correlationId)
+      )
+        return;
+      attachedActionsInFlight.current.add(correlationId);
+      submitAction.mutate({ action, clientRequestId: correlationId });
     },
     [submitAction]
   );

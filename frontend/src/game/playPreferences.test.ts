@@ -79,6 +79,21 @@ describe('playPreferences', () => {
     });
   });
 
+  it('ignores unscoped legacy preferences and keeps anchors account-isolated', () => {
+    localStorage.setItem(
+      'arx:play-preferences:v1',
+      JSON.stringify({ ...DEFAULT_PLAY_PREFERENCES, sidebarWidth: 360 })
+    );
+    expect(loadPlayPreferences(1).sidebarWidth).toBe(DEFAULT_PLAY_PREFERENCES.sidebarWidth);
+    saveConversationAnchor(
+      'scene:1',
+      { anchors: { threads: null, chronological: null }, expanded: [] },
+      1
+    );
+    expect(loadConversationAnchor('scene:1', 2)).toBeNull();
+    expect(loadConversationAnchor('scene:1', 1)).not.toBeNull();
+  });
+
   it('returns null for an unknown conversation', () => {
     expect(loadConversationAnchor('scene:999')).toBeNull();
   });

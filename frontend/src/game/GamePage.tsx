@@ -131,29 +131,35 @@ function useThreadTabPersistence(
   active: string | null,
   sceneId: string | undefined,
   openThreadTabs: string[],
-  activeThreadTabRaw: string | null
+  activeThreadTabRaw: string | null,
+  accountId?: number | null
 ) {
   const dispatch = useAppDispatch();
   const [tabsReadyFor, setTabsReadyFor] = useState<string | null>(null);
   useEffect(() => {
     if (!active || !sceneId) return;
-    const hydrationKey = `${active}:${sceneId}`;
+    const hydrationKey = `${accountId ?? 'anonymous'}:${active}:${sceneId}`;
     if (tabsReadyFor === hydrationKey) return;
-    const stored = loadThreadTabs(active, sceneId);
+    const stored = loadThreadTabs(active, sceneId, accountId);
     if (stored && stored.openThreadTabs.length > 0) {
       dispatch(hydrateThreadTabs({ character: active, ...stored }));
     }
     setTabsReadyFor(hydrationKey);
-  }, [active, sceneId, dispatch, tabsReadyFor]);
+  }, [active, sceneId, dispatch, tabsReadyFor, accountId]);
 
   useEffect(() => {
     if (!active || !sceneId) return;
-    if (tabsReadyFor !== `${active}:${sceneId}`) return;
-    saveThreadTabs(active, sceneId, {
-      openThreadTabs,
-      activeThreadTab: activeThreadTabRaw,
-    });
-  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor]);
+    if (tabsReadyFor !== `${accountId ?? 'anonymous'}:${active}:${sceneId}`) return;
+    saveThreadTabs(
+      active,
+      sceneId,
+      {
+        openThreadTabs,
+        activeThreadTab: activeThreadTabRaw,
+      },
+      accountId
+    );
+  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor, accountId]);
 }
 
 /** The feed props GameWindow takes, present only when we are inside a scene. */
@@ -555,7 +561,7 @@ export function GamePage() {
       ? activeThreadTabRaw
       : null;
 
-  useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw);
+  useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw, account?.id);
 
   // #3761 Task 1: lifted from PlaySidebar/SidebarTabPanel so a later top-bar
   // combat banner (Task 3) can also drive the sidebar into view.
@@ -847,6 +853,8 @@ export function GamePage() {
   const [targetToAppend, setPendingTarget] = useState<string | null>(null);
   const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
   const queryClient = useQueryClient();
+  const attachedActionsInFlight = useRef(new Set<string>());
+  const attachedActionsCompleted = useRef(new Set<string>());
 
   const handleDismissOutcome = useCallback(() => {
     if (sceneData?.id != null) {
@@ -860,13 +868,15 @@ export function GamePage() {
   }, [queryClient, sceneData?.id, railEncounterId]);
 
   const submitAction = useMutation({
-    mutationFn: (action: ActionAttachmentInfo) =>
+    mutationFn: ({ action }: { action: ActionAttachmentInfo; clientRequestId: string }) =>
       createActionRequest(sceneId ?? '', {
         action_key: action.actionKey,
         target_persona_id: action.targetPersonaId,
         technique_id: action.techniqueId,
       }),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
+      attachedActionsInFlight.current.delete(variables.clientRequestId);
+      attachedActionsCompleted.current.add(variables.clientRequestId);
       setActionAttachment(null);
       // No 'scene-messages' invalidation here (#2156 review fix): nothing in
       // this codebase ever queries that key — the scene feed here is
@@ -874,14 +884,23 @@ export function GamePage() {
       // React Query cache to invalidate. The stale call was dead on arrival.
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     },
-    onError: () => {
+    onError: (_error, variables) => {
+      attachedActionsInFlight.current.delete(variables.clientRequestId);
       // Keep the attachment so the user can retry.
     },
   });
 
   const handleSubmitAction = useCallback(
-    (action: ActionAttachmentInfo) => {
-      submitAction.mutate(action);
+    (action: ActionAttachmentInfo, clientRequestId?: string) => {
+      const correlationId =
+        clientRequestId ?? `${action.actionKey}:${action.targetPersonaId ?? ''}`;
+      if (
+        attachedActionsInFlight.current.has(correlationId) ||
+        attachedActionsCompleted.current.has(correlationId)
+      )
+        return;
+      attachedActionsInFlight.current.add(correlationId);
+      submitAction.mutate({ action, clientRequestId: correlationId });
     },
     [submitAction]
   );

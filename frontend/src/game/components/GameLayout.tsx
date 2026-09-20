@@ -112,20 +112,27 @@ export function GameLayout({
             aria-valuemin={240}
             aria-valuemax={360}
             aria-valuenow={sidebarWidth}
+            aria-valuetext={`${sidebarWidth}px`}
+            data-testid="sidebar-resize"
             aria-orientation="vertical"
             role="separator"
-            className={`absolute top-0 z-10 hidden h-full w-11 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
+            className={`play-sidebar-resize absolute top-0 z-10 h-full w-11 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
             onPointerDown={resizeSidebar}
             onKeyDown={(event) => {
               if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
               event.preventDefault();
-              const delta = event.key === 'ArrowLeft' ? -8 : 8;
+              const direction = event.key === 'ArrowLeft' ? -1 : 1;
+              const delta = (sidebarSide === 'right' ? -direction : direction) * 8;
               const nextWidth = Math.min(360, Math.max(240, sidebarWidth + delta));
               setSidebarWidth(nextWidth);
-              savePlayPreferences(
-                { ...loadPlayPreferences(accountId), sidebarWidth: nextWidth },
-                accountId
-              );
+              if (
+                !savePlayPreferences(
+                  { ...loadPlayPreferences(accountId), sidebarWidth: nextWidth },
+                  accountId
+                )
+              ) {
+                window.dispatchEvent(new Event('arx-play-storage-warning'));
+              }
             }}
           />
           {contextualSidebar}

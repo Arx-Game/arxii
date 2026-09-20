@@ -687,13 +687,20 @@ export function useGameSocket() {
     [account, dispatch, navigate]
   );
 
-  const send = useCallback((character: MyRosterEntry['name'], command: string) => {
-    const socket = sockets[character];
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
-      socket.send(JSON.stringify(message));
-    }
-  }, []);
+  const send = useCallback(
+    (character: MyRosterEntry['name'], command: string, clientRequestId?: string) => {
+      const socket = sockets[character];
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const message: OutgoingMessage = [
+          WS_MESSAGE_TYPE.TEXT,
+          [command],
+          { client_request_id: clientRequestId ?? globalThis.crypto.randomUUID() },
+        ];
+        socket.send(JSON.stringify(message));
+      }
+    },
+    []
+  );
 
   /**
    * Send a staff Commands-mode line (#3857): the same text frame, flagged so

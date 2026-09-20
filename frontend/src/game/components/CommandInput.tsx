@@ -27,6 +27,7 @@ import type { MyRosterEntry } from '@/roster/types';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { createActionRequest } from '@/scenes/actionQueries';
+import { useUnsavedNavigationGuard } from '../useUnsavedNavigationGuard';
 import { submitPose, fetchScene, sceneKeys, fetchPoseSubmission } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/queries';
 import { replyReachability } from '@/scenes/replyReachability';
@@ -110,7 +111,7 @@ interface CommandInputProps {
   actionAttachment?: ActionAttachmentInfo | null;
   onActionAttach?: (action: ActionAttachmentInfo) => void;
   onActionDetach?: () => void;
-  onSubmitAction?: (action: ActionAttachmentInfo) => void;
+  onSubmitAction?: (action: ActionAttachmentInfo, clientRequestId?: string) => void;
   /** Persona id for the active character — used to call submit_pose REST endpoint. */
   personaId?: number | null;
   /** IDs of the persona's unlinked ACTION interactions in this scene (from usePendingUnlinkedActions). */
@@ -312,6 +313,7 @@ export function CommandInput({
   const isStrandedDraft =
     (draft.status === 'pending' || draft.status === 'unknown') &&
     pendingSpeechRef.current?.clientRequestId !== draft.clientRequestId;
+  useUnsavedNavigationGuard(draft.content.trim().length > 0 || draft.status !== 'clean');
   // "Unsent draft from <context>" (demo Screen 4) — the closest available
   // stand-in for a room/place name is the active composer mode's own label
   // (e.g. "Pose → The Gilded Hart"), falling back to `roomName` for the
@@ -644,10 +646,6 @@ export function CommandInput({
         : undefined
     );
 
-    if (actionAttachment && onSubmitAction) {
-      onSubmitAction(actionAttachment);
-    }
-
     // #3760 Task 10 — say/whisper dispatch via `executeAction` (structured
     // ack + idempotency), replacing the raw WS text-command send for these
     // two modes. `tt` is deliberately excluded from `executeAction` itself
@@ -737,6 +735,10 @@ export function CommandInput({
     const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
 
     if (usesRestSubmit) {
+      // The action is correlated to this prose request and runs only after the
+      // prose is accepted. This prevents an action from firing when the pose
+      // is rejected, and lets retries reuse the same correlation id.
+      const attachedAction = actionAttachment;
       // REST path: explicit action_link_ids override when the user has detached
       // one or more pending actions. WebSocket send() is intentionally skipped
       // to avoid creating two POSE Interactions for the same pose.
@@ -780,6 +782,9 @@ export function CommandInput({
           : {}),
       })
         .then((response) => {
+          if (attachedAction && onSubmitAction) {
+            onSubmitAction(attachedAction, clientRequestId);
+          }
           // A newer edit made after the request went out survives this ack:
           // `acknowledge` only clears while the dispatched id is still the
           // draft's, and `setContent` nulled it on that edit (#3784).
@@ -830,6 +835,11 @@ export function CommandInput({
     // WebSocket path: existing behavior. Server-side auto-link will attach
     // any pending ACTION interactions when the POSE is created.
     send(character, fullCommand);
+    // A legacy command socket has no structured acknowledgement. Treat the
+    // command dispatch itself as prose acceptance and dispatch the attached
+    // action after it, never before it. Structured REST poses use the
+    // correlated callback above instead.
+    if (actionAttachment && onSubmitAction) onSubmitAction(actionAttachment);
 
     // Finding 4 fix (#3760 final review) — this fallback (reached when a
     // stored whisper/tt's target/place can't be resolved right now, an
@@ -1012,6 +1022,7 @@ export function CommandInput({
         onAttach={(action) => onActionAttach?.(action)}
         onDetach={() => onActionDetach?.()}
         targetName={composerMode?.targets[0]}
+        actionRequestId={pendingSpeechRef.current?.clientRequestId}
       />
     </div>
   ) : undefined;
