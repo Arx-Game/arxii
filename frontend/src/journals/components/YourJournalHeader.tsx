@@ -47,39 +47,43 @@ export function YourJournalHeader({ name, onWrite }: YourJournalHeaderProps) {
         <h1 className="m-0 font-display text-[1.6rem] font-semibold tracking-[.04em]">{name}</h1>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
         {settings ? (
           <>
             <span className="jr-sans text-[.8125rem] text-muted-foreground">
               Black journal after your death
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               <PillButton
                 pressed={settings.posthumous_journal_disposition === 'reveal'}
                 onClick={() => setDisposition('reveal')}
+                className="px-3"
               >
                 Reveal
               </PillButton>
               <PillButton
                 pressed={settings.posthumous_journal_disposition === 'seal'}
                 onClick={() => setDisposition('seal')}
+                className="px-3"
               >
                 Remain sealed
               </PillButton>
             </div>
-            <span className="jr-sans ml-2 text-[.8125rem] text-muted-foreground">
+            <span className="jr-sans text-[.8125rem] text-muted-foreground">
               Retorts and condemnation
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               <PillButton
                 pressed={settings.retort_consent === 'rivals'}
                 onClick={() => setConsent('rivals')}
+                className="px-3"
               >
                 Rivals only
               </PillButton>
               <PillButton
                 pressed={settings.retort_consent === 'anyone'}
                 onClick={() => setConsent('anyone')}
+                className="px-3"
               >
                 Anyone
               </PillButton>
