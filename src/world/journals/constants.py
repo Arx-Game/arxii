@@ -5,7 +5,7 @@ class ResponseType(models.TextChoices):
     """Type of journal response.
 
     PRAISE and CONDEMN are the agree/disagree pair on an entry's substance; RETORT answers
-    it. RETORT and CONDEMN are consent-gated (#3941, ADR-0303): offered only to a rival or
+    it. RETORT and CONDEMN are consent-gated (#3941, ADR-0306): offered only to a rival or
     when the writer's ``CharacterSheet.retort_consent`` is ANYONE.
     """
 
