@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.scenes.factories import InteractionFactory, SceneFactory
+from world.scenes.models import Interaction
 
 
 class PlayKeysetPagingContractTests(APITestCase):
@@ -41,3 +42,51 @@ class PlayKeysetPagingContractTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["code"], "invalid_date")
         self.assertEqual(response.json()["field"], "from")
+
+
+class PlayContextCursorContractTests(APITestCase):
+    def test_context_cursor_rejects_tamper_and_filter_mismatch(self):
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        rows = [InteractionFactory(scene=scene) for _ in range(60)]
+        params = {
+            "id": rows[30].pk,
+            "timestamp": rows[30].timestamp.isoformat(),
+            "from": "2000-01-01",
+        }
+        response = self.client.get("/api/play/context/", params)
+        self.assertEqual(response.status_code, 200)
+        cursor = response.json()["before"]
+        self.assertTrue(cursor)
+
+        tampered = cursor[:-1] + ("A" if cursor[-1] != "A" else "B")
+        invalid = self.client.get("/api/play/context/", {**params, "before": tampered})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.json()["code"], "invalid_cursor")
+
+        mismatched = self.client.get(
+            "/api/play/context/", {**params, "from": "2020-01-01", "before": cursor}
+        )
+        self.assertEqual(mismatched.status_code, 400)
+        self.assertEqual(mismatched.json()["code"], "invalid_cursor")
+
+    def test_context_cursor_rejects_deleted_boundary_as_stale(self):
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        rows = [InteractionFactory(scene=scene) for _ in range(60)]
+        params = {
+            "id": rows[30].pk,
+            "timestamp": rows[30].timestamp.isoformat(),
+            "from": "2000-01-01",
+        }
+        response = self.client.get("/api/play/context/", params)
+        cursor = response.json()["before"]
+        from django.core import signing
+
+        boundary_id = signing.loads(cursor, salt="narrative-play-cursor-v2")["key"][1]
+        Interaction.objects.filter(pk=boundary_id).delete()
+        stale = self.client.get("/api/play/context/", {**params, "before": cursor})
+        self.assertEqual(stale.status_code, 400)
+        self.assertEqual(stale.json()["code"], "invalid_cursor")

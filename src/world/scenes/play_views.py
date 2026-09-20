@@ -369,7 +369,7 @@ def _paged_rows(  # noqa: C901, PLR0912
     deterministic.
     """
     queryset, context = _queryset(request, params)
-    token = request.query_params.get("before") or request.query_params.get("after")
+    token = request.query_params.get("before") or request.query_params.get("after")  # noqa: USE_FILTERSET
     decoded = (
         _decode_cursor(token, request=request, query_params=request.query_params) if token else None
     )
@@ -715,11 +715,11 @@ class PlayPosesView(APIView):
 
 
 class PlayContextView(APIView):
-    """GET a small authorized context window around one retained pose."""
+    """GET a bounded authorized neighborhood around one retained pose."""
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request) -> Response:
+    def get(self, request: Request) -> Response:  # noqa: C901, PLR0912, PLR0915
         pose_id = request.query_params.get("id")  # noqa: USE_FILTERSET
         pose_timestamp = request.query_params.get("timestamp")  # noqa: USE_FILTERSET
         if not pose_id:
@@ -736,40 +736,107 @@ class PlayContextView(APIView):
                 pose_timestamp and not _same_instant(target.timestamp.isoformat(), pose_timestamp)
             ):
                 return Response({"detail": "This pose is no longer available."}, status=404)
-            # Resolve only a bounded authorized neighborhood. The target itself
-            # is resolved before enrichment, so inaccessible ids cannot reveal
-            # existence through a serializer or a broad materialized list.
-            older_qs = queryset.filter(
-                Q(timestamp__lt=target.timestamp) | Q(timestamp=target.timestamp, id__lt=target.pk)
-            ).order_by("-timestamp", "-id")[:25]
-            newer_qs = queryset.filter(
-                Q(timestamp__gt=target.timestamp) | Q(timestamp=target.timestamp, id__gt=target.pk)
-            ).order_by("timestamp", "id")[:25]
-            older = list(reversed(list(older_qs)))
-            newer = list(newer_qs)
-            interactions = [*older, target, *newer]
-            rows = list(InteractionListSerializer(interactions, many=True, context=context).data)
-            latest = queryset.order_by("-timestamp", "-id").values("timestamp", "id").first()
-            snapshot = (
-                [latest["timestamp"].isoformat(), int(latest["id"])]
-                if latest
-                else [target.timestamp.isoformat(), target.pk]
+            token = request.query_params.get("before") or request.query_params.get("after")  # noqa: USE_FILTERSET
+            decoded = (
+                _decode_cursor(token, request=request, query_params=request.query_params)
+                if token
+                else None
             )
+            if decoded:
+                boundary = decoded["key"]
+                boundary_dt = _datetime_param(str(boundary[0]), "cursor")
+                if boundary_dt is None:
+                    raise PlayCursorError
+                if not queryset.filter(pk=int(boundary[1]), timestamp=boundary_dt).exists():
+                    raise PlayCursorError("This context cursor is stale. Reload and try again.")
+                raw_snapshot = decoded.get("snapshot")
+                snapshot = (
+                    (str(raw_snapshot[0]), int(raw_snapshot[1]))
+                    if raw_snapshot
+                    else (timezone.now().isoformat(), 2**63 - 1)
+                )
+                snap_dt = _datetime_param(snapshot[0], "snapshot")
+                if snap_dt is None:
+                    raise PlayCursorError
+                queryset = queryset.filter(timestamp__lte=snap_dt)
+                if request.query_params.get("before"):  # noqa: USE_FILTERSET
+                    interactions = list(
+                        queryset.filter(
+                            Q(timestamp__lt=boundary_dt)
+                            | Q(timestamp=boundary_dt, id__lt=int(boundary[1]))
+                        ).order_by("-timestamp", "-id")[:26]
+                    )
+                    interactions.reverse()
+                else:
+                    interactions = list(
+                        queryset.filter(
+                            Q(timestamp__gt=boundary_dt)
+                            | Q(timestamp=boundary_dt, id__gt=int(boundary[1]))
+                        ).order_by("timestamp", "id")[:26]
+                    )
+            else:
+                snapshot = (timezone.now().isoformat(), 2**63 - 1)
+                snap_dt = _datetime_param(snapshot[0], "snapshot")
+                if snap_dt is None:
+                    raise PlayCursorError
+                queryset = queryset.filter(timestamp__lte=snap_dt)
+                older = list(
+                    queryset.filter(
+                        Q(timestamp__lt=target.timestamp)
+                        | Q(timestamp=target.timestamp, id__lt=target.pk)
+                    ).order_by("-timestamp", "-id")[:25]
+                )
+                newer = list(
+                    queryset.filter(
+                        Q(timestamp__gt=target.timestamp)
+                        | Q(timestamp=target.timestamp, id__gt=target.pk)
+                    ).order_by("timestamp", "id")[:25]
+                )
+                interactions = [*reversed(older), target, *newer]
+            rows = list(InteractionListSerializer(interactions, many=True, context=context).data)
+            if not rows:
+                return Response(
+                    {
+                        "results": [],
+                        "threadId": None,
+                        "before": None,
+                        "after": None,
+                        "snapshot": snapshot[0],
+                    }
+                )
+            first_key, last_key = _row_key(rows[0]), _row_key(rows[-1])
+            first_dt = _datetime_param(first_key[0], "cursor")
+            last_dt = _datetime_param(last_key[0], "cursor")
+            if first_dt is None or last_dt is None:
+                raise PlayCursorError
             has_older = queryset.filter(
-                Q(timestamp__lt=target.timestamp) | Q(timestamp=target.timestamp, id__lt=target.pk)
+                Q(timestamp__lt=first_dt) | Q(timestamp=first_dt, id__lt=first_key[1])
             ).exists()
             has_newer = queryset.filter(
-                Q(timestamp__gt=target.timestamp) | Q(timestamp=target.timestamp, id__gt=target.pk)
+                Q(timestamp__gt=last_dt) | Q(timestamp=last_dt, id__gt=last_key[1])
             ).exists()
             return Response(
                 {
                     "results": rows,
-                    "threadId": rows[len(older)].get("thread_id"),
-                    # Context cursors retain the original compact shape for
-                    # deep-link compatibility; each boundary is still resolved
-                    # against the authorized queryset on the next request.
-                    "before": _cursor(rows[0]) if has_older else None,
-                    "after": _cursor(rows[-1]) if has_newer else None,
+                    "threadId": str(target.thread_id) if target.thread_id else None,
+                    "before": _encode_cursor(
+                        request=request,
+                        query_params=request.query_params,
+                        key=first_key,
+                        snapshot=snapshot,
+                        direction="before",
+                    )
+                    if has_older
+                    else None,
+                    "after": _encode_cursor(
+                        request=request,
+                        query_params=request.query_params,
+                        key=last_key,
+                        snapshot=snapshot,
+                        direction="after",
+                    )
+                    if has_newer
+                    else None,
                     "snapshot": snapshot[0],
                 }
             )

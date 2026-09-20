@@ -1,10 +1,10 @@
 # Issue #3948 evidence
 
-Implementation revision: `5d1721cae` (based on PR #3953 revision `e548f12b6`).
+Implementation revision: branch commit after context-cursor hardening (based on PR #3953 revision `e548f12b6`).
 
 ## Fixture-backed checks
 
-- `uv run arx test world.scenes.tests.test_play_views world.scenes.tests.test_play_paging_contracts --keepdb` — 41 passed.
+- `uv run arx test world.scenes.tests.test_play_views world.scenes.tests.test_play_paging_contracts --keepdb` — 43 passed.
 - `pnpm vitest run src/game/components/HistoryNavigator.test.tsx src/game/playQueries.test.ts` — 12 passed.
 - `pnpm typecheck` — passed.
 
