@@ -4,7 +4,9 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.journals.constants import ResponseType
+from world.character_sheets.types import RetortConsent
+from world.journals.constants import INTRODUCTION_KINDS, JournalKind, ResponseType
+from world.journals.factories import CondemnFactory, JournalEntryFactory
 from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
 
 
@@ -179,3 +181,43 @@ class WeeklyJournalXPTests(TestCase):
         WeeklyJournalXP.objects.create(character_sheet=self.sheet)
         with self.assertRaises(IntegrityError):
             WeeklyJournalXP.objects.create(character_sheet=self.sheet)
+
+
+class AboutAndConsentColumnsTest(TestCase):
+    def test_entry_about_defaults_null_and_holds_a_sheet(self) -> None:
+        subject = CharacterSheetFactory()
+        entry = JournalEntryFactory()
+        self.assertIsNone(entry.about)
+        entry.about = subject
+        entry.save(update_fields=["about"])
+        entry.refresh_from_db()
+        self.assertEqual(entry.about_id, subject.pk)
+        self.assertIn(entry, subject.journal_entries_about.all())
+
+    def test_deleting_the_subject_keeps_the_entry(self) -> None:
+        subject = CharacterSheetFactory()
+        entry = JournalEntryFactory(about=subject)
+        subject.delete()
+        # flush_from_cache(): the collector's SET_NULL is a bulk UPDATE, which never
+        # touches this identity-mapped Python instance, and refresh_from_db() alone
+        # would just short-circuit back to the same cached (stale) instance (idmapper
+        # quirk documented for e.g. world/magic/tests/test_audere_majora_offer.py).
+        entry.flush_from_cache()
+        entry.refresh_from_db()
+        self.assertIsNone(entry.about_id)
+
+    def test_sheet_consent_defaults_to_rivals(self) -> None:
+        sheet = CharacterSheetFactory()
+        self.assertEqual(sheet.retort_consent, RetortConsent.RIVALS)
+        self.assertIsNone(sheet.journals_visited_at)
+
+    def test_condemn_is_a_response_type(self) -> None:
+        response = CondemnFactory()
+        self.assertEqual(response.response_type, ResponseType.CONDEMN)
+        self.assertIsNotNone(response.parent_id)
+
+    def test_introduction_kinds_are_the_three_non_entry_kinds(self) -> None:
+        self.assertEqual(
+            set(INTRODUCTION_KINDS),
+            {JournalKind.FIRST_JOURNAL, JournalKind.APPLICATION, JournalKind.WHISPERS},
+        )
