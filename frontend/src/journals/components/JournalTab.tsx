@@ -50,7 +50,7 @@ export function JournalTab() {
           return (
             <li key={entry.id} className="flex items-center gap-1">
               <Link
-                to="/journals"
+                to="/journals?mine=1"
                 className="block min-w-0 flex-1 rounded border px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <span className="block truncate font-medium">{entry.title}</span>
@@ -86,7 +86,7 @@ export function JournalTab() {
 
       {renderRecent()}
 
-      <Link to="/journals" className="block text-xs text-muted-foreground underline">
+      <Link to="/journals?mine=1" className="block text-xs text-muted-foreground underline">
         Full journal →
       </Link>
 

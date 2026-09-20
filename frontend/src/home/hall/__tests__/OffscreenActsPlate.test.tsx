@@ -68,9 +68,9 @@ describe('OffscreenActsPlate', () => {
     renderWithProviders(<OffscreenActsPlate characters={[aria, bianca]} />);
 
     expect(screen.getByText('Offscreen Acts')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Write in your journal' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Your journal' })).toHaveAttribute(
       'href',
-      '/journals'
+      '/journals?mine=1'
     );
     expect(screen.getByRole('link', { name: 'Set your goals' })).toHaveAttribute(
       'href',
@@ -97,7 +97,7 @@ describe('OffscreenActsPlate', () => {
     store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<OffscreenActsPlate characters={[inComa]} />);
 
-    expect(screen.getByRole('link', { name: 'Write in your journal' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Your journal' })).toBeInTheDocument();
   });
 
   it.each([
@@ -113,7 +113,7 @@ describe('OffscreenActsPlate', () => {
       renderWithProviders(<OffscreenActsPlate characters={[degraded]} />);
 
       expect(screen.getByText(expectedText)).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Write in your journal' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Your journal' })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Set your goals' })).not.toBeInTheDocument();
     }
   );
