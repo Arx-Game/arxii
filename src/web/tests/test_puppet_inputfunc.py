@@ -13,10 +13,10 @@ def _char(name: str) -> MagicMock:
     return char
 
 
-def _session(available, puppet_result=(True, "Now controlling Tehom.")) -> MagicMock:
+def _session(available, puppet_result=(True, "Now controlling Tehom."), seance=()) -> MagicMock:
     session = MagicMock()
-    session.protocol_key = "websocket"
     session.account.get_available_characters.return_value = available
+    session.account.get_seance_manifestable_characters.return_value = list(seance)
     session.account.puppet_character_in_session.return_value = puppet_result
     return session
 
@@ -63,9 +63,18 @@ class PuppetInputfuncTests(TestCase):
                 command_error={"error": "Which character?", "command": "puppet"}
             )
 
+    def test_a_seance_manifestable_character_is_puppeted(self) -> None:
+        """#2393 — @ic reaches these, so the web handshake must too."""
+        ariel = _char("Ariel")
+        session = _session([_char("Tehom")], seance=[ariel])
+        puppet(session, character="Ariel")
+        session.account.puppet_character_in_session.assert_called_once_with(ariel, session)
+        session.msg.assert_not_called()
+
     def test_a_session_without_an_account_is_a_command_error(self) -> None:
         session = _session([])
         session.account = None
         puppet(session, character="Tehom")
-        session.msg.assert_called_once()
-        session.account = None  # keep; puppet must not have been attempted
+        session.msg.assert_called_once_with(
+            command_error={"error": "Not logged in.", "command": "puppet"}
+        )

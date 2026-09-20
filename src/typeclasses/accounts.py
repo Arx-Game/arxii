@@ -29,7 +29,7 @@ from evennia.utils.utils import make_iter
 
 from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
-from core.wire_options import LIFECYCLE_TEXT_TYPE, LifecycleEvent
+from core.wire_options import LifecycleEvent, TextFrameType
 from evennia_extensions.account_setup import heal_account_setup
 
 TELNET_BLOCKED_BY_2FA_MESSAGE = (
@@ -493,7 +493,10 @@ class Account(DefaultAccount):
             session.msg(
                 (
                     f"Switching from {session.puppet.name} to {character.name}.",
-                    {"type": LIFECYCLE_TEXT_TYPE, "event": LifecycleEvent.SWITCH.value},
+                    {
+                        "type": TextFrameType.LIFECYCLE.value,
+                        "event": LifecycleEvent.SWITCH.value,
+                    },
                 )
             )
             self.unpuppet_object(session)
@@ -628,7 +631,12 @@ class Account(DefaultAccount):
             # a lifecycle frame is dropped there as a milestone note (#3933).
             session.msg(command_error={"error": message, "command": "puppet"})
             return
-        session.msg((message, {"type": LIFECYCLE_TEXT_TYPE, "event": LifecycleEvent.PUPPET.value}))
+        session.msg(
+            (
+                message,
+                {"type": TextFrameType.LIFECYCLE.value, "event": LifecycleEvent.PUPPET.value},
+            )
+        )
 
     def at_post_create_character(self, character, **kwargs):
         """

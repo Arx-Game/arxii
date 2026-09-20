@@ -107,6 +107,10 @@ export interface Session {
    * Set when `puppet_changed` names this session's character after the
    * open-time puppet request (#3933) — confirms the handshake landed, rather
    * than just assuming it from the absence of a `command_error`.
+   *
+   * Its consumer is the #3934 connection recorder, which reads it as the
+   * "puppet confirmed" readiness milestone in the entry timeline. Nothing
+   * gates on it today: readiness stays `room_state`.
    */
   puppetConfirmed?: boolean;
 }

@@ -2,34 +2,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
-from core.wire_options import (  # re-exported wire vocabulary, see __all__
-    LIFECYCLE_TEXT_TYPE,
-    LifecycleEvent,
-    TextFrameOption,
-    TextFrameType,
-)
-
-__all__ = [
-    "LIFECYCLE_TEXT_TYPE",
-    "BattleStatePayload",
-    "CharacterDiedPayload",
-    "CommandErrorPayload",
-    "HazardPromptPayload",
-    "KudosReceivedPayload",
-    "LifecycleEvent",
-    "MailArrivedPayload",
-    "MessageReactionPayload",
-    "RoomStateObject",
-    "RoomStatePayload",
-    "ScenePayload",
-    "SceneSummary",
-    "TextFrameOption",
-    "TextFrameType",
-    "VnMessagePayload",
-    "WebsocketMessage",
-    "WebsocketMessageType",
-]
-
 
 class WebsocketMessageType(str, Enum):
     """Supported websocket message types."""

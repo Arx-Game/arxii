@@ -122,7 +122,10 @@ def puppet(session, *args, **kwargs):  # noqa: ARG001 - Evennia's inputfunc sign
         _puppet_error(session, "Which character?")
         return
     wanted = character.strip().lower()
-    matches = [char for char in account.get_available_characters() if char.key.lower() == wanted]
+    # #2393 — a retired honoree with an accepted, open seance offer is
+    # reachable too, even though get_available_characters() excludes them.
+    reachable = account.get_available_characters() + account.get_seance_manifestable_characters()
+    matches = [char for char in reachable if char.key.lower() == wanted]
     if len(matches) != 1:
         _puppet_error(session, f"Character '{character.strip()}' is not one of yours.")
         return

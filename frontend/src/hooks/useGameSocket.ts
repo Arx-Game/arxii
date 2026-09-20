@@ -322,9 +322,15 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
       return ({ character, args }) => handleCommandPayload(character, args as CommandSpec[]);
 
     // Broadcast to every account session on each successful puppet (#3933).
-    // Confirms the open-time puppet request landed when it names THIS
-    // socket's character; a puppet_changed for another character (a sibling
-    // session switching) is not this session's confirmation and is ignored.
+    // The frame carries a `session_id`, but a socket does not know its own, so
+    // the match is on `character_name` alone. What that proves is narrower than
+    // "my request landed": SOME session of this account now puppets this
+    // socket's character. In the common single-tab case that is this socket's
+    // own open-time request; with two tabs on the same character, the sibling's
+    // puppet confirms this one too. A per-session confirmation needs the server
+    // to echo a request id back on the frame, which #3934's connection-recorder
+    // work adds. A puppet_changed for another character (a sibling tab on a
+    // different character) is never this socket's confirmation and is ignored.
     case WS_MESSAGE_TYPE.PUPPET_CHANGED:
       return ({ character, kwargs, dispatch }) => {
         if (kwargs?.character_name === character) {

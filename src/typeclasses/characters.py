@@ -18,12 +18,7 @@ from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
-from core.wire_options import (
-    LIFECYCLE_TEXT_TYPE,
-    LifecycleEvent,
-    TextFrameOption,
-    TextFrameType,
-)
+from core.wire_options import LifecycleEvent, TextFrameOption, TextFrameType
 from flows.constants import EventName
 from flows.emit import emit_event
 from flows.events.payloads import AttackLandedPayload, MovedPayload, MovePreDepartPayload
@@ -560,7 +555,7 @@ class Character(ObjectParent, DefaultCharacter):
         self.msg(
             (
                 f"You become {self.key}.",
-                {"type": LIFECYCLE_TEXT_TYPE, "event": LifecycleEvent.BECOME.value},
+                {"type": TextFrameType.LIFECYCLE.value, "event": LifecycleEvent.BECOME.value},
             )
         )
 
@@ -577,7 +572,7 @@ class Character(ObjectParent, DefaultCharacter):
             return
         self.location.msg_contents(
             ("{name} has entered the game.", {"type": TextFrameType.ARRIVE.value}),
-            exclude=[self, *(resolve_broadcast_exclusions(self.location) or [])],
+            exclude=[self, *resolve_broadcast_exclusions(self.location)],
             from_obj=self,
             mapping={"name": self},
         )

@@ -37,6 +37,14 @@ describe('unknownFrames (#3933)', () => {
     expect(frames[frames.length - 1].type).toBe('frame-54');
   });
 
+  it('warns once per type while recording every occurrence', () => {
+    recordUnknownFrame('mystery', 1);
+    recordUnknownFrame('mystery', 2);
+
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(recordedUnknownFrames()).toHaveLength(2);
+  });
+
   it('__resetUnknownFramesForTests clears', () => {
     recordUnknownFrame('mystery', 1);
     __resetUnknownFramesForTests();

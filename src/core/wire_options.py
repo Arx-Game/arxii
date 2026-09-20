@@ -23,13 +23,10 @@ class TextFrameOption(str, Enum):
 class TextFrameType(str, Enum):
     """``type`` values a ``text`` frame carries that are not an InteractionMode (#3933)."""
 
+    # A puppet-lifecycle milestone rather than story text (#3933); telnet
+    # prints the line and ignores the options.
     LIFECYCLE = "lifecycle"
     ARRIVE = "arrive"
-
-
-# The ``type`` on a text frame that reports a puppet-lifecycle milestone rather
-# than story text (#3933); telnet prints the line and ignores the options.
-LIFECYCLE_TEXT_TYPE = TextFrameType.LIFECYCLE.value
 
 
 class LifecycleEvent(str, Enum):
