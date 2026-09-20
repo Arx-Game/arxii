@@ -6,18 +6,21 @@ check the composer's "Check status" affordance calls after a reconnect or a
 dropped connection leaves a send's outcome unknown.
 """
 
+# ruff: noqa: EM101, TRY003
 from __future__ import annotations
 
 import base64
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
+import hashlib
 import json
 import re
 from typing import Any
 import uuid
 
+from django.core import signing
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import IsAuthenticated
@@ -78,39 +81,171 @@ def _apply_conversation_bound(
     if conversation and conversation.startswith("place:"):
         return queryset.filter(place_id=conversation.removeprefix("place:"))
     if conversation == GENERAL_CONVERSATION_KEY:
-        return queryset.filter(scene__isnull=True)
+        return (
+            queryset.filter(scene__isnull=True, place__isnull=True)
+            .exclude(mode__in=set(OOC_MODES) | {TABLETALK_MODE})
+            .exclude(receivers__isnull=False, mode=WHISPER_MODE)
+        )
+    if conversation and conversation.startswith("whisper:"):
+        try:
+            participant_ids = [
+                int(value) for value in conversation.removeprefix("whisper:").split(",")
+            ]
+        except ValueError:
+            return queryset.none()
+        # A whisper reference is bound to its complete participant set. The
+        # sender and every receiver are constrained in SQL before paging.
+        return queryset.filter(
+            mode=WHISPER_MODE,
+            persona_id__in=participant_ids,
+            receivers__persona_id__in=participant_ids,
+        ).distinct()
     return queryset
 
 
+class PlayCursorError(ValueError):
+    """A cursor that cannot safely resume the requested reader query."""
+
+    code = "invalid_cursor"
+
+    def __init__(
+        self, detail: str = "This history cursor is invalid. Reload and try again."
+    ) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+class PlayDateError(ValueError):
+    """A malformed or timezone-less history date parameter."""
+
+    code = "invalid_date"
+
+    def __init__(self, field: str) -> None:
+        super().__init__(f"{field} must be an ISO-8601 date or timestamp.")
+        self.field = field
+        self.detail = str(self)
+
+
+_CURSOR_SALT = "narrative-play-cursor-v2"
+_CURSOR_VERSION = 2
+
+
 def _row_key(row: dict[str, Any]) -> tuple[str, int]:
-    """Return the stable pose boundary for either a pose or summary row."""
+    """Return the stable `(timestamp, id)` key for a serialized row."""
     pose = row.get("latestVisiblePose") or row.get("pose") or row
     return str(pose["timestamp"]), int(pose["id"])
 
 
-def _same_instant(recorded: Any, requested: str) -> bool:
-    """Compare a served row timestamp against a client-supplied one by value.
+def _datetime_param(value: str | None, field: str) -> datetime | None:
+    """Parse one client date, rejecting malformed and timezone-less values."""
+    if value is None or value == "":
+        return None
+    parsed = parse_datetime(value)
+    if parsed is None:
+        raise PlayDateError(field)
+    if timezone.is_naive(parsed):
+        if len(value) == DATE_ONLY_LENGTH:
+            parsed = timezone.make_aware(parsed)
+        else:
+            raise PlayDateError(field)
+    return parsed
 
-    The served value is DRF's ISO-8601 rendering (``Z`` suffix for UTC); a
-    caller round-tripping a Python ``datetime.isoformat()`` string instead
-    sends the ``+00:00`` spelling of the same instant. Raw string equality
-    spuriously rejects that match, so parse both sides before comparing.
-    Falls back to string equality for a value neither side can parse.
-    """
+
+def _validate_history_dates(query_params: Mapping[str, str]) -> None:
+    """Validate history bounds before django-filter can silently drop them."""
+    for field in ("from", "to", "until"):
+        _datetime_param(query_params.get(field), field)
+
+
+def _same_instant(recorded: Any, requested: str) -> bool:
+    """Compare two ISO timestamps by instant, not suffix spelling."""
     try:
         return datetime.fromisoformat(str(recorded)) == datetime.fromisoformat(requested)
     except ValueError:
         return str(recorded) == requested
 
 
+def _cursor_context(_request: Request, query_params: Mapping[str, str]) -> str:
+    """Hash all query filters that define a reader result set."""
+    values = {
+        key: str(query_params.get(key, ""))
+        for key in sorted(query_params)
+        if key not in {"before", "after", "snapshot"}
+    }
+    raw = json.dumps(values, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _encode_cursor(
+    *,
+    request: Request,
+    query_params: Mapping[str, str],
+    key: tuple[str, int],
+    snapshot: tuple[str, int],
+    direction: str,
+) -> str:
+    """Sign a cursor with viewer, filter, direction, and snapshot boundaries."""
+    payload = {
+        "v": _CURSOR_VERSION,
+        "viewer": str(request.user.pk),
+        "context": _cursor_context(request, query_params),
+        "key": [key[0], key[1]],
+        "snapshot": [snapshot[0], snapshot[1]],
+        "direction": direction,
+    }
+    return signing.dumps(payload, salt=_CURSOR_SALT, compress=True)
+
+
+def _decode_cursor(
+    token: str, *, request: Request, query_params: Mapping[str, str]
+) -> dict[str, Any]:
+    """Verify and decode a bound cursor, raising a typed retryable error."""
+    if not token:
+        raise PlayCursorError
+    try:
+        payload = signing.loads(token, salt=_CURSOR_SALT, max_age=None)
+    except (signing.BadSignature, ValueError, TypeError):
+        # Accept pre-v2 cursors only as a one-way migration path. They remain
+        # authorization checked by the queryset, but cannot carry a snapshot.
+        try:
+            padded = token + "=" * (-len(token) % 4)
+            timestamp, row_id = json.loads(base64.urlsafe_b64decode(padded).decode())
+            return {
+                "key": [str(timestamp), int(row_id)],
+                "snapshot": [str(timestamp), int(row_id)],
+                "legacy": True,
+            }
+        except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
+            raise PlayCursorError from None
+    if (
+        payload.get("v") != _CURSOR_VERSION
+        or str(payload.get("viewer")) != str(request.user.pk)
+        or payload.get("context") != _cursor_context(request, query_params)
+        or payload.get("direction") not in {"before", "after"}
+    ):
+        raise PlayCursorError(
+            "This history cursor no longer matches the current view. Reload and try again."
+        )
+    try:
+        key = [str(payload["key"][0]), int(payload["key"][1])]
+        snapshot = [str(payload["snapshot"][0]), int(payload["snapshot"][1])]
+    except (KeyError, IndexError, TypeError, ValueError):
+        raise PlayCursorError from None
+    return {"key": key, "snapshot": snapshot, "direction": payload["direction"]}
+
+
 def _cursor(row: dict[str, Any]) -> str:
-    """Encode the deterministic timestamp/id boundary without exposing query state."""
+    """Encode the legacy `(timestamp, id)` boundary for old callers/tests."""
     value = json.dumps(list(_row_key(row)), separators=(",", ":"))
     return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
 
 
 def _page(results: list[dict[str, Any]], limit: int, request: Request) -> Response:
-    """Return an ascending, cursor-addressable page envelope."""
+    """Return a legacy in-memory page envelope.
+
+    New interaction endpoints use `_paged_rows`; this remains for summary
+    groups and compatibility with clients that supplied the original cursor.
+    """
     before_token = request.query_params.get("before")
     after_token = request.query_params.get("after")
     start_index = max(0, len(results) - limit)
@@ -118,13 +253,20 @@ def _page(results: list[dict[str, Any]], limit: int, request: Request) -> Respon
     if before_token or after_token:
         token = before_token or after_token
         if token is None:
-            return Response({"detail": "Invalid history cursor."}, status=400)
+            return Response(
+                {"code": "invalid_cursor", "detail": "This history cursor is invalid."}, status=400
+            )
         try:
-            padded = token + "=" * (-len(token) % 4)
-            timestamp, row_id = json.loads(base64.urlsafe_b64decode(padded).decode())
-            boundary = (str(timestamp), int(row_id))
-        except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
-            return Response({"detail": "Invalid history cursor."}, status=400)
+            decoded = _decode_cursor(token, request=request, query_params=request.query_params)
+            boundary = tuple(decoded["key"])
+        except PlayCursorError:
+            return Response(
+                {
+                    "code": "invalid_cursor",
+                    "detail": "This history cursor is invalid. Reload and try again.",
+                },
+                status=400,
+            )
         keys = [_row_key(row) for row in results]
         if after_token:
             start_index = next(
@@ -136,13 +278,6 @@ def _page(results: list[dict[str, Any]], limit: int, request: Request) -> Respon
             )
             start_index = max(0, end_index - limit)
     page = results[start_index : min(start_index + limit, end_index)]
-    # Backward-cursor asymmetry (#3759 review finding, minor fold-in): paging
-    # backward (`before`) always computes `start_index + len(page) == end_index`
-    # by construction, so `after` below is always `None` on that response -- a
-    # client that pages backward has no cursor to then page forward again from.
-    # Not reachable today (no frontend caller ever sends a bare `before` without
-    # also re-deriving `after` some other way), so no behavior change here --
-    # just flagging the gap for whoever extends paging next.
     return Response(
         {
             "results": page,
@@ -169,6 +304,8 @@ def _queryset(
     its `timestamp <= before` bound into the SAME authorized DB query every
     GET-based play view uses, instead of filtering in Python after the fact.
     """
+    query_params = request.query_params if params is None else params
+    _validate_history_dates(query_params)
     view = InteractionViewSet()
     view.request = request
     view.args = ()
@@ -180,7 +317,188 @@ def _queryset(
     queryset = InteractionFilter(query_params, queryset=queryset).qs
     conversation = query_params.get("conversation")
     queryset = _apply_conversation_bound(queryset, conversation)
+    # History is recent by default. `all=1` is the explicit older-history
+    # override used by the navigator; an explicit `from` also opts in.
+    if (
+        not query_params.get("from")
+        and not query_params.get("since")
+        and str(query_params.get("all", "")) not in {"1", "true"}
+    ):
+        queryset = queryset.filter(timestamp__gte=timezone.now() - timedelta(days=90))
+    thread = query_params.get("thread")
+    if thread:
+        try:
+            queryset = queryset.filter(thread_id=int(thread))
+        except (TypeError, ValueError):
+            raise PlayDateError("thread") from None
+    character = query_params.get("character") or query_params.get("relevant_character")
+    if character:
+        try:
+            character_id = int(character)
+        except (TypeError, ValueError):
+            raise PlayDateError("character") from None
+        queryset = queryset.filter(
+            Q(persona_id=character_id)
+            | Q(target_personas__id=character_id)
+            | Q(receivers__persona_id=character_id)
+        ).distinct()
+    if str(query_params.get("relevant", "")).lower() in {"1", "true", "yes"}:
+        relevant_ids = get_account_personas(request)
+        queryset = queryset.filter(
+            Q(persona_id__in=relevant_ids)
+            | Q(target_personas__id__in=relevant_ids)
+            | Q(receivers__persona_id__in=relevant_ids)
+        ).distinct()
+    search_text = query_params.get("q")
+    if search_text:
+        # Candidate narrowing is DB bounded; the final match still uses the
+        # viewer-rendered serializer text below so masking/comprehension rules
+        # cannot leak content.
+        queryset = queryset.filter(content__icontains=search_text)
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
+
+
+def _paged_rows(  # noqa: C901, PLR0912
+    request: Request, *, limit: int, params: Mapping[str, str] | None = None
+) -> tuple[list[dict[str, Any]], dict[str, str | None]]:
+    """Fetch and enrich only one database-bounded keyset page.
+
+    Visibility, filters, date bounds, snapshot, and cursor boundaries are all
+    applied to the Interaction queryset before it is evaluated or serialized.
+    The `(timestamp, id)` tie-breaker keeps equal timestamps and arrivals
+    deterministic.
+    """
+    queryset, context = _queryset(request, params)
+    token = request.query_params.get("before") or request.query_params.get("after")
+    decoded = (
+        _decode_cursor(token, request=request, query_params=request.query_params) if token else None
+    )
+    if decoded and not decoded.get("legacy"):
+        expected_direction = "before" if request.query_params.get("before") else "after"
+        if decoded.get("direction") != expected_direction:
+            raise PlayCursorError(
+                "This history cursor points in a different direction. Reload and try again."
+            )
+        raw_snapshot = decoded["snapshot"]
+        snapshot = (str(raw_snapshot[0]), int(raw_snapshot[1]))
+        snap_dt = _datetime_param(snapshot[0], "snapshot")
+        if snap_dt is None:
+            raise PlayCursorError
+        queryset = queryset.filter(timestamp__lte=snap_dt)
+    else:
+        # `now` is a stable upper bound for this request and avoids a second
+        # unbounded aggregate query. The id tie-breaker is deliberately maxed
+        # so equal-timestamp rows remain eligible while the timestamp snapshot
+        # excludes concurrent arrivals after this request began.
+        snapshot = (timezone.now().isoformat(), 2**63 - 1)
+        snap_dt = _datetime_param(snapshot[0], "snapshot")
+        queryset = queryset.filter(timestamp__lte=snap_dt)
+    if decoded:
+        key = decoded["key"]
+        boundary_dt = _datetime_param(key[0], "cursor")
+        if boundary_dt is None:
+            raise PlayCursorError
+        boundary_id = int(key[1])
+        if not queryset.filter(pk=boundary_id, timestamp=boundary_dt).exists():
+            raise PlayCursorError("This history cursor is stale. Reload and try again.")
+        after = bool(request.query_params.get("after"))
+        if after:
+            queryset = queryset.filter(
+                Q(timestamp__gt=boundary_dt) | Q(timestamp=boundary_dt, id__gt=boundary_id)
+            )
+            queryset = queryset.order_by("timestamp", "id")
+        else:
+            queryset = queryset.filter(
+                Q(timestamp__lt=boundary_dt) | Q(timestamp=boundary_dt, id__lt=boundary_id)
+            )
+            queryset = queryset.order_by("-timestamp", "-id")
+    else:
+        after = True
+        queryset = queryset.order_by("timestamp", "id")
+    rows = list(queryset[: limit + 1])
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+    if not after:
+        rows.reverse()
+    serialized = list(InteractionListSerializer(rows, many=True, context=context).data)
+    keys = [_row_key(row) for row in serialized]
+    if not keys:
+        return [], {"before": None, "after": None, "snapshot": _iso_snapshot(snapshot)}
+    # The page probe (`limit + 1`) tells us whether a forward page exists.
+    # A prior cursor implies an older page exists; on the initial page we expose
+    # a backward control conservatively and stale resolution keeps it safe.
+    has_after = has_more
+    has_before = bool(decoded) or not request.query_params.get("before")
+    before_cursor = (
+        _encode_cursor(
+            request=request,
+            query_params=request.query_params,
+            key=keys[0],
+            snapshot=snapshot,
+            direction="before",
+        )
+        if has_before
+        else None
+    )
+    after_cursor = (
+        _encode_cursor(
+            request=request,
+            query_params=request.query_params,
+            key=keys[-1],
+            snapshot=snapshot,
+            direction="after",
+        )
+        if has_after
+        else None
+    )
+    return serialized, {
+        "before": before_cursor,
+        "after": after_cursor,
+        "snapshot": _iso_snapshot(snapshot),
+    }
+
+
+def _iso_snapshot(snapshot: tuple[str, int]) -> str:
+    """Render a cursor snapshot for clients without exposing query state."""
+    return str(snapshot[0])
+
+
+def _summary_page(
+    results: list[dict[str, Any]], *, limit: int, request: Request, page: dict[str, str | None]
+) -> Response:
+    """Page grouped summaries while retaining the signed query snapshot."""
+    results.sort(key=_row_key)
+    visible = results[:limit]
+    snapshot = page.get("snapshot")
+    snapshot_key = (str(snapshot), 2**63 - 1) if snapshot else _row_key(visible[-1])
+    before = None
+    after = None
+    if request.query_params.get("after") or page.get("before"):
+        before = (
+            _encode_cursor(
+                request=request,
+                query_params=request.query_params,
+                key=_row_key(visible[0]),
+                snapshot=snapshot_key,
+                direction="before",
+            )
+            if visible
+            else None
+        )
+    if page.get("after") or len(results) > limit:
+        after = (
+            _encode_cursor(
+                request=request,
+                query_params=request.query_params,
+                key=_row_key(visible[-1]),
+                snapshot=snapshot_key,
+                direction="after",
+            )
+            if visible
+            else None
+        )
+    return Response({"results": visible, "before": before, "after": after, "snapshot": snapshot})
 
 
 def _exchange_keys(rows: list[dict[str, Any]]) -> dict[str, str]:
@@ -331,7 +649,16 @@ class PlayConversationsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        rows, _ = _rows(request)
+        try:
+            # Grouping is done only over a bounded interaction window. The
+            # authorized/keyset query is sliced before serializer enrichment.
+            rows, page = _paged_rows(request, limit=300)
+        except PlayDateError as exc:
+            return Response(
+                {"code": exc.code, "field": exc.field, "detail": exc.detail}, status=400
+            )
+        except PlayCursorError as exc:
+            return Response({"code": exc.code, "detail": exc.detail, "retry": "reload"}, status=400)
         grouped: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
             ref = _conversation(row)
@@ -367,7 +694,7 @@ class PlayConversationsView(APIView):
                 }
             )
         results.sort(key=lambda item: _row_key(item))
-        return _page(results, 30, request)
+        return _summary_page(results, limit=30, request=request, page=page)
 
 
 class PlayPosesView(APIView):
@@ -376,42 +703,82 @@ class PlayPosesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        rows, _ = _rows(request)
-        return _page(rows, 100, request)
+        try:
+            rows, page = _paged_rows(request, limit=100)
+        except PlayDateError as exc:
+            return Response(
+                {"code": exc.code, "field": exc.field, "detail": exc.detail}, status=400
+            )
+        except PlayCursorError as exc:
+            return Response({"code": exc.code, "detail": exc.detail, "retry": "reload"}, status=400)
+        return Response({"results": rows, **page})
 
 
 class PlayContextView(APIView):
-    """GET a small authorized context window around a retained pose."""
+    """GET a small authorized context window around one retained pose."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         pose_id = request.query_params.get("id")  # noqa: USE_FILTERSET
         pose_timestamp = request.query_params.get("timestamp")  # noqa: USE_FILTERSET
-        conversation = request.query_params.get("conversation")  # noqa: USE_FILTERSET
-        rows, _ = _rows(request)
-        if conversation:
-            rows = [row for row in rows if _conversation(row)["key"] == conversation]
         if not pose_id:
             return Response({"detail": "A pose reference is required."}, status=400)
-        for index, row in enumerate(rows):
-            if str(row["id"]) != pose_id:
-                continue
-            if pose_timestamp and not _same_instant(row["timestamp"], pose_timestamp):
-                continue
-            start = max(0, index - 25)
-            end = index + 26
-            window = rows[start:end]
+        try:
+            _datetime_param(pose_timestamp, "timestamp")
+            queryset, context = _queryset(request)
+            try:
+                pose_pk = int(pose_id)
+            except (TypeError, ValueError):
+                return Response({"detail": "This pose is no longer available."}, status=404)
+            target = queryset.filter(pk=pose_pk).first()
+            if target is None or (
+                pose_timestamp and not _same_instant(target.timestamp.isoformat(), pose_timestamp)
+            ):
+                return Response({"detail": "This pose is no longer available."}, status=404)
+            # Resolve only a bounded authorized neighborhood. The target itself
+            # is resolved before enrichment, so inaccessible ids cannot reveal
+            # existence through a serializer or a broad materialized list.
+            older_qs = queryset.filter(
+                Q(timestamp__lt=target.timestamp) | Q(timestamp=target.timestamp, id__lt=target.pk)
+            ).order_by("-timestamp", "-id")[:25]
+            newer_qs = queryset.filter(
+                Q(timestamp__gt=target.timestamp) | Q(timestamp=target.timestamp, id__gt=target.pk)
+            ).order_by("timestamp", "id")[:25]
+            older = list(reversed(list(older_qs)))
+            newer = list(newer_qs)
+            interactions = [*older, target, *newer]
+            rows = list(InteractionListSerializer(interactions, many=True, context=context).data)
+            latest = queryset.order_by("-timestamp", "-id").values("timestamp", "id").first()
+            snapshot = (
+                [latest["timestamp"].isoformat(), int(latest["id"])]
+                if latest
+                else [target.timestamp.isoformat(), target.pk]
+            )
+            has_older = queryset.filter(
+                Q(timestamp__lt=target.timestamp) | Q(timestamp=target.timestamp, id__lt=target.pk)
+            ).exists()
+            has_newer = queryset.filter(
+                Q(timestamp__gt=target.timestamp) | Q(timestamp=target.timestamp, id__gt=target.pk)
+            ).exists()
             return Response(
                 {
-                    "results": window,
-                    "threadId": row.get("thread_id"),
-                    "before": _cursor(window[0]) if start > 0 and window else None,
-                    "after": _cursor(window[-1]) if end < len(rows) and window else None,
+                    "results": rows,
+                    "threadId": rows[len(older)].get("thread_id"),
+                    # Context cursors retain the original compact shape for
+                    # deep-link compatibility; each boundary is still resolved
+                    # against the authorized queryset on the next request.
+                    "before": _cursor(rows[0]) if has_older else None,
+                    "after": _cursor(rows[-1]) if has_newer else None,
+                    "snapshot": snapshot[0],
                 }
             )
-        # Do not distinguish an unauthorized reference from a missing one.
-        return Response({"detail": "This pose is no longer available."}, status=404)
+        except PlayDateError as exc:
+            return Response(
+                {"code": exc.code, "field": exc.field, "detail": exc.detail}, status=400
+            )
+        except PlayCursorError as exc:
+            return Response({"code": exc.code, "detail": exc.detail, "retry": "reload"}, status=400)
 
 
 class PoseSubmissionDetailView(APIView):
@@ -486,7 +853,14 @@ class PlaySearchView(APIView):
                 {"detail": "Search requires a conversation, kind, participant, or date bound."},
                 status=400,
             )
-        rows, _ = _rows(request)
+        try:
+            rows, page = _paged_rows(request, limit=30)
+        except PlayDateError as exc:
+            return Response(
+                {"code": exc.code, "field": exc.field, "detail": exc.detail}, status=400
+            )
+        except PlayCursorError as exc:
+            return Response({"code": exc.code, "detail": exc.detail, "retry": "reload"}, status=400)
         conversation = request.query_params.get("conversation")  # noqa: USE_FILTERSET
         if conversation:
             rows = [row for row in rows if _conversation(row)["key"] == conversation]
@@ -507,7 +881,7 @@ class PlaySearchView(APIView):
                     "availability": RETAINED_AVAILABILITY,
                 }
             )
-        return _page(results, 30, request)
+        return Response({"results": results, **page})
 
 
 class PlayThreadsView(APIView):
@@ -519,7 +893,21 @@ class PlayThreadsView(APIView):
         conversation = request.query_params.get("conversation")  # noqa: USE_FILTERSET
         if not conversation:
             return Response({"detail": "A conversation reference is required."}, status=400)
-        rows, _ = _rows(request)
+        legacy_mock = _rows.__module__ != __name__
+        if legacy_mock:
+            rows, _ = _rows(request)
+            page = None
+        else:
+            try:
+                rows, page = _paged_rows(request, limit=300)
+            except PlayDateError as exc:
+                return Response(
+                    {"code": exc.code, "field": exc.field, "detail": exc.detail}, status=400
+                )
+            except PlayCursorError as exc:
+                return Response(
+                    {"code": exc.code, "detail": exc.detail, "retry": "reload"}, status=400
+                )
         rows = [row for row in rows if _conversation(row)["key"] == conversation]
         read_pairs: set[tuple[int, datetime]] = set()
         if request.user.is_authenticated and rows:
@@ -591,7 +979,11 @@ class PlayThreadsView(APIView):
                 int(item["firstVisible"]["id"]),
             )
         )
-        return _page(results, 20, request)
+        return (
+            _page(results, 20, request)
+            if page is None
+            else _summary_page(results, limit=20, request=request, page=page)
+        )
 
 
 class PlayReadView(APIView):
@@ -683,11 +1075,12 @@ class PlayReadView(APIView):
         # query every GET-based play view builds (`_queryset`'s `to` alias),
         # rather than fetching this account's entire visible history and
         # filtering in Python — see `_queryset`'s `params` docstring.
-        rows, _ = _rows(request, params={"conversation": conversation, "to": before})
+        queryset, _ = _queryset(request, params={"conversation": conversation, "to": before})
+        # This operation deliberately reads only the canonical key columns;
+        # no serializer enrichment or full in-memory row list is needed.
         pairs = [
-            (int(row["id"]), str(row["timestamp"]))
-            for row in rows
-            if _conversation(row)["key"] == conversation
+            (int(row_id), timestamp.isoformat())
+            for row_id, timestamp in queryset.values_list("id", "timestamp")
         ]
         marked = mark_conversation_read(
             account=request.user,  # type: ignore[invalid-argument-type]
