@@ -566,7 +566,7 @@ def base_entries_queryset() -> QuerySet[JournalEntry]:
     ``world.journals.views`` (would create a filters.py <-> views.py import cycle).
     """
     return (
-        JournalEntry.objects.select_related("author__character")
+        JournalEntry.objects.select_related("author__character", "about__character")
         .prefetch_related(
             Prefetch("tags", queryset=JournalTag.objects.all(), to_attr="cached_tags"),
         )

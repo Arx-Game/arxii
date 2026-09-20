@@ -7,6 +7,13 @@ from typing import TYPE_CHECKING, Any
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 
+# The plain ``django_filters.BooleanFilter`` defaults to Django's ``NullBooleanSelect``
+# widget, which only recognizes "true"/"false"/"2"/"3" — a JSON/JS-side "1"/"0" (what an
+# API client naturally sends) parses to ``None`` and the filter silently no-ops. The REST
+# variant defaults to django-filter's own ``BooleanWidget``, which also accepts "1"/"0".
+from django_filters.rest_framework.filters import BooleanFilter as RestBooleanFilter
+
+from world.journals.constants import INTRODUCTION_KINDS
 from world.journals.models import JournalEntry
 from world.journals.services import (
     base_entries_queryset,
@@ -17,6 +24,9 @@ from world.journals.services import (
 if TYPE_CHECKING:
     from django.db.models import QuerySet
     from rest_framework.request import Request
+
+#: The Search filter's "Introductions" alias for ``INTRODUCTION_KINDS`` (#3941).
+INTRODUCTION_KINDS_ALIAS = "introductions"
 
 
 class JournalFilterBackend(DjangoFilterBackend):
@@ -45,6 +55,14 @@ class JournalEntryFilter(django_filters.FilterSet):
 
     author = django_filters.NumberFilter(field_name="author_id")
     tag = django_filters.CharFilter(field_name="tags__name")
+    writer = django_filters.CharFilter(
+        field_name="author__character__db_key", lookup_expr="icontains"
+    )
+    about = django_filters.NumberFilter(field_name="about_id")
+    kind = django_filters.CharFilter(method="filter_kind")
+    post_mortem = RestBooleanFilter(field_name="revealed_at", lookup_expr="isnull", exclude=True)
+    since_visit = RestBooleanFilter(method="filter_since_visit")
+    black_only = RestBooleanFilter(method="filter_black_only")
     # Browse a deceased sheet's bequeathed corpus (#3287) instead of the public feed. Gated
     # here — not read from request.query_params in the view — per
     # tools/lint_use_filterset.py's USE_FILTERSET rule: the permission check needs the
@@ -56,12 +74,52 @@ class JournalEntryFilter(django_filters.FilterSet):
 
     class Meta:
         model = JournalEntry
-        fields = ["author", "tag", "deceased"]
+        fields = [
+            "author",
+            "tag",
+            "writer",
+            "about",
+            "kind",
+            "post_mortem",
+            "since_visit",
+            "black_only",
+            "deceased",
+        ]
 
     def __init__(self, *args: Any, view: Any = None, **kwargs: Any) -> None:
         """Accept the view instance (see ``JournalFilterBackend``) for ``filter_deceased``."""
         self.view = view
         super().__init__(*args, **kwargs)
+
+    def filter_kind(
+        self, queryset: QuerySet[JournalEntry], name: str, value: str
+    ) -> QuerySet[JournalEntry]:
+        """``kind=<JournalKind>`` or the alias ``introductions`` (the three CG kinds)."""
+        del name
+        if value == INTRODUCTION_KINDS_ALIAS:
+            return queryset.filter(kind__in=INTRODUCTION_KINDS)
+        return queryset.filter(kind=value)
+
+    def filter_since_visit(
+        self, queryset: QuerySet[JournalEntry], name: str, value: bool
+    ) -> QuerySet[JournalEntry]:
+        """Entries newer than the viewer's last stream visit; no mark means everything."""
+        del name
+        if not value:
+            return queryset
+        sheet = self.view.get_character_sheet(self.request) if self.view is not None else None
+        if sheet is None or sheet.journals_visited_at is None:
+            return queryset
+        return queryset.filter(created_at__gt=sheet.journals_visited_at)
+
+    def filter_black_only(
+        self, queryset: QuerySet[JournalEntry], name: str, value: bool
+    ) -> QuerySet[JournalEntry]:
+        """Staff only: just the private entries. Silently ignored for everyone else."""
+        del name
+        if not value or not self.request.user.is_staff:
+            return queryset
+        return queryset.filter(is_public=False, revealed_at__isnull=True)
 
     def filter_deceased(
         self, queryset: QuerySet[JournalEntry], name: str, value: int
