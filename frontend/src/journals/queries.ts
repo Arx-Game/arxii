@@ -4,6 +4,7 @@
  * Follows the key-factory + hook shape used by `frontend/src/relationships/queries.ts`.
  */
 
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import * as api from './api';
@@ -11,7 +12,7 @@ import type {
   CreateJournalEntryRequest,
   EditJournalEntryRequest,
   JournalEntryListFilters,
-  PosthumousJournalDisposition,
+  PatchJournalSettingsRequest,
   RespondToJournalRequest,
 } from './api';
 
@@ -21,14 +22,31 @@ export const journalsKeys = {
   list: (filters: JournalEntryListFilters = {}) => [...journalsKeys.lists(), filters] as const,
   mine: (page = 1) => [...journalsKeys.all, 'mine', page] as const,
   detail: (id: number) => [...journalsKeys.all, 'detail', id] as const,
-  disposition: () => [...journalsKeys.all, 'disposition'] as const,
+  settings: () => [...journalsKeys.all, 'settings'] as const,
 };
 
-/** GET /api/journals/entries/ — public feed, optionally filtered by author/tag. */
-export function useJournalEntries(filters: JournalEntryListFilters = {}) {
+/**
+ * GET /api/journals/entries/ — the feed, optionally filtered (see
+ * `JournalEntryListFilters`).
+ *
+ * `markVisitOnce` stamps the reader's visit mark on the FIRST fetch this hook
+ * performs and on no other. It is deliberately not part of `filters`: in the
+ * query key it would make "the stream" and "the stream, marked" two different
+ * queries — so the first thing to re-render the page would swap the key and
+ * refetch — and baked into the queryFn it would re-stamp on every background
+ * refetch, quietly moving the mark to now and emptying "since your last visit".
+ * The ref is read at fetch time, which is the only moment that can tell a first
+ * fetch from a refetch.
+ */
+export function useJournalEntries(filters: JournalEntryListFilters = {}, markVisitOnce = false) {
+  const stamped = useRef(false);
   return useQuery({
     queryKey: journalsKeys.list(filters),
-    queryFn: () => api.listJournalEntries(filters),
+    queryFn: () => {
+      const stamp = markVisitOnce && !stamped.current;
+      stamped.current = true;
+      return api.listJournalEntries(stamp ? { ...filters, mark_visit: 1 } : filters);
+    },
   });
 }
 
@@ -52,7 +70,7 @@ export function useJournalEntry(id: number | null, enabled = true) {
 /**
  * POST /api/journals/entries/ — write a new entry. Invalidates the public
  * feed and "mine" lists so the new entry (and its weekly-XP-driven counters)
- * show up without a manual refetch.
+ * show up without a manual refetch, plus settings (`posts_this_week` changes, #3941).
  */
 export function useCreateJournalEntry() {
   const queryClient = useQueryClient();
@@ -61,14 +79,15 @@ export function useCreateJournalEntry() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.all }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
     },
   });
 }
 
 /**
- * POST /api/journals/entries/{id}/respond/ — praise or retort a parent entry.
+ * POST /api/journals/entries/{id}/respond/ — praise, retort, or condemn a parent entry.
  * Invalidates the parent's detail (its `responses` list grows) plus the
- * public/mine feeds (`response_count` changes).
+ * public/mine feeds (`response_count` changes) and settings (`posts_this_week`, #3941).
  */
 export function useRespondToJournal() {
   const queryClient = useQueryClient();
@@ -79,14 +98,16 @@ export function useRespondToJournal() {
       queryClient.invalidateQueries({ queryKey: journalsKeys.detail(entryId) }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.mine() }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
     },
   });
 }
 
 /**
- * PATCH /api/journals/entries/{id}/ — edit title/body and/or the per-entry posthumous
- * override (#3287). Invalidates the entry's detail plus "mine" (own-entries tab shows the
- * updated override) and the public feed (title/body edits should refresh there too).
+ * PATCH /api/journals/entries/{id}/ — edit title/body, the per-entry posthumous
+ * override (#3287), and/or the relationship-journal `about` subject (#3941). Invalidates
+ * the entry's detail plus "mine" (own-entries tab shows the updated override/about), the
+ * public feed (title/body edits should refresh there too), and settings.
  */
 export function useEditJournalEntry() {
   const queryClient = useQueryClient();
@@ -97,28 +118,32 @@ export function useEditJournalEntry() {
       queryClient.invalidateQueries({ queryKey: journalsKeys.detail(entryId) }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.mine() }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
     },
   });
 }
 
-/** GET /api/journals/entries/disposition/ — the caller's sheet-level default (#3287). */
-export function useJournalDisposition() {
+/**
+ * GET /api/journals/entries/disposition/ — the caller's journal settings (#3941, was
+ * #3287): sheet-level posthumous default, retort consent, and weekly posting-XP tracker.
+ */
+export function useJournalSettings() {
   return useQuery({
-    queryKey: journalsKeys.disposition(),
-    queryFn: () => api.getJournalDisposition(),
+    queryKey: journalsKeys.settings(),
+    queryFn: () => api.getJournalSettings(),
   });
 }
 
 /**
- * PATCH /api/journals/entries/disposition/ — set the caller's sheet-level default (#3287).
+ * PATCH /api/journals/entries/disposition/ — update the caller's journal settings
+ * (#3941, was #3287); pass only the keys being changed.
  */
-export function useSetJournalDisposition() {
+export function usePatchJournalSettings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (disposition: PosthumousJournalDisposition) =>
-      api.setJournalDisposition(disposition),
+    mutationFn: (body: PatchJournalSettingsRequest) => api.patchJournalSettings(body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: journalsKeys.disposition() }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
     },
   });
 }

@@ -52,6 +52,7 @@ from world.character_sheets.types import (
     PosthumousJournalDisposition,
     ProfileBeginningsSource,
     ProfileTextField,
+    RetortConsent,
     SheetVisibility,
 )
 from world.contributors.models import CreditedContent
@@ -775,6 +776,23 @@ class CharacterSheet(SharedMemoryModel):
             "Default fate of this character's private journal entries after death (#3287)."
             " REVEAL is the Arx I black-journal precedent; SEAL keeps them buried. A"
             " per-entry JournalEntry.posthumous_override can override this default."
+        ),
+    )
+    retort_consent = models.CharField(
+        max_length=6,
+        choices=RetortConsent.choices,
+        default=RetortConsent.RIVALS,
+        help_text=(
+            "Who may Retort or Condemn this character's journal entries (#3941):"
+            " rivals only (default) or anyone."
+        ),
+    )
+    journals_visited_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this character last opened World > Journals (#3941). One mark per"
+            " character; the stream counts entries newer than it as 'since your last visit'."
         ),
     )
 

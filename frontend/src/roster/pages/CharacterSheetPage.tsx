@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery, useWearLook } from '../queries';
 import { useBrowsingIdentity } from '../useBrowsingIdentity';
@@ -121,20 +121,28 @@ export function CharacterSheetPage() {
         isSaving={wearLook.isPending}
         galleriesTo={isMyCharacter ? '/profile/media' : null}
         actions={
-          !isMyCharacter && (
-            <>
-              <FriendButton
-                viewerEntryId={viewerEntryId}
-                targetEntryId={entryId}
-                targetName={entry.character.name}
-              />
-              <RivalButton
-                viewerEntryId={viewerEntryId}
-                targetEntryId={entryId}
-                targetName={entry.character.name}
-              />
-            </>
-          )
+          <>
+            <Link
+              to={`/journals?writer=${sheetId}`}
+              className="rounded border px-3 py-1 text-sm hover:bg-accent"
+            >
+              Journal
+            </Link>
+            {!isMyCharacter && (
+              <>
+                <FriendButton
+                  viewerEntryId={viewerEntryId}
+                  targetEntryId={entryId}
+                  targetName={entry.character.name}
+                />
+                <RivalButton
+                  viewerEntryId={viewerEntryId}
+                  targetEntryId={entryId}
+                  targetName={entry.character.name}
+                />
+              </>
+            )}
+          </>
         }
       />
 

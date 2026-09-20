@@ -282,7 +282,10 @@ in `honor_deed` checks life-state.
   from this week the nominator could see, no budget, invisible to the nominee; weekly cron
   settles four paths on one stepped curve (in general from 3 by distinct people; most
   nominated prose 1; best in scene by scene wins from 1; most nominated journal 1 game-wide).
-  One scene with one friend pays 5; twenty scenes and a hundred people pay 19.
+  One scene with one friend pays 5; twenty scenes and a hundred people pay 19. A journal entry
+  is nominable only while public and from the current game week; a post mortem (revealed at
+  death, never public) is not nominable, even after it surfaces (#3941 Decision 16,
+  `progression/services/nominations.py:_visible_journal_sheet`).
 - Random Scene bounties: 5 weekly targets (strangers + relationships), auto-validated claims
   (5+5 XP, first-time bonus +10), one reroll per week, weekly cron generation
 - Scene completion no longer pays a vote bonus (#3738); `on_scene_finished` settles reaction windows only

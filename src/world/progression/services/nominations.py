@@ -7,8 +7,9 @@ per piece and the settlement counts distinct people.
 
 What can be nominated is exactly what the nominator could see and what was
 written this week: an interaction passes ``Interaction.objects.visible_to``
-for the account's own personas, a journal entry is public (or revealed) and
-from the current game week. Your own characters are never nominable, and
+for the account's own personas, a journal entry is public and from the
+current game week (a post mortem, revealed but never public, is not
+nominable: #3941 Decision 16). Your own characters are never nominable, and
 neither is a character nobody is playing (there is no player to pay).
 """
 
@@ -70,7 +71,10 @@ def _visible_interaction_sheet(
 
 
 def _visible_journal_sheet(target_id: int, game_week: GameWeek) -> CharacterSheet:
-    """The sheet behind a public (or revealed) journal entry written this week."""
+    """The sheet behind a public journal entry written this week.
+
+    A post mortem (revealed, never public) is not nominable (#3941 Decision 16).
+    """
     from world.journals.models import JournalEntry
 
     entry = JournalEntry.objects.filter(pk=target_id).select_related("author").first()
@@ -78,7 +82,7 @@ def _visible_journal_sheet(target_id: int, game_week: GameWeek) -> CharacterShee
         raise ProgressionError(ProgressionError.NO_AUTHOR)
     if entry.created_at < game_week.started_at:
         raise ProgressionError(ProgressionError.NOT_THIS_WEEK)
-    if not (entry.is_public or entry.revealed_at is not None):
+    if not entry.is_public:
         raise ProgressionError(ProgressionError.NOT_VISIBLE)
     return entry.author
 

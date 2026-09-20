@@ -33,7 +33,7 @@ interface PlateProps {
   isSaving: boolean;
   /** Where 'All galleries' points for THIS viewer; null for no link. */
   galleriesTo: string | null;
-  /** Owner-only doors (friend/rival buttons live here on a foreign sheet). */
+  /** Doors beside the plate: a Journal link for every viewer, plus friend/rival buttons on a foreign sheet. */
   actions?: ReactNode;
 }
 

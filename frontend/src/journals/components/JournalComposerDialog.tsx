@@ -1,44 +1,44 @@
 /**
- * JournalComposerDialog — write a new journal entry (#2160).
+ * JournalComposerDialog — write an entry from somewhere that is not the
+ * Reading Room (#2160, rebuilt for #3941).
+ *
+ * The page has a desk that folds open above the stream; the sidebar's Journal
+ * tab has this instead, because there is no stream there to fold it over. Both
+ * render the same `JournalEntryFields`, so the two surfaces ask for exactly the
+ * same things and neither can drift.
  *
  * Externally controlled (`open`/`onClose`), following the
- * `DramaticMomentTagDialog` pattern rather than owning its own trigger —
- * both the sidebar `JournalTab` and `JournalsPage` open it from their own
- * "Write" buttons. `initialTags` pre-seeds the chip list — Task 4's
- * card-action "post about this" flow opens the composer with a tag already
- * attached (e.g. a character or location name) so the entry gets tagged
- * without the player re-typing it.
+ * `DramaticMomentTagDialog` pattern rather than owning its own trigger.
+ * `initialTags` pre-seeds the chip list — a card action that opens the composer
+ * "about this" attaches the tag without the player retyping it.
  *
- * Tags are a chip list, never a comma-split string — the backend's
- * `tags` field is a `ListField` of exact strings
- * (`JournalEntryCreateSerializer`), so splitting on commas would silently
- * mangle any tag that legitimately contains one.
+ * No description under the title: interface copy on this page is plain and
+ * unhelpful by ruling, and the two pills already say what the two journals are.
  */
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
-import type { PosthumousOverride } from '../api';
+
+import type { CreateJournalEntryRequest } from '../api';
 import { useCreateJournalEntry } from '../queries';
+import {
+  EMPTY_ENTRY_FIELDS,
+  isAboutUnresolved,
+  type JournalEntryFieldsValue,
+} from '../entryFields';
+import { JournalEntryFields } from './JournalEntryFields';
+// The dialog renders through a portal, outside the page's `.journals` root, and is
+// opened from the sidebar on routes that never load `JournalsPage`. Importing the
+// stylesheet here is what puts the `jr-*` rules in the document for those routes.
+import '../journals.css';
 
 interface JournalComposerDialogProps {
   open: boolean;
@@ -48,187 +48,76 @@ interface JournalComposerDialogProps {
 }
 
 export function JournalComposerDialog({ open, onClose, initialTags }: JournalComposerDialogProps) {
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [isPublic, setIsPublic] = useState(false);
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagDraft, setTagDraft] = useState('');
-  // Per-entry posthumous override (#3287) -- INHERIT (default) falls through to the
-  // character's sheet-level disposition; only meaningful while the entry stays private.
-  const [posthumousOverride, setPosthumousOverride] = useState<PosthumousOverride>('inherit');
-
+  const [value, setValue] = useState<JournalEntryFieldsValue>(EMPTY_ENTRY_FIELDS);
   const createEntry = useCreateJournalEntry();
 
-  // Reset (and re-seed tags) only on the closed->open transition, not on
-  // every render while the dialog stays open — otherwise a parent that
-  // passes a fresh `initialTags` array literal each render would keep
-  // wiping out whatever the player has already typed.
-  const wasOpenRef = useRef(false);
+  // Reset (and re-seed tags) only on the closed->open transition, not on every
+  // render while the dialog stays open — otherwise a parent passing a fresh
+  // `initialTags` array literal each render would keep wiping what has been typed.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open && !wasOpenRef.current) {
-      setTitle('');
-      setBody('');
-      setIsPublic(false);
-      setTags(initialTags ?? []);
-      setTagDraft('');
-      setPosthumousOverride('inherit');
+    if (open && !wasOpen.current) {
+      setValue({ ...EMPTY_ENTRY_FIELDS, tags: initialTags ?? [] });
     }
-    wasOpenRef.current = open;
+    wasOpen.current = open;
   }, [open, initialTags]);
 
-  function handleOpenChange(isOpen: boolean) {
-    if (!isOpen) onClose();
-  }
-
-  function addTagFromDraft() {
-    const value = tagDraft.trim();
-    if (!value) return;
-    setTags((prev) => (prev.includes(value) ? prev : [...prev, value]));
-    setTagDraft('');
-  }
-
-  function handleTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addTagFromDraft();
-    } else if (e.key === 'Backspace' && tagDraft === '' && tags.length > 0) {
-      setTags((prev) => prev.slice(0, -1));
-    }
-  }
-
-  function removeTag(tag: string) {
-    setTags((prev) => prev.filter((t) => t !== tag));
-  }
-
   function handleSubmit() {
-    if (!title.trim() || !body.trim() || createEntry.isPending) return;
-    // Omit the field entirely at the INHERIT default -- never send a no-op override.
-    const payload =
-      posthumousOverride === 'inherit'
-        ? { title: title.trim(), body, is_public: isPublic, tags }
-        : {
-            title: title.trim(),
-            body,
-            is_public: isPublic,
-            tags,
-            posthumous_override: posthumousOverride,
-          };
+    if (!canSubmit) return;
+    const payload: CreateJournalEntryRequest = {
+      title: value.title.trim(),
+      body: value.body,
+      is_public: value.isPublic,
+      tags: value.tags,
+      about: value.about?.id ?? null,
+    };
+    // Omit the field entirely at the INHERIT default — never send a no-op override.
+    if (value.posthumousOverride !== 'inherit') {
+      payload.posthumous_override = value.posthumousOverride;
+    }
     createEntry.mutate(payload, {
       onSuccess: () => {
         toast.success('Journal entry recorded.');
         onClose();
       },
-      onError: (err) => {
-        toast.error(err instanceof Error ? err.message : 'Failed to post journal entry');
-      },
+      onError: (err: Error) => toast.error(err.message),
     });
   }
 
-  const canSubmit = title.trim().length > 0 && body.trim().length > 0 && !createEntry.isPending;
+  // A name typed into About that has not resolved to anybody holds the button:
+  // posting now would silently drop the subject the writer asked for.
+  const canSubmit =
+    value.title.trim().length > 0 &&
+    value.body.trim().length > 0 &&
+    !isAboutUnresolved(value) &&
+    !createEntry.isPending;
   // Inline refusal rendering (#3412 T4) — a gate refusal (4xx `{detail}`, parsed into
   // `ApiError.message` by `readErrorDetail`/`createJournalEntry`) needs to stay readable
-  // after the toast above dismisses; the reason text IS the message, never rewritten here.
-  // Mirrors `PromoteRoleDialog`'s established inline-error convention.
+  // after the toast dismisses; the reason text IS the message, never rewritten here.
   const errorMessage =
     createEntry.isError && createEntry.error instanceof Error ? createEntry.error.message : null;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(isOpen) => (isOpen ? undefined : onClose())}>
+      <DialogContent className="journals max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Write a Journal Entry</DialogTitle>
-          <DialogDescription>
-            Private entries are visible only to you. Public entries can be read; and praised or
-            retorted: by anyone.
-          </DialogDescription>
+          <DialogTitle>Write a journal entry</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="journal-title">Title</Label>
-            <Input
-              id="journal-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="A title for this entry"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="journal-body">Entry</Label>
-            <Textarea
-              id="journal-body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="What's on your mind…"
-              className="min-h-[160px]"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="journal-public">Public</Label>
-            <Switch id="journal-public" checked={isPublic} onCheckedChange={setIsPublic} />
-          </div>
-          {!isPublic ? (
-            <div className="space-y-2">
-              <Label htmlFor="journal-disposition">After your death</Label>
-              <Select
-                value={posthumousOverride}
-                onValueChange={(val) => setPosthumousOverride(val as PosthumousOverride)}
-              >
-                <SelectTrigger id="journal-disposition">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="inherit">Use my character's default</SelectItem>
-                  <SelectItem value="reveal">Reveal this entry</SelectItem>
-                  <SelectItem value="seal">Seal this entry forever</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-          <div className="space-y-2">
-            <Label htmlFor="journal-tag-input">Tags</Label>
-            {tags.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5" data-testid="journal-tag-list">
-                {tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1 pr-1">
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(tag)}
-                      aria-label={`Remove tag ${tag}`}
-                      className="rounded-full px-1 hover:bg-secondary-foreground/10"
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-            <Input
-              id="journal-tag-input"
-              value={tagDraft}
-              onChange={(e) => setTagDraft(e.target.value)}
-              onKeyDown={handleTagKeyDown}
-              onBlur={addTagFromDraft}
-              placeholder="Type a tag and press Enter"
-            />
-          </div>
 
-          {/* PLACEHOLDER styling */}
-          {errorMessage && (
-            <div
-              className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
-              data-testid="journal-composer-error"
-            >
-              <p>{errorMessage}</p>
-            </div>
-          )}
-        </div>
+        <JournalEntryFields value={value} onChange={setValue} showAfterDeath />
+
+        {errorMessage ? (
+          <p className="jr-sans m-0 text-sm text-destructive" data-testid="journal-composer-error">
+            {errorMessage}
+          </p>
+        ) : null}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={createEntry.isPending}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {createEntry.isPending ? 'Posting…' : 'Post Entry'}
+            {createEntry.isPending ? 'Posting…' : 'Post entry'}
           </Button>
         </DialogFooter>
       </DialogContent>

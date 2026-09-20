@@ -391,6 +391,30 @@ describe('CharacterSheetPage', () => {
     expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'verdigris');
   });
 
+  it('offers the Journal door to a stranger, alongside the Friend/Rival buttons', () => {
+    setEntry(ENTRY);
+    setOwnership(false);
+    mountSheet();
+    expect(screen.getByRole('link', { name: 'Journal' })).toHaveAttribute(
+      'href',
+      '/journals?writer=42'
+    );
+    expect(screen.getByRole('button', { name: 'Friend' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rival' })).toBeInTheDocument();
+  });
+
+  it('offers the owner the Journal door too, but never the Friend/Rival buttons', () => {
+    setEntry(ENTRY);
+    setOwnership(true);
+    mountSheet();
+    expect(screen.getByRole('link', { name: 'Journal' })).toHaveAttribute(
+      'href',
+      '/journals?writer=42'
+    );
+    expect(screen.queryByRole('button', { name: 'Friend' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rival' })).not.toBeInTheDocument();
+  });
+
   it('falls back to the default ink before the payload arrives', () => {
     setEntry(ENTRY);
     mockUseCharacterSheetQuery.mockReturnValue({

@@ -1,411 +1,400 @@
 /**
- * JournalsPage — `/journals` (#2160).
+ * The Reading Room — `/journals` (#3941).
  *
- * Two sections: "My Journal" (`mine/`, includes private entries, with a
- * "Write" button opening `JournalComposerDialog`) and "Public Journals" (the
- * public feed, filterable by author id / tag name, paginated). Rows expand
- * in place to the full entry — body, tags, and (public entries) a
- * Praise/Retort response form plus existing responses.
+ * One route, four screens, no rail: a centred stream of writing, newest first.
+ * `?writer=<sheetId>` is one writer's journal, `?mine=1` is your own, and
+ * everything else is the stream. Search drops down beside Write with the index
+ * under it; closing it always returns you to the stream, because Search is a
+ * panel and never a mode.
+ *
+ * The visit mark is stamped exactly once per visit: the stream asks
+ * `useJournalEntries` for it, and the hook puts it on its first fetch and on no
+ * later one, so "since your last visit" keeps meaning the last visit rather than
+ * the last thing the reader clicked.
+ *
+ * Interface copy here is plain and short by ruling: no help text, no
+ * explanation of what a white or a black journal is. The page is furniture;
+ * the writing is the point.
  */
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { toast } from 'sonner';
-import { NominateButton } from '@/components/NominateButton';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
-import type {
-  JournalEntrySummary,
-  JournalResponseType,
-  PosthumousJournalDisposition,
-} from '../api';
-import {
-  useJournalDisposition,
-  useJournalEntries,
-  useJournalEntry,
-  useMyJournalEntries,
-  useRespondToJournal,
-  useSetJournalDisposition,
-} from '../queries';
-import { JournalComposerDialog } from '../components/JournalComposerDialog';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 
-export function JournalsPage() {
-  const [composerOpen, setComposerOpen] = useState(false);
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
+import { useAppSelector } from '@/store/hooks';
 
+import type { JournalEntryListFilters, JournalEntrySummary } from '../api';
+import { QUIET_BUTTON_CLASS, PRIMARY_BUTTON_CLASS } from '../fieldClasses';
+import { useJournalEntries, useMyJournalEntries } from '../queries';
+import { subjectsOf, type AboutSubject } from '../rows';
+import { JournalDesk } from '../components/JournalDesk';
+import { JournalRow, type RowViewer } from '../components/JournalRow';
+import { SearchPanel } from '../components/SearchPanel';
+import { WriterPlate, type WriterFilter } from '../components/WriterPlate';
+import { YourJournalHeader } from '../components/YourJournalHeader';
+import '../journals.css';
+
+interface StreamProps {
+  rows: JournalEntrySummary[];
+  viewer: RowViewer;
+  openId: number | null;
+  onToggleRow: (id: number) => void;
+  isLoading: boolean;
+}
+
+/** The stream itself: the rows, and what to say when there are none. */
+function Stream({ rows, viewer, openId, onToggleRow, isLoading }: StreamProps) {
+  if (isLoading) {
+    return <p className="jr-sans text-[.875rem] text-muted-foreground">Loading…</p>;
+  }
+  if (rows.length === 0) {
+    return <p className="jr-sans text-[.875rem] text-muted-foreground">Nothing here yet.</p>;
+  }
   return (
-    <div className="container mx-auto max-w-3xl space-y-8 px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Journals</h1>
-        <Button onClick={() => setComposerOpen(true)}>Write</Button>
-      </div>
-
-      <MyJournalSection />
-      <PublicJournalsSection />
-
-      <JournalComposerDialog open={composerOpen} onClose={() => setComposerOpen(false)} />
+    <div>
+      {rows.map((row) => (
+        <JournalRow
+          key={row.id}
+          entry={row}
+          open={openId === row.id}
+          onToggle={() => onToggleRow(row.id)}
+          viewer={viewer}
+        />
+      ))}
     </div>
   );
 }
 
-function MyJournalSection() {
-  const [page, setPage] = useState(1);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const { data, isLoading } = useMyJournalEntries(page);
-  const entries = data?.results ?? [];
+function Pages({
+  page,
+  hasPrevious,
+  hasNext,
+  onPage,
+}: {
+  page: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  onPage: (page: number) => void;
+}) {
+  if (!hasPrevious && !hasNext) return null;
+  return (
+    <div className="jr-sans flex items-center gap-3 border-t pt-4 text-[.8125rem]">
+      <button
+        type="button"
+        className={QUIET_BUTTON_CLASS}
+        disabled={!hasPrevious}
+        onClick={() => onPage(page - 1)}
+      >
+        Newer entries
+      </button>
+      <span className="text-muted-foreground">Page {page}</span>
+      <button
+        type="button"
+        className={QUIET_BUTTON_CLASS}
+        disabled={!hasNext}
+        onClick={() => onPage(page + 1)}
+      >
+        Older entries
+      </button>
+    </div>
+  );
+}
 
-  const renderEntries = () => {
-    if (isLoading) {
-      return <p className="text-sm text-muted-foreground">Loading…</p>;
-    }
-    if (entries.length === 0) {
-      return (
-        <p className="text-sm text-muted-foreground">You haven&apos;t written anything yet.</p>
-      );
-    }
-    return (
-      <div className="space-y-2">
-        {entries.map((entry) => (
-          <EntryRow
-            key={entry.id}
-            entry={entry}
-            expanded={expandedId === entry.id}
-            onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-            showResponseForm={false}
-          />
-        ))}
-      </div>
-    );
-  };
+function scrollEntryIntoView(id: number) {
+  const element = document.querySelector(`[data-entry-id="${id}"]`);
+  element?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+}
+
+/** What the stream looked like when the reader arrived, kept from the first response. */
+interface LastVisit {
+  /** The mark as it stood before this visit advanced it; null on a first visit. */
+  at: string | null;
+  /** How many entries were newer than that mark. */
+  count: number;
+}
+
+interface BodyProps {
+  viewer: RowViewer;
+  openId: number | null;
+  onOpenRow: (id: number | null) => void;
+}
+
+/** Screen 1 — everything the reader may see, newest first, with Search over it. */
+function StreamBody({
+  viewer,
+  openId,
+  onOpenRow,
+  searchOpen,
+  onCloseSearch,
+}: BodyProps & { searchOpen: boolean; onCloseSearch: () => void }) {
+  const [filters, setFilters] = useState<JournalEntryListFilters>({});
+  const [page, setPage] = useState(1);
+  const [lastVisit, setLastVisit] = useState<LastVisit | null>(null);
+  // `mark_visit` stays out of these filters, and so out of the query key: the hook
+  // stamps the mark on its first fetch and never again.
+  const query = useJournalEntries({ ...filters, page }, true);
+
+  const rows = query.data?.results ?? [];
+
+  // The reader's previous visit is only knowable from the FIRST response: that request
+  // moved the mark to now, so every response after it reports a mark of a moment ago and
+  // a count of nothing. Held here, so pressing "Since your last visit" three filters
+  // later still means the visit before this one.
+  const data = query.data;
+  useEffect(() => {
+    if (lastVisit !== null || data === undefined) return;
+    setLastVisit({ at: data.visited_at ?? null, count: data.since_visit_count ?? 0 });
+  }, [data, lastVisit]);
 
   return (
-    <section className="space-y-3" data-testid="my-journal-section">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-medium">My Journal</h2>
-        <PosthumousDispositionPicker />
-      </div>
-      {renderEntries()}
-      <PaginationControls
-        page={page}
-        onPrev={() => setPage((p) => Math.max(1, p - 1))}
-        onNext={() => setPage((p) => p + 1)}
-        hasNext={!!data?.next}
-        hasPrev={!!data?.previous}
+    <>
+      <SearchPanel
+        open={searchOpen}
+        filters={filters}
+        onFiltersChange={(next) => {
+          setFilters(next);
+          setPage(1);
+        }}
+        rows={rows}
+        onOpenEntry={(id) => {
+          onCloseSearch();
+          onOpenRow(id);
+          scrollEntryIntoView(id);
+        }}
+        isStaff={viewer.isStaff}
+        sinceVisitCount={lastVisit?.count ?? 0}
+        visitedAt={lastVisit?.at ?? null}
+        totalCount={query.data?.count}
       />
-    </section>
+      <Stream
+        rows={rows}
+        viewer={viewer}
+        openId={openId}
+        onToggleRow={(id) => onOpenRow(openId === id ? null : id)}
+        isLoading={query.isLoading}
+      />
+      <Pages
+        page={page}
+        hasPrevious={!!query.data?.previous}
+        hasNext={!!query.data?.next}
+        onPage={setPage}
+      />
+    </>
   );
 }
 
 /**
- * Sheet-level default posthumous journal disposition (#3287) -- "after your death, reveal
- * or seal your private entries." Lives beside "My Journal" since it governs exactly those
- * entries; per-entry overrides are set from the composer/edit surface instead.
+ * Which `about` the writer's three pills ask for: the subject itself while
+ * reading what they wrote about someone, the writer while reading what was
+ * written about them, and nothing at all for their whole journal.
  */
-function PosthumousDispositionPicker() {
-  const { data } = useJournalDisposition();
-  const setDisposition = useSetJournalDisposition();
+function aboutFilter(filter: WriterFilter, writerId: number): number | undefined {
+  if (filter.kind === 'about') return filter.aboutId;
+  if (filter.kind === 'reverse') return writerId;
+  return undefined;
+}
 
-  if (!data) return null;
+/** Screen 2 — one writer, under their plate, cut three ways. */
+function WriterBody({ writerId, viewer, openId, onOpenRow }: BodyProps & { writerId: number }) {
+  const [filter, setFilter] = useState<WriterFilter>({ kind: 'all' });
+  const [page, setPage] = useState(1);
+  const [subjects, setSubjects] = useState<AboutSubject[]>([]);
+
+  const reverse = filter.kind === 'reverse';
+  const query = useJournalEntries({
+    author: reverse ? undefined : writerId,
+    about: aboutFilter(filter, writerId),
+    page,
+  });
+
+  // The "Written about them" pill's count is the reverse cut's total, which the
+  // unfiltered fetch above never carries (that one is the writer's OWN entries,
+  // never what others wrote about them) — so it gets its own one-row probe.
+  const reverseCountQuery = useJournalEntries({ about: writerId, page_size: 1 });
+
+  const rows = useMemo(() => query.data?.results ?? [], [query.data]);
+  const fresh = useMemo(() => subjectsOf(rows), [rows]);
+
+  // The About pills describe the writer, not the cut currently being read, so
+  // they are remembered from the unfiltered view rather than recomputed from a
+  // page that has already been narrowed to one subject.
+  useEffect(() => {
+    if (filter.kind === 'all' && fresh.length > 0) setSubjects(fresh);
+  }, [filter.kind, fresh]);
+
+  const name =
+    rows.find((row) => row.author === writerId)?.author_name ??
+    rows.find((row) => row.about === writerId)?.about_name ??
+    null;
 
   return (
-    <div className="flex items-center gap-2" data-testid="posthumous-disposition-picker">
-      <Label htmlFor="posthumous-disposition" className="text-xs text-muted-foreground">
-        After my death
-      </Label>
-      <Select
-        value={data.posthumous_journal_disposition}
-        onValueChange={(val) => {
-          setDisposition.mutate(val as PosthumousJournalDisposition, {
-            onSuccess: () => toast.success('Posthumous disposition updated.'),
-            onError: (err) =>
-              toast.error(err instanceof Error ? err.message : 'Failed to update disposition'),
-          });
+    <>
+      <WriterPlate
+        writerId={writerId}
+        name={name}
+        counts={{
+          entries: query.data?.count ?? 0,
+          // Only this page's rows can be counted, so the black tally is shown only when
+          // the page IS the whole journal. Otherwise it would read as a total and be one.
+          black:
+            query.data !== undefined && query.data.count === rows.length
+              ? rows.filter((row) => !row.is_public && !row.revealed_at).length
+              : null,
         }}
-        disabled={setDisposition.isPending}
-      >
-        <SelectTrigger id="posthumous-disposition" className="h-8 w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="reveal">Reveal after death</SelectItem>
-          <SelectItem value="seal">Seal forever</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
+        subjects={subjects}
+        filter={filter}
+        onFilter={(next) => {
+          setFilter(next);
+          setPage(1);
+        }}
+        reverseCount={reverseCountQuery.data?.count}
+      />
+      <Stream
+        rows={rows}
+        viewer={viewer}
+        openId={openId}
+        onToggleRow={(id) => onOpenRow(openId === id ? null : id)}
+        isLoading={query.isLoading}
+      />
+      <Pages
+        page={page}
+        hasPrevious={!!query.data?.previous}
+        hasNext={!!query.data?.next}
+        onPage={setPage}
+      />
+    </>
   );
 }
 
-function PublicJournalsSection() {
+/** Screen 4 — your own, white and black together. */
+function MineBody({ viewer, openId, onOpenRow }: BodyProps) {
   const [page, setPage] = useState(1);
-  const [authorFilter, setAuthorFilter] = useState('');
-  const [tagFilter, setTagFilter] = useState('');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const query = useMyJournalEntries(page);
+  const rows = query.data?.results ?? [];
 
-  const author = authorFilter.trim() ? Number(authorFilter.trim()) : undefined;
-  const tag = tagFilter.trim() || undefined;
+  return (
+    <>
+      <Stream
+        rows={rows}
+        viewer={viewer}
+        openId={openId}
+        onToggleRow={(id) => onOpenRow(openId === id ? null : id)}
+        isLoading={query.isLoading}
+      />
+      <Pages
+        page={page}
+        hasPrevious={!!query.data?.previous}
+        hasNext={!!query.data?.next}
+        onPage={setPage}
+      />
+    </>
+  );
+}
 
-  const { data, isLoading } = useJournalEntries({ page, author, tag: tag || undefined });
-  const entries = data?.results ?? [];
+export function JournalsPage() {
+  const [searchParams] = useSearchParams();
+  const identity = useBrowsingIdentity();
+  const isStaff = useAppSelector((state) => state.auth.account?.is_staff) ?? false;
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [deskOpen, setDeskOpen] = useState(false);
+  const [openId, setOpenId] = useState<number | null>(null);
 
-  const renderEntries2 = () => {
-    if (isLoading) {
-      return <p className="text-sm text-muted-foreground">Loading…</p>;
+  const mine = searchParams.get('mine') === '1';
+  const writerParam = searchParams.get('writer');
+  const writerId = writerParam ? Number(writerParam) : null;
+  const docked = identity.entry !== null;
+
+  const viewer: RowViewer = useMemo(
+    () => ({
+      sheetId: identity.entry?.character_id ?? null,
+      // The face the player is wearing (#981), never the PRIMARY persona directly.
+      personaId: identity.entry?.active_persona_id ?? identity.entry?.primary_persona_id ?? null,
+      isStaff,
+    }),
+    [identity.entry, isStaff]
+  );
+
+  const body = () => {
+    if (mine) {
+      return <MineBody viewer={viewer} openId={openId} onOpenRow={setOpenId} />;
     }
-    if (entries.length === 0) {
-      return <p className="text-sm text-muted-foreground">No public entries found.</p>;
+    if (writerId !== null && !Number.isNaN(writerId)) {
+      return (
+        <WriterBody writerId={writerId} viewer={viewer} openId={openId} onOpenRow={setOpenId} />
+      );
     }
     return (
-      <div className="space-y-2">
-        {entries.map((entry) => (
-          <EntryRow
-            key={entry.id}
-            entry={entry}
-            expanded={expandedId === entry.id}
-            onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-            showResponseForm
-          />
-        ))}
-      </div>
+      <StreamBody
+        viewer={viewer}
+        openId={openId}
+        onOpenRow={setOpenId}
+        searchOpen={searchOpen}
+        onCloseSearch={() => setSearchOpen(false)}
+      />
     );
   };
 
-  return (
-    <section className="space-y-3" data-testid="public-journals-section">
-      <h2 className="text-lg font-medium">Public Journals</h2>
-      <div className="flex flex-wrap gap-2">
-        <div className="space-y-1">
-          <Label htmlFor="filter-author">Author (character id)</Label>
-          <Input
-            id="filter-author"
-            value={authorFilter}
-            onChange={(e) => {
-              setAuthorFilter(e.target.value);
-              setPage(1);
-            }}
-            placeholder="e.g. 42"
-            className="w-40"
+  const onStream = !mine && (writerId === null || Number.isNaN(writerId));
+  // Screen 2's plate stands as its own header (demo screen 2 never shows a page-level
+  // heading or the Search/Write/Your journal row above it), so the writer view renders
+  // no `<header>` at all — same treatment `mine` already gets via `YourJournalHeader`.
+  const isWriterView = writerId !== null && !Number.isNaN(writerId);
+
+  const header = (() => {
+    if (isWriterView) return null;
+    if (mine) {
+      return (
+        <header className="mb-4">
+          <YourJournalHeader
+            name={identity.name ?? ''}
+            onWrite={docked ? () => setDeskOpen((previous) => !previous) : undefined}
           />
+        </header>
+      );
+    }
+    return (
+      <header className="mb-4 flex flex-wrap items-baseline justify-between gap-4">
+        <h1 className="m-0 font-display text-[1.6rem] font-semibold tracking-[.04em]">Journals</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {onStream ? (
+            <button
+              type="button"
+              className={QUIET_BUTTON_CLASS}
+              aria-expanded={searchOpen}
+              aria-controls="journal-search"
+              onClick={() => setSearchOpen((previous) => !previous)}
+            >
+              Search
+            </button>
+          ) : null}
+          {docked ? (
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => setDeskOpen((previous) => !previous)}
+            >
+              Write
+            </button>
+          ) : null}
+          {docked ? (
+            <Link to="/journals?mine=1" className={`${PRIMARY_BUTTON_CLASS} no-underline`}>
+              Your journal
+            </Link>
+          ) : null}
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="filter-tag">Tag</Label>
-          <Input
-            id="filter-tag"
-            value={tagFilter}
-            onChange={(e) => {
-              setTagFilter(e.target.value);
-              setPage(1);
-            }}
-            placeholder="e.g. grief"
-            className="w-40"
-          />
-        </div>
-      </div>
-      {renderEntries2()}
-      <PaginationControls
-        page={page}
-        onPrev={() => setPage((p) => Math.max(1, p - 1))}
-        onNext={() => setPage((p) => p + 1)}
-        hasNext={!!data?.next}
-        hasPrev={!!data?.previous}
-      />
-    </section>
-  );
-}
-
-function PaginationControls({
-  page,
-  onPrev,
-  onNext,
-  hasPrev,
-  hasNext,
-}: {
-  page: number;
-  onPrev: () => void;
-  onNext: () => void;
-  hasPrev: boolean;
-  hasNext: boolean;
-}) {
-  if (!hasPrev && !hasNext) return null;
-  return (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" size="sm" onClick={onPrev} disabled={!hasPrev}>
-        Previous
-      </Button>
-      <span className="text-sm text-muted-foreground">Page {page}</span>
-      <Button variant="outline" size="sm" onClick={onNext} disabled={!hasNext}>
-        Next
-      </Button>
-    </div>
-  );
-}
-
-function EntryRow({
-  entry,
-  expanded,
-  onToggle,
-  showResponseForm,
-}: {
-  entry: JournalEntrySummary;
-  expanded: boolean;
-  onToggle: () => void;
-  showResponseForm: boolean;
-}) {
-  // Own-entry gate for NominateButton (#3302, nominations since #3738), mirroring
-  // PoseUnit's isSelfPose guard: the button has no self-guard of its own (the
-  // backend refuses your own characters; this is UX only), so the row computes
-  // whether `entry.author` (a CharacterSheet id) is one of the viewer's own
-  // characters and decides whether to mount. Also requires `is_public`, since
-  // only a public entry can be nominated server-side.
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const isOwnEntry = myRosterEntries.some((e) => e.character_id === entry.author);
-  const canNominate = entry.is_public && !isOwnEntry;
-
-  return (
-    <Card>
-      <div className="flex items-start justify-between gap-2 p-4">
-        <button type="button" className="min-w-0 flex-1 text-left" onClick={onToggle}>
-          <CardHeader className="p-0">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">{entry.title}</CardTitle>
-              {!entry.is_public ? <Badge variant="outline">Private</Badge> : null}
-            </div>
-            {entry.is_posthumous ? (
-              <p className="text-xs italic text-muted-foreground">
-                From the journals of {entry.author_name}, revealed after death.
-              </p>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <span>{entry.author_name}</span>
-              <span>·</span>
-              <span>{new Date(entry.created_at).toLocaleDateString()}</span>
-              {entry.response_count > 0 ? (
-                <>
-                  <span>·</span>
-                  <span>
-                    {entry.response_count} response{entry.response_count === 1 ? '' : 's'}
-                  </span>
-                </>
-              ) : null}
-              {entry.tags.map((tag) => (
-                <Badge key={tag.id} variant="secondary">
-                  {tag.name}
-                </Badge>
-              ))}
-            </div>
-          </CardHeader>
-        </button>
-        {canNominate ? (
-          <NominateButton
-            targetType="journal"
-            targetId={entry.id}
-            nomineeName={entry.author_name}
-          />
-        ) : null}
-      </div>
-      {expanded ? (
-        <CardContent className="p-4 pt-0">
-          <EntryDetail entryId={entry.id} showResponseForm={showResponseForm} />
-        </CardContent>
-      ) : null}
-    </Card>
-  );
-}
-
-function EntryDetail({
-  entryId,
-  showResponseForm,
-}: {
-  entryId: number;
-  showResponseForm: boolean;
-}) {
-  const { data: detail, isLoading } = useJournalEntry(entryId);
-
-  if (isLoading || !detail) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="whitespace-pre-wrap text-sm">{detail.body}</p>
-
-      {detail.responses.length > 0 ? (
-        <div className="space-y-2 border-l-2 pl-3">
-          {detail.responses.map((response) => (
-            <div key={response.id} className="text-sm">
-              <span className="font-medium">{response.author_name}</span>{' '}
-              <Badge variant={response.response_type === 'praise' ? 'default' : 'destructive'}>
-                {response.response_type}
-              </Badge>
-              <p className="mt-0.5">{response.title}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {showResponseForm ? <RespondForm entryId={entryId} /> : null}
-    </div>
-  );
-}
-
-function RespondForm({ entryId }: { entryId: number }) {
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const respond = useRespondToJournal();
-
-  function submit(responseType: JournalResponseType) {
-    if (!title.trim() || !body.trim() || respond.isPending) return;
-    respond.mutate(
-      { entryId, body: { title: title.trim(), body, response_type: responseType } },
-      {
-        onSuccess: () => {
-          toast.success(responseType === 'praise' ? 'Praise sent.' : 'Retort sent.');
-          setTitle('');
-          setBody('');
-        },
-        onError: (err) => {
-          toast.error(err instanceof Error ? err.message : 'Failed to respond');
-        },
-      }
+      </header>
     );
-  }
-
-  const canSubmit = title.trim().length > 0 && body.trim().length > 0 && !respond.isPending;
+  })();
 
   return (
-    <div className="space-y-2 border-t pt-3">
-      <Label htmlFor={`respond-title-${entryId}`}>Respond</Label>
-      <Input
-        id={`respond-title-${entryId}`}
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="A title for your response"
-      />
-      <Textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Praise or retort…"
-      />
-      <div className="flex gap-2">
-        <Button size="sm" disabled={!canSubmit} onClick={() => submit('praise')}>
-          Praise
-        </Button>
-        <Button
-          size="sm"
-          variant="destructive"
-          disabled={!canSubmit}
-          onClick={() => submit('retort')}
-        >
-          Retort
-        </Button>
+    <div className="journals min-h-screen px-4 py-8">
+      <div className="mx-auto max-w-[54rem]">
+        {header}
+
+        {deskOpen && docked ? (
+          <JournalDesk onPosted={() => setDeskOpen(false)} onDiscard={() => setDeskOpen(false)} />
+        ) : null}
+
+        {body()}
       </div>
     </div>
   );

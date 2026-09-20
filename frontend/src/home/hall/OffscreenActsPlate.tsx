@@ -78,8 +78,8 @@ export function OffscreenActsPlate({ characters }: { characters: MyRosterEntry[]
       {isAllowed ? (
         <ul className="divide-y text-sm">
           <li className="py-1.5">
-            <Link to="/journals" className="hover:underline">
-              Write in your journal
+            <Link to="/journals?mine=1" className="hover:underline">
+              Your journal
             </Link>
           </li>
           <li className="py-1.5">

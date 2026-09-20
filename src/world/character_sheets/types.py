@@ -578,6 +578,18 @@ class PosthumousJournalDisposition(models.TextChoices):
     SEAL = "seal", "Seal forever"
 
 
+class RetortConsent(models.TextChoices):
+    """Who may Retort or Condemn this character's journal entries (#3941, ADR-0307).
+
+    RIVALS (default): only a character with an active relationship on a negative-sign
+    track, either direction. ANYONE: the writer has opened the door. Praise and Nominate
+    are never gated by this.
+    """
+
+    RIVALS = "rivals", "Rivals only"
+    ANYONE = "anyone", "Anyone"
+
+
 class PlateInk(models.TextChoices):
     """The ground colour a character's sheet plate is printed in (#3898).
 

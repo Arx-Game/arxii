@@ -2,10 +2,16 @@ from django.db import models
 
 
 class ResponseType(models.TextChoices):
-    """Type of journal response."""
+    """Type of journal response.
+
+    PRAISE and CONDEMN are the agree/disagree pair on an entry's substance; RETORT answers
+    it. RETORT and CONDEMN are consent-gated (#3941, ADR-0307): offered only to a rival or
+    when the writer's ``CharacterSheet.retort_consent`` is ANYONE.
+    """
 
     PRAISE = "praise", "Praise"
     RETORT = "retort", "Retort"
+    CONDEMN = "condemn", "Condemn"
 
 
 class JournalKind(models.TextChoices):
@@ -19,6 +25,14 @@ class JournalKind(models.TextChoices):
     FIRST_JOURNAL = "first_journal", "First Journal"
     APPLICATION = "application", "Application to Shroudwatch Academy"
     WHISPERS = "whispers", "The Whispers"
+
+
+#: The CG Introductions (#3621) as one Search filter ("Introductions", #3941).
+INTRODUCTION_KINDS: tuple[str, ...] = (
+    JournalKind.FIRST_JOURNAL,
+    JournalKind.APPLICATION,
+    JournalKind.WHISPERS,
+)
 
 
 class PosthumousOverride(models.TextChoices):
@@ -40,3 +54,5 @@ PRAISE_GIVEN_XP = 2
 PRAISE_RECEIVED_XP = 1
 RETORT_GIVEN_XP = 1
 RETORT_RECEIVED_XP = 3
+CONDEMN_GIVEN_XP = RETORT_GIVEN_XP
+CONDEMN_RECEIVED_XP = RETORT_RECEIVED_XP
