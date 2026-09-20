@@ -9458,7 +9458,7 @@ WebSocket-based game interface for MUD interaction.
 - **Wire vocabulary (#3933, ADR-0306):** `src/core/wire_options.py` is the home of the
   `text`-frame option keys and type values every layer shares: `TextFrameOption`
   (`console`, `interaction_echo`, `on_entry`), `TextFrameType` (`lifecycle`, `arrive`),
-  `LIFECYCLE_TEXT_TYPE` and `LifecycleEvent` (`become`, `switch`, `puppet`). It lives in
+  `TextFrameType` (`lifecycle`, `arrive`) and `LifecycleEvent` (`become`, `switch`, `puppet`). It lives in
   `core` because none of it is protocol-specific and `flows` sits below `web`;
   `src/web/webclient/message_types.py` re-exports the names through `__all__` and keeps
   the websocket frame names themselves. `WebsocketMessageType` gained `PUPPET` (the web

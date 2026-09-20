@@ -74,7 +74,7 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
   Evennia's `(text, {options})` tuple tagged `{"type": "lifecycle", "event":
 "switch" | "puppet"}`. Telnet prints them; the web client treats them as
   milestones and adds no feed note. The tag values come from
-  `core.wire_options` (`LIFECYCLE_TEXT_TYPE`, `LifecycleEvent`), never a free
+  `core.wire_options` (`TextFrameType`, `LifecycleEvent`), never a free
   string.
 - **Sessions share a character** (`MULTISESSION_MODE = 3`). `can_puppet_character`
   never refuses "another of your sessions has it"; two windows are one
