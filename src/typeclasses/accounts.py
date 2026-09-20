@@ -31,6 +31,10 @@ from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
 from evennia_extensions.account_setup import heal_account_setup
 
+# These lines are metadata-tagged so a structured client can treat them as
+# milestones rather than story text (#3933); telnet ignores the options.
+LIFECYCLE_TYPE = "lifecycle"
+
 TELNET_BLOCKED_BY_2FA_MESSAGE = (
     "This account refuses telnet sign-in while two-factor authentication is on. "
     "Sign in through the web client."
@@ -474,10 +478,10 @@ class Account(DefaultAccount):
     def puppet_character_in_session(self, character, session):
         """Puppet ``character`` in ``session``; ``@ic`` and login both come through here.
 
-        Idempotent for the session's own puppet: the web client sends
-        ``@ic <name>`` on every socket open, after login has usually puppeted
-        that character already, and a repeat must be a no-op rather than a
-        refusal (#3812).
+        Idempotent for the session's own puppet: the web client no longer sends
+        ``@ic <name>`` on every socket open (it sends a structured ``puppet``
+        request instead, a later task), but the idempotent same-puppet path
+        stays for telnet's ``@ic`` and any repeat request (#3812).
         """
         if session.puppet is character:
             return True, f"Already controlling {character.name}."
@@ -489,7 +493,12 @@ class Account(DefaultAccount):
 
         # If session is already puppeting something, unpuppet first
         if session.puppet:
-            session.msg(f"Switching from {session.puppet.name} to {character.name}.")
+            session.msg(
+                (
+                    f"Switching from {session.puppet.name} to {character.name}.",
+                    {"type": LIFECYCLE_TYPE, "event": "switch"},
+                )
+            )
             self.unpuppet_object(session)
 
         # Puppet the new character — broadcast handled by puppet_object override
@@ -610,7 +619,7 @@ class Account(DefaultAccount):
             session.msg(f"Which character? {names}. Type @ic <name> to play.")
             return
         _ok, message = self.puppet_character_in_session(character, session)
-        session.msg(message)
+        session.msg((message, {"type": LIFECYCLE_TYPE, "event": "puppet"}))
 
     def at_post_create_character(self, character, **kwargs):
         """
