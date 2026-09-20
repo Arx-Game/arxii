@@ -104,6 +104,14 @@ function scrollEntryIntoView(id: number) {
   element?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
 }
 
+/** What the stream looked like when the reader arrived, kept from the first response. */
+interface LastVisit {
+  /** The mark as it stood before this visit advanced it; null on a first visit. */
+  at: string | null;
+  /** How many entries were newer than that mark. */
+  count: number;
+}
+
 interface BodyProps {
   viewer: RowViewer;
   openId: number | null;
@@ -120,11 +128,22 @@ function StreamBody({
 }: BodyProps & { searchOpen: boolean; onCloseSearch: () => void }) {
   const [filters, setFilters] = useState<JournalEntryListFilters>({});
   const [page, setPage] = useState(1);
+  const [lastVisit, setLastVisit] = useState<LastVisit | null>(null);
   // `mark_visit` stays out of these filters, and so out of the query key: the hook
   // stamps the mark on its first fetch and never again.
   const query = useJournalEntries({ ...filters, page }, true);
 
   const rows = query.data?.results ?? [];
+
+  // The reader's previous visit is only knowable from the FIRST response: that request
+  // moved the mark to now, so every response after it reports a mark of a moment ago and
+  // a count of nothing. Held here, so pressing "Since your last visit" three filters
+  // later still means the visit before this one.
+  const data = query.data;
+  useEffect(() => {
+    if (lastVisit !== null || data === undefined) return;
+    setLastVisit({ at: data.visited_at ?? null, count: data.since_visit_count ?? 0 });
+  }, [data, lastVisit]);
 
   return (
     <>
@@ -142,7 +161,8 @@ function StreamBody({
           scrollEntryIntoView(id);
         }}
         isStaff={viewer.isStaff}
-        sinceVisitCount={query.data?.since_visit_count ?? 0}
+        sinceVisitCount={lastVisit?.count ?? 0}
+        visitedAt={lastVisit?.at ?? null}
         totalCount={query.data?.count}
       />
       <Stream
@@ -208,7 +228,12 @@ function WriterBody({ writerId, viewer, openId, onOpenRow }: BodyProps & { write
         name={name}
         counts={{
           entries: query.data?.count ?? 0,
-          black: rows.filter((row) => !row.is_public && !row.revealed_at).length,
+          // Only this page's rows can be counted, so the black tally is shown only when
+          // the page IS the whole journal. Otherwise it would read as a total and be one.
+          black:
+            query.data !== undefined && query.data.count === rows.length
+              ? rows.filter((row) => !row.is_public && !row.revealed_at).length
+              : null,
         }}
         subjects={subjects}
         filter={filter}

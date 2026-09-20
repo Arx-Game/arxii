@@ -76,7 +76,12 @@ export interface JournalEntrySummary {
   /** CharacterSheet id of the relationship-journal subject, if any (#3941). */
   about: number | null;
   about_name: string | null;
-  /** The author's active Persona id, for routing to their public sheet (#3941). */
+  /**
+   * The author's PRIMARY persona id (#3941) — the face the entry is signed with, and the
+   * target the row's Mute and Block links act on. Not a viewer-gated read: the entry is
+   * already published under the character's true name, so the active-persona rule (#981,
+   * which governs what a viewer may learn about who is present) has nothing to hide here.
+   */
   author_persona_id: number | null;
   /** In-character timestamp the entry was written at, if the author has one (#3941). */
   ic_timestamp: string | null;
@@ -126,8 +131,17 @@ export interface PaginatedJournalEntries {
   next: string | null;
   previous: string | null;
   results: JournalEntrySummary[];
-  /** Count of results newer than the viewer's last visit mark (#3941). */
-  since_visit_count: number;
+  /**
+   * Count of entries newer than the viewer's last visit mark (#3941). Absent from `mine/`
+   * and from a `?deceased=` bequest listing, neither of which is the viewer's own stream.
+   */
+  since_visit_count?: number;
+  /**
+   * The viewer's visit mark as it stood BEFORE this request advanced it, or null when they
+   * have never opened the stream (#3941). Pass it back as `since` to read the entries
+   * written since then. Absent alongside `since_visit_count` on the two feeds above.
+   */
+  visited_at?: string | null;
 }
 
 // A `type` alias (not `interface`) so it structurally satisfies `buildQuery`'s
@@ -152,8 +166,12 @@ export type JournalEntryListFilters = {
   kind?: string;
   /** 1 to restrict to entries revealed posthumously (#3941). */
   post_mortem?: 1;
-  /** 1 to restrict to entries newer than the viewer's last visit mark (#3941). */
-  since_visit?: 1;
+  /**
+   * ISO timestamp — only entries created after it (#3941). This is how "Since your last
+   * visit" is asked for: the page passes back the `visited_at` the stream's first response
+   * carried, because by then the server has already moved the mark to now.
+   */
+  since?: string;
   /** 1 to restrict to private ("black journal") entries (#3941). */
   black_only?: 1;
   /** 1 to stamp the viewer's visit mark as part of this request (#3941). */
@@ -206,11 +224,11 @@ function buildQuery(params: Record<string, string | number | undefined>): string
  *
  * The Reading Room feed (#3941), paginated (page_size default 20, per
  * `JournalEntryPagination`). See `JournalEntryListFilters` for the full filter set
- * (`writer`, `about`, `kind`, `post_mortem`, `since_visit`, `black_only`, `mark_visit`,
+ * (`writer`, `about`, `kind`, `post_mortem`, `since`, `black_only`, `mark_visit`,
  * plus the pre-existing `author`/`tag`/`deceased`). `?deceased=` switches to browsing a
  * bequeathed corpus (#3287) — empty unless the caller holds a grant for that sheet.
- * The response's `since_visit_count` reflects entries newer than the viewer's last visit
- * mark regardless of whether `?since_visit=1` was passed.
+ * The response's `since_visit_count` and `visited_at` both describe the viewer's PREVIOUS
+ * visit, whatever filters were passed; `mark_visit=1` advances the mark after reading them.
  */
 export async function listJournalEntries(
   filters: JournalEntryListFilters = {}

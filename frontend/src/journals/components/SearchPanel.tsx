@@ -28,12 +28,18 @@ export interface SearchPanelProps {
   onOpenEntry: (id: number) => void;
   isStaff: boolean;
   sinceVisitCount: number;
+  /**
+   * The reader's previous visit, as the stream's first response named it, or null for a
+   * first visit. "Since your last visit" asks the server for entries after this moment,
+   * because the server itself can no longer name it: opening the stream moved the mark.
+   */
+  visitedAt: string | null;
   /** Everything the current filters match; defaults to what is on this page. */
   totalCount?: number;
 }
 
 /** The five ways to narrow the stream. Exactly one holds at a time. */
-type Scope = 'newest' | 'since_visit' | 'introductions' | 'post_mortem' | 'black_only';
+type Scope = 'newest' | 'since' | 'introductions' | 'post_mortem' | 'black_only';
 
 const GROUP_HEAD_CLASS =
   'jr-sans m-0 text-[.6875rem] font-semibold uppercase tracking-[.14em] text-muted-foreground';
@@ -51,7 +57,7 @@ const CELL_CLASS = 'border-b px-[.6rem] py-2 align-top';
  * changes the page when pressed.
  */
 function currentScope(filters: JournalEntryListFilters): Scope | null {
-  if (filters.since_visit) return 'since_visit';
+  if (filters.since) return 'since';
   if (filters.kind === 'introductions') return 'introductions';
   if (filters.post_mortem) return 'post_mortem';
   if (filters.black_only) return 'black_only';
@@ -78,6 +84,7 @@ export function SearchPanel({
   onOpenEntry,
   isStaff,
   sinceVisitCount,
+  visitedAt,
   totalCount,
 }: SearchPanelProps) {
   const [writerTerm, setWriterTerm] = useState(filters.writer ?? '');
@@ -117,7 +124,9 @@ export function SearchPanel({
     }
     onFiltersChange({
       ...filters,
-      since_visit: next === 'since_visit' ? 1 : undefined,
+      // A reader with no previous visit has nothing to cut on — everything in front of
+      // them is new — so "Since your last visit" simply leaves the stream unnarrowed.
+      since: next === 'since' && visitedAt !== null ? visitedAt : undefined,
       kind: next === 'introductions' ? 'introductions' : undefined,
       post_mortem: next === 'post_mortem' ? 1 : undefined,
       black_only: next === 'black_only' ? 1 : undefined,
@@ -171,7 +180,7 @@ export function SearchPanel({
             <button {...scopeProps('newest')}>Newest</button>
           </li>
           <li>
-            <button {...scopeProps('since_visit')}>
+            <button {...scopeProps('since')}>
               Since your last visit
               <OptionCount count={sinceVisitCount} />
             </button>

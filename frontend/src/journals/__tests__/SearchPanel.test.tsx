@@ -48,6 +48,7 @@ describe('SearchPanel (#3941)', () => {
         onOpenEntry={vi.fn()}
         isStaff={false}
         sinceVisitCount={4}
+        visitedAt={null}
       />
     );
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
@@ -65,6 +66,7 @@ describe('SearchPanel (#3941)', () => {
         onOpenEntry={onOpen}
         isStaff={true}
         sinceVisitCount={4}
+        visitedAt="2026-09-16T08:00:00Z"
       />
     );
     expect(screen.getByText(/Since your last visit/)).toHaveTextContent('4');
@@ -89,6 +91,7 @@ describe('SearchPanel (#3941)', () => {
         onOpenEntry={vi.fn()}
         isStaff={false}
         sinceVisitCount={0}
+        visitedAt={null}
       />
     );
 
@@ -108,6 +111,7 @@ describe('SearchPanel (#3941)', () => {
         onOpenEntry={vi.fn()}
         isStaff={false}
         sinceVisitCount={0}
+        visitedAt={null}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: 'council' }));
@@ -123,10 +127,66 @@ describe('SearchPanel (#3941)', () => {
         onOpenEntry={vi.fn()}
         isStaff={false}
         sinceVisitCount={0}
+        visitedAt={null}
       />
     );
     fireEvent.click(screen.getByText('Newest'));
     expect(onFilters).toHaveBeenCalledWith({ page: 3 });
+  });
+
+  it('cuts on the visit it was given, and on nothing when there was no visit', () => {
+    const onFilters = vi.fn();
+    const { rerender } = render(
+      <SearchPanel
+        open
+        filters={{}}
+        onFiltersChange={onFilters}
+        rows={rows}
+        onOpenEntry={vi.fn()}
+        isStaff={false}
+        sinceVisitCount={4}
+        visitedAt="2026-09-16T08:00:00Z"
+      />
+    );
+    fireEvent.click(screen.getByText(/Since your last visit/));
+    expect(onFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ since: '2026-09-16T08:00:00Z' })
+    );
+
+    // A reader with no previous visit: the option narrows nothing, because nothing in
+    // front of them is old.
+    onFilters.mockClear();
+    rerender(
+      <SearchPanel
+        open
+        filters={{}}
+        onFiltersChange={onFilters}
+        rows={rows}
+        onOpenEntry={vi.fn()}
+        isStaff={false}
+        sinceVisitCount={4}
+        visitedAt={null}
+      />
+    );
+    fireEvent.click(screen.getByText(/Since your last visit/));
+    expect(onFilters).toHaveBeenCalledWith(expect.objectContaining({ since: undefined }));
+  });
+
+  it('marks the live option when a since cut holds', () => {
+    render(
+      <SearchPanel
+        open
+        filters={{ since: '2026-09-16T08:00:00Z' }}
+        onFiltersChange={vi.fn()}
+        rows={rows}
+        onOpenEntry={vi.fn()}
+        isStaff={false}
+        sinceVisitCount={4}
+        visitedAt="2026-09-16T08:00:00Z"
+      />
+    );
+    expect(screen.getByText(/Since your last visit/)).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByText('Newest')).not.toHaveAttribute('aria-current');
   });
 
   it('hides the staff filter for players', () => {
@@ -139,6 +199,7 @@ describe('SearchPanel (#3941)', () => {
         onOpenEntry={vi.fn()}
         isStaff={false}
         sinceVisitCount={0}
+        visitedAt={null}
       />
     );
     expect(screen.queryByText('Black journals only')).not.toBeInTheDocument();

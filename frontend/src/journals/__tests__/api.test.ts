@@ -17,7 +17,7 @@ describe('journals api (#3941)', () => {
       about: 7,
       kind: 'introductions',
       post_mortem: 1,
-      since_visit: 1,
+      since: '2026-09-16T08:00:00Z',
       mark_visit: 1,
     });
     const url = apiFetch.mock.calls[0][0] as string;
@@ -25,7 +25,7 @@ describe('journals api (#3941)', () => {
     expect(url).toContain('about=7');
     expect(url).toContain('kind=introductions');
     expect(url).toContain('post_mortem=1');
-    expect(url).toContain('since_visit=1');
+    expect(url).toContain(`since=${encodeURIComponent('2026-09-16T08:00:00Z')}`);
     expect(url).toContain('mark_visit=1');
   });
 

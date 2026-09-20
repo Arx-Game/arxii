@@ -93,8 +93,16 @@ function entry(over: Partial<JournalEntrySummary> = {}): JournalEntrySummary {
   };
 }
 
+/** The stream as the reader's FIRST request sees it: a mark from a previous visit. */
 function page(results: JournalEntrySummary[]): PaginatedJournalEntries {
-  return { count: results.length, next: null, previous: null, results, since_visit_count: 4 };
+  return {
+    count: results.length,
+    next: null,
+    previous: null,
+    results,
+    since_visit_count: 4,
+    visited_at: '2026-09-16T08:00:00Z',
+  };
 }
 
 function renderAt(path: string) {
@@ -139,6 +147,18 @@ describe('JournalsPage (#3941)', () => {
     for (const call of useJournalEntriesMock.mock.calls) {
       expect((call[0] as Record<string, unknown>).mark_visit).toBeUndefined();
     }
+  });
+
+  it('the Search panel cuts on the visit the first response named', () => {
+    renderAt('/journals');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    // The count and the moment both come off that first response.
+    expect(screen.getByText(/Since your last visit/)).toHaveTextContent('4');
+
+    fireEvent.click(screen.getByText(/Since your last visit/));
+    const lastFilters = useJournalEntriesMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(lastFilters.since).toBe('2026-09-16T08:00:00Z');
   });
 
   it('the stream renders each row with the prose the feed already sent', () => {
@@ -200,6 +220,9 @@ describe('JournalsPage (#3941)', () => {
     expect(screen.getByText('White journal · Public')).toBeInTheDocument();
     expect(screen.getByText('Black journal · Private')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Post entry' })).toBeInTheDocument();
+    expect(screen.getByText(/rewarded entries left this week/)).toHaveTextContent(
+      '2 of 3 rewarded entries left this week'
+    );
     expect(screen.queryByText(/Read by anyone/)).toBeNull();
     expect(screen.queryByText(/visible only to you/i)).toBeNull();
   });

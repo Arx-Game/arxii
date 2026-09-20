@@ -24,7 +24,8 @@ export interface WriterPlateProps {
   writerId: number;
   /** Their name, or null before any of their entries have arrived. */
   name: string | null;
-  counts: { entries: number; black: number };
+  /** Their entry total; `black` is null unless the page holds the whole journal. */
+  counts: { entries: number; black: number | null };
   /** Who this page of their entries is about. */
   subjects: AboutSubject[];
   filter: WriterFilter;
@@ -56,7 +57,7 @@ export function WriterPlate({
         </h1>
         <div className="jr-sans jr-plate-soft text-[.875rem]">
           <b className="jr-plate-strong font-semibold">{counts.entries}</b> entries
-          {counts.black > 0 ? (
+          {counts.black !== null && counts.black > 0 ? (
             <>
               {' · '}
               <b className="jr-plate-strong font-semibold">{counts.black}</b> black
