@@ -56,6 +56,12 @@ export interface JournalEntrySummary {
   author: number;
   author_name: string;
   title: string;
+  /**
+   * The entry's full text. The feed sends it (`JournalEntryListSerializer.Meta.fields`)
+   * so a collapsed row can show its first seven lines without a request of its own — the
+   * list queryset has already narrowed to entries this viewer may read.
+   */
+  body: string;
   is_public: boolean;
   response_type: JournalResponseType | null;
   parent: number | null;
@@ -79,13 +85,10 @@ export interface JournalEntrySummary {
   /** True when the viewer's active character wrote this entry (#3941). */
   is_own: boolean;
   /**
-   * What the entry is (#3941). Optional because the feed serializer does not send it
-   * yet: `JournalEntryListSerializer.Meta.fields` has no `"kind"` entry, so the row's
-   * Introduction band ("First Journal", "Application", "The Whispers") stays dark until
-   * that one field is added. The Search panel's Introductions filter already works — it
-   * filters server-side on the same column.
+   * What the entry is (#3941) — an ordinary entry, or one of the CG Introductions, whose
+   * name the row wears in its band ("First Journal", "Application", "The Whispers").
    */
-  kind?: JournalKind;
+  kind: JournalKind;
 }
 
 /** Shape returned by retrieve/create/respond (`JournalEntryDetailSerializer`). */
@@ -112,13 +115,10 @@ export interface JournalEntryDetail {
   can_retort: boolean;
   is_own: boolean;
   /**
-   * What the entry is (#3941). Optional because the feed serializer does not send it
-   * yet: `JournalEntryListSerializer.Meta.fields` has no `"kind"` entry, so the row's
-   * Introduction band ("First Journal", "Application", "The Whispers") stays dark until
-   * that one field is added. The Search panel's Introductions filter already works — it
-   * filters server-side on the same column.
+   * What the entry is (#3941) — an ordinary entry, or one of the CG Introductions, whose
+   * name the row wears in its band ("First Journal", "Application", "The Whispers").
    */
-  kind?: JournalKind;
+  kind: JournalKind;
 }
 
 export interface PaginatedJournalEntries {

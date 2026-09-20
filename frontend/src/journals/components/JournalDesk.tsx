@@ -14,7 +14,11 @@ import { toast } from 'sonner';
 import type { CreateJournalEntryRequest } from '../api';
 import { PRIMARY_BUTTON_CLASS, QUIET_BUTTON_CLASS } from '../fieldClasses';
 import { useCreateJournalEntry, useJournalSettings } from '../queries';
-import { EMPTY_ENTRY_FIELDS, type JournalEntryFieldsValue } from '../entryFields';
+import {
+  EMPTY_ENTRY_FIELDS,
+  isAboutUnresolved,
+  type JournalEntryFieldsValue,
+} from '../entryFields';
 import { JournalEntryFields } from './JournalEntryFields';
 
 export interface JournalDeskProps {
@@ -27,8 +31,13 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
   const createEntry = useCreateJournalEntry();
   const { data: settings } = useJournalSettings();
 
+  // A name typed into About that has not resolved to anybody holds the button:
+  // posting now would silently drop the subject the writer asked for.
   const canSubmit =
-    value.title.trim().length > 0 && value.body.trim().length > 0 && !createEntry.isPending;
+    value.title.trim().length > 0 &&
+    value.body.trim().length > 0 &&
+    !isAboutUnresolved(value) &&
+    !createEntry.isPending;
   const errorMessage =
     createEntry.isError && createEntry.error instanceof Error ? createEntry.error.message : null;
   const rewardedLeft = settings

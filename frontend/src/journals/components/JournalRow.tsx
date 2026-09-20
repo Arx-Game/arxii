@@ -7,10 +7,12 @@
  * respond form and — last and faint — Mute and Block. Nothing is a mode: the
  * row never navigates away to show more of itself.
  *
- * The list feed carries no body (`JournalEntryListSerializer`), so the text
- * comes from `useJournalEntry(id, open)` and is fetched the moment the reader
- * opens the row. React Query keeps it, so a row that has been opened once
- * shows its clamped first lines when it closes again.
+ * The text is the row's own: the list feed sends `body` (#3941), so a collapsed
+ * row shows its first seven lines with no request of its own and a stream of
+ * twenty rows costs one fetch. `useJournalEntry(id, open)` is asked only for
+ * the responses, which the feed does not carry, and only once the row is open;
+ * its `body` is preferred when it arrives, so an entry edited in another tab
+ * shows its new text as soon as the row is opened.
  *
  * Deliberately provider-free: no `useQueryClient`, no `Link`, no router. A
  * stream is twenty of these, and a leaf that needs the whole app's context to
@@ -74,7 +76,7 @@ const CHIP_CLASS =
 function bandText(entry: JournalEntrySummary): string | null {
   if (entry.revealed_at) return `Post mortem · ${formatPostingDate(entry.revealed_at)}`;
   if (!entry.is_public) return 'Black journal';
-  if (entry.kind && entry.kind !== 'entry') return KIND_BANDS[entry.kind] ?? null;
+  if (entry.kind !== 'entry') return KIND_BANDS[entry.kind] ?? null;
   return null;
 }
 
@@ -172,11 +174,12 @@ function AfterDeathPills({ entry }: { entry: JournalEntrySummary }) {
   );
 }
 
-/** One response, opened for its text — the feed's response fragment carries only the title. */
+/**
+ * One response: its kind, its author, its title and its text, all of it already
+ * in hand. The parent's `responses` are serialized by the list serializer, which
+ * carries `body`, so nothing here is worth a request or a second click.
+ */
 function ResponseItem({ response }: { response: JournalEntrySummary }) {
-  const [expanded, setExpanded] = useState(false);
-  const { data } = useJournalEntry(response.id, expanded);
-
   return (
     <div className="grid gap-[.15rem]">
       <div className="jr-sans jr-soft flex flex-wrap items-baseline gap-[.6rem] text-[.8125rem] text-muted-foreground">
@@ -187,18 +190,8 @@ function ResponseItem({ response }: { response: JournalEntrySummary }) {
         ) : null}
         <span>{response.author_name}</span>
       </div>
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={(event) => {
-          event.stopPropagation();
-          setExpanded((previous) => !previous);
-        }}
-        className="cursor-pointer border-0 bg-transparent p-0 text-left font-body text-[1.05rem] font-semibold text-inherit hover:underline"
-      >
-        {response.title}
-      </button>
-      {expanded && data?.body ? <p className="jr-body m-0">{data.body}</p> : null}
+      <h4 className="m-0 font-body text-[1.05rem] font-semibold">{response.title}</h4>
+      <p className="jr-body m-0">{response.body}</p>
     </div>
   );
 }
@@ -456,10 +449,19 @@ export function JournalRow({ entry, open, onToggle, viewer }: JournalRowProps) {
   const isBlack = !entry.is_public && !entry.revealed_at;
   const isRevealed = entry.revealed_at !== null;
   const band = bandText(entry);
-  const body = detail?.body ?? '';
+  // Collapsed, always the row's own text. Opened, the detail's if it has arrived:
+  // it is the fresher of the two after an edit elsewhere.
+  const body = open ? (detail?.body ?? entry.body) : entry.body;
   const responses = detail?.responses ?? [];
+  // A black row takes no actions at all, the owner's Edit aside — which includes
+  // the staff reader who reached it through `black_only`: a private entry is not
+  // a thing to praise, answer, or mute its writer over.
   const canModerate =
-    !isOwn && !isRevealed && entry.author_persona_id !== null && viewer.personaId !== null;
+    !isOwn &&
+    !isBlack &&
+    !isRevealed &&
+    entry.author_persona_id !== null &&
+    viewer.personaId !== null;
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -529,7 +531,7 @@ export function JournalRow({ entry, open, onToggle, viewer }: JournalRowProps) {
             <InlineEditor
               entry={entry}
               initialTitle={detail?.title ?? entry.title}
-              initialBody={body}
+              initialBody={detail?.body ?? entry.body}
               onDone={() => setEditing(false)}
             />
           ) : null}

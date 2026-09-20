@@ -4,6 +4,7 @@
  * Follows the key-factory + hook shape used by `frontend/src/relationships/queries.ts`.
  */
 
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import * as api from './api';
@@ -24,11 +25,28 @@ export const journalsKeys = {
   settings: () => [...journalsKeys.all, 'settings'] as const,
 };
 
-/** GET /api/journals/entries/ — public feed, optionally filtered by author/tag. */
-export function useJournalEntries(filters: JournalEntryListFilters = {}) {
+/**
+ * GET /api/journals/entries/ — the feed, optionally filtered (see
+ * `JournalEntryListFilters`).
+ *
+ * `markVisitOnce` stamps the reader's visit mark on the FIRST fetch this hook
+ * performs and on no other. It is deliberately not part of `filters`: in the
+ * query key it would make "the stream" and "the stream, marked" two different
+ * queries — so the first thing to re-render the page would swap the key and
+ * refetch — and baked into the queryFn it would re-stamp on every background
+ * refetch, quietly moving the mark to now and emptying "since your last visit".
+ * The ref is read at fetch time, which is the only moment that can tell a first
+ * fetch from a refetch.
+ */
+export function useJournalEntries(filters: JournalEntryListFilters = {}, markVisitOnce = false) {
+  const stamped = useRef(false);
   return useQuery({
     queryKey: journalsKeys.list(filters),
-    queryFn: () => api.listJournalEntries(filters),
+    queryFn: () => {
+      const stamp = markVisitOnce && !stamped.current;
+      stamped.current = true;
+      return api.listJournalEntries(stamp ? { ...filters, mark_visit: 1 } : filters);
+    },
   });
 }
 

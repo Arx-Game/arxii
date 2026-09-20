@@ -44,11 +44,18 @@ const OPTION_CLASS =
 
 const CELL_CLASS = 'border-b px-[.6rem] py-2 align-top';
 
-function currentScope(filters: JournalEntryListFilters): Scope {
+/**
+ * Which option is the live one, or none. Newest means the unfiltered stream, so a
+ * page narrowed to one writer, subject or tag is not Newest even with no scope
+ * flag set — marking it so would show the reader a current option that still
+ * changes the page when pressed.
+ */
+function currentScope(filters: JournalEntryListFilters): Scope | null {
   if (filters.since_visit) return 'since_visit';
   if (filters.kind === 'introductions') return 'introductions';
   if (filters.post_mortem) return 'post_mortem';
   if (filters.black_only) return 'black_only';
+  if (filters.writer || filters.about !== undefined || filters.tag) return null;
   return 'newest';
 }
 
@@ -96,7 +103,18 @@ export function SearchPanel({
     });
   }, [debouncedWriter]);
 
+  /**
+   * Exactly one scope holds at a time, and Newest is none of them: it is the
+   * unfiltered stream, so it clears the writer, the subject and the tag as well
+   * as the four flags. Anything else and the reader would press "Newest", still
+   * be looking at one person's entries, and have nothing left to press.
+   */
   function setScope(next: Scope) {
+    if (next === 'newest') {
+      setWriterTerm('');
+      onFiltersChange({ page: filters.page });
+      return;
+    }
     onFiltersChange({
       ...filters,
       since_visit: next === 'since_visit' ? 1 : undefined,
@@ -104,6 +122,15 @@ export function SearchPanel({
       post_mortem: next === 'post_mortem' ? 1 : undefined,
       black_only: next === 'black_only' ? 1 : undefined,
     });
+  }
+
+  /** Pressing the live subject or tag again clears it — the only way back out. */
+  function toggleAbout(id: number) {
+    onFiltersChange({ ...filters, about: filters.about === id ? undefined : id });
+  }
+
+  function toggleTag(name: string) {
+    onFiltersChange({ ...filters, tag: filters.tag === name ? undefined : name });
   }
 
   function scopeProps(next: Scope) {
@@ -174,7 +201,8 @@ export function SearchPanel({
                   OPTION_CLASS,
                   filters.about === subject.id && 'font-semibold text-primary'
                 )}
-                onClick={() => onFiltersChange({ ...filters, about: subject.id })}
+                aria-pressed={filters.about === subject.id}
+                onClick={() => toggleAbout(subject.id)}
               >
                 {subject.name}
                 <OptionCount count={subject.count} />
@@ -192,7 +220,8 @@ export function SearchPanel({
               <button
                 type="button"
                 className={cn(OPTION_CLASS, filters.tag === tag && 'font-semibold text-primary')}
-                onClick={() => onFiltersChange({ ...filters, tag })}
+                aria-pressed={filters.tag === tag}
+                onClick={() => toggleTag(tag)}
               >
                 {tag}
               </button>

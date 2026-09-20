@@ -72,6 +72,22 @@
   border-color: #38302a;
   color: #e3dccd;
 }
+/* A field inside a black row: the shared field classes paint text in
+   `--foreground`, which in light mode is near-black ink on this near-black
+   ground. The row's own writing surfaces (its editor, its block reason) take the
+   band's ink instead. */
+.journals .jr-black input,
+.journals .jr-black textarea,
+.journals .jr-black select {
+  color: #e3dccd;
+  border-color: #38302a;
+}
+.journals .jr-black input::placeholder,
+.journals .jr-black textarea::placeholder {
+  color: #e3dccd;
+  opacity: 0.5;
+}
+
 .journals .jr-black .jr-pill[aria-pressed='true'] {
   background: #e3dccd;
   color: #1f1a17;

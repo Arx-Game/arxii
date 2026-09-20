@@ -7,16 +7,16 @@
  * under it; closing it always returns you to the stream, because Search is a
  * panel and never a mode.
  *
- * The visit mark is stamped exactly once per visit: `mark_visit` rides the
- * first request and is dropped for every refetch and filter change after it,
- * so "since your last visit" keeps meaning the last visit rather than the last
- * thing the reader clicked.
+ * The visit mark is stamped exactly once per visit: the stream asks
+ * `useJournalEntries` for it, and the hook puts it on its first fetch and on no
+ * later one, so "since your last visit" keeps meaning the last visit rather than
+ * the last thing the reader clicked.
  *
  * Interface copy here is plain and short by ruling: no help text, no
  * explanation of what a white or a black journal is. The page is furniture;
  * the writing is the point.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
@@ -84,7 +84,7 @@ function Pages({
         disabled={!hasPrevious}
         onClick={() => onPage(page - 1)}
       >
-        Earlier page
+        Newer entries
       </button>
       <span className="text-muted-foreground">Page {page}</span>
       <button
@@ -120,19 +120,9 @@ function StreamBody({
 }: BodyProps & { searchOpen: boolean; onCloseSearch: () => void }) {
   const [filters, setFilters] = useState<JournalEntryListFilters>({});
   const [page, setPage] = useState(1);
-  // The visit mark rides the first request only. A ref (not state) on purpose:
-  // flipping it must not re-render, or the query key would change under the
-  // very fetch that is stamping the mark.
-  const firstLoad = useRef(true);
-  const query = useJournalEntries({
-    ...filters,
-    page,
-    mark_visit: firstLoad.current ? 1 : undefined,
-  });
-
-  useEffect(() => {
-    if (query.isSuccess) firstLoad.current = false;
-  }, [query.isSuccess]);
+  // `mark_visit` stays out of these filters, and so out of the query key: the hook
+  // stamps the mark on its first fetch and never again.
+  const query = useJournalEntries({ ...filters, page }, true);
 
   const rows = query.data?.results ?? [];
 

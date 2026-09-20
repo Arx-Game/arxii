@@ -36,6 +36,8 @@ function entry(over: Partial<JournalEntrySummary> = {}): JournalEntrySummary {
     author: 10,
     author_name: 'Ilsavet du Verane',
     title: 'On the matter of the harbor tolls',
+    body: 'The tolls are the harbour and the harbour is the city.',
+    kind: 'entry',
     is_public: true,
     response_type: null,
     parent: null,
@@ -65,6 +67,17 @@ describe('JournalRow (#3941)', () => {
     expect(screen.getByRole('button', { name: '22 September 1012' })).toBeInTheDocument();
     expect(screen.queryByText('Praise')).not.toBeInTheDocument();
     expect(screen.queryByText('harbor')).not.toBeInTheDocument();
+  });
+
+  it('reads its prose off the row itself, with nothing fetched while it is shut', () => {
+    detail.mockReturnValue({ data: undefined });
+    render(<JournalRow entry={entry()} open={false} onToggle={vi.fn()} viewer={viewer} />);
+
+    expect(
+      screen.getByText('The tolls are the harbour and the harbour is the city.')
+    ).toBeInTheDocument();
+    // The detail query exists for the responses, and stays disabled until the row opens.
+    expect(detail).toHaveBeenCalledWith(3, false);
   });
 
   it('flips the date without toggling the row', () => {
@@ -122,6 +135,61 @@ describe('JournalRow (#3941)', () => {
       />
     );
     expect(screen.getByText(/Post mortem/)).toBeInTheDocument();
+    expect(screen.queryByText('Praise')).not.toBeInTheDocument();
+  });
+
+  it('an Introduction wears its own name in the band', () => {
+    detail.mockReturnValue({ data: { body: 'x', responses: [] } });
+    render(
+      <JournalRow
+        entry={entry({ kind: 'first_journal' })}
+        open={false}
+        onToggle={vi.fn()}
+        viewer={viewer}
+      />
+    );
+    expect(screen.getByText('First Journal')).toBeInTheDocument();
+  });
+
+  it('shows each response in full, without a second request for it', () => {
+    detail.mockReturnValue({
+      data: {
+        body: 'Full text',
+        responses: [
+          {
+            ...entry(),
+            id: 44,
+            author_name: 'Corvin Ashe',
+            title: 'The tolls are a tax on bread',
+            body: 'You name the harbour and mean the granary.',
+            response_type: 'retort',
+          },
+        ],
+      },
+    });
+    render(<JournalRow entry={entry()} open onToggle={vi.fn()} viewer={viewer} />);
+
+    expect(screen.getByText('The tolls are a tax on bread')).toBeInTheDocument();
+    expect(screen.getByText('You name the harbour and mean the granary.')).toBeInTheDocument();
+    expect(screen.getByText('retort')).toBeInTheDocument();
+    // One detail query for the row; none for the response it already has in hand.
+    expect(detail).not.toHaveBeenCalledWith(44, expect.anything());
+  });
+
+  it('offers a black row no Mute or Block, even to staff reading it', () => {
+    detail.mockReturnValue({ data: { body: 'x', responses: [] } });
+    render(
+      <JournalRow
+        entry={entry({ is_public: false, is_own: false })}
+        open
+        onToggle={vi.fn()}
+        viewer={{ sheetId: 20, personaId: 5, isStaff: true }}
+      />
+    );
+
+    expect(screen.getByText('Black journal')).toBeInTheDocument();
+    expect(screen.queryByText('Mute writer')).not.toBeInTheDocument();
+    expect(screen.queryByText('Block writer')).not.toBeInTheDocument();
     expect(screen.queryByText('Praise')).not.toBeInTheDocument();
   });
 });

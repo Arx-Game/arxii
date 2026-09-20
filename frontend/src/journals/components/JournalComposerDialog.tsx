@@ -29,7 +29,11 @@ import { Button } from '@/components/ui/button';
 
 import type { CreateJournalEntryRequest } from '../api';
 import { useCreateJournalEntry } from '../queries';
-import { EMPTY_ENTRY_FIELDS, type JournalEntryFieldsValue } from '../entryFields';
+import {
+  EMPTY_ENTRY_FIELDS,
+  isAboutUnresolved,
+  type JournalEntryFieldsValue,
+} from '../entryFields';
 import { JournalEntryFields } from './JournalEntryFields';
 // The dialog renders through a portal, outside the page's `.journals` root, and is
 // opened from the sidebar on routes that never load `JournalsPage`. Importing the
@@ -80,8 +84,13 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
     });
   }
 
+  // A name typed into About that has not resolved to anybody holds the button:
+  // posting now would silently drop the subject the writer asked for.
   const canSubmit =
-    value.title.trim().length > 0 && value.body.trim().length > 0 && !createEntry.isPending;
+    value.title.trim().length > 0 &&
+    value.body.trim().length > 0 &&
+    !isAboutUnresolved(value) &&
+    !createEntry.isPending;
   // Inline refusal rendering (#3412 T4) — a gate refusal (4xx `{detail}`, parsed into
   // `ApiError.message` by `readErrorDetail`/`createJournalEntry`) needs to stay readable
   // after the toast dismisses; the reason text IS the message, never rewritten here.

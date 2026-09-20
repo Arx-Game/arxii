@@ -25,8 +25,13 @@ vi.mock('sonner', () => ({
   },
 }));
 
+// The type-ahead answers late in life and instantly here, so the results are a
+// handle the test can move: empty first, populated once the "response" arrives.
+const personaSearch = vi.hoisted(() => ({
+  results: [] as { id: number; name: string; character_sheet: number | null }[],
+}));
 vi.mock('@/roster/usePersonaSearch', () => ({
-  usePersonaSearch: () => ({ results: [], isFetching: false }),
+  usePersonaSearch: () => ({ results: personaSearch.results, isFetching: false }),
 }));
 
 import { JournalComposerDialog } from '../components/JournalComposerDialog';
@@ -47,6 +52,7 @@ function makeCreateMock(errorState?: { error: Error }) {
 describe('JournalComposerDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    personaSearch.results = [];
   });
 
   it('does not render when closed', () => {
@@ -165,6 +171,34 @@ describe('JournalComposerDialog', () => {
     render(<JournalComposerDialog open onClose={vi.fn()} />);
 
     expect(screen.queryByTestId('journal-composer-error')).not.toBeInTheDocument();
+  });
+
+  it('holds Post entry until a typed About name resolves to somebody', async () => {
+    const user = userEvent.setup();
+    const mutateMock = makeCreateMock();
+
+    render(<JournalComposerDialog open onClose={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Title'), 'On the tolls');
+    await user.type(screen.getByLabelText('Entry'), 'Body text.');
+    expect(screen.getByRole('button', { name: /post entry/i })).not.toBeDisabled();
+
+    // Typed while the search has answered with nothing: a name that is nobody.
+    await user.type(screen.getByLabelText('About a character'), 'Corvin Ashe');
+    expect(screen.getByRole('button', { name: /post entry/i })).toBeDisabled();
+
+    // The search answers. The next render re-resolves the same term — the bug was
+    // that nothing did, and the entry posted with no subject at all.
+    personaSearch.results = [{ id: 9, name: 'Corvin Ashe', character_sheet: 20 }];
+    await user.type(screen.getByLabelText('Entry'), '!');
+
+    expect(screen.getByRole('button', { name: /post entry/i })).not.toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: /post entry/i }));
+    expect(mutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ about: 20 }),
+      expect.any(Object)
+    );
   });
 
   it('disables submit until both title and body are filled', async () => {

@@ -44,7 +44,8 @@ vi.mock('@/roster/useBrowsingIdentity', () => ({
 const useJournalEntriesMock = vi.fn();
 const useMyJournalEntriesMock = vi.fn();
 vi.mock('../queries', () => ({
-  useJournalEntries: (filters: unknown) => useJournalEntriesMock(filters),
+  useJournalEntries: (filters: unknown, markVisitOnce?: boolean) =>
+    useJournalEntriesMock(filters, markVisitOnce),
   useMyJournalEntries: (page: number) => useMyJournalEntriesMock(page),
   useJournalEntry: () => ({ data: undefined }),
   useRespondToJournal: () => ({ mutate: vi.fn(), isPending: false }),
@@ -70,6 +71,8 @@ function entry(over: Partial<JournalEntrySummary> = {}): JournalEntrySummary {
     author: 10,
     author_name: 'Ilsavet du Verane',
     title: 'On the matter of the harbor tolls',
+    body: 'The tolls are the harbour and the harbour is the city.',
+    kind: 'entry',
     is_public: true,
     response_type: null,
     parent: null,
@@ -117,21 +120,33 @@ describe('JournalsPage (#3941)', () => {
     });
   });
 
-  it('renders the stream and marks the visit on the first load only', () => {
+  it('renders the stream and asks for the visit mark without keying on it', () => {
     renderAt('/journals');
 
     expect(screen.getByRole('heading', { name: 'Journals' })).toBeInTheDocument();
     expect(screen.getByText('On the matter of the harbor tolls')).toBeInTheDocument();
-    expect(useJournalEntriesMock.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ mark_visit: 1 })
-    );
+    // The stream asks to be marked; the hook decides which single fetch carries it.
+    expect(useJournalEntriesMock.mock.calls[0][1]).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     fireEvent.click(screen.getByText('Post mortems'));
 
     const lastFilters = useJournalEntriesMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
-    expect(lastFilters.mark_visit).toBeUndefined();
     expect(lastFilters.post_mortem).toBe(1);
+    // `mark_visit` never rides the filters, so it can never be part of the query
+    // key: a re-render would otherwise swap the key and refetch, and a background
+    // refetch would re-stamp the mark and empty "since your last visit".
+    for (const call of useJournalEntriesMock.mock.calls) {
+      expect((call[0] as Record<string, unknown>).mark_visit).toBeUndefined();
+    }
+  });
+
+  it('the stream renders each row with the prose the feed already sent', () => {
+    renderAt('/journals');
+
+    expect(
+      screen.getByText('The tolls are the harbour and the harbour is the city.')
+    ).toBeInTheDocument();
   });
 
   it('toggles the Search panel without leaving the stream', () => {

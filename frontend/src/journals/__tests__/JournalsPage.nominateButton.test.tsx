@@ -77,6 +77,8 @@ function makeEntry(overrides: Partial<JournalEntrySummary> = {}): JournalEntrySu
     author: 99,
     author_name: 'Someone Else',
     title: 'A Quiet Evening',
+    body: 'The rain fell softly on the manor roof.',
+    kind: 'entry',
     is_public: true,
     response_type: null,
     parent: null,

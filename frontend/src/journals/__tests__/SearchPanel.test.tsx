@@ -16,6 +16,8 @@ const rows = [
     author: 10,
     author_name: 'Corvin Ashe',
     title: 'Third correction',
+    body: 'A third time, then, and plainly.',
+    kind: 'entry' as const,
     is_public: true,
     response_type: null,
     parent: null,
@@ -74,6 +76,57 @@ describe('SearchPanel (#3941)', () => {
     expect(onOpen).toHaveBeenCalledWith(1);
     fireEvent.click(screen.getByText('Introductions'));
     expect(onFilters).toHaveBeenCalledWith(expect.objectContaining({ kind: 'introductions' }));
+  });
+
+  it('lets a chosen subject or tag be unchosen, and Newest clears everything', () => {
+    const onFilters = vi.fn();
+    const { rerender } = render(
+      <SearchPanel
+        open
+        filters={{ about: 20 }}
+        onFiltersChange={onFilters}
+        rows={rows}
+        onOpenEntry={vi.fn()}
+        isStaff={false}
+        sinceVisitCount={0}
+      />
+    );
+
+    // The live subject is pressed, and pressing it again is the way back out.
+    const subject = screen.getByRole('button', { name: 'Ilsavet du Verane · 1' });
+    expect(subject).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(subject);
+    expect(onFilters).toHaveBeenCalledWith(expect.objectContaining({ about: undefined }));
+
+    onFilters.mockClear();
+    rerender(
+      <SearchPanel
+        open
+        filters={{ tag: 'council' }}
+        onFiltersChange={onFilters}
+        rows={rows}
+        onOpenEntry={vi.fn()}
+        isStaff={false}
+        sinceVisitCount={0}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'council' }));
+    expect(onFilters).toHaveBeenCalledWith(expect.objectContaining({ tag: undefined }));
+
+    onFilters.mockClear();
+    rerender(
+      <SearchPanel
+        open
+        filters={{ about: 20, tag: 'council', writer: 'Corvin', post_mortem: 1, page: 3 }}
+        onFiltersChange={onFilters}
+        rows={rows}
+        onOpenEntry={vi.fn()}
+        isStaff={false}
+        sinceVisitCount={0}
+      />
+    );
+    fireEvent.click(screen.getByText('Newest'));
+    expect(onFilters).toHaveBeenCalledWith({ page: 3 });
   });
 
   it('hides the staff filter for players', () => {

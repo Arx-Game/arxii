@@ -16,8 +16,13 @@
  * race-safe search the scene and event forms use) to the CharacterSheet the
  * backend wants. An entry can be about anyone, so this is a search and not a
  * list of the writer's own roster.
+ *
+ * The resolution is derived from the term and the results together, and re-derived
+ * whenever either moves. Resolving once, as the writer typed, meant the answer was
+ * computed against results that had not arrived yet: the name looked accepted and the
+ * entry posted with no subject at all.
  */
-import { useId, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { cn } from '@/lib/utils';
@@ -36,21 +41,34 @@ export interface JournalEntryFieldsProps {
 
 export function JournalEntryFields({ value, onChange, showAfterDeath }: JournalEntryFieldsProps) {
   const ids = useId();
-  const [aboutTerm, setAboutTerm] = useState(value.about?.name ?? '');
   const [tagDraft, setTagDraft] = useState('');
-  const { results } = usePersonaSearch(aboutTerm);
+  const { results } = usePersonaSearch(value.aboutTerm);
 
-  /** A typed name only becomes a subject when it is somebody; anything else is nobody. */
-  function resolveAbout(term: string) {
-    const wanted = term.trim().toLowerCase();
-    const match = results.find((result) => result.name.toLowerCase() === wanted);
-    if (!match || match.character_sheet === null) {
-      if (value.about !== null) onChange({ ...value, about: null });
-      return;
-    }
-    if (value.about?.id === match.character_sheet) return;
-    onChange({ ...value, about: { id: match.character_sheet, name: match.name } });
-  }
+  // A typed name is somebody only on an exact match against what the search has
+  // answered with so far; both sides move, so this is derived, never latched.
+  const match = useMemo(() => {
+    const wanted = value.aboutTerm.trim().toLowerCase();
+    if (!wanted) return null;
+    return results.find((result) => result.name.toLowerCase() === wanted) ?? null;
+  }, [value.aboutTerm, results]);
+  const matchSheetId = match?.character_sheet ?? null;
+  const matchName = match?.name ?? '';
+
+  // The effect fires on the resolution changing, never on the rest of the form
+  // moving, so the deps are the two primitives that describe it and the current
+  // value is read through a ref.
+  const latest = useRef({ value, onChange });
+  useEffect(() => {
+    latest.current = { value, onChange };
+  });
+  useEffect(() => {
+    const { value: current, onChange: emit } = latest.current;
+    if ((current.about?.id ?? null) === matchSheetId) return;
+    emit({
+      ...current,
+      about: matchSheetId === null ? null : { id: matchSheetId, name: matchName },
+    });
+  }, [matchSheetId, matchName]);
 
   function addTagFromDraft() {
     const tag = tagDraft.trim();
@@ -119,12 +137,8 @@ export function JournalEntryFields({ value, onChange, showAfterDeath }: JournalE
             id={`${ids}-about`}
             list={`${ids}-people`}
             className={FIELD_INPUT_CLASS}
-            value={aboutTerm}
-            onChange={(event) => {
-              setAboutTerm(event.target.value);
-              resolveAbout(event.target.value);
-            }}
-            onBlur={(event) => resolveAbout(event.target.value)}
+            value={value.aboutTerm}
+            onChange={(event) => onChange({ ...value, aboutTerm: event.target.value })}
           />
           <datalist id={`${ids}-people`}>
             {results.map((result) => (
