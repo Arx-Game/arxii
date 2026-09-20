@@ -6,9 +6,21 @@ const FLUSH_INTERVAL_MS = 2000;
 const MAX_BATCH = 20;
 
 interface PoseRef {
-  id: number;
+  id: number | string;
   timestamp: string;
+  /** Temporary/ephemeral rows are read only in this tab session. */
+  availability?: 'retained' | 'temporary';
+  /** Collapsed rows and non-body sentinels must not start a dwell. */
+  readEligible?: boolean;
 }
+
+function poseKey(pose: Pick<PoseRef, 'id' | 'timestamp'>): string {
+  return `${pose.id}:${pose.timestamp}`;
+}
+
+// Deliberately module-local: this survives reader remounts in the current tab,
+// but is not persisted to the account, another device, or durable storage.
+const sessionRead = new Set<string>();
 
 /**
  * Dwell-tracked read state (#3759 Task 14). Marks a pose read once it has
@@ -41,7 +53,8 @@ export function usePoseReadTracking() {
   // scroll it fully out and back in. The visibilitychange/focus handler
   // below re-derives dwell eligibility from this set instead.
   const intersecting = useRef<Set<HTMLElement>>(new Set());
-  const queued = useRef<PoseRef[]>([]);
+  const queued = useRef<{ id: number; timestamp: string }[]>([]);
+  const [, bumpSessionRead] = useState(0);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flush = useCallback(() => {
@@ -92,12 +105,22 @@ export function usePoseReadTracking() {
   // one running.
   const startDwellTimer = useCallback(
     (el: HTMLElement, pose: PoseRef) => {
-      if (dwellTimers.current.has(el)) return;
+      if (pose.readEligible === false || dwellTimers.current.has(el)) return;
+      if (pose.availability === 'temporary' && sessionRead.has(poseKey(pose))) return;
       dwellTimers.current.set(
         el,
         setTimeout(() => {
-          queued.current.push(pose);
           dwellTimers.current.delete(el);
+          if (pose.availability === 'temporary') {
+            // Ephemeral IDs are not durable database references. Keep this
+            // receipt in this mounted reader/tab only; never send it to the
+            // account-level receipt endpoint or another device.
+            sessionRead.add(poseKey(pose));
+            bumpSessionRead((value) => value + 1);
+            return;
+          }
+          if (typeof pose.id !== 'number') return;
+          queued.current.push({ id: pose.id, timestamp: pose.timestamp });
           if (queued.current.length >= MAX_BATCH) flush();
           else scheduleFlush();
         }, DWELL_MS)
@@ -197,5 +220,10 @@ export function usePoseReadTracking() {
     [observer]
   );
 
-  return { observe };
+  const isSessionRead = useCallback(
+    (pose: Pick<PoseRef, 'id' | 'timestamp'>) => sessionRead.has(poseKey(pose)),
+    []
+  );
+
+  return { observe, isSessionRead };
 }
