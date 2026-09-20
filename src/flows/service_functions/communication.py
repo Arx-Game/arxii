@@ -11,19 +11,33 @@ from flows.service_functions.perception_registry import (
     resolve_broadcast_exclusions,
 )
 from flows.service_functions.serializers.room_state import build_room_state_payload
+from world.scenes.constants import InteractionMode
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 _PARSER = funcparser.FuncParser(funcparser.ACTOR_STANCE_CALLABLES)
 
+# The options a compatibility line carries when the same submission is also
+# recorded and pushed as a structured Interaction (#3933). Telnet prints the
+# text; the web client drops the note because the Interaction is the render.
+INTERACTION_ECHO_OPTION = "interaction_echo"
 
-def send_message(
+
+def _echo_text(text: str, echo_of: InteractionMode | None) -> str | tuple[str, dict[str, object]]:
+    """Return ``text`` as Evennia's ``(text, {options})`` form when it echoes an Interaction."""
+    if echo_of is None:
+        return text
+    return (text, {"type": echo_of.value, INTERACTION_ECHO_OPTION: True})
+
+
+def send_message(  # noqa: PLR0913 - all keyword, optional, and each independently meaningful
     recipient: BaseState,
     text: str,
     caller: BaseState | None = None,
     target: BaseState | None = None,
     mapping: dict[str, object] | None = None,
+    echo_of: InteractionMode | None = None,
 ) -> None:
     """Send text to ``recipient``.
 
@@ -34,6 +48,9 @@ def send_message(
         target: Optional target state for pronoun resolution.
         mapping: Optional mapping of additional variables to include in the
             payload. Values should be BaseState instances or plain values.
+        echo_of: Set when the caller also records this line as an Interaction; the
+            frame carries ``type`` and ``interaction_echo`` so a structured client
+            can drop the duplicate.
     """
     resolved_mapping: dict[str, object] = {}
     if mapping:
@@ -59,15 +76,16 @@ def send_message(
             for key, obj in resolved_mapping.items()
         },
     )
-    recipient.msg(parsed)
+    recipient.msg(_echo_text(parsed, echo_of))
 
 
-def message_location(
+def message_location(  # noqa: PLR0913 - all keyword, optional, and each independently meaningful
     caller: BaseState,
     text: str,
     target: BaseState | None = None,
     mapping: dict[str, object] | None = None,
     location_state: BaseState | None = None,
+    echo_of: InteractionMode | None = None,
 ) -> None:
     """Broadcast text in the caller's location. Pure real-time delivery.
 
@@ -82,6 +100,9 @@ def message_location(
             BaseState instances or plain values.
         location_state: Optional pre-resolved location state. If not provided,
             the caller's location is looked up via SceneDataManager.
+        echo_of: Set when the caller also records this line as an Interaction; the
+            frame carries ``type`` and ``interaction_echo`` so a structured client
+            can drop the duplicate.
     """
     if caller.obj.location is None:
         return
@@ -103,7 +124,7 @@ def message_location(
         resolved_mapping.update(mapping)
 
     location.msg_contents(
-        text,
+        _echo_text(text, echo_of),
         from_obj=caller.obj,
         mapping=resolved_mapping,
         exclude=resolve_broadcast_exclusions(location) or None,
