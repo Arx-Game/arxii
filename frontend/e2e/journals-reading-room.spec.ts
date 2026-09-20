@@ -368,8 +368,16 @@ test.describe('World › Journals, the Reading Room (#3941)', () => {
     await expect(page.getByRole('heading', { name: 'Ilsavet du Verane' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^All/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /^About Corvin Ashe/ }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /Written about them/ })).toBeVisible();
+    // The reverse pill carries the reverse cut's total (one entry, "Third correction",
+    // is about sheet 20), matching the demo's "Written about her · 1".
+    await expect(page.getByRole('button', { name: 'Written about them · 1' })).toBeVisible();
     await expect(page.getByText('Third correction')).toHaveCount(0);
+    // The plate stands alone as the header: no page-level "Journals" heading, and
+    // none of the stream's Search/Write/Your journal row above it.
+    await expect(page.getByRole('heading', { name: 'Journals' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Search' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Write', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Your journal' })).toHaveCount(0);
     await shot(page, '2-writer');
   });
 

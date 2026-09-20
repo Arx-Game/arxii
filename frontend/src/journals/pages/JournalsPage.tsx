@@ -206,6 +206,11 @@ function WriterBody({ writerId, viewer, openId, onOpenRow }: BodyProps & { write
     page,
   });
 
+  // The "Written about them" pill's count is the reverse cut's total, which the
+  // unfiltered fetch above never carries (that one is the writer's OWN entries,
+  // never what others wrote about them) — so it gets its own one-row probe.
+  const reverseCountQuery = useJournalEntries({ about: writerId, page_size: 1 });
+
   const rows = useMemo(() => query.data?.results ?? [], [query.data]);
   const fresh = useMemo(() => subjectsOf(rows), [rows]);
 
@@ -241,6 +246,7 @@ function WriterBody({ writerId, viewer, openId, onOpenRow }: BodyProps & { write
           setFilter(next);
           setPage(1);
         }}
+        reverseCount={reverseCountQuery.data?.count}
       />
       <Stream
         rows={rows}
@@ -328,46 +334,61 @@ export function JournalsPage() {
   };
 
   const onStream = !mine && (writerId === null || Number.isNaN(writerId));
+  // Screen 2's plate stands as its own header (demo screen 2 never shows a page-level
+  // heading or the Search/Write/Your journal row above it), so the writer view renders
+  // no `<header>` at all — same treatment `mine` already gets via `YourJournalHeader`.
+  const isWriterView = writerId !== null && !Number.isNaN(writerId);
+
+  const header = (() => {
+    if (isWriterView) return null;
+    if (mine) {
+      return (
+        <header className="mb-4">
+          <YourJournalHeader
+            name={identity.name ?? ''}
+            onWrite={docked ? () => setDeskOpen((previous) => !previous) : undefined}
+          />
+        </header>
+      );
+    }
+    return (
+      <header className="mb-4 flex flex-wrap items-baseline justify-between gap-4">
+        <h1 className="m-0 font-display text-[1.6rem] font-semibold tracking-[.04em]">Journals</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {onStream ? (
+            <button
+              type="button"
+              className={QUIET_BUTTON_CLASS}
+              aria-expanded={searchOpen}
+              aria-controls="journal-search"
+              onClick={() => setSearchOpen((previous) => !previous)}
+            >
+              Search
+            </button>
+          ) : null}
+          {docked ? (
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => setDeskOpen((previous) => !previous)}
+            >
+              Write
+            </button>
+          ) : null}
+          {docked ? (
+            <Link to="/journals?mine=1" className={`${PRIMARY_BUTTON_CLASS} no-underline`}>
+              Your journal
+            </Link>
+          ) : null}
+        </div>
+      </header>
+    );
+  })();
 
   return (
     <div className="journals min-h-screen px-4 py-8">
       <div className="mx-auto max-w-[54rem]">
-        <header className="mb-4 flex flex-wrap items-baseline justify-between gap-4">
-          {mine ? (
-            <YourJournalHeader name={identity.name ?? ''} />
-          ) : (
-            <h1 className="m-0 font-display text-[1.6rem] font-semibold tracking-[.04em]">
-              Journals
-            </h1>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            {onStream ? (
-              <button
-                type="button"
-                className={QUIET_BUTTON_CLASS}
-                aria-expanded={searchOpen}
-                aria-controls="journal-search"
-                onClick={() => setSearchOpen((previous) => !previous)}
-              >
-                Search
-              </button>
-            ) : null}
-            {docked ? (
-              <button
-                type="button"
-                className={PRIMARY_BUTTON_CLASS}
-                onClick={() => setDeskOpen((previous) => !previous)}
-              >
-                Write
-              </button>
-            ) : null}
-            {docked && !mine ? (
-              <Link to="/journals?mine=1" className={`${QUIET_BUTTON_CLASS} no-underline`}>
-                Your journal
-              </Link>
-            ) : null}
-          </div>
-        </header>
+        {header}
 
         {deskOpen && docked ? (
           <JournalDesk onPosted={() => setDeskOpen(false)} onDiscard={() => setDeskOpen(false)} />

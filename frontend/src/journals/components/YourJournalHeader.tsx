@@ -7,18 +7,26 @@
  * default a single entry may still override), and who may Retort or Condemn
  * you (ADR-0306 — rivals, or anyone). Praise and Nominate are never gated by
  * the second one, so it says nothing about them.
+ *
+ * Write trails the two switch groups in the same wrapping row (demo screen 4):
+ * it renders here, inside the switches' own flex-wrap group, rather than as a
+ * sibling in the page's header row, which would wrap onto its own line
+ * independently of this (wide) block instead of trailing "Anyone".
  */
 import { toast } from 'sonner';
 
 import type { PosthumousJournalDisposition, RetortConsent } from '../api';
+import { PRIMARY_BUTTON_CLASS } from '../fieldClasses';
 import { useJournalSettings, usePatchJournalSettings } from '../queries';
 import { PillButton } from './Pill';
 
 export interface YourJournalHeaderProps {
   name: string;
+  /** Renders Write trailing the switches when set; omitted when not docked. */
+  onWrite?: () => void;
 }
 
-export function YourJournalHeader({ name }: YourJournalHeaderProps) {
+export function YourJournalHeader({ name, onWrite }: YourJournalHeaderProps) {
   const { data: settings } = useJournalSettings();
   const patchSettings = usePatchJournalSettings();
 
@@ -31,7 +39,7 @@ export function YourJournalHeader({ name }: YourJournalHeaderProps) {
   }
 
   return (
-    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-3">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3">
       <div>
         <div className="jr-sans text-[.6875rem] uppercase tracking-[.14em] text-muted-foreground">
           Your journal
@@ -39,44 +47,51 @@ export function YourJournalHeader({ name }: YourJournalHeaderProps) {
         <h1 className="m-0 font-display text-[1.6rem] font-semibold tracking-[.04em]">{name}</h1>
       </div>
 
-      {settings ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="jr-sans text-[.8125rem] text-muted-foreground">
-            Black journal after your death
-          </span>
-          <div className="flex flex-wrap gap-2">
-            <PillButton
-              pressed={settings.posthumous_journal_disposition === 'reveal'}
-              onClick={() => setDisposition('reveal')}
-            >
-              Reveal
-            </PillButton>
-            <PillButton
-              pressed={settings.posthumous_journal_disposition === 'seal'}
-              onClick={() => setDisposition('seal')}
-            >
-              Remain sealed
-            </PillButton>
-          </div>
-          <span className="jr-sans ml-2 text-[.8125rem] text-muted-foreground">
-            Retorts and condemnation
-          </span>
-          <div className="flex flex-wrap gap-2">
-            <PillButton
-              pressed={settings.retort_consent === 'rivals'}
-              onClick={() => setConsent('rivals')}
-            >
-              Rivals only
-            </PillButton>
-            <PillButton
-              pressed={settings.retort_consent === 'anyone'}
-              onClick={() => setConsent('anyone')}
-            >
-              Anyone
-            </PillButton>
-          </div>
-        </div>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {settings ? (
+          <>
+            <span className="jr-sans text-[.8125rem] text-muted-foreground">
+              Black journal after your death
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <PillButton
+                pressed={settings.posthumous_journal_disposition === 'reveal'}
+                onClick={() => setDisposition('reveal')}
+              >
+                Reveal
+              </PillButton>
+              <PillButton
+                pressed={settings.posthumous_journal_disposition === 'seal'}
+                onClick={() => setDisposition('seal')}
+              >
+                Remain sealed
+              </PillButton>
+            </div>
+            <span className="jr-sans ml-2 text-[.8125rem] text-muted-foreground">
+              Retorts and condemnation
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <PillButton
+                pressed={settings.retort_consent === 'rivals'}
+                onClick={() => setConsent('rivals')}
+              >
+                Rivals only
+              </PillButton>
+              <PillButton
+                pressed={settings.retort_consent === 'anyone'}
+                onClick={() => setConsent('anyone')}
+              >
+                Anyone
+              </PillButton>
+            </div>
+          </>
+        ) : null}
+        {onWrite ? (
+          <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={onWrite}>
+            Write
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -9,7 +9,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { JournalEntrySummary, PaginatedJournalEntries } from '../api';
+import type { JournalEntryListFilters, JournalEntrySummary, PaginatedJournalEntries } from '../api';
+import { PRIMARY_BUTTON_CLASS, QUIET_BUTTON_CLASS } from '../fieldClasses';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/roster/queries', () => ({ useMyRosterEntriesQuery: () => ({ data: [] }) }));
@@ -116,10 +117,20 @@ function renderAt(path: string) {
 describe('JournalsPage (#3941)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useJournalEntriesMock.mockReturnValue({
-      data: page([entry()]),
-      isLoading: false,
-      isSuccess: true,
+    // WriterBody asks twice: the main (filtered) cut, and a `page_size: 1` probe for the
+    // reverse cut's total. Told apart by `page_size`, so each keeps its own answer.
+    // Each answer is built ONCE, outside the implementation, and reused by reference on
+    // every call: a fresh object per call would make `query.data` a new reference on
+    // every re-render, which defeats WriterBody's `useMemo`/`useEffect` dependency
+    // checks (the "About" pills are remembered via a `[fresh]` effect dependency) and
+    // free-runs a render loop instead of settling.
+    const defaultData = page([entry()]);
+    const reverseCountData = { ...page([]), count: 1 };
+    useJournalEntriesMock.mockImplementation((filters: JournalEntryListFilters = {}) => {
+      if (filters.page_size === 1) {
+        return { data: reverseCountData, isLoading: false, isSuccess: true };
+      }
+      return { data: defaultData, isLoading: false, isSuccess: true };
     });
     useMyJournalEntriesMock.mockReturnValue({
       data: page([entry({ id: 7, title: 'A private page', is_own: true })]),
@@ -201,15 +212,34 @@ describe('JournalsPage (#3941)', () => {
     expect(screen.getByText('A private page')).toBeInTheDocument();
   });
 
-  it("?writer= shows the writer's plate and its three filters", () => {
+  it("?writer= shows the writer's plate and its three filters, and stands alone", () => {
     renderAt('/journals?writer=10');
 
     expect(screen.getByRole('heading', { name: 'Ilsavet du Verane' })).toBeInTheDocument();
     expect(screen.getByText('Journal of')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'About Corvin Ashe · 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Written about them' })).toBeInTheDocument();
+    // The reverse pill carries the reverse cut's total, from the `page_size: 1` probe
+    // the mock above answers with `count: 1` — matching the demo's "Written about her · 1".
+    expect(screen.getByRole('button', { name: 'Written about them · 1' })).toBeInTheDocument();
     expect(useJournalEntriesMock.mock.calls[0][0]).toEqual(expect.objectContaining({ author: 10 }));
+
+    // The plate IS the header here (demo screen 2): no page-level heading, no
+    // Search/Write/Your journal row above it.
+    expect(screen.queryByRole('heading', { name: 'Journals' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Write' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Your journal' })).not.toBeInTheDocument();
+  });
+
+  it('Write and Your journal share the same filled emphasis; Search stays quiet', () => {
+    renderAt('/journals');
+
+    expect(screen.getByRole('button', { name: 'Search' }).className).toBe(QUIET_BUTTON_CLASS);
+    expect(screen.getByRole('button', { name: 'Write' }).className).toBe(PRIMARY_BUTTON_CLASS);
+    expect(screen.getByRole('link', { name: 'Your journal' }).className).toBe(
+      `${PRIMARY_BUTTON_CLASS} no-underline`
+    );
   });
 
   it('Write opens the desk, which offers the two journals and no help text', () => {

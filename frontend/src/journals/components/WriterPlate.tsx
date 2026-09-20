@@ -30,6 +30,8 @@ export interface WriterPlateProps {
   subjects: AboutSubject[];
   filter: WriterFilter;
   onFilter: (filter: WriterFilter) => void;
+  /** The reverse cut's total — entries by anyone about this writer — or undefined before it loads. */
+  reverseCount?: number;
 }
 
 function isSameFilter(a: WriterFilter, b: WriterFilter): boolean {
@@ -45,6 +47,7 @@ export function WriterPlate({
   subjects,
   filter,
   onFilter,
+  reverseCount,
 }: WriterPlateProps) {
   return (
     <div data-writer-id={writerId}>
@@ -86,7 +89,7 @@ export function WriterPlate({
           pressed={isSameFilter(filter, { kind: 'reverse' })}
           onClick={() => onFilter({ kind: 'reverse' })}
         >
-          Written about them
+          Written about them{reverseCount != null && reverseCount > 0 ? ` · ${reverseCount}` : ''}
         </PillButton>
       </div>
     </div>
