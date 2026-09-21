@@ -21,10 +21,26 @@ import type {
   CharacterSheetCovenantRole,
   CharacterSheetMentor,
   CharacterSheetStanding,
+  CharacterSheetTie,
 } from '@/character_sheets/api';
 
 vi.mock('@/components/character', () => ({
-  RelationshipsSection: () => <div data-testid="relationships" />,
+  RelationshipsSection: ({
+    entryId,
+    ties,
+    tiesApThisWeek,
+  }: {
+    entryId: number;
+    ties: CharacterSheetTie[];
+    tiesApThisWeek: number | null;
+  }) => (
+    <div
+      data-testid="relationships"
+      data-entry-id={entryId}
+      data-tie-count={ties.length}
+      data-ap={tiesApThisWeek ?? ''}
+    />
+  ),
 }));
 vi.mock('@/kinship/components/KinshipPanel', () => ({
   KinshipPanel: () => <div data-testid="kinship" />,
@@ -42,10 +58,14 @@ function renderTies({
   mentors = [],
   standing = EMPTY_STANDING,
   covenants = [],
+  ties = [],
+  tiesApThisWeek = null,
 }: {
   mentors?: CharacterSheetMentor[];
   standing?: CharacterSheetStanding;
   covenants?: CharacterSheetCovenantRole[];
+  ties?: CharacterSheetTie[];
+  tiesApThisWeek?: number | null;
 } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -60,6 +80,8 @@ function renderTies({
           mentors={mentors}
           standing={standing}
           covenants={covenants}
+          ties={ties}
+          tiesApThisWeek={tiesApThisWeek}
         />
       </MemoryRouter>
     </QueryClientProvider>
@@ -125,5 +147,30 @@ describe('TiesPanel', () => {
     expect(screen.queryByText('Belongs to')).not.toBeInTheDocument();
     expect(screen.queryByText('Thought of as')).not.toBeInTheDocument();
     expect(screen.getByText('Titles')).toBeInTheDocument();
+  });
+
+  it('hands the cast and the AP total straight through to Relationships (#3957)', () => {
+    renderTies({
+      ties: [
+        {
+          relationship_id: 77,
+          other_name: 'Corvin Ashe',
+          other_sheet_id: 12,
+          other_entry_id: 34,
+          other_companion_id: null,
+          labels: [],
+          depth: 340,
+          tier: 2,
+          summary_line: '',
+          thread: null,
+        },
+      ],
+      tiesApThisWeek: 12,
+    });
+    const block = screen.getByTestId('relationships');
+    expect(block).toHaveAttribute('data-tie-count', '1');
+    expect(block).toHaveAttribute('data-ap', '12');
+    // The tie page hangs off the ROSTER ENTRY, not the sheet.
+    expect(block).toHaveAttribute('data-entry-id', '7');
   });
 });

@@ -18,7 +18,6 @@ import { useBrowsingIdentity } from '../useBrowsingIdentity';
 import { ApplicationSlot } from '@/components/character';
 import { MessagesSection } from '@/narrative/components/MessagesSection';
 import { FriendButton } from '@/friends/components/FriendButton';
-import { RivalButton } from '@/friends/components/RivalButton';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { MaturationPanel } from '@/character_sheets/components/MaturationPanel';
 import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
@@ -128,19 +127,15 @@ export function CharacterSheetPage() {
             >
               Journal
             </Link>
+            {/* Friend is the account's OOC list and stays. Rival is gone with #3957:
+                declaring someone an enemy is an IC label on a tie now, not an OOC
+                double opt-in, and it is named on their tie page. */}
             {!isMyCharacter && (
-              <>
-                <FriendButton
-                  viewerEntryId={viewerEntryId}
-                  targetEntryId={entryId}
-                  targetName={entry.character.name}
-                />
-                <RivalButton
-                  viewerEntryId={viewerEntryId}
-                  targetEntryId={entryId}
-                  targetName={entry.character.name}
-                />
-              </>
+              <FriendButton
+                viewerEntryId={viewerEntryId}
+                targetEntryId={entryId}
+                targetName={entry.character.name}
+              />
             )}
           </>
         }
@@ -195,6 +190,8 @@ export function CharacterSheetPage() {
             mentors={sheet?.mentors ?? []}
             standing={sheet?.standing ?? { memberships: [], reputations: [] }}
             covenants={sheet?.covenants ?? []}
+            ties={sheet?.ties ?? []}
+            tiesApThisWeek={sheet?.ties_ap_this_week ?? null}
           />
         )}
 

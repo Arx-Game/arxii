@@ -188,7 +188,6 @@ export type PullPreviewResponse = components['schemas']['ThreadPullPreviewRespon
 
 export type AcceptTeachingOfferRequest = components['schemas']['AcceptTeachingOfferRequest'];
 export type AcceptTeachingOfferResponse = components['schemas']['AcceptTeachingOfferResponse'];
-export type RelationshipTrack = components['schemas']['RelationshipTrack'];
 
 // ---------------------------------------------------------------------------
 // Applicable Pulls

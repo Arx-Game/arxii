@@ -5,11 +5,12 @@
  *   1. Pick anchor kind (TargetKind) — disabled if character has no unlock for that kind.
  *   2. Pick anchor — kind-specific picker. FACET, COVENANT_ROLE, TRAIT, TECHNIQUE, SANCTUM,
  *      and RELATIONSHIP_TRACK are supported; RELATIONSHIP_CAPSTONE is deferred per spec.
- *      RELATIONSHIP_TRACK is a "with whom" partner-then-track picker (#2159): partner
- *      choices are my scoped relationships with at least one `track_progress` row among
- *      `weavable_relationship_track_ids`; picking a partner reveals that partner's
- *      qualifying tracks (still step 2 — see `renderRelationshipTrackStep2`). The payload
- *      adds `target_persona_id` (the partner's resolved Persona pk) for this kind only.
+ *      RELATIONSHIP_TRACK is a "with whom" partner-then-type picker (#2159, #3957): partner
+ *      choices are the caller's own ties carrying at least one unended label whose type is
+ *      among `weavable_relationship_type_ids`; picking a partner reveals that partner's
+ *      qualifying types (still step 2 — see `renderRelationshipTrackStep2`). The payload
+ *      adds `target_persona_id` (the partner's resolved Persona pk) for this kind only, and
+ *      `target_id` names a RelationshipType from the catalogue, not a row on the tie.
  *   3. Pick resonance — combobox over useCharacterResonances().
  *   4. Narrative — optional name (max 120) and description.
  *   5. Confirm — summary card + [Weave] button.
@@ -37,8 +38,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCharacterResonances, useWeaveThread } from '../../queries';
 import type { CharacterResonance, TargetKind, ThreadHubSummary } from '../../types';
 import { apiFetch } from '@/evennia_replacements/api';
-import { getMyOutboundRelationships, getRelationshipDetail } from '@/relationships/api';
-import type { CharacterRelationshipList } from '@/relationships/api';
+import { getPersonaIdForSheet, listMyTies } from '@/relationships/api';
 
 // ---------------------------------------------------------------------------
 // Local anchor-picker data types
@@ -51,17 +51,16 @@ interface AnchorOption {
 }
 
 /**
- * RELATIONSHIP_TRACK only (#2159): a "with whom" candidate — one of the
- * caller's outbound relationships that has at least one `track_progress` row
- * among `weavable_relationship_track_ids`. `id`/`label` name the partner's
- * CharacterSheet; `personaId` is the partner's resolved Persona pk (the
- * write payload's `target_persona_id`); `qualifyingTracks` are that
- * partner's tracks eligible to anchor a thread (fed straight into the
- * existing `anchorOptions` picker once a partner is chosen).
+ * RELATIONSHIP_TRACK only (#2159, #3957): a "with whom" candidate — one of the caller's
+ * own ties carrying at least one unended label whose type is weavable. `id`/`label` name
+ * the partner's CharacterSheet; `personaId` is the partner's resolved Persona pk (the
+ * write payload's `target_persona_id`); `qualifyingTypes` are the RelationshipType rows
+ * that tie could anchor a thread on (fed straight into the existing `anchorOptions`
+ * picker once a partner is chosen).
  */
 interface PartnerOption extends AnchorOption {
   personaId: number;
-  qualifyingTracks: AnchorOption[];
+  qualifyingTypes: AnchorOption[];
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +177,7 @@ async function fetchAnchorOptions(
       return fetchTechniqueOptions(summary);
     default:
       // RELATIONSHIP_TRACK is handled separately by
-      // fetchRelationshipPartnerOptions — it needs a partner-then-track
+      // fetchRelationshipPartnerOptions — it needs a partner-then-type
       // picker, not a flat option list (#2159).
       return [];
   }
@@ -188,64 +187,53 @@ async function fetchAnchorOptions(
 // RELATIONSHIP_TRACK partner picker (#2159)
 // ---------------------------------------------------------------------------
 
-/** Resolve a CharacterSheet's primary Persona pk (falls back to its first persona). */
-async function resolvePrimaryPersonaId(characterSheetId: number): Promise<number | null> {
-  const res = await apiFetch(`/api/personas/?character_sheet=${characterSheetId}&page_size=50`);
-  if (!res.ok) return null;
-  const data = (await res.json()) as {
-    results?: Array<{ id: number; persona_type: string }>;
-  };
-  const personas = data.results ?? [];
-  return personas.find((p) => p.persona_type === 'primary')?.id ?? personas[0]?.id ?? null;
-}
-
 /**
- * "With whom" step 1 (#2159): my scoped relationships that have at least one
- * `track_progress` row among `weavable_relationship_track_ids` — the only
- * relationships that could possibly anchor a RELATIONSHIP_TRACK thread.
- * `track_progress` only exists on the detail retrieve (the list serializer
- * omits it), so this fetches one detail per outbound relationship. Companion-
- * targeted relationships (#3575) are filtered out up front, since a companion
- * has no persona to weave a thread with; a partner whose CharacterSheet has
- * no resolvable Persona is dropped too, since there would be no legal
- * `target_persona_id` to submit for them.
+ * "With whom" step 1 (#2159, #3957): the caller's own ties that hold at least one
+ * unended label of a weavable type — the only ties that could anchor a
+ * RELATIONSHIP_TRACK thread.
+ *
+ * One list call, not one detail call per partner: a tie payload already carries its
+ * labels, so the per-relationship `track_progress` fetch the old track model forced is
+ * gone. The tier minimum is NOT checked here — the server refuses a tie that has not
+ * reached it, with the sentence the player should read, and a client-side copy of that
+ * rule would drift from the growth config the moment staff tuned it.
+ *
+ * Companion ties (#3575) are dropped up front: a companion has no persona to weave with.
+ * So is a partner whose CharacterSheet has no resolvable Persona, since there would be
+ * no legal `target_persona_id` to submit for them.
  */
 async function fetchRelationshipPartnerOptions(
-  characterSheetId: number,
   summary: ThreadHubSummary | undefined
 ): Promise<PartnerOption[]> {
-  const allowedTrackIds = new Set(summary?.weavable_relationship_track_ids ?? []);
-  if (allowedTrackIds.size === 0) return [];
+  const allowedTypeIds = new Set(summary?.weavable_relationship_type_ids ?? []);
+  if (allowedTypeIds.size === 0) return [];
 
-  const relationships = await getMyOutboundRelationships(characterSheetId);
-  // Companion bonds (#3575) have no persona to weave with; only character targets are partners.
-  const characterTargeted = relationships.filter(
-    (rel): rel is CharacterRelationshipList & { target: number } => rel.target != null
-  );
-  const withQualifyingTracks = await Promise.all(
-    characterTargeted.map(async (rel) => {
-      const detail = await getRelationshipDetail(rel.id);
-      const qualifyingTracks = detail.track_progress
-        .filter((tp) => allowedTrackIds.has(tp.track))
-        .map((tp) => ({ id: tp.track, label: tp.track_name }));
-      return { rel, qualifyingTracks };
+  const ties = await listMyTies();
+  const qualifying = ties
+    .filter((tie) => tie.target != null && tie.target_companion == null)
+    .map((tie) => {
+      const seen = new Map<number, AnchorOption>();
+      for (const label of tie.labels) {
+        if (label.ended_at !== null || !allowedTypeIds.has(label.type)) continue;
+        seen.set(label.type, { id: label.type, label: label.type_name });
+      }
+      return { tie, qualifyingTypes: [...seen.values()] };
     })
-  );
+    .filter((row) => row.qualifyingTypes.length > 0);
 
-  const qualifying = withQualifyingTracks.filter((x) => x.qualifyingTracks.length > 0);
   const personaIds = await Promise.all(
-    qualifying.map((x) => resolvePrimaryPersonaId(x.rel.target))
+    qualifying.map((row) => getPersonaIdForSheet(row.tie.target as number))
   );
 
   const options: PartnerOption[] = [];
-  qualifying.forEach((x, i) => {
-    const personaId = personaIds[i];
+  qualifying.forEach((row, index) => {
+    const personaId = personaIds[index];
     if (personaId == null) return;
     options.push({
-      id: x.rel.target,
-      label: x.rel.target_name,
+      id: row.tie.target as number,
+      label: row.tie.target_name,
       personaId,
-      qualifyingTracks: x.qualifyingTracks,
+      qualifyingTypes: row.qualifyingTypes,
     });
   });
   return options;
@@ -433,10 +421,10 @@ export function WeaveThreadWizard({
     setAnchorLoading(true);
     try {
       if (kind === 'RELATIONSHIP_TRACK') {
+        // The tie list is already scoped to the caller server-side, so it needs no
+        // sheet id; the guard stays because a weave with no sheet cannot be submitted.
         const options =
-          characterSheetId == null
-            ? []
-            : await fetchRelationshipPartnerOptions(characterSheetId, summary);
+          characterSheetId == null ? [] : await fetchRelationshipPartnerOptions(summary);
         if (token !== anchorRequestTokenRef.current) return;
         setPartnerOptions(options);
       } else {
@@ -452,7 +440,7 @@ export function WeaveThreadWizard({
     }
   }
 
-  /** RELATIONSHIP_TRACK "with whom" pick — reveals that partner's qualifying tracks. */
+  /** RELATIONSHIP_TRACK "with whom" pick — reveals that partner's qualifying types. */
   function selectPartner(partner: PartnerOption) {
     setState((prev) => ({
       ...prev,
@@ -462,7 +450,7 @@ export function WeaveThreadWizard({
       selectedAnchorId: null,
       selectedAnchorLabel: null,
     }));
-    setAnchorOptions(partner.qualifyingTracks);
+    setAnchorOptions(partner.qualifyingTypes);
     setAnchorError(null);
   }
 
@@ -726,7 +714,7 @@ export function WeaveThreadWizard({
       <div className="space-y-3" data-testid="wizard-step-2-track">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
-            Select the track with {state.selectedPartnerLabel}.
+            Select the label with {state.selectedPartnerLabel}.
           </p>
           <button
             type="button"

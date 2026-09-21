@@ -1,33 +1,14 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { BackgroundSection, StatsSection, CharacterLink } from '@/components/character';
 import { FriendButton } from '@/friends/components/FriendButton';
-import { RivalButton } from '@/friends/components/RivalButton';
 import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries';
-import { useMyRelationshipToTarget } from '@/relationships/queries';
-import { RelationshipWriteupDialog } from '@/relationships/components/RelationshipWriteupDialog';
-import type { RelationshipWriteupMode } from '@/relationships/components/RelationshipWriteupDialog';
-import type { CharacterRelationshipList } from '@/relationships/api';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import { JournalComposerDialog } from '@/journals/components/JournalComposerDialog';
 import { MessagePlayerDialog } from './MessagePlayerDialog';
-
-/**
- * Decide whether the "Record an impression" quick action opens the
- * writeup dialog in development mode (a relationship the caller authored
- * already exists toward this target) or impression mode (none yet, or the
- * lookup couldn't run — e.g. a disguise with no public roster match, per
- * this file's own privacy docstring). `undefined` (query not yet resolved
- * or disabled) is treated the same as "none" — impression is always the
- * safe default first move. Exported for testing.
- */
-export function resolveWriteupMode(
-  relationships: CharacterRelationshipList[] | undefined
-): RelationshipWriteupMode {
-  return relationships && relationships.length > 0 ? 'development' : 'impression';
-}
 
 export interface CharacterCardDrawerProps {
   /** The clicked bubble's persona identity; `null` means the drawer is closed. */
@@ -55,10 +36,13 @@ export interface CharacterCardDrawerProps {
  * roster." and no sheet data, no FriendButton. Never resolve through
  * `receiver_persona_ids`, scene participation, or any other non-public linkage.
  *
- * Quick actions: "Record an impression" (#2159) opens `RelationshipWriteupDialog`
- * in impression or development mode per `resolveWriteupMode` above. "Write a
- * journal" (#2160) opens `JournalComposerDialog` pre-tagged with the resolved
- * character's name once `entry` resolves. "Message the player" (#2160) opens
+ * Quick actions: "Declare a tie" (#3957) leads to this character's tie page in declare
+ * mode, carrying the persona id so the picker opens on the right person — the drawer
+ * already knows who this is, and making the player search for them again on arrival
+ * would be the interface forgetting. It replaced "Record an impression", whose writeup
+ * dialog went with the writeups. "Write a journal" (#2160) opens
+ * `JournalComposerDialog` pre-tagged with the resolved character's name once `entry`
+ * resolves. "Message the player" (#2160) opens
  * `MessagePlayerDialog` - an OOC message to whoever currently plays this
  * character, pre-addressed to their live tenure
  * (`entry.tenures.find(t => t.end_date === null)`) - hidden when there's no
@@ -88,16 +72,6 @@ export function CharacterCardDrawer({
 
   const [journalOpen, setJournalOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
-
-  // Undefined for a disguise/temporary persona with no public roster match —
-  // `useMyRelationshipToTarget` stays disabled and `resolveWriteupMode` falls
-  // back to impression mode (the only mode that makes sense with nothing to
-  // develop). See this file's own privacy docstring.
-  const targetCharacterSheetId = entry?.character.id;
-  const { data: myRelationship } = useMyRelationshipToTarget(targetCharacterSheetId);
-  const writeupMode = resolveWriteupMode(myRelationship);
-
-  const [writeupOpen, setWriteupOpen] = useState(false);
 
   const handleWhisper = () => {
     if (!persona) return;
@@ -164,24 +138,17 @@ export function CharacterCardDrawer({
                   targetName={persona.name}
                 />
               )}
-              {matchId != null && (
-                <RivalButton
-                  viewerEntryId={viewerEntryId}
-                  targetEntryId={matchId}
-                  targetName={persona.name}
-                />
-              )}
               <Button type="button" variant="outline" size="sm" onClick={handleWhisper}>
                 Whisper
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setWriteupOpen(true)}
-              >
-                Record an impression
-              </Button>
+              {matchId != null && (
+                <Link
+                  to={`/characters/${matchId}/ties/new?persona=${persona.id}`}
+                  className="rounded border px-3 py-1 text-sm hover:bg-accent"
+                >
+                  Declare a tie
+                </Link>
+              )}
               {entry && (
                 <Button
                   type="button"
@@ -221,14 +188,6 @@ export function CharacterCardDrawer({
             )}
 
             {renderSearching()}
-
-            <RelationshipWriteupDialog
-              open={writeupOpen}
-              onOpenChange={setWriteupOpen}
-              mode={writeupMode}
-              target={{ kind: 'persona', personaId: persona.id }}
-              targetName={persona.name}
-            />
           </>
         )}
       </SheetContent>
