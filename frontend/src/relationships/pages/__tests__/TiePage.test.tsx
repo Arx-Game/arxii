@@ -230,8 +230,19 @@ describe('TiePage', () => {
   });
 
   it('will not name a route character the viewer does not play on the declare page', () => {
+    // The eyebrow is nested inside the `matched &&` block, so this has to resolve a
+    // persona first — without one the whole Stack never mounts and the ownership check
+    // is never reached, which is exactly how the first spelling of this test passed
+    // whether or not the gate existed.
+    usePersonaSearch.mockReturnValue({
+      results: [{ id: 91, name: 'Corvin Ashe', character_sheet: 12 }],
+      isFetching: false,
+    });
     useMyRosterEntriesQuery.mockReturnValue({ data: [{ id: 1234 }] });
-    renderPage('new');
+    renderPage('new', '?persona=91&name=Corvin%20Ashe');
+    // The person the declare would write toward is still named...
+    expect(screen.getByRole('heading', { name: 'Corvin Ashe' })).toBeInTheDocument();
+    // ...but the route's character is not the caller's, so nothing claims the other end.
     expect(screen.queryByText('Ilsavet du Verane and')).not.toBeInTheDocument();
   });
 });
