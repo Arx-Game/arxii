@@ -126,7 +126,9 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
         .filter(
             ~Exists(
                 InteractionReadReceipt.objects.filter(
-                    interaction_id=OuterRef("interaction_id"), account=account
+                    interaction_id=OuterRef("interaction_id"),
+                    timestamp=OuterRef("timestamp"),
+                    account=account,
                 )
             )
         )
@@ -140,7 +142,9 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
         .filter(
             ~Exists(
                 InteractionReadReceipt.objects.filter(
-                    interaction_id=OuterRef("interaction_id"), account=account
+                    interaction_id=OuterRef("interaction_id"),
+                    timestamp=OuterRef("timestamp"),
+                    account=account,
                 )
             )
         )
@@ -197,7 +201,9 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
             .filter(
                 ~Exists(
                     InteractionReadReceipt.objects.filter(
-                        interaction_id=OuterRef("id"), account=account
+                        interaction_id=OuterRef("id"),
+                        timestamp=OuterRef("timestamp"),
+                        account=account,
                     )
                 )
             )

@@ -16,6 +16,7 @@ import re
 from typing import Any
 import uuid
 
+from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -208,6 +209,44 @@ def _ref(row: dict[str, Any]) -> dict[str, str]:
     return {"id": str(row["id"]), "timestamp": row["timestamp"]}
 
 
+def _read_pair(row: dict[str, Any]) -> tuple[int, datetime] | None:
+    """Normalize a serialized row to the receipt's canonical pair."""
+    timestamp = parse_datetime(str(row["timestamp"]))
+    if timestamp is None:
+        return None
+    return int(row["id"]), timestamp
+
+
+def _read_pairs_for_rows(rows: list[dict[str, Any]]) -> set[tuple[int, datetime]]:
+    """Return exact read pairs for serialized rows, ignoring malformed rows."""
+    return {pair for row in rows if (pair := _read_pair(row)) is not None}
+
+
+def _directed_to_account(row: dict[str, Any], persona_ids: set[int]) -> bool:
+    """Whether a row directly targets one of the account's personas."""
+    targeted_ids = [
+        *(row.get("receiver_persona_ids") or []),
+        *(row.get("target_persona_ids") or []),
+    ]
+    targeted = {int(persona_id) for persona_id in targeted_ids}
+    return bool(targeted & persona_ids)
+
+
+def _unread_counts(
+    rows: list[dict[str, Any]], read_pairs: set[tuple[int, datetime]], persona_ids: set[int]
+) -> tuple[int, int]:
+    """Count unread rows, excluding own poses and deriving direct attention."""
+    unread = direct = 0
+    for row in rows:
+        pair = _read_pair(row)
+        if pair is None or pair in read_pairs or int(row["persona"]["id"]) in persona_ids:
+            continue
+        unread += 1
+        if _directed_to_account(row, persona_ids):
+            direct += 1
+    return unread, direct
+
+
 def _conversation(row: dict[str, Any]) -> dict[str, str]:
     """Build a stable non-sensitive conversation reference from serialized context."""
     mode = str(row.get("mode") or "").lower()
@@ -297,20 +336,21 @@ class PlayConversationsView(APIView):
         for row in rows:
             ref = _conversation(row)
             grouped.setdefault(f"{ref['kind']}:{ref['key']}", []).append(row)
-        read_ids: set[int] = set()
+        read_pairs: set[tuple[int, datetime]] = set()
         if request.user.is_authenticated and rows:
-            from world.scenes.read_state_services import has_read  # noqa: PLC0415
+            from world.scenes.read_state_services import has_read_pairs  # noqa: PLC0415
 
-            read_ids = has_read(
+            read_pairs = has_read_pairs(
                 account=request.user,  # type: ignore[invalid-argument-type]
-                interaction_ids=[row["id"] for row in rows],
+                poses=list(_read_pairs_for_rows(rows)),
             )
+        persona_ids = set(get_account_personas(request))
         results = []
         for group in grouped.values():
             first, latest = group[0], group[-1]
             ref = _conversation(first)
             scene = first.get("scene")
-            unread = sum(1 for row in group if int(row["id"]) not in read_ids)
+            unread, direct_unread = _unread_counts(group, read_pairs, persona_ids)
             results.append(
                 {
                     "ref": ref,
@@ -321,11 +361,9 @@ class PlayConversationsView(APIView):
                     "sceneId": str(scene) if scene is not None else None,
                     "latestVisiblePose": _ref(latest),
                     "unread": unread,
-                    # `directUnread` -- specifically-addressed-to-me unread --
-                    # requires knowing the current persona's own targeting, a
-                    # gap `PlayThreadsView` also leaves at 0 today (#3759 spec's
-                    # own staging note); consistent, not a new gap to fix here.
-                    "directUnread": 0,
+                    # Direct unread spans every persona on this account;
+                    # own-authored poses are excluded from both counters.
+                    "directUnread": direct_unread,
                 }
             )
         results.sort(key=lambda item: _row_key(item))
@@ -483,14 +521,15 @@ class PlayThreadsView(APIView):
             return Response({"detail": "A conversation reference is required."}, status=400)
         rows, _ = _rows(request)
         rows = [row for row in rows if _conversation(row)["key"] == conversation]
-        read_ids: set[int] = set()
+        read_pairs: set[tuple[int, datetime]] = set()
         if request.user.is_authenticated and rows:
-            from world.scenes.read_state_services import has_read  # noqa: PLC0415
+            from world.scenes.read_state_services import has_read_pairs  # noqa: PLC0415
 
-            read_ids = has_read(
+            read_pairs = has_read_pairs(
                 account=request.user,  # type: ignore[invalid-argument-type]
-                interaction_ids=[row["id"] for row in rows],
+                poses=list(_read_pairs_for_rows(rows)),
             )
+        persona_ids = set(get_account_personas(request))
         # An exchange is the whole nesting tree, not one thread (#3787): answering an
         # unanswered reply moves it into a child thread, so one back-and-forth spans
         # several threads that share a root. Grouping by that root is also what keeps
@@ -524,7 +563,7 @@ class PlayThreadsView(APIView):
             # id), so `members[0]` is the earliest pose of the exchange the viewer
             # can see, which is exactly what `root`/`firstVisible` mean.
             root, latest = members[0], members[-1]
-            unread = sum(1 for m in members if int(m["id"]) not in read_ids)
+            unread, direct_unread = _unread_counts(members, read_pairs, persona_ids)
             results.append(
                 {
                     "id": key,
@@ -535,7 +574,7 @@ class PlayThreadsView(APIView):
                     "opening": root.get("content") or "",
                     "visiblePoseCount": len(members),
                     "unread": unread,
-                    "directUnread": 0,
+                    "directUnread": direct_unread,
                 }
             )
             # `_page()`'s `_row_key()` fallback (`latestVisiblePose` or `pose` or the row
@@ -591,6 +630,8 @@ class PlayReadView(APIView):
     def _mark_poses_read(self, request: Request) -> Response:
         from world.scenes.read_state_services import (  # noqa: PLC0415
             MAX_POSES_PER_BATCH,
+            ReadBatchAuthorizationError,
+            authorize_read_pairs,
             mark_poses_read,
         )
 
@@ -601,15 +642,25 @@ class PlayReadView(APIView):
                 status=400,
             )
         pairs: list[tuple[int, str]] = []
-        for entry in poses:
-            try:
-                pairs.append((int(entry["id"]), str(entry["timestamp"])))
-            except (KeyError, TypeError, ValueError):
-                return Response({"detail": "Each pose needs an id and a timestamp."}, status=400)
-        marked = mark_poses_read(
-            account=request.user,  # type: ignore[invalid-argument-type]
-            poses=pairs,
-        )
+        try:
+            pairs = [(int(entry["id"]), str(entry["timestamp"])) for entry in poses]
+        except (KeyError, TypeError, ValueError):
+            return Response({"detail": "Unable to authorize read batch."}, status=400)
+
+        # Authorize the complete batch against the same visibility queryset used
+        # by every play GET before writing anything. This prevents forged,
+        # stale, hidden, deleted, and timestamp-mismatched pairs from producing
+        # partial receipts.
+        try:
+            with transaction.atomic():
+                queryset, _ = _queryset(request)
+                authorized = authorize_read_pairs(queryset=queryset, poses=pairs)
+                marked = mark_poses_read(
+                    account=request.user,  # type: ignore[invalid-argument-type]
+                    poses=authorized,
+                )
+        except ReadBatchAuthorizationError:
+            return Response({"detail": "Unable to authorize read batch."}, status=400)
         return Response({"marked": marked})
 
     def _mark_conversation_read(self, request: Request, conversation: Any) -> Response:

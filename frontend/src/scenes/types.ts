@@ -422,6 +422,8 @@ export interface Interaction {
   root_thread_id?: string | null;
   /** Explicit parent reference; never inferred from ordering or names. */
   reply_to?: { id: string; timestamp: string } | null;
+  /** Retained rows may use durable receipts; temporary rows are tab-local. */
+  availability?: 'retained' | 'temporary';
   /** Reader-local state, supplied by the play contract when available. */
   is_unread?: boolean;
   persona: InteractionPersona;

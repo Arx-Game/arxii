@@ -8,14 +8,23 @@ it.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
+from django.db.models import QuerySet
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
 MAX_POSES_PER_BATCH = 100
+
+
+class ReadBatchAuthorizationError(ValueError):
+    """Raised when any explicit read reference is not canonical and visible."""
+
+
 # Bulk mark-all-before-snapshot dismissal (#3759 spec section 7: "Separate
 # explicit mark-all-before-snapshot operation for deliberate dismissal.").
 # The caller (`play_views.PlayReadView`) has already bounded the DB read with
@@ -30,32 +39,60 @@ MAX_POSES_PER_BATCH = 100
 MAX_CONVERSATION_MARK_READ = 5000
 
 
-def _mark_read_pairs(*, account: AccountDB, poses: list[tuple[int, str]]) -> int:
-    """Idempotently record `account` having read each `(interaction_id, timestamp)` pair.
+def _parse_timestamp(value: str) -> datetime:
+    """Parse a canonical client timestamp, rejecting naive values."""
+    parsed = parse_datetime(value)
+    if parsed is None or not timezone.is_aware(parsed):
+        raise ReadBatchAuthorizationError
+    return parsed
 
-    Returns the number of NEW receipts created (already-read poses are silently
-    skipped, not errors). Shared core for both the per-pose batch path
-    (`mark_poses_read`) and the bulk conversation-dismissal path
-    (`mark_conversation_read`) — callers own their own size cap.
+
+def authorize_read_pairs(
+    *, queryset: QuerySet, poses: list[tuple[int, str]]
+) -> list[tuple[int, str]]:
+    """Authorize every explicit ``(interaction_id, timestamp)`` independently.
+
+    ``queryset`` must be the canonical viewer-visible interaction queryset. The
+    returned list preserves the request's spelling for receipt creation, while
+    comparison is by parsed instant. Any invalid, stale, hidden, deleted, or
+    timestamp-mismatched pair rejects the entire batch.
     """
+    if not poses:
+        return []
+    requested = []
+    for pose_id, timestamp in poses:
+        try:
+            requested.append((int(pose_id), str(timestamp), _parse_timestamp(str(timestamp))))
+        except (TypeError, ValueError, OverflowError):
+            raise ReadBatchAuthorizationError from None
+    ids = {pose_id for pose_id, _timestamp, _parsed in requested}
+    visible = {
+        (int(pose_id), timestamp)
+        for pose_id, timestamp in queryset.filter(id__in=ids).values_list("id", "timestamp")
+    }
+    if any((pose_id, parsed) not in visible for pose_id, _timestamp, parsed in requested):
+        raise ReadBatchAuthorizationError
+    return [(pose_id, timestamp) for pose_id, timestamp, _parsed in requested]
+
+
+def _mark_read_pairs(*, account: AccountDB, poses: list[tuple[int, str]]) -> int:
+    """Idempotently record ``account`` having read each canonical pair."""
     from world.scenes.models import InteractionReadReceipt  # noqa: PLC0415
 
+    parsed_pairs = {(pose_id, _parse_timestamp(timestamp)) for pose_id, timestamp in poses}
+    if not parsed_pairs:
+        return 0
     existing = set(
         InteractionReadReceipt.objects.filter(
             account=account,
-            interaction_id__in=[pose_id for pose_id, _ in poses],
+            interaction_id__in=[pose_id for pose_id, _timestamp in parsed_pairs],
         ).values_list("interaction_id", "timestamp")
     )
-    to_create = []
-    for pose_id, timestamp_str in poses:
-        parsed = parse_datetime(timestamp_str)
-        if parsed is None:
-            continue
-        if (pose_id, parsed) in existing:
-            continue
-        to_create.append(
-            InteractionReadReceipt(interaction_id=pose_id, timestamp=parsed, account=account)
-        )
+    to_create = [
+        InteractionReadReceipt(interaction_id=pose_id, timestamp=timestamp, account=account)
+        for pose_id, timestamp in parsed_pairs
+        if (pose_id, timestamp) not in existing
+    ]
     if not to_create:
         return 0
     InteractionReadReceipt.objects.bulk_create(to_create, ignore_conflicts=True)
@@ -101,8 +138,26 @@ def mark_conversation_read(
     return _mark_read_pairs(account=account, poses=poses)
 
 
+def has_read_pairs(
+    *, account: AccountDB, poses: list[tuple[int, datetime]]
+) -> set[tuple[int, datetime]]:
+    """Return exact canonical pairs already marked read for ``account``."""
+    from world.scenes.models import InteractionReadReceipt  # noqa: PLC0415
+
+    ids = [pose_id for pose_id, _timestamp in poses]
+    if not ids:
+        return set()
+    requested = {(pose_id, timestamp) for pose_id, timestamp in poses}
+    existing = InteractionReadReceipt.objects.filter(
+        account=account, interaction_id__in=ids
+    ).values_list("interaction_id", "timestamp")
+    return {
+        (pose_id, timestamp) for pose_id, timestamp in existing if (pose_id, timestamp) in requested
+    }
+
+
 def has_read(*, account: AccountDB, interaction_ids: list[int]) -> set[int]:
-    """Return the subset of `interaction_ids` this account has already marked read."""
+    """Return IDs with any receipt (legacy helper for non-timestamp callers)."""
     from world.scenes.models import InteractionReadReceipt  # noqa: PLC0415
 
     return set(

@@ -325,19 +325,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return RETAINED_AVAILABILITY
 
     def get_is_unread(self, obj: Interaction) -> bool:
-        """True when the read-receipt table has no row for this viewer+pose (#3759)."""
-        return obj.id not in self._read_interaction_ids()
+        """True when no exact ``(id, timestamp)`` receipt exists (#3947)."""
+        return (obj.id, obj.timestamp) not in self._read_interaction_pairs()
 
-    def _read_interaction_ids(self) -> set[int]:
-        """Batch-resolve which of this page's interactions the viewer has read.
-
-        Cached on the shared serializer context (one query per page, not per row),
-        mirroring ``_muted_persona_ids``'s lazy cache-on-context pattern; the
-        page-wide row batching mirrors ``_persona_display_map``.
-        """
-        cache_key = "_read_interaction_ids_cache"
+    def _read_interaction_pairs(self) -> set[tuple[int, Any]]:
+        """Batch-resolve exact timestamp-aware receipts for this page."""
+        cache_key = "_read_interaction_pairs_cache"
         if cache_key not in self.context:
-            from world.scenes.read_state_services import has_read  # noqa: PLC0415
+            from world.scenes.read_state_services import has_read_pairs  # noqa: PLC0415
 
             request = self.context.get("request")
             user = request.user if request is not None else None
@@ -347,9 +342,9 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 rows = [self.instance]
             else:
                 rows = []
-            ids = [row.id for row in rows if row is not None]
-            if user and user.is_authenticated and ids:
-                self.context[cache_key] = has_read(account=user, interaction_ids=ids)
+            poses = [(row.id, row.timestamp) for row in rows if row is not None]
+            if user and user.is_authenticated and poses:
+                self.context[cache_key] = has_read_pairs(account=user, poses=poses)
             else:
                 self.context[cache_key] = set()
         return self.context[cache_key]

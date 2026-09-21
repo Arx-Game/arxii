@@ -11,6 +11,8 @@ from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import (
     InteractionFactory,
@@ -24,6 +26,7 @@ from world.scenes.models import (
     Interaction,
     InteractionAction,
     InteractionReadReceipt,
+    InteractionTargetPersona,
     InteractionThread,
 )
 from world.scenes.play_views import _queryset, _rows
@@ -265,6 +268,50 @@ class PlayReadViewTests(APITestCase):
         response = self.client.post("/api/play/read/", {"poses": []}, format="json")
         self.assertEqual(response.status_code, 403)
 
+    def test_rejects_any_invalid_pair_without_partial_receipts(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        visible = InteractionFactory()
+        hidden = InteractionFactory(visibility=InteractionVisibility.VERY_PRIVATE)
+
+        for bad_pair in (
+            {"id": visible.pk, "timestamp": "2026-01-01T00:00:00Z"},
+            {"id": hidden.pk, "timestamp": hidden.timestamp.isoformat()},
+            {"id": 99999999, "timestamp": visible.timestamp.isoformat()},
+        ):
+            response = self.client.post(
+                "/api/play/read/",
+                {
+                    "poses": [
+                        {"id": visible.pk, "timestamp": visible.timestamp.isoformat()},
+                        bad_pair,
+                    ]
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["detail"], "Unable to authorize read batch.")
+            self.assertFalse(InteractionReadReceipt.objects.filter(account=account).exists())
+
+    def test_equal_timestamp_spelling_is_authorized_and_idempotent(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        interaction = InteractionFactory()
+        timestamp = interaction.timestamp.isoformat().replace("+00:00", "Z")
+        body = {"poses": [{"id": interaction.pk, "timestamp": timestamp}]}
+
+        first = self.client.post("/api/play/read/", body, format="json")
+        second = self.client.post("/api/play/read/", body, format="json")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["marked"], 1)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["marked"], 0)
+        self.assertEqual(
+            InteractionReadReceipt.objects.filter(account=account, interaction=interaction).count(),
+            1,
+        )
+
 
 class PlayReadViewMarkConversationReadTests(APITestCase):
     """The mark-all-before-snapshot bulk dismissal (#3759 spec section 7).
@@ -479,6 +526,33 @@ class PlayConversationsViewTests(APITestCase):
         row = next(r for r in response.json()["results"] if r["ref"]["key"] == f"scene:{scene.pk}")
         self.assertEqual(row["unread"], 2)
         self.assertEqual(row["directUnread"], 0)
+
+    def test_unread_excludes_own_poses_and_direct_counts_all_account_personas(self) -> None:
+        account = AccountFactory()
+        player_data = PlayerDataFactory(account=account)
+        first_sheet = CharacterSheetFactory()
+        first_entry = RosterEntryFactory(character_sheet=first_sheet)
+        RosterTenureFactory(player_data=player_data, roster_entry=first_entry)
+        second_sheet = CharacterSheetFactory()
+        second_entry = RosterEntryFactory(character_sheet=second_sheet)
+        RosterTenureFactory(player_data=player_data, roster_entry=second_entry)
+
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        InteractionFactory(scene=scene, persona=first_sheet.primary_persona)
+        directed = InteractionFactory(scene=scene)
+        InteractionTargetPersona.objects.create(
+            interaction=directed,
+            timestamp=directed.timestamp,
+            persona=second_sheet.primary_persona,
+        )
+
+        response = self.client.get("/api/play/conversations/")
+
+        self.assertEqual(response.status_code, 200)
+        row = next(r for r in response.json()["results"] if r["ref"]["key"] == f"scene:{scene.pk}")
+        self.assertEqual(row["unread"], 1)
+        self.assertEqual(row["directUnread"], 1)
 
 
 class PlayThreadsViewTests(APITestCase):

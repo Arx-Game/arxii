@@ -234,34 +234,34 @@ function PoseReadTarget({
   pose,
   observe,
   highlighted,
+  readEligible = true,
   children,
 }: {
-  pose: { id: number; timestamp: string; name?: string };
-  observe: (element: HTMLElement, pose: { id: number; timestamp: string }) => () => void;
+  pose: { id: number; timestamp: string; name?: string; availability?: 'retained' | 'temporary' };
+  observe: (
+    element: HTMLElement,
+    pose: {
+      id: number | string;
+      timestamp: string;
+      availability?: 'retained' | 'temporary';
+      readEligible?: boolean;
+    }
+  ) => () => void;
   /** True for ~2s right after this pose was scrolled to as a deep-link target (#3759 C2). */
   highlighted?: boolean;
+  /** Collapsed poses remain unread until their body is opened. */
+  readEligible?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const readSentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const element = ref.current;
+    const element = readSentinelRef.current;
     if (!element) return;
-    return observe(element, pose);
-    // Depend on pose.id/pose.timestamp (stable primitives), not the pose
-    // object itself: the caller passes a fresh `{ id, timestamp }` literal
-    // on every render, so an object-identity dep would re-run this effect
-    // (and thus unobserve/re-observe the element) every render instead of
-    // only when the pose actually changes.
+    return observe(element, { ...pose, readEligible });
+    // Depend on stable pose primitives, not the object literal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [observe, pose.id, pose.timestamp]);
-  // `data-pose-id` is the stable DOM handle the anchor system (#3759 Wave 6)
-  // uses to find "the pose the user was reading" again after a resize, font
-  // change, or history-page insertion -- see findScrollContainer/
-  // findTopVisiblePoseId below. `data-highlighted` is the same kind of handle
-  // for the deep-link target highlight (#3759 review finding C2): a
-  // CSS-only, transition-based ring rather than an animation, so it degrades
-  // to an instant, non-distracting state change under `prefers-reduced-motion`
-  // (see the `motion-reduce:transition-none` utility below).
+  }, [observe, pose.id, pose.timestamp, pose.availability, readEligible]);
   return (
     <div
       ref={ref}
@@ -273,7 +273,8 @@ function PoseReadTarget({
           : undefined
       }
     >
-      {/* Any block minimises or dismisses, per viewer (#3856 PR 2). */}
+      {/* The sentinel is after the complete body. Tall poses therefore require
+          reaching the final body block, not merely seeing their header. */}
       <FeedBlockFrame
         itemKey={feedItemKey('interaction', pose.id)}
         stub={`${pose.name ?? 'Pose'} · ${new Date(pose.timestamp).toLocaleTimeString([], {
@@ -282,6 +283,7 @@ function PoseReadTarget({
         })}`}
       >
         {children}
+        <div ref={readSentinelRef} aria-hidden="true" className="h-px" />
       </FeedBlockFrame>
     </div>
   );
@@ -1411,9 +1413,15 @@ export function ThreadedNarrativeReader({
                       }}
                     >
                       <PoseReadTarget
-                        pose={{ id: item.id, timestamp: item.timestamp, name: item.persona.name }}
+                        pose={{
+                          id: item.id,
+                          timestamp: item.timestamp,
+                          name: item.persona.name,
+                          availability: item.availability,
+                        }}
                         observe={observe}
                         highlighted={String(item.id) === highlightedPoseId}
+                        readEligible={!poseCollapsed}
                       >
                         {roleLabel && <p className="text-xs text-muted-foreground">{roleLabel}</p>}
                         {poseCollapsed ? (
@@ -1510,9 +1518,15 @@ export function ThreadedNarrativeReader({
                 return (
                   <div key={group.key} data-thread-id={group.key}>
                     <PoseReadTarget
-                      pose={{ id: item.id, timestamp: item.timestamp, name: item.persona.name }}
+                      pose={{
+                        id: item.id,
+                        timestamp: item.timestamp,
+                        name: item.persona.name,
+                        availability: item.availability,
+                      }}
                       observe={observe}
                       highlighted={String(item.id) === highlightedPoseId}
+                      readEligible={!poseCollapsed}
                     >
                       {/* #3759 Wave 9 review Minor M-1: `poseRoleLabel` itself
                           returns "Standalone" here (gated on `item.thread_id`,
@@ -1660,9 +1674,11 @@ export function ThreadedNarrativeReader({
                               id: item.id,
                               timestamp: item.timestamp,
                               name: item.persona.name,
+                              availability: item.availability,
                             }}
                             observe={observe}
                             highlighted={String(item.id) === highlightedPoseId}
+                            readEligible={!poseCollapsed}
                           >
                             {/* #3759 Wave 9 review finding F4. */}
                             {roleLabel && (
