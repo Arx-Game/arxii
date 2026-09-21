@@ -22,32 +22,35 @@ class AnchorCapTests(TestCase):
         thread = ThreadFactory(as_technique_thread=True, _technique_level=3)
         self.assertEqual(compute_anchor_cap(thread), 30)
 
-    def test_relationship_track_cap_zero_when_no_developed_points(self) -> None:
-        # Default developed_points is 0; _developed_points=0 documents intent.
-        thread = ThreadFactory(as_track_thread=True, _developed_points=0)
+    def test_relationship_track_cap_zero_when_no_depth(self) -> None:
+        # Default invested_depth is 0; _invested_depth=0 documents intent (#3957).
+        thread = ThreadFactory(as_track_thread=True, _invested_depth=0)
         self.assertEqual(compute_anchor_cap(thread), 0)
 
-    def test_relationship_track_cap_reflects_developed_points_continuously(self) -> None:
-        """anchor_cap = developed_points directly. Every point matters, not just tier thresholds."""
-        thread = ThreadFactory(as_track_thread=True, _developed_points=37)
+    def test_relationship_track_cap_reflects_pair_depth_continuously(self) -> None:
+        """anchor_cap = pair_depth() directly (#3957). Every point matters, not just
+        tier thresholds. No reverse side exists here, so pair_depth == invested_depth."""
+        thread = ThreadFactory(as_track_thread=True, _invested_depth=37)
         self.assertEqual(compute_anchor_cap(thread), 37)
 
     def test_relationship_track_cap_scales_with_deeper_relationships(self) -> None:
-        thread = ThreadFactory(as_track_thread=True, _developed_points=500)
+        thread = ThreadFactory(as_track_thread=True, _invested_depth=500)
         self.assertEqual(compute_anchor_cap(thread), 500)
 
-    def test_relationship_capstone_cap_zero_when_capstone_has_no_points(self) -> None:
-        # _capstone_points=0 explicitly overrides RelationshipCapstoneFactory's default of 100.
-        thread = ThreadFactory(as_capstone_thread=True, _capstone_points=0)
+    def test_relationship_capstone_cap_zero_when_relationship_has_no_depth(self) -> None:
+        # _capstone_depth=0 documents intent; default invested_depth is already 0 (#3957).
+        thread = ThreadFactory(as_capstone_thread=True, _capstone_depth=0)
         self.assertEqual(compute_anchor_cap(thread), 0)
 
-    def test_relationship_capstone_cap_reflects_capstone_points(self) -> None:
-        """anchor_cap = target_capstone.points. Capstone significance drives Thread cap."""
-        thread = ThreadFactory(as_capstone_thread=True, _capstone_points=50)
+    def test_relationship_capstone_cap_reflects_relationship_pair_depth(self) -> None:
+        """anchor_cap = target_capstone.relationship.pair_depth() (#3957) — the
+        capstone is a receipt with no cap value of its own; the underlying tie's
+        depth drives the Thread cap."""
+        thread = ThreadFactory(as_capstone_thread=True, _capstone_depth=50)
         self.assertEqual(compute_anchor_cap(thread), 50)
 
-    def test_relationship_capstone_cap_scales_with_capstone_size(self) -> None:
-        thread = ThreadFactory(as_capstone_thread=True, _capstone_points=500)
+    def test_relationship_capstone_cap_scales_with_relationship_depth(self) -> None:
+        thread = ThreadFactory(as_capstone_thread=True, _capstone_depth=500)
         self.assertEqual(compute_anchor_cap(thread), 500)
 
     def test_sanctum_anchor_cap_is_level_times_ten(self) -> None:
