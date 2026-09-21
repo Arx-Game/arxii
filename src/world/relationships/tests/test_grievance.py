@@ -43,3 +43,10 @@ class RegisterGrievanceTests(TestCase):
     def test_requires_an_option_or_custom_points(self) -> None:
         with self.assertRaises(ValidationError):
             register_grievance(source=self.victim, target=self.perpetrator)
+
+    def test_rejects_both_option_and_custom_points(self) -> None:
+        option = GrievanceOptionFactory(label="Slight", conflict_points=50)
+        with self.assertRaises(ValidationError):
+            register_grievance(
+                source=self.victim, target=self.perpetrator, option=option, custom_points=10
+            )

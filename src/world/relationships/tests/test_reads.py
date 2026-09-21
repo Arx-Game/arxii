@@ -14,6 +14,7 @@ from world.relationships.reads import (
     visible_labels,
 )
 from world.relationships.services import declare_label, end_label, get_or_create_side
+from world.scenes.factories import InteractionFactory, SceneFactory
 
 
 class ReadTests(TestCase):
@@ -54,6 +55,12 @@ class ReadTests(TestCase):
     def test_third_party_needs_an_open_public_label(self):
         self.assertFalse(third_party_can_see(self.ab))
 
+    def test_third_party_sees_an_open_public_label(self):
+        declare_label(
+            side=self.ab, type=RelationshipTypeFactory(name="Ally"), awareness=LabelAwareness.PUBLIC
+        )
+        self.assertTrue(third_party_can_see(self.ab))
+
     def test_breakdown(self):
         owner = depth_breakdown(self.ab, TieAudience.OWNER)
         self.assertEqual(
@@ -79,3 +86,19 @@ class ReadTests(TestCase):
         self.assertEqual(titles, ["Theirs", "White"])
         titles = [i["title"] for i in tie_stream(self.ab, self.a, False)]
         self.assertIn("Black", titles)
+
+    def test_stream_staff_with_no_viewer_sees_black_entries(self):
+        JournalEntryFactory(author=self.a, about=self.b, is_public=False, title="Black")
+        titles = [i["title"] for i in tie_stream(self.ab, None, True)]
+        self.assertIn("Black", titles)
+
+    def test_stream_includes_a_scene_both_posed_in(self):
+        scene = SceneFactory(name="The Gate")
+        for sheet in (self.a, self.b):
+            persona = sheet.personas.first() or sheet.personas.create(name=sheet.character.db_key)
+            InteractionFactory(scene=scene, persona=persona)
+        items = tie_stream(self.ab, self.b, False)
+        scene_items = [i for i in items if i["kind"] == "scene"]
+        self.assertEqual(len(scene_items), 1)
+        self.assertEqual(scene_items[0]["title"], "The Gate")
+        self.assertEqual(scene_items[0]["id"], scene.pk)

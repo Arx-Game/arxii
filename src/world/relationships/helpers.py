@@ -10,6 +10,7 @@ def get_relationship_tier(character_a: ObjectDB, character_b: ObjectDB) -> int:
     mentorship, which is two sides that both said so and both invested.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.relationships.constants import TypeFamily  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
     from world.relationships.services import is_mutual  # noqa: PLC0415
 
@@ -24,7 +25,9 @@ def get_relationship_tier(character_a: ObjectDB, character_b: ObjectDB) -> int:
     side = CharacterRelationship.objects.filter(source=sheet_a, target=sheet_b).first()
     if side is None or side.reverse is None:
         return 0
-    teaching_labels = side.open_labels().filter(type__family="teaching")
+    teaching_labels = side.open_labels().filter(type__family=TypeFamily.TEACHING)
+    # any() short-circuits at the first mutual match -- is_mutual's own two queries
+    # only run per label up to that point, not for the whole teaching_labels set.
     if not any(is_mutual(side, label.type) for label in teaching_labels):
         return 0
     return min(side.tier, side.reverse.tier)

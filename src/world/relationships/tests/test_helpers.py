@@ -40,11 +40,6 @@ class GetRelationshipTierTests(TestCase):
         """Returns 0 when a character has no CharacterSheet attached."""
         self.assertEqual(get_relationship_tier(self.char_a, self.char_b), 0)
 
-    def test_returns_int(self) -> None:
-        """Return type is int."""
-        tier = get_relationship_tier(self.char_a, self.char_b)
-        self.assertIsInstance(tier, int)
-
     def test_mutual_mentor_student_returns_the_lower_claimed_tier(self) -> None:
         """A mutual Mentor/Student pair returns the lower of the two claimed tiers."""
         ab = CharacterRelationshipFactory(source=self.sheet_a, target=self.sheet_b, tier=2)

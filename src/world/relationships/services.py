@@ -28,6 +28,7 @@ from world.relationships.exceptions import (
     LabelAlreadyDeclaredError,
     LabelEndedError,
     SameTypeShiftError,
+    TieError,
     TierNotReachedError,
 )
 from world.relationships.models import (
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
     from world.checks.types import ModifierContribution
     from world.combat.models import CombatEncounter
     from world.companions.models import Companion
+    from world.game_clock.models import GameWeek
     from world.journals.models import JournalEntry
     from world.npc_services.models import NpcRegardEvent
     from world.relationships.models import BondCombatConfig, GrievanceOption
@@ -115,7 +117,8 @@ def declare_label(
 ) -> RelationshipLabel:
     """Name one type on this side, Private unless told otherwise (#3957)."""
     if awareness not in AWARENESS_RANK:
-        raise AwarenessBackwardError
+        msg = "Unknown awareness."
+        raise TieError(msg)
     now = timezone.now()
     try:
         with transaction.atomic():
@@ -194,7 +197,7 @@ def advance_awareness(*, label: RelationshipLabel, to: str) -> RelationshipLabel
     return label
 
 
-def _known_label_q(source_id: int, target_ref, type_ref=None) -> Q:
+def _known_label_q(source_id: int | OuterRef, target_ref, type_ref=None) -> Q:
     """Labels the OTHER side may see, declared under a still-open tenure."""
     q = Q(
         relationship__source_id=source_id,
@@ -241,16 +244,7 @@ def mutual_hostile_expression(viewer_sheet_id: int, other_ref: str = "author_id"
         _known_label_q(viewer_sheet_id, OuterRef(other_ref)) & hostile
     )
     theirs = RelationshipLabel.objects.filter(
-        Q(
-            relationship__source_id=OuterRef(other_ref),
-            relationship__target_id=viewer_sheet_id,
-            relationship__is_active=True,
-            ended_at__isnull=True,
-            awareness__in=KNOWN_AWARENESS,
-            declared_by_tenure__isnull=False,
-            declared_by_tenure__end_date__isnull=True,
-        )
-        & hostile
+        _known_label_q(OuterRef(other_ref), viewer_sheet_id) & hostile
     )
     return ExpressionWrapper(Q(Exists(mine)) & Q(Exists(theirs)), output_field=BooleanField())
 
@@ -263,7 +257,8 @@ def set_allocation(*, side: CharacterRelationship, ap_amount: int) -> Relationsh
     from world.game_clock.week_services import get_current_game_week
 
     if ap_amount < 0:
-        raise AllocationTooLargeError
+        msg = "AP cannot be negative."
+        raise TieError(msg)
     pool = ActionPointPool.get_or_create_for_character(side.source.character)
     if pool is None or (ap_amount and not pool.can_afford(ap_amount)):
         raise AllocationTooLargeError
@@ -274,11 +269,22 @@ def set_allocation(*, side: CharacterRelationship, ap_amount: int) -> Relationsh
     return allocation
 
 
-def _award_depth(
-    side: CharacterRelationship, amount: int, source: str, *, scene: Scene | None = None
+def _award_depth(  # noqa: PLR0913 - the batch-vs-single-award split needs all six
+    side: CharacterRelationship,
+    amount: int,
+    source: str,
+    *,
+    week: GameWeek,
+    scene: Scene | None = None,
+    refresh: bool = True,
 ) -> None:
-    from world.game_clock.week_services import get_current_game_week
+    """Add depth to one side and record the audit row (#3957).
 
+    ``refresh=False`` skips the post-write ``refresh_from_db()`` for batch callers
+    that discard ``side`` immediately after (``credit_scene_depth``'s fan-out) --
+    ``flush_from_cache`` still runs unconditionally so a stale in-memory instance is
+    never left in the idmapper identity map for a later reader to pick up.
+    """
     field = "invested_depth" if source == DepthSource.ALLOCATION else "scene_depth"
     with transaction.atomic():
         CharacterRelationship.objects.filter(pk=side.pk).update_with_reason(
@@ -289,7 +295,7 @@ def _award_depth(
             amount=amount,
             source=source,
             scene=scene,
-            game_week=get_current_game_week(),
+            game_week=week,
         )
     # Full (not fields=[...]) refresh: idmapper's __call__ re-caches whatever partial
     # instance a .only()-style refresh constructs, so a single-field refresh right after
@@ -297,24 +303,46 @@ def _award_depth(
     # object (world/npc_services/regard.py's mirror_npc_regard_event bridge uses the same
     # flush-then-full-refresh pairing for the same reason).
     side.flush_from_cache(force=True)
-    side.refresh_from_db()
+    if refresh:
+        side.refresh_from_db()
 
 
 def process_weekly_relationship_allocations() -> int:
-    """The weekly turn: every allocation the pool can pay becomes depth (#3957)."""
+    """The weekly turn: every allocation the pool can pay becomes depth (#3957).
+
+    Idempotent per game week: a side that already has an ALLOCATION-sourced depth
+    transaction for the current week is skipped, so a repeat call in the same week
+    (the weekly orchestrator plus the standalone 24h fallback registration both firing)
+    never spends the same standing AP allocation, or awards its depth, more than once.
+    """
     from world.action_points.models import ActionPointPool
+    from world.game_clock.week_services import get_current_game_week
 
     cfg = get_growth_config()
+    week = get_current_game_week()
+    already_credited = set(
+        RelationshipDepthTransaction.objects.filter(
+            source=DepthSource.ALLOCATION, game_week=week
+        ).values_list("relationship_id", flat=True)
+    )
     processed = 0
-    allocations = RelationshipAllocation.objects.filter(
-        ap_amount__gt=0, relationship__is_active=True
-    ).select_related("relationship__source__character")
+    allocations = (
+        RelationshipAllocation.objects.filter(ap_amount__gt=0, relationship__is_active=True)
+        .exclude(relationship_id__in=already_credited)
+        .select_related("relationship__source")
+    )
     for allocation in allocations:
         side = allocation.relationship
-        pool = ActionPointPool.get_or_create_for_character(side.source.character)
+        # ActionPointPool.character FKs the CharacterSheet directly, and CharacterSheet
+        # shares its pk with side.source -- no need to walk sheet -> character -> sheet
+        # through get_or_create_for_character (set_allocation already required the pool
+        # to exist before an allocation with ap_amount > 0 could be set).
+        pool = ActionPointPool.objects.filter(character_id=side.source_id).first()
         if pool is None or not pool.spend(allocation.ap_amount):
             continue
-        _award_depth(side, allocation.ap_amount * cfg.depth_per_ap, DepthSource.ALLOCATION)
+        _award_depth(
+            side, allocation.ap_amount * cfg.depth_per_ap, DepthSource.ALLOCATION, week=week
+        )
         processed += 1
     return processed
 
@@ -323,6 +351,8 @@ def credit_scene_depth(scene: Scene) -> int:
     """First scene together in a game week credits each side ``scene_base_gain`` (#3957).
 
     Both characters must have POSED in the scene. Returns the number of sides credited.
+    Every posed-together pair opens a row on each side (spec) -- the already-credited
+    set is fetched once up front so the per-pair loop costs no extra query per side.
     """
     from world.game_clock.week_services import get_current_game_week
     from world.scenes.models import Interaction
@@ -343,19 +373,27 @@ def credit_scene_depth(scene: Scene) -> int:
     sheets = {s.pk: s for s in CharacterSheet.objects.filter(pk__in=sheet_ids)}
     cfg = get_growth_config()
     week = get_current_game_week()
+    already_credited = set(
+        RelationshipDepthTransaction.objects.filter(
+            source=DepthSource.SCENE, game_week=week, relationship__source_id__in=sheet_ids
+        ).values_list("relationship_id", flat=True)
+    )
     credited = 0
     for i, a_id in enumerate(sheet_ids):
         for b_id in sheet_ids[i + 1 :]:
             for src, tgt in ((a_id, b_id), (b_id, a_id)):
                 side = get_or_create_side(source=sheets[src], target=sheets[tgt])
-                if not side.is_active:
+                if not side.is_active or side.pk in already_credited:
                     continue
-                already = RelationshipDepthTransaction.objects.filter(
-                    relationship=side, source=DepthSource.SCENE, game_week=week
-                ).exists()
-                if already:
-                    continue
-                _award_depth(side, cfg.scene_base_gain, DepthSource.SCENE, scene=scene)
+                _award_depth(
+                    side,
+                    cfg.scene_base_gain,
+                    DepthSource.SCENE,
+                    week=week,
+                    scene=scene,
+                    refresh=False,
+                )
+                already_credited.add(side.pk)
                 credited += 1
     return credited
 
@@ -506,8 +544,11 @@ def register_grievance(
     custom_points: int | None = None,
 ) -> CharacterRelationship:
     """A wronged character's one-sided grievance: Conflict added on their side (#1429, #3957)."""
+    if (option is None) == (custom_points is None):
+        msg = "A grievance needs exactly one of option or custom_points."
+        raise ValidationError(msg)
     points = option.conflict_points if option is not None else custom_points
-    if points is None or points <= 0:
+    if points <= 0:
         msg = "A grievance must add a positive amount of conflict."
         raise ValidationError(msg)
     side = get_or_create_side(source=source, target=target)

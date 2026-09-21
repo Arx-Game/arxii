@@ -9,6 +9,7 @@ from world.relationships.exceptions import (
     LabelAlreadyDeclaredError,
     LabelEndedError,
     SameTypeShiftError,
+    TieError,
 )
 from world.relationships.factories import RelationshipTypeFactory
 from world.relationships.models import CharacterRelationship
@@ -44,6 +45,11 @@ class DeclareLabelTests(TestCase):
         with self.assertRaises(LabelAlreadyDeclaredError):
             declare_label(side=side, type=self.friend)
 
+    def test_declare_unknown_awareness_raises(self):
+        side = get_or_create_side(source=self.a, target=self.b)
+        with self.assertRaises(TieError):
+            declare_label(side=side, type=self.friend, awareness="bogus")
+
     def test_shift_ends_old_and_records_replaced(self):
         side = get_or_create_side(source=self.a, target=self.b)
         old = declare_label(side=side, type=self.friend, awareness=LabelAwareness.PUBLIC)
@@ -69,6 +75,20 @@ class DeclareLabelTests(TestCase):
         self.assertTrue(label.is_former)
         with self.assertRaises(LabelEndedError):
             end_label(label=label)
+
+    def test_shift_on_ended_label_raises(self):
+        side = get_or_create_side(source=self.a, target=self.b)
+        label = declare_label(side=side, type=self.friend)
+        end_label(label=label)
+        with self.assertRaises(LabelEndedError):
+            shift_label(label=label, new_type=self.lover)
+
+    def test_advance_awareness_on_ended_label_raises(self):
+        side = get_or_create_side(source=self.a, target=self.b)
+        label = declare_label(side=side, type=self.friend)
+        end_label(label=label)
+        with self.assertRaises(LabelEndedError):
+            advance_awareness(label=label, to=LabelAwareness.PUBLIC)
 
     def test_awareness_forward_only(self):
         side = get_or_create_side(source=self.a, target=self.b)

@@ -11,7 +11,6 @@ from world.game_clock.tasks import (
     batch_condition_expiration_cleanup,
     batch_form_expiration_cleanup,
     batch_journal_weekly_reset,
-    batch_relationship_weekly_reset,
 )
 
 
@@ -186,44 +185,31 @@ class BatchApWeeklyRegenTests(TestCase):
         self.assertEqual(pool.current, 150)
 
 
-class BatchRelationshipWeeklyResetTests(TestCase):
-    """Tests for batch relationship weekly reset."""
+class RelationshipDepthTaskTests(TestCase):
+    """The weekly relationship-depth processor delegates to the service layer (#3957)."""
 
-    def test_resets_old_week_relationships(self) -> None:
-        """Relationship counters from a previous game week are reset."""
-        from world.game_clock.week_services import advance_game_week, get_current_game_week
-        from world.relationships.factories import CharacterRelationshipFactory
-        from world.relationships.models import CharacterRelationship
+    def test_calls_through_to_process_weekly_relationship_allocations(self) -> None:
+        from unittest.mock import patch
 
-        old_week = get_current_game_week()
-        rel = CharacterRelationshipFactory(
-            developments_this_week=3, changes_this_week=2, game_week=old_week
-        )
+        from world.game_clock.tasks import _run_relationship_depth
 
-        advance_game_week()
-        batch_relationship_weekly_reset()
+        with patch(
+            "world.relationships.services.process_weekly_relationship_allocations",
+            return_value=3,
+        ) as processed:
+            _run_relationship_depth()
 
-        CharacterRelationship.flush_instance_cache()
-        rel.refresh_from_db()
-        self.assertEqual(rel.developments_this_week, 0)
-        self.assertEqual(rel.changes_this_week, 0)
+        processed.assert_called_once()
 
-    def test_skips_current_week_relationships(self) -> None:
-        """Relationships in the current game week are not touched."""
-        from world.game_clock.week_services import get_current_game_week
-        from world.relationships.factories import CharacterRelationshipFactory
+    def test_registered_in_the_weekly_rollover_processor_list(self) -> None:
+        """The orchestrator's processors list carries the new callable, not the old one."""
+        import inspect
 
-        current_week = get_current_game_week()
-        rel = CharacterRelationshipFactory(
-            developments_this_week=3,
-            changes_this_week=2,
-            game_week=current_week,
-        )
+        from world.game_clock.tasks import weekly_rollover_task
 
-        batch_relationship_weekly_reset()
-
-        rel.refresh_from_db()
-        self.assertEqual(rel.developments_this_week, 3)
+        source = inspect.getsource(weekly_rollover_task)
+        self.assertIn("_run_relationship_depth", source)
+        self.assertNotIn("batch_relationship_weekly_reset", source)
 
 
 class BatchFormExpirationTests(TestCase):
