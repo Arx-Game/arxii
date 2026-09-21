@@ -286,11 +286,17 @@ class TieApiTests(TestCase):
         )
         self.ba.is_active = False
         self.ba.save(update_fields=["is_active"])
-        data = (
-            self._client(self.stranger).get(f"/api/relationships/relationships/{self.ab.pk}/").data
-        )
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.stranger).get(url).data
         row = next(lab for lab in data["labels"] if lab["type_name"] == "Bonded")
         self.assertFalse(row["is_mutual"])
+
+        # A frozen reverse side stops EARNING but keeps the depth it already earned (spec
+        # Decision 2): the owner still sees the full pair_depth(), including ba's frozen
+        # contribution, even though mutuality (above) correctly stays false regardless.
+        owner_data = self._client(self.owner).get(url).data
+        self.assertEqual(owner_data["depth"], 340)
+        self.assertEqual(owner_data["breakdown"]["their_added_depth"], 108)
 
     def test_companion_side_404s_for_anyone_but_owner_or_staff(self):
         companion = CompanionFactory(owner=self.a)

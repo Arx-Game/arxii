@@ -247,14 +247,16 @@ def build_tie_page(
         if side.target_id is not None:
             pair_q |= Q(source_id=side.target_id, target_id=side.source_id)
     if pair_q:
-        # is_active=True: a frozen reverse side never counts toward pair depth or mutuality
-        # (#3957 review). Keyed on the (source, target) PAIR, not source alone — two of the
-        # caller's own owned characters can each hold a side toward the same target, and both
-        # reverse rows then share one source_id; a source-only key would collide and hand one
-        # row the other's depth/labels.
-        reverse_sides = CharacterRelationship.objects.filter(
-            pair_q, is_active=True
-        ).prefetch_related(
+        # No is_active filter here (#3957 review, spec Decision 2): a frozen side takes no
+        # credit of either kind until reactivated, but it KEEPS the depth it already earned —
+        # displayed depth/breakdown.their_added_depth must match the model's own unfiltered
+        # pair_depth(), which services.advance_tier also gates on. Mutuality is the one thing
+        # that DOES require both sides active, and that check lives inside
+        # _labels_are_mutual itself (reverse.is_active), not here. Keyed on the (source,
+        # target) PAIR, not source alone — two of the caller's own owned characters can each
+        # hold a side toward the same target, and both reverse rows then share one source_id;
+        # a source-only key would collide and hand one row the other's depth/labels.
+        reverse_sides = CharacterRelationship.objects.filter(pair_q).prefetch_related(
             Prefetch(  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
                 "labels",
                 queryset=RelationshipLabel.objects.select_related(

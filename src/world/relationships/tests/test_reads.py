@@ -9,6 +9,7 @@ from world.relationships.factories import RelationshipTypeFactory
 from world.relationships.models import RelationshipLabel
 from world.relationships.reads import (
     _labels_are_mutual,  # unit-testing the batched sibling directly
+    build_tie_page,
     depth_breakdown,
     third_party_can_see,
     tie_audience,
@@ -180,11 +181,24 @@ class MutualEquivalenceTests(TestCase):
         ally = RelationshipTypeFactory(name="Ally3")
         side = get_or_create_side(source=a, target=b)
         reverse = get_or_create_side(source=b, target=a)
+        side.scene_depth = 25
+        side.save(update_fields=["scene_depth"])
+        reverse.scene_depth = 40
+        reverse.save(update_fields=["scene_depth"])
         declare_label(side=side, type=ally, awareness=LabelAwareness.PUBLIC, tenure=tenure_a)
         declare_label(side=reverse, type=ally, awareness=LabelAwareness.PUBLIC, tenure=tenure_b)
         reverse.is_active = False
         reverse.save(update_fields=["is_active"])
         self._assert_agree(side, reverse, ally)
+
+        # A frozen side stops EARNING but keeps the depth it already earned (spec Decision
+        # 2): build_tie_page's displayed depth must still match the model's own unfiltered
+        # pair_depth() even though the same frozen reverse correctly kills mutuality above.
+        side.refresh_from_db()
+        reverse.refresh_from_db()
+        row = build_tie_page([side], viewer_sheet=a, is_staff=False)[0]
+        self.assertEqual(row["depth"], side.pair_depth())
+        self.assertEqual(row["breakdown"]["their_added_depth"], reverse.depth)
 
     def test_hostile_counterpart_pair_agrees(self):
         a, b, tenure_a, tenure_b = self._pair()
