@@ -558,11 +558,14 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
         help_text="Label type this requirement gates. Null = any type.",
     )
     minimum_tier = models.PositiveIntegerField(
-        help_text="Minimum RelationshipTier.tier_number the track must have reached.",
+        help_text=(
+            "Minimum RelationshipTier.tier_number a side holding an open label of the "
+            "required type must have reached."
+        ),
     )
     minimum_count = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Number of qualifying tracks required (at/above minimum_tier).",
+        help_text="Number of qualifying sides required (at/above minimum_tier).",
     )
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
