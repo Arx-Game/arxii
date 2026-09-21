@@ -10,11 +10,7 @@ from django.test import TestCase
 from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.services import apply_interpose_outcome
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
+from world.relationships.factories import CharacterRelationshipFactory, RelationshipTierFactory
 from world.relationships.services import bond_combat_bonus
 
 
@@ -28,12 +24,11 @@ class BondCombatE2ETests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ally = CharacterSheetFactory()
 
-        # Create a bonded relationship (developed_absolute_value = 27 → cube root = 3)
+        # A claimed tier (combat_bonus=3) on this side of the bond.
+        RelationshipTierFactory(tier_number=1, combat_bonus=3)
         self.rel = CharacterRelationshipFactory(
-            source=self.sheet, target=self.ally, is_active=True, is_pending=False
+            source=self.sheet, target=self.ally, is_active=True, tier=1
         )
-        track = RelationshipTrackFactory(sign="POSITIVE")
-        RelationshipTrackProgressFactory(relationship=self.rel, track=track, developed_points=27)
 
         # Create a combat encounter with both as participants
         self.encounter = CombatEncounterFactory()
@@ -48,7 +43,7 @@ class BondCombatE2ETests(TestCase):
         """bond_combat_bonus returns a contribution for the bonded ally."""
         contributions = bond_combat_bonus(self.sheet, self.encounter)
         self.assertEqual(len(contributions), 1)
-        self.assertEqual(contributions[0].value, 3)  # cube root of 27
+        self.assertEqual(contributions[0].value, 3)  # tier 1's combat_bonus
         self.assertIn("Bond", contributions[0].source_label)
 
     def test_bond_bonus_drops_when_ally_falls(self):

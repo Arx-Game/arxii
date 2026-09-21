@@ -20,10 +20,11 @@ from world.conditions.services import apply_condition
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
+from world.relationships.constants import TypeValence
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
 
 
@@ -66,16 +67,15 @@ class EscalationPerilSpikeTests(TestCase):
         )
 
     def _bond(self, *, points=10, fuels=True):
-        track = RelationshipTrackFactory(fuels_escalation_spikes=fuels)
+        rel_type = RelationshipTypeFactory(valence=TypeValence.WARM, fuels_escalation_spikes=fuels)
         relationship = CharacterRelationshipFactory(
             source=self.protector.character_sheet,
             target=self.victim.character_sheet,
             is_active=True,
-            is_pending=False,
         )
-        RelationshipTrackProgressFactory(
-            relationship=relationship, track=track, developed_points=points, capacity=points
-        )
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
+        relationship.invested_depth = points
+        relationship.save()
 
     def _apply_bleed_out(self):
         apply_condition(target=self.victim_char, condition=self.bleed_out)
