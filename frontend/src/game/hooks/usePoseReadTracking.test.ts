@@ -262,4 +262,46 @@ describe('usePoseReadTracking', () => {
     expect(removeDocListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     expect(removeWinListener).toHaveBeenCalledWith('focus', expect.any(Function));
   });
+  it('keeps ephemeral reads tab-local and never sends an ephemeral ID to the API', () => {
+    const { result } = renderHook(() => usePoseReadTracking());
+    const el = document.createElement('div');
+    const pose = {
+      id: 'ephemeral-7',
+      timestamp: '2026-01-01T00:00:00Z',
+      availability: 'temporary' as const,
+    };
+    result.current.observe(el, pose);
+
+    act(() => {
+      observerInstance.trigger([{ target: el, isIntersecting: true }]);
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(playQueries.markPosesRead).not.toHaveBeenCalled();
+    expect(result.current.isSessionRead(pose)).toBe(true);
+  });
+
+  it('does not mark a collapsed pose until its final body becomes eligible', () => {
+    const { result } = renderHook(() => usePoseReadTracking());
+    const el = document.createElement('div');
+    const pose = { id: 73, timestamp: '2026-01-01T00:00:00Z', readEligible: false };
+    const cleanup = result.current.observe(el, pose);
+
+    act(() => {
+      observerInstance.trigger([{ target: el, isIntersecting: true }]);
+      vi.advanceTimersByTime(3000);
+    });
+    expect(playQueries.markPosesRead).not.toHaveBeenCalled();
+
+    cleanup();
+    result.current.observe(el, { ...pose, readEligible: true });
+    act(() => {
+      observerInstance.trigger([{ target: el, isIntersecting: true }]);
+      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(2100);
+    });
+    expect(playQueries.markPosesRead).toHaveBeenCalledWith([
+      { id: 73, timestamp: '2026-01-01T00:00:00Z' },
+    ]);
+  });
 });

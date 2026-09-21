@@ -31871,7 +31871,7 @@ export interface components {
       };
       /** @description Classify temporary scene rows without changing retention behavior. */
       readonly availability: string;
-      /** @description True when the read-receipt table has no row for this viewer+pose (#3759). */
+      /** @description True when no exact ``(id, timestamp)`` receipt exists (#3947). */
       readonly is_unread: boolean;
       /** @description Persona data embedded in interaction payloads. */
       readonly persona: {
@@ -32090,7 +32090,7 @@ export interface components {
       };
       /** @description Classify temporary scene rows without changing retention behavior. */
       readonly availability: string;
-      /** @description True when the read-receipt table has no row for this viewer+pose (#3759). */
+      /** @description True when no exact ``(id, timestamp)`` receipt exists (#3947). */
       readonly is_unread: boolean;
       /** @description Persona data embedded in interaction payloads. */
       readonly persona: {

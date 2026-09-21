@@ -55652,8 +55652,7 @@ components:
           readOnly: true
         is_unread:
           type: boolean
-          description: True when the read-receipt table has no row for this viewer+pose
-            (#3759).
+          description: True when no exact ``(id, timestamp)`` receipt exists (#3947).
           readOnly: true
         persona:
           type: object
@@ -56020,8 +56019,7 @@ components:
           readOnly: true
         is_unread:
           type: boolean
-          description: True when the read-receipt table has no row for this viewer+pose
-            (#3759).
+          description: True when no exact ``(id, timestamp)`` receipt exists (#3947).
           readOnly: true
         persona:
           type: object
