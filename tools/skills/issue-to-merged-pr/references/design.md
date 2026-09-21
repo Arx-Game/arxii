@@ -1,7 +1,7 @@
 # issue-to-merged-pr Skill — Design
 
 **Date**: 2026-05-25
-**Status**: Brainstormed, awaiting spec review
+**Status**: Implemented in #3956; pilot pending
 **Branch**: `devcontainer-workflow-skill`
 
 ## Purpose
@@ -20,17 +20,22 @@ captured as GitHub issues (not roadmap entries, not code TODOs).
 
 ```
 START
-  └── Pickup: user provides issue number OR no arg (interactive prompt → agent files an issue then proceeds)
-  └── Determine type from issue labels (feature, fix, chore, refactor, test, docs, perf, ...) — falls back to interactive prompt if no label
+  └── Pickup: claim/assign the issue before reading it or doing substantive work
+  └── Discovery assessment: record outcome, success signal, provenance, impact, and lane
+       ├── lightweight + no outcome-changing fork → complete marker, validate, implement
+       └── standard/heavyweight → stakeholder and agent brainstorm a product brief/PRD
+            └── visual/high-risk: compare competing demo directions/screenshots
+            └── stakeholder chooses or amends; record the ratified direction
+  └── Determine type from issue labels (feature, fix, chore, refactor, test, docs, perf, ...) — labels are candidate signals only
   └── Branch named <type>-<N>-<slug>  (e.g. fix-47-migration-history, feature-52-clash-side-favored)
-  └── Design (substantive work only — skipped for trivial issue types):
-       superpowers:brainstorming → spec → superpowers:writing-plans → plan
-  └── Implementation: per plan
+  └── Technical design after the product brief is settled:
+       verify-against-code → schema-shape when needed → spec → member approval
+  └── Implementation: per plan; select conditional quality reviewers from the diff
   └── Sync-with-main: fetch origin/main; rebase; resolve conflicts
        └── for each conflict whose files overlap with another open issue's domain,
            the agent files/updates a comment on that issue explaining how the resolution
            interacts with their work
-  └── Push & open PR; body says "Closes #N" + lists deferred follow-ups (filed as issues NOW and linked)
+  └── Push & open PR; body says "Closes #N" + lists discovery/reviewer dispositions and deferred follow-ups
   └── CI watch loop (smart cadence):
        └── poll cheap checks (lint, frontend) within ~90s of push
        └── back off to ~3-5 min intervals for backend tests
@@ -99,6 +104,7 @@ tools/skills/issue-to-merged-pr/
 ├── spec-document-reviewer-prompt.md      # project-local override of superpowers' canonical reviewer prompt (see Spec-review override)
 ├── scripts/
 │   ├── pickup-issue.sh                   # superpowers-installed precheck, then fetch issue, infer type, create branch
+│   ├── validate-discovery.sh             # fail-closed discovery marker and phase-transition validation
 │   ├── sync-with-main.sh                 # fetch + rebase, report conflicts + cross-issue overlap
 │   ├── open-pr.sh                        # push, open PR with body template
 │   ├── file-followup.sh                  # create a new issue, return its number
@@ -120,8 +126,9 @@ JSON on stdout where structured output is needed, and supports `--dry-run` on
 the state-mutating ones.
 
 - **pickup-issue.sh** `<issue-number>` → first runs the superpowers precheck (exits 2 with install command if missing; see Plugin dependency); then fetches the issue, infers type from labels, emits JSON `{type, slug, branch, parent_issue_url}`; creates branch from `origin/main`; errors if issue is closed or assigned to a different user.
+- **validate-discovery.sh** `<issue-number> [--body-file PATH] [--labels CSV]` → validates exactly one discovery marker outside the spec markers, the nonempty visible lane-assessment fields, and the fail-closed rule that only a complete lightweight lane may implement without `spec:approved`; spec review validates the full standard/heavyweight PRD packet. Its explicit `--allow-approved-legacy` compatibility mode permits already member-approved in-flight issues without a marker while marker migration is pending; new phase transitions never use that mode. It emits a concise valid result or exits non-zero.
 - **sync-with-main.sh** `<branch>` → `git fetch origin && git rebase origin/main`; on conflict emits JSON listing conflicted files and any open issues whose body/comments substring-match those file paths (over-inclusive on purpose).
-- **open-pr.sh** `<branch> <issue-number> <followup-issue-numbers...>` → pushes (with `--force-with-lease` if branch was rebased), opens a PR via `gh pr create` with a body beginning `Closes #<issue-number>`; emits PR number. `--dry-run` prints the body without pushing and rejects the removed keep-open override.
+- **open-pr.sh** `<branch> <issue-number> <followup-issue-numbers...>` → validates the issue's discovery marker and implementation/approval state, requires nonempty discovery/PRD/demo and selected/skipped reviewer disposition notes, then pushes (with `--force-with-lease` if branch was rebased) and opens a PR via `gh pr create` with a body beginning `Closes #<issue-number>`; emits PR number. `--dry-run` prints the body without pushing and rejects the removed keep-open override.
 - **file-followup.sh** `<title> <body-path> <labels...>` → `gh issue create`; emits issue number. `--dry-run` prints the title/body/labels.
 - **comment-on-issue.sh** `<issue-number> <body-path>` → `gh issue comment`. `--dry-run` prints the comment.
 - **watch-ci.sh** `<pr-number>` → blocks with internal `sleep` calls per cadence below; exits when checks settle. Stdout: `OK` or `FAIL <check-name>`. **Idempotent across sessions:** on start, queries `gh pr checks` first; if no checks are pending, exits immediately with the current rollup status (no sleep). This makes re-invocation while a prior session's CI is mid-run safe — the new session walks straight into the right phase via the phase-detection table rather than racing a stale watch. There is no inter-session lock: GitHub is the single source of truth, multiple agents querying it concurrently is harmless.

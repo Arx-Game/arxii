@@ -6,29 +6,37 @@ compatibility: polytoken-only
 
 # Brainstorming Ideas Into Designs
 
-Turn ideas into fully formed designs and specs through collaborative dialogue,
-then post the spec to the **GitHub issue body** for review. This is the design
-gate that prevents the failure mode of building the wrong thing: no code is
-written until a design has been presented and approved.
+Turn ideas into fully formed product briefs/PRDs and technical designs through
+collaborative dialogue, then post the approved material to the **GitHub issue body**
+for review. This is the design gate that prevents building the wrong thing: for
+standard/heavyweight work, no technical implementation begins until the
+stakeholder has reviewed the product direction and a member has approved the
+technical spec.
 
-Start by understanding the current project context, then ask questions one at a
-time to refine the idea. Once you understand what you're building, present the
-design and get user approval, then post it to the issue and **exit** — a member
-must apply `spec:approved` before implementation begins.
+Start by understanding the current project context, then ask focused questions one
+at a time. Brainstorm with the stakeholder rather than extracting requirements into
+an agent-owned answer: present options, consequences, concrete scenarios, and (for
+visual/high-risk work) competing demo directions or screenshot variants. The
+stakeholder supplies taste, priorities, and product decisions; the agent
+facilitates, expands scenarios, records provenance, and maintains the PRD.
 
 <HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or
-take any implementation action until you have presented a design and the user
-has approved it. This applies to EVERY project regardless of perceived
-simplicity.
+For standard/heavyweight work, do NOT invoke any implementation skill, write code,
+scaffold a project, or take implementation action until the collaborative product
+brief/PRD and required demo direction have been reviewed by the stakeholder and
+the technical spec has passed the member-only approval gate. A clearly bounded
+issue may use the issue-to-merged-pr workflow's explicit lightweight marker after
+its visible assessment; that exception must not be inferred from a label alone.
 </HARD-GATE>
 
-## Anti-Pattern: "This Is Too Simple To Need A Design"
+## Anti-Pattern: "This Is Too Simple To Need An Assessment"
 
-Every project goes through this process. A todo list, a single-function utility,
-a config change — all of them. "Simple" projects are where unexamined
-assumptions cause the most wasted work. The design can be short (a few sentences
-for truly simple projects), but you MUST present it and get approval.
+Every project gets a quick visible discovery assessment. A clearly bounded todo,
+single-function utility, or config change may then use the lightweight marker and
+avoid a full collaborative PRD. "Simple" labels are only candidates: if the
+assessment finds an outcome-changing assumption, meaningful user impact, or risk,
+move to the standard/heavyweight lane. Never use simplicity as permission to make
+an unrecorded product decision.
 
 ## Where the spec lives
 
@@ -36,8 +44,11 @@ for truly simple projects), but you MUST present it and get approval.
 `<!-- spec:end -->` markers — never as a committed `docs/superpowers/` file.
 This is project convention (ADR-0020, reflected in `docs/spec-template.md`):
 GitHub-as-truth, no on-disk workflow state, review happens where the issue is.
-Preserve the original problem statement above the markers; write the spec
-between them via `gh issue edit <N> --body-file`.
+Preserve the original problem statement and the visible Discovery assessment
+above the markers; keep the single `<!-- discovery:lane=...;state=... -->` marker
+there too. Write or revise only the spec between the spec markers via
+`gh issue edit <N> --body-file`, so a spec rewrite cannot erase the discovery
+state.
 
 This is a **deliberate alteration** of the upstream Superpowers brainstorming
 skill, which writes specs to `docs/superpowers/specs/`. Do not do that.
@@ -49,11 +60,20 @@ You MUST work through these items in order:
 1. **Explore project context** — check files, docs, recent commits, `docs/adr/`,
    `AGENT_GLOSSARY_MAP.md` for canonical terms.
 2. **Ask clarifying questions** — one at a time, understand
-   purpose/constraints/success criteria.
-3. **Propose 2-3 approaches** — with trade-offs and your recommendation.
-4. **Present design** — in sections scaled to their complexity, get user
+   purpose/constraints/success criteria and identify the decision-maker.
+3. **Build the product brief/PRD together** — state users, outcome, success
+   signal, non-goals, provenance, assumptions, options, consequences, and
+   concrete scenarios or state transitions. Mark observations, proposals, and
+   ratified decisions separately.
+4. **Compare concrete directions** — for visual/high-risk work, create at least
+   two low-cost demo directions or screenshot variants and ask the stakeholder to
+   choose or amend one; for nonvisual work, compare traces, payloads, or state
+   walkthroughs.
+5. **Propose 2-3 technical approaches** — with trade-offs and your recommendation,
+   only after product direction is settled.
+6. **Present design** — in sections scaled to their complexity, get user
    approval after each section.
-5. **Run the `verify-against-code` pass** — for every new surface the design
+7. **Run the `verify-against-code` pass** — for every new surface the design
    proposes, state its **role** (what it lets someone express), then verify
    against code (not docs/summaries) and label it `[BUILT & WIRED]` /
    `[BUILT, NOT WIRED]` / `[ABSENT]` with file:line evidence. If the design
@@ -92,7 +112,9 @@ You MUST work through these items in order:
 - Prefer multiple choice questions when possible, but open-ended is fine too.
 - Only one question per message — if a topic needs more exploration, break it
   into multiple questions.
-- Focus on understanding: purpose, constraints, success criteria.
+- Focus on understanding: purpose, constraints, success criteria, stakeholder taste,
+  priorities, and decision authority. Keep the product conversation separate from
+  the later engineering design.
 
 **Exploring approaches:**
 
@@ -168,10 +190,12 @@ Fix any issues inline. No need to re-review — just fix and move on.
 
 This is the exit gate. After the spec is written to the issue and self-reviewed:
 
-1. `gh issue edit <N> --remove-label status:spec-draft --add-label status:spec-review`.
-2. Post a comment that @-mentions the review target (default `@TehomCD`;
+1. Keep the completed discovery marker and visible PRD assessment outside the
+   spec markers; validate them with `validate-discovery.sh`.
+2. `gh issue edit <N> --remove-label status:spec-draft --add-label status:spec-review`.
+3. Post a comment that @-mentions the review target (default `@TehomCD`;
    configurable to a `@Arx-Game/<team>` handle) and links the spec section.
-3. **Exit.** Spec review is async and on a human. Do NOT proceed to plan or
+4. **Exit.** Spec review is async and on a human. Do NOT proceed to plan or
    implementation, and **do NOT apply `spec:approved`** — only a member does
    that.
 

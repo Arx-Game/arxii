@@ -21,6 +21,42 @@ decision that already constrains this work.
 One or two paragraphs: the problem, who has it, and what "done" looks like in
 player- or staff-facing terms. State the outcome, not the implementation.
 
+### Product brief / PRD (collaborative, stakeholder-owned)
+
+Write this section with the stakeholder before the technical design. Keep product
+outcomes and taste separate from implementation choices. Record observations,
+proposals, and ratified decisions with provenance.
+
+- Users / affected people: <who benefits or is affected>
+- Desired outcome: <what changes for them>
+- Success signal: <how we know it worked>
+- Non-goals: <what this does not promise>
+- Stakeholder provenance: <reporter, affected user, implementer, decision-maker>
+
+Public issue and PR artifacts must record roles and decision authority without
+exposing private player identity, IC/OOC details, or sensitive stakeholder context.
+Use an approved pseudonym or role where needed. Keep private details in an
+approved private channel and include only a redacted reference in the public
+artifact.
+
+- Outcome-changing assumptions: <assumption and consequence if wrong>
+- Options and consequences: <1–3 directions discussed together>
+- Concrete scenarios / state transitions: <examples that test the shape>
+- Ratified product decisions: <choices made by the stakeholder>
+
+For visual or high-risk work, show at least two low-cost demo directions or
+screenshot variants before technical approval. The stakeholder chooses, rejects,
+or amends a direction in chat. Republish the artifact and fold the ruling into
+this section. For nonvisual work, use concrete traces, payloads, or state
+walkthroughs instead of forcing screenshots.
+
+### Technical design
+
+Only after the product brief is settled, describe the implementation architecture,
+interfaces, data shape, and test seams below. Stakeholders are not expected to
+choose file paths or internal abstractions unless those choices change a product
+consequence.
+
 ### Walkthrough (required for anything player- or staff-facing)
 
 Link the demo page (see the `demoing-a-feature` skill), then list its screens in
@@ -88,7 +124,7 @@ the spec isn't finished.
 |---|---|---|
 | `<surface>` | <issue / header comment / ADR> | <concrete consequence, or "nothing — superseded by X"> |
 
-### Design
+### Implementation design
 
 The spec body: models, service functions, actions, flows, API/UI surfaces, and how
 they fit the existing architecture. Reference the canonical terms and the relevant

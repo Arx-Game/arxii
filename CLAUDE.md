@@ -176,8 +176,18 @@ drafts the spec, flags the team, then **stops** until a human org member approve
   members can apply labels, so this label *is* the authorization boundary.
   **Agents MUST NEVER apply `spec:approved`** — hold the PAT but self-restrain and
   only poll for it.
-- `status:implementing` — approved; building toward a PR (normal code review)
+- `status:implementing` — approved; building toward a PR (normal code review).
+  The only exception is a clearly bounded issue carrying exactly one complete
+  `<!-- discovery:lane=lightweight;state=complete -->` marker outside the spec
+  markers; the validator and issue-to-merged-pr skill must accept no other
+  marker-based bypass.
 
+Discovery markers record the collaborative product gate before the technical spec:
+`lane=lightweight|standard|heavyweight` and
+`state=complete|awaiting-stakeholder`. They stay outside
+`<!-- spec:start -->` / `<!-- spec:end -->` so spec rewrites cannot erase or
+rewrite discovery state. Standard/heavyweight work still requires
+`spec:approved` after the stakeholder-owned PRD and technical spec are complete.
 Comments never gate (anyone can comment on a public issue). Labels + assignment +
 close state also drive the **Project board** automatically (see
 `docs/project-board-automation.md`) — change the label/assignment; don't hand-move
