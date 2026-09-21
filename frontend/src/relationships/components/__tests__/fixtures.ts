@@ -92,6 +92,17 @@ export const TYPES: RelationshipType[] = [
     display_order: 2,
   },
   {
+    id: 9,
+    name: 'Enemy',
+    slug: 'enemy',
+    description: 'Open hostility. Opens antagonism when mutual.',
+    family: 'contest',
+    valence: 'hostile',
+    counterpart: null,
+    counterpart_name: 'Enemy',
+    display_order: 3,
+  },
+  {
     id: 11,
     name: 'Mentor',
     slug: 'mentor',

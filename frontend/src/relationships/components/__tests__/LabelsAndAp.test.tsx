@@ -167,11 +167,34 @@ describe('LabelsAndAp', () => {
     renderBlock();
     fireEvent.click(within(labelRow('Lover')).getByRole('button', { name: 'Change' }));
     const select = screen.getByRole('combobox', { name: 'Lover becomes' });
+    // Enemy IS in the catalogue and IS held open on this side, so its absence is the
+    // mechanism under test: without `heldTypeIds` reaching the block, Contest would be
+    // a group here and shifting Lover into the Enemy they already hold would earn a
+    // server refusal the player should never have been able to ask for.
+    expect(within(select).queryByRole('option', { name: 'Enemy' })).not.toBeInTheDocument();
     const groups = within(select).getAllByRole('group');
     expect(groups.map((group) => group.getAttribute('label'))).toEqual(['Company', 'Teaching']);
-    // Lover is this label's own type and Enemy is held open, so neither is on offer;
-    // Friend has ended, so it is.
+    // Lover is this label's own type; Friend has ended, so it is on offer again.
     expect(within(select).getByRole('option', { name: 'Friend' })).toBeInTheDocument();
     expect(within(select).queryByRole('option', { name: 'Lover' })).not.toBeInTheDocument();
+  });
+
+  it('shows the owner the note they left on a label, under that label', () => {
+    const tie = makeTie({
+      labels: [makeLabel({ id: 1, replaced_type_name: 'Friend', note: 'He waited at the gate.' })],
+    });
+    renderBlock(tie);
+    const lover = labelRow('Lover');
+    expect(within(lover).getByText('He waited at the gate.')).toBeInTheDocument();
+    expect(within(lover).getByText('Replaced Friend')).toBeInTheDocument();
+  });
+
+  it('draws nothing where there is no note, and never labels the field', () => {
+    // Every other audience receives `note` as the empty string (the server gates it to
+    // owner and staff), so an empty note must leave no trace at all.
+    renderBlock();
+    expect(screen.queryByText(/note/i)).not.toBeInTheDocument();
+    const lover = labelRow('Lover');
+    expect(within(lover).getByText('Replaced Friend')).toBeInTheDocument();
   });
 });

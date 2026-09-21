@@ -56,7 +56,8 @@ function bandText(item: TieStreamItem): string | null {
 
 export interface TieStreamProps {
   tieId: number;
-  ownerName: string;
+  /** The side owner's name, or null when the page could not confirm whose side it is. */
+  ownerName: string | null;
   otherName: string;
   /** CharacterSheet pks, which is what a stream item's `author_id` is. */
   ownerSheetId: number;
@@ -73,10 +74,12 @@ export function TieStream({
   const [slice, setSlice] = useState<Slice>('all');
   const { data: items = [] } = useTieStream(tieId);
 
+  // A "By " pill with nobody after it is worse than no pill: the owner's name is only
+  // known when the page confirmed whose side this is, so that one is drawn or vanishes.
   const pills: Array<{ value: Slice; label: string }> = [
     { value: 'all', label: 'Everything' },
     { value: 'capstones', label: 'Capstones' },
-    { value: 'owner', label: `By ${firstName(ownerName)}` },
+    ...(ownerName ? [{ value: 'owner' as Slice, label: `By ${firstName(ownerName)}` }] : []),
     { value: 'other', label: `By ${firstName(otherName)}` },
     { value: 'scenes', label: 'Scenes' },
   ];

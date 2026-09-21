@@ -19,6 +19,7 @@ import { useState } from 'react';
 import { PillButton } from '@/journals/components/Pill';
 import { Eyebrow, QuietDoor } from '@/character_sheets/components/sheet/primitives';
 import { useDeclareLabel, useRelationshipTypes } from '@/relationships/queries';
+import { hasTieTarget } from '../api';
 import type { Awareness, RelationshipType, TieTargetRef } from '../api';
 import { FAMILIES } from './families';
 
@@ -46,7 +47,7 @@ export function TypePicker({ target, heldTypeIds = [], onDeclared }: TypePickerP
 
   const held = new Set(heldTypeIds);
   const offered = types.filter((type) => !held.has(type.id));
-  const canWrite = target.target_persona_id != null || target.target_companion_id != null;
+  const canWrite = hasTieTarget(target);
 
   function submit() {
     if (!pending || !canWrite) return;

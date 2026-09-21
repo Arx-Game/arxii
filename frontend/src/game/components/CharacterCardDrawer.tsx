@@ -41,9 +41,9 @@ export interface CharacterCardDrawerProps {
  * not the person in the drawer — carrying the clicked persona and its name so the page
  * can print who the tie is toward and the picker opens on the right person. The roster
  * match still gates the link, so a disguise or a temporary persona offers no door at
- * all. It replaced "Record an impression", whose writeup dialog went with the writeups. "Write a journal" (#2160) opens
- * `JournalComposerDialog` pre-tagged with the resolved character's name once `entry`
- * resolves. "Message the player" (#2160) opens
+ * all. It replaced "Record an impression", whose writeup dialog went with the writeups.
+ * "Write a journal" (#2160) opens `JournalComposerDialog` pre-tagged with the resolved
+ * character's name once `entry` resolves. "Message the player" (#2160) opens
  * `MessagePlayerDialog` - an OOC message to whoever currently plays this
  * character, pre-addressed to their live tenure
  * (`entry.tenures.find(t => t.end_date === null)`) - hidden when there's no

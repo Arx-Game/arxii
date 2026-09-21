@@ -27,7 +27,6 @@ export type TieThread = components['schemas']['TieThread'];
 export type DepthBreakdown = components['schemas']['DepthBreakdown'];
 export type RelationshipType = components['schemas']['RelationshipType'];
 export type TieWriteResult = components['schemas']['TieWriteResult'];
-export type TieAudience = components['schemas']['AudienceEnum'];
 export type Awareness = components['schemas']['AwarenessEnum'];
 export type RelationshipTypeFamily = components['schemas']['FamilyEnum'];
 

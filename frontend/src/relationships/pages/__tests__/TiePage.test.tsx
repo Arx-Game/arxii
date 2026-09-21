@@ -32,11 +32,11 @@ vi.mock('@/relationships/queries', () => ({
   useTargetPersonaId: () => ({ data: 91 }),
 }));
 
+const useRosterEntryQuery = vi.fn();
+const useMyRosterEntriesQuery = vi.fn();
 vi.mock('@/roster/queries', () => ({
-  useRosterEntryQuery: () => ({
-    data: { id: 9, character: { id: 5, name: 'Ilsavet du Verane' }, fullname: 'Ilsavet du Verane' },
-    isLoading: false,
-  }),
+  useRosterEntryQuery: (id: number) => useRosterEntryQuery(id),
+  useMyRosterEntriesQuery: () => useMyRosterEntriesQuery(),
 }));
 
 const useCharacterSheetQuery = vi.fn();
@@ -72,6 +72,11 @@ beforeEach(() => {
   useTieStream.mockReturnValue({ data: STREAM, isLoading: false, error: null });
   useCharacterSheetQuery.mockReturnValue({ data: { plate_ink: 'verdigris' } });
   usePersonaSearch.mockReturnValue({ results: [], isFetching: false });
+  useRosterEntryQuery.mockReturnValue({
+    data: { id: 9, character: { id: 5, name: 'Ilsavet du Verane' }, fullname: 'Ilsavet du Verane' },
+    isLoading: false,
+  });
+  useMyRosterEntriesQuery.mockReturnValue({ data: [{ id: 9 }] });
 });
 
 describe('TiePage', () => {
@@ -208,5 +213,25 @@ describe('TiePage', () => {
     renderPage('new');
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     expect(screen.queryByText('Declare a tie')).not.toBeInTheDocument();
+  });
+
+  // The route's `:id` and `:tieId` are independent, so a hand-typed URL could otherwise
+  // print one character's name above another character's tie — the same shape as C2.
+  it('will not name a route character who does not own the side', () => {
+    useRosterEntryQuery.mockReturnValue({
+      data: { id: 9, character: { id: 404, name: 'Someone Else' }, fullname: 'Someone Else' },
+      isLoading: false,
+    });
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'Corvin Ashe' })).toBeInTheDocument();
+    expect(screen.queryByText('Someone Else and')).not.toBeInTheDocument();
+    // And the stream's "By {owner}" pill vanishes rather than reading "By ".
+    expect(screen.queryByRole('button', { name: /^By / })).toHaveTextContent('By Corvin');
+  });
+
+  it('will not name a route character the viewer does not play on the declare page', () => {
+    useMyRosterEntriesQuery.mockReturnValue({ data: [{ id: 1234 }] });
+    renderPage('new');
+    expect(screen.queryByText('Ilsavet du Verane and')).not.toBeInTheDocument();
   });
 });

@@ -25,7 +25,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 
 import '@/character_sheets/sheet.css';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
-import { useRosterEntryQuery } from '@/roster/queries';
+import { useMyRosterEntriesQuery, useRosterEntryQuery } from '@/roster/queries';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { Eyebrow, Heading, Stack } from '@/character_sheets/components/sheet/primitives';
 import { useTargetPersonaId, useTie } from '@/relationships/queries';
@@ -43,7 +43,7 @@ export function TiePage() {
   const relationshipId = isNew ? null : Number(tieId);
 
   const { data: entry } = useRosterEntryQuery(entryId);
-  const ownerName = entry?.fullname || entry?.character.name || null;
+  const routeName = entry?.fullname || entry?.character.name || null;
 
   // The ink is a token set on the ROOT: `--plate-ground` and `--plate-accent` are
   // declared only by `.refsheet[data-ink=...]` and read by every part of the plate, so
@@ -55,7 +55,14 @@ export function TiePage() {
   const { data: tie, isLoading, error } = useTie(relationshipId);
   const { data: targetPersonaId = null } = useTargetPersonaId(tie?.other_sheet_id);
 
-  if (isNew) return <DeclareTie ownerName={ownerName} ink={ink} />;
+  // The route's `:id` and the tie's `:tieId` are independent, so a hand-typed URL can put
+  // anyone's name above someone else's tie. The eyebrow is drawn only when the route's
+  // character really is the side's owner — the same shape as C2: a page must never name a
+  // side other than the one it is showing.
+  const routeOwnsSide = entry != null && tie != null && entry.character.id === tie.source;
+  const ownerName = routeOwnsSide ? routeName : null;
+
+  if (isNew) return <DeclareTie routeEntryId={entryId} routeName={routeName} ink={ink} />;
 
   if (error instanceof TieNotFoundError) {
     return <p className="p-4">Tie not found.</p>;
@@ -82,7 +89,7 @@ export function TiePage() {
           {tie.other_sheet_id != null && (
             <TieStream
               tieId={tie.id}
-              ownerName={ownerName ?? ''}
+              ownerName={ownerName}
               otherName={tie.target_name}
               ownerSheetId={tie.source}
               otherSheetId={tie.other_sheet_id}
@@ -106,9 +113,24 @@ export function TiePage() {
  * from the resolved match (with `?persona=` breaking a tie between two characters of the
  * same name), never from the query string alone. So there is no arrangement in which
  * Declare writes toward somebody the player was never shown.
+ *
+ * The "X and" eyebrow names the OTHER end of the write, so it is drawn only when the
+ * route's character is one the caller actually plays — the declare lands on the caller's
+ * own side whatever the URL says, and a hand-typed `:id` must not put a stranger's name
+ * on a sentence about the caller.
  */
-function DeclareTie({ ownerName, ink }: { ownerName: string | null; ink: string }) {
+function DeclareTie({
+  routeEntryId,
+  routeName,
+  ink,
+}: {
+  routeEntryId: number;
+  routeName: string | null;
+  ink: string;
+}) {
   const [params] = useSearchParams();
+  const { data: myEntries } = useMyRosterEntriesQuery();
+  const ownerName = myEntries?.some((mine) => mine.id === routeEntryId) === true ? routeName : null;
   const preselectedId = params.get('persona') ? Number(params.get('persona')) : null;
   const [term, setTerm] = useState(params.get('name') ?? '');
   const { results } = usePersonaSearch(term);

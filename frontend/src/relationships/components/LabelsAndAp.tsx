@@ -131,6 +131,12 @@ export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
               }
               gloss={label.replaced_type_name ? `Replaced ${label.replaced_type_name}` : undefined}
             >
+              {/* The note the owner left when they changed this label into what it is.
+                  The server ships `note` to the owner and staff only, and this whole
+                  block renders only on the viewer's own side, so it is read exactly
+                  where it was written and nowhere else. Bare text: it is the player's
+                  own sentence, not a field the interface is labelling. */}
+              {label.note && <p className="refsheet-entry-gloss">{label.note}</p>}
               {!former && (
                 <div className="refsheet-doors">
                   <QuietDoor onClick={() => setShifting(label)}>Change</QuietDoor>
@@ -160,7 +166,13 @@ export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
         })}
       </Entries>
 
-      {shifting && <RelationshipShift label={shifting} onDone={() => setShifting(null)} />}
+      {shifting && (
+        <RelationshipShift
+          label={shifting}
+          heldTypeIds={open.map((label) => label.type)}
+          onDone={() => setShifting(null)}
+        />
+      )}
 
       <div className="refsheet-doors">
         <QuietDoor expanded={picking} onClick={() => setPicking((was) => !was)}>

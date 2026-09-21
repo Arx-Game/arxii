@@ -30,7 +30,18 @@ export const relationshipsKeys = {
   types: () => [...relationshipsKeys.all, 'types'] as const,
 };
 
-/** The sheet query's key prefix (`character_sheets/queries.ts`) — a tie write moves a card on it. */
+/**
+ * The sheet query's key prefix (`character_sheets/queries.ts`) — a tie write moves a card
+ * on the cast, so every write marks it stale.
+ *
+ * Marks, but does not refetch (`refetchType: 'none'`). The tie page reads the owner's
+ * sheet too, for the one `plate_ink` token the whole plate is painted in, so that query
+ * is ACTIVE while the player is pressing these doors — and a plain invalidate would pull
+ * the entire sheet payload down again on every Keep, Declare, End and awareness step, for
+ * a string no write can change. Stale-without-refetch gets the cast right the moment the
+ * player goes back to it (a stale query refetches on mount) and costs nothing while they
+ * are here.
+ */
 const CHARACTER_SHEETS_KEY = ['character-sheets'] as const;
 
 /** One side of a tie. `relationshipId` null until a route param resolves. */
@@ -83,7 +94,7 @@ function useTieWriteMutation<TBody>(mutationFn: (body: TBody) => Promise<TieWrit
     mutationFn,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: relationshipsKeys.all }).catch(() => {});
-      qc.invalidateQueries({ queryKey: CHARACTER_SHEETS_KEY }).catch(() => {});
+      qc.invalidateQueries({ queryKey: CHARACTER_SHEETS_KEY, refetchType: 'none' }).catch(() => {});
     },
   });
 }
