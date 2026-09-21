@@ -9,6 +9,7 @@ from django.test import TestCase
 from commands.exceptions import CommandError
 from commands.weave import CmdWeaveThread
 from world.character_sheets.factories import CharacterSheetFactory
+from world.journals.factories import JournalEntryFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
@@ -20,8 +21,8 @@ from world.magic.models import PendingRitualEffect, Thread
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipCapstoneFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
 from world.traits.factories import TraitFactory
 
@@ -99,22 +100,24 @@ class CmdWeaveThreadTests(TestCase):
 
 
 class CmdWeaveThreadRelationshipTrackTests(TestCase):
-    """``weave track=<partner>/<track name>`` — RELATIONSHIP_TRACK anchor (#2033)."""
+    """``weave track=<partner>/<type name>`` — RELATIONSHIP_TRACK anchor (#2033, #3957)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.partner_sheet = CharacterSheetFactory()
         cls.resonance = ResonanceFactory(name="Embers")
-        cls.track = RelationshipTrackFactory(name="Trust")
+        cls.rel_type = RelationshipTypeFactory(name="Trust")
         cls.relationship = CharacterRelationshipFactory(source=cls.sheet, target=cls.partner_sheet)
-        cls.progress = RelationshipTrackProgressFactory(
-            relationship=cls.relationship, track=cls.track, developed_points=10
-        )
+        # tier=2 clears the default RelationshipGrowthConfig.thread_min_tier gate.
+        cls.relationship.tier = 2
+        cls.relationship.invested_depth = 10
+        cls.relationship.save()
+        RelationshipLabelFactory(relationship=cls.relationship, type=cls.rel_type)
         unlock = ThreadWeavingUnlockFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             unlock_trait=None,
-            unlock_track=cls.track,
+            unlock_type=cls.rel_type,
         )
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=unlock, xp_spent=100)
         cls.weaving_ritual = WeavingCeremonyFactory()
@@ -139,7 +142,7 @@ class CmdWeaveThreadRelationshipTrackTests(TestCase):
                 owner=self.sheet,
                 resonance=self.resonance,
                 target_kind=TargetKind.RELATIONSHIP_TRACK,
-                target_relationship_track=self.progress,
+                target_relationship=self.relationship,
             ).exists()
         )
         self.character.msg.assert_called()
@@ -162,25 +165,30 @@ class CmdWeaveThreadRelationshipTrackTests(TestCase):
 
 
 class CmdWeaveThreadRelationshipCapstoneTests(TestCase):
-    """``weave capstone=<id or title>`` — RELATIONSHIP_CAPSTONE anchor (#2033)."""
+    """``weave capstone=<id or title>`` — RELATIONSHIP_CAPSTONE anchor (#2033, #3957)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.partner_sheet = CharacterSheetFactory()
         cls.resonance = ResonanceFactory(name="Embers")
-        cls.track = RelationshipTrackFactory(name="Trust")
+        cls.rel_type = RelationshipTypeFactory(name="Trust")
         cls.relationship = CharacterRelationshipFactory(source=cls.sheet, target=cls.partner_sheet)
+        # A non-ritual capstone's title comes from its journal_entry — RelationshipCapstone
+        # carries no authored title column anymore (#3957).
         cls.capstone = RelationshipCapstoneFactory(
             relationship=cls.relationship,
-            author=cls.sheet,
-            track=cls.track,
-            title="TheVow",
+            tier_claimed=1,
+            xp_spent=10,
+            is_ritual_capstone=False,
+            journal_entry=JournalEntryFactory(author=cls.sheet, title="TheVow"),
         )
+        # RELATIONSHIP_CAPSTONE weaving inherits from any RELATIONSHIP_TRACK unlock —
+        # no per-type label needed on the relationship (#3957).
         unlock = ThreadWeavingUnlockFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             unlock_trait=None,
-            unlock_track=cls.track,
+            unlock_type=cls.rel_type,
         )
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=unlock, xp_spent=100)
         cls.weaving_ritual = WeavingCeremonyFactory()

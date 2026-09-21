@@ -347,10 +347,12 @@ def _anchor_label_for(thread: Thread) -> str:
     if kind == TargetKind.FACET and thread.target_facet is not None:
         return thread.target_facet.name
     if kind == TargetKind.RELATIONSHIP_TRACK:
-        track = thread.target_relationship_track
-        if track is not None:
-            partner_name = track.relationship.target_name
-            return f"bond with {partner_name} ({track.track.name})"
+        side = thread.target_relationship
+        if side is not None:
+            partner_name = side.target_name
+            label = side.open_labels().first()
+            label_desc = label.type.name if label is not None else "unlabeled"
+            return f"bond with {partner_name} ({label_desc})"
     if kind == TargetKind.RELATIONSHIP_CAPSTONE:
         cap = thread.target_capstone
         if cap is not None:

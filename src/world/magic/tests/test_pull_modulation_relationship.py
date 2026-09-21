@@ -1,4 +1,4 @@
-"""Tests for RELATIONSHIP_TRACK pull modulation (#1849).
+"""Tests for RELATIONSHIP_TRACK pull modulation (#1849, #3957).
 
 Mirrors world/magic/tests/test_pull_modulation_passthrough.py's structure and
 world/magic/services/pull_modulation_court.py's shape, but this rule has no
@@ -20,47 +20,37 @@ from world.magic.services.pull_modulation_relationship import (
     relationship_bond_modulation,
 )
 from world.magic.services.resonance import resolve_pull_effects
-from world.relationships.constants import TrackSign
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
+from world.relationships.factories import CharacterRelationshipFactory
 
 
-def _relationship_track_thread(*, owner, threaded_sheet, developed_points: int = 0):
-    """Build a RELATIONSHIP_TRACK thread owned by `owner`, anchored to a relationship
-    where `owner` is source and `threaded_sheet` is target."""
-    relationship = CharacterRelationshipFactory(
-        source=owner, target=threaded_sheet, is_active=True, is_pending=False
-    )
-    progress = RelationshipTrackProgressFactory(
-        relationship=relationship, developed_points=developed_points
-    )
+def _relationship_track_thread(*, owner, threaded_sheet, invested_depth: int = 0):
+    """Build a RELATIONSHIP_TRACK thread owned by `owner`, anchored to `owner`'s
+    own side of a tie toward `threaded_sheet`, with the given invested_depth."""
+    relationship = CharacterRelationshipFactory(source=owner, target=threaded_sheet, is_active=True)
+    if invested_depth:
+        relationship.invested_depth = invested_depth
+        relationship.save()
     return ThreadFactory(
         owner=owner,
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        target_relationship_track=progress,
+        target_relationship=relationship,
         target_trait=None,
         level=10,
     )
 
 
-def _bond_with_signed_investment(*, owner, threaded_sheet, pos: int = 0, neg: int = 0):
+def _bond_with_affection_conflict(*, owner, threaded_sheet, affection: int = 0, conflict: int = 0):
     """Build a RELATIONSHIP_TRACK thread anchored on an owner->threaded_sheet bond
-    carrying `pos` positive-track developed points and `neg` negative-track developed
-    points -- the owner's OWN bond magnitude the fraught/devotion terms key on."""
+    carrying `affection`/`conflict` gauges -- pair_depth() (the base term) is set to
+    affection+conflict (mirroring the old developed_absolute_value = pos+neg split);
+    min(affection, conflict) is what the fraught term keys on."""
     thread = _relationship_track_thread(
-        owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+        owner=owner, threaded_sheet=threaded_sheet, invested_depth=affection + conflict
     )
     bond = owner.relationships_as_source.get(target=threaded_sheet)
-    if pos:
-        RelationshipTrackProgressFactory(relationship=bond, developed_points=pos)
-    if neg:
-        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(
-            relationship=bond, track=negative_track, developed_points=neg
-        )
+    bond.affection = affection
+    bond.conflict = conflict
+    bond.save()
     return thread
 
 
@@ -71,13 +61,8 @@ class RelationshipBondModulationDirectTriggerTests(TestCase):
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=30
         )
-        # Owner's own bond to Y is the relationship _relationship_track_thread already
-        # created as the anchor (unique_relationship_pair forbids a second
-        # (owner, threaded_sheet) row) -- add a second track's progress to it.
-        bond_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond_relationship, developed_points=30)
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         ThreadPullEffectFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
@@ -95,18 +80,17 @@ class RelationshipBondModulationDirectTriggerTests(TestCase):
         flat_rows = [r for r in resolved if r.kind == EffectKind.FLAT_BONUS]
         self.assertEqual(len(flat_rows), 1)
         # level=10 -> multiplier=1; base_scaled = 4*1 = 4.
-        # S = 1*30 = 30; bonus = round(20*30/(30+30)) = round(10.0) = 10.
+        # S = 1*30 = 30 (pair_depth, no reverse side); bonus = round(20*30/60) = 10.
         # scaled_value = 4 + 10 = 14.
         self.assertEqual(flat_rows[0].scaled_value, 14)
 
     def test_no_owner_to_threaded_person_relationship_leaves_unchanged(self) -> None:
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
-        # thread anchors owner's relationship-track thread, but there is no SEPARATE
-        # owner->threaded_sheet CharacterRelationship row with developed points beyond
-        # the one created for the anchor itself (developed_points=0 by default).
+        # thread anchors owner's own side, but that side has no invested_depth
+        # beyond the default 0.
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=0
         )
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         ThreadPullEffectFactory(
@@ -123,7 +107,7 @@ class RelationshipBondModulationDirectTriggerTests(TestCase):
         )
 
         flat_rows = [r for r in resolved if r.kind == EffectKind.FLAT_BONUS]
-        # developed_points=0 -> S=0 -> _soft_cap returns 0 -> bonus 0 -> unchanged.
+        # pair_depth=0 -> S=0 -> _soft_cap returns 0 -> bonus 0 -> unchanged.
         self.assertEqual(flat_rows[0].scaled_value, 4)
 
 
@@ -134,24 +118,16 @@ class RelationshipBondModulationIndirectTriggerTests(TestCase):
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=30
         )
-        # Owner's own bond to Y: 30 developed points.
-        bond_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond_relationship, developed_points=30)
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
-        # X (a third party) is net-negative toward Y.
+        # X (a third party) is hostile toward Y: conflict > affection.
         x_sheet = CharacterSheetFactory()
-        from world.relationships.constants import TrackSign
-        from world.relationships.factories import RelationshipTrackFactory
-
         hostile_relationship = CharacterRelationshipFactory(
-            source=x_sheet, target=threaded_sheet, is_active=True, is_pending=False
+            source=x_sheet, target=threaded_sheet, is_active=True
         )
-        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(
-            relationship=hostile_relationship, track=negative_track, developed_points=10
-        )
+        hostile_relationship.conflict = 10
+        hostile_relationship.save()
         ThreadPullEffectFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=thread.resonance,
@@ -165,7 +141,7 @@ class RelationshipBondModulationIndirectTriggerTests(TestCase):
 
         flat_rows = [r for r in resolved if r.kind == EffectKind.FLAT_BONUS]
         # Same magnitude as the direct-trigger test: scale is ALWAYS the owner's
-        # bond to Y (30 points), never X's hostility magnitude (10 points).
+        # bond to Y (30 depth), never X's conflict magnitude (10).
         self.assertEqual(flat_rows[0].scaled_value, 14)
 
     def test_indirect_trigger_magnitude_unaffected_by_x_hostility_size(self) -> None:
@@ -174,23 +150,16 @@ class RelationshipBondModulationIndirectTriggerTests(TestCase):
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=30
         )
-        bond_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond_relationship, developed_points=30)
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         x_sheet = CharacterSheetFactory()
-        from world.relationships.constants import TrackSign
-        from world.relationships.factories import RelationshipTrackFactory
-
         hostile_relationship = CharacterRelationshipFactory(
-            source=x_sheet, target=threaded_sheet, is_active=True, is_pending=False
+            source=x_sheet, target=threaded_sheet, is_active=True
         )
-        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
-        # Very high hostility magnitude (1000 points) -- bonus must still be 14.
-        RelationshipTrackProgressFactory(
-            relationship=hostile_relationship, track=negative_track, developed_points=1000
-        )
+        # Very high hostility magnitude -- bonus must still be 14.
+        hostile_relationship.conflict = 1000
+        hostile_relationship.save()
         ThreadPullEffectFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=thread.resonance,
@@ -206,15 +175,13 @@ class RelationshipBondModulationIndirectTriggerTests(TestCase):
         self.assertEqual(flat_rows[0].scaled_value, 14)
 
     def test_non_hostile_third_party_leaves_pull_unchanged(self) -> None:
-        """X exists, has no relationship (or a positive one) toward Y, and isn't Y:
-        neither trigger condition holds -> no-op."""
+        """X exists, has no relationship (or a non-hostile one) toward Y, and isn't
+        Y: neither trigger condition holds -> no-op."""
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=30
         )
-        bond_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond_relationship, developed_points=30)
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         x_sheet = CharacterSheetFactory()  # no relationship to threaded_sheet at all
         ThreadPullEffectFactory(
@@ -232,23 +199,24 @@ class RelationshipBondModulationIndirectTriggerTests(TestCase):
         self.assertEqual(flat_rows[0].scaled_value, 4)
 
 
-class RelationshipBondModulationPendingInactiveTests(TestCase):
-    """Pending (never-consented) or broken-off relationships must not count."""
+class RelationshipBondModulationInactiveBondTests(TestCase):
+    """A frozen (is_active=False) side earns/triggers no reward (#3957 — replaces
+    the old never-consented "pending" gate; ties have no consent concept anymore)."""
 
-    def test_pending_owner_to_y_relationship_does_not_reward(self) -> None:
+    def test_inactive_owner_to_y_relationship_does_not_reward(self) -> None:
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=0
         )
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         # Owner->Y relationship is the anchor _relationship_track_thread already
         # created (unique_relationship_pair forbids a second row for this pair) --
-        # flip it to PENDING (never mutually consented) and add developed points.
-        pending_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        pending_relationship.is_pending = True
-        pending_relationship.save(update_fields=["is_pending"])
-        RelationshipTrackProgressFactory(relationship=pending_relationship, developed_points=30)
+        # freeze it and add depth; a frozen side earns no reward.
+        inactive_relationship = owner.relationships_as_source.get(target=threaded_sheet)
+        inactive_relationship.is_active = False
+        inactive_relationship.invested_depth = 30
+        inactive_relationship.save()
         ThreadPullEffectFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=thread.resonance,
@@ -269,23 +237,17 @@ class RelationshipBondModulationPendingInactiveTests(TestCase):
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=30
         )
-        bond_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond_relationship, developed_points=30)
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         x_sheet = CharacterSheetFactory()
-        from world.relationships.constants import TrackSign
-        from world.relationships.factories import RelationshipTrackFactory
 
         # X->Y relationship is hostile but INACTIVE (broken off) -- must not trigger.
         broken_off_relationship = CharacterRelationshipFactory(
-            source=x_sheet, target=threaded_sheet, is_active=False, is_pending=False
+            source=x_sheet, target=threaded_sheet, is_active=False
         )
-        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(
-            relationship=broken_off_relationship, track=negative_track, developed_points=10
-        )
+        broken_off_relationship.conflict = 10
+        broken_off_relationship.save()
         ThreadPullEffectFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=thread.resonance,
@@ -314,22 +276,15 @@ class RelationshipBondModulationNoResolutionPrivacyGateTests(TestCase):
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=30
         )
-        bond_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond_relationship, developed_points=30)
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         x_sheet = CharacterSheetFactory()
-        from world.relationships.constants import TrackSign
-        from world.relationships.factories import RelationshipTrackFactory
-
         hostile_relationship = CharacterRelationshipFactory(
-            source=x_sheet, target=threaded_sheet, is_active=True, is_pending=False
+            source=x_sheet, target=threaded_sheet, is_active=True
         )
-        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(
-            relationship=hostile_relationship, track=negative_track, developed_points=10
-        )
+        hostile_relationship.conflict = 10
+        hostile_relationship.save()
         ThreadPullEffectFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=thread.resonance,
@@ -361,10 +316,8 @@ class RelationshipTrackPassthroughTests(TestCase):
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
-            owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+            owner=owner, threaded_sheet=threaded_sheet, invested_depth=30
         )
-        bond_relationship = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond_relationship, developed_points=30)
         RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
         ThreadPullEffectFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
@@ -382,7 +335,7 @@ class RelationshipTrackPassthroughTests(TestCase):
 
 
 class RelationshipBondModulationFraughtDevotionTests(TestCase):
-    """Acceptance matrix for the fraught + devotion differential terms (#2034).
+    """Acceptance matrix for the fraught + devotion differential terms (#2034, #3957).
 
     All cases call ``relationship_bond_modulation`` directly (rather than through
     ``resolve_pull_effects``) so the assertions isolate the bond-investment math
@@ -394,45 +347,45 @@ class RelationshipBondModulationFraughtDevotionTests(TestCase):
     """
 
     def test_mixed_valence_out_earns_single_valence_same_total(self) -> None:
-        """Same developed_absolute_value (80) split two ways: bond A mixes 40
-        pos + 40 neg (fraught term fires); bond B is pure 80 pos (fraught term
+        """Same pair_depth (80) split two ways: bond A mixes 40 affection + 40
+        conflict (fraught term fires); bond B is pure 80 affection (fraught term
         is 0). Base + devotion terms are identical for both -- only the mixed
         bond's fraught bonus tips the total."""
         RelationshipBondPullTuning.objects.create(pk=1)
         owner_a = CharacterSheetFactory()
         target_a = CharacterSheetFactory()
-        thread_a = _bond_with_signed_investment(
-            owner=owner_a, threaded_sheet=target_a, pos=40, neg=40
+        thread_a = _bond_with_affection_conflict(
+            owner=owner_a, threaded_sheet=target_a, affection=40, conflict=40
         )
         owner_b = CharacterSheetFactory()
         target_b = CharacterSheetFactory()
-        thread_b = _bond_with_signed_investment(
-            owner=owner_b, threaded_sheet=target_b, pos=80, neg=0
+        thread_b = _bond_with_affection_conflict(
+            owner=owner_b, threaded_sheet=target_b, affection=80, conflict=0
         )
 
         total_a = relationship_bond_modulation(thread_a, target_a.character, None, base_scaled=0)
         total_b = relationship_bond_modulation(thread_b, target_b.character, None, base_scaled=0)
 
         # base: round(20*80/110) = 15; devotion: round(10*20/50) = 4 -- identical
-        # for both (same dav=80). fraught A: round(10*40/70) = 6; fraught B: 0.
+        # for both (same depth=80). fraught A: round(10*40/70) = 6; fraught B: 0.
         self.assertEqual(total_a, 15 + 6 + 4)
         self.assertEqual(total_b, 15 + 0 + 4)
         self.assertGreater(total_a, total_b)
 
     def test_beyond_threshold_depth_out_earns_at_threshold(self) -> None:
-        """A bond exactly at devotion_threshold (dav=60) gets no devotion bonus;
-        one 40 past it (dav=100) does, and the *total* gap between them exceeds
+        """A bond exactly at devotion_threshold (depth=60) gets no devotion bonus;
+        one 40 past it (depth=100) does, and the *total* gap between them exceeds
         what the base curve's own delta would give alone."""
         RelationshipBondPullTuning.objects.create(pk=1)
         owner_at = CharacterSheetFactory()
         target_at = CharacterSheetFactory()
-        thread_at_threshold = _bond_with_signed_investment(
-            owner=owner_at, threaded_sheet=target_at, pos=60, neg=0
+        thread_at_threshold = _bond_with_affection_conflict(
+            owner=owner_at, threaded_sheet=target_at, affection=60, conflict=0
         )
         owner_deep = CharacterSheetFactory()
         target_deep = CharacterSheetFactory()
-        thread_deep = _bond_with_signed_investment(
-            owner=owner_deep, threaded_sheet=target_deep, pos=100, neg=0
+        thread_deep = _bond_with_affection_conflict(
+            owner=owner_deep, threaded_sheet=target_deep, affection=100, conflict=0
         )
 
         total_at_threshold = relationship_bond_modulation(
@@ -451,14 +404,16 @@ class RelationshipBondModulationFraughtDevotionTests(TestCase):
         self.assertGreater(total_delta, base_curve_delta)
 
     def test_shallow_bond_unchanged_from_baseline(self) -> None:
-        """A shallow single-valence bond (10 pos) is far below both the fraught
-        (needs both signs) and devotion (needs dav>60) gates -- the function
-        must return exactly today's pre-change value: base_scaled + soft_cap
-        on the base term alone."""
+        """A shallow single-valence bond (10 affection) is far below both the
+        fraught (needs both gauges) and devotion (needs depth>60) gates -- the
+        function must return exactly today's pre-change value: base_scaled +
+        soft_cap on the base term alone."""
         RelationshipBondPullTuning.objects.create(pk=1)
         owner = CharacterSheetFactory()
         target = CharacterSheetFactory()
-        thread = _bond_with_signed_investment(owner=owner, threaded_sheet=target, pos=10, neg=0)
+        thread = _bond_with_affection_conflict(
+            owner=owner, threaded_sheet=target, affection=10, conflict=0
+        )
 
         total = relationship_bond_modulation(thread, target.character, None, base_scaled=4)
 
@@ -466,20 +421,20 @@ class RelationshipBondModulationFraughtDevotionTests(TestCase):
         # = 4 + round(200/40) = 4 + 5 = 9.
         self.assertEqual(total, 9)
 
-    def test_pure_negative_deep_gets_no_fraught_term(self) -> None:
-        """A deep bond invested entirely in negative tracks (80 neg) gets no
-        fraught term (needs both signs) and totals exactly the same as its
-        pure-positive twin (80 pos) -- the base term is sign-blind."""
+    def test_pure_conflict_deep_gets_no_fraught_term(self) -> None:
+        """A deep bond invested entirely in Conflict (80) gets no fraught term
+        (needs both gauges) and totals exactly the same as its pure-Affection
+        twin (80) -- the base term is sign-blind."""
         RelationshipBondPullTuning.objects.create(pk=1)
         owner_neg = CharacterSheetFactory()
         target_neg = CharacterSheetFactory()
-        thread_neg = _bond_with_signed_investment(
-            owner=owner_neg, threaded_sheet=target_neg, neg=80
+        thread_neg = _bond_with_affection_conflict(
+            owner=owner_neg, threaded_sheet=target_neg, affection=0, conflict=80
         )
         owner_pos = CharacterSheetFactory()
         target_pos = CharacterSheetFactory()
-        thread_pos = _bond_with_signed_investment(
-            owner=owner_pos, threaded_sheet=target_pos, pos=80
+        thread_pos = _bond_with_affection_conflict(
+            owner=owner_pos, threaded_sheet=target_pos, affection=80, conflict=0
         )
 
         total_neg = relationship_bond_modulation(
@@ -501,7 +456,9 @@ class RelationshipBondModulationFraughtDevotionTests(TestCase):
         RelationshipBondPullTuning.objects.create(pk=1)
         owner = CharacterSheetFactory()
         target = CharacterSheetFactory()
-        thread = _bond_with_signed_investment(owner=owner, threaded_sheet=target, pos=40, neg=40)
+        thread = _bond_with_affection_conflict(
+            owner=owner, threaded_sheet=target, affection=40, conflict=40
+        )
 
         total_before = relationship_bond_modulation(thread, target.character, None, base_scaled=0)
 
@@ -516,7 +473,7 @@ class RelationshipBondModulationFraughtDevotionTests(TestCase):
 
 
 class CompanionTargetedThreadTests(TestCase):
-    """A thread woven on a companion-targeted track earns no bond term (#3575)."""
+    """A thread woven on a companion-targeted side earns no bond term (#3575)."""
 
     def test_modulation_passes_through_for_companion_bond(self) -> None:
         from world.companions.factories import CompanionFactory
@@ -524,13 +481,12 @@ class CompanionTargetedThreadTests(TestCase):
         owner = CharacterSheetFactory()
         companion = CompanionFactory(owner=owner)
         relationship = CharacterRelationshipFactory(
-            source=owner, target=None, target_companion=companion, is_active=True, is_pending=False
+            source=owner, target=None, target_companion=companion, is_active=True
         )
-        progress = RelationshipTrackProgressFactory(relationship=relationship, developed_points=50)
         thread = ThreadFactory(
             owner=owner,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
-            target_relationship_track=progress,
+            target_relationship=relationship,
             target_trait=None,
             level=10,
         )

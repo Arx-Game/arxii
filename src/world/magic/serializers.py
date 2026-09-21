@@ -942,10 +942,10 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME, read_only=True)
     target_id = serializers.IntegerField(write_only=True, required=True)
-    # RELATIONSHIP_TRACK only (#2159): names the partner persona. target_id for that
-    # kind is the RelationshipTrack CATALOG id (not a RelationshipTrackProgress pk —
-    # no API exposes that pk; RelationshipTrackProgressSerializer has no id field).
-    # Same identifier convention as the relationship write serializers
+    # RELATIONSHIP_TRACK only (#2159, #3957): names the partner persona. target_id for
+    # that kind is the RelationshipType CATALOG id — resolved against the caller's OWN
+    # side (CharacterRelationship) toward that persona, which must hold an open label
+    # of that type. Same identifier convention as the relationship write serializers
     # (RelationshipUpdateViewSet._resolve_target_sheet): a Persona pk resolved
     # server-side to its CharacterSheet.
     target_persona_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
@@ -1050,9 +1050,9 @@ class ThreadSerializer(serializers.ModelSerializer):
         Same identifier convention as the relationship write serializers
         (``RelationshipUpdateViewSet._resolve_target_sheet``): the request names a
         Persona pk, resolved server-side. Required for RELATIONSHIP_TRACK — a thread
-        anchors to one specific partner's developed track, and no anchor pk survives
-        the round trip to the client (``RelationshipTrackProgressSerializer`` has no
-        id field), so the partner must be named directly (#2159).
+        anchors to the caller's own side of a tie toward one specific partner, and
+        ``target_id`` names a ``RelationshipType``, not a relationship row, so the
+        partner must be named directly (#2159, #3957).
         """
         from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -1131,42 +1131,33 @@ class ThreadSerializer(serializers.ModelSerializer):
         character_sheet: CharacterSheet | None,
         partner_sheet: CharacterSheet | None,
     ) -> object:
-        """Resolve the caller's OWN ``RelationshipTrackProgress`` toward ``partner_sheet``.
+        """Resolve the caller's OWN side (``CharacterRelationship``) toward ``partner_sheet``.
 
-        ``target_id`` is the ``RelationshipTrack`` **catalog** id (not a
-        ``RelationshipTrackProgress`` pk — no API exposes that pk). Mirrors telnet's
-        ``CmdWeaveThread._resolve_track_anchor`` (#2159): filter-resolve by
-        (source, target, track), never create a progress row, and surface a friendly
-        message when the pair has no developed history on that track yet.
+        ``target_id`` is a ``RelationshipType`` **catalog** id (#3957). Mirrors telnet's
+        ``CmdWeaveThread._resolve_track_anchor``: the caller's own side must hold an open
+        label of that type toward the named partner, else a friendly, alt-safe refusal.
         """
         from world.relationships.models import (  # noqa: PLC0415
-            RelationshipTrack,
-            RelationshipTrackProgress,
+            CharacterRelationship,
+            RelationshipType,
         )
 
         if partner_sheet is None:
             msg = "target_persona_id is required to weave a RELATIONSHIP_TRACK thread."
             raise serializers.ValidationError(msg)
 
-        track = RelationshipTrack.objects.filter(pk=target_id).first()
-        if track is None:
-            msg = f"RelationshipTrack target with id={target_id} does not exist."
-            raise serializers.ValidationError(msg)
-
-        progress = RelationshipTrackProgress.objects.filter(
-            relationship__source=character_sheet,
-            relationship__target=partner_sheet,
-            track_id=target_id,
+        rel_type = RelationshipType.objects.filter(pk=target_id).first()
+        side = CharacterRelationship.objects.filter(
+            source=character_sheet, target=partner_sheet, is_active=True
         ).first()
-        if progress is None:
-            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-            # Name the partner by the face they present, never their primary
-            # directly (alt-leak, #981) — this message is shown to another player.
-            partner_name = active_persona_for_sheet(partner_sheet).name or "them"
-            msg = f"You have no developed '{track.name}' track with {partner_name} yet."
+        if (
+            rel_type is None
+            or side is None
+            or not side.open_labels().filter(type=rel_type).exists()
+        ):
+            msg = "No relationship of that type toward that character."
             raise serializers.ValidationError(msg)
-        return progress
+        return side
 
     def create(self, validated_data: dict) -> Thread:
         """Delegate thread creation to ``WeaveThreadAction`` (telnet + web converge).
@@ -2914,7 +2905,7 @@ class ThreadHubSummarySerializer(serializers.Serializer):
     weaving_eligibility = serializers.DictField(child=serializers.BooleanField())
     weavable_traits = _WeavableTraitSerializer(many=True)
     weavable_techniques = _WeavableTechniqueSerializer(many=True)
-    weavable_relationship_track_ids = serializers.ListField(child=serializers.IntegerField())
+    weavable_relationship_type_ids = serializers.ListField(child=serializers.IntegerField())
 
 
 # =============================================================================

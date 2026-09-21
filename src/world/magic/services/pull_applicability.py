@@ -193,7 +193,7 @@ def _relationship_pull_would_have_effect(thread: Thread, target_persona_id: int)
     target_character = target_persona.character_sheet.character
     x_sheet = target_persona.character_sheet
 
-    y_sheet = thread.target_relationship_track.relationship.target
+    y_sheet = thread.target_relationship.target
 
     if y_sheet is None:
         return False  # a companion bond has no threaded person to have a stake in (#3575)
@@ -207,6 +207,6 @@ def _relationship_pull_would_have_effect(thread: Thread, target_persona_id: int)
         return False
 
     bond = CharacterRelationship.objects.filter(
-        source=thread.owner, target=y_sheet, is_active=True, is_pending=False
+        source=thread.owner, target=y_sheet, is_active=True
     ).first()
     return bond is not None

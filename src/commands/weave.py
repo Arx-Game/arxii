@@ -10,11 +10,11 @@ the web POST body; this command mirrors its ``TargetKind`` coverage.
 
 Supported anchor kwargs (exactly one required per invocation):
     ``trait=<name or id>``            — TargetKind.TRAIT
-    ``track=<partner>/<track name>``  — TargetKind.RELATIONSHIP_TRACK (the
-        caller's OWN developed ``RelationshipTrackProgress`` toward the named
-        partner; the partner name resolves via Evennia's standard
-        ``search()`` — ambiguous names get the usual numbered-disambiguation
-        message)
+    ``track=<partner>/<type name>``   — TargetKind.RELATIONSHIP_TRACK (the
+        caller's OWN side, a ``CharacterRelationship``, toward the named
+        partner — the side must hold an open label of that ``RelationshipType``,
+        #3957; the partner name resolves via Evennia's standard ``search()`` —
+        ambiguous names get the usual numbered-disambiguation message)
     ``capstone=<id or title>``        — TargetKind.RELATIONSHIP_CAPSTONE (one
         of the caller's OWN recorded capstones)
     ``facet=<name or id>``            — TargetKind.FACET
@@ -67,7 +67,7 @@ class CmdWeaveThread(ArxCommand):
 
     Telnet grammar (exactly one anchor kwarg per invocation):
         ``weave resonance=<name> trait=<name or id> [name=<thread name>]``
-        ``weave resonance=<name> track=<partner>/<track name> [name=<...>]``
+        ``weave resonance=<name> track=<partner>/<type name> [name=<...>]``
         ``weave resonance=<name> capstone=<id or title> [name=<...>]``
         ``weave resonance=<name> facet=<name or id> [name=<...>]``
         ``weave resonance=<name> technique=<name or id> [name=<...>]``
@@ -187,37 +187,45 @@ class CmdWeaveThread(ArxCommand):
         return TargetKind.MANTLE, mantle
 
     def _resolve_capstone_anchor(self, value: str) -> tuple[str, Any]:
-        """Resolve one of the CALLER's OWN recorded ``RelationshipCapstone`` rows."""
+        """Resolve one of the CALLER's OWN recorded ``RelationshipCapstone`` rows.
+
+        ``title`` is a computed property (#3957 — a receipt has no authored title
+        column: it derives from ``journal_entry.title`` or reads "Soul Tether
+        Formation"), so a non-numeric value is matched in Python against each
+        candidate's ``.title`` rather than a DB-level ``__iexact`` filter.
+        """
         from world.magic.constants import TargetKind  # noqa: PLC0415
         from world.relationships.models import RelationshipCapstone  # noqa: PLC0415
 
         sheet = self.caller.sheet_data
-        capstone = self.resolve_by_name_or_id(
-            RelationshipCapstone,
-            value,
-            field="title",
-            not_found_msg=f"You have no recorded capstone matching '{value}'.",
-            relationship__source=sheet,
-        )
+        candidates = RelationshipCapstone.objects.filter(relationship__source=sheet)
+        if value.isdigit():
+            capstone = candidates.filter(pk=int(value)).first()
+        else:
+            capstone = next((c for c in candidates if c.title.lower() == value.lower()), None)
+        if capstone is None:
+            msg = f"You have no recorded capstone matching '{value}'."
+            raise CommandError(msg)
         return TargetKind.RELATIONSHIP_CAPSTONE, capstone
 
     def _resolve_track_anchor(self, value: str) -> tuple[str, Any]:
-        """Resolve the CALLER's OWN ``RelationshipTrackProgress`` toward a named partner.
+        """Resolve the CALLER's OWN side (``CharacterRelationship``) toward a named
+        partner, for the named ``RelationshipType`` (#3957).
 
-        Grammar: ``track=<partner>/<track name>`` — a single whitespace-delimited
+        Grammar: ``track=<partner>/<type name>`` — a single whitespace-delimited
         token split on the first ``/``. Partner-name ambiguity is reported via
         ``search_or_raise`` — the same Evennia ``search()``
         found/not-found/numbered-disambiguation convention every other
         command uses (e.g. ``CmdRelationship._resolve_target``).
         """
         from world.magic.constants import TargetKind  # noqa: PLC0415
-        from world.relationships.models import RelationshipTrackProgress  # noqa: PLC0415
+        from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
-        partner_token, sep, track_name = value.partition("/")
+        partner_token, sep, type_name = value.partition("/")
         partner_token = partner_token.strip()
-        track_name = track_name.strip()
-        if not sep or not partner_token or not track_name:
-            msg = "Specify track=<partner>/<track name>."
+        type_name = type_name.strip()
+        if not sep or not partner_token or not type_name:
+            msg = "Specify track=<partner>/<relationship type>."
             raise CommandError(msg)
 
         partner = self.search_or_raise(
@@ -237,15 +245,13 @@ class CmdWeaveThread(ArxCommand):
             raise CommandError(msg)
 
         sheet = self.caller.sheet_data
-        progress = RelationshipTrackProgress.objects.filter(
-            relationship__source=sheet,
-            relationship__target=partner_sheet,
-            track__name__iexact=track_name,
+        side = CharacterRelationship.objects.filter(
+            source=sheet, target=partner_sheet, is_active=True
         ).first()
-        if progress is None:
-            msg = f"You have no developed '{track_name}' track with {partner_token}."
+        if side is None or not side.open_labels().filter(type__name__iexact=type_name).exists():
+            msg = f"You have no '{type_name}' relationship with {partner_token}."
             raise CommandError(msg)
-        return TargetKind.RELATIONSHIP_TRACK, progress
+        return TargetKind.RELATIONSHIP_TRACK, side
 
     @staticmethod
     def _parse_kwargs(args: str) -> dict[str, str]:

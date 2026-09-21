@@ -9,17 +9,16 @@ alike — unlike Court's NPC-preference sign-matching), and a saturating curve
 rather than a fixed ratio (CharacterRelationship values are unbounded, unlike
 NpcRegard's 0..REGARD_MAX).
 
-The base term is deliberately sign-blind — it rewards `developed_absolute_value`
-(magnitude only) regardless of how that magnitude splits across positive and
-negative tracks. Two additive, valence-aware terms (#2034) sit on top of it:
+The base term is keyed on `pair_depth()` — the tie's depth summed across both sides
+(#3957). Two additive, valence-aware terms (#2034) sit on top of it:
 
-- **Fraught** — a bond invested heavily in BOTH positive and negative tracks at
-  once (a love/hate dynamic) earns a bonus keyed on the smaller of the two
-  signed sub-sums (`developed_signed_sums`). A bond lopsided entirely in one
-  direction earns nothing here, no matter how large.
-- **Devotion** — a bond so overwhelmingly deep its `developed_absolute_value`
-  clears a threshold well past the base curve's own half-saturation point earns
-  a second-wind bonus on the excess above that threshold.
+- **Fraught** — a bond that has moved BOTH the Affection and Conflict gauges (a
+  love/hate dynamic) earns a bonus keyed on the smaller of the two
+  (`min(affection, conflict)`). A bond lopsided entirely in one direction earns
+  nothing here, no matter how large.
+- **Devotion** — a bond so overwhelmingly deep its `pair_depth()` clears a
+  threshold well past the base curve's own half-saturation point earns a
+  second-wind bonus on the excess above that threshold.
 """
 
 from __future__ import annotations
@@ -63,17 +62,17 @@ def _relationship_pull_would_trigger(x_sheet: CharacterSheet, y_sheet: Character
     if x_sheet.pk == y_sheet.pk:
         return True
     hostile = CharacterRelationship.objects.filter(
-        source=x_sheet, target=y_sheet, is_active=True, is_pending=False
+        source=x_sheet, target=y_sheet, is_active=True
     ).first()
-    return hostile is not None and hostile.affection < 0
+    return hostile is not None and hostile.conflict > hostile.affection
 
 
 def _thread_relationship_target(thread: Thread) -> CharacterSheet | None:
     """Resolve the threaded person from either RELATIONSHIP_TRACK or CAPSTONE FK.
 
-    RELATIONSHIP_TRACK threads store the relationship via
-    ``target_relationship_track.relationship``; RELATIONSHIP_CAPSTONE threads
-    store it via ``target_capstone.relationship``. Both point at the same
+    RELATIONSHIP_TRACK threads store the relationship directly via
+    ``target_relationship`` (the weaver's own side, #3957); RELATIONSHIP_CAPSTONE
+    threads store it via ``target_capstone.relationship``. Both point at the same
     ``CharacterRelationship`` — only the FK access path differs (#2021).
 
     None when the bond targets a Companion (#3575): a companion is not a
@@ -81,7 +80,7 @@ def _thread_relationship_target(thread: Thread) -> CharacterSheet | None:
     """
     if thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
         return thread.target_capstone.relationship.target
-    return thread.target_relationship_track.relationship.target
+    return thread.target_relationship.target
 
 
 def relationship_bond_modulation(
@@ -98,16 +97,15 @@ def relationship_bond_modulation(
     to the threaded person.
 
     Three additive terms are layered on ``base_scaled`` when a bond is found
-    (#2034):
+    (#2034, #3957):
 
-    - ``bonus`` — the pre-existing sign-blind base term, keyed on the bond's
-      ``developed_absolute_value`` (magnitude only, any track sign).
-    - ``fraught_bonus`` — a love/hate term keyed on ``min(pos_sum, neg_sum)``
-      from ``developed_signed_sums``: nonzero only when the bond is invested in
-      BOTH positive and negative tracks at once.
-    - ``devotion_bonus`` — a second-wind term keyed on how far
-      ``developed_absolute_value`` clears ``devotion_threshold``: nonzero only
-      for bonds overwhelmingly deep enough to exceed that threshold.
+    - ``bonus`` — the base term, keyed on the tie's ``pair_depth()`` (both
+      sides' depth, summed).
+    - ``fraught_bonus`` — a love/hate term keyed on ``min(bond.affection,
+      bond.conflict)``: nonzero only when the bond has moved BOTH gauges at once.
+    - ``devotion_bonus`` — a second-wind term keyed on how far ``pair_depth()``
+      clears ``devotion_threshold``: nonzero only for bonds overwhelmingly deep
+      enough to exceed that threshold.
 
     No ``can_perceive`` gate here, deliberately — mirrors ``court_regard_modulation``,
     which also has none. The privacy concern (#1849, #1831) is specific to the
@@ -134,22 +132,20 @@ def relationship_bond_modulation(
         return base_scaled
 
     bond = CharacterRelationship.objects.filter(
-        source=thread.owner, target=y_sheet, is_active=True, is_pending=False
+        source=thread.owner, target=y_sheet, is_active=True
     ).first()
     if bond is None:
         return base_scaled
 
     tuning = get_relationship_bond_pull_tuning()
-    score = tuning.coefficient * bond.developed_absolute_value
+    depth = bond.pair_depth()
+    score = tuning.coefficient * depth
     bonus = _soft_cap(score, tuning.cap, tuning.half_saturation)
 
-    pos_sum, neg_sum = bond.developed_signed_sums
-    fraught_score = tuning.fraught_coefficient * min(pos_sum, neg_sum)
+    fraught_score = tuning.fraught_coefficient * min(bond.affection, bond.conflict)
     fraught_bonus = _soft_cap(fraught_score, tuning.fraught_cap, tuning.fraught_half_saturation)
 
-    devotion_score = tuning.devotion_coefficient * max(
-        0, bond.developed_absolute_value - tuning.devotion_threshold
-    )
+    devotion_score = tuning.devotion_coefficient * max(0, depth - tuning.devotion_threshold)
     devotion_bonus = _soft_cap(devotion_score, tuning.devotion_cap, tuning.devotion_half_saturation)
 
     return base_scaled + bonus + fraught_bonus + devotion_bonus

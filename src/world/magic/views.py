@@ -910,7 +910,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",
-                "target_relationship_track",
+                "target_relationship",
                 "target_capstone",
             )
             .order_by("-pk")
@@ -1313,7 +1313,7 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
         "unlock",
         "unlock__unlock_trait",
         "unlock__unlock_gift",
-        "unlock__unlock_track",
+        "unlock__unlock_type",
     ).order_by("-pk")
     serializer_class = ThreadWeavingTeachingOfferSerializer
     permission_classes = [IsAuthenticated]
@@ -2111,8 +2111,7 @@ class PendingCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
                 "thread__resonance",
                 "thread__target_trait",
                 "thread__target_facet",
-                "thread__target_relationship_track__track",
-                "thread__target_relationship_track__relationship__target__character",
+                "thread__target_relationship__target__character",
                 "thread__target_capstone__relationship__target__character",
                 "thread__target_sanctum_details",
                 "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
@@ -2253,7 +2252,7 @@ class ThreadHubSummaryView(APIView):
         character = sheet.character
         weavable_traits: list[dict] = []
         weavable_techniques: list[dict] = []
-        weavable_relationship_track_ids: list[int] = []
+        weavable_relationship_type_ids: list[int] = []
 
         for cu in unlocks:
             unlock = cu.unlock
@@ -2283,8 +2282,8 @@ class ThreadHubSummaryView(APIView):
                     for technique in character.techniques.all()
                     if technique.gift_id == gift.pk
                 )
-            elif kind == TargetKind.RELATIONSHIP_TRACK and unlock.unlock_track_id:
-                weavable_relationship_track_ids.append(unlock.unlock_track_id)
+            elif kind == TargetKind.RELATIONSHIP_TRACK and unlock.unlock_type_id:
+                weavable_relationship_type_ids.append(unlock.unlock_type_id)
 
         payload = {
             "balances": balances,
@@ -2294,7 +2293,7 @@ class ThreadHubSummaryView(APIView):
             "weaving_eligibility": eligibility,
             "weavable_traits": weavable_traits,
             "weavable_techniques": weavable_techniques,
-            "weavable_relationship_track_ids": weavable_relationship_track_ids,
+            "weavable_relationship_type_ids": weavable_relationship_type_ids,
         }
         return Response(ThreadHubSummarySerializer(payload).data)
 

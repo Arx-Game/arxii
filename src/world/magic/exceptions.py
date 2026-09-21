@@ -543,6 +543,13 @@ class RelationshipBondNotOwned(MagicError):
     user_message = "That isn't your own relationship bond to weave a thread on."
 
 
+class RelationshipTierTooLow(MagicError):
+    """Raised when weaving a RELATIONSHIP_TRACK thread on a side that has not
+    claimed the tier ``RelationshipGrowthConfig.thread_min_tier`` requires (#3957)."""
+
+    user_message = "The relationship has not reached the tier a thread needs."
+
+
 # =============================================================================
 # Signature-bonus selection exceptions (#1582)
 # =============================================================================

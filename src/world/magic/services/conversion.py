@@ -364,7 +364,7 @@ def _find_existing_target_thread(
         "target_trait",
         "target_technique",
         "target_facet",
-        "target_relationship_track",
+        "target_relationship",
         "target_capstone",
         "target_covenant_role",
         "target_gift",

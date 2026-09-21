@@ -148,7 +148,6 @@ class CharacterDreamStateViewTests(DreamSleeperTestMixin, APITestCase):
             source=self.sheet,
             target=bonded,
             is_soul_tether=True,
-            is_pending=False,
         )
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -168,7 +167,6 @@ class CharacterDreamStateViewTests(DreamSleeperTestMixin, APITestCase):
             source=self.sheet,
             target=bonded,
             is_soul_tether=True,
-            is_pending=False,
         )
         instance = get_condition_instance(bonded.character, self.template, include_suppressed=True)
         instance.is_suppressed = True

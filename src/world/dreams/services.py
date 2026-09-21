@@ -198,8 +198,8 @@ def has_dream_bond(source_sheet: CharacterSheet, target_sheet: CharacterSheet) -
     )
     for thread in threads:
         if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
-            progress = thread.target_relationship_track
-            if progress is not None and progress.relationship.target == target_sheet:
+            side = thread.target_relationship
+            if side is not None and side.target == target_sheet:
                 return True
         elif thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
             capstone = thread.target_capstone

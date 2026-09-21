@@ -84,7 +84,7 @@ def build_applicable_threads(
             "target_technique",
             "target_mantle__item_instance",
             "target_sanctum_details__feature_instance__room_profile",
-            "target_relationship_track__relationship",
+            "target_relationship",
             "target_capstone__relationship",
         )
     )

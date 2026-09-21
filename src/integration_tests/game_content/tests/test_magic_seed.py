@@ -842,7 +842,7 @@ class TestSeedMagicDevSoulTetherContent(TestCase):
             unlock,
             "seed_magic_dev() must seed a RELATIONSHIP_TRACK ThreadWeavingUnlock",
         )
-        self.assertIsNotNone(unlock.unlock_track)
+        self.assertIsNotNone(unlock.unlock_type)
         self.assertEqual(
             self.result.relationship_track_thread_unlock.unlock.pk,
             unlock.pk,
@@ -1083,7 +1083,7 @@ class SeedStarterMagicStoryStripsStandInsTests(TestCase):
 class SeedMagicDevStripsStandInsTests(TestCase):
     """#2973 items 3 + 4 + 6 + 7 + 8: MagicContent.create_all(), the reference
     Corruption content, the touchstone/reagent content, the Fall/Redemption
-    example rows, and the Devotion RelationshipTrack + unlock left
+    example rows, and the Sworn RelationshipType + unlock left
     ``seed_magic_dev()`` — they're content-repo rows now (or, for
     ``MagicContent``/``ensure_touchstone_content()``/
     ``author_reference_corruption_content()``, test-fixture builders a suite
@@ -1167,15 +1167,15 @@ class SeedMagicDevStripsStandInsTests(TestCase):
             "resolves them via authored_or_sample (#2973)",
         )
 
-    def test_no_devotion_track_authored(self) -> None:
+    def test_no_sworn_type_authored(self) -> None:
         from world.magic.constants import TargetKind
         from world.magic.models.weaving import ThreadWeavingUnlock
-        from world.relationships.models import RelationshipTrack
+        from world.relationships.models import RelationshipType
 
         seed_magic_dev()
         self.assertFalse(
-            RelationshipTrack.objects.filter(name="Devotion").exists(),
-            "seed_magic_dev() must not author the 'Devotion' RelationshipTrack "
+            RelationshipType.objects.filter(name="Sworn").exists(),
+            "seed_magic_dev() must not author the 'Sworn' RelationshipType "
             "without SEED_SAMPLE_CONTENT — seed_relationship_track_thread_unlock() "
             "resolves it via authored_or_sample (#2973)",
         )
@@ -1185,7 +1185,7 @@ class SeedMagicDevStripsStandInsTests(TestCase):
             ).exists(),
             "seed_magic_dev() must not author a RELATIONSHIP_TRACK "
             "ThreadWeavingUnlock without SEED_SAMPLE_CONTENT — it has no "
-            "'Devotion' track to hang off of (#2973)",
+            "'Sworn' type to hang off of (#2973)",
         )
 
 

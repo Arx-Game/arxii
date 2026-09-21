@@ -1311,15 +1311,16 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     - _trait_value=<int>    → set CharacterTraitValue.value for (owner, target_trait)
     - as_technique_thread=True → switch to TECHNIQUE kind; use with _technique_level=<int>
     - _technique_level=<int>   → set target_technique.level (saved in place)
-    - as_track_thread=True  → switch to RELATIONSHIP_TRACK kind
-    - _track_tier_index=<int>  → create a RelationshipTier with that tier_number on the
-                                 progress.track; set developed_points >= threshold so
-                                 current_tier returns that tier
-    - _developed_points=<int>  → set developed_points directly on the RelationshipTrackProgress
-                                 (overrides _track_tier_index; requires as_track_thread=True)
-    - as_capstone_thread=True  → switch to RELATIONSHIP_CAPSTONE kind
-    - _capstone_points=<int>   → set points directly on the RelationshipCapstone
-                                 (overrides default 100; requires as_capstone_thread=True)
+    - as_track_thread=True  → switch to RELATIONSHIP_TRACK kind; anchors to a fresh
+                                 CharacterRelationship side (source=owner, #3957)
+    - _invested_depth=<int>    → set invested_depth on that side (no reverse side is
+                                 created, so pair_depth() == invested_depth + scene_depth);
+                                 requires as_track_thread=True
+    - as_capstone_thread=True  → switch to RELATIONSHIP_CAPSTONE kind; creates a
+                                 RelationshipCapstone receipt on a fresh side (#3957)
+    - _capstone_depth=<int>    → set invested_depth on the capstone's relationship side
+                                 (anchor_cap reads target_capstone.relationship.pair_depth());
+                                 requires as_capstone_thread=True
     - _path_stage=<int>        → add a CharacterPathHistory row for thread.owner with
                                  a Path of that stage (applies to capstone + effective cap)
     - as_covenant_role_thread=True → switch to COVENANT_ROLE kind; creates a CovenantRole
@@ -1385,71 +1386,53 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
     @factory.post_generation  # type: ignore[misc]
     def as_track_thread(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
-        """Switch to RELATIONSHIP_TRACK kind: create a RelationshipTrackProgress."""
+        """Switch to RELATIONSHIP_TRACK kind: anchor to a fresh CharacterRelationship
+        side owned by this thread's owner (#3957)."""
         if not create or not extracted:
             return
-        from world.relationships.factories import RelationshipTrackProgressFactory
+        from world.relationships.factories import CharacterRelationshipFactory
 
-        progress = RelationshipTrackProgressFactory()
+        side = CharacterRelationshipFactory(source=self.owner)
         Thread.objects.filter(pk=self.pk).update_with_reason(
             reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.RELATIONSHIP_TRACK,
-            target_relationship_track=progress,
+            target_relationship=side,
             target_trait=None,
         )
         self.target_kind = TargetKind.RELATIONSHIP_TRACK
-        self.target_relationship_track = progress
+        self.target_relationship = side
         self.target_trait = None  # type: ignore[assignment]
 
+    # Must be declared after as_track_thread so self.target_relationship is populated.
     @factory.post_generation  # type: ignore[misc]
-    def _track_tier_index(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
-        """Create a RelationshipTier with tier_number=extracted on the progress track.
+    def _invested_depth(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
+        """Set invested_depth on the side (#3957).
 
-        Sets developed_points on the progress so that current_tier returns the
-        newly created tier (developed_points = tier.point_threshold).
+        No reverse side is created by ``as_track_thread``, so ``pair_depth()`` on the
+        resulting side equals ``invested_depth + scene_depth`` (scene_depth stays 0
+        unless set separately). Requires as_track_thread=True.
         """
         if not create or extracted is None:
             return
-        if self.target_relationship_track is None:
+        if self.target_relationship is None:
             return
-        tier_number = int(extracted)  # type: ignore[arg-type]
-        from world.relationships.factories import RelationshipTierFactory
-
-        progress = self.target_relationship_track
-        tier = RelationshipTierFactory(
-            track=progress.track,
-            tier_number=tier_number,
-            point_threshold=tier_number * 10,
-        )
-        # Set developed_points so current_tier resolves to this tier.
-        progress.developed_points = tier.point_threshold
-        progress.save(update_fields=["developed_points"])
-
-    # Must be declared after as_track_thread so self.target_relationship_track is populated.
-    @factory.post_generation  # type: ignore[misc]
-    def _developed_points(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
-        """Set developed_points directly on the RelationshipTrackProgress.
-
-        Use this param when you need an arbitrary value (e.g. 37) rather than
-        a tier-threshold multiple of 10.  Overrides any value set by
-        _track_tier_index.  Requires as_track_thread=True.
-        """
-        if not create or extracted is None:
-            return
-        if self.target_relationship_track is None:
-            return
-        progress = self.target_relationship_track
-        progress.developed_points = int(extracted)  # type: ignore[arg-type]
-        progress.save(update_fields=["developed_points"])
+        side = self.target_relationship
+        side.invested_depth = int(extracted)  # type: ignore[arg-type]
+        side.save(update_fields=["invested_depth"])
 
     @factory.post_generation  # type: ignore[misc]
     def as_capstone_thread(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
-        """Switch to RELATIONSHIP_CAPSTONE kind: create a RelationshipCapstone."""
+        """Switch to RELATIONSHIP_CAPSTONE kind: create a RelationshipCapstone receipt
+        on a fresh CharacterRelationship side owned by this thread's owner (#3957)."""
         if not create or not extracted:
             return
-        from world.relationships.factories import RelationshipCapstoneFactory
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipCapstoneFactory,
+        )
 
-        capstone = RelationshipCapstoneFactory()
+        side = CharacterRelationshipFactory(source=self.owner)
+        capstone = RelationshipCapstoneFactory(relationship=side)
         Thread.objects.filter(pk=self.pk).update_with_reason(
             reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
@@ -1462,19 +1445,20 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
     # Must be declared after as_capstone_thread so self.target_capstone is populated.
     @factory.post_generation  # type: ignore[misc]
-    def _capstone_points(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
-        """Set points directly on the RelationshipCapstone.
+    def _capstone_depth(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
+        """Set invested_depth on the capstone's relationship side (#3957).
 
-        Use this param to override the default points=100 from RelationshipCapstoneFactory
-        with an arbitrary value (e.g. 0, 50, 500).  Requires as_capstone_thread=True.
+        RELATIONSHIP_CAPSTONE's anchor_cap reads
+        ``target_capstone.relationship.pair_depth()`` — the capstone itself carries no
+        cap value (it's a receipt). Requires as_capstone_thread=True.
         """
         if not create or extracted is None:
             return
         if self.target_capstone is None:
             return
-        capstone = self.target_capstone
-        capstone.points = int(extracted)  # type: ignore[arg-type]
-        capstone.save(update_fields=["points"])
+        side = self.target_capstone.relationship
+        side.invested_depth = int(extracted)  # type: ignore[arg-type]
+        side.save(update_fields=["invested_depth"])
 
     @factory.post_generation  # type: ignore[misc]
     def _path_stage(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:

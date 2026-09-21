@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from world.magic.types import PullActionContext
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
-    from world.relationships.models import RelationshipCapstone, RelationshipTrackProgress
+    from world.relationships.models import CharacterRelationship, RelationshipCapstone
     from world.worship.models import WorshipRitePerformance
 
 logger = logging.getLogger(__name__)
@@ -647,7 +647,7 @@ def _anchor_ambiently_active(
         location = character.location
         return location is not None and location.pk == room_obj_id
     if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
-        return _relationship_target_present(thread.target_relationship_track, character)
+        return _relationship_target_present(thread.target_relationship, character)
     if thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
         return _relationship_target_present(thread.target_capstone, character)
     if thread.target_kind == TargetKind.FACET:
@@ -715,20 +715,21 @@ def resolve_gift_ids_by_technique(involved_techniques: tuple[int, ...]) -> dict[
 
 
 def _relationship_target_present(
-    owner_row: RelationshipTrackProgress | RelationshipCapstone | None,
+    owner_row: CharacterRelationship | RelationshipCapstone | None,
     character: ObjectDB,  # noqa: OBJECTDB_PARAM — room-contents check needs the game object
 ) -> bool:
     """True iff the other party to this relationship is in the acting character's room.
 
-    ``owner_row`` is a RelationshipTrackProgress or a RelationshipCapstone; both carry a
-    ``relationship`` FK to CharacterRelationship, whose ``target`` is a CharacterSheet
-    (relationships/models.py:323). CharacterSheet shares ObjectDB's pk, so the presence
-    check is a pk comparison — no extra fetch.
+    ``owner_row`` is a CharacterRelationship (the weaver's own side, RELATIONSHIP_TRACK,
+    #3957) or a RelationshipCapstone (RELATIONSHIP_CAPSTONE, exposes ``.relationship``);
+    both resolve to a CharacterSheet ``target``. CharacterSheet shares ObjectDB's pk, so
+    the presence check is a pk comparison — no extra fetch.
     """
     location = character.location
     if owner_row is None or location is None:
         return False
-    target_pk = owner_row.relationship.target_id
+    side = owner_row if hasattr(owner_row, "target_id") else owner_row.relationship
+    target_pk = side.target_id
     return any(obj.pk == target_pk for obj in location.contents)
 
 
