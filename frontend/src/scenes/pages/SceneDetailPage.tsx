@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { fetchScene, SceneDetail } from '../queries';
 import { createActionRequest, fetchPlaces } from '../actionQueries';
+import { AttachedActionSubmissionGuard } from '../actionSubmissionGuard';
 import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
@@ -247,32 +248,25 @@ export function SceneDetailPage() {
         technique_id: action.techniqueId,
       }),
     onSuccess: (_result, variables) => {
-      attachedActionsInFlight.current.delete(variables.clientRequestId);
-      attachedActionsCompleted.current.add(variables.clientRequestId);
+      attachedActionGuard.current.succeed(variables.clientRequestId);
       setActionAttachment(null);
       // 2026-07 audit: 'scene-messages' matched no query — the feed key is 'scene-interactions'.
       queryClient.invalidateQueries({ queryKey: ['scene-interactions', id] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', id] });
     },
     onError: (_error, variables) => {
-      attachedActionsInFlight.current.delete(variables.clientRequestId);
+      attachedActionGuard.current.fail(variables.clientRequestId);
       // Keep the attachment so user can retry
     },
   });
 
-  const attachedActionsInFlight = useRef(new Set<string>());
-  const attachedActionsCompleted = useRef(new Set<string>());
+  const attachedActionGuard = useRef(new AttachedActionSubmissionGuard());
 
   const handleSubmitAction = useCallback(
     (action: ActionAttachmentInfo, clientRequestId?: string) => {
       const correlationId =
         clientRequestId ?? `${action.actionKey}:${action.targetPersonaId ?? ''}`;
-      if (
-        attachedActionsInFlight.current.has(correlationId) ||
-        attachedActionsCompleted.current.has(correlationId)
-      )
-        return;
-      attachedActionsInFlight.current.add(correlationId);
+      if (!attachedActionGuard.current.start(correlationId)) return;
       submitAction.mutate({ action, clientRequestId: correlationId });
     },
     [submitAction]

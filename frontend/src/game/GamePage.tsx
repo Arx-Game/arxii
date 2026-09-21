@@ -57,6 +57,7 @@ import { PendingActionAttachments } from '@/scenes/components/PendingActionAttac
 import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
 import { fetchScene } from '@/scenes/queries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
+import { AttachedActionSubmissionGuard } from '@/scenes/actionSubmissionGuard';
 import type { Interaction, SceneDetail } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
@@ -853,8 +854,7 @@ export function GamePage() {
   const [targetToAppend, setPendingTarget] = useState<string | null>(null);
   const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
   const queryClient = useQueryClient();
-  const attachedActionsInFlight = useRef(new Set<string>());
-  const attachedActionsCompleted = useRef(new Set<string>());
+  const attachedActionGuard = useRef(new AttachedActionSubmissionGuard());
 
   const handleDismissOutcome = useCallback(() => {
     if (sceneData?.id != null) {
@@ -875,8 +875,7 @@ export function GamePage() {
         technique_id: action.techniqueId,
       }),
     onSuccess: (_result, variables) => {
-      attachedActionsInFlight.current.delete(variables.clientRequestId);
-      attachedActionsCompleted.current.add(variables.clientRequestId);
+      attachedActionGuard.current.succeed(variables.clientRequestId);
       setActionAttachment(null);
       // No 'scene-messages' invalidation here (#2156 review fix): nothing in
       // this codebase ever queries that key — the scene feed here is
@@ -885,7 +884,7 @@ export function GamePage() {
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     },
     onError: (_error, variables) => {
-      attachedActionsInFlight.current.delete(variables.clientRequestId);
+      attachedActionGuard.current.fail(variables.clientRequestId);
       // Keep the attachment so the user can retry.
     },
   });
@@ -894,12 +893,7 @@ export function GamePage() {
     (action: ActionAttachmentInfo, clientRequestId?: string) => {
       const correlationId =
         clientRequestId ?? `${action.actionKey}:${action.targetPersonaId ?? ''}`;
-      if (
-        attachedActionsInFlight.current.has(correlationId) ||
-        attachedActionsCompleted.current.has(correlationId)
-      )
-        return;
-      attachedActionsInFlight.current.add(correlationId);
+      if (!attachedActionGuard.current.start(correlationId)) return;
       submitAction.mutate({ action, clientRequestId: correlationId });
     },
     [submitAction]

@@ -1235,6 +1235,26 @@ export function ThreadedNarrativeReader({
     []
   );
 
+  const renderPoseBody = (item: Interaction) => {
+    const poseBody = (
+      <SceneMessages
+        sceneId={sceneId}
+        filteredInteractions={[item]}
+        onAvatarClick={onAvatarClick}
+        onAddTarget={onAddTarget}
+        onAttachAction={onAttachAction}
+        readOnly={readOnly}
+        interactionsById={interactionsById}
+      />
+    );
+    if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) return poseBody;
+    return (
+      <InvolvementFlag item={item} onReply={onReply} readOnly={readOnly} venue={viewerVenue}>
+        {poseBody}
+      </InvolvementFlag>
+    );
+  };
+
   return (
     <div
       ref={rootRef}
@@ -1526,32 +1546,7 @@ export function ThreadedNarrativeReader({
                               plain bubble and then a restatement of the same
                               sentence. `poseBody` is the identical per-viewer
                               rendering either way. */}
-                          {(() => {
-                            const poseBody = (
-                              <SceneMessages
-                                sceneId={sceneId}
-                                filteredInteractions={[item]}
-                                onAvatarClick={onAvatarClick}
-                                onAddTarget={onAddTarget}
-                                onAttachAction={onAttachAction}
-                                readOnly={readOnly}
-                                interactionsById={interactionsById}
-                              />
-                            );
-                            if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
-                              return poseBody;
-                            }
-                            return (
-                              <InvolvementFlag
-                                item={item}
-                                onReply={onReply}
-                                readOnly={readOnly}
-                                venue={viewerVenue}
-                              >
-                                {poseBody}
-                              </InvolvementFlag>
-                            );
-                          })()}
+                          {renderPoseBody(item)}
                           <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                             <button
                               type="button"
@@ -1693,32 +1688,7 @@ export function ThreadedNarrativeReader({
                             ) : (
                               <>
                                 {/* #3787 D1 -- see the Chronological branch. */}
-                                {(() => {
-                                  const poseBody = (
-                                    <SceneMessages
-                                      sceneId={sceneId}
-                                      filteredInteractions={[item]}
-                                      onAvatarClick={onAvatarClick}
-                                      onAddTarget={onAddTarget}
-                                      onAttachAction={onAttachAction}
-                                      readOnly={readOnly}
-                                      interactionsById={interactionsById}
-                                    />
-                                  );
-                                  if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
-                                    return poseBody;
-                                  }
-                                  return (
-                                    <InvolvementFlag
-                                      item={item}
-                                      onReply={onReply}
-                                      readOnly={readOnly}
-                                      venue={viewerVenue}
-                                    >
-                                      {poseBody}
-                                    </InvolvementFlag>
-                                  );
-                                })()}
+                                {renderPoseBody(item)}
                                 <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                                   <button
                                     type="button"
