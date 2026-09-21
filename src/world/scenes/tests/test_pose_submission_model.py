@@ -1,4 +1,4 @@
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.test import TestCase
 
 from world.scenes.factories import InteractionFactory, PersonaFactory
@@ -54,6 +54,22 @@ class PoseSubmissionModelTests(TestCase):
         self.assertEqual(submission.interaction_id, interaction.pk)
         self.assertEqual(submission.timestamp, interaction.timestamp)
         submission.save()
+        loaded = PoseSubmission.objects.filter(pk=submission.pk).get()
+        self.assertEqual(loaded.interaction.pk, interaction.pk)
+        self.assertEqual(loaded.interaction.timestamp, interaction.timestamp)
         self.assertEqual(
             PoseSubmission.objects.filter(interaction=interaction).get().pk, submission.pk
         )
+
+    def test_parent_delete_cascades_durable_submission(self):
+        if connection.vendor != "postgresql":
+            self.skipTest("composite database cascade is PostgreSQL-only")
+        persona = PersonaFactory()
+        interaction = InteractionFactory(persona=persona)
+        submission = PoseSubmission.objects.create(
+            persona=persona,
+            client_request_id="66666666-6666-6666-6666-666666666666",
+            interaction=interaction,
+        )
+        interaction.delete()
+        self.assertFalse(PoseSubmission.objects.filter(pk=submission.pk).exists())

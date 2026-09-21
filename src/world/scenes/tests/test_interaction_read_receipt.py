@@ -142,9 +142,7 @@ class PartitionedMetadataIntegrityTests(TestCase):
     def test_deleting_interaction_cleans_receipt(self) -> None:
         account = AccountFactory()
         interaction = InteractionFactory()
-        receipt = InteractionReadReceipt.objects.create(
-            interaction_id=interaction.pk, timestamp=interaction.timestamp, account=account
-        )
+        receipt = InteractionReadReceipt.objects.create(account=account, interaction=interaction)
         interaction.delete()
         self.assertFalse(InteractionReadReceipt.objects.filter(pk=receipt.pk).exists())
 
@@ -192,6 +190,9 @@ class PartitionedMetadataIntegrityTests(TestCase):
         relation_query = str(InteractionReadReceipt.objects.filter(interaction=interaction).query)
         self.assertIn("interaction_id", relation_query)
         self.assertIn('"timestamp"', relation_query)
+        loaded = InteractionReadReceipt.objects.filter(pk=receipt.pk).get()
+        self.assertEqual(loaded.interaction.pk, interaction.pk)
+        self.assertEqual(loaded.interaction.timestamp, interaction.timestamp)
         self.assertEqual(
             InteractionReadReceipt.objects.filter(interaction=interaction).get().pk,
             receipt.pk,

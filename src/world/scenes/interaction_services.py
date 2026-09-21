@@ -1490,9 +1490,7 @@ def idempotent_record_interaction(
         with transaction.atomic():
             interaction = record_fn(on_before_push=_write_ledger, **record_kwargs)
     except IntegrityError:
-        winner = PoseSubmission.objects.get(
-            persona=persona, client_request_id=client_request_id
-        )
+        winner = PoseSubmission.objects.get(persona=persona, client_request_id=client_request_id)
         return IdempotentSubmissionResult(
             interaction=winner.resolve_interaction(), replayed=True, conflict=False
         )
