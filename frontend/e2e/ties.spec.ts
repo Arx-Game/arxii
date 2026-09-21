@@ -15,7 +15,7 @@
  * Run with: cd frontend && pnpm playwright test e2e/ties.spec.ts
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR ?? '';
 
@@ -72,9 +72,16 @@ const ILSAVET_ENTRY = {
   created_for_table_name: null,
 };
 
-/** A `CharacterSheetTieLabel`. */
+/** A `CharacterSheetTieLabel`. `valence` colours the chip, so every fixture carries it. */
 function tieLabel(over: Record<string, unknown>) {
-  return { type_name: '', awareness: 'public', is_former: false, is_mutual: false, ...over };
+  return {
+    type_name: '',
+    awareness: 'public',
+    valence: 'neutral',
+    is_former: false,
+    is_mutual: false,
+    ...over,
+  };
 }
 
 /** Ilsavet's cast, owner-shaped: every card, every number (#3957 demo, Screen 1). */
@@ -86,8 +93,8 @@ const OWNER_CAST = [
     other_entry_id: 34,
     other_companion_id: null,
     labels: [
-      tieLabel({ type_name: 'Lover', awareness: 'clandestine' }),
-      tieLabel({ type_name: 'Enemy', awareness: 'private' }),
+      tieLabel({ type_name: 'Lover', awareness: 'clandestine', valence: 'warm' }),
+      tieLabel({ type_name: 'Enemy', awareness: 'private', valence: 'hostile' }),
     ],
     depth: 340,
     tier: 2,
@@ -101,8 +108,8 @@ const OWNER_CAST = [
     other_entry_id: 35,
     other_companion_id: null,
     labels: [
-      tieLabel({ type_name: 'Rival', is_mutual: true }),
-      tieLabel({ type_name: 'Friend', is_former: true }),
+      tieLabel({ type_name: 'Rival', is_mutual: true, valence: 'hostile' }),
+      tieLabel({ type_name: 'Friend', is_former: true, valence: 'warm' }),
     ],
     depth: 610,
     tier: 2,
@@ -115,7 +122,7 @@ const OWNER_CAST = [
     other_sheet_id: 14,
     other_entry_id: 36,
     other_companion_id: null,
-    labels: [tieLabel({ type_name: 'Kin' })],
+    labels: [tieLabel({ type_name: 'Kin', valence: 'warm' })],
     depth: 140,
     tier: 1,
     summary_line: '',
@@ -127,7 +134,10 @@ const OWNER_CAST = [
     other_sheet_id: 15,
     other_entry_id: 37,
     other_companion_id: null,
-    labels: [tieLabel({ type_name: 'Mentor', is_mutual: true }), tieLabel({ type_name: 'Friend' })],
+    labels: [
+      tieLabel({ type_name: 'Mentor', is_mutual: true }),
+      tieLabel({ type_name: 'Friend', valence: 'warm' }),
+    ],
     depth: 88,
     tier: 1,
     summary_line: '',
@@ -315,6 +325,8 @@ function tieOwner() {
     },
     summary: TIE_SUMMARY,
     ap_this_week: 9,
+    // The week's whole purse, the demo's "31 / 40" beside the AP field (Screen 3).
+    ap_pool: { remaining: 31, total: 40 },
     thread: null,
     is_soul_tether: false,
   };
@@ -334,6 +346,7 @@ function tieOther() {
     labels: [owner.labels[0]],
     breakdown: { ...owner.breakdown, affection: null, conflict: null },
     ap_this_week: null,
+    ap_pool: null,
   };
 }
 
@@ -437,6 +450,41 @@ const RELATIONSHIP_TYPES = [
     counterpart: null,
     counterpart_name: 'Enemy',
     display_order: 3,
+  },
+  // Three more families, so the picker photograph shows what the demo's Screen 3 shows:
+  // groups side by side, each type's authored line, and a counterpart where there is one.
+  {
+    id: 5,
+    name: 'Comrade',
+    slug: 'comrade',
+    description: 'Stood beside in danger.',
+    family: 'company',
+    valence: 'warm',
+    counterpart: null,
+    counterpart_name: 'Comrade',
+    display_order: 4,
+  },
+  {
+    id: 6,
+    name: 'Ward',
+    slug: 'ward',
+    description: 'In their keeping. Pairs with Guardian.',
+    family: 'blood_and_oath',
+    valence: 'neutral',
+    counterpart: 7,
+    counterpart_name: 'Guardian',
+    display_order: 5,
+  },
+  {
+    id: 8,
+    name: 'Mentor',
+    slug: 'mentor',
+    description: 'Teaches you. Pairs with Student.',
+    family: 'teaching',
+    valence: 'neutral',
+    counterpart: 12,
+    counterpart_name: 'Student',
+    display_order: 6,
   },
 ];
 
@@ -558,6 +606,70 @@ async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: `${EVIDENCE_DIR}/${name}.png`, fullPage: true });
 }
 
+/**
+ * The mechanical companion to the demo-fidelity review (#3957): a `.refsheet-*` colour
+ * token that resolves to the ground behind it is invisible, and three of the review's
+ * six findings were exactly that. Screenshots caught them because a human looked; these
+ * assertions catch the next one without anybody looking.
+ *
+ * Resolved values only — `getComputedStyle` in the real browser, on the real cascade, so
+ * a rule that does not REACH the page fails here the way it fails the reader (#3667).
+ */
+function channel(value: number): number {
+  const scaled = value / 255;
+  return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance(rgb: string): number {
+  const parts = (rgb.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+  const [red, green, blue] = parts.length === 3 ? parts : [0, 0, 0];
+  return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue);
+}
+
+function contrastRatio(ink: string, ground: string): number {
+  const a = luminance(ink);
+  const b = luminance(ground);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/**
+ * One element's resolved ink and the ground actually painted behind it — the nearest
+ * ancestor with a non-transparent background, which is what the eye sees.
+ */
+async function inkAndGround(locator: Locator): Promise<{ ink: string; ground: string }> {
+  return locator.first().evaluate((element) => {
+    const ink = getComputedStyle(element).color;
+    let node: HTMLElement | null = element as HTMLElement;
+    while (node) {
+      const background = getComputedStyle(node).backgroundColor;
+      if (background && !/rgba?\(0, 0, 0, 0\)|transparent/.test(background)) {
+        return { ink, ground: background };
+      }
+      node = node.parentElement;
+    }
+    return { ink, ground: 'rgb(255, 255, 255)' };
+  });
+}
+
+/**
+ * `minimum` is 4.5 for a chip or a door — WCAG's small-text bar, and the one that tells
+ * the two states apart: the paper palette measured 3.3:1 on the plate's ground while
+ * the demo's own literals measure 10.4:1. An eyebrow is 13px tracked caps and its gilt
+ * measures 3.5:1 on paper, so 3 is its bar; what it has to be told from is the realm
+ * token resolving to 1.1:1, not from a slightly darker gold.
+ */
+async function expectReadable(locator: Locator, what: string, minimum = 4.5): Promise<void> {
+  const { ink, ground } = await inkAndGround(locator);
+  const ratio = contrastRatio(ink, ground);
+  expect(ratio, `${what}: ${ink} on ${ground}`).toBeGreaterThanOrEqual(minimum);
+}
+
+/** The exact ink the demo specifies, resolved on the page. */
+async function expectInk(locator: Locator, expected: string, what: string): Promise<void> {
+  const { ink } = await inkAndGround(locator);
+  expect(ink, what).toBe(expected);
+}
+
 test.describe('Ties, redrawn (#3957)', () => {
   test('the cast and the tie page, as the owner (Ilsavet)', async ({ page }) => {
     const { shiftRequests } = await mockApi(page, {
@@ -589,6 +701,12 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect(page.getByText('Depth 610 · Tier 2')).toBeVisible();
     await expect(page.getByText('Thread, level 2, Silence')).toBeVisible();
 
+    // The private chip carries its own ink (`.tag.secret`'s purple), so it is readable
+    // on the cast where no valence used to colour it at all — it read near-white on
+    // white paper before (demo-fidelity Finding 1).
+    const corvinCard = page.locator('.refsheet-face', { hasText: 'Corvin Ashe' });
+    await expectReadable(corvinCard.locator('.refsheet-tag-private'), 'cast private chip');
+
     await shot(page, 'ties-cast-owner');
 
     // Open the tie page from the card.
@@ -608,6 +726,8 @@ test.describe('Ties, redrawn (#3957)', () => {
     // doors, and the "Replaced Friend" gloss the demo's Screen 3 carries. Both labels
     // carry Change/End/Make public; only the private Enemy also carries Make clandestine.
     await expect(page.getByLabel('AP this week')).toHaveValue('9');
+    // The week's budget beside it, bare (#3957 demo, Screen 3).
+    await expect(page.getByText('31 / 40')).toBeVisible();
     await expect(page.getByText('Clandestine', { exact: true })).toBeVisible();
     await expect(page.getByText('Private', { exact: true })).toBeVisible();
     await expect(page.getByText('Replaced Friend')).toBeVisible();
@@ -624,6 +744,28 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect(page.getByText('340 / 500').last()).toBeVisible();
     await expect(page.getByText('Cost: 10xp * tier level.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Advance' })).toBeDisabled();
+
+    // The plate paints its chips and its doors in its own literals: the paper palette
+    // does not survive `--plate-ground` (demo-fidelity Finding 2), and the off-plate
+    // eyebrows take the sheet's fallback gilt rather than the realm token that resolves
+    // to near-white when no realm is set (Finding 6).
+    const plate = page.locator('.refsheet-plate');
+    await expectReadable(plate.locator('.refsheet-tag-warm'), 'plate warm chip');
+    // By colour, not by contrast: a near-white private chip would be readable on the
+    // night ground and still wrong. #c8a6f0 is the demo's own literal (`ties.html:90`),
+    // and before the fix this chip took `--destructive` red from the valence rule that
+    // followed it.
+    await expectInk(
+      plate.locator('.refsheet-tag-private'),
+      'rgb(200, 166, 240)',
+      'plate private chip'
+    );
+    await expectReadable(plate.getByRole('button', { name: 'Edit' }), 'plate Edit door');
+    await expectReadable(
+      page.locator('.refsheet-eyebrow', { hasText: 'Advance Relationship Tier' }),
+      'off-plate eyebrow',
+      3
+    );
 
     await shot(page, 'ties-page-owner');
 
@@ -643,6 +785,7 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect(shiftBlock().getByText('Relationship Shift')).toBeVisible();
     await expect(shiftBlock().getByText('Lover becomes')).toBeVisible();
     await expect(page.getByLabel('Lover becomes')).toBeVisible();
+    await shot(page, 'ties-shift-open');
     await shiftBlock().getByRole('button', { name: 'Keep as is' }).click();
     await expect(page.getByText('Relationship Shift')).toHaveCount(0);
 
@@ -652,6 +795,32 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect.poll(() => shiftRequests.length).toBe(1);
     expect(shiftRequests[0]).toEqual({ label_id: 1, new_type_id: 4, note: '' });
     await expect(page.getByText('Relationship Shift')).toHaveCount(0);
+
+    // The type picker, open: five families' worth of authored lines, each type's
+    // counterpart where it has one, and the awareness pills under them. Photographed
+    // because the demo's Screen 3 draws it and nothing else in this harness did.
+    await page.getByRole('button', { name: 'Declare another' }).click();
+    const picker = page.locator('.refsheet-picker');
+    await expect(picker.getByText('Betrothed')).toBeVisible();
+    await expect(picker.getByText('Promised.')).toBeVisible();
+    // Families in the catalogue's own order, and the counterpart line under a paired type.
+    await expect(picker.getByText('Heart')).toBeVisible();
+    await expect(picker.getByText('Company')).toBeVisible();
+    await expect(picker.getByText('Blood and oath')).toBeVisible();
+    await expect(picker.getByText('Teaching')).toBeVisible();
+    // Exact: each type's authored line also ends "Pairs with Guardian."/"with Student."
+    await expect(picker.getByText('with Guardian', { exact: true })).toBeVisible();
+    await expect(picker.getByText('with Student', { exact: true })).toBeVisible();
+    // Choosing a type raises the awareness pills, at Private — the demo's own default,
+    // and the one thing about declaring that has to be visible before it is pressed.
+    await picker.getByRole('button', { name: 'Betrothed' }).click();
+    await expect(page.getByRole('button', { name: 'Private' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await shot(page, 'ties-picker-open');
+    await page.getByRole('button', { name: 'Declare another' }).click();
+    await expect(picker).toHaveCount(0);
 
     // The breakdown panel: Tier, Scenes, Invested, Their Added Depth, and — owner only —
     // Affection and Conflict. Scoped to the popover: "Scenes" also names one of the
@@ -670,13 +839,17 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect(breakdown.getByText('41')).toBeVisible();
     await expect(breakdown.getByText('28')).toBeVisible();
 
-    // The stream: both capstone bands (capstone status wins the band over the private
-    // one's own black-journal styling), the scene, and the plain entry. Scoped to the
-    // stream itself — its first entry shares a title with a capstone-picker door above.
+    // The stream: both capstone bands, naming the writer and the tier in words the way
+    // the demo does — and the black one says BOTH things, since a capstone that is also
+    // a black entry is not one or the other. The scene and the plain entry follow.
+    // Scoped to the stream itself — its first entry shares a title with a
+    // capstone-picker door above.
     const stream = page.locator('.refsheet-stream');
-    await expect(stream.getByText('Capstone · tier 2')).toBeVisible();
+    await expect(
+      stream.getByText("Capstone · Ilsavet's second tier · Black journal")
+    ).toBeVisible();
     await expect(stream.getByText('What I did not say to Corvin')).toBeVisible();
-    await expect(stream.getByText('Capstone · tier 1')).toBeVisible();
+    await expect(stream.getByText("Capstone · Corvin's first tier")).toBeVisible();
     await expect(stream.getByText('Tolls and other promises')).toBeVisible();
     await expect(stream.getByText('Corvin, at the gate')).toBeVisible();
 
