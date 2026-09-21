@@ -90,7 +90,7 @@ class HatedFoeSpikeTests(TestCase):
 
         self.assertEqual(self._intensity(), self.curve.hated_foe_spike_intensity_amount)
 
-    def test_no_surge_on_positive_sign_track(self):
+    def test_no_surge_on_warm_label(self):
         self._hate(valence=TypeValence.WARM)
 
         add_opponent(

@@ -566,8 +566,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Social relationships: the allure ModifierTarget + Attracted To / Very Attracted conditions
     # the directed-allure engine reads + Flirt/Seduce effects set (#1697).
     "social_relationships": _seed_social_relationships,
-    # Relationship scale: the Regard/Friction system tracks ambient bumps write to,
-    # their 25/100/500/2000 tier bands, and the ReactionEmoji catalog (#1699).
+    # Relationship scale: the starter RelationshipType catalogue, the single
+    # RelationshipTier ladder (25/100/500/2000 depth), the RelationshipGrowthConfig
+    # singleton, and the ReactionEmoji catalog (#1699, #3957).
     "relationship_scale": _seed_relationship_scale,
     # Social actions: authoritative social ActionTemplates + pools + Flirt/Seduce attraction
     # effects. After social_relationships (its conditions) + checks (its CheckTypes) (#1697).
@@ -867,7 +868,12 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         ContributionMethod,
         ProjectKindResonanceAward,
     )
-    from world.relationships.models import RelationshipCondition, RelationshipTier  # noqa: PLC0415
+    from world.relationships.models import (  # noqa: PLC0415
+        RelationshipCondition,
+        RelationshipGrowthConfig,
+        RelationshipTier,
+        RelationshipType,
+    )
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.roster.models import GameInvite, Kinsperson, NPCStatlinePreset  # noqa: PLC0415
     from world.scenes.models import ReactionEmoji  # noqa: PLC0415
@@ -932,9 +938,14 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social relationships: the allure target + Attracted/Very-Attracted RelationshipConditions
         # (a shared lookup); represented by RelationshipCondition (#1697).
         "social_relationships": [RelationshipCondition],
-        # Relationship scale: Regard/Friction system tracks + tier bands + emoji
-        # catalog; represented by RelationshipTier and ReactionEmoji (#1699).
-        "relationship_scale": [RelationshipTier, ReactionEmoji],
+        # Relationship scale: the starter tie-type catalogue + tier ladder + growth
+        # config + emoji catalog (#1699, #3957).
+        "relationship_scale": [
+            RelationshipType,
+            RelationshipTier,
+            RelationshipGrowthConfig,
+            ReactionEmoji,
+        ],
         # Social actions seed ActionTemplate rows (#1697).
         "social_actions": [ActionTemplate],
         # Social combat: 4 CheckTypes + Inspired condition + Charming Word

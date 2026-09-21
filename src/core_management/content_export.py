@@ -293,8 +293,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "missions.missionrenownaward",
         # realms
         "realms.realm",
-        # relationships
-        "relationships.relationshiptrack",
+        # relationships — #3957: RelationshipType (Friend/Rival/Enemy/...) replaced
+        # the retired RelationshipTrack as the staff-authored catalogue.
+        "relationships.relationshiptype",
         # roster — #3427: the curated Story-NPC statline preset catalog (GMs
         # select at mint time, never invent values). Trait/skill line rows
         # (NPCPresetTraitLine/NPCPresetSkillLine) stay seeder-owned, mirroring

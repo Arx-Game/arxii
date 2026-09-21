@@ -19,16 +19,13 @@ from world.progression.models import ClassLevelUnlock, RelationshipRequirement
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipLabelFactory,
-    RelationshipTierFactory,
     RelationshipTypeFactory,
 )
 
 
-def _make_type_with_tiers(name: str):
-    """A labelled type, plus the shared 1/2/3 tier ladder (idempotent across test classes)."""
-    RelationshipTierFactory(tier_number=1)
-    RelationshipTierFactory(tier_number=2)
-    RelationshipTierFactory(tier_number=3)
+def _make_type(name: str):
+    """A labelled type. ``is_met_by_character`` compares ``relationship.tier`` (a plain int)
+    against ``minimum_tier`` directly — no ``RelationshipTier`` ladder row is read at all."""
     return RelationshipTypeFactory(name=name)
 
 
@@ -41,7 +38,7 @@ class RelationshipRequirementBoundaryTierTests(TestCase):
         cls.unlock = ClassLevelUnlock.objects.create(
             character_class=cls.character_class, target_level=4
         )
-        cls.type = _make_type_with_tiers("Trust")
+        cls.type = _make_type("Trust")
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
@@ -109,7 +106,7 @@ class RelationshipRequirementTypeKindTests(TestCase):
         cls.unlock = ClassLevelUnlock.objects.create(
             character_class=cls.character_class, target_level=4
         )
-        cls.trust_type = _make_type_with_tiers("Trust2")
+        cls.trust_type = _make_type("Trust2")
         cls.respect_type = RelationshipTypeFactory(name="Respect2")
 
     def setUp(self) -> None:
@@ -157,7 +154,7 @@ class RelationshipRequirementMinimumCountTests(TestCase):
         cls.unlock = ClassLevelUnlock.objects.create(
             character_class=cls.character_class, target_level=4
         )
-        cls.type = _make_type_with_tiers("TrackA")
+        cls.type = _make_type("TrackA")
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
@@ -195,6 +192,34 @@ class RelationshipRequirementMinimumCountTests(TestCase):
         met, _message = req.is_met_by_character(self.character)
         assert met is True
 
+    def test_one_side_with_two_qualifying_labels_counts_once(self) -> None:
+        """The class docstring's promise: two labels on ONE side still count as one side."""
+        other_sheet = CharacterSheetFactory()
+        relationship = CharacterRelationshipFactory(
+            source=self.sheet, target=other_sheet, is_active=True, tier=1
+        )
+        RelationshipLabelFactory(relationship=relationship, type=self.type)
+        RelationshipLabelFactory(relationship=relationship, type=RelationshipTypeFactory())
+
+        req_met_at_one = RelationshipRequirement.objects.create(
+            class_level_unlock=self.unlock,
+            required_type=None,
+            minimum_tier=1,
+            minimum_count=1,
+        )
+        met, message = req_met_at_one.is_met_by_character(self.character)
+        assert met is True
+        assert "have 1" in message  # not 2 — the two labels are one relationship
+
+        req_needs_two = RelationshipRequirement.objects.create(
+            class_level_unlock=self.unlock,
+            required_type=None,
+            minimum_tier=1,
+            minimum_count=2,
+        )
+        met, _message = req_needs_two.is_met_by_character(self.character)
+        assert met is False
+
 
 class RelationshipRequirementNoLeakTests(TestCase):
     """Unmet text renders only the authored gate + the character's own progress."""
@@ -205,7 +230,7 @@ class RelationshipRequirementNoLeakTests(TestCase):
         cls.unlock = ClassLevelUnlock.objects.create(
             character_class=cls.character_class, target_level=4
         )
-        cls.type = _make_type_with_tiers("Secretive")
+        cls.type = _make_type("Secretive")
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
