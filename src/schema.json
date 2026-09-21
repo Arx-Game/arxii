@@ -27627,7 +27627,7 @@ paths:
   /api/play/context/:
     get:
       operationId: play_context_retrieve
-      description: GET a small authorized context window around a retained pose.
+      description: GET a bounded authorized neighborhood around one retained pose.
       tags:
       - play
       security:

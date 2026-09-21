@@ -138,8 +138,9 @@ class PlayReaderContractTests(APITestCase):
         self.assertIsNotNone(data["after"])
 
         def _decode(token: str) -> list:
-            padded = token + "=" * (-len(token) % 4)
-            return json.loads(base64.urlsafe_b64decode(padded).decode())
+            from django.core import signing
+
+            return signing.loads(token, salt="narrative-play-cursor-v2")["key"]
 
         # Window is rows[5:56] (start = max(0, 30-25) = 5, end = 30+26 = 56,
         # of 60 rows): `before` must decode to row 5's boundary, `after` to

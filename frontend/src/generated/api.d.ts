@@ -17015,7 +17015,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description GET a small authorized context window around a retained pose. */
+    /** @description GET a bounded authorized neighborhood around one retained pose. */
     get: operations['play_context_retrieve'];
     put?: never;
     post?: never;
