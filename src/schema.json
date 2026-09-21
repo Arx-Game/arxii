@@ -27627,7 +27627,7 @@ paths:
   /api/play/context/:
     get:
       operationId: play_context_retrieve
-      description: GET a small authorized context window around a retained pose.
+      description: GET a bounded authorized neighborhood around one retained pose.
       tags:
       - play
       security:
@@ -55652,8 +55652,7 @@ components:
           readOnly: true
         is_unread:
           type: boolean
-          description: True when the read-receipt table has no row for this viewer+pose
-            (#3759).
+          description: True when no exact ``(id, timestamp)`` receipt exists (#3947).
           readOnly: true
         persona:
           type: object
@@ -56020,8 +56019,7 @@ components:
           readOnly: true
         is_unread:
           type: boolean
-          description: True when the read-receipt table has no row for this viewer+pose
-            (#3759).
+          description: True when no exact ``(id, timestamp)`` receipt exists (#3947).
           readOnly: true
         persona:
           type: object
