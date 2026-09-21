@@ -93,7 +93,8 @@ def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
     - ``invite=<csv>`` is parsed as the invitee list.
     - ``key=value`` tokens go into *kwargs*; if the next tokens contain no
       ``=`` they are consumed as the value's remainder — matching
-      ``declaration=``-style trailing-text behaviour.
+      ``covenant=``/``organization=``-style multi-word-name trailing-text
+      behaviour (consumed by the draft adapters in ``ritual_adapters.py``).
     - All other tokens are accumulated as the ritual name.
     """
     tokens = rest.split()
@@ -109,7 +110,8 @@ def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
         elif "=" in token and not token.startswith("="):
             key, _, val = token.partition("=")
             # Consume any following tokens that are not themselves key=value pairs
-            # (trailing-value semantics: declaration=<text> spans remaining tokens).
+            # (trailing-value semantics: covenant=<multi word name> spans remaining
+            # tokens, same for organization=).
             j = index + 1
             trailing: list[str] = []
             while j < len(tokens) and "=" not in tokens[j]:

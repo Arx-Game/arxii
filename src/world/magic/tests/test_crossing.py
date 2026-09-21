@@ -782,6 +782,31 @@ class AnchorLabelTests(TestCase):
         cap = self.capstone_thread.target_capstone
         self.assertIn(cap.title, label)
 
+    def test_track_anchor_label_skips_an_ended_label(self) -> None:
+        """An ENDED label is never chosen while a later OPEN label exists (review
+        round 2, N2) -- the ``ended_at`` filter moved from SQL to hand-rolled
+        Python in ``_anchor_label_for`` and nothing previously proved it fires."""
+        from django.utils import timezone
+
+        from world.magic.crossing.handlers import _anchor_label_for
+        from world.relationships.factories import RelationshipLabelFactory, RelationshipTypeFactory
+
+        ended_type = RelationshipTypeFactory(name="Rivalry")
+        RelationshipLabelFactory(
+            relationship=self.track_thread.target_relationship,
+            type=ended_type,
+            ended_at=timezone.now(),
+        )
+        open_type = RelationshipTypeFactory(name="Loyalty")
+        RelationshipLabelFactory(
+            relationship=self.track_thread.target_relationship,
+            type=open_type,
+        )
+
+        label = _anchor_label_for(self.track_thread)
+        self.assertIn(open_type.name, label)
+        self.assertNotIn(ended_type.name, label)
+
     def test_track_anchor_label_names_a_companion_partner(self) -> None:
         from world.companions.factories import CompanionFactory
         from world.magic.constants import TargetKind

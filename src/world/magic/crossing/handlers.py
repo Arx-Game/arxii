@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Thread
     from world.magic.specialization.models import AbstractSpecializedVariant
+    from world.relationships.models import RelationshipLabel
 
 logger = logging.getLogger(__name__)
 
@@ -325,13 +326,62 @@ class TraitCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.TRAIT
 
 
-def _anchor_label_for(thread: Thread) -> str:
+def _open_labels_by_relationship_id(
+    threads: Iterable[Thread],
+) -> dict[int, RelationshipLabel]:
+    """Batch-fetch each RELATIONSHIP_TRACK thread's earliest open label in ONE query.
+
+    Built once per request by a caller that lists more than one thread
+    (``CmdThreads._list_threads`` / ``_list_crossing_offers``) and passed into
+    ``_anchor_label_for``. This replaced a ``prefetch_related(
+    "target_relationship__labels__type")`` on the feeding queryset (#3957
+    review round 2, N1): a bare-string prefetch writes
+    ``_prefetched_objects_cache["labels"]`` onto the ``CharacterRelationship``
+    instance, which is idmapper-shared and outlives the request — every other
+    reader of ``side.labels.all()`` in the process (``world/relationships/
+    reads.py``, ``character_sheets/serializers.py``, ``commands/
+    relationships.py``, ``commands/account/sheet_sections.py``) would then
+    serve whatever got cached here until a label change elsewhere refreshed
+    the instance. A plain batched query has no such cache and cannot leak.
+    """
+    from world.relationships.models import RelationshipLabel  # noqa: PLC0415
+
+    relationship_ids = {
+        t.target_relationship_id
+        for t in threads
+        if t.target_kind == TargetKind.RELATIONSHIP_TRACK and t.target_relationship_id is not None
+    }
+    if not relationship_ids:
+        return {}
+    labels = RelationshipLabel.objects.filter(
+        relationship_id__in=relationship_ids, ended_at__isnull=True
+    ).select_related("type")
+    # RelationshipLabel.Meta.ordering = ["since"], so iterating in default order
+    # and keeping only the FIRST hit per relationship reproduces
+    # open_labels().first()'s "earliest open label" tie-break.
+    result: dict[int, RelationshipLabel] = {}
+    for label in labels:
+        result.setdefault(label.relationship_id, label)
+    return result
+
+
+def _anchor_label_for(
+    thread: Thread,
+    open_label_by_relationship_id: dict[int, RelationshipLabel] | None = None,
+) -> str:
     """Return a human-readable label for the thread's anchor entity.
 
     Used by ``_compose_crossing_message`` and ``CmdThreads._list_offers`` so
     the crossing announcement references the right anchor (partner name for
     relationship threads, trait/facet name for those kinds) instead of a
     generic placeholder.
+
+    ``open_label_by_relationship_id``, when given, is a pre-built batch lookup
+    from ``_open_labels_by_relationship_id`` — the caller listing several
+    threads builds it once and passes it in, avoiding a query per thread.
+    When omitted (a single-thread caller, e.g. ``_compose_crossing_message``,
+    called once per crossing event — never in a loop), this queries directly;
+    building a one-row batch for a single thread would be pointless.
     """
     kind = thread.target_kind
     fallback = {
@@ -350,12 +400,10 @@ def _anchor_label_for(thread: Thread) -> str:
         side = thread.target_relationship
         if side is not None:
             partner_name = side.target_name
-            # Read off the prefetched `labels` cache in Python rather than
-            # `side.open_labels()` (a fresh filtered query per thread — N+1
-            # across a thread list). `RelationshipLabel.Meta.ordering =
-            # ["since"]` is the manager's default order, so this matches
-            # `open_labels().first()`'s "earliest open label" pick.
-            label = next((lbl for lbl in side.labels.all() if lbl.ended_at is None), None)
+            if open_label_by_relationship_id is not None:
+                label = open_label_by_relationship_id.get(side.pk)
+            else:
+                label = side.open_labels().first()
             label_desc = label.type.name if label is not None else "unlabeled"
             return f"bond with {partner_name} ({label_desc})"
     if kind == TargetKind.RELATIONSHIP_CAPSTONE:

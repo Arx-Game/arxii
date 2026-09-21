@@ -2116,11 +2116,6 @@ class PendingCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
                 "thread__target_sanctum_details",
                 "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
             )
-            # See commands/threads.py's _list_threads for why this stays a bare-string
-            # prefetch rather than a Prefetch() object naming a cached-attr target:
-            # the chain crosses two hops into a model (RelationshipLabel) this fix
-            # round does not own, with no PrunedCachedProperty to point at yet.
-            .prefetch_related("thread__target_relationship__labels__type")  # noqa: PREFETCH_STRING
             .order_by("-created_at")
             .distinct()
         )
