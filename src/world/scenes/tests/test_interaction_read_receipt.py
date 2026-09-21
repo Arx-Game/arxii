@@ -1,7 +1,8 @@
+from datetime import timedelta
 from unittest.mock import patch
 
-from django.db import IntegrityError
-from django.test import TestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase, tag
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
@@ -116,3 +117,28 @@ class IsUnreadSerializerFieldTests(APITestCase):
         after = self.client.get(reverse("interaction-list")).json()
         row_after = next(r for r in after["results"] if r["id"] == interaction.pk)
         self.assertFalse(row_after["is_unread"])
+
+
+@tag("postgres")
+class PartitionedMetadataIntegrityTests(TestCase):
+    """PostgreSQL enforces the full ``(interaction_id, timestamp)`` reference."""
+
+    def test_receipt_timestamp_must_match_partition_key(self) -> None:
+        account = AccountFactory()
+        interaction = InteractionFactory()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InteractionReadReceipt.objects.create(
+                    interaction_id=interaction.pk,
+                    timestamp=interaction.timestamp + timedelta(seconds=1),
+                    account=account,
+                )
+
+    def test_deleting_interaction_cleans_receipt(self) -> None:
+        account = AccountFactory()
+        interaction = InteractionFactory()
+        receipt = InteractionReadReceipt.objects.create(
+            interaction=interaction, timestamp=interaction.timestamp, account=account
+        )
+        interaction.delete()
+        self.assertFalse(InteractionReadReceipt.objects.filter(pk=receipt.pk).exists())

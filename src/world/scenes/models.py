@@ -1532,8 +1532,12 @@ class InteractionAction(RelatedCacheClearingMixin, SharedMemoryModel):
 class PoseSubmission(SharedMemoryModel):
     """Idempotency ledger: (persona, client_request_id) -> the Interaction it produced.
 
-    Written only on acceptance, inside the same transaction as the Interaction
-    it points to (see `idempotent_record_interaction` in interaction_services.py).
+    The interaction reference carries its denormalized timestamp because the
+    partitioned Interaction table is identified by ``(id, timestamp)``. Both
+    reference columns are null for an accepted ephemeral pose, which has no
+    durable Interaction row. Written only on acceptance, inside the same
+    transaction as the Interaction it points to (see
+    `idempotent_record_interaction` in interaction_services.py).
     Rejections are never recorded here - they are re-validated fresh on every
     attempt. Pruned after 24h by scenes.tasks.pose_submission_cleanup_task; this
     table's steady-state size tracks recent web-submission volume only, never
@@ -1556,6 +1560,14 @@ class PoseSubmission(SharedMemoryModel):
         db_constraint=False,
         help_text="The Interaction this submission produced.",
     )
+    timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Denormalized from interaction; required with interaction for the "
+            "partitioned table composite reference. Both are null for ephemeral submissions."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1564,9 +1576,17 @@ class PoseSubmission(SharedMemoryModel):
                 fields=["persona", "client_request_id"],
                 name="unique_submission_per_persona",
             ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(interaction__isnull=True, timestamp__isnull=True)
+                    | models.Q(interaction__isnull=False, timestamp__isnull=False)
+                ),
+                name="pose_submission_interaction_timestamp_pair",
+            ),
         ]
         indexes = [
             models.Index(fields=["created_at"]),
+            models.Index(fields=["interaction", "timestamp"], name="posesub_interaction_ts_idx"),
         ]
 
     def __str__(self) -> str:

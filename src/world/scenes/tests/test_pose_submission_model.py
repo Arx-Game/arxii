@@ -1,7 +1,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.scenes.factories import PersonaFactory
+from world.scenes.factories import InteractionFactory, PersonaFactory
 from world.scenes.models import PoseSubmission
 
 
@@ -20,3 +20,24 @@ class PoseSubmissionModelTests(TestCase):
         PoseSubmission.objects.create(persona=persona_a, client_request_id=request_id)
         PoseSubmission.objects.create(persona=persona_b, client_request_id=request_id)
         self.assertEqual(PoseSubmission.objects.count(), 2)
+
+    def test_durable_submission_carries_interaction_timestamp(self):
+        persona = PersonaFactory()
+        interaction = InteractionFactory(persona=persona)
+        submission = PoseSubmission.objects.create(
+            persona=persona,
+            client_request_id="33333333-3333-3333-3333-333333333333",
+            interaction=interaction,
+            timestamp=interaction.timestamp,
+        )
+        self.assertEqual(submission.timestamp, interaction.timestamp)
+
+    def test_interaction_and_timestamp_must_be_set_together(self):
+        persona = PersonaFactory()
+        interaction = InteractionFactory(persona=persona)
+        with self.assertRaises(IntegrityError):
+            PoseSubmission.objects.create(
+                persona=persona,
+                client_request_id="44444444-4444-4444-4444-444444444444",
+                interaction=interaction,
+            )

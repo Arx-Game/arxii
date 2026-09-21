@@ -1483,6 +1483,9 @@ def idempotent_record_interaction(
             persona=persona,
             client_request_id=client_request_id,
             interaction=interaction_for_ledger,
+            # Partitioned Interaction rows are identified by (id, timestamp).
+            # Ephemeral acceptances intentionally keep both reference columns null.
+            timestamp=(interaction_for_ledger.timestamp if interaction_for_ledger else None),
         )
 
     try:

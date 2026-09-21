@@ -48,6 +48,7 @@ from check_partition_sql_drift import POST_PARTITION_COLUMNS  # noqa: E402
 # in-repo only as a frozen reference.
 SQL_FILES = [
     "world/scenes/sql/partition_interaction_forward.sql",
+    "world/scenes/sql/interaction_metadata_fk_forward.sql",
     "world/combat/sql/interaction_fk_composites_forward.sql",
     "world/areas/sql/areaclosure.sql",
     "world/codex/sql/subjectbreadcrumb.sql",
