@@ -129,6 +129,9 @@ class SheetTiesSectionTests(APITestCase):
         self.assertEqual(len(sides), 1, sides)
         self.assertEqual([q for q in sql if "arxii_relationshiptier" in q], [])
         self.assertEqual([q for q in sql if "arxii_relationshipallocation" in q], [])
+        # The viewer's own-character resolution reads player data; with no sides there is
+        # no audience to decide, so that read never fires either.
+        self.assertEqual([q for q in sql if q.startswith('SELECT "arxii_playerdata"')], [])
 
     def test_cast_query_budget_stays_flat_as_ties_grow(self):
         """``_build_ties`` batches via ``reads.build_tie_page`` (#3957 review): adding five

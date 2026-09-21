@@ -2047,7 +2047,6 @@ class CharacterSheetSerializer(serializers.Serializer):
 
         roster_entry = sheet.roster_entry
         user = request.user if request else None
-        viewer_sheet = resolve_viewer_sheet(request)
 
         # Per-viewer identity gating (#1109): close the de-anonymization leaks. Only the owner /
         # staff see the full secret alt list (which would link every face); a non-privileged
@@ -2075,6 +2074,10 @@ class CharacterSheetSerializer(serializers.Serializer):
         # below. Both consumers take the evaluated list, so neither fires a query of its
         # own and a sheet with no ties pays for this lookup alone.
         tie_sides = _active_tie_sides(sheet)
+        # Who is looking, as which of their own characters, decides each card's audience.
+        # ``character_for_request`` reads the account's player data, so a sheet with no
+        # ties never asks; the audience question has nothing to shape.
+        viewer_sheet = resolve_viewer_sheet(request) if tie_sides else None
 
         return {
             "id": sheet.pk,
