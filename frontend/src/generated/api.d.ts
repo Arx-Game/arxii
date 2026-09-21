@@ -18648,59 +18648,6 @@ export interface paths {
     patch: operations['risk_calibrations_partial_update'];
     trace?: never;
   };
-  '/api/rivals/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description The requesting player's rival declarations: list, declare, withdraw (#2170).
-     *
-     *     Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
-     *     RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
-     *     removes only your own side.
-     */
-    get: operations['rivals_list'];
-    put?: never;
-    /**
-     * @description The requesting player's rival declarations: list, declare, withdraw (#2170).
-     *
-     *     Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
-     *     RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
-     *     removes only your own side.
-     */
-    post: operations['rivals_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/rivals/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /**
-     * @description The requesting player's rival declarations: list, declare, withdraw (#2170).
-     *
-     *     Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
-     *     RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
-     *     removes only your own side.
-     */
-    delete: operations['rivals_destroy'];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/room-features/defenses/fund-ward/': {
     parameters: {
       query?: never;
@@ -24362,14 +24309,12 @@ export interface components {
      *     ``partner_sheet_id`` identifies the partner's character sheet.
      *     ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
      *     ``resonance_id`` selects the resonance for the Sinner's Thread.
-     *     ``writeup`` is the narrative description of the bond (20+ chars).
      */
     AcceptSoulTetherRequest: {
       actor_sheet_id: number;
       partner_sheet_id: number;
       sinner_role: components['schemas']['SinnerRoleEnum'];
       resonance_id: number;
-      writeup: string;
     };
     /**
      * @description Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
@@ -37679,21 +37624,6 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Ritual'][];
     };
-    PaginatedRivalryList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['Rivalry'][];
-    };
     PaginatedRoomAlarmDetailsList: {
       /** @example 123 */
       count: number;
@@ -42770,46 +42700,6 @@ export interface components {
       responded_at: string | null;
     };
     /**
-     * @description One of your rival declarations — target name, which character declared, mutual or pending.
-     *
-     *     ``is_mutual`` reports the #2170 double-opt-in state: True only once the other side has
-     *     declared you back (the list queryset annotates it; the create path stamps it explicitly).
-     *     ``rivaler_entry`` / ``rival_entry`` expose the RosterEntry pks web clients speak.
-     */
-    Rivalry: {
-      readonly id: number;
-      /** @description The declarer's tenure (this player's run of the character that named a rival). */
-      readonly rivaler_tenure: number;
-      /** @description The named rival's tenure (a specific player's run of that character). */
-      readonly rival_tenure: number;
-      readonly rivaler_entry: number;
-      readonly rival_entry: number;
-      readonly rival_name: string;
-      readonly is_mutual: boolean;
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /**
-     * @description Declare a rival by character (web-friendly): your declaring character + the target.
-     *
-     *     ``viewer`` / ``rival`` are ``RosterEntry`` pks; the view resolves each to its current tenure
-     *     (rivalries are tenure-based, mirroring ``FriendshipCreateSerializer``).
-     */
-    RivalryCreate: {
-      viewer: number;
-      rival: number;
-    };
-    /**
-     * @description Declare a rival by character (web-friendly): your declaring character + the target.
-     *
-     *     ``viewer`` / ``rival`` are ``RosterEntry`` pks; the view resolves each to its current tenure
-     *     (rivalries are tenure-based, mirroring ``FriendshipCreateSerializer``).
-     */
-    RivalryCreateRequest: {
-      viewer: number;
-      rival: number;
-    };
-    /**
      * @description * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
@@ -46148,7 +46038,7 @@ export interface components {
       };
       weavable_traits: components['schemas']['_WeavableTrait'][];
       weavable_techniques: components['schemas']['_WeavableTechnique'][];
-      weavable_relationship_track_ids: number[];
+      weavable_relationship_type_ids: number[];
     };
     /**
      * @description Request serializer for POST /api/magic/thread-pull-preview/.
@@ -73551,71 +73441,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['RiskCalibration'];
         };
-      };
-    };
-  };
-  rivals_list: {
-    parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedRivalryList'];
-        };
-      };
-    };
-  };
-  rivals_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RivalryCreateRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RivalryCreate'];
-        };
-      };
-    };
-  };
-  rivals_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };
