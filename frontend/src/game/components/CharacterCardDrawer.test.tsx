@@ -252,7 +252,7 @@ describe('CharacterCardDrawer', () => {
   });
 
   describe('the tie door (#3957)', () => {
-    it("leads to the matched character's declare page, carrying the persona", () => {
+    it("leads to the VIEWER's own declare page, carrying the clicked persona and name", () => {
       mockSearchMatch(matchedEntry());
       renderWithProviders(
         <CharacterCardDrawer
@@ -262,10 +262,26 @@ describe('CharacterCardDrawer', () => {
           onWhisper={vi.fn()}
         />
       );
+      // The route's `:id` is the character whose SIDE the tie is — the viewer. Pointing
+      // it at the target's entry (42) drew "Alice and / Alice" on arrival and hung the
+      // declare page off the wrong sheet.
       expect(screen.getByRole('link', { name: 'Declare a tie' })).toHaveAttribute(
         'href',
-        '/characters/42/ties/new?persona=9'
+        '/characters/7/ties/new?persona=9&name=Alice'
       );
+    });
+
+    it('offers no tie door to a viewer who is playing nobody', () => {
+      mockSearchMatch(matchedEntry());
+      renderWithProviders(
+        <CharacterCardDrawer
+          persona={PERSONA}
+          onClose={vi.fn()}
+          viewerEntryId={null}
+          onWhisper={vi.fn()}
+        />
+      );
+      expect(screen.queryByRole('link', { name: 'Declare a tie' })).not.toBeInTheDocument();
     });
 
     it('offers no tie door for a face that is not on the public roster', () => {

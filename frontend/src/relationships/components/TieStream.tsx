@@ -2,11 +2,12 @@
  * The stream under a tie (#3957) — everything the two of them wrote about each other,
  * and every scene they were both in.
  *
- * Drawn in the Reading Room's own row shape and its own stylesheet rather than a second
- * idea of what an entry looks like: same band, same meta line, same seven-line clamp.
- * That is why the block roots itself in `.journals` — every one of those rules is
- * scoped under it, so a row drawn outside that class renders unstyled (the #3667
- * lesson: assert the rule REACHES the page, not that the class name is in the markup).
+ * Drawn with the Reading Room's own row parts (`journals/components/EntryRowParts`)
+ * rather than a second idea of what an entry looks like, so the two cannot drift: same
+ * band, same meta line, same seven-line clamp, one spelling of "Black journal". That is
+ * also why the block roots itself in `.journals` — every one of those rules is scoped
+ * under it, so a row drawn outside that class renders unstyled (the #3667 lesson: assert
+ * the rule REACHES the page, not that the class name is in the markup).
  *
  * The server already removed anything this viewer may not read, so the pills here only
  * ever narrow what is in hand — they are a reader's convenience, never a gate.
@@ -16,8 +17,15 @@ import { useState } from 'react';
 
 import '@/journals/journals.css';
 import { PillButton } from '@/journals/components/Pill';
+import {
+  BLACK_JOURNAL_BAND,
+  EntryBand,
+  EntryBody,
+  EntryMeta,
+  EntryTitle,
+  entryRowClass,
+} from '@/journals/components/EntryRowParts';
 import { formatIcDate, formatPostingDate } from '@/journals/dates';
-import { cn } from '@/lib/utils';
 import { useTieStream } from '@/relationships/queries';
 import type { TieStreamItem } from '../api';
 
@@ -48,7 +56,7 @@ function bandText(item: TieStreamItem): string | null {
   if (item.is_capstone) {
     return item.capstone_tier == null ? 'Capstone' : `Capstone · tier ${item.capstone_tier}`;
   }
-  if (!item.is_public) return 'Black journal';
+  if (!item.is_public) return BLACK_JOURNAL_BAND;
   return null;
 }
 
@@ -103,33 +111,12 @@ export function TieStream({
         return (
           <article
             key={`${item.kind}-${item.id}`}
-            className={cn(
-              'grid gap-[.35rem] border-t py-[1.1rem] first:border-t-0 first:pt-0',
-              !item.is_public && 'jr-black my-[.35rem] border-t-0 px-5'
-            )}
+            className={entryRowClass({ isBlack: !item.is_public })}
           >
-            {band && (
-              <div className="jr-sans jr-soft text-[.6875rem] uppercase tracking-[.14em] text-muted-foreground">
-                {band}
-              </div>
-            )}
-            <div className="jr-sans jr-soft flex flex-wrap items-baseline gap-x-[.9rem] gap-y-1 text-[.8125rem] text-muted-foreground">
-              {item.author_name && (
-                <span className="jr-strong font-body text-[1.05rem] font-semibold text-foreground">
-                  {item.author_name}
-                </span>
-              )}
-              <span>{date}</span>
-            </div>
-            <h3
-              className={cn(
-                'm-0 font-body leading-[1.2]',
-                isScene ? 'text-[1.1rem] italic' : 'text-[1.4rem] font-medium'
-              )}
-            >
-              {item.title}
-            </h3>
-            {item.body && <div className="jr-body jr-clamp font-body">{item.body}</div>}
+            {band && <EntryBand>{band}</EntryBand>}
+            <EntryMeta who={item.author_name || undefined} date={date} />
+            <EntryTitle quiet={isScene}>{item.title}</EntryTitle>
+            {item.body && <EntryBody clamped>{item.body}</EntryBody>}
           </article>
         );
       })}

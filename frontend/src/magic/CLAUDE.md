@@ -412,13 +412,17 @@ FACET, SANCTUM, COVENANT_ROLE, and RELATIONSHIP_TRACK are all live; RELATIONSHIP
 is the one kind still stubbed "coming soon", #2033). The bare ROOM anchor was removed
 (#879/#1199) — room-anchored threads now use the dedicated SANCTUM slot-based weaving flow,
 not this generic wizard. Step 2: select anchor — for RELATIONSHIP_TRACK this is a "with
-whom" partner-then-track picker (#2159): partner choices come from
-`@/relationships/api.getMyOutboundRelationships` filtered to relationships with at least
-one `track_progress` row (fetched per-partner via `getRelationshipDetail` — the list
-serializer omits it) among `ThreadHubSummary.weavable_relationship_type_ids`; picking a
-partner reveals only that partner's qualifying tracks, still within step 2
-(`renderRelationshipTrackStep2`). The payload adds `target_persona_id` (the partner's
-primary Persona pk, resolved via `/api/personas/?character_sheet=`) for this kind only —
+whom" partner-then-type picker (#2159, #3957): partner choices come from one
+`@/relationships/api.listMyTies()` call, kept where the tie holds at least one UNENDED
+label whose `type` is among `ThreadHubSummary.weavable_relationship_type_ids`; a tie
+payload already carries its labels, so there is no per-partner detail fetch. Companion
+ties are dropped (no persona to weave with). Picking a partner reveals only that
+partner's qualifying types, still within step 2 (`renderRelationshipTrackStep2`), and the
+submitted `target_id` is a `RelationshipType` catalogue id, NOT a row on the tie. The
+tier minimum is deliberately not checked client-side — the server refuses with the
+sentence the player should read. The payload adds `target_persona_id` (the partner's
+primary Persona pk, resolved via `@/relationships/api.getPersonaIdForSheet`, which wraps
+`/api/personas/?character_sheet=`) for this kind only —
 `ThreadSerializer._resolve_partner_sheet` requires it server-side. Step 3: name +
 description + confirm. Calls `useWeaveThread`.
 

@@ -130,7 +130,9 @@ export function useSetTieSummary() {
  */
 export function useTargetPersonaId(characterSheetId: number | null | undefined) {
   return useQuery({
-    queryKey: [...relationshipsKeys.all, 'target-persona', characterSheetId ?? 0] as const,
+    // Deliberately OUTSIDE the tie prefix: every tie write invalidates that prefix, and a
+    // character's primary persona does not move because someone renamed a label.
+    queryKey: ['persona-for-sheet', characterSheetId ?? 0] as const,
     queryFn: () => api.getPersonaIdForSheet(characterSheetId as number),
     enabled: characterSheetId != null,
     staleTime: 5 * 60_000,

@@ -39,9 +39,12 @@ function labelRow(name: string) {
 }
 
 describe('LabelsAndAp', () => {
-  it('heads the block with the other name and prefills the AP already set', () => {
+  it('names the other side without opening a second heading, and prefills the AP set', () => {
     renderBlock();
-    expect(screen.getByText('Corvin Ashe')).toHaveClass('refsheet-eyebrow');
+    expect(screen.getByText('Corvin Ashe')).toBeInTheDocument();
+    // The plate above already carries them in an h2; a second one at the same weight
+    // reads as a duplicate to anyone hearing the page.
+    expect(screen.queryByRole('heading', { name: 'Corvin Ashe' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('AP this week')).toHaveValue('9');
   });
 
@@ -55,14 +58,15 @@ describe('LabelsAndAp', () => {
     );
   });
 
-  it('says when a label arrived and what it replaced', () => {
+  it('marks a label and says what it replaced, without printing a real-world date', () => {
     renderBlock();
     const lover = labelRow('Lover');
-    expect(within(lover).getByText('Clandestine · since 1 September 1012')).toBeInTheDocument();
+    expect(within(lover).getByText('Clandestine')).toBeInTheDocument();
     expect(within(lover).getByText('Replaced Friend')).toBeInTheDocument();
-    expect(
-      within(labelRow('Enemy')).getByText('Private · since 22 September 1012')
-    ).toBeInTheDocument();
+    expect(within(labelRow('Enemy')).getByText('Private')).toBeInTheDocument();
+    // `since` is a posting timestamp, not an IC one — it has no business on an IC label.
+    expect(screen.queryByText(/since /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/20\d\d/)).not.toBeInTheDocument();
   });
 
   it('offers only the awareness moves that go forward', () => {
@@ -82,7 +86,8 @@ describe('LabelsAndAp', () => {
     renderBlock(makeTie({ labels: [makeLabel({ id: 1, awareness: 'public' })] }));
     const lover = labelRow('Lover');
     expect(within(lover).queryByRole('button', { name: /^Make / })).not.toBeInTheDocument();
-    expect(within(lover).getByText('since 1 September 1012')).toBeInTheDocument();
+    // A public label carries no marker at all, so it gets no aside either.
+    expect(within(lover).queryByText(/Private|Clandestine|former/)).not.toBeInTheDocument();
   });
 
   it('moves a label forward when the door is used', () => {
@@ -107,10 +112,13 @@ describe('LabelsAndAp', () => {
     confirm.mockRestore();
   });
 
-  it('leaves a former label with no doors', () => {
+  it('leaves a former label with no doors, and says only that it is former', () => {
     renderBlock();
     const former = labelRow('Friend · former');
     expect(within(former).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(former).getByText('former')).toBeInTheDocument();
+    // The awareness of an ended label is not a live fact.
+    expect(within(former).queryByText(/^Private$|^Clandestine$/)).not.toBeInTheDocument();
   });
 
   it('opens the shift block from the Change door on a label', () => {
@@ -143,5 +151,27 @@ describe('LabelsAndAp', () => {
       { target_persona_id: 91, type_id: 11, awareness: 'private' },
       expect.anything()
     );
+  });
+
+  it('will not let a write fire before the target persona has resolved', () => {
+    render(<LabelsAndAp tie={makeTie()} targetPersonaId={null} />);
+    expect(screen.getByRole('button', { name: 'Keep' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Declare another' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Mentor/ }));
+    expect(screen.getByRole('button', { name: 'Declare' })).toBeDisabled();
+    expect(allocation).not.toHaveBeenCalled();
+    expect(declare).not.toHaveBeenCalled();
+  });
+
+  it('offers the shift select grouped, without the types already held open', () => {
+    renderBlock();
+    fireEvent.click(within(labelRow('Lover')).getByRole('button', { name: 'Change' }));
+    const select = screen.getByRole('combobox', { name: 'Lover becomes' });
+    const groups = within(select).getAllByRole('group');
+    expect(groups.map((group) => group.getAttribute('label'))).toEqual(['Company', 'Teaching']);
+    // Lover is this label's own type and Enemy is held open, so neither is on offer;
+    // Friend has ended, so it is.
+    expect(within(select).getByRole('option', { name: 'Friend' })).toBeInTheDocument();
+    expect(within(select).queryByRole('option', { name: 'Lover' })).not.toBeInTheDocument();
   });
 });

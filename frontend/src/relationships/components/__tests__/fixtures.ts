@@ -28,6 +28,7 @@ export function makeTie(overrides: Partial<Tie> = {}): Tie {
     other_sheet_id: 12,
     other_entry_id: 34,
     audience: 'owner',
+    is_own_side: true,
     labels: [
       makeLabel({ id: 1, replaced_type_name: 'Friend' }),
       makeLabel({

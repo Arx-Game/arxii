@@ -8,17 +8,20 @@
 
 import { useState } from 'react';
 
-import { Eyebrow, QuietDoor } from '@/character_sheets/components/sheet/primitives';
+import { Eyebrow, Ledger, QuietDoor } from '@/character_sheets/components/sheet/primitives';
 import { useRelationshipTypes, useShiftLabel } from '@/relationships/queries';
 import type { TieLabel } from '../api';
+import { FAMILIES } from './TypePicker';
 
 export interface RelationshipShiftProps {
   label: TieLabel;
+  /** Type ids the side already holds UNENDED — shifting into one of those is refused. */
+  heldTypeIds?: number[];
   /** Fired on a successful change, and on Keep as is. */
   onDone: () => void;
 }
 
-export function RelationshipShift({ label, onDone }: RelationshipShiftProps) {
+export function RelationshipShift({ label, heldTypeIds = [], onDone }: RelationshipShiftProps) {
   const { data: types = [] } = useRelationshipTypes();
   const shift = useShiftLabel();
   const [newTypeId, setNewTypeId] = useState<number | null>(null);
@@ -26,7 +29,14 @@ export function RelationshipShift({ label, onDone }: RelationshipShiftProps) {
   const [error, setError] = useState<string | null>(null);
 
   const becomes = `${label.type_name} becomes`;
-  const choices = types.filter((type) => type.id !== label.type);
+  // Grouped the way the picker groups, and narrowed the same way: a type the side already
+  // holds open is not on offer, because shifting Lover into a Lover you already hold is a
+  // server refusal the player should never have been able to ask for.
+  const held = new Set([...heldTypeIds, label.type]);
+  const groups = FAMILIES.map(({ key, heading }) => ({
+    heading,
+    options: types.filter((type) => type.family === key && !held.has(type.id)),
+  })).filter((group) => group.options.length > 0);
 
   function submit() {
     if (newTypeId == null) return;
@@ -43,9 +53,9 @@ export function RelationshipShift({ label, onDone }: RelationshipShiftProps) {
   return (
     <div className="refsheet-block">
       <Eyebrow>Relationship Shift</Eyebrow>
-      <p className="refsheet-ledger">
+      <Ledger>
         <span>{becomes}</span>
-      </p>
+      </Ledger>
       <select
         aria-label={becomes}
         className="refsheet-input"
@@ -53,10 +63,14 @@ export function RelationshipShift({ label, onDone }: RelationshipShiftProps) {
         onChange={(event) => setNewTypeId(event.target.value ? Number(event.target.value) : null)}
       >
         <option value="" />
-        {choices.map((type) => (
-          <option key={type.id} value={String(type.id)}>
-            {type.name}
-          </option>
+        {groups.map((group) => (
+          <optgroup key={group.heading} label={group.heading}>
+            {group.options.map((type) => (
+              <option key={type.id} value={String(type.id)}>
+                {type.name}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <div className="refsheet-field">

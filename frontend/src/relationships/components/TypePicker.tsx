@@ -21,8 +21,11 @@ import { Eyebrow, QuietDoor } from '@/character_sheets/components/sheet/primitiv
 import { useDeclareLabel, useRelationshipTypes } from '@/relationships/queries';
 import type { Awareness, RelationshipType, TieTargetRef } from '../api';
 
-/** The five families, in the order the picker draws them, with their headings. */
-const FAMILIES: Array<{ key: RelationshipType['family']; heading: string }> = [
+/**
+ * The five families, in the order they are drawn, with their headings. Exported because
+ * the shift block groups its select the same way — one order, one spelling.
+ */
+export const FAMILIES: Array<{ key: RelationshipType['family']; heading: string }> = [
   { key: 'heart', heading: 'Heart' },
   { key: 'company', heading: 'Company' },
   { key: 'contest', heading: 'Contest' },

@@ -39,19 +39,25 @@ vi.mock('@/roster/queries', () => ({
   }),
 }));
 
+const useCharacterSheetQuery = vi.fn();
+vi.mock('@/character_sheets/queries', () => ({
+  useCharacterSheetQuery: (id: number) => useCharacterSheetQuery(id),
+}));
+
 vi.mock('@/journals/queries', () => ({
   useJournalEntries: () => ({ data: { results: [] } }),
 }));
 
+const usePersonaSearch = vi.fn();
 vi.mock('@/roster/usePersonaSearch', () => ({
-  usePersonaSearch: () => ({ results: [], isFetching: false }),
+  usePersonaSearch: (term: string) => usePersonaSearch(term),
 }));
 
-function renderPage(tieId = '77') {
+function renderPage(tieId = '77', search = '') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/characters/9/ties/${tieId}`]}>
+      <MemoryRouter initialEntries={[`/characters/9/ties/${tieId}${search}`]}>
         <Routes>
           <Route path="/characters/:id/ties/:tieId" element={<TiePage />} />
         </Routes>
@@ -64,6 +70,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   useTie.mockReturnValue({ data: makeTie(), isLoading: false, error: null });
   useTieStream.mockReturnValue({ data: STREAM, isLoading: false, error: null });
+  useCharacterSheetQuery.mockReturnValue({ data: { plate_ink: 'verdigris' } });
+  usePersonaSearch.mockReturnValue({ results: [], isFetching: false });
 });
 
 describe('TiePage', () => {
@@ -102,6 +110,7 @@ describe('TiePage', () => {
     useTie.mockReturnValue({
       data: makeTie({
         audience: 'third_party',
+        is_own_side: false,
         labels: [makeLabel({ id: 1, awareness: 'public', type_name: 'Rival' })],
         depth: null,
         next_tier_threshold: null,
@@ -133,5 +142,71 @@ describe('TiePage', () => {
     expect(useTie).toHaveBeenCalledWith(null);
     expect(screen.getByLabelText('About a character')).toBeInTheDocument();
     expect(screen.queryByLabelText('AP this week')).not.toBeInTheDocument();
+  });
+
+  // C1: `--plate-ground` and `--plate-accent` are declared only by `.refsheet[data-ink=…]`,
+  // so without the attribute the night plate has no ground and its near-white ink lands
+  // on paper. The class being in the markup is not the rule reaching the page.
+  it("prints the plate in the owner's ink", () => {
+    const { container } = renderPage();
+    expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'verdigris');
+  });
+
+  it('falls back to the default ink before the sheet payload arrives', () => {
+    useCharacterSheetQuery.mockReturnValue({ data: undefined });
+    const { container } = renderPage();
+    expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'ember');
+  });
+
+  it('inks the declare page too', () => {
+    const { container } = renderPage('new');
+    expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'verdigris');
+  });
+
+  // C2: `tie_audience` short-circuits on staffness, so STAFF says nothing about whose
+  // side this is — and four of the seven writes resolve their side from the CALLER's
+  // sheet, so a door opened here wrote a row on the staff character's own tie.
+  it("gives staff reading someone else's tie no write doors at all", () => {
+    useTie.mockReturnValue({
+      data: makeTie({ audience: 'staff', is_own_side: false }),
+      isLoading: false,
+      error: null,
+    });
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'Corvin Ashe' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('AP this week')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Declare another' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Advance Relationship Tier')).not.toBeInTheDocument();
+  });
+
+  it('gives staff their write doors back on their own tie', () => {
+    useTie.mockReturnValue({
+      data: makeTie({ audience: 'staff', is_own_side: true }),
+      isLoading: false,
+      error: null,
+    });
+    renderPage();
+    expect(screen.getByLabelText('AP this week')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Declare another' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  // I2: the page must name the person a Declare would write toward, and the id it writes
+  // must come from a match it printed — never from the query string on its own.
+  it('names the preselected character before anything can be declared', () => {
+    usePersonaSearch.mockReturnValue({
+      results: [{ id: 91, name: 'Corvin Ashe', character_sheet: 12 }],
+      isFetching: false,
+    });
+    renderPage('new', '?persona=91&name=Corvin%20Ashe');
+    expect(screen.getByRole('heading', { name: 'Corvin Ashe' })).toBeInTheDocument();
+    expect(screen.getByLabelText('About a character')).toHaveValue('Corvin Ashe');
+  });
+
+  it('opens no heading at all until a person is chosen', () => {
+    renderPage('new');
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    expect(screen.queryByText('Declare a tie')).not.toBeInTheDocument();
   });
 });

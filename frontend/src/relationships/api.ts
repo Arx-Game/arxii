@@ -216,3 +216,16 @@ export function tieTargetRef(tie: Tie, targetPersonaId: number | null): TieTarge
   if (targetPersonaId != null) return { target_persona_id: targetPersonaId };
   return {};
 }
+
+/**
+ * Whether a target ref names anybody yet.
+ *
+ * `tieTargetRef` answers `{}` while the persona lookup is in flight, or when it came back
+ * empty. Posting that body earns "Provide exactly one of target_persona_id or
+ * target_companion_id." from the serializer — a sentence written for a developer, which a
+ * player must never be shown. So every write door is disabled until this is true, rather
+ * than enabled and then apologising.
+ */
+export function hasTieTarget(target: TieTargetRef): boolean {
+  return target.target_persona_id != null || target.target_companion_id != null;
+}

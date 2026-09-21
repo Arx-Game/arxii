@@ -18,20 +18,30 @@
 
 import { useState } from 'react';
 
-import { formatIcDate } from '@/journals/dates';
 import { Entries, Entry, Eyebrow, QuietDoor } from '@/character_sheets/components/sheet/primitives';
 import { useAdvanceAwareness, useEndLabel, useSetTieAllocation } from '@/relationships/queries';
-import { tieTargetRef, type Tie, type TieLabel } from '../api';
+import { hasTieTarget, tieTargetRef, type Tie, type TieLabel } from '../api';
 import { labelTagClass, labelText } from './labelText';
 import { RelationshipShift } from './RelationshipShift';
 import { TypePicker } from './TypePicker';
 
-/** `Clandestine · since 1 September 1012`, or just the date where there is no marker. */
+/**
+ * The line beside a label's name: its marker, and nothing else.
+ *
+ * No date. `RelationshipLabel.since` is a `DateTimeField(default=timezone.now)` — a real
+ * posting timestamp — and printing it beside an in-character label spelled it in the
+ * world's voice ("since 21 September 2026"). A label is a thing that is true now, not a
+ * receipt, so the marker is the whole of what the row has to say. A public label says
+ * nothing at all, which is the awareness rule everywhere else in this feature.
+ *
+ * A former label prints only `former`: the awareness of an ended label is not a live
+ * fact, and the chip beside it already carries the same word.
+ */
 function awarenessLine(label: TieLabel): string {
-  const since = `since ${formatIcDate(label.since)}`;
-  if (label.awareness === 'clandestine') return `Clandestine · ${since}`;
-  if (label.awareness === 'private') return `Private · ${since}`;
-  return since;
+  if (label.ended_at !== null) return 'former';
+  if (label.awareness === 'clandestine') return 'Clandestine';
+  if (label.awareness === 'private') return 'Private';
+  return '';
 }
 
 export interface LabelsAndApProps {
@@ -42,6 +52,7 @@ export interface LabelsAndApProps {
 
 export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
   const target = tieTargetRef(tie, targetPersonaId);
+  const canWrite = hasTieTarget(target);
   const setAllocation = useSetTieAllocation();
   const endLabel = useEndLabel();
   const advanceAwareness = useAdvanceAwareness();
@@ -95,7 +106,7 @@ export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
             onChange={(event) => setAp(event.target.value)}
           />
         </div>
-        <QuietDoor onClick={keepAp} disabled={setAllocation.isPending}>
+        <QuietDoor onClick={keepAp} disabled={!canWrite || setAllocation.isPending}>
           Keep
         </QuietDoor>
       </div>
@@ -103,11 +114,12 @@ export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
       <Entries>
         {tie.labels.map((label) => {
           const former = label.ended_at !== null;
+          const marker = awarenessLine(label);
           return (
             <Entry
               key={label.id}
               name={label.type_name}
-              aside={<span className="refsheet-note">{awarenessLine(label)}</span>}
+              aside={marker ? <span className="refsheet-note">{marker}</span> : undefined}
               tags={
                 former ? (
                   <span

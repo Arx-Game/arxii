@@ -14,7 +14,7 @@ import { useState } from 'react';
 
 import { Eyebrow, QuietDoor } from '@/character_sheets/components/sheet/primitives';
 import { useSetTieSummary } from '@/relationships/queries';
-import { tieTargetRef, type Tie } from '../api';
+import { hasTieTarget, tieTargetRef, type Tie } from '../api';
 import { DepthReadout } from './DepthReadout';
 import { labelTagClass, labelText, mutualSuffix } from './labelText';
 
@@ -22,12 +22,20 @@ export interface TiePlateProps {
   tie: Tie;
   /** The character whose side this is. Drawn only for the two parties. */
   ownerName: string | null;
-  isOwner: boolean;
+  /**
+   * Whether this side belongs to the viewer's own character — `tie.is_own_side`, never a
+   * reading of `audience`. Staff reading someone else's tie are STAFF but do not own it,
+   * and the summary write resolves its side from the CALLER's sheet, so an Edit door
+   * offered on the audience enum wrote the staff character's own summary (#3957 review).
+   */
+  isOwnSide: boolean;
   targetPersonaId: number | null;
 }
 
-export function TiePlate({ tie, ownerName, isOwner, targetPersonaId }: TiePlateProps) {
+export function TiePlate({ tie, ownerName, isOwnSide, targetPersonaId }: TiePlateProps) {
   const isParty = tie.audience !== 'third_party';
+  const target = tieTargetRef(tie, targetPersonaId);
+  const canWrite = hasTieTarget(target);
   const setSummary = useSetTieSummary();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tie.summary);
@@ -36,7 +44,7 @@ export function TiePlate({ tie, ownerName, isOwner, targetPersonaId }: TiePlateP
   function save() {
     setError(null);
     setSummary.mutate(
-      { ...tieTargetRef(tie, targetPersonaId), summary: draft },
+      { ...target, summary: draft },
       {
         onSuccess: () => setEditing(false),
         onError: (err: Error) => setError(err.message),
@@ -72,19 +80,23 @@ export function TiePlate({ tie, ownerName, isOwner, targetPersonaId }: TiePlateP
           </div>
         )}
 
-        <div className="refsheet-plate-summary">
-          <Eyebrow>Summary</Eyebrow>
-          {isOwner && !editing && (
-            <QuietDoor
-              onClick={() => {
-                setDraft(tie.summary);
-                setEditing(true);
-              }}
-            >
-              Edit
-            </QuietDoor>
-          )}
-        </div>
+        {/* Render-or-vanish: a stranger on a tie whose owner has written nothing gets no
+            bare Summary heading with empty space under it. */}
+        {(isOwnSide || tie.summary) && (
+          <div className="refsheet-plate-summary">
+            <Eyebrow>Summary</Eyebrow>
+            {isOwnSide && !editing && (
+              <QuietDoor
+                onClick={() => {
+                  setDraft(tie.summary);
+                  setEditing(true);
+                }}
+              >
+                Edit
+              </QuietDoor>
+            )}
+          </div>
+        )}
         {editing ? (
           <>
             <textarea
@@ -100,7 +112,7 @@ export function TiePlate({ tie, ownerName, isOwner, targetPersonaId }: TiePlateP
               </p>
             )}
             <div className="refsheet-doors">
-              <QuietDoor onClick={save} disabled={setSummary.isPending}>
+              <QuietDoor onClick={save} disabled={!canWrite || setSummary.isPending}>
                 Save
               </QuietDoor>
               <QuietDoor onClick={() => setEditing(false)}>Keep as is</QuietDoor>

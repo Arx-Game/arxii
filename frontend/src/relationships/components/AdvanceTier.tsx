@@ -15,9 +15,9 @@
 import { useState } from 'react';
 
 import { useJournalEntries } from '@/journals/queries';
-import { Eyebrow, QuietDoor } from '@/character_sheets/components/sheet/primitives';
+import { Eyebrow, Ledger, QuietDoor } from '@/character_sheets/components/sheet/primitives';
 import { useAdvanceTier } from '@/relationships/queries';
-import { tieTargetRef, type Tie } from '../api';
+import { hasTieTarget, tieTargetRef, type Tie } from '../api';
 
 /** The placeholder ladder's cost: ten XP times the tier being claimed. */
 function xpCost(tie: Tie): number {
@@ -45,6 +45,8 @@ export function AdvanceTier({ tie, targetPersonaId }: AdvanceTierProps) {
 
   if (tie.next_tier_threshold == null || tie.depth == null) return null;
 
+  const target = tieTargetRef(tie, targetPersonaId);
+  const canWrite = hasTieTarget(target);
   const entries = (data?.results ?? []).filter((entry) =>
     term.trim() ? entry.title.toLowerCase().includes(term.trim().toLowerCase()) : true
   );
@@ -54,7 +56,7 @@ export function AdvanceTier({ tie, targetPersonaId }: AdvanceTierProps) {
     if (!picked) return;
     setError(null);
     advance.mutate(
-      { ...tieTargetRef(tie, targetPersonaId), journal_entry_id: picked.id },
+      { ...target, journal_entry_id: picked.id },
       {
         onSuccess: () => setPicked(null),
         onError: (err: Error) => setError(err.message),
@@ -65,11 +67,11 @@ export function AdvanceTier({ tie, targetPersonaId }: AdvanceTierProps) {
   return (
     <div className="refsheet-block">
       <Eyebrow>Advance Relationship Tier</Eyebrow>
-      <p className="refsheet-ledger">
+      <Ledger>
         <span>
           {tie.depth} / {tie.next_tier_threshold}
         </span>
-      </p>
+      </Ledger>
       <div className="refsheet-field">
         <label htmlFor="capstone-pick">Capstone entry</label>
         <input
@@ -104,7 +106,7 @@ export function AdvanceTier({ tie, targetPersonaId }: AdvanceTierProps) {
         <QuietDoor
           onClick={submit}
           title={`${xpCost(tie)} XP`}
-          disabled={!reached || !picked || advance.isPending}
+          disabled={!canWrite || !reached || !picked || advance.isPending}
         >
           Advance
         </QuietDoor>

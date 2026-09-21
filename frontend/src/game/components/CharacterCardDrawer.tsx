@@ -36,11 +36,12 @@ export interface CharacterCardDrawerProps {
  * roster." and no sheet data, no FriendButton. Never resolve through
  * `receiver_persona_ids`, scene participation, or any other non-public linkage.
  *
- * Quick actions: "Declare a tie" (#3957) leads to this character's tie page in declare
- * mode, carrying the persona id so the picker opens on the right person — the drawer
- * already knows who this is, and making the player search for them again on arrival
- * would be the interface forgetting. It replaced "Record an impression", whose writeup
- * dialog went with the writeups. "Write a journal" (#2160) opens
+ * Quick actions: "Declare a tie" (#3957) leads to the VIEWER's own tie page in declare
+ * mode — the route's `:id` is the character whose side the tie is, which is the viewer,
+ * not the person in the drawer — carrying the clicked persona and its name so the page
+ * can print who the tie is toward and the picker opens on the right person. The roster
+ * match still gates the link, so a disguise or a temporary persona offers no door at
+ * all. It replaced "Record an impression", whose writeup dialog went with the writeups. "Write a journal" (#2160) opens
  * `JournalComposerDialog` pre-tagged with the resolved character's name once `entry`
  * resolves. "Message the player" (#2160) opens
  * `MessagePlayerDialog` - an OOC message to whoever currently plays this
@@ -141,9 +142,12 @@ export function CharacterCardDrawer({
               <Button type="button" variant="outline" size="sm" onClick={handleWhisper}>
                 Whisper
               </Button>
-              {matchId != null && (
+              {matchId != null && viewerEntryId != null && (
                 <Link
-                  to={`/characters/${matchId}/ties/new?persona=${persona.id}`}
+                  to={
+                    `/characters/${viewerEntryId}/ties/new` +
+                    `?persona=${persona.id}&name=${encodeURIComponent(persona.name)}`
+                  }
                   className="rounded border px-3 py-1 text-sm hover:bg-accent"
                 >
                   Declare a tie

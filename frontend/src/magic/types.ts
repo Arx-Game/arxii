@@ -62,7 +62,7 @@ export type StageAdvanceBonusResult = components['schemas']['StageAdvanceBonusRe
 // ---------------------------------------------------------------------------
 // Tether bond — returned by getMyTetherBonds / useMyTetherBonds
 //
-// Derived from CharacterRelationshipList rows where is_soul_tether=true.
+// Derived from the caller's CharacterRelationship sides where is_soul_tether=true.
 // One entry per relationship; source vs target is normalised so bonded_*
 // always refers to the other party.
 // ---------------------------------------------------------------------------
