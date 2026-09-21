@@ -78,6 +78,12 @@ function ordinal(tier: number): string {
  *
  * `BLACK_JOURNAL_BAND` rather than a second literal, so the Reading Room and the tie
  * stream keep one spelling of it (the band renders uppercase either way).
+ *
+ * Only a JOURNAL row can be black (#3957 final review). `is_public` means two different
+ * things in this one list: on an entry it is the white/black journal distinction, and on
+ * a scene it is the scene's `ScenePrivacyMode` — so an unguarded read hung "Black
+ * journal" on the PRIVATE scenes a participant is entitled to see, calling a scene a
+ * journal it is not.
  */
 function bandText(item: TieStreamItem): string | null {
   const parts: string[] = [];
@@ -88,7 +94,7 @@ function bandText(item: TieStreamItem): string | null {
       parts.push(`${who}${ordinal(item.capstone_tier)} tier`);
     }
   }
-  if (!item.is_public) parts.push(BLACK_JOURNAL_BAND);
+  if (item.kind === 'entry' && !item.is_public) parts.push(BLACK_JOURNAL_BAND);
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
@@ -146,7 +152,9 @@ export function TieStream({
         return (
           <article
             key={`${item.kind}-${item.id}`}
-            className={entryRowClass({ isBlack: !item.is_public })}
+            // Same guard as the band: `jr-black` is the journals' black-entry ink, and a
+            // private SCENE is not a black journal (#3957 final review).
+            className={entryRowClass({ isBlack: item.kind === 'entry' && !item.is_public })}
           >
             {band && <EntryBand>{band}</EntryBand>}
             <EntryMeta who={item.author_name || undefined} date={date} />

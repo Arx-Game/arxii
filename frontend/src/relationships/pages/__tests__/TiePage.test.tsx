@@ -217,6 +217,20 @@ describe('TiePage', () => {
 
   // The route's `:id` and `:tieId` are independent, so a hand-typed URL could otherwise
   // print one character's name above another character's tie — the same shape as C2.
+  it('never wears a journal band on a scene row, private or not', () => {
+    // `is_public` carries two different meanings in one stream: on an entry it is the
+    // white/black journal distinction, on a scene it is the scene's own privacy mode.
+    // A PRIVATE scene the viewer took part in is not a black journal (#3957 final review).
+    renderPage();
+    const scene = screen.getByText('The long room, after').closest('article');
+    expect(scene).not.toBeNull();
+    expect(scene).not.toHaveClass('jr-black');
+    expect(scene?.textContent).not.toMatch(/Black journal/i);
+    // The black ENTRY still wears it, so this is a guard and not a silencing.
+    const entry = screen.getByText('What I did not say to Corvin').closest('article');
+    expect(entry?.textContent).toMatch(/Black journal/i);
+  });
+
   it('will not name a route character who does not own the side', () => {
     useRosterEntryQuery.mockReturnValue({
       data: { id: 9, character: { id: 404, name: 'Someone Else' }, fullname: 'Someone Else' },

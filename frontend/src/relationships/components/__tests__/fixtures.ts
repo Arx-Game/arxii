@@ -156,4 +156,19 @@ export const STREAM: TieStreamItem[] = [
     created_at: '2026-09-16T00:00:00Z',
     ic_timestamp: '1012-09-16T00:00:00Z',
   },
+  // A PRIVATE scene the viewer took part in: `is_public` is the scene's own privacy mode
+  // here, never the journals' white/black distinction (#3957 final review).
+  {
+    kind: 'scene',
+    id: 504,
+    title: 'The long room, after',
+    author_id: null,
+    author_name: 'A scene, both present',
+    body: '',
+    is_public: false,
+    is_capstone: false,
+    capstone_tier: null,
+    created_at: '2026-09-14T00:00:00Z',
+    ic_timestamp: '1012-09-14T00:00:00Z',
+  },
 ];
