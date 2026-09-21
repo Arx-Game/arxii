@@ -57,6 +57,8 @@ import { PendingActionAttachments } from '@/scenes/components/PendingActionAttac
 import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
 import { fetchScene } from '@/scenes/queries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
+import { AttachedActionSubmissionGuard } from '@/scenes/actionSubmissionGuard';
+import { useDetachedActionIds } from '@/scenes/useDetachedActionIds';
 import type { Interaction, SceneDetail } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
@@ -131,29 +133,35 @@ function useThreadTabPersistence(
   active: string | null,
   sceneId: string | undefined,
   openThreadTabs: string[],
-  activeThreadTabRaw: string | null
+  activeThreadTabRaw: string | null,
+  accountId?: number | null
 ) {
   const dispatch = useAppDispatch();
   const [tabsReadyFor, setTabsReadyFor] = useState<string | null>(null);
   useEffect(() => {
     if (!active || !sceneId) return;
-    const hydrationKey = `${active}:${sceneId}`;
+    const hydrationKey = `${accountId ?? 'anonymous'}:${active}:${sceneId}`;
     if (tabsReadyFor === hydrationKey) return;
-    const stored = loadThreadTabs(active, sceneId);
+    const stored = loadThreadTabs(active, sceneId, accountId);
     if (stored && stored.openThreadTabs.length > 0) {
       dispatch(hydrateThreadTabs({ character: active, ...stored }));
     }
     setTabsReadyFor(hydrationKey);
-  }, [active, sceneId, dispatch, tabsReadyFor]);
+  }, [active, sceneId, dispatch, tabsReadyFor, accountId]);
 
   useEffect(() => {
     if (!active || !sceneId) return;
-    if (tabsReadyFor !== `${active}:${sceneId}`) return;
-    saveThreadTabs(active, sceneId, {
-      openThreadTabs,
-      activeThreadTab: activeThreadTabRaw,
-    });
-  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor]);
+    if (tabsReadyFor !== `${accountId ?? 'anonymous'}:${active}:${sceneId}`) return;
+    saveThreadTabs(
+      active,
+      sceneId,
+      {
+        openThreadTabs,
+        activeThreadTab: activeThreadTabRaw,
+      },
+      accountId
+    );
+  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor, accountId]);
 }
 
 /** The feed props GameWindow takes, present only when we are inside a scene. */
@@ -555,7 +563,7 @@ export function GamePage() {
       ? activeThreadTabRaw
       : null;
 
-  useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw);
+  useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw, account?.id);
 
   // #3761 Task 1: lifted from PlaySidebar/SidebarTabPanel so a later top-bar
   // combat banner (Task 3) can also drive the sidebar into view.
@@ -833,20 +841,13 @@ export function GamePage() {
   );
   const pendingActionIds = useMemo(() => pendingActions.map((a) => a.id), [pendingActions]);
 
-  const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
-  const handleDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
-  }, []);
-  const handleUndoDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => prev.filter((id) => id !== actionId));
-  }, []);
-  const handlePoseSubmitted = useCallback(() => {
-    setDetachedActionIds([]);
-  }, []);
+  const { detachedActionIds, handleDetach, handleUndoDetach, handlePoseSubmitted } =
+    useDetachedActionIds();
 
   const [targetToAppend, setPendingTarget] = useState<string | null>(null);
   const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
   const queryClient = useQueryClient();
+  const attachedActionGuard = useRef(new AttachedActionSubmissionGuard());
 
   const handleDismissOutcome = useCallback(() => {
     if (sceneData?.id != null) {
@@ -860,13 +861,14 @@ export function GamePage() {
   }, [queryClient, sceneData?.id, railEncounterId]);
 
   const submitAction = useMutation({
-    mutationFn: (action: ActionAttachmentInfo) =>
+    mutationFn: ({ action }: { action: ActionAttachmentInfo; clientRequestId: string }) =>
       createActionRequest(sceneId ?? '', {
         action_key: action.actionKey,
         target_persona_id: action.targetPersonaId,
         technique_id: action.techniqueId,
       }),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
+      attachedActionGuard.current.succeed(variables.clientRequestId);
       setActionAttachment(null);
       // No 'scene-messages' invalidation here (#2156 review fix): nothing in
       // this codebase ever queries that key — the scene feed here is
@@ -874,14 +876,18 @@ export function GamePage() {
       // React Query cache to invalidate. The stale call was dead on arrival.
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     },
-    onError: () => {
+    onError: (_error, variables) => {
+      attachedActionGuard.current.fail(variables.clientRequestId);
       // Keep the attachment so the user can retry.
     },
   });
 
   const handleSubmitAction = useCallback(
-    (action: ActionAttachmentInfo) => {
-      submitAction.mutate(action);
+    (action: ActionAttachmentInfo, clientRequestId?: string) => {
+      const correlationId =
+        clientRequestId ?? `${action.actionKey}:${action.targetPersonaId ?? ''}`;
+      if (!attachedActionGuard.current.start(correlationId)) return;
+      submitAction.mutate({ action, clientRequestId: correlationId });
     },
     [submitAction]
   );

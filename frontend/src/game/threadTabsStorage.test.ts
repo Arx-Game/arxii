@@ -19,6 +19,16 @@ describe('threadTabsStorage', () => {
     expect(loadThreadTabs('Aria', '100')).toBeNull();
   });
 
+  it('does not share a tab layout across accounts', () => {
+    const value: StoredThreadTabs = {
+      openThreadTabs: ['whisper:9'],
+      activeThreadTab: 'whisper:9',
+    };
+    saveThreadTabs('Aria', '100', value, 1);
+    expect(loadThreadTabs('Aria', '100', 2)).toBeNull();
+    expect(loadThreadTabs('Aria', '100', 1)).toEqual(value);
+  });
+
   it('returns null for garbage JSON', () => {
     localStorage.setItem('arx:threadTabs:Aria:100', 'not json{{{');
     expect(loadThreadTabs('Aria', '100')).toBeNull();

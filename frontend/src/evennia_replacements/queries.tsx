@@ -20,8 +20,9 @@ import {
 } from '@/store/gameSlice';
 import { readTabIdentity, writeTabIdentity, clearTabIdentity } from '@/store/browsingIdentity';
 import { useGameSocket } from '@/hooks/useGameSocket';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { clearAccountPlayStorage } from '@/game/playStorage';
 
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
@@ -35,6 +36,7 @@ export function useAccountQuery() {
   // back before the clearing mutation's refetch could land (whole-branch
   // review, Critical). The effect keys on `result.data` alone.
   const store = useStore<RootState>();
+  const previousAccountId = useRef<number | null>(null);
   const result = useQuery({
     queryKey: ['account'],
     queryFn: fetchAccount,
@@ -53,6 +55,14 @@ export function useAccountQuery() {
       return;
     }
     const account = result.data;
+    const nextAccountId = account?.id ?? null;
+    if (previousAccountId.current !== null && previousAccountId.current !== nextAccountId) {
+      clearAccountPlayStorage(previousAccountId.current);
+    }
+    if (nextAccountId === null && previousAccountId.current !== null) {
+      clearAccountPlayStorage();
+    }
+    previousAccountId.current = nextAccountId;
     dispatch(setAccount(account));
     // Reload survival (#3412) + per-tab browsing identity (#3479): mirror the
     // durable server-side selection into gameSlice, but only SEED this tab's
@@ -231,6 +241,7 @@ export function useLogout(onSuccess?: () => void) {
     mutationFn: postLogout,
     onSuccess: () => {
       disconnectAll();
+      clearAccountPlayStorage();
       dispatch(resetGame());
       dispatch(setAccount(null));
       // clear() drops every per-account cache entry (mail, roster, ...)

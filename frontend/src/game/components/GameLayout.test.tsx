@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import { GameLayout } from './GameLayout';
@@ -19,5 +19,11 @@ describe('GameLayout', () => {
     expect(screen.getByText('context')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Story' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sidebar' })).toBeInTheDocument();
+    const separator = screen.getByTestId('sidebar-resize');
+    expect(separator).toHaveAttribute('role', 'separator');
+    expect(separator).toHaveAttribute('aria-valuemin', '240');
+    expect(separator).toHaveAttribute('aria-valuemax', '360');
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    expect(separator).toHaveAttribute('aria-valuenow', '288');
   });
 });

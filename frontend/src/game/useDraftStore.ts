@@ -46,7 +46,7 @@ const EMPTY_DRAFT: Draft = {
   mode: null,
 };
 
-const DRAFT_STORAGE_PREFIX = 'arx:play-draft:v2:';
+export const DRAFT_STORAGE_PREFIX = 'arx:play-draft:v2:';
 
 export function draftStorageKey(key: DraftKey): string {
   return `${DRAFT_STORAGE_PREFIX}${key.accountId}:${key.personaId}:${key.conversationKey}`;

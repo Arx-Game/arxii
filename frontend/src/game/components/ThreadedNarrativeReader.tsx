@@ -351,6 +351,8 @@ function findTopVisiblePoseId(container: HTMLElement): { poseId: string; offsetP
 
 interface ThreadedNarrativeReaderProps {
   sceneId: string;
+  /** Stable account scope for reading anchors. */
+  accountId?: number | null;
   conversationKey: string;
   /**
    * The REAL server-format conversation ref (#3759 review finding C1) --
@@ -456,6 +458,7 @@ interface ThreadWindow {
 /** A wide, accessible reader for long-form scene poses. */
 export function ThreadedNarrativeReader({
   sceneId,
+  accountId,
   conversationKey,
   conversationRef,
   interactions,
@@ -654,8 +657,8 @@ export function ThreadedNarrativeReader({
     return { start: Math.min(stored.start, length), end: Math.min(stored.end, length) };
   };
   const storedAnchorState = useMemo(
-    () => loadConversationAnchor(conversationKey),
-    [conversationKey]
+    () => loadConversationAnchor(conversationKey, accountId),
+    [conversationKey, accountId]
   );
   // #3759 Wave 9 fix round 1 finding I-4: this is `expandedKeys` -- an
   // OPT-IN set of expanded thread keys -- not the `collapsed` opt-OUT set
@@ -727,7 +730,7 @@ export function ThreadedNarrativeReader({
     });
   };
   const { observe } = usePoseReadTracking();
-  const { preferences, update } = usePlayPreferences();
+  const { preferences, update } = usePlayPreferences(accountId);
   const chronological = preferences.readerMode === 'chronological';
   // #3759 Wave 9 (F1): sorts the FULL `interactions` array, not a windowed
   // slice -- this view is already virtualized via `@tanstack/react-virtual`
@@ -770,7 +773,7 @@ export function ThreadedNarrativeReader({
     anchor?: ReadingAnchor | null;
     expanded?: string[];
   }) => {
-    const current = loadConversationAnchor(conversationKey);
+    const current = loadConversationAnchor(conversationKey, accountId);
     const currentAnchors = current?.anchors ?? { threads: null, chronological: null };
     const nextAnchors =
       'anchor' in overrides
@@ -779,10 +782,14 @@ export function ThreadedNarrativeReader({
             [chronological ? 'chronological' : 'threads']: overrides.anchor ?? null,
           }
         : currentAnchors;
-    saveConversationAnchor(conversationKey, {
-      anchors: nextAnchors,
-      expanded: overrides.expanded ?? current?.expanded ?? [],
-    });
+    saveConversationAnchor(
+      conversationKey,
+      {
+        anchors: nextAnchors,
+        expanded: overrides.expanded ?? current?.expanded ?? [],
+      },
+      accountId
+    );
   };
   // Gate the WRITE only (#3759 review finding I1) -- expanding/collapsing
   // threads stays allowed while reading a reference or a non-room
@@ -1230,6 +1237,26 @@ export function ThreadedNarrativeReader({
     []
   );
 
+  const renderPoseBody = (item: Interaction) => {
+    const poseBody = (
+      <SceneMessages
+        sceneId={sceneId}
+        filteredInteractions={[item]}
+        onAvatarClick={onAvatarClick}
+        onAddTarget={onAddTarget}
+        onAttachAction={onAttachAction}
+        readOnly={readOnly}
+        interactionsById={interactionsById}
+      />
+    );
+    if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) return poseBody;
+    return (
+      <InvolvementFlag item={item} onReply={onReply} readOnly={readOnly} venue={viewerVenue}>
+        {poseBody}
+      </InvolvementFlag>
+    );
+  };
+
   return (
     <div
       ref={rootRef}
@@ -1533,32 +1560,7 @@ export function ThreadedNarrativeReader({
                               plain bubble and then a restatement of the same
                               sentence. `poseBody` is the identical per-viewer
                               rendering either way. */}
-                          {(() => {
-                            const poseBody = (
-                              <SceneMessages
-                                sceneId={sceneId}
-                                filteredInteractions={[item]}
-                                onAvatarClick={onAvatarClick}
-                                onAddTarget={onAddTarget}
-                                onAttachAction={onAttachAction}
-                                readOnly={readOnly}
-                                interactionsById={interactionsById}
-                              />
-                            );
-                            if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
-                              return poseBody;
-                            }
-                            return (
-                              <InvolvementFlag
-                                item={item}
-                                onReply={onReply}
-                                readOnly={readOnly}
-                                venue={viewerVenue}
-                              >
-                                {poseBody}
-                              </InvolvementFlag>
-                            );
-                          })()}
+                          {renderPoseBody(item)}
                           <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                             <button
                               type="button"
@@ -1702,32 +1704,7 @@ export function ThreadedNarrativeReader({
                             ) : (
                               <>
                                 {/* #3787 D1 -- see the Chronological branch. */}
-                                {(() => {
-                                  const poseBody = (
-                                    <SceneMessages
-                                      sceneId={sceneId}
-                                      filteredInteractions={[item]}
-                                      onAvatarClick={onAvatarClick}
-                                      onAddTarget={onAddTarget}
-                                      onAttachAction={onAttachAction}
-                                      readOnly={readOnly}
-                                      interactionsById={interactionsById}
-                                    />
-                                  );
-                                  if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
-                                    return poseBody;
-                                  }
-                                  return (
-                                    <InvolvementFlag
-                                      item={item}
-                                      onReply={onReply}
-                                      readOnly={readOnly}
-                                      venue={viewerVenue}
-                                    >
-                                      {poseBody}
-                                    </InvolvementFlag>
-                                  );
-                                })()}
+                                {renderPoseBody(item)}
                                 <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                                   <button
                                     type="button"
