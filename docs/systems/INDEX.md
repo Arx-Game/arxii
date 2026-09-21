@@ -2191,8 +2191,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
     label and have claimed `tier >= minimum_tier`, optionally narrowed to one `required_type`
     (FK to `RelationshipType`, null = any), against `minimum_count`. The count is
     `.values("relationship_id").distinct()`, so two labels on one side count once: the gate
-    is "N ties", never "N labels"
-    (#2116, retargeted #3957)
+    is "N ties", never "N labels" (#2116, retargeted #3957)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
   - `CodexKnowledgeRequirement` — checks `CharacterCodexKnowledge` at `KNOWN` status for a specific `CodexEntry`; gates Path selection behind codex knowledge (#2603)
 - **Key Functions:**
