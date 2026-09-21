@@ -1,144 +1,62 @@
-"""Relationship-building telnet command — the ``relationship <subverb>`` namespace (#1485 / #1537).
+"""Tie telnet command — the ``relationship <subverb>`` namespace (#3957 / #1485 / #1537).
 
-A single command routes the positive relationship-building verbs through
-``action.run()`` — the same seam the web ``RelationshipUpdateViewSet`` uses —
-plus the telnet-only ``list`` / ``show`` read surfaces, and the feedback verbs
-``kudos`` / ``complain``.
+A single command routes the tie-building verbs through ``action.run()`` — the same
+seam the web tie panel uses — plus the telnet-only ``list`` / ``show`` read surfaces
+and the ambient ``plus`` / ``neg`` bumps (#1699).
 
 Write verbs (reach the Actions in ``actions/definitions/relationships.py``):
 
-- ``relationship impression <name> ...``  → ``CreateFirstImpressionAction``
-- ``relationship develop <name> ...``       → ``CreateDevelopmentAction``
-- ``relationship capstone <name> ...``      → ``CreateCapstoneAction``
-- ``relationship redistribute <name> ...``  → ``RedistributePointsAction``
+- ``relationship declare <name>=<type>[,private|clandestine|public]`` → ``DeclareLabelAction``
+- ``relationship shift <name>=<from>,<to>[,note]`` → ``ShiftLabelAction``
+- ``relationship end <name>=<type>`` → ``EndLabelAction``
+- ``relationship reveal <name>=<type>,<clandestine|public>`` → ``AdvanceLabelAwarenessAction``
+- ``relationship ap <name>=<n>`` → ``SetTieAllocationAction``
+- ``relationship advance <name>=<journal entry id>`` → ``AdvanceRelationshipTierAction``
+- ``relationship summary <name>=<text>`` → ``SetTieSummaryAction``
+- ``relationship plus|neg <name>`` → ``RelationshipBumpAction``
 
-Feedback verbs (#1537):
+The verbs live under the ``relationship`` namespace rather than as bare top-level
+keys to avoid exit/channel/alias collisions — mirrors ``CmdRitual`` / ``CmdDuel``
+subverb routing.
 
-- ``relationship kudos <ref>``           → ``GiveWriteupKudosAction``
-- ``relationship complain <ref>=<reason>`` → ``FileWriteupComplaintAction``
-
-Writeup references use a type-prefix + pk notation — ``u<pk>`` for
-RelationshipUpdate, ``d<pk>`` for RelationshipDevelopment, ``c<pk>`` for
-RelationshipCapstone — matching the labels shown by ``relationship show``.
-``_parse_writeup_ref`` encodes the shared scheme used in both display and parse.
-
-The verbs live under the ``relationship`` namespace rather than as bare
-top-level keys (e.g. ``impression`` / ``develop``) to avoid exit/channel/alias
-collisions — mirrors ``CmdRitual`` / ``CmdDuel`` subverb routing.
-
-No consent gate: these describe the caller's *regard* for another character,
-they do not compel or provoke the target's behavior (ADR-0024). The Golden Rule
-covers bad-faith writeups; the ``kudos`` / ``complaint`` feedback layer lets the
-writeup subject commend or flag a writeup (#1537).
-
-``linked_scene`` defaults to the caller's active scene in the current room
-when the target is co-located in an active scene — so players can note a moment
-in the moment, right after it warrants a relationship beat.
+No consent gate: these describe the caller's own side of a tie, they do not compel
+or provoke the target's behavior (ADR-0024).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
-    from actions.base import Action
     from world.character_sheets.models import CharacterSheet
     from world.companions.models import Companion
-    from world.relationships.constants import FirstImpressionColoring, UpdateVisibility
-    from world.relationships.models import CharacterRelationship, RelationshipTrack
+    from world.relationships.models import (
+        CharacterRelationship,
+        RelationshipLabel,
+        RelationshipType,
+    )
 
 # Subverbs.
-_SUBVERB_IMPRESSION = "impression"
-_SUBVERB_DEVELOP = "develop"
-_SUBVERB_CAPSTONE = "capstone"
-_SUBVERB_REDISTRIBUTE = "redistribute"
 _SUBVERB_LIST = "list"
 _SUBVERB_SHOW = "show"
-_SUBVERB_KUDOS = "kudos"
-_SUBVERB_COMPLAIN = "complain"
 _SUBVERB_PLUS = "plus"
 _SUBVERB_NEG = "neg"
+_SUBVERB_DECLARE = "declare"
+_SUBVERB_SHIFT = "shift"
+_SUBVERB_END = "end"
+_SUBVERB_REVEAL = "reveal"
+_SUBVERB_AP = "ap"
+_SUBVERB_ADVANCE = "advance"
+_SUBVERB_SUMMARY = "summary"
 _BUMP_SUBVERBS = frozenset({_SUBVERB_PLUS, _SUBVERB_NEG})
-_WRITE_SUBVERBS = frozenset(
-    {_SUBVERB_IMPRESSION, _SUBVERB_DEVELOP, _SUBVERB_CAPSTONE, _SUBVERB_REDISTRIBUTE}
-)
-_READ_SUBVERBS = frozenset({_SUBVERB_LIST, _SUBVERB_SHOW})
-_FEEDBACK_SUBVERBS = frozenset({_SUBVERB_KUDOS, _SUBVERB_COMPLAIN})
 
-# Writeup reference prefix → writeup_type string (matches what the Action + service expect).
-# Labels are displayed in ``relationship show`` and parsed back here — one scheme, shared.
-_WRITEUP_PREFIX_MAP: dict[str, str] = {
-    "u": "update",
-    "d": "development",
-    "c": "capstone",
-}
-
-# Telnet key=value argument keys.
-_KEY_TRACK = "track"
-_KEY_SOURCE = "source"
-_KEY_TARGET_TRACK = "target"
-_KEY_POINTS = "points"
-_KEY_TITLE = "title"
-_KEY_WRITEUP = "writeup"
-_KEY_COLORING = "coloring"
-_KEY_VISIBILITY = "visibility"
-_KEY_XP = "xp"
-
-# Multi-word value keys — their value runs until the next ``key=`` token.
-_MULTIWORD_KEYS = frozenset({_KEY_TITLE, _KEY_WRITEUP})
-
-
-def _parse_kwargs_tokens(tokens: list[str]) -> dict[str, str]:
-    """Parse ``key=value ...`` tokens into a kwargs dict.
-
-    A free-text key (``title`` / ``writeup``) extends to the next ``key=`` token;
-    other keys take exactly one value token, and a bare token following a
-    completed single-word value is an error.
-    """
-    kwargs: dict[str, str] = {}
-    key = ""
-    value_parts: list[str] = []
-    for token in tokens:
-        if "=" in token and not token.startswith("="):
-            if key:
-                kwargs[key] = " ".join(value_parts).strip()
-            key, _, value = token.partition("=")
-            value_parts = [value] if value else []
-        elif key and key in _MULTIWORD_KEYS:
-            value_parts.append(token)
-        elif key:
-            msg = (
-                f"Unexpected argument '{token}' after '{key}='. "
-                "Multi-word values are only allowed for title and writeup."
-            )
-            raise CommandError(msg)
-        else:
-            msg = f"Unexpected argument '{token}'."
-            raise CommandError(msg)
-    if key:
-        kwargs[key] = " ".join(value_parts).strip()
-    return kwargs
-
-
-def _parse_name_and_kwargs(rest: str) -> tuple[str, dict[str, str]]:
-    """Split ``<name> key=value ...`` into the leading target name + a kwargs dict.
-
-    The target name is positional (may be multi-word until the first ``key=``).
-    Remaining ``key=value`` tokens are parsed by ``_parse_kwargs_tokens``.
-    """
-    tokens = rest.split()
-    name_parts: list[str] = []
-    idx = 0
-    while idx < len(tokens) and "=" not in tokens[idx]:
-        name_parts.append(tokens[idx])
-        idx += 1
-    name = " ".join(name_parts).strip()
-    if idx == len(tokens):
-        return name, {}
-    return name, _parse_kwargs_tokens(tokens[idx:])
+#: A label-row reference (``shift``'s ``<from>,<to>``, ``reveal``'s ``<type>,<awareness>``)
+#: is at least a type token and a second token — the split-comma count checked below.
+_MIN_LABEL_REF_PARTS = 2
 
 
 def _active_companion_of(obj: Any) -> Companion | None:
@@ -159,31 +77,21 @@ def _require_int(value: str | None, name: str) -> int:
 
 
 class CmdRelationship(ArxCommand):
-    """Record and review your regard for other characters.
+    """Record and review your side of a tie with other characters.
 
     Usage:
-        relationship                         - list your relationships
-        relationship list                    - same as bare ``relationship``
-        relationship show <name|#>           - detail one relationship (includes writeup refs)
-        relationship plus <name>             - ambient +1 bump (also ``rel/plus <name>``)
-        relationship neg <name>              - ambient -1 bump (also ``rel/neg <name>``)
-        relationship impression <name> track=<id|name> points=<n>
-            title=<text> writeup=<text> [coloring=positive|neutral|negative]
-            [visibility=private|shared|gossip|public]
-        relationship develop <name> track=<id|name> points=<n>
-            title=<text> writeup=<text> [xp=<n>] [visibility=...]
-        relationship capstone <name> track=<id|name> points=<n>
-            title=<text> writeup=<text> [visibility=...]
-        relationship redistribute <name> source=<track> target=<track>
-            points=<n> title=<text> writeup=<text> [visibility=...]
-        relationship kudos <ref>             - commend a shared writeup
-        relationship complain <ref>=<reason> - file a staff complaint about a writeup
-
-    Writeup refs are shown by ``relationship show``: ``u<id>`` = update,
-    ``d<id>`` = development, ``c<id>`` = capstone (e.g. ``kudos u42``).
-    Tracks resolve by name (iexact) or id. ``title`` / ``writeup`` are free
-    text; their values run to the next ``key=`` token. An active scene in your
-    current room is linked automatically when the target is co-located.
+        relationship                                     - list your ties
+        relationship list                                - same as bare ``relationship``
+        relationship show <name|#>                       - detail one tie
+        relationship plus <name>                         - ambient +1 bump
+        relationship neg <name>                          - ambient -1 bump
+        relationship declare <name>=<type>[,private|clandestine|public]
+        relationship shift <name>=<from>,<to>[,note]
+        relationship end <name>=<type>
+        relationship reveal <name>=<type>,<clandestine|public>
+        relationship ap <name>=<n>
+        relationship advance <name>=<journal entry id>
+        relationship summary <name>=<text>
     """
 
     key = "relationship"
@@ -193,8 +101,22 @@ class CmdRelationship(ArxCommand):
     # Base Command has no switches attr; a class default keeps direct func() calls safe.
     switches: list[str] = []
 
+    def _handlers(self) -> dict[str, Callable[[str], None]]:
+        """The subverb -> handler table (a dict keeps ``func()`` under the branch limit)."""
+        return {
+            _SUBVERB_LIST: lambda _rest: self._show_list(),
+            _SUBVERB_SHOW: self._show_detail,
+            _SUBVERB_DECLARE: self._dispatch_declare,
+            _SUBVERB_SHIFT: self._dispatch_shift,
+            _SUBVERB_END: self._dispatch_end,
+            _SUBVERB_REVEAL: self._dispatch_reveal,
+            _SUBVERB_AP: self._dispatch_ap,
+            _SUBVERB_ADVANCE: self._dispatch_advance,
+            _SUBVERB_SUMMARY: self._dispatch_summary,
+        }
+
     def func(self) -> None:
-        """Route the leading subverb; bare ``relationship`` lists relationships."""
+        """Route the leading subverb; bare ``relationship`` lists ties."""
         try:
             raw = (self.args or "").strip()
             # Switch form: ``rel/plus <name>`` / ``rel/neg <name>`` (#1699).
@@ -210,20 +132,14 @@ class CmdRelationship(ArxCommand):
             # Accept the slash-form embedded in args too (``/plus <name>``).
             subverb = parts[0].lower().lstrip("/")
             rest = parts[1].strip() if len(parts) > 1 else ""
-            if subverb == _SUBVERB_LIST:
-                self._show_list()
-            elif subverb == _SUBVERB_SHOW:
-                self._show_detail(rest)
-            elif subverb in _BUMP_SUBVERBS:
+            if subverb in _BUMP_SUBVERBS:
                 self._dispatch_bump(subverb, rest)
-            elif subverb in _WRITE_SUBVERBS:
-                self._dispatch_write(subverb, rest)
-            elif subverb == _SUBVERB_KUDOS:
-                self._dispatch_kudos(rest)
-            elif subverb == _SUBVERB_COMPLAIN:
-                self._dispatch_complain(rest)
-            else:
+                return
+            handler = self._handlers().get(subverb)
+            if handler is None:
                 self.msg(self._usage())
+                return
+            handler(rest)
         except CommandError as err:
             self.msg(str(err))
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
@@ -246,159 +162,181 @@ class CmdRelationship(ArxCommand):
         if result.message:
             self.msg(result.message)
 
-    # -- write verbs -----------------------------------------------------------
+    # -- label write verbs -------------------------------------------------------
 
-    def _dispatch_write(self, subverb: str, rest: str) -> None:
-        """Resolve the target + kwargs and run the matching relationship Action."""
-        name, kwargs = _parse_name_and_kwargs(rest)
-        if not name:
-            msg = f"Usage: relationship {subverb} <name> ..."
+    def _dispatch_declare(self, rest: str) -> None:
+        """Syntax: ``declare <name>=<type>[,private|clandestine|public]``."""
+        from actions.definitions.relationships import DeclareLabelAction  # noqa: PLC0415
+
+        name, sep, rhs = rest.partition("=")
+        if not name.strip() or not sep or not rhs.strip():
+            msg = "Usage: relationship declare <name>=<type>[,private|clandestine|public]"
             raise CommandError(msg)
-        actor = self.caller
-        sheet = self._actor_sheet(actor)
-        target_sheet, target_companion = self._resolve_target(actor, name)
-        action, run_kwargs = self._build_write_kwargs(
-            subverb, sheet, target_sheet, target_companion, kwargs
-        )
-        result = action.run(actor=actor, **run_kwargs)
-        if result.message:
-            self.msg(result.message)
-
-    def _build_write_kwargs(
-        self,
-        subverb: str,
-        sheet: CharacterSheet,
-        target_sheet: CharacterSheet | None,
-        target_companion: Companion | None,
-        kwargs: dict[str, str],
-    ) -> tuple[Action, dict[str, Any]]:
-        """Translate parsed telnet kwargs into the Action's run() kwargs."""
-        from actions.definitions.relationships import (  # noqa: PLC0415
-            CreateCapstoneAction,
-            CreateDevelopmentAction,
-            CreateFirstImpressionAction,
-            RedistributePointsAction,
-        )
-
-        common: dict[str, Any] = {
+        parts = rhs.split(",", 1)
+        type_name = parts[0].strip()
+        awareness = parts[1].strip().lower() if len(parts) > 1 and parts[1].strip() else None
+        target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
+        rel_type = self._resolve_type(type_name)
+        run_kwargs: dict[str, Any] = {
             "target_sheet": target_sheet,
             "target_companion": target_companion,
-            "points": _require_int(kwargs.get(_KEY_POINTS), _KEY_POINTS),
-            "title": kwargs.get(_KEY_TITLE, ""),
-            "writeup": kwargs.get(_KEY_WRITEUP, ""),
+            "type": rel_type,
         }
-        # Only pass visibility when the player set it, so each Action's own
-        # default applies (capstone defaults to SHARED; the others to PRIVATE).
-        if _KEY_VISIBILITY in kwargs:
-            common["visibility"] = self._parse_visibility(kwargs.get(_KEY_VISIBILITY))
+        if awareness:
+            run_kwargs["awareness"] = awareness
+        result = DeclareLabelAction().run(actor=self.caller, **run_kwargs)
+        if result.message:
+            self.msg(result.message)
 
-        if subverb == _SUBVERB_IMPRESSION:
-            coloring = self._parse_coloring(kwargs.get(_KEY_COLORING))
-            track = self._resolve_track(kwargs.get(_KEY_TRACK))
-            return CreateFirstImpressionAction(), {**common, "track": track, "coloring": coloring}
-        if subverb == _SUBVERB_DEVELOP:
-            track = self._resolve_track(kwargs.get(_KEY_TRACK))
-            xp = _require_int(kwargs.get(_KEY_XP, "0"), _KEY_XP) if _KEY_XP in kwargs else 0
-            return CreateDevelopmentAction(), {**common, "track": track, "xp_awarded": xp}
-        if subverb == _SUBVERB_CAPSTONE:
-            track = self._resolve_track(kwargs.get(_KEY_TRACK))
-            return CreateCapstoneAction(), {**common, "track": track}
-        # redistribute
-        source_track = self._resolve_track(kwargs.get(_KEY_SOURCE), label="source track")
-        target_track = self._resolve_track(kwargs.get(_KEY_TARGET_TRACK), label="target track")
-        run_kwargs = {**common, "source_track": source_track, "target_track": target_track}
-        return RedistributePointsAction(), run_kwargs
+    def _dispatch_shift(self, rest: str) -> None:
+        """Syntax: ``shift <name>=<from>,<to>[,note]``."""
+        from actions.definitions.relationships import ShiftLabelAction  # noqa: PLC0415
 
-    # -- feedback verbs (kudos / complain) ------------------------------------
-
-    def _dispatch_kudos(self, rest: str) -> None:
-        """Commend a shared writeup.  Syntax: ``relationship kudos <ref>``."""
-        from actions.definitions.relationships import GiveWriteupKudosAction  # noqa: PLC0415
-
-        ref = rest.strip()
-        if not ref:
-            msg = (
-                "Usage: relationship kudos <ref>  "
-                "(e.g. 'kudos u42'; see 'relationship show <name|#>' for refs)."
-            )
+        name, sep, rhs = rest.partition("=")
+        parts = rhs.split(",", 2) if sep else []
+        if (
+            not name.strip()
+            or len(parts) < _MIN_LABEL_REF_PARTS
+            or not parts[0].strip()
+            or not parts[1].strip()
+        ):
+            msg = "Usage: relationship shift <name>=<from>,<to>[,note]"
             raise CommandError(msg)
-        writeup_type, writeup_id = self._parse_writeup_ref(ref)
-        result = GiveWriteupKudosAction().run(
-            actor=self.caller, writeup_type=writeup_type, writeup_id=writeup_id
+        sheet = self._actor_sheet(self.caller)
+        target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
+        label = self._own_open_label(sheet, target_sheet, target_companion, parts[0].strip())
+        new_type = self._resolve_type(parts[1].strip())
+        note = parts[2].strip() if len(parts) > _MIN_LABEL_REF_PARTS else ""
+        result = ShiftLabelAction().run(
+            actor=self.caller, label=label, new_type=new_type, note=note
         )
         if result.message:
             self.msg(result.message)
 
-    def _dispatch_complain(self, rest: str) -> None:
-        """File a writeup complaint.  Syntax: ``relationship complain <ref>=<reason>``."""
-        from actions.definitions.relationships import FileWriteupComplaintAction  # noqa: PLC0415
+    def _dispatch_end(self, rest: str) -> None:
+        """Syntax: ``end <name>=<type>``."""
+        from actions.definitions.relationships import EndLabelAction  # noqa: PLC0415
 
-        if "=" not in rest:
-            msg = (
-                "Usage: relationship complain <ref>=<reason>  "
-                "(e.g. 'complain u42=This writeup is in bad faith.')."
-            )
+        name, sep, type_name = rest.partition("=")
+        if not name.strip() or not sep or not type_name.strip():
+            msg = "Usage: relationship end <name>=<type>"
             raise CommandError(msg)
-        ref, _, reason = rest.partition("=")
-        reason = reason.strip()
-        if not reason:
-            msg = "A reason is required. Usage: relationship complain <ref>=<reason>"
+        sheet = self._actor_sheet(self.caller)
+        target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
+        label = self._own_open_label(sheet, target_sheet, target_companion, type_name.strip())
+        result = EndLabelAction().run(actor=self.caller, label=label)
+        if result.message:
+            self.msg(result.message)
+
+    def _dispatch_reveal(self, rest: str) -> None:
+        """Syntax: ``reveal <name>=<type>,<clandestine|public>``."""
+        from actions.definitions.relationships import AdvanceLabelAwarenessAction  # noqa: PLC0415
+
+        name, sep, rhs = rest.partition("=")
+        parts = rhs.split(",", 1) if sep else []
+        if (
+            not name.strip()
+            or len(parts) < _MIN_LABEL_REF_PARTS
+            or not parts[0].strip()
+            or not parts[1].strip()
+        ):
+            msg = "Usage: relationship reveal <name>=<type>,<clandestine|public>"
             raise CommandError(msg)
-        writeup_type, writeup_id = self._parse_writeup_ref(ref.strip())
-        result = FileWriteupComplaintAction().run(
+        sheet = self._actor_sheet(self.caller)
+        target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
+        label = self._own_open_label(sheet, target_sheet, target_companion, parts[0].strip())
+        awareness = parts[1].strip().lower()
+        result = AdvanceLabelAwarenessAction().run(
+            actor=self.caller, label=label, awareness=awareness
+        )
+        if result.message:
+            self.msg(result.message)
+
+    def _dispatch_ap(self, rest: str) -> None:
+        """Syntax: ``ap <name>=<n>``."""
+        from actions.definitions.relationships import SetTieAllocationAction  # noqa: PLC0415
+
+        name, sep, value = rest.partition("=")
+        if not name.strip() or not sep:
+            msg = "Usage: relationship ap <name>=<n>"
+            raise CommandError(msg)
+        ap_amount = _require_int(value.strip(), "AP")
+        target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
+        result = SetTieAllocationAction().run(
             actor=self.caller,
-            writeup_type=writeup_type,
-            writeup_id=writeup_id,
-            reason=reason,
+            target_sheet=target_sheet,
+            target_companion=target_companion,
+            ap_amount=ap_amount,
         )
         if result.message:
             self.msg(result.message)
 
-    def _parse_writeup_ref(self, ref: str) -> tuple[str, int]:
-        """Parse a writeup reference like ``u42``, ``d15``, or ``c7`` into (writeup_type, pk).
+    def _dispatch_advance(self, rest: str) -> None:
+        """Syntax: ``advance <name>=<journal entry id>``."""
+        from actions.definitions.relationships import AdvanceRelationshipTierAction  # noqa: PLC0415
+        from world.journals.models import JournalEntry  # noqa: PLC0415
 
-        Prefix letters match the labels shown in ``relationship show``:
-        ``u`` = RelationshipUpdate, ``d`` = RelationshipDevelopment, ``c`` = RelationshipCapstone.
-        This is the single shared scheme — the same notation used in both display and parse.
-        """
-        ref = ref.strip().lower()
-        for prefix, writeup_type in _WRITEUP_PREFIX_MAP.items():
-            if ref.startswith(prefix) and len(ref) > len(prefix):
-                pk_str = ref[len(prefix) :]
-                if pk_str.isdigit():
-                    return writeup_type, int(pk_str)
-        msg = (
-            f"Invalid writeup reference '{ref}'. "
-            "Use u<id> (update), d<id> (development), or c<id> (capstone); "
-            "labels shown by 'relationship show <name|#>'."
+        name, sep, value = rest.partition("=")
+        if not name.strip() or not sep:
+            msg = "Usage: relationship advance <name>=<journal entry id>"
+            raise CommandError(msg)
+        entry_id = _require_int(value.strip(), "journal entry id")
+        target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
+        if target_companion is not None:
+            msg = "A relationship tier can only be advanced with a character."
+            raise CommandError(msg)
+        sheet = self._actor_sheet(self.caller)
+        entry = JournalEntry.objects.filter(pk=entry_id, author=sheet).first()
+        if entry is None:
+            msg = f"No journal entry #{entry_id} of yours found."
+            raise CommandError(msg)
+        result = AdvanceRelationshipTierAction().run(
+            actor=self.caller, target_sheet=target_sheet, journal_entry=entry
         )
-        raise CommandError(msg)
+        if result.message:
+            self.msg(result.message)
+
+    def _dispatch_summary(self, rest: str) -> None:
+        """Syntax: ``summary <name>=<text>``."""
+        from actions.definitions.relationships import SetTieSummaryAction  # noqa: PLC0415
+
+        name, sep, text = rest.partition("=")
+        if not name.strip() or not sep:
+            msg = "Usage: relationship summary <name>=<text>"
+            raise CommandError(msg)
+        target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
+        result = SetTieSummaryAction().run(
+            actor=self.caller,
+            target_sheet=target_sheet,
+            target_companion=target_companion,
+            summary=text,
+        )
+        if result.message:
+            self.msg(result.message)
 
     # -- read verbs ------------------------------------------------------------
 
     def _show_list(self) -> None:
-        """Render the caller's relationships (source side), newest first."""
+        """Render one line per side of a tie the caller has touched (source side)."""
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
         sheet = self._actor_sheet(self.caller)
         qs = (
             CharacterRelationship.objects.filter(source=sheet)
             .select_related("target", "target__character", "target_companion")
+            .prefetch_related("labels__type")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
             .order_by("-updated_at")
         )
         relationships = list(qs)
         if not relationships:
             self.msg("You have recorded no relationships.")
             return
-        lines = ["|wYour relationships:|n"]
-        lines.extend(self._render_list_row(rel) for rel in relationships)
-        lines.append("Use 'relationship show <name|#>' for detail.")
-        self.msg("\n".join(lines))
+        self.msg("\n".join(self._render_list_row(rel) for rel in relationships))
 
     def _show_detail(self, rest: str) -> None:
-        """Render a single relationship by target name or relationship id."""
+        """Render a single side by target name or relationship id."""
         if not rest:
-            msg = "Usage: relationship show <name or #id>."
+            msg = "Usage: relationship show <name|#>."
             raise CommandError(msg)
         sheet = self._actor_sheet(self.caller)
         relationship = self._resolve_relationship(sheet, rest)
@@ -442,42 +380,51 @@ class CmdRelationship(ArxCommand):
             raise CommandError(msg)
         return target_sheet, None
 
-    def _resolve_track(self, value: str | None, *, label: str = "track") -> RelationshipTrack:
-        """Resolve a RelationshipTrack by name (iexact) or numeric id."""
-        from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+    def _resolve_type(self, value: str | None) -> RelationshipType:
+        from world.relationships.models import RelationshipType  # noqa: PLC0415
 
-        if value is None or value == "":
-            msg = f"{label} is required (name or id)."
+        if not value:
+            msg = "A relationship type is required."
             raise CommandError(msg)
-        if value.isdigit():
-            track = RelationshipTrack.objects.filter(pk=int(value)).first()
-        else:
-            track = RelationshipTrack.objects.filter(name__iexact=value).first()
-        if track is None:
-            msg = f"No relationship track '{value}' found."
+        rel_type = RelationshipType.objects.filter(name__iexact=value.strip()).first()
+        if rel_type is None:
+            msg = f"No relationship type '{value}'."
             raise CommandError(msg)
-        return track
+        return rel_type
+
+    def _own_open_label(
+        self,
+        sheet: CharacterSheet,
+        target_sheet: CharacterSheet | None,
+        target_companion: Companion | None,
+        type_name: str,
+    ) -> RelationshipLabel:
+        from world.relationships.models import RelationshipLabel  # noqa: PLC0415
+
+        rel_type = self._resolve_type(type_name)
+        label = RelationshipLabel.objects.filter(
+            relationship__source=sheet,
+            relationship__target=target_sheet,
+            relationship__target_companion=target_companion,
+            type=rel_type,
+            ended_at__isnull=True,
+        ).first()
+        if label is None:
+            msg = f"You have not declared {rel_type.name} toward them."
+            raise CommandError(msg)
+        return label
 
     def _resolve_relationship(self, sheet: CharacterSheet, ref: str) -> CharacterRelationship:
         """Resolve one of the caller's (source-side) relationships by id or target name."""
-        from django.db.models import Prefetch  # noqa: PLC0415
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        from world.relationships.models import (  # noqa: PLC0415
-            CharacterRelationship,
-            RelationshipTrackProgress,
-        )
+        from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
         ref = ref.strip().removeprefix("#")
         qs = (
             CharacterRelationship.objects.filter(source=sheet)
             .select_related("target", "target__character", "target_companion")
-            .prefetch_related(
-                Prefetch(
-                    "track_progress",
-                    queryset=RelationshipTrackProgress.objects.select_related("track"),
-                    to_attr="cached_track_progress",
-                ),
-            )
+            .prefetch_related("labels__type")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
         )
         if ref.isdigit():
             relationship = qs.filter(pk=int(ref)).first()
@@ -490,122 +437,61 @@ class CmdRelationship(ArxCommand):
             if companion is not None:
                 relationship = qs.filter(target_companion=companion).first()
             else:
-                relationship = qs.filter(target=target.sheet_data).first()
+                try:
+                    target_sheet = target.sheet_data
+                except (AttributeError, ObjectDoesNotExist):
+                    target_sheet = None
+                relationship = qs.filter(target=target_sheet).first() if target_sheet else None
         if relationship is None:
-            msg = f"No relationship #{ref} found."
+            msg = f"No relationship with '{ref}' found."
             raise CommandError(msg)
         return relationship
 
-    def _parse_visibility(self, value: str | None) -> UpdateVisibility:
-        """Coerce a visibility token to UpdateVisibility (default PRIVATE)."""
-        from world.relationships.constants import UpdateVisibility  # noqa: PLC0415
-
-        if value is None or value == "":
-            return UpdateVisibility.PRIVATE
-        try:
-            return UpdateVisibility(value.lower())
-        except ValueError as exc:
-            msg = "visibility must be one of: private, shared, gossip, public."
-            raise CommandError(msg) from exc
-
-    def _parse_coloring(self, value: str | None) -> FirstImpressionColoring:
-        """Coerce a coloring token to FirstImpressionColoring (default NEUTRAL)."""
-        from world.relationships.constants import FirstImpressionColoring  # noqa: PLC0415
-
-        if value is None or value == "":
-            return FirstImpressionColoring.NEUTRAL
-        try:
-            return FirstImpressionColoring(value.lower())
-        except ValueError as exc:
-            msg = "coloring must be one of: positive, neutral, negative."
-            raise CommandError(msg) from exc
-
     # -- rendering -------------------------------------------------------------
 
-    def _render_list_row(self, rel: CharacterRelationship) -> str:
-        """One summary line for a relationship in the list view."""
-        target_name = rel.target_name
-        status = "pending" if rel.is_pending else "active"
-        flags: list[str] = []
-        if rel.is_deceitful:
-            flags.append("deceitful")
-        if rel.is_soul_tether:
-            flags.append("soul-tether")
-        flag_text = f" ({', '.join(flags)})" if flags else ""
-        affection = rel.affection
-        return (
-            f"[#{rel.pk}] {target_name} — |{self._affection_color(affection)}{affection:+d}|n "
-            f"({status}){flag_text}"
-        )
-
-    def _render_detail(self, rel: CharacterRelationship) -> str:
-        """A multi-line detail view for one relationship."""
-        from world.relationships.models import (  # noqa: PLC0415
-            RelationshipCapstone,
-            RelationshipDevelopment,
-            RelationshipUpdate,
-        )
-
-        target_name = rel.target_name
-        status = "pending" if rel.is_pending else "active"
-        lines = [
-            f"|wRelationship #{rel.pk} with {target_name}|n — {status}",
-            f"Affection: {rel.affection:+d}  Absolute value: {rel.absolute_value}  "
-            f"Developed: {rel.developed_absolute_value}",
-        ]
-        progress = sorted(rel.cached_track_progress, key=lambda p: p.track.display_order)
-        if progress:
-            lines.append("|wTracks:|n")
-            for prog in progress:
-                tier = prog.current_tier
-                tier_name = tier.name if tier else "-"
-                lines.append(
-                    f"  {prog.track.name}: {prog.developed_points} permanent / "
-                    f"{prog.temporary_points} temporary (cap {prog.capacity}, tier {tier_name})"
-                )
-        else:
-            lines.append("No track progress recorded yet.")
-
-        # Writeups — listed with type-prefix refs so players know what to pass to kudos/complain.
-        updates = list(
-            RelationshipUpdate.objects.filter(relationship=rel)
-            .select_related("track")
-            .order_by("created_at")
-        )
-        developments = list(
-            RelationshipDevelopment.objects.filter(relationship=rel)
-            .select_related("track")
-            .order_by("created_at")
-        )
-        capstones = list(
-            RelationshipCapstone.objects.filter(relationship=rel)
-            .select_related("track")
-            .order_by("created_at")
-        )
-        if updates or developments or capstones:
-            lines.append("|wWriteups:|n  (use ref with 'kudos <ref>' or 'complain <ref>=<reason>')")
-            lines.extend(f"  [u{u.pk}] ({u.visibility}) {u.track.name}: {u.title}" for u in updates)
-            lines.extend(
-                f"  [d{d.pk}] ({d.visibility}) {d.track.name}: {d.title}" for d in developments
-            )
-            lines.extend(
-                f"  [c{c.pk}] ({c.visibility}) {c.track.name}: {c.title}" for c in capstones
-            )
-
-        return "\n".join(lines)
-
     @staticmethod
-    def _affection_color(affection: int) -> str:
-        """Evennia color code for an affection value (green/red/grey)."""
-        if affection > 0:
-            return "g"
-        if affection < 0:
-            return "r"
-        return "n"
+    def _label_text(label: RelationshipLabel) -> str:
+        """``Lover`` (public), ``Lover (clandestine)``, ``Enemy (private)``, ``Friend (former)``."""
+        from world.relationships.constants import LabelAwareness  # noqa: PLC0415
+
+        if label.is_former:
+            return f"{label.type.name} (former)"
+        if label.awareness == LabelAwareness.PUBLIC:
+            return label.type.name
+        return f"{label.type.name} ({label.awareness})"
+
+    def _render_labels(self, side: CharacterRelationship) -> str:
+        texts = [self._label_text(label) for label in side.labels.all()]
+        return ", ".join(texts) if texts else "no labels"
+
+    def _render_list_row(self, side: CharacterRelationship) -> str:
+        """One summary line for a side of a tie: labels, depth, tier."""
+        labels = self._render_labels(side)
+        return f"{side.target_name}: {labels} | depth {side.pair_depth()} | tier {side.tier}"
+
+    def _render_detail(self, side: CharacterRelationship) -> str:
+        """A two-line detail view: the list row, then gauges + AP + summary."""
+        from world.relationships.models import RelationshipAllocation  # noqa: PLC0415
+
+        try:
+            ap_this_week = side.allocation.ap_amount
+        except RelationshipAllocation.DoesNotExist:
+            ap_this_week = 0
+        lines = [
+            self._render_list_row(side),
+            f"scenes {side.scene_depth} | invested {side.invested_depth} | "
+            f"affection {side.affection} | conflict {side.conflict} | "
+            f"ap this week {ap_this_week}",
+        ]
+        if side.summary:
+            lines.append(side.summary)
+        return "\n".join(lines)
 
     def _usage(self) -> str:
         return (
-            "Usage: relationship [list|show <name|#>|impression <name> ...|"
-            "develop <name> ...|capstone <name> ...|redistribute <name> ...|"
-            "kudos <ref>|complain <ref>=<reason>]"
+            "Usage: relationship [list|show <name|#>|plus <name>|neg <name>|"
+            "declare <name>=<type>[,private|clandestine|public]|"
+            "shift <name>=<from>,<to>[,note]|end <name>=<type>|"
+            "reveal <name>=<type>,<clandestine|public>|ap <name>=<n>|"
+            "advance <name>=<journal entry id>|summary <name>=<text>]"
         )

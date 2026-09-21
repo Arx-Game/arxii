@@ -581,14 +581,14 @@ def _fury_tier_options() -> tuple[FuryTierOption, ...]:
 
 
 def _eligible_fury_anchors(character: ObjectDB, sheet: CharacterSheet) -> tuple[AnchorOption, ...]:
-    """Consented, active relationships whose bond can carry a provocation (#1543)."""
+    """Active relationships whose bond can carry a provocation (#1543, #3957)."""
     from world.magic.services.fury import provocation_cap  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     anchors: list[AnchorOption] = []
-    for rel in CharacterRelationship.objects.filter(
-        source=sheet, is_active=True, is_pending=False
-    ).select_related("target", "target__character"):
+    for rel in CharacterRelationship.objects.filter(source=sheet, is_active=True).select_related(
+        "target", "target__character"
+    ):
         anchor_sheet = rel.target
         cap = provocation_cap(character, anchor_sheet)
         if cap < 1:

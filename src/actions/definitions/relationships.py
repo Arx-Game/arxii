@@ -1,7 +1,8 @@
-"""Relationship-building player actions.
+"""Tie actions (#3957): declare, shift, end, reveal, AP, advance, summary.
 
-Four Actions converging on the existing relationship services:
-first impression, development, capstone, and point redistribution.
+Seven Actions converging on ``world.relationships.services`` — the one seam
+telnet and the web share (``action.run()``). Plus ``RelationshipBumpAction``,
+the ambient +/-1 nudge (#1699), unchanged apart from the service it calls.
 """
 
 from __future__ import annotations
@@ -19,14 +20,12 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
-
-
-_MSG_INVALID_POINTS = "Invalid points value."
+    from world.relationships.exceptions import TieError
 
 
 @dataclass
 class BaseRelationshipAction(Action):
-    """Shared base for relationship-building verbs."""
+    """Shared base for tie-building verbs."""
 
     target_type: TargetType = TargetType.SINGLE
 
@@ -36,42 +35,10 @@ class BaseRelationshipAction(Action):
     def _sheet(self, actor: ObjectDB) -> Any:
         return resolve_actor_sheet(actor)
 
-    def _active_scene_for(
-        self, actor: ObjectDB, target_sheet: Any, target_companion: Any = None
-    ) -> Any:
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        if actor.location is None:
-            return None
-        if target_companion is not None:
-            # objectdb is None when the live object was destroyed outside
-            # release_companion (#3575); no scene link then, the write still proceeds.
-            character = target_companion.objectdb
-        else:
-            try:
-                character = target_sheet.character
-            except (AttributeError, ObjectDoesNotExist):
-                return None
-        if character is None or character.location_id != actor.location.id:
-            return None
-        return Scene.objects.active_for_room(actor.location).first()
-
     def _relationship(self, source: Any, target: Any, target_companion: Any = None) -> Any:
-        from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+        from world.relationships.services import get_or_create_side  # noqa: PLC0415
 
-        if target_companion is not None:
-            relationship, _ = CharacterRelationship.objects.get_or_create(
-                source=source,
-                target_companion=target_companion,
-                defaults={"is_pending": False},
-            )
-            return relationship
-        relationship, _ = CharacterRelationship.objects.get_or_create(
-            source=source,
-            target=target,
-            defaults={"is_pending": True},
-        )
-        return relationship
+        return get_or_create_side(source=source, target=target, target_companion=target_companion)
 
     def _target_name(self, target_sheet: Any, target_companion: Any = None) -> str | None:
         if target_companion is not None:
@@ -93,43 +60,10 @@ class BaseRelationshipAction(Action):
             return "You cannot record a relationship with yourself."
         return ""
 
-    def _resolve_writeup(self, writeup_type: str | None, writeup_id: int | None) -> Any:
-        """Resolve a writeup instance from type and id kwargs.
-
-        ``writeup_type`` must be one of ``"update"``, ``"development"``, or ``"capstone"``.
-        Raises ``WriteupFeedbackError`` (with a ``user_message``) for unknown types or
-        missing rows so callers can convert it to a clean ``ActionResult`` failure.
-        """
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-        from world.relationships.exceptions import WriteupFeedbackError  # noqa: PLC0415
-        from world.relationships.models import (  # noqa: PLC0415
-            RelationshipCapstone,
-            RelationshipDevelopment,
-            RelationshipUpdate,
-        )
-
-        _TYPE_MAP: dict[str, Any] = {
-            "update": RelationshipUpdate,
-            "development": RelationshipDevelopment,
-            "capstone": RelationshipCapstone,
-        }
-
-        if writeup_type not in _TYPE_MAP:
-            msg = "Invalid writeup type."
-            raise WriteupFeedbackError(msg)
-
-        model = _TYPE_MAP[writeup_type]
-        try:
-            return model.objects.get(pk=writeup_id)
-        except (ObjectDoesNotExist, model.DoesNotExist, ValueError, TypeError):
-            msg = "Writeup not found."
-            raise WriteupFeedbackError(msg) from None
-
     def _preflight_error(
         self, sheet: Any, target_sheet: Any, target_companion: Any = None, **required: Any
     ) -> str:
-        """Return the first preflight error for a relationship verb, else "".
+        """Return the first preflight error for a tie verb, else "".
 
         Consolidates the no-sheet / missing-required-kwarg / self-target / companion-
         ownership checks into a single message so each ``execute()`` needs one early
@@ -150,13 +84,23 @@ class BaseRelationshipAction(Action):
         return self._self_target_error(sheet, target_sheet)
 
 
-@dataclass
-class CreateFirstImpressionAction(BaseRelationshipAction):
-    """Record a first impression toward another character."""
+def _tenure_for(sheet: Any) -> Any:
+    """The sheet's current roster tenure, or None (consent reads it later)."""
+    entry = sheet.roster_entry_or_none
+    return entry.current_tenure if entry is not None else None
 
-    key: str = "create_first_impression"
-    name: str = "First Impression"
-    icon: str = "sparkles"
+
+def _tie_error(exc: TieError) -> ActionResult:
+    return ActionResult(success=False, message=exc.user_message)
+
+
+@dataclass
+class DeclareLabelAction(BaseRelationshipAction):
+    """Name a type on your side of a tie; Private unless told otherwise (#3957)."""
+
+    key: str = "declare_label"
+    name: str = "Declare"
+    icon: str = "tag"
     category: str = "relationships"
 
     def execute(
@@ -165,201 +109,62 @@ class CreateFirstImpressionAction(BaseRelationshipAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.relationships.constants import (  # noqa: PLC0415
-            FirstImpressionColoring,
-            UpdateVisibility,
-        )
-        from world.relationships.services import create_first_impression  # noqa: PLC0415
+        from world.relationships.constants import LabelAwareness  # noqa: PLC0415
+        from world.relationships.exceptions import TieError  # noqa: PLC0415
+        from world.relationships.services import declare_label  # noqa: PLC0415
 
         sheet = self._sheet(actor)
         target_sheet = kwargs.get("target_sheet")
         target_companion = kwargs.get("target_companion")
-        track = kwargs.get("track")
+        label_type = kwargs.get("type")
         err = self._preflight_error(
             sheet,
             target_sheet,
             target_companion,
             target=target_sheet if target_sheet is not None else target_companion,
-            track=track,
+            type=label_type,
         )
         if err:
             return ActionResult(success=False, message=err)
-
+        side = self._relationship(sheet, target_sheet, target_companion)
         try:
-            points = int(kwargs.get("points", 0))
-            relationship = create_first_impression(
-                source=sheet,
-                target=target_sheet,
-                target_companion=target_companion,
-                title=kwargs.get("title", ""),
-                writeup=kwargs.get("writeup", ""),
-                track=track,
-                points=points,
-                coloring=kwargs.get("coloring", FirstImpressionColoring.NEUTRAL),
-                visibility=kwargs.get("visibility", UpdateVisibility.PRIVATE),
-                linked_scene=self._active_scene_for(actor, target_sheet, target_companion),
+            label = declare_label(
+                side=side,
+                type=label_type,
+                awareness=kwargs.get("awareness", LabelAwareness.PRIVATE),
+                tenure=_tenure_for(sheet),
             )
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
-        except ValidationError as exc:
-            return ActionResult(success=False, message=str(exc))
-
-        target_name = self._target_name(target_sheet, target_companion)
+        except TieError as exc:
+            return _tie_error(exc)
         return ActionResult(
             success=True,
-            message=(
-                f"You record a first impression of {target_name}."
-                if target_name
-                else "You record a first impression."
-            ),
-            data={"relationship_id": relationship.pk},
+            message=f"{label_type.name} declared toward {side.target_name}.",
+            data={"relationship_id": side.pk, "label_id": label.pk},
         )
 
 
 @dataclass
-class CreateDevelopmentAction(BaseRelationshipAction):
-    """Solidify temporary points into permanent developed points."""
+class _LabelRowAction(BaseRelationshipAction):
+    """Shared: resolve ``label`` and refuse one the actor does not own."""
 
-    key: str = "create_development"
-    name: str = "Develop Relationship"
-    icon: str = "trending-up"
-    category: str = "relationships"
-
-    def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
-    ) -> ActionResult:
-        from world.relationships.constants import UpdateVisibility  # noqa: PLC0415
-        from world.relationships.services import create_development  # noqa: PLC0415
-
+    def _own_label(self, actor: ObjectDB, kwargs: dict[str, Any]) -> tuple[Any, Any, str]:
         sheet = self._sheet(actor)
-        target_sheet = kwargs.get("target_sheet")
-        target_companion = kwargs.get("target_companion")
-        track = kwargs.get("track")
-        err = self._preflight_error(
-            sheet,
-            target_sheet,
-            target_companion,
-            target=target_sheet if target_sheet is not None else target_companion,
-            track=track,
-        )
-        if err:
-            return ActionResult(success=False, message=err)
-
-        relationship = self._relationship(sheet, target_sheet, target_companion)
-
-        try:
-            points = int(kwargs.get("points", 0))
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
-
-        try:
-            xp_awarded = int(kwargs.get("xp_awarded", 0))
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message="Invalid xp value.")
-
-        try:
-            development = create_development(
-                relationship=relationship,
-                author=sheet,
-                title=kwargs.get("title", ""),
-                writeup=kwargs.get("writeup", ""),
-                track=track,
-                points=points,
-                xp_awarded=xp_awarded,
-                visibility=kwargs.get("visibility", UpdateVisibility.PRIVATE),
-                linked_scene=self._active_scene_for(actor, target_sheet, target_companion),
-            )
-        except ValidationError as exc:
-            return ActionResult(success=False, message=str(exc))
-
-        target_name = self._target_name(target_sheet, target_companion)
-        return ActionResult(
-            success=True,
-            message=(
-                f"You develop your regard for {target_name} "
-                f"({development.points_earned} points on {track.name})."
-                if target_name
-                else f"You develop your regard "
-                f"({development.points_earned} points on {track.name})."
-            ),
-            data={"development_id": development.pk},
-        )
+        label = kwargs.get("label")
+        if sheet is None:
+            return None, None, "No active character."
+        if label is None:
+            return None, None, "No label selected."
+        if label.relationship.source_id != sheet.pk:
+            return None, None, "That is not your relationship."
+        return sheet, label, ""
 
 
 @dataclass
-class CreateCapstoneAction(BaseRelationshipAction):
-    """Record a monumental relationship capstone."""
+class ShiftLabelAction(_LabelRowAction):
+    """Change one label into another; the old row ends, the new one remembers it (#3957)."""
 
-    key: str = "create_capstone"
-    name: str = "Relationship Capstone"
-    icon: str = "crown"
-    category: str = "relationships"
-
-    def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
-    ) -> ActionResult:
-        from world.relationships.constants import UpdateVisibility  # noqa: PLC0415
-        from world.relationships.services import create_capstone  # noqa: PLC0415
-
-        sheet = self._sheet(actor)
-        target_sheet = kwargs.get("target_sheet")
-        target_companion = kwargs.get("target_companion")
-        track = kwargs.get("track")
-        err = self._preflight_error(
-            sheet,
-            target_sheet,
-            target_companion,
-            target=target_sheet if target_sheet is not None else target_companion,
-            track=track,
-        )
-        if err:
-            return ActionResult(success=False, message=err)
-
-        relationship = self._relationship(sheet, target_sheet, target_companion)
-
-        try:
-            points = int(kwargs.get("points", 0))
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
-
-        try:
-            capstone = create_capstone(
-                relationship=relationship,
-                author=sheet,
-                title=kwargs.get("title", ""),
-                writeup=kwargs.get("writeup", ""),
-                track=track,
-                points=points,
-                visibility=kwargs.get("visibility", UpdateVisibility.SHARED),
-                linked_scene=self._active_scene_for(actor, target_sheet, target_companion),
-            )
-        except ValidationError as exc:
-            return ActionResult(success=False, message=str(exc))
-
-        target_name = self._target_name(target_sheet, target_companion)
-        return ActionResult(
-            success=True,
-            message=(
-                f"You mark a capstone in your regard for {target_name} ({track.name})."
-                if target_name
-                else f"You mark a capstone in your regard ({track.name})."
-            ),
-            data={"capstone_id": capstone.pk},
-        )
-
-
-@dataclass
-class RedistributePointsAction(BaseRelationshipAction):
-    """Move developed points between tracks in an existing relationship."""
-
-    key: str = "redistribute_points"
-    name: str = "Redistribute Relationship Points"
+    key: str = "shift_label"
+    name: str = "Relationship Shift"
     icon: str = "shuffle"
     category: str = "relationships"
 
@@ -369,67 +174,142 @@ class RedistributePointsAction(BaseRelationshipAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.relationships.constants import UpdateVisibility  # noqa: PLC0415
-        from world.relationships.services import redistribute_points  # noqa: PLC0415
+        from world.relationships.exceptions import TieError  # noqa: PLC0415
+        from world.relationships.services import shift_label  # noqa: PLC0415
+
+        _sheet, label, err = self._own_label(actor, kwargs)
+        new_type = kwargs.get("new_type")
+        if not err and new_type is None:
+            err = "No type selected."
+        if err:
+            return ActionResult(success=False, message=err)
+        try:
+            new = shift_label(label=label, new_type=new_type, note=kwargs.get("note", ""))
+        except TieError as exc:
+            return _tie_error(exc)
+        return ActionResult(
+            success=True,
+            message=f"{label.type.name} becomes {new_type.name}.",
+            data={"relationship_id": label.relationship_id, "label_id": new.pk},
+        )
+
+
+@dataclass
+class EndLabelAction(_LabelRowAction):
+    """End an open label; it shows as former from then on (#3957)."""
+
+    key: str = "end_label"
+    name: str = "End"
+    icon: str = "minus"
+    category: str = "relationships"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.relationships.exceptions import TieError  # noqa: PLC0415
+        from world.relationships.services import end_label  # noqa: PLC0415
+
+        _sheet, label, err = self._own_label(actor, kwargs)
+        if err:
+            return ActionResult(success=False, message=err)
+        try:
+            end_label(label=label)
+        except TieError as exc:
+            return _tie_error(exc)
+        return ActionResult(
+            success=True,
+            message=f"{label.type.name} ended.",
+            data={"relationship_id": label.relationship_id, "label_id": label.pk},
+        )
+
+
+@dataclass
+class AdvanceLabelAwarenessAction(_LabelRowAction):
+    """Move a label's awareness forward — never backward (#3957)."""
+
+    key: str = "advance_label_awareness"
+    name: str = "Make known"
+    icon: str = "eye"
+    category: str = "relationships"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.relationships.exceptions import TieError  # noqa: PLC0415
+        from world.relationships.services import advance_awareness  # noqa: PLC0415
+
+        _sheet, label, err = self._own_label(actor, kwargs)
+        if err:
+            return ActionResult(success=False, message=err)
+        try:
+            advance_awareness(label=label, to=kwargs.get("awareness", ""))
+        except TieError as exc:
+            return _tie_error(exc)
+        return ActionResult(
+            success=True,
+            message=f"{label.type.name} is now {label.awareness}.",
+            data={"relationship_id": label.relationship_id, "label_id": label.pk},
+        )
+
+
+@dataclass
+class SetTieAllocationAction(BaseRelationshipAction):
+    """Set this week's AP toward one side of a tie (#3957)."""
+
+    key: str = "set_tie_allocation"
+    name: str = "AP this week"
+    icon: str = "clock"
+    category: str = "relationships"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.relationships.exceptions import TieError  # noqa: PLC0415
+        from world.relationships.services import set_allocation  # noqa: PLC0415
 
         sheet = self._sheet(actor)
         target_sheet = kwargs.get("target_sheet")
         target_companion = kwargs.get("target_companion")
-        source_track = kwargs.get("source_track")
-        target_track = kwargs.get("target_track")
         err = self._preflight_error(
             sheet,
             target_sheet,
             target_companion,
             target=target_sheet if target_sheet is not None else target_companion,
-            **{"source track": source_track, "target track": target_track},
         )
         if err:
             return ActionResult(success=False, message=err)
-
-        relationship = self._relationship(sheet, target_sheet, target_companion)
-
         try:
-            points = int(kwargs.get("points", 0))
+            ap_amount = int(kwargs.get("ap_amount", 0))
         except (TypeError, ValueError):
-            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
-
+            return ActionResult(success=False, message="Invalid AP value.")
+        side = self._relationship(sheet, target_sheet, target_companion)
         try:
-            change = redistribute_points(
-                relationship=relationship,
-                author=sheet,
-                title=kwargs.get("title", ""),
-                writeup=kwargs.get("writeup", ""),
-                source_track=source_track,
-                target_track=target_track,
-                points=points,
-                visibility=kwargs.get("visibility", UpdateVisibility.PRIVATE),
-            )
-        except ValidationError as exc:
-            return ActionResult(success=False, message=str(exc))
-
-        target_name = self._target_name(target_sheet, target_companion)
+            set_allocation(side=side, ap_amount=ap_amount)
+        except TieError as exc:
+            return _tie_error(exc)
         return ActionResult(
             success=True,
-            message=(
-                f"You shift {change.points_moved} points from "
-                f"{change.source_track.name} to {change.target_track.name} "
-                f"regarding {target_name}."
-                if target_name
-                else f"You shift {change.points_moved} points from "
-                f"{change.source_track.name} to {change.target_track.name}."
-            ),
-            data={"change_id": change.pk},
+            message=f"{ap_amount} AP this week toward {side.target_name}.",
+            data={"relationship_id": side.pk},
         )
 
 
 @dataclass
-class GiveWriteupKudosAction(BaseRelationshipAction):
-    """Commend a shared/public relationship writeup on behalf of its subject."""
+class AdvanceRelationshipTierAction(BaseRelationshipAction):
+    """Claim the next tier with a capstone journal entry and XP (#3957)."""
 
-    key: str = "give_writeup_kudos"
-    name: str = "Commend Writeup"
-    icon: str = "heart"
+    key: str = "advance_relationship_tier"
+    name: str = "Advance Relationship Tier"
+    icon: str = "crown"
     category: str = "relationships"
 
     def execute(
@@ -438,44 +318,46 @@ class GiveWriteupKudosAction(BaseRelationshipAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.relationships.exceptions import WriteupFeedbackError  # noqa: PLC0415
-        from world.relationships.services import give_writeup_kudos  # noqa: PLC0415
-        from world.roster.selectors import get_account_for_character  # noqa: PLC0415
+        from world.progression.exceptions import InsufficientXPError  # noqa: PLC0415
+        from world.relationships.exceptions import TieError  # noqa: PLC0415
+        from world.relationships.services import advance_tier  # noqa: PLC0415
 
-        writeup_type = kwargs.get("writeup_type")
-        writeup_id = kwargs.get("writeup_id")
-
-        if not writeup_type or writeup_id is None:
-            return ActionResult(success=False, message="No writeup selected.")
-
+        sheet = self._sheet(actor)
+        target_sheet = kwargs.get("target_sheet")
+        entry = kwargs.get("journal_entry")
+        err = self._preflight_error(
+            sheet, target_sheet, None, target=target_sheet, journal_entry=entry
+        )
+        if err:
+            return ActionResult(success=False, message=err)
+        side = self._relationship(sheet, target_sheet, None)
         try:
-            writeup = self._resolve_writeup(writeup_type, writeup_id)
-        except WriteupFeedbackError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        giver_account = get_account_for_character(actor)
-        if giver_account is None:
-            return ActionResult(success=False, message="No account found for your character.")
-
-        try:
-            kudos = give_writeup_kudos(giver_account=giver_account, writeup=writeup)
-        except WriteupFeedbackError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
+            receipt = advance_tier(side=side, journal_entry=entry)
+        except TieError as exc:
+            return _tie_error(exc)
+        except InsufficientXPError as exc:
+            return ActionResult(
+                success=False,
+                message=f"Not enough XP: {exc.required} needed, {exc.available} available.",
+            )
         return ActionResult(
             success=True,
-            message="You commend the writeup.",
-            data={"kudos_id": kudos.pk},
+            message=f"Tier {receipt.tier_claimed} with {side.target_name}.",
+            data={
+                "relationship_id": side.pk,
+                "capstone_id": receipt.pk,
+                "tier": receipt.tier_claimed,
+            },
         )
 
 
 @dataclass
-class FileWriteupComplaintAction(BaseRelationshipAction):
-    """File a bad-faith-RP complaint against a relationship writeup for staff triage."""
+class SetTieSummaryAction(BaseRelationshipAction):
+    """Set the player's own paragraph on one side of a tie (#3957)."""
 
-    key: str = "file_writeup_complaint"
-    name: str = "File Writeup Complaint"
-    icon: str = "flag"
+    key: str = "set_tie_summary"
+    name: str = "Summary"
+    icon: str = "pen"
     category: str = "relationships"
 
     def execute(
@@ -484,42 +366,23 @@ class FileWriteupComplaintAction(BaseRelationshipAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.relationships.exceptions import WriteupFeedbackError  # noqa: PLC0415
-        from world.relationships.services import file_writeup_complaint  # noqa: PLC0415
-        from world.roster.selectors import get_account_for_character  # noqa: PLC0415
+        from world.relationships.services import set_summary  # noqa: PLC0415
 
-        writeup_type = kwargs.get("writeup_type")
-        writeup_id = kwargs.get("writeup_id")
-        reason = kwargs.get("reason") or ""
-
-        if not reason:
-            return ActionResult(success=False, message="No reason provided.")
-
-        if not writeup_type or writeup_id is None:
-            return ActionResult(success=False, message="No writeup selected.")
-
-        try:
-            writeup = self._resolve_writeup(writeup_type, writeup_id)
-        except WriteupFeedbackError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        complainant_account = get_account_for_character(actor)
-        if complainant_account is None:
-            return ActionResult(success=False, message="No account found for your character.")
-
-        try:
-            complaint = file_writeup_complaint(
-                complainant_account=complainant_account,
-                writeup=writeup,
-                reason=reason,
-            )
-        except WriteupFeedbackError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
+        sheet = self._sheet(actor)
+        target_sheet = kwargs.get("target_sheet")
+        target_companion = kwargs.get("target_companion")
+        err = self._preflight_error(
+            sheet,
+            target_sheet,
+            target_companion,
+            target=target_sheet if target_sheet is not None else target_companion,
+        )
+        if err:
+            return ActionResult(success=False, message=err)
+        side = self._relationship(sheet, target_sheet, target_companion)
+        set_summary(side=side, summary=str(kwargs.get("summary", "")))
         return ActionResult(
-            success=True,
-            message="Your complaint has been filed for staff review.",
-            data={"complaint_id": complaint.pk},
+            success=True, message="Summary saved.", data={"relationship_id": side.pk}
         )
 
 

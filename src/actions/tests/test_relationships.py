@@ -1,569 +1,119 @@
-"""Tests for relationship-building Actions."""
+"""Tie actions (#3957) run through action.run(): the one seam telnet and web share."""
 
-from unittest.mock import PropertyMock, patch
-
-from evennia.objects.models import ObjectDB
+from django.test import TestCase
 
 from actions.definitions.relationships import (
-    CreateCapstoneAction,
-    CreateDevelopmentAction,
-    CreateFirstImpressionAction,
-    RedistributePointsAction,
+    AdvanceLabelAwarenessAction,
+    AdvanceRelationshipTierAction,
+    DeclareLabelAction,
+    EndLabelAction,
+    SetTieAllocationAction,
+    SetTieSummaryAction,
+    ShiftLabelAction,
 )
-from actions.tests.utils import ActionTestCase
-from world.character_sheets.models import CharacterSheet
-from world.companions.factories import CompanionFactory
-from world.relationships.factories import RelationshipTrackFactory
-from world.relationships.models import (
-    CharacterRelationship,
-    RelationshipCapstone,
-    RelationshipChange,
-    RelationshipDevelopment,
-    RelationshipTrackProgress,
-)
+from evennia_extensions.factories import CharacterFactory
+from world.action_points.models import ActionPointPool
+from world.character_sheets.factories import CharacterSheetFactory
+from world.relationships.constants import LabelAwareness
+from world.relationships.factories import RelationshipTypeFactory
+from world.relationships.models import CharacterRelationship, RelationshipLabel
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
-class CreateFirstImpressionActionTests(ActionTestCase):
-    def test_first_impression_creates_relationship(self):
-        track = RelationshipTrackFactory()
-        action = CreateFirstImpressionAction()
+def _character():
+    character = CharacterFactory()
+    sheet = CharacterSheetFactory(character=character)
+    entry = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(roster_entry=entry)
+    return character
 
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=track,
-            points=3,
-            title="A striking introduction",
-            writeup="They commanded the room.",
+
+class TieActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.actor = _character()
+        cls.other = _character()
+        cls.friend = RelationshipTypeFactory(name="Friend")
+        cls.lover = RelationshipTypeFactory(name="Lover")
+
+    def _declare(self, **kwargs):
+        return DeclareLabelAction().run(
+            actor=self.actor, target_sheet=self.other.sheet_data, type=self.friend, **kwargs
         )
 
-        self.assertTrue(result.success)
-        self.assertIn("first impression", result.message.lower())
-        self.assertIn("relationship_id", result.data)
-        relationship = CharacterRelationship.objects.get(pk=result.data["relationship_id"])
-        self.assertEqual(relationship.source, self.actor_sheet)
-        self.assertEqual(relationship.target, self.target_sheet)
-
-    def test_first_impression_requires_track(self):
-        action = CreateFirstImpressionAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            points=3,
-        )
-        self.assertFalse(result.success)
-
-
-class CreateDevelopmentActionTests(ActionTestCase):
-    def test_development_solidifies_points(self):
-        track = RelationshipTrackFactory()
-        CreateFirstImpressionAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=track,
-            points=5,
-            title="A striking introduction",
-            writeup="They commanded the room.",
-        )
-
-        action = CreateDevelopmentAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=track,
-            points=3,
-            title="Growing trust",
-            writeup="We spoke for hours.",
-        )
-
-        self.assertTrue(result.success)
-        development = RelationshipDevelopment.objects.get(pk=result.data["development_id"])
-        self.assertEqual(development.points_earned, 3)
-        progress = RelationshipTrackProgress.objects.get(
-            relationship__source=self.actor_sheet,
-            relationship__target=self.target_sheet,
-            track=track,
-        )
-        self.assertEqual(progress.developed_points, 3)
-
-    def test_development_fails_without_capacity(self):
-        track = RelationshipTrackFactory()
-        action = CreateDevelopmentAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=track,
-            points=3,
-            title="Too soon",
-            writeup="No foundation yet.",
-        )
-        self.assertFalse(result.success)
-
-
-class CreateCapstoneActionTests(ActionTestCase):
-    def test_capstone_adds_capacity_and_points(self):
-        track = RelationshipTrackFactory()
-        CreateFirstImpressionAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=track,
-            points=2,
-            title="A striking introduction",
-            writeup="They commanded the room.",
-        )
-
-        action = CreateCapstoneAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=track,
-            points=5,
-            title="A defining moment",
-            writeup="We stood back to back against the tide.",
-        )
-
-        self.assertTrue(result.success)
-        capstone = RelationshipCapstone.objects.get(pk=result.data["capstone_id"])
-        self.assertEqual(capstone.points, 5)
-        progress = RelationshipTrackProgress.objects.get(
-            relationship__source=self.actor_sheet,
-            relationship__target=self.target_sheet,
-            track=track,
-        )
-        self.assertEqual(progress.capacity, 7)
-        self.assertEqual(progress.developed_points, 5)
-
-
-class TargetNameFallbackTests(ActionTestCase):
-    """Ensure _target_name() falls back to a neutral message gracefully."""
-
-    def _setup_relationship(self, track):
-        """Create a relationship with a valid target character."""
-        CreateFirstImpressionAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=track,
-            points=5,
-            title="A striking introduction",
-            writeup="They commanded the room.",
-        )
-
-    def _patch_character_missing(self):
-        """Patch CharacterSheet.character to None without mutating the PK."""
-        return patch.object(
-            CharacterSheet,
-            "character",
-            new_callable=PropertyMock,
-            return_value=None,
-        )
-
-    def test_first_impression_uses_neutral_message_when_target_character_missing(self):
-        track = RelationshipTrackFactory()
-
-        with self._patch_character_missing():
-            result = CreateFirstImpressionAction().run(
-                actor=self.actor,
-                target_sheet=self.target_sheet,
-                track=track,
-                points=3,
-                title="A striking introduction",
-                writeup="They commanded the room.",
-            )
-
-        self.assertTrue(result.success)
-        self.assertEqual(result.message, "You record a first impression.")
-
-    def test_development_uses_neutral_message_when_target_character_missing(self):
-        source_track = RelationshipTrackFactory()
-        self._setup_relationship(source_track)
-
-        with self._patch_character_missing():
-            result = CreateDevelopmentAction().run(
-                actor=self.actor,
-                target_sheet=self.target_sheet,
-                track=source_track,
-                points=2,
-                title="Growing trust",
-                writeup="We spoke for hours.",
-            )
-
-        self.assertTrue(result.success)
-        self.assertEqual(
-            result.message,
-            f"You develop your regard (2 points on {source_track.name}).",
-        )
-
-    def test_capstone_uses_neutral_message_when_target_character_missing(self):
-        track = RelationshipTrackFactory()
-        self._setup_relationship(track)
-
-        with self._patch_character_missing():
-            result = CreateCapstoneAction().run(
-                actor=self.actor,
-                target_sheet=self.target_sheet,
-                track=track,
-                points=3,
-                title="A defining moment",
-                writeup="We stood back to back against the tide.",
-            )
-
-        self.assertTrue(result.success)
-        self.assertEqual(
-            result.message,
-            f"You mark a capstone in your regard ({track.name}).",
-        )
-
-    def test_redistribute_uses_neutral_message_when_target_character_missing(self):
-        source_track = RelationshipTrackFactory()
-        target_track = RelationshipTrackFactory()
-        self._setup_relationship(source_track)
-        CreateDevelopmentAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=source_track,
-            points=3,
-            title="Growing trust",
-            writeup="We spoke for hours.",
-        )
-
-        with self._patch_character_missing():
-            result = RedistributePointsAction().run(
-                actor=self.actor,
-                target_sheet=self.target_sheet,
-                source_track=source_track,
-                target_track=target_track,
-                points=2,
-                title="Shifting focus",
-                writeup="My regard finds a new shape.",
-            )
-
-        self.assertTrue(result.success)
-        self.assertEqual(
-            result.message,
-            (f"You shift 2 points from {source_track.name} to {target_track.name}."),
-        )
-
-    def test_target_name_returns_none_when_character_missing(self):
-        """_target_name catches AttributeError and returns None."""
-
-        class MissingCharacterSheet:
-            character = None
-
-        action = CreateFirstImpressionAction()
-        self.assertIsNone(action._target_name(MissingCharacterSheet()))
-
-    def test_target_name_returns_none_when_character_raises_does_not_exist(self):
-        """_target_name catches ObjectDoesNotExist and returns None."""
-        deleted_message = "Character deleted"
-
-        class MissingCharacterSheet:
-            @property
-            def character(self):
-                raise ObjectDB.DoesNotExist(deleted_message)
-
-        action = CreateFirstImpressionAction()
-        self.assertIsNone(action._target_name(MissingCharacterSheet()))
-
-
-class RedistributePointsActionTests(ActionTestCase):
-    def test_redistribute_moves_points(self):
-        source_track = RelationshipTrackFactory()
-        target_track = RelationshipTrackFactory()
-        CreateFirstImpressionAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=source_track,
-            points=5,
-            title="A striking introduction",
-            writeup="They commanded the room.",
-        )
-        CreateDevelopmentAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=source_track,
-            points=3,
-            title="Growing trust",
-            writeup="We spoke for hours.",
-        )
-
-        action = RedistributePointsAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            source_track=source_track,
-            target_track=target_track,
-            points=2,
-            title="Shifting focus",
-            writeup="My regard finds a new shape.",
-        )
-
-        self.assertTrue(result.success)
-        change = RelationshipChange.objects.get(pk=result.data["change_id"])
-        self.assertEqual(change.points_moved, 2)
-        self.assertEqual(change.source_track, source_track)
-        self.assertEqual(change.target_track, target_track)
-
-        source_progress = RelationshipTrackProgress.objects.get(
-            relationship__source=self.actor_sheet,
-            relationship__target=self.target_sheet,
-            track=source_track,
-        )
-        target_progress = RelationshipTrackProgress.objects.get(
-            relationship__source=self.actor_sheet,
-            relationship__target=self.target_sheet,
-            track=target_track,
-        )
-        self.assertEqual(source_progress.developed_points, 1)
-        self.assertEqual(target_progress.developed_points, 2)
-
-    def test_redistribute_requires_target_sheet(self):
-        action = RedistributePointsAction()
-        result = action.run(
-            actor=self.actor,
-            source_track=RelationshipTrackFactory(),
-            target_track=RelationshipTrackFactory(),
-            points=1,
-        )
-        self.assertFalse(result.success)
-        self.assertIn("target", result.message.lower())
-
-    def test_redistribute_requires_source_track(self):
-        action = RedistributePointsAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            target_track=RelationshipTrackFactory(),
-            points=1,
-        )
-        self.assertFalse(result.success)
-        self.assertIn("source track", result.message.lower())
-
-    def test_redistribute_requires_target_track(self):
-        action = RedistributePointsAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            source_track=RelationshipTrackFactory(),
-            points=1,
-        )
-        self.assertFalse(result.success)
-        self.assertIn("target track", result.message.lower())
-
-    def test_redistribute_fails_when_not_enough_points(self):
-        source_track = RelationshipTrackFactory()
-        target_track = RelationshipTrackFactory()
-        CreateFirstImpressionAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=source_track,
-            points=5,
-            title="A striking introduction",
-            writeup="They commanded the room.",
-        )
-        CreateDevelopmentAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=source_track,
-            points=3,
-            title="Growing trust",
-            writeup="We spoke for hours.",
-        )
-
-        action = RedistributePointsAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            source_track=source_track,
-            target_track=target_track,
-            points=5,
-            title="Too much",
-            writeup="My regard overreaches.",
-        )
-        self.assertFalse(result.success)
-
-    def test_redistribute_fails_with_invalid_points(self):
-        source_track = RelationshipTrackFactory()
-        target_track = RelationshipTrackFactory()
-        CreateFirstImpressionAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=source_track,
-            points=5,
-            title="A striking introduction",
-            writeup="They commanded the room.",
-        )
-        CreateDevelopmentAction().run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            track=source_track,
-            points=3,
-            title="Growing trust",
-            writeup="We spoke for hours.",
-        )
-
-        action = RedistributePointsAction()
-        result = action.run(
-            actor=self.actor,
-            target_sheet=self.target_sheet,
-            source_track=source_track,
-            target_track=target_track,
-            points="not-a-number",
-            title="Shifting focus",
-            writeup="My regard finds a new shape.",
-        )
-        self.assertFalse(result.success)
-        self.assertIn("invalid", result.message.lower())
-
-
-class SelfTargetGuardTests(ActionTestCase):
-    """No verb may record a relationship with the actor's own character (#1485)."""
-
-    def test_first_impression_rejects_self_target(self):
-        track = RelationshipTrackFactory()
-        result = CreateFirstImpressionAction().run(
-            actor=self.actor,
-            target_sheet=self.actor_sheet,
-            track=track,
-            points=3,
-            title="Navel-gazing",
-            writeup="I find myself fascinating.",
-        )
-        self.assertFalse(result.success)
-        self.assertIn("yourself", result.message.lower())
-        self.assertFalse(
-            CharacterRelationship.objects.filter(
-                source=self.actor_sheet, target=self.actor_sheet
-            ).exists()
-        )
-
-    def test_development_rejects_self_target(self):
-        track = RelationshipTrackFactory()
-        result = CreateDevelopmentAction().run(
-            actor=self.actor,
-            target_sheet=self.actor_sheet,
-            track=track,
-            points=2,
-            title="Growing self-regard",
-            writeup="I grow on me.",
-        )
-        self.assertFalse(result.success)
-        self.assertIn("yourself", result.message.lower())
-
-    def test_capstone_rejects_self_target(self):
-        track = RelationshipTrackFactory()
-        result = CreateCapstoneAction().run(
-            actor=self.actor,
-            target_sheet=self.actor_sheet,
-            track=track,
-            points=10,
-            title="Self oath",
-            writeup="I swore to myself.",
-        )
-        self.assertFalse(result.success)
-        self.assertIn("yourself", result.message.lower())
-
-    def test_redistribute_rejects_self_target(self):
-        source_track = RelationshipTrackFactory()
-        target_track = RelationshipTrackFactory()
-        result = RedistributePointsAction().run(
-            actor=self.actor,
-            target_sheet=self.actor_sheet,
-            source_track=source_track,
-            target_track=target_track,
-            points=3,
-            title="Self shift",
-            writeup="Reconfiguring my self-regard.",
-        )
-        self.assertFalse(result.success)
-        self.assertIn("yourself", result.message.lower())
-
-
-class CompanionTargetActionTests(ActionTestCase):
-    def setUp(self):
-        super().setUp()
-        self.companion = CompanionFactory(owner=self.actor_sheet, name="Ash")
-        self.track = RelationshipTrackFactory()
-
-    def _impress(self, **overrides):
-        kwargs = {
-            "actor": self.actor,
-            "target_companion": self.companion,
-            "track": self.track,
-            "points": 3,
-            "title": "Ash at the gate",
-            "writeup": "It did not flinch.",
-        }
-        kwargs.update(overrides)
-        return CreateFirstImpressionAction().run(**kwargs)
-
-    def test_first_impression_toward_own_companion(self):
-        result = self._impress()
+    def test_declare_defaults_private(self):
+        result = self._declare()
         self.assertTrue(result.success, result.message)
-        self.assertIn("Ash", result.message)
-        relationship = CharacterRelationship.objects.get(pk=result.data["relationship_id"])
-        self.assertEqual(relationship.target_companion, self.companion)
-        self.assertFalse(relationship.is_pending)
+        label = RelationshipLabel.objects.get()
+        self.assertEqual(label.awareness, LabelAwareness.PRIVATE)
+        self.assertEqual(label.relationship.source_id, self.actor.sheet_data.pk)
+        self.assertEqual(result.data["relationship_id"], label.relationship_id)
+        self.assertIsNotNone(label.declared_by_tenure_id)
 
-    def test_first_impression_toward_someone_elses_companion_is_refused(self):
-        stranger_companion = CompanionFactory(name="Not Yours")
-        result = self._impress(target_companion=stranger_companion)
+    def test_declare_self_refused(self):
+        result = DeclareLabelAction().run(
+            actor=self.actor, target_sheet=self.actor.sheet_data, type=self.friend
+        )
         self.assertFalse(result.success)
-        self.assertEqual(result.message, "That companion is not bonded to you.")
+        self.assertEqual(CharacterRelationship.objects.count(), 0)
 
-    def test_development_and_capstone_toward_companion(self):
-        self._impress()
-        dev = CreateDevelopmentAction().run(
-            actor=self.actor,
-            target_companion=self.companion,
-            track=self.track,
-            points=2,
-            title="Held the line",
-            writeup="Stood between me and the blade.",
-        )
-        self.assertTrue(dev.success, dev.message)
-        cap = CreateCapstoneAction().run(
-            actor=self.actor,
-            target_companion=self.companion,
-            track=self.track,
-            points=4,
-            title="Bled for me",
-            writeup="It nearly died.",
-        )
-        self.assertTrue(cap.success, cap.message)
-        relationship = CharacterRelationship.objects.get(
-            source=self.actor_sheet, target_companion=self.companion
-        )
-        progress = RelationshipTrackProgress.objects.get(
-            relationship=relationship, track=self.track
-        )
-        self.assertEqual(progress.developed_points, 6)
+    def test_declare_twice_refused(self):
+        self._declare()
+        result = self._declare()
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "That label is already declared.")
 
-    def test_redistribute_toward_companion(self):
-        other_track = RelationshipTrackFactory()
-        self._impress()
-        CreateCapstoneAction().run(
-            actor=self.actor,
-            target_companion=self.companion,
-            track=self.track,
-            points=4,
-            title="Bled for me",
-            writeup="It nearly died.",
-        )
-        result = RedistributePointsAction().run(
-            actor=self.actor,
-            target_companion=self.companion,
-            source_track=self.track,
-            target_track=other_track,
-            points=2,
-            title="Shifting",
-            writeup="Less awe, more trust.",
+    def test_shift_end_awareness(self):
+        self._declare()
+        label = RelationshipLabel.objects.get()
+        result = ShiftLabelAction().run(
+            actor=self.actor, label=label, new_type=self.lover, note="at the gate"
         )
         self.assertTrue(result.success, result.message)
-        self.assertIn("Ash", result.message)
-
-    def test_no_target_at_all_is_refused(self):
-        result = CreateFirstImpressionAction().run(
-            actor=self.actor, track=self.track, points=3, title="x", writeup="y"
+        new = RelationshipLabel.objects.get(ended_at__isnull=True)
+        self.assertEqual(new.type_id, self.lover.pk)
+        result = AdvanceLabelAwarenessAction().run(
+            actor=self.actor, label=new, awareness=LabelAwareness.PUBLIC
+        )
+        self.assertTrue(result.success, result.message)
+        result = AdvanceLabelAwarenessAction().run(
+            actor=self.actor, label=new, awareness=LabelAwareness.PRIVATE
         )
         self.assertFalse(result.success)
-        self.assertEqual(result.message, "No target selected.")
+        result = EndLabelAction().run(actor=self.actor, label=new)
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(RelationshipLabel.objects.filter(ended_at__isnull=True).count(), 0)
+
+    def test_label_actions_refuse_someone_elses_label(self):
+        self._declare()
+        label = RelationshipLabel.objects.get()
+        result = EndLabelAction().run(actor=self.other, label=label)
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "That is not your relationship.")
+
+    def test_allocation_and_summary(self):
+        pool = ActionPointPool.get_or_create_for_character(self.actor)
+        pool.current = 40
+        pool.save(update_fields=["current"])
+        result = SetTieAllocationAction().run(
+            actor=self.actor, target_sheet=self.other.sheet_data, ap_amount=9
+        )
+        self.assertTrue(result.success, result.message)
+        side = CharacterRelationship.objects.get()
+        self.assertEqual(side.allocation.ap_amount, 9)
+        result = SetTieSummaryAction().run(
+            actor=self.actor, target_sheet=self.other.sheet_data, summary="  A throat. "
+        )
+        self.assertTrue(result.success, result.message)
+        side.refresh_from_db()
+        self.assertEqual(side.summary, "A throat.")
+
+    def test_advance_tier_reports_the_gate(self):
+        from world.journals.factories import JournalEntryFactory
+
+        entry = JournalEntryFactory(author=self.actor.sheet_data, about=self.other.sheet_data)
+        result = AdvanceRelationshipTierAction().run(
+            actor=self.actor, target_sheet=self.other.sheet_data, journal_entry=entry
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "The relationship is not deep enough for the next tier.")

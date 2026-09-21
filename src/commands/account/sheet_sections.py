@@ -26,23 +26,12 @@ if TYPE_CHECKING:
         TechniqueFormPayload,
         TechniqueSignaturePayload,
     )
+    from world.relationships.models import RelationshipLabel
     from world.roster.models import ParentageEdge as ParentageEdgeType
     from world.secrets.models import Secret, SecretKnowledge
 
 _UNKNOWN = "Unknown"
 _NO_IDENTITY = "You have no active character to view sections with."
-
-
-_TONE_NEUTRAL = "neutral"
-
-
-def _affection_tone(affection: int) -> str:
-    """How a relationship reads on the sheet: warm, cold, or neither."""
-    if affection > 0:
-        return "|gwarm|n"
-    if affection < 0:
-        return "|rcold|n"
-    return _TONE_NEUTRAL
 
 
 def _viewer_sheet(command: Command) -> CharacterSheet:
@@ -176,47 +165,46 @@ def _format_renown(payload: dict) -> list[str]:
 
 
 def _render_relationships_section(command: Command) -> list[str]:
-    """The relationships section: your regard toward others (relationships app).
+    """The relationships section: your side of each tie (#3957).
 
-    Mirrors the web Relationships tab for your active character — each relationship with a
-    qualitative read of its affection (warm / cold / neutral) + status. Numeric points stay OOC.
+    Mirrors the telnet ``relationship list`` read: one line per side, its labels,
+    pair depth, and claimed tier. Numeric gauges (scenes/invested/affection/conflict/AP)
+    and the summary stay off this list — see ``relationship show <name|#>`` for detail.
     """
-    from django.db.models import Prefetch  # noqa: PLC0415
-
-    from world.relationships.models import (  # noqa: PLC0415
-        CharacterRelationship,
-        RelationshipTrackProgress,
-    )
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     viewer = _viewer_sheet(command)
     relationships = (
         CharacterRelationship.objects.filter(source=viewer)
         .select_related("target__character", "target_companion")
-        .prefetch_related(
-            Prefetch(
-                "track_progress",
-                queryset=RelationshipTrackProgress.objects.select_related("track"),
-                to_attr="cached_track_progress",
-            )
-        )
+        .prefetch_related("labels__type")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
         .order_by("-updated_at")
     )
     return _format_relationships(list(relationships))
 
 
+def _label_text(label: RelationshipLabel) -> str:
+    """``Lover`` (public), ``Lover (clandestine)``, ``Enemy (private)``, ``Friend (former)``."""
+    from world.relationships.constants import LabelAwareness  # noqa: PLC0415
+
+    if label.is_former:
+        return f"{label.type.name} (former)"
+    if label.awareness == LabelAwareness.PUBLIC:
+        return label.type.name
+    return f"{label.type.name} ({label.awareness})"
+
+
 def _format_relationships(relationships: list) -> list[str]:
     if not relationships:
         return ["You have no relationships recorded."]
-    lines = ["|wYour relationships:|n"]
+    lines = []
     for relationship in relationships:
-        target = relationship.target_name
-        affection = relationship.affection
-        tone = _affection_tone(affection)
-        status = " (pending)" if relationship.is_pending else ""
-        tether = (
-            f" |m[tether: {relationship.soul_tether_role}]|n" if relationship.is_soul_tether else ""
+        labels = [_label_text(label) for label in relationship.labels.all()]
+        label_text = ", ".join(labels) if labels else "no labels"
+        lines.append(
+            f"  {relationship.target_name}: {label_text} | depth {relationship.pair_depth()} "
+            f"| tier {relationship.tier}"
         )
-        lines.append(f"  {target}: {tone}{status}{tether}")
     return lines
 
 

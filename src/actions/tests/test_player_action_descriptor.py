@@ -140,13 +140,13 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
             FuryTierFactory,
             TechniqueFactory,
         )
-        from world.relationships.constants import TrackSign
+        from world.relationships.constants import LabelAwareness, TypeFamily
         from world.relationships.factories import (
             CharacterRelationshipFactory,
-            RelationshipTierFactory,
-            RelationshipTrackFactory,
-            RelationshipTrackProgressFactory,
+            RelationshipLabelFactory,
+            RelationshipTypeFactory,
         )
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
         from world.scenes.constants import RoundStatus
 
         # Active DECLARING encounter with an ACTIVE participant.
@@ -181,25 +181,34 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
             depth=3,
         )
 
-        # A consented relationship at tier 1 so provocation_cap >= 1.
+        # A mutual TEACHING label at tier 1 on both sides so provocation_cap >= 1
+        # (get_relationship_tier requires a mutual teaching-family label + both
+        # sides' claimed tier -- #3957 replaced the old track/tier-threshold shape).
         cls.anchor_sheet = CharacterSheetFactory()
-        track = RelationshipTrackFactory(sign=TrackSign.POSITIVE)
-        tier_row = RelationshipTierFactory(
-            track=track,
-            tier_number=1,
-            point_threshold=10,
+        source_tenure = RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=cls.sheet)
         )
+        anchor_tenure = RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=cls.anchor_sheet)
+        )
+        teaching_type = RelationshipTypeFactory(name="Mentorship", family=TypeFamily.TEACHING)
         cls.relationship = CharacterRelationshipFactory(
-            source=cls.sheet,
-            target=cls.anchor_sheet,
-            is_active=True,
-            is_pending=False,
+            source=cls.sheet, target=cls.anchor_sheet, is_active=True, tier=1
         )
-        RelationshipTrackProgressFactory(
+        reverse = CharacterRelationshipFactory(
+            source=cls.anchor_sheet, target=cls.sheet, is_active=True, tier=1
+        )
+        RelationshipLabelFactory(
             relationship=cls.relationship,
-            track=track,
-            developed_points=tier_row.point_threshold,
-            capacity=tier_row.point_threshold,
+            type=teaching_type,
+            awareness=LabelAwareness.PUBLIC,
+            declared_by_tenure=source_tenure,
+        )
+        RelationshipLabelFactory(
+            relationship=reverse,
+            type=teaching_type,
+            awareness=LabelAwareness.PUBLIC,
+            declared_by_tenure=anchor_tenure,
         )
 
     def test_cast_descriptor_carries_fury_tiers(self) -> None:

@@ -1,13 +1,13 @@
-"""Tests for the ``relationship`` telnet command (#1485).
+"""Tests for the ``relationship`` telnet command (#3957 / #1485).
 
-Exercises the namespaced subverb router end-to-end: the four write verbs run the
-real relationship Actions (asserting DB state, not mocked dispatch), and the
-``list`` / ``show`` read surfaces render real relationships. The parser's
-multi-word ``key=value`` handling and the error paths get focused coverage too.
+Exercises the namespaced subverb router end-to-end: every write verb runs the
+real tie Action (asserting DB state, not mocked dispatch), and the ``list`` /
+``show`` read surfaces render real relationships. The error paths get focused
+coverage too.
 
-Mirrors the ``CmdMageScar`` test pattern (real ``_handle_*`` + ``patch.object``
-on the action where needed) and the org-command ``caller.search`` mock pattern
-(returns a real character so ``target.sheet_data`` resolves for real).
+Mirrors the ``CmdMageScar`` test pattern (real ``_handle_*`` methods) and the
+org-command ``caller.search`` mock pattern (returns a real character so
+``target.sheet_data`` resolves for real).
 """
 
 from __future__ import annotations
@@ -17,29 +17,12 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from commands.relationships import CmdRelationship, _parse_name_and_kwargs
+from commands.relationships import CmdRelationship
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.constants import TrackSign, UpdateVisibility
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipCapstoneFactory,
-    RelationshipDevelopmentFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-    RelationshipUpdateFactory,
-)
-from world.relationships.models import (
-    CharacterRelationship,
-    RelationshipCapstone,
-    RelationshipChange,
-    RelationshipDevelopment,
-    RelationshipTrackProgress,
-    RelationshipUpdate,
-    WriteupComplaint,
-    WriteupKudos,
-)
-from world.roster.factories import RosterTenureFactory
+from world.relationships.constants import LabelAwareness
+from world.relationships.factories import RelationshipTypeFactory
+from world.relationships.models import CharacterRelationship, RelationshipLabel
 
 
 def _make_cmd(caller: Any, args: str = "") -> CmdRelationship:
@@ -62,8 +45,8 @@ def _search_returns(target: Any):
     return lambda name: target if name == target.db_key else None
 
 
-class CmdRelationshipWriteTests(TestCase):
-    """The four write verbs run the real Action and mutate the DB."""
+class CmdRelationshipDeclareTests(TestCase):
+    """``relationship declare <name>=<type>[,awareness]`` runs DeclareLabelAction."""
 
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
@@ -75,108 +58,169 @@ class CmdRelationshipWriteTests(TestCase):
         self.caller.search = MagicMock()
         self.target = CharacterFactory()
         self.target_sheet = CharacterSheetFactory(character=self.target)
-        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Friendship")
-        # Make caller.search return the real target character by name.
+        self.caller.search.side_effect = _search_returns(self.target)
+        self.friend = RelationshipTypeFactory(name="Friend")
+
+    def test_declare_defaults_private(self) -> None:
+        _make_cmd(self.caller, f"declare {self.target.db_key}=Friend").func()
+        label = RelationshipLabel.objects.get()
+        self.assertEqual(label.awareness, LabelAwareness.PRIVATE)
+        self.assertEqual(label.relationship.source_id, self.caller_sheet.pk)
+        self.assertEqual(label.relationship.target_id, self.target_sheet.pk)
+
+    def test_declare_with_awareness_creates_public(self) -> None:
+        _make_cmd(self.caller, f"declare {self.target.db_key}=Friend,public").func()
+        label = RelationshipLabel.objects.get()
+        self.assertEqual(label.awareness, LabelAwareness.PUBLIC)
+
+    def test_declare_unknown_type_refused(self) -> None:
+        _make_cmd(self.caller, f"declare {self.target.db_key}=Nonexistent").func()
+        self.assertIn("No relationship type", _capture(self.caller))
+        self.assertEqual(RelationshipLabel.objects.count(), 0)
+
+    def test_declare_requires_a_name(self) -> None:
+        _make_cmd(self.caller, "declare =Friend").func()
+        self.assertIn("Usage: relationship declare", _capture(self.caller))
+
+    def test_declare_requires_an_equals(self) -> None:
+        _make_cmd(self.caller, f"declare {self.target.db_key}").func()
+        self.assertIn("Usage: relationship declare", _capture(self.caller))
+
+
+class CmdRelationshipShiftEndTests(TestCase):
+    """``relationship shift``/``end`` run ShiftLabelAction/EndLabelAction."""
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        self.caller = CharacterFactory()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock()
+        self.target = CharacterFactory()
+        self.target_sheet = CharacterSheetFactory(character=self.target)
+        self.caller.search.side_effect = _search_returns(self.target)
+        self.friend = RelationshipTypeFactory(name="Friend")
+        self.lover = RelationshipTypeFactory(name="Lover")
+        _make_cmd(self.caller, f"declare {self.target.db_key}=Friend").func()
+
+    def test_shift_changes_label_type(self) -> None:
+        _make_cmd(self.caller, f"shift {self.target.db_key}=Friend,Lover,at the gate").func()
+        self.assertFalse(RelationshipLabel.objects.filter(ended_at__isnull=True, type=self.friend))
+        new = RelationshipLabel.objects.get(ended_at__isnull=True)
+        self.assertEqual(new.type_id, self.lover.pk)
+        self.assertEqual(new.note, "at the gate")
+
+    def test_shift_unknown_from_label_refused(self) -> None:
+        _make_cmd(self.caller, f"shift {self.target.db_key}=Lover,Friend").func()
+        self.assertIn("have not declared", _capture(self.caller))
+
+    def test_end_ends_the_label(self) -> None:
+        _make_cmd(self.caller, f"end {self.target.db_key}=Friend").func()
+        label = RelationshipLabel.objects.get()
+        self.assertIsNotNone(label.ended_at)
+
+
+class CmdRelationshipRevealTests(TestCase):
+    """``relationship reveal <name>=<type>,<awareness>`` runs AdvanceLabelAwarenessAction."""
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        self.caller = CharacterFactory()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock()
+        self.target = CharacterFactory()
+        self.target_sheet = CharacterSheetFactory(character=self.target)
+        self.caller.search.side_effect = _search_returns(self.target)
+        RelationshipTypeFactory(name="Friend")
+        _make_cmd(self.caller, f"declare {self.target.db_key}=Friend").func()
+
+    def test_reveal_advances_awareness(self) -> None:
+        _make_cmd(self.caller, f"reveal {self.target.db_key}=Friend,public").func()
+        label = RelationshipLabel.objects.get()
+        self.assertEqual(label.awareness, LabelAwareness.PUBLIC)
+
+    def test_reveal_backward_refused(self) -> None:
+        _make_cmd(self.caller, f"reveal {self.target.db_key}=Friend,public").func()
+        self.caller.msg.reset_mock()
+        _make_cmd(self.caller, f"reveal {self.target.db_key}=Friend,private").func()
+        self.assertIn("A label can be made known, never hidden again.", _capture(self.caller))
+
+
+class CmdRelationshipApSummaryTests(TestCase):
+    """``relationship ap``/``summary`` run SetTieAllocationAction/SetTieSummaryAction."""
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        from world.action_points.models import ActionPointPool
+
+        flush_cache()
+        self.caller = CharacterFactory()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock()
+        self.target = CharacterFactory()
+        self.target_sheet = CharacterSheetFactory(character=self.target)
+        self.caller.search.side_effect = _search_returns(self.target)
+        pool = ActionPointPool.get_or_create_for_character(self.caller)
+        pool.current = 40
+        pool.save(update_fields=["current"])
+
+    def test_ap_sets_the_allocation(self) -> None:
+        _make_cmd(self.caller, f"ap {self.target.db_key}=9").func()
+        side = CharacterRelationship.objects.get(source=self.caller_sheet, target=self.target_sheet)
+        self.assertEqual(side.allocation.ap_amount, 9)
+
+    def test_ap_requires_a_number(self) -> None:
+        _make_cmd(self.caller, f"ap {self.target.db_key}=nine").func()
+        self.assertIn("must be a number", _capture(self.caller))
+
+    def test_summary_sets_the_summary(self) -> None:
+        _make_cmd(self.caller, f"summary {self.target.db_key}=A throat.").func()
+        side = CharacterRelationship.objects.get(source=self.caller_sheet, target=self.target_sheet)
+        self.assertEqual(side.summary, "A throat.")
+
+
+class CmdRelationshipAdvanceTests(TestCase):
+    """``relationship advance <name>=<journal entry id>`` runs AdvanceRelationshipTierAction."""
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        self.caller = CharacterFactory()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock()
+        self.target = CharacterFactory()
+        self.target_sheet = CharacterSheetFactory(character=self.target)
         self.caller.search.side_effect = _search_returns(self.target)
 
-    def test_impression_creates_relationship(self) -> None:
-        args = (
-            f"impression {self.target.db_key} track={self.track.pk} points=3 "
-            "title=A striking introduction writeup=They commanded the room."
-        )
-        _make_cmd(self.caller, args).func()
-        relationship = CharacterRelationship.objects.get(
-            source=self.caller_sheet, target=self.target_sheet
-        )
-        self.assertTrue(relationship.is_pending)
-        self.assertTrue(
-            RelationshipUpdate.objects.filter(
-                relationship=relationship, is_first_impression=True
-            ).exists()
-        )
-        self.assertIn("first impression", _capture(self.caller).lower())
+    def test_advance_reports_the_gate(self) -> None:
+        from world.journals.factories import JournalEntryFactory
 
-    def test_impression_resolves_track_by_name(self) -> None:
-        args = (
-            f"impression {self.target.db_key} track=Friendship points=2 "
-            "title=Hi writeup=Hello there."
-        )
-        _make_cmd(self.caller, args).func()
-        relationship = CharacterRelationship.objects.get(
-            source=self.caller_sheet, target=self.target_sheet
-        )
-        update = RelationshipUpdate.objects.get(relationship=relationship)
-        self.assertEqual(update.track, self.track)
-
-    def test_develop_adds_development(self) -> None:
-        # Development adds permanent points up to track capacity, so seed
-        # capacity directly on the progress record.
-        relationship = CharacterRelationshipFactory(
-            source=self.caller_sheet, target=self.target_sheet
-        )
-        RelationshipTrackProgress.objects.create(
-            relationship=relationship, track=self.track, capacity=5, developed_points=0
-        )
-        args = (
-            f"develop {self.target.db_key} track={self.track.pk} points=2 "
-            "title=Growing respect writeup=They proved themselves. xp=5"
-        )
-        _make_cmd(self.caller, args).func()
-        self.assertTrue(
-            RelationshipDevelopment.objects.filter(
-                author=self.caller_sheet, track=self.track
-            ).exists()
+        entry = JournalEntryFactory(author=self.caller_sheet, about=self.target_sheet)
+        _make_cmd(self.caller, f"advance {self.target.db_key}={entry.pk}").func()
+        self.assertIn(
+            "The relationship is not deep enough for the next tier.", _capture(self.caller)
         )
 
-    def test_capstone_creates_capstone(self) -> None:
-        args = (
-            f"capstone {self.target.db_key} track={self.track.pk} points=10 "
-            "title=A binding oath writeup=We swore an oath that day."
-        )
-        _make_cmd(self.caller, args).func()
-        capstone = RelationshipCapstone.objects.get(author=self.caller_sheet, track=self.track)
-        self.assertEqual(capstone.points, 10)
-        # Capstone defaults to SHARED visibility.
-        self.assertEqual(capstone.visibility, UpdateVisibility.SHARED)
+    def test_advance_refuses_a_journal_entry_that_is_not_yours(self) -> None:
+        from world.journals.factories import JournalEntryFactory
 
-    def test_redistribute_moves_points(self) -> None:
-        relationship = CharacterRelationshipFactory(
-            source=self.caller_sheet, target=self.target_sheet
-        )
-        target_track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Rivalry")
-        RelationshipTrackProgress.objects.create(
-            relationship=relationship,
-            track=self.track,
-            capacity=10,
-            developed_points=5,
-        )
-        args = (
-            f"redistribute {self.target.db_key} source={self.track.pk} "
-            f"target={target_track.pk} points=3 title=A shift writeup=Respect waned."
-        )
-        _make_cmd(self.caller, args).func()
-        change = RelationshipChange.objects.get(author=self.caller_sheet)
-        self.assertEqual(change.points_moved, 3)
-        progress = RelationshipTrackProgress.objects.get(
-            relationship=relationship, track=target_track
-        )
-        self.assertEqual(progress.developed_points, 3)
-
-    def test_impression_respects_visibility_and_coloring(self) -> None:
-        args = (
-            f"impression {self.target.db_key} track={self.track.pk} points=3 "
-            "title=Hi writeup=Hello. coloring=positive visibility=public"
-        )
-        _make_cmd(self.caller, args).func()
-        update = RelationshipUpdate.objects.get(author=self.caller_sheet)
-        self.assertEqual(update.visibility, UpdateVisibility.PUBLIC)
-        from world.relationships.constants import FirstImpressionColoring
-
-        self.assertEqual(update.coloring, FirstImpressionColoring.POSITIVE)
+        other_sheet = CharacterSheetFactory()
+        entry = JournalEntryFactory(author=other_sheet, about=self.target_sheet)
+        _make_cmd(self.caller, f"advance {self.target.db_key}={entry.pk}").func()
+        self.assertIn("No journal entry", _capture(self.caller))
 
 
 class CmdRelationshipReadTests(TestCase):
-    """``list`` and ``show`` render real relationships."""
+    """``relationship list``/``show`` render the target name, a label, and depth."""
 
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
@@ -189,302 +233,68 @@ class CmdRelationshipReadTests(TestCase):
         self.target = CharacterFactory()
         self.target_sheet = CharacterSheetFactory(character=self.target)
         self.caller.search.side_effect = _search_returns(self.target)
-        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Friendship")
+        RelationshipTypeFactory(name="Friend")
+        _make_cmd(self.caller, f"declare {self.target.db_key}=Friend,public").func()
+        self.caller.msg.reset_mock()
 
-    def test_bare_lists_empty(self) -> None:
-        _make_cmd(self.caller, "").func()
-        self.assertIn("no relationships", _capture(self.caller).lower())
-
-    def test_list_renders_relationship(self) -> None:
-        relationship = CharacterRelationshipFactory(
-            source=self.caller_sheet, target=self.target_sheet
-        )
-        RelationshipTrackProgressFactory(
-            relationship=relationship,
-            track=self.track,
-            capacity=5,
-            developed_points=3,
-        )
+    def test_list_renders_target_label_and_depth(self) -> None:
         _make_cmd(self.caller, "list").func()
-        text = _capture(self.caller)
-        # The list row shows the target name, the relationship id, and affection.
-        self.assertIn(self.target.db_key, text)
-        self.assertIn(f"[#{relationship.pk}]", text)
-        # Track names appear in the detail view, not the list row.
-        self.assertIn("show", text.lower())
+        out = _capture(self.caller)
+        self.assertIn(self.target.db_key, out)
+        self.assertIn("Friend", out)
+        self.assertIn("depth", out)
 
-    def test_show_by_id_renders_detail(self) -> None:
-        rel = CharacterRelationshipFactory(source=self.caller_sheet, target=self.target_sheet)
-        _make_cmd(self.caller, f"show #{rel.pk}").func()
-        text = _capture(self.caller)
-        self.assertIn(self.target.db_key, text)
-        self.assertIn(f"#{rel.pk}", text)
+    def test_bare_relationship_is_the_same_as_list(self) -> None:
+        _make_cmd(self.caller, "").func()
+        out = _capture(self.caller)
+        self.assertIn(self.target.db_key, out)
 
-    def test_show_by_name_renders_detail(self) -> None:
-        CharacterRelationshipFactory(source=self.caller_sheet, target=self.target_sheet)
+    def test_show_renders_detail(self) -> None:
         _make_cmd(self.caller, f"show {self.target.db_key}").func()
-        text = _capture(self.caller)
-        self.assertIn(self.target.db_key, text)
+        out = _capture(self.caller)
+        self.assertIn(self.target.db_key, out)
+        self.assertIn("Friend", out)
+        self.assertIn("depth", out)
+        self.assertIn("ap this week", out)
+
+    def test_show_by_id(self) -> None:
+        side = CharacterRelationship.objects.get()
+        _make_cmd(self.caller, f"show {side.pk}").func()
+        self.assertIn(self.target.db_key, _capture(self.caller))
+
+    def test_list_empty(self) -> None:
+        other_caller = CharacterFactory()
+        CharacterSheetFactory(character=other_caller)
+        other_caller.msg = MagicMock()
+        _make_cmd(other_caller, "list").func()
+        self.assertIn("no relationships", _capture(other_caller).lower())
 
 
 class CmdRelationshipErrorTests(TestCase):
-    """Routing and argument-resolution error paths."""
+    """No active character / unresolved target / unknown subverb error paths."""
 
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
 
         flush_cache()
         self.caller = CharacterFactory()
-        CharacterSheetFactory(character=self.caller)
         self.caller.msg = MagicMock()
         self.caller.search = MagicMock(return_value=None)
-        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Friendship")
+
+    def test_no_active_character(self) -> None:
+        _make_cmd(self.caller, "list").func()
+        self.assertIn("No active character", _capture(self.caller))
+
+    def test_unresolved_target(self) -> None:
+        CharacterSheetFactory(character=self.caller)
+        RelationshipTypeFactory(name="Friend")
+        _make_cmd(self.caller, "declare Nobody=Friend").func()
+        self.assertIn("Could not find", _capture(self.caller))
 
     def test_unknown_subverb_shows_usage(self) -> None:
-        _make_cmd(self.caller, "frobnicate").func()
-        self.assertIn("Usage", _capture(self.caller))
-
-    def test_impression_missing_target_reports_usage(self) -> None:
-        _make_cmd(self.caller, "impression").func()
-        self.assertIn("Usage", _capture(self.caller))
-
-    def test_impression_target_not_found_reports_error(self) -> None:
-        _make_cmd(
-            self.caller,
-            f"impression Ghost track={self.track.pk} points=3 title=x writeup=y",
-        ).func()
-        text = _capture(self.caller).lower()
-        self.assertIn("could not find", text)
-
-    def test_impression_unknown_track_reports_error(self) -> None:
-        self.caller.search.return_value = CharacterFactory()  # some real char, no sheet
-        _make_cmd(
-            self.caller,
-            "impression Bob track=99999 points=3 title=x writeup=y",
-        ).func()
-        # Either the target has no sheet or the track is unknown; both are errors.
-        text = _capture(self.caller).lower()
-        self.assertTrue("no character sheet" in text or "no relationship track" in text)
-
-    def test_impression_missing_points_reports_error(self) -> None:
-        target = CharacterFactory()
-        CharacterSheetFactory(character=target)
-        self.caller.search.return_value = target
-        _make_cmd(
-            self.caller,
-            f"impression {target.db_key} track={self.track.pk} title=x writeup=y",
-        ).func()
-        self.assertIn("points", _capture(self.caller).lower())
-
-    def test_bad_visibility_reports_error(self) -> None:
-        target = CharacterFactory()
-        CharacterSheetFactory(character=target)
-        self.caller.search.return_value = target
-        _make_cmd(
-            self.caller,
-            f"impression {target.db_key} track={self.track.pk} points=3 "
-            "title=x writeup=y visibility=banana",
-        ).func()
-        self.assertIn("visibility", _capture(self.caller).lower())
-
-
-class ParseNameAndKwargsTests(TestCase):
-    """The multi-word ``key=value`` parser (focused unit coverage)."""
-
-    def test_name_only(self) -> None:
-        name, kwargs = _parse_name_and_kwargs("Alice")
-        self.assertEqual(name, "Alice")
-        self.assertEqual(kwargs, {})
-
-    def test_multiword_name_until_first_key(self) -> None:
-        name, kwargs = _parse_name_and_kwargs("Alice Bob track=5 points=3")
-        self.assertEqual(name, "Alice Bob")
-        self.assertEqual(kwargs, {"track": "5", "points": "3"})
-
-    def test_multiword_value_runs_to_next_key(self) -> None:
-        name, kwargs = _parse_name_and_kwargs(
-            "Alice title=A striking day writeup=They were great. points=3"
-        )
-        self.assertEqual(name, "Alice")
-        self.assertEqual(kwargs["title"], "A striking day")
-        self.assertEqual(kwargs["writeup"], "They were great.")
-        self.assertEqual(kwargs["points"], "3")
-
-    def test_empty_value(self) -> None:
-        _name, kwargs = _parse_name_and_kwargs("Alice title= writeup=text")
-        self.assertEqual(kwargs["title"], "")
-        self.assertEqual(kwargs["writeup"], "text")
-
-    def test_empty_rest(self) -> None:
-        self.assertEqual(_parse_name_and_kwargs(""), ("", {}))
-
-    def test_leading_token_without_key_raises(self) -> None:
-        # A bare token after a key=value pair with no key context is malformed.
-        from commands.exceptions import CommandError
-
-        with self.assertRaises(CommandError):
-            _parse_name_and_kwargs("Alice track=5 strayword points=3")
-
-
-class CmdRelationshipKudosComplainTests(TestCase):
-    """``kudos`` and ``complain`` subverbs create feedback rows and surface errors.
-
-    Setup: caller is the SUBJECT of a SHARED update (relationship.target = caller_sheet).
-    caller has an account via RosterTenureFactory — required by give_writeup_kudos.
-    """
-
-    def setUp(self) -> None:
-        from evennia.utils.idmapper.models import flush_cache
-
-        flush_cache()
-        # Author writes the writeup.
-        self.author = CharacterFactory()
-        self.author_sheet = CharacterSheetFactory(character=self.author)
-        # Caller is the subject (relationship.target).
-        self.caller = CharacterFactory()
-        self.caller_sheet = CharacterSheetFactory(character=self.caller)
-        self.caller.msg = MagicMock()
-        self.caller.search = MagicMock(return_value=None)
-        # Link caller to an account so get_account_for_character resolves.
-        tenure = RosterTenureFactory(roster_entry__character_sheet=self.caller_sheet)
-        self.caller_account = tenure.player_data.account
-        # Relationship: author → caller (caller is target/subject).
-        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Friendship")
-        self.rel = CharacterRelationshipFactory(source=self.author_sheet, target=self.caller_sheet)
-        # A SHARED update authored by the author about the caller.
-        self.update = RelationshipUpdateFactory(
-            relationship=self.rel,
-            author=self.author_sheet,
-            track=self.track,
-            visibility=UpdateVisibility.SHARED,
-        )
-
-    def test_kudos_creates_writeupkudos_row(self) -> None:
-        """``relationship kudos u<pk>`` creates a WriteupKudos row for the update."""
-        _make_cmd(self.caller, f"kudos u{self.update.pk}").func()
-        self.assertTrue(
-            WriteupKudos.objects.filter(update=self.update, account=self.caller_account).exists()
-        )
-
-    def test_kudos_shows_success_message(self) -> None:
-        """``relationship kudos`` surfaces the action's success message."""
-        _make_cmd(self.caller, f"kudos u{self.update.pk}").func()
-        self.assertIn("commend", _capture(self.caller).lower())
-
-    def test_kudos_missing_ref_reports_error(self) -> None:
-        """``relationship kudos`` with no ref shows a usage error."""
-        _make_cmd(self.caller, "kudos").func()
-        self.assertIn("usage", _capture(self.caller).lower())
-
-    def test_kudos_bad_ref_reports_error(self) -> None:
-        """An unrecognised writeup ref (e.g. ``xyz``) shows a clear error."""
-        _make_cmd(self.caller, "kudos xyz").func()
-        text = _capture(self.caller).lower()
-        self.assertTrue("invalid" in text or "u<id>" in text or "ref" in text)
-
-    def test_kudos_nonexistent_writeup_reports_error(self) -> None:
-        """A well-formed ref to a non-existent pk surfaces the action error."""
-        _make_cmd(self.caller, "kudos u99999").func()
-        text = _capture(self.caller).lower()
-        self.assertTrue("not found" in text or "writeup" in text)
-
-    def test_complain_creates_writeupcomplaint_row(self) -> None:
-        """``relationship complain u<pk>=<reason>`` creates a WriteupComplaint row."""
-        _make_cmd(self.caller, f"complain u{self.update.pk}=This RP was in bad faith.").func()
-        self.assertTrue(
-            WriteupComplaint.objects.filter(
-                update=self.update, complainant=self.caller_account
-            ).exists()
-        )
-
-    def test_complain_shows_success_message(self) -> None:
-        """``relationship complain`` surfaces the action's success message."""
-        _make_cmd(self.caller, f"complain u{self.update.pk}=Bad faith.").func()
-        self.assertIn("complaint", _capture(self.caller).lower())
-
-    def test_complain_missing_reason_reports_error(self) -> None:
-        """``relationship complain <ref>`` without ``=<reason>`` shows a usage error."""
-        _make_cmd(self.caller, f"complain u{self.update.pk}").func()
-        self.assertIn("usage", _capture(self.caller).lower())
-
-    def test_complain_bad_ref_reports_error(self) -> None:
-        """An unrecognised writeup ref in complain shows a clear error."""
-        _make_cmd(self.caller, "complain xyz=reason").func()
-        text = _capture(self.caller).lower()
-        self.assertTrue("invalid" in text or "u<id>" in text or "ref" in text)
-
-    def test_complain_empty_reason_reports_error(self) -> None:
-        """``relationship complain <ref>=`` with empty reason shows a usage error."""
-        _make_cmd(self.caller, f"complain u{self.update.pk}=").func()
-        text = _capture(self.caller).lower()
-        self.assertIn("reason is required", text)
-        # Verify no WriteupComplaint row was created.
-        self.assertFalse(
-            WriteupComplaint.objects.filter(
-                update=self.update, complainant=self.caller_account
-            ).exists()
-        )
-
-
-class CmdRelationshipShowWriteupsTests(TestCase):
-    """``relationship show`` includes writeup labels so users know what to pass to kudos/complain.
-
-    Ref notation: ``u<pk>`` = update, ``d<pk>`` = development, ``c<pk>`` = capstone.
-    """
-
-    def setUp(self) -> None:
-        from evennia.utils.idmapper.models import flush_cache
-
-        flush_cache()
-        self.caller = CharacterFactory()
-        self.caller_sheet = CharacterSheetFactory(character=self.caller)
-        self.caller.msg = MagicMock()
-        self.caller.search = MagicMock(return_value=None)
-        self.target = CharacterFactory()
-        self.target_sheet = CharacterSheetFactory(character=self.target)
-        self.caller.search.side_effect = _search_returns(self.target)
-        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Friendship")
-        # Relationship source=caller → target.
-        self.rel = CharacterRelationshipFactory(source=self.caller_sheet, target=self.target_sheet)
-        # Seed one update so the writeup list appears.
-        self.update = RelationshipUpdateFactory(
-            relationship=self.rel,
-            author=self.caller_sheet,
-            track=self.track,
-            visibility=UpdateVisibility.SHARED,
-        )
-
-    def test_show_displays_update_writeup_label(self) -> None:
-        """``relationship show <#>`` lists updates with ``[u<pk>]`` labels."""
-        _make_cmd(self.caller, f"show #{self.rel.pk}").func()
-        text = _capture(self.caller)
-        self.assertIn(f"[u{self.update.pk}]", text)
-
-    def test_show_displays_development_writeup_label(self) -> None:
-        """``relationship show <#>`` lists developments with ``[d<pk>]`` labels."""
-        RelationshipTrackProgressFactory(
-            relationship=self.rel, track=self.track, capacity=10, developed_points=0
-        )
-        dev = RelationshipDevelopmentFactory(
-            relationship=self.rel,
-            author=self.caller_sheet,
-            track=self.track,
-            points_earned=3,
-        )
-        _make_cmd(self.caller, f"show #{self.rel.pk}").func()
-        text = _capture(self.caller)
-        self.assertIn(f"[d{dev.pk}]", text)
-
-    def test_show_displays_capstone_writeup_label(self) -> None:
-        """``relationship show <#>`` lists capstones with ``[c<pk>]`` labels."""
-        capstone = RelationshipCapstoneFactory(
-            relationship=self.rel,
-            author=self.caller_sheet,
-            track=self.track,
-        )
-        _make_cmd(self.caller, f"show #{self.rel.pk}").func()
-        text = _capture(self.caller)
-        self.assertIn(f"[c{capstone.pk}]", text)
+        CharacterSheetFactory(character=self.caller)
+        _make_cmd(self.caller, "bogus").func()
+        self.assertIn("Usage:", _capture(self.caller))
 
 
 class CmdRelationshipBumpTests(TestCase):
@@ -493,16 +303,10 @@ class CmdRelationshipBumpTests(TestCase):
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
 
-        from world.relationships.constants import TrackSystemKey
+        from world.roster.factories import RosterTenureFactory
         from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
         flush_cache()
-        RelationshipTrackFactory(
-            name="Regard", sign=TrackSign.POSITIVE, system_key=TrackSystemKey.REGARD
-        )
-        RelationshipTrackFactory(
-            name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
-        )
         self.room = ObjectDBFactory(db_key="BumpRoom", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
         self.caller = CharacterFactory()
@@ -568,7 +372,7 @@ class CmdRelationshipBumpTests(TestCase):
 
 
 class CmdRelationshipCompanionTargetTests(TestCase):
-    """``relationship impression <companion>`` resolves the room-present companion (#3575)."""
+    """``relationship declare <companion>=...`` resolves the room-present companion (#3575)."""
 
     def setUp(self) -> None:
         from evennia.utils.create import create_object
@@ -587,29 +391,21 @@ class CmdRelationshipCompanionTargetTests(TestCase):
         self.companion.objectdb = self.companion_obj
         self.companion.save(update_fields=["objectdb"])
         self.caller.search.side_effect = _search_returns(self.companion_obj)
-        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Loyalty")
+        RelationshipTypeFactory(name="Loyalty")
 
-    def test_impression_toward_companion(self) -> None:
-        cmd = _make_cmd(
-            self.caller,
-            "impression Ash track=Loyalty points=3 title=At the gate writeup=It did not flinch.",
-        )
-        cmd.func()
+    def test_declare_toward_companion(self) -> None:
+        _make_cmd(self.caller, "declare Ash=Loyalty").func()
         rel = CharacterRelationship.objects.get(
             source=self.caller_sheet, target_companion=self.companion
         )
-        self.assertFalse(rel.is_pending)
+        self.assertEqual(RelationshipLabel.objects.filter(relationship=rel).count(), 1)
         self.assertIn("Ash", _capture(self.caller))
 
     def test_list_and_show_render_the_companion_row(self) -> None:
-        rel = CharacterRelationshipFactory(
-            source=self.caller_sheet, target=None, target_companion=self.companion
-        )
+        _make_cmd(self.caller, "declare Ash=Loyalty").func()
+        self.caller.msg.reset_mock()
         _make_cmd(self.caller, "list").func()
         self.assertIn("Ash", _capture(self.caller))
         self.caller.msg.reset_mock()
-        _make_cmd(self.caller, f"show {rel.pk}").func()
-        self.assertIn("Ash", _capture(self.caller))
-        self.caller.msg.reset_mock()
         _make_cmd(self.caller, "show Ash").func()
-        self.assertIn(f"#{rel.pk}", _capture(self.caller))
+        self.assertIn("Ash", _capture(self.caller))
