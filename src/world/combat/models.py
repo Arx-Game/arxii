@@ -3495,8 +3495,7 @@ class EscalationCurve(SharedMemoryModel):
     spike_minimum_track_points = models.PositiveIntegerField(
         default=1,
         help_text=(
-            "Minimum developed_points on a spike-fueling relationship track "
-            "for the bond to qualify."
+            "Pair depth (scene + invested) a bonded side needs before a grief or peril spike fires."
         ),
     )
     tick_narration = models.TextField(

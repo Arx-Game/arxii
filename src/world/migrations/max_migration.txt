@@ -1,1 +1,1 @@
-0153_delete_rivalry
+0154_escalation_curve_help_text
