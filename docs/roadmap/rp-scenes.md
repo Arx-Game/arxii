@@ -449,7 +449,7 @@ combat action records whom it targeted.
   See ADR-0293 and issue #3827.
 
 ### Relationship Integration
-- RelationshipUpdate has linked_interaction FK and reference_mode
+- (superseded by #3957) `RelationshipUpdate` and its `linked_interaction` FK / `reference_mode` are gone; prose about a tie is a journal entry about the other character, and a scene both parties posed in credits tie depth via `credit_scene_depth`
 
 ### Design Docs
 - `docs/plans/2026-03-19-rp-interactions-privacy-design.md`

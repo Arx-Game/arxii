@@ -1,179 +1,115 @@
 # Relationships & Bonds
 
-**Status:** in-progress
-**Depends on:** Magic (threads/resonance), Scenes, Progression, Achievements
+**Status:** shipped (#3957, "Ties, redrawn") — extensions tracked below
+**Depends on:** Journals (the capstone entry and the tie stream), Scenes, Progression (XP and
+AP), Magic (threads/resonance), Consent
 
 ## Overview
-Relationships are the heart of the game. A track-based system lets characters develop feelings across multiple dimensions simultaneously — friendship, romance, rivalry, enmity, family, mentorship, and alliances. The absolute value of a relationship (total intensity regardless of direction) drives mechanical bonuses, meaning a bitter rival and a devoted lover are equally powerful. The system rewards all forms of intense RP while providing safety mechanics so drama stays fun and never feels like obligation.
+
+Relationships are the heart of the game, and a relationship here is a **tie**: two people,
+each side naming what the other is to them. A side holds any number of **labels** from a
+staff-authored catalogue (Lover, Rival, Kin, Mentor…), each at one of three awareness stages
+that only ever move forward — Private, Clandestine, Public — each with a since date and a
+memory of what it replaced. Labels are never deleted. Both sides **add depth** by playing
+together and by allocating weekly AP, and the tie's depth is the two sides' sum, so investment
+by one person deepens the tie for both. Each side **claims its own tier** on one shared ladder
+by marking a journal entry about the other as the capstone and spending XP — the moment is
+written down, and the choice is the player's. **Affection** and **Conflict** are two unsigned
+gauges on each side, moved only by play and never set by a hand on a dial. The sheet shows a
+cast: one card per tie, with the other character's face, the labels, the depth, the tier and
+the woven thread.
 
 ## Key Design Points
-- **Track-based progression:** Characters allocate points across feeling tracks (Friendship, Romance, Enemies, Rivals, Family, Mentor, Allies), each with tiered intensity levels
-- **Absolute value = mechanical power:** A character with 500 love and 500 hate has 1000 absolute value — massive bonuses regardless of emotional direction
-- **Conflicted feelings are first-class:** Characters can simultaneously love and hate someone. The system supports "enemies to lovers" and "beloved enemy" arcs naturally
-- **Mutual consent at every step:** Intense relationship types (Rivals, Romance, Enemies) only activate with both players' agreement. Easy de-escalation at any time
-- **Deceit mechanic:** Characters with Deceitful distinctions can display a fake relationship type, with an OOC warning flag so the other player is never truly blindsided
-- **Weekly updates with diminishing returns:** Relationship growth is gated by scene-based or private reflection rolls, with decreasing returns per update per week
-- **Hybrid types:** Staff-defined combinations (Frenemy, Beloved Enemy, Friends With Benefits) emerge when multiple tracks are active simultaneously
-- **OOC safety:** Player-level agree/disagree on designations. Any player can make a relationship inactive at any time
-- **Thread integration:** Magic threads amplify and solidify existing relationships, scaling power off the relationship's absolute value
-- **Achievement integration:** Relationship milestones fire achievement stats (first relationship, enemies-to-lovers, etc.)
+
+- **A tie is two directed sides.** Every piece of state — labels, tier, gauges, summary — is
+  per side. Nothing is stored on the pair; mutuality is derived, and the pooled depth is a sum.
+- **Labels carry awareness and history, never points.** Change ends one label and starts
+  another that remembers it; End leaves a former label on the card. A known thing cannot be
+  unsaid, so awareness never moves backward.
+- **Depth grows from play.** The first scene two characters share in a game week credits each
+  side; weekly AP converts to depth on the rollover. No decay, no weekly cap, one AP number
+  per tie, and every award leaves an audit row.
+- **A tier is claimed, not reached.** Pair depth opens the rung; a capstone journal entry and
+  XP claim it. Bonuses ride the claimed tier.
+- **Feeling is a record, not a dial.** Bumps, Flirt/Seduce shifts, boon drains, grievances and
+  the NPC mirror move Affection and Conflict; nothing lets a player set them, and only the
+  owner (and staff) ever sees them.
+- **Conflicted feelings are still first-class.** A tie moved in both directions at once is
+  what magic's fraught pull term rewards — love and hate on the same tie, with no netting.
+- **Secrecy is playable.** A Clandestine label is visible to the other side and nobody else; a
+  tie with no Public label does not exist for a stranger, and its page 404s rather than 403s,
+  so absence and refusal are indistinguishable.
+- **The declaration is the consent.** Mutual hostile labels open antagonism (consent's RIVALS
+  mode) and the journals' Retort and Condemn — one predicate, `mutual_hostile`, read by both.
+  A roster successor inherits the label and the history, but not the open antagonism.
+- **Counterparts make paired roles mean the right thing.** Mentor pairs with Student, Ward
+  with Guardian, Liege with Vassal; symmetric types pair with themselves.
+- **Interface copy is bare** (Dan, 2026-09-21): a Public label carries no marker, no help text
+  sits beside a control, numbers are bare, and nothing on a screen explains itself.
+- **The game never writes prose for players.** The summary is the player's own paragraph, and
+  the prose about a tie is journal entries about the other character — one prose channel.
 
 ## What Exists
-- **Models:** RelationshipTrack, RelationshipTier, HybridRelationshipType + HybridRequirement, CharacterRelationship (with track progress, deceit fields, consent mechanics), RelationshipTrackProgress (capacity + developed_points), RelationshipUpdate (temporary + capacity), RelationshipDevelopment (permanent up to capacity), RelationshipCapstone (permanent + capacity), RelationshipChange, RelationshipCondition (modifier gating), GrievanceOption (#1429)
-- **Writeup feedback (#1537):** WriteupKudos (subject's non-revocable commendation; awards kudos to the author via the existing `award_kudos` path; one per account+writeup), WriteupComplaint (bad-faith-RP flag for staff triage; `resolved` bool; no player signal)
-- **Services:** create_first_impression (with reciprocal activation), redistribute_points (atomic point movement between tracks), create_development (permanent points up to capacity), create_capstone (permanent + capacity), give_writeup_kudos (#1537), file_writeup_complaint (#1537)
-- **Writeup feedback player surface (#1537):** GiveWriteupKudosAction (key `give_writeup_kudos`) + FileWriteupComplaintAction (key `file_writeup_complaint`) wired to both web (`RelationshipUpdateViewSet` POST `kudos`/`complaint`) and telnet (`relationship kudos <ref>` / `relationship complain <ref>=<reason>`). Read serializers expose `kudos_count` + `viewer_has_kudosed`. Admin: WriteupComplaint registered for staff triage.
-- **Magnitude scale + ambient bumps (#1699, SHIPPED):** RelationshipBump (permanent ±1
-  anchored to an Interaction; unique per relationship+interaction = the whole anti-spam
-  cap), the Regard/Friction system tracks (`RelationshipTrack.system_key`), the seeded
-  25/100/500/2000 `RelationshipTier` bands (PLACEHOLDER names, `relationship_scale` seed
-  cluster), `apply_relationship_bump` + `RelationshipBumpAction` (key `relationship_bump`),
-  telnet `relationship plus|neg <name>` (`rel/plus`, `rel/neg`) with backfill anchoring,
-  and web valenced `ReactionEmoji` reactions (catalog endpoint `/api/reaction-emoji/`,
-  catalog-driven scene footer). Shift sizes for Flirt/Seduce land with #1697.
-- **Automatic affection shifts + tier difficulty ladder (#1697, SHIPPED):**
-  `AffectionShift` + `apply_affection_shift` + the `SHIFT_AFFECTION` effect (Flirt +5 /
-  Seduce +50 PLACEHOLDER, first-per-scene-per-pair dedup — the generic valence-signed
-  family future offensive actions reuse with negative amounts); the affection-derived
-  social difficulty now reads its bands from the #1699 system-track tiers (one tier per
-  band, neutral = Normal); Smitten's teeth (`exploitable_tiers=2` easing checks against
-  the bearer, Melee Defense −10 `ConditionCheckModifier`, Force +100%
-  `ConditionDamageInteraction` riding #2018 — all PLACEHOLDER); the Attractive
-  distinction's allure grant (+2/rank PLACEHOLDER, `social_relationships` seed).
-  Surprise-attack semantics deliberately not built (combat design, TehomCD).
-- **Magic threads (new Thread model, Spec A):** Single `Thread` table with a discriminator
-  and typed FKs per anchor kind. For relationships the two kinds are `RELATIONSHIP_TRACK`
-  (anchored to a specific CharacterRelationship + track) and `RELATIONSHIP_CAPSTONE`
-  (soul-tether thread; requires `CharacterRelationship.is_soul_tether=True`). Threads are
-  persistent currency consumers that players spend Resonance on via pulls, not 0-100 axis
-  trackers. Supporting tables: `ThreadPullCost`, `ThreadXPLockedLevel`, `ThreadLevelUnlock`,
-  `ThreadPullEffect`, `ThreadWeavingUnlock`, `CharacterThreadWeavingUnlock`. See
-  `docs/systems/magic.md` for the full model lineup.
-- **Fraught + devotion pull differentials (#2034, ADR-0110, SHIPPED):** the "conflicted
-  feelings are first-class" and "beloved enemy"/devoted-lover design points above now have
-  a mechanical payoff on `RELATIONSHIP_TRACK` thread pulls, not just the sign-blind base
-  bonus — a bond invested heavily in BOTH positive and negative tracks at once earns an
-  additive **fraught** bonus (`CharacterRelationship.developed_signed_sums`, keyed on the
-  smaller of the two signed sub-sums), and a bond deep enough to clear a threshold past the
-  base curve's own half-saturation point earns an additive **devotion** bonus (depth alone,
-  no ritual gate). See `world/magic/services/pull_modulation_relationship.py`.
-- **APIs:** Full viewsets and serializers for tracks, tiers, hybrids, conditions, and relationships
-- **Admin:** Admin classes for all models with inlines
-- **Tests:** Model tests, service tests, and view tests
 
-## What's Needed for MVP
+- **Models** (`src/world/relationships/models.py`): `RelationshipType` (family, valence,
+  counterpart, `fuels_escalation_spikes`; credited content), `RelationshipTier` (one ladder:
+  `depth_threshold`, `combat_bonus`), `CharacterRelationship` (the side: `scene_depth`,
+  `invested_depth`, `tier`, `affection`, `conflict`, `summary`, `is_active`, the soul-tether
+  fields, `target` XOR `target_companion`), `RelationshipLabel` (awareness, the three
+  timestamps, `replaced`, `declared_by_tenure`, `note`), `RelationshipAllocation`,
+  `RelationshipDepthTransaction`, `RelationshipGrowthConfig`, `RelationshipCapstone` (the
+  advance receipt, or a ritual capstone), `BondCombatConfig`, `GrievanceOption`,
+  `RelationshipCondition` / `TemporaryRelationshipCondition`, `RelationshipBump`,
+  `AffectionShift`.
+- **Services** (`services.py`): `get_or_create_side`, `declare_label`, `shift_label`,
+  `end_label`, `advance_awareness`, `set_summary`, `set_allocation`,
+  `process_weekly_relationship_allocations` (idempotent per game week),
+  `credit_scene_depth(scene)` (called from `Scene.finish_scene`), `advance_tier`,
+  `move_gauges`, `register_grievance`, `apply_relationship_bump`, `apply_affection_shift`,
+  `mirror_npc_regard_event`, `is_mutual`, `mutual_hostile` (+ the annotatable expression),
+  `known_label_q`, `bond_combat_bonus` / `bond_bonus`, `get_relationship_tier`.
+- **Per-audience reads** (`reads.py`): `build_tie_page` (the batched page read the API and the
+  sheet cast share), `tie_audience`, `third_party_can_see`, `visible_labels`,
+  `depth_breakdown`, `tie_stream`.
+- **Actions** (`src/actions/definitions/relationships.py`): `declare_label`, `shift_label`,
+  `end_label`, `advance_label_awareness`, `set_tie_allocation`, `advance_relationship_tier`,
+  `set_tie_summary`, `relationship_bump`.
+- **API:** `/api/relationships/relationships/` (list, retrieve, `{id}/stream/`, and POST
+  declare / shift / end / awareness / allocation / advance / summary) and
+  `/api/relationships/types/`; the sheet payload carries `ties` and `ties_ap_this_week`.
+- **Telnet:** `relationship list | show | plus | neg | declare | shift | end | reveal | ap |
+  advance | summary`.
+- **Frontend:** the Ties section is the cast of cards; a card opens the tie page
+  (`/characters/:id/ties/:tieId`) with the depth button and breakdown panel, labels, the
+  summary, the thread line, the Labels-and-AP and Advance-Tier doors, and the merged stream.
+- **Seeds:** eighteen PLACEHOLDER types in five families (Kin warm), the five asymmetric
+  counterpart pairs, the four tier rungs at 25/100/500/2000, the growth config and the
+  starter reaction emoji (`world/seeds/relationship_scale.py`).
+- **Consumers wired:** consent's RIVALS mode and the scene picker sweep, journals'
+  `can_retort` / `annotate_can_retort`, the combat bond bonus and the surge engine's
+  grief/peril/hated-foe legs, magic thread anchors (`Thread.target_relationship`) with the
+  tier-gated weave and the depth/gauge-keyed pull terms, social difficulty's affection bands,
+  training's mentor multiplier, `RelationshipRequirement`, and the NPC regard mirror.
+- **Harness:** `frontend/e2e/ties.spec.ts` mounts the real sheet and tie page against
+  fixtures for the three audiences (the #3898 evidence lesson).
+- **Decision record:** ADR-0308 (this shape and its rejected alternatives); ADR-0117 amended
+  for the two-party read; ADR-0024 still governs "a declaration is not consent-gated".
 
-### Magic Integration
-- **Thread anchor wiring** — The new `Thread` model (Spec A) supports `RELATIONSHIP_TRACK`
-  and `RELATIONSHIP_CAPSTONE` anchor kinds. Per-track threads anchor to a specific
-  CharacterRelationship + track; soul-tether (capstone) threads require
-  `CharacterRelationship.is_soul_tether=True`. Authoring paths, UI for creating/levelling
-  these threads, and service wiring for scaling thread power off relationship absolute
-  value are still pending.
-- **Soul tethers (capstone threads)** — DONE in Spec B (branch `spec-b-soul-tether-design`).
-  `CharacterRelationship.is_soul_tether`, `soul_tether_role` (Sinner/Sineater), and the
-  `RELATIONSHIP_CAPSTONE` Thread anchor kind all shipped in Spec A. Spec B activated the
-  mechanic: formation ritual (`accept_soul_tether`), the Hollow buffer (`Thread.hollow_current`),
-  the Sineating loop, the `CORRUPTION_ACCRUING` redirect handler, stage-advance dramatic prompts,
-  and the stage-3+ rescue ritual. `RelationshipCapstone.is_ritual_capstone` +
-  `RelationshipCapstone.ritual` FK also added for capstone-gated ritual dispatch.
-  See `docs/architecture/soul-tether.md`.
-- **Pull integration** — Players should be able to spend Resonance on pulls against
-  relationship threads during actions where the other party is engaged (§5 of Spec A).
-  The underlying pull machinery (`ThreadPullCost`, `ThreadPullEffect`, `CombatPull`)
-  exists; the relationship-action surface that consumes it is not yet wired.
-- **Aura farming tie-in** — Dramatic relationship moments in scenes should feed into
-  resonance/aura (depends on scenes + magic integration)
+## What's Needed
 
-### Mechanical Bonuses & Formulas
-- **Cube root bonus in checks** — `mechanical_bonus` property exists on CharacterRelationship (cube root of developed absolute value) but nothing in the check/attempt pipeline consumes it
-- **Track-specific bonus types** — Different tracks should give different bonus types (Romance → protective actions, Rivals → competitive performance, Found Family → resilience). No formulas defined, depends on combat system
-- **Teamwork check bonuses** — Bonus when characters act together, scaled by developed absolute value. Not integrated into check resolution
-- **Combat coordination bonuses** — Party members with strong relationships get coordination bonuses. Depends on combat system
-- **Combo attack gating** — Effectiveness gated by relationship strength + thread resonances. Depends on combat system
-- **Minimum-of-both rule** — Each player sets track designations independently; shared mechanical bonuses should use the lower of the two. No service function implements this
+- **Relationship Prestige** — a share of the partner's renown added to yours by tier, and
+  ranking boards for the most renowned marriages, rivalries, friendships and enemies. Its own
+  feature and its own issue, filed after this merges (Decision 17). What this pass leaves it:
+  a tier per side, mutual labels, and #761's ranking boards.
+- **Companions in combat** — a companion tie earns depth and tiers today and grants no combat
+  bond. Companions fighting beside their owner is a later expansion, not a deferral of this
+  spec (Decision 14).
 
-### Relationship Advancement Mechanics
-- **Relationship tier calculation for training** — Training system mentor bonus uses `(relationship_tier + 1)` as multiplier. Need to define tier breakpoints from affection/impression values and expose via `get_relationship_tier(character_a, character_b)` helper. Currently stubbed at 0. See `docs/plans/2026-03-10-training-system-design.md`
-- **Development roll formula** — What stat/skill is used for the social roll in development updates, and how roll result maps to points earned. Currently create_development just takes points directly
-- **Tier point thresholds** — DONE for the system tracks (#1699): Regard/Friction seeded at 25/100/500/2000 via the `relationship_scale` cluster (PLACEHOLDER names, magnitudes tunable in data). Authored tracks (Friendship, Romance, …) still need their own tier rows
-- **XP reward formula** — How much XP a development update awards. xp_awarded field exists on RelationshipDevelopment but no formula calculates it
-- **Temporary point decay cron** — RelationshipUpdate.current_temporary_value() calculates decay on read, but there's no cron job to clean up fully-decayed updates or update cached totals
-- **RelationshipUpdate creation service** — No service function for creating relationship updates (only first impressions have a service). Need validation, achievement stat firing, capacity updates
-
-### Consent & Safety
-- **Player agreement flow** — OOC prompt when a player picks a designation ("Are you comfortable RPing this?"). No UI or backend for this consent exchange
-- **Designation fallback logic** — When consent is denied, positive tracks fall to Acquaintance, negative to Unfriendly Acquaintance. No implementation
-- **Deceit skill check** — What check is required for non-distinction characters to maintain a deceptive displayed relationship. No formula or integration with check system
-- **Consent withdrawal** — Either player can withdraw consent at any time. No endpoint or UI for this
-- **Inactivity/freezing** — Players can make relationships inactive (points freeze, bonuses stop). Frozen model referenced in design but not implemented
-- **Roster transition reset** — When a new player takes over a character, both players can mutually agree to reset. No implementation
-
-### Frontend UI
-- **Relationship management page — DONE (#2159).** `RelationshipsSection`'s "Ties" subsection
-  now renders `RelationshipPanel`, branching on own vs. foreign sheet (own:
-  `OwnRelationshipsList`; foreign: `ForeignRelationshipTimeline`) instead of the old
-  free-text `string[]` "TBD" stub.
-- **First impression / development / capstone / redistribute creation UI — DONE (#2159).**
-  One `RelationshipWriteupDialog` covers all four positive write actions (mode is a fixed
-  prop per call site), with track picker(s), points, title, writeup, visibility, and
-  `coloring` (impression-only). Reachable from `OwnRelationshipsList` action buttons and
-  from a card-drawer quick action (impression-vs-development chosen automatically by
-  whether a relationship already exists).
-- **Relationship timeline view — DONE (#2159).** `GET .../relationship-updates/timeline/`
-  merges Update/Development/Capstone history into one type-tagged, `-created_at`-ordered
-  feed; consumed by `OwnRelationshipsList`'s per-relationship expandable history and by
-  `ForeignRelationshipTimeline` in full.
-- **Track progress visualization — partially DONE (#2159).** `OwnRelationshipsList` shows
-  points/tiers per track via the relationship detail read (`track_progress`); no dedicated
-  capacity vs. developed vs. temporary chart yet.
-- **Visibility controls — partially DONE (#2159).** Private/Shared/Gossip/Public is a field
-  on `RelationshipWriteupDialog`'s create form and is enforced read-side (privacy-scoped
-  timeline/list queries, ADR-0117); a standalone "appropriate filtering" browse UI beyond
-  the panel's own scoped queries is not built.
-- **Deceit indicator** — Red question mark OOC warning when a character's displayed feelings may differ from real
-- **Asymmetric view rendering** — Each player sees their own real designations + the other's displayed designation
-- **Consent prompt UI** — OOC agree/disagree modal for track designations
-- **Hybrid type display** — Showing when a relationship qualifies as a hybrid type (Frenemy, Beloved Enemy, etc.)
-
-### Achievement Integration
-- **Achievement stat hooks** — Only reciprocation fires `relationships.total_established`. Missing stats for:
-  - Relationships per track (number of Friends, Rivals, etc.)
-  - Highest tier reached per track
-  - Track transitions (Enemies → Romance = "enemies to lovers" trigger)
-  - Total points in each track type
-  - Number of relationship updates written
-  - Total absolute value across all relationships
-  - Pure positive relationships (no negative tracks)
-  - Pure negative relationships (no positive tracks)
-  - Time spent in relationship (weeks active)
-  - Monogamous relationship milestones
-  - Capstone events written
-  - Development updates completed
-- **Relationship achievement definitions** — Example achievements designed but not created as fixture data: First Impression, Social Butterfly, It's Complicated, Enemies to Lovers, Lone Wolf, Serial Monogamist, Heart of Gold, Enemies With Benefits, Irresistible
-- **Hybrid type detection service** — No service function to check if a relationship's active tracks match hybrid type requirements (needed for achievement triggers)
-
-### Content Authoring
-- **Family track tier definitions** — Tier names and mechanics TBD
-- **Mentor track tier definitions** — Tier names and mechanics TBD
-- **Allies track tier definitions** — Tier names and mechanics TBD
-- **Hybrid type definitions** — Frenemy, Friends With Benefits, Beloved Enemy designed; need fixture data and potentially more types
-- **Relationship condition definitions** — RelationshipCondition model exists with M2M to ModifierTarget, but no service to apply conditions during checks
-
-### Cross-System Integration
-- **Progression requirements** — `RelationshipRequirement` (progression app) implemented (#2116):
-  counts the character's own `RelationshipTrackProgress` rows at/above an authored
-  `minimum_tier`, optionally narrowed to one `required_track_kind`, gated on `minimum_count`.
-- **Gossip system** — Gossip-visible updates should be discoverable by other players. No gossip system exists yet
-- **Scene linking** — linked_scene FK exists on updates/developments/capstones but no UI to link scenes during creation
-- ✅ **Adventuring party model** — the Covenant IS the party primitive (Covenant of the
-  Durance); no separate Party model exists or is planned. Group formation (#519/Slice B),
-  shared legend (`CovenantLegendCredit` → covenant level), and coordination bonuses
-  (teamwork/coordination-bonus scope = encounter participants + engaged covenants) all ride
-  the covenant substrate. Minor (guest) membership + covenant treasury shipped in #2992
-  (ADR-0213) — see `docs/systems/covenants.md`.
-- **NPC reputation model** — Simpler -1000 to 1000 reputation for system NPCs (shopkeepers, faction contacts). No models exist
-
-## Notes
-
-See `docs/plans/2026-03-08-relationships-achievements-design.md` for the full design document.
+Everything the previous roadmap listed as needed is superseded, not outstanding: consent
+prompts and designation fallback (the label IS the declaration, and mutual labels are the
+consent), the deceit check (Private labels replace the deceit display), inactivity freeze and
+roster reset (`is_active` freezes a side; a successor inherits the history and re-declares
+what they mean to keep open), the development roll and XP formula (depth comes from scenes and
+AP; XP is spent, not awarded), the decay cron (no temporary points exist), hybrid-type
+detection (several labels on one side carry the fact), and the achievement hooks that named
+tracks (they would need rewriting against labels and tiers before they mean anything).
