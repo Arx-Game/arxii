@@ -3323,7 +3323,9 @@ Telnet parity: `train <technique> [=<ap>]` / bare `train` for the meter list (`C
   formation still weaves its RELATIONSHIP_CAPSTONE thread on a tier-0 tie. RELATIONSHIP_CAPSTONE
   keeps resolving by its own pk (`target_persona_id` not used).
 - `weave_thread` asserts relationship-bond ownership for RELATIONSHIP_TRACK /
-  RELATIONSHIP_CAPSTONE anchors (`target.relationship.source == character_sheet`,
+  RELATIONSHIP_CAPSTONE anchors (`_validate_relationship_ownership` resolves the
+  side row through `relationship_side_from_row` — for RELATIONSHIP_TRACK the target IS
+  that side since #3957 — and compares `side.source_id != character_sheet.pk`,
   raising `RelationshipBondNotOwned`, #2033) **after** the `ThreadWeavingUnlock`
   gate — the unlock gate alone is not sufficient because track-progress/capstone
   rows can belong to any character's relationship, but ordering the ownership

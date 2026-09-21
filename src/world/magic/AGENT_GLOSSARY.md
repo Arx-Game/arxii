@@ -120,7 +120,7 @@ The transient, never-persisted record of how a cast's Power was derived — an o
 The enum naming each phase of power derivation in the ledger (base, flat modifier, multiplier, term, environment, reactive, combat pull, penetration, clamp). Each ledger entry is tagged with one stage.
 
 **Thread**:
-A per-character attachment owned by a CharacterSheet, anchored to exactly one anchor (Trait / Technique / Facet / relationship track / relationship capstone / covenant role / Mantle / Sanctum) and channeling a single Resonance. It accrues `developed_points` into a `level` and is the unit of long-term magical investment.
+A per-character attachment owned by a CharacterSheet, anchored to exactly one anchor (Trait / Technique / Facet / relationship side / relationship capstone / covenant role / Mantle / Sanctum) and channeling a single Resonance. It accrues `developed_points` into a `level` and is the unit of long-term magical investment.
 
 **Imbue**:
 Spending Resonance currency to advance an existing Thread's developed points and level. Player-facing it is the Rite of Imbuing, a CEREMONY-kind Ritual completed by the `imbue` finisher.

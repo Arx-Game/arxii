@@ -1009,7 +1009,11 @@ integration test suite.
   that is not yet settled. See `docs/plans/2026-05-21-positioning-zones-design-notes.md`.
 - **Fury lever** — **DONE** (#567): the control-lowering / rage escalation lever, Strain's
   sibling. A player declares a `FuryTier` + a `fury_anchor` (a bonded harmed entity); bond
-  strength (`get_relationship_tier`) caps the tier and scales an intensity bonus. Fury lowers
+  strength caps the tier and scales an intensity bonus — since #3957 read as the
+  claimed `tier` on the character's OWN `CharacterRelationship` side toward the anchor
+  (`fury._bond_tier`), any label, no reciprocity required; it no longer goes through
+  `relationships.helpers.get_relationship_tier`, which narrowed to training's mutual
+  Mentor/Student question. Fury lowers
   runtime control via a `control_penalty` param on `use_technique` (feeding the existing
   mishap + anima-cost paths) in exchange for intensity riding the existing
   `power_intensity_bonus` — no fatigue of its own. A provocation-scaled control-retention

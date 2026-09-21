@@ -34,7 +34,8 @@ Catalogue and tuning (staff-authored / singleton):
 - **`RelationshipType`** — the catalogue: `name`, `slug`, `family` (`TypeFamily`), `valence`
   (`TypeValence` WARM / HOSTILE / NEUTRAL), `counterpart` self-FK (null = symmetric),
   `fuels_escalation_spikes`, `display_order`. `CreditedContent` + `NaturalKeyMixin` (content
-  repo owns it). Seeded as eighteen PLACEHOLDER types in five families by
+  repo owns it). Seeded as twenty-three PLACEHOLDER types in five families (Heart 5,
+  Company 4, Contest 4, Blood and oath 6, Teaching 4) by
   `world/seeds/relationship_scale.py`; Kin is WARM (found family reads as warm).
 - **`RelationshipTier`** — one ladder: `tier_number`, `name`, `depth_threshold`,
   `combat_bonus`. Also the source of the social-difficulty affection bands.
@@ -49,8 +50,12 @@ Per-tie rows:
 - **`CharacterRelationship`** — the side. `source`, `target` XOR `target_companion`,
   `is_active`, `scene_depth`, `invested_depth`, `tier`, `affection`, `conflict`, `summary`,
   the soul-tether fields (`is_soul_tether`, `soul_tether_role`, `magical_flavor`), the
-  `conditions` M2M. Properties: `depth`, `reverse` (cached, the other side's row, always None
-  toward a companion), `pair_depth()`, `open_labels()`, `next_tier()`, `target_name` (read
+  `conditions` M2M. Properties: `depth`, `reverse` (the other side's row, always None toward
+  a companion — a plain `@property`, deliberately NOT cached: nothing would invalidate a
+  per-instance cache on an idmapper-shared model, so it would outlive the identity-map flush
+  the depth and gauge writers do on the other side; page reads batch the reverse rows
+  themselves in `reads.build_tie_page`), `pair_depth()`, `open_labels()`, `next_tier()`,
+  `target_name` (read
   this, never `target.character`, anywhere a row may be about a companion). Constraints: the
   two partial uniques, `relationship_target_xor_companion`, `relationship_source_not_target`.
 - **`RelationshipLabel`** — `relationship`, `type`, `awareness`, `declared_by_tenure`,
@@ -78,8 +83,10 @@ Per-tie rows:
    declaration creates the tie. Free, and never consent-gated (ADR-0024) — it describes the
    caller's own stance and compels nothing.
 2. **Play.** `credit_scene_depth(scene)` runs at scene close (`Scene.finish_scene` in
-   `world/scenes/models.py`): for every pair of sheets whose personas both **posed**, each
-   side gets `scene_base_gain` once per game week. Gauges move on their own through bumps,
+   `world/scenes/models.py`): for every pair of sheets whose personas both **took part**, each
+   side gets `scene_base_gain` once per game week — the read is over every `Interaction` in
+   the scene, so a say or a mechanical action counts as surely as a pose does. Gauges move on
+   their own through bumps,
    affection shifts, grievances and the NPC mirror.
 3. **Allocate.** `set_allocation` sets this week's AP against one side (checked against the
    `ActionPointPool`); the weekly rollover (`world/game_clock/tasks.py`) calls
@@ -93,7 +100,9 @@ Per-tie rows:
    entry, spends `xp_per_tier × new tier`, writes the receipt and sets `tier`.
 6. **Freeze.** `is_active=False` stops new credit and mutuality; the depth already earned
    stays and still counts toward the pair (`build_tie_page` deliberately does not filter the
-   reverse side on `is_active`).
+   reverse side on `is_active`). It also drops the side from the sheet cast — `_build_ties`
+   filters `is_active=True` — while the tie API's own `list` has no such filter and still
+   returns it.
 
 ## Visibility — four audiences, decided server-side
 
@@ -107,6 +116,12 @@ from the read.
 | OTHER_SIDE | Clandestine + Public | pair depth, both tiers, breakdown; **no gauges** |
 | THIRD_PARTY | Public only | **none at all**; a side with no open Public label is absent from lists and **404s** on retrieve (never 403) |
 | STAFF | everything | everything |
+
+Every tie payload also carries **`is_own_side`** (`TieSerializer`, set in
+`views._row_to_payload`): true when the viewer is looking at their own side. `list` passes it
+unconditionally (its queryset is a tenure join on `source`), `retrieve` derives it from the
+viewer sheet. It is the flag the frontend branches its owner-only doors on, so a client never
+has to re-derive ownership from `audience`.
 
 Corollaries in `reads.py`: `_replaced_type_name` only names a replaced type the audience could
 have seen; `note` is owner/staff-only; `is_mutual` is computed with `public_only=True` for a
@@ -144,7 +159,10 @@ Predicates and reads used by other apps:
   `soul_tether_active(a_sheet, b_sheet)`, `relationship_gated_contributions`,
   `get_growth_config()`, `get_bond_combat_config()`, `companion_target_error`.
 - `helpers.get_relationship_tier(character_a, character_b)` — the lower claimed tier of a
-  **mutual TEACHING-family** tie, else 0. Training reads it as `(tier + 1)`.
+  **mutual TEACHING-family** tie, else 0. Training's mentor multiplier (`(tier + 1)`) is its
+  only consumer, and the mutual-Teaching narrowing is the point: it rewards a real
+  mentorship. Anything wanting plain bond strength reads the side's own `tier` directly
+  instead (magic's fury cap does — `world/magic/services/fury.py:_bond_tier`).
 
 Per-audience reads live in `reads.py`, never in `services.py`: `tie_audience`,
 `third_party_can_see` / `has_open_public_label`, `visible_labels`, `label_payload`,
@@ -169,7 +187,7 @@ Both surfaces converge on `actions/definitions/relationships.py` — `declare_la
 - **Web.** `CharacterRelationshipViewSet` under `/api/relationships/relationships/`: `list`
   (the caller's own sides, always the OWNER shape), `retrieve` (any pk, audience computed,
   404 rules above), `GET {id}/stream/` (journal entries either side wrote about the other,
-  visibility-filtered row by row, merged with the scenes both posed in), and seven POST
+  visibility-filtered row by row, merged with the scenes both took part in), and seven POST
   actions — `declare`, `shift`, `end`, `awareness`, `allocation`, `advance`, `summary`.
   `RelationshipTypeViewSet` (`/api/relationships/types/`) is the read-only catalogue for the
   picker; `RelationshipCapstoneViewSet` and `RelationshipConditionViewSet` are unchanged.
@@ -182,7 +200,9 @@ Both surfaces converge on `actions/definitions/relationships.py` — `declare_la
   (`list`, `show`) are telnet-only; the tie page and its stream are web-only.
 - **Admin.** Types (family, valence, counterpart), the tier ladder, both singleton configs,
   grievance options, conditions, `CharacterRelationship` with a `RelationshipLabel` inline,
-  and read-only allocations / depth transactions / capstones.
+  and allocations / depth transactions / capstones through `_AuditReadOnlyAdmin`, which
+  refuses add, change and delete outright — a hand-written audit row would desync the side's
+  running sums, or hand out a tier nobody paid XP for.
 
 ## Integration
 
@@ -211,10 +231,16 @@ Both surfaces converge on `actions/definitions/relationships.py` — `declare_la
 - **Scenes** — `Scene.finish_scene` calls `credit_scene_depth`; `social_difficulty` reads the
   `RelationshipTier` ladder's `depth_threshold` rungs as its affection bands.
 - **Training** (`world/skills/services.py`) — the mentor multiplier is
-  `get_relationship_tier(character, mentor) + 1`.
-- **Progression** — `RelationshipRequirement` counts the character's own open labels
-  (optionally of one `required_type`) on sides whose `tier >= minimum_tier`, against
-  `minimum_count`.
+  `get_relationship_tier(character, mentor) + 1` (a mutual Mentor/Student tie).
+- **Fury** (`world/magic/services/fury.py`) — `provocation_cap` reads the claimed `tier` on
+  the character's OWN side toward the fury anchor (`_bond_tier`), any label and no
+  reciprocity: a character can be provoked over someone who never declared anything back.
+  Deliberately not `get_relationship_tier`, whose mutual-Teaching narrowing belongs to
+  training.
+- **Progression** — `RelationshipRequirement` counts the character's own **sides** that hold
+  an open label (optionally of one `required_type`) and have claimed `tier >= minimum_tier`,
+  against `minimum_count`. It is `.values("relationship_id").distinct()`, so two labels on
+  one side count once: the gate is "N ties", never "N labels".
 - **NPC regard** (#2039) — `mirror_npc_regard_event(event)` moves the PC's gauges toward the
   NPC. `NPCStanding` remains the separate NPC cousin.
 - **Game clock** — the weekly rollover calls `process_weekly_relationship_allocations()`; the

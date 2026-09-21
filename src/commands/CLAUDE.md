@@ -298,9 +298,12 @@ actions, backends, and service functions.
   `weave resonance=<name> <anchor>=<value> [name=<...>]`, one anchor kwarg per call (#2033
   extends the original TRAIT-only reference grammar to mirror `ThreadSerializer
   ._resolve_target`'s `TargetKind` coverage): `trait=<name or id>`,
-  `track=<partner>/<track name>` (the caller's OWN developed `RelationshipTrackProgress`
-  toward the named partner — partner name resolves via `search_or_raise`, the same
-  found/not-found/numbered-disambiguation convention every other command uses),
+  `track=<partner>/<type name>` (#3957: the caller's OWN side of the tie
+  (`CharacterRelationship`) toward the named partner, which must hold an OPEN label of
+  that `RelationshipType`, and whose claimed tier must reach
+  `RelationshipGrowthConfig.thread_min_tier` — partner name resolves via
+  `search_or_raise`, the same found/not-found/numbered-disambiguation convention every
+  other command uses),
   `capstone=<id or title>` (one of the caller's OWN recorded `RelationshipCapstone` rows),
   `facet=<name or id>`, `technique=<name or id>` (signature thread; caller must know it),
   `role=<name or id>` (covenant role), `mantle=<name or id>`. SANCTUM (own slot grammar,

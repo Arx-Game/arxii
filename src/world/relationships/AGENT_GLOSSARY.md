@@ -15,7 +15,9 @@ One character's directed row toward another character (`target`) or toward their
 companion (`target_companion`) — exactly one is set. It owns that character's labels, its own
 added depth (`scene_depth` + `invested_depth`), its claimed `tier`, its two gauges and its
 `summary`. `is_active=False` freezes a side: it takes no new credit of either kind and cannot
-count toward mutual, but it keeps the depth it earned.
+count toward mutual, but it keeps the depth it earned and still counts toward the pair's
+depth. A frozen side leaves the sheet cast (`_build_ties` filters `is_active=True`) while the
+tie API's own `list` still returns it.
 _Avoid_: relationship (ambiguous between the side and the tie), direction, half.
 
 **Label** (`RelationshipLabel`):
@@ -31,8 +33,9 @@ this side holding it).
 The staff-authored catalogue row a label names: `family` (how the picker groups it),
 `valence` (WARM / HOSTILE / NEUTRAL — what consent, journals and the surge engine read),
 `counterpart` (null meaning itself), `fuels_escalation_spikes`. Credited content
-(`CreditedContent` + `NaturalKeyMixin`), seeded as eighteen PLACEHOLDER types in five
-families by `world/seeds/relationship_scale.py`.
+(`CreditedContent` + `NaturalKeyMixin`), seeded as twenty-three PLACEHOLDER types in five
+families (Heart 5, Company 4, Contest 4, Blood and oath 6, Teaching 4) by
+`world/seeds/relationship_scale.py`.
 _Avoid_: RelationshipTrack (the retired name), category, tag.
 
 **Awareness** (`LabelAwareness`):
@@ -48,8 +51,10 @@ _Avoid_: visibility (that word belongs to journals' own rule), secrecy level, pr
 **Depth**:
 How much play the tie has had, in three readings. **Scene depth** (`scene_depth`) is credited
 by `credit_scene_depth(scene)` once per game week per side for the first scene the two both
-*posed* in. **Invested depth** (`invested_depth`) comes from a weekly AP allocation turned
-into depth by `process_weekly_relationship_allocations()`. A side's own added depth is the
+*took part in* (it reads every `Interaction` in the scene, and a say or a mechanical action
+writes one as surely as a pose does). **Invested depth** (`invested_depth`) comes from a
+weekly AP allocation turned into depth by `process_weekly_relationship_allocations()`. A side's
+own added depth is the
 sum of the two (`CharacterRelationship.depth`); the **pair depth** is both sides' added depth
 summed (`pair_depth()`) and is what a tier threshold, the magic pull term and the tie page's
 "340 / 500" all read. No decay, no weekly cap, no per-label points. Every award writes a
@@ -160,7 +165,11 @@ _Avoid_: seduction bonus, auto-rep, per-action affection (it is per-scene-dedupe
 A side whose `target_companion` is set (and `target` null): the bonded owner's tie toward
 their own `Companion`. Owner-only on every surface (a companion has no player to weigh being
 named publicly), no reverse side, so no mutual and no pair depth beyond its own. It earns
-depth and tiers; combat bond for companions is a later expansion (Decision 14). Read
+**invested depth only** — `credit_scene_depth` pairs `CharacterSheet`s, so a companion side
+never takes scene credit — and it can claim **no tier**: `advance_tier` refuses a side whose
+`target_id` is null, and `AdvanceRelationshipTierAction` only accepts a character target, because
+a capstone is a journal entry *about the other party*. Combat bond for companions is a later
+expansion (Decision 14). Read
 `target_name`, never `target.character`, anywhere a row may be about a companion.
 _Avoid_: pet bond, companion relationship model (there is no separate model).
 

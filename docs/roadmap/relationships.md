@@ -26,8 +26,8 @@ the woven thread.
 - **Labels carry awareness and history, never points.** Change ends one label and starts
   another that remembers it; End leaves a former label on the card. A known thing cannot be
   unsaid, so awareness never moves backward.
-- **Depth grows from play.** The first scene two characters share in a game week credits each
-  side; weekly AP converts to depth on the rollover. No decay, no weekly cap, one AP number
+- **Depth grows from play.** The first scene in a game week that two characters both take
+  part in credits each side (a say or a mechanical action counts, not only a pose); weekly AP converts to depth on the rollover. No decay, no weekly cap, one AP number
   per tie, and every award leaves an audit row.
 - **A tier is claimed, not reached.** Pair depth opens the rung; a capstone journal entry and
   XP claim it. Bonuses ride the claimed tier.
@@ -82,14 +82,17 @@ the woven thread.
 - **Frontend:** the Ties section is the cast of cards; a card opens the tie page
   (`/characters/:id/ties/:tieId`) with the depth button and breakdown panel, labels, the
   summary, the thread line, the Labels-and-AP and Advance-Tier doors, and the merged stream.
-- **Seeds:** eighteen PLACEHOLDER types in five families (Kin warm), the five asymmetric
+- **Seeds:** twenty-three PLACEHOLDER types in five families (Heart 5, Company 4, Contest 4,
+  Blood and oath 6, Teaching 4; Kin warm), the five asymmetric
   counterpart pairs, the four tier rungs at 25/100/500/2000, the growth config and the
   starter reaction emoji (`world/seeds/relationship_scale.py`).
 - **Consumers wired:** consent's RIVALS mode and the scene picker sweep, journals'
   `can_retort` / `annotate_can_retort`, the combat bond bonus and the surge engine's
   grief/peril/hated-foe legs, magic thread anchors (`Thread.target_relationship`) with the
   tier-gated weave and the depth/gauge-keyed pull terms, social difficulty's affection bands,
-  training's mentor multiplier, `RelationshipRequirement`, and the NPC regard mirror.
+  training's mentor multiplier (a mutual Mentor/Student tie, via `get_relationship_tier`),
+  magic's fury provocation cap (the character's own side's claimed tier, any label),
+  `RelationshipRequirement`, and the NPC regard mirror.
 - **Harness:** `frontend/e2e/ties.spec.ts` mounts the real sheet and tie page against
   fixtures for the three audiences (the #3898 evidence lesson).
 - **Decision record:** ADR-0308 (this shape and its rejected alternatives); ADR-0117 amended
@@ -101,9 +104,11 @@ the woven thread.
   ranking boards for the most renowned marriages, rivalries, friendships and enemies. Its own
   feature and its own issue, filed after this merges (Decision 17). What this pass leaves it:
   a tier per side, mutual labels, and #761's ranking boards.
-- **Companions in combat** — a companion tie earns depth and tiers today and grants no combat
-  bond. Companions fighting beside their owner is a later expansion, not a deferral of this
-  spec (Decision 14).
+- **Companions in combat** — a companion tie earns **invested depth only** today (no scene
+  credit, since `credit_scene_depth` pairs character sheets), has no reverse side, claims no
+  tier (a capstone is a journal entry about the other party, so `advance_tier` refuses a
+  companion target) and grants no combat bond. Companions fighting beside their owner is a
+  later expansion, not a deferral of this spec (Decision 14).
 
 Everything the previous roadmap listed as needed is superseded, not outstanding: consent
 prompts and designation fallback (the label IS the declaration, and mutual labels are the

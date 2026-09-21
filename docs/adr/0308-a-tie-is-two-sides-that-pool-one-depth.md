@@ -44,7 +44,12 @@ new row that remembers its predecessor. **Reversible awareness**: a known thing 
 in character, so `advance_awareness` raises `AwarenessBackwardError` rather than hiding a label
 someone has already read. **Hybrid combo types** (`HybridRelationshipType`, "Frenemy"): several
 labels on one side already carry that fact, and a combo row adds a second vocabulary nobody
-authored against. **Relationship writeups beside journals** (`RelationshipUpdate` /
+authored against. **Symmetric mutuality** — requiring the *same* type on both sides and dropping
+the `counterpart` column altogether: it reads as the simpler design right up until Mentor, whose
+counterpart is Student, not Mentor; a self-FK defaulting to the type itself costs one nullable
+column and lets Friend pair with Friend while Liege pairs with Vassal, where the alternative
+would have needed either duplicate symmetric rows or a bridge table carrying one row per pair
+for what is a property of the type. **Relationship writeups beside journals** (`RelationshipUpdate` /
 `RelationshipDevelopment` / `RelationshipCapstone` prose, plus `WriteupKudos` and
 `WriteupComplaint`): one prose channel — journal entries about a character (#3941) — and the
 capstone is one of those entries marked through a receipt.
@@ -56,6 +61,10 @@ superseded**: numeric state is no longer author-private alone; the other side of
 known labels, the pooled depth and both tiers, while the gauges stay owner-and-staff-only and
 third parties still read no number. ADR-0092 and ADR-0110 keep their curves, but their inputs
 change: the relationship-bond pull term keys on `pair_depth()`, fraught on
-`min(affection, conflict)`, devotion on pooled depth past its threshold. ADR-0307's
+`min(affection, conflict)`, devotion on pooled depth past its threshold. **ADR-0109 is amended
+the same way**: its unconditional-investment principle stands, but the cube-root-of-developed-
+points magnitude and the `min_developed_absolute_value` floor it names are dropped columns — the
+combat bond now reads `BondCombatConfig.min_tier` and the claimed tier's authored
+`RelationshipTier.combat_bonus`. ADR-0307's
 `can_retort` now reads `mutual_hostile` rather than "either direction on a negative track",
 narrowing exactly where that ADR said the relationships pass would narrow it.

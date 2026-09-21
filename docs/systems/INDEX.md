@@ -8868,14 +8868,16 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `end_label(*, label)`, `advance_awareness(*, label, to)`, `set_summary`,
   `set_allocation(*, side, ap_amount)`, `process_weekly_relationship_allocations()`
   (idempotent per game week), `credit_scene_depth(scene)` (called from `Scene.finish_scene`;
-  first scene together per week, both must have posed), `advance_tier(*, side,
+  first scene together per week, both must have taken part — it reads every `Interaction`
+  in the scene, so a say counts as surely as a pose), `advance_tier(*, side,
   journal_entry)` (cost `xp_per_tier × new tier`), `move_gauges(*, side, amount)`,
   `register_grievance`, `apply_relationship_bump`, `apply_affection_shift`,
   `mirror_npc_regard_event`, `is_mutual(side, type, *, public_only=False)`,
   `mutual_hostile(a, b)` + `mutual_hostile_expression(...)`, `known_label_q(...)`,
   `bond_combat_bonus` / `bond_bonus`, `companion_target_error`;
   `helpers.get_relationship_tier(a, b)` = the lower claimed tier of a mutual TEACHING-family
-  tie
+  tie, read only by training's mentor multiplier (magic's fury cap reads the side's own
+  `tier` directly, `world/magic/services/fury.py:_bond_tier`)
 - **Reads (`reads.py`):** `build_tie_page(sides, *, viewer_sheet, is_staff,
   force_audience=None, include_allocation=True)` is the batched entry point the tie API and
   the sheet cast share (three extra queries regardless of page size); plus `tie_audience`,
@@ -8886,9 +8888,9 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `CapstoneEntryInvalidError`, `AllocationTooLargeError`, `NotYourTieError`;
   `RelationshipBumpError` base + `AlreadyAcknowledgedError` (#1699) — each with
   `user_message` for 400 API responses
-- **Seeds:** `relationship_scale` cluster (`world/seeds/relationship_scale.py`) — eighteen
-  PLACEHOLDER `RelationshipType` rows in five families (Heart, Company, Contest, Blood and
-  oath, Teaching; Kin is WARM) with the five asymmetric counterpart pairs
+- **Seeds:** `relationship_scale` cluster (`world/seeds/relationship_scale.py`) — twenty-three
+  PLACEHOLDER `RelationshipType` rows in five families (Heart 5, Company 4, Contest 4,
+  Blood and oath 6, Teaching 4; Kin is WARM) with the five asymmetric counterpart pairs
   (Beloved↔Admirer, Ward↔Guardian, Liege↔Vassal, Mentor↔Student, Patron↔Protege), the four
   `RelationshipTier` rungs at 25/100/500/2000, the growth-config singleton, and the starter
   `ReactionEmoji` rows (👍 neutral, ❤️ +1, 😠 −1)
@@ -8897,9 +8899,10 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `set_tie_allocation`, `advance_relationship_tier`, `set_tie_summary`,
   `relationship_bump`) through `action.run()` (ADR-0001). Web:
   `CharacterRelationshipViewSet` at `/api/relationships/relationships/` — `list` (own sides,
-  OWNER shape), `retrieve` (any pk, audience computed), `GET {id}/stream/` (journal entries
+  OWNER shape), `retrieve` (any pk, audience computed; every row also carries `is_own_side`,
+  the flag the frontend branches its owner-only doors on), `GET {id}/stream/` (journal entries
   either side wrote about the other, visibility-filtered row by row, merged with the scenes
-  both posed in), and POST `declare` / `shift` / `end` / `awareness` / `allocation` /
+  both took part in), and POST `declare` / `shift` / `end` / `awareness` / `allocation` /
   `advance` / `summary`; `RelationshipTypeViewSet` (`/api/relationships/types/`) is the
   picker catalogue. Sheet payload carries `ties` (`_build_ties`, one `TieCardEntry` per
   visible side) and `ties_ap_this_week` (owner/staff only); the cast is the Ties section and
@@ -8911,7 +8914,8 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   target's most recent unacknowledged visible pose; web valenced `ReactionEmoji` reactions
   bump the pose's author (`InteractionReactionViewSet.create` side-effect, `bump_applied` in
   the response). `UniqueConstraint(relationship, interaction)` is the whole anti-spam cap.
-  +1 adds Affection, -1 adds Conflict; the target is never notified.
+  Both dispatch `RelationshipBumpAction` (key `"relationship_bump"`, `actions/definitions/
+  relationships.py`). +1 adds Affection, -1 adds Conflict; the target is never notified.
 - **Automatic affection shifts (#1697, boon mode #2540):** `apply_affection_shift(...)` — a
   successful Flirt (+5) / Seduce (+50, PLACEHOLDER) moves the TARGET's side toward the actor
   (`EffectType.SHIFT_AFFECTION`, `ConsequenceEffect.affection_amount`, handler in
@@ -8938,13 +8942,16 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   pruned hourly by the `relationships.temp_condition_cleanup` game_clock task.
 - **Admin:** types (family/valence/counterpart), the tier ladder, both singleton configs,
   grievance options, conditions, `CharacterRelationship` with a `RelationshipLabel` inline;
-  allocations, depth transactions and capstones read-only
+  allocations, depth transactions and capstones registered through `_AuditReadOnlyAdmin`
+  (add, change and delete all refused — the rows are the audit behind the side's columns)
 - **Integrates with:** consent (`ConsentMode.RIVALS` → `mutual_hostile`), journals
   (`can_retort`/`annotate_can_retort`, and the capstone IS a `JournalEntry`), combat (bond
   bonus off the claimed tier; the surge engine off `fuels_escalation_spikes` + side depth),
   magic (`Thread.target_relationship`, weaving gated on `thread_min_tier`, pull modulation
-  off `pair_depth()` and the gauges), scenes (`finish_scene` → `credit_scene_depth`; social
-  difficulty), skills (mentor multiplier), progression (`RelationshipRequirement`, XP spend),
+  off `pair_depth()` and the gauges, fury's provocation cap off the side's own `tier`), scenes
+  (`finish_scene` → `credit_scene_depth`; social difficulty), skills (mentor multiplier),
+  progression (`RelationshipRequirement` — it counts qualifying SIDES, not labels, so two
+  labels on one side count once; XP spend),
   game_clock (the weekly turn), npc_services (the regard mirror)
 - **Source:** `src/world/relationships/`; frontend: `frontend/src/relationships/` +
   `frontend/src/components/character/RelationshipsSection.tsx`
