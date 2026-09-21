@@ -197,14 +197,21 @@ def advance_awareness(*, label: RelationshipLabel, to: str) -> RelationshipLabel
     return label
 
 
-def _known_label_q(source_id: int | OuterRef, target_ref, type_ref=None) -> Q:
-    """Labels the OTHER side may see, declared under a still-open tenure."""
+def _known_label_q(
+    source_id: int | OuterRef, target_ref, type_ref=None, *, awareness=KNOWN_AWARENESS
+) -> Q:
+    """Labels the OTHER side may see, declared under a still-open tenure.
+
+    ``awareness`` narrows which awareness stages count as "known" — the default is
+    Clandestine-or-Public (what the OTHER side of a tie may see); a caller reading what a
+    THIRD PARTY may see passes ``awareness=(LabelAwareness.PUBLIC,)`` instead (#3957 review).
+    """
     q = Q(
         relationship__source_id=source_id,
         relationship__target_id=target_ref,
         relationship__is_active=True,
         ended_at__isnull=True,
-        awareness__in=KNOWN_AWARENESS,
+        awareness__in=awareness,
         declared_by_tenure__isnull=False,
         declared_by_tenure__end_date__isnull=True,
     )
@@ -213,15 +220,28 @@ def _known_label_q(source_id: int | OuterRef, target_ref, type_ref=None) -> Q:
     return q
 
 
-def is_mutual(side: CharacterRelationship, type: RelationshipType) -> bool:  # noqa: A002
-    """Both sides hold counterpart labels at Clandestine or Public (#3957)."""
+def is_mutual(
+    side: CharacterRelationship,
+    type: RelationshipType,  # noqa: A002 - the model field is named type
+    *,
+    public_only: bool = False,
+) -> bool:
+    """Both sides hold counterpart labels at Clandestine or Public (#3957).
+
+    ``public_only=True`` narrows both sides' required awareness to Public alone — the
+    predicate a THIRD_PARTY audience reads: a stranger may only learn what both sides chose
+    to make public, not what one side merely let the other side know (#3957 review).
+    """
     if side.target_id is None:
         return False
+    awareness = (LabelAwareness.PUBLIC,) if public_only else KNOWN_AWARENESS
     mine = RelationshipLabel.objects.filter(
-        _known_label_q(side.source_id, side.target_id, type.pk)
+        _known_label_q(side.source_id, side.target_id, type.pk, awareness=awareness)
     ).exists()
     theirs = RelationshipLabel.objects.filter(
-        _known_label_q(side.target_id, side.source_id, type.counterpart_or_self.pk)
+        _known_label_q(
+            side.target_id, side.source_id, type.counterpart_or_self.pk, awareness=awareness
+        )
     ).exists()
     return mine and theirs
 

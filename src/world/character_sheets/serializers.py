@@ -486,27 +486,6 @@ def _presented_bio_profile(
     return None
 
 
-def _resolve_viewer_sheet(request: Request | None) -> CharacterSheet | None:
-    """The viewer's own currently-selected character's sheet, or None (plays nobody).
-
-    Feeds ``_build_ties``'s per-audience gate (#3957): the viewer's OWN sheet, not the
-    sheet being rendered — a stranger browsing Alice's page has ``viewer_sheet`` pointing
-    at their own character, which is what ``tie_audience`` compares against each side's
-    ``target`` to tell an OTHER_SIDE viewer from a THIRD_PARTY one.
-    """
-    if request is None:
-        return None
-    from world.roster.services.selection import character_for_request  # noqa: PLC0415
-
-    actor = character_for_request(request, entry_id=None)
-    if actor is None:
-        return None
-    try:
-        return actor.sheet_data
-    except ObjectDoesNotExist:
-        return None
-
-
 def _viewer_is_privileged(sheet: CharacterSheet, user: Any) -> bool:
     """Staff, or the viewer's account currently plays this character (#1109).
 
@@ -1797,19 +1776,6 @@ def _build_mentors(sheet: CharacterSheet, *, privileged: bool) -> list[MentorBon
     return entries
 
 
-def _entry_id_for(target_sheet: CharacterSheet | None) -> int | None:
-    """The target's ``RosterEntry`` pk, or None (no roster row, e.g. a test/NPC sheet).
-
-    ``CharacterSheet`` has no ``roster_entry_id`` column of its own — ``roster_entry``
-    is the reverse side of ``RosterEntry.character_sheet`` — so this reads the safe
-    ``*_or_none`` accessor rather than a nonexistent shortcut attribute.
-    """
-    if target_sheet is None:
-        return None
-    entry = target_sheet.roster_entry_or_none
-    return entry.pk if entry is not None else None
-
-
 def _build_ties(sheet: CharacterSheet, viewer_sheet, *, privileged: bool) -> list[TieCardEntry]:
     """The cast (#3957): one card per active side, shaped for who is looking.
 
@@ -1817,61 +1783,64 @@ def _build_ties(sheet: CharacterSheet, viewer_sheet, *, privileged: bool) -> lis
     card's known labels and numbers; anyone else sees public labels and the first line
     of the summary, and a tie with no public label is not on their list at all. Companion
     cards (``target_companion`` set) are owner/staff-only — a companion has no player of
-    its own to weigh being named on a public tie card.
+    its own to weigh being named on a public tie card. Batched via ``reads.build_tie_page``
+    (#3957 review): one query each for the reverse sides, the open threads and the tier
+    ladder, regardless of how many ties are on the page.
     """
-    from world.magic.models import Thread  # noqa: PLC0415
     from world.relationships.constants import TieAudience  # noqa: PLC0415
+    from world.relationships.models import RelationshipLabel  # noqa: PLC0415
     from world.relationships.reads import (  # noqa: PLC0415
-        third_party_can_see,
-        tie_audience,
-        visible_labels,
+        build_tie_page,
+        entry_id_for,
+        has_open_public_label,
     )
-    from world.relationships.services import is_mutual  # noqa: PLC0415
 
-    sides = (
+    sides = list(
         sheet.relationships_as_source.filter(is_active=True)
         .select_related("target", "target__character", "target__roster_entry", "target_companion")
-        .prefetch_related("labels__type")  # noqa: PREFETCH_STRING - per-request queryset
+        .prefetch_related(
+            Prefetch(  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
+                "labels",
+                queryset=RelationshipLabel.objects.select_related(
+                    "type", "type__counterpart", "replaced__type"
+                ).order_by("since"),
+            )
+        )
         .order_by("-updated_at")
     )
+    visible_sides = [side for side in sides if side.target_companion_id is None or privileged]
+    rows = build_tie_page(visible_sides, viewer_sheet=viewer_sheet, is_staff=privileged)
     cards: list[TieCardEntry] = []
-    for side in sides:
-        if side.target_companion_id is not None and not privileged:
+    for row in rows:
+        side = row["side"]
+        if row["audience"] == TieAudience.THIRD_PARTY and not has_open_public_label(
+            side.labels.all()
+        ):
             continue
-        audience = (
-            TieAudience.STAFF
-            if privileged and viewer_sheet is None
-            else tie_audience(side, viewer_sheet, privileged)
-        )
-        if audience == TieAudience.THIRD_PARTY and not third_party_can_see(side):
-            continue
-        numbers = audience != TieAudience.THIRD_PARTY
-        thread = (
-            Thread.objects.filter(target_relationship=side, retired_at__isnull=True)
-            .select_related("resonance")
-            .order_by("-level")
-            .first()
-        )
         cards.append(
             TieCardEntry(
                 relationship_id=side.pk,
                 other_name=side.target_name,
                 other_sheet_id=side.target_id,
-                other_entry_id=_entry_id_for(side.target),
+                other_entry_id=entry_id_for(side.target),
                 other_companion_id=side.target_companion_id,
                 labels=[
                     TieLabelEntry(
-                        type_name=label.type.name,
-                        awareness=label.awareness,
-                        is_former=label.ended_at is not None,
-                        is_mutual=label.ended_at is None and is_mutual(side, label.type),
+                        type_name=label["type_name"],
+                        awareness=label["awareness"],
+                        is_former=label["ended_at"] is not None,
+                        is_mutual=label["is_mutual"],
                     )
-                    for label in visible_labels(side, audience)
+                    for label in row["labels"]
                 ],
-                depth=side.pair_depth() if numbers else None,
-                tier=side.tier if numbers else None,
+                depth=row["depth"],
+                tier=row["tier"],
                 summary_line=side.summary.split("\n", 1)[0][:160],
-                thread=f"Thread, level {thread.level}, {thread.resonance.name}" if thread else None,
+                thread=(
+                    f"Thread, level {row['thread']['level']}, {row['thread']['resonance_name']}"
+                    if row["thread"]
+                    else None
+                ),
             )
         )
     return cards
@@ -2029,9 +1998,11 @@ class CharacterSheetSerializer(serializers.Serializer):
     def to_representation(self, instance: Any) -> dict[str, Any]:
         sheet: CharacterSheet = instance
         request: Request | None = self.context.get("request")
+        from world.relationships.reads import resolve_viewer_sheet  # noqa: PLC0415
+
         roster_entry = sheet.roster_entry
         user = request.user if request else None
-        viewer_sheet = _resolve_viewer_sheet(request)
+        viewer_sheet = resolve_viewer_sheet(request)
 
         # Per-viewer identity gating (#1109): close the de-anonymization leaks. Only the owner /
         # staff see the full secret alt list (which would link every face); a non-privileged

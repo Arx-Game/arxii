@@ -1,16 +1,27 @@
 """Tie API (#3957): per-audience reads, the seven writes, the stream, the catalogue."""
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.companions.factories import CompanionFactory
 from world.journals.factories import JournalEntryFactory
+from world.magic.constants import TargetKind
+from world.magic.factories import ResonanceFactory
+from world.magic.models import Thread
 from world.relationships.constants import LabelAwareness, TypeFamily, TypeValence
 from world.relationships.factories import RelationshipTierFactory, RelationshipTypeFactory
-from world.relationships.models import RelationshipLabel
-from world.relationships.services import declare_label, get_or_create_side
+from world.relationships.models import RelationshipAllocation, RelationshipLabel
+from world.relationships.services import (
+    advance_awareness,
+    declare_label,
+    get_or_create_side,
+    shift_label,
+)
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
 
@@ -173,3 +184,115 @@ class TieApiTests(TestCase):
         data = self._client(self.stranger).get("/api/relationships/types/").data
         names = {row["name"] for row in data.get("results", data)}
         self.assertEqual(names, {"Lover", "Enemy", "Rival"})
+
+    def test_ap_this_week_visible_to_owner_and_staff_only(self):
+        RelationshipAllocation.objects.create(relationship=self.ab, ap_amount=7)
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        owner_data = self._client(self.owner).get(url).data
+        self.assertEqual(owner_data["ap_this_week"], 7)
+        other_data = self._client(self.other).get(url).data
+        self.assertIsNone(other_data["ap_this_week"])
+        staff_data = self._client(self.staff).get(url).data
+        self.assertEqual(staff_data["ap_this_week"], 7)
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+        stranger_data = self._client(self.stranger).get(url).data
+        self.assertIsNone(stranger_data["ap_this_week"])
+
+    def test_breakdown_conflict_null_for_other_side(self):
+        data = self._client(self.other).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        self.assertIsNone(data["breakdown"]["conflict"])
+
+    def test_third_party_never_sees_thread_or_a_hidden_replaced_label(self):
+        Thread.objects.create(
+            owner=self.a,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship=self.ab,
+            level=20,
+        )
+        secret_type = RelationshipTypeFactory(name="Secret")
+        known_type = RelationshipTypeFactory(name="Known")
+        private_label = declare_label(
+            side=self.ab, type=secret_type, awareness=LabelAwareness.PRIVATE
+        )
+        shifted = shift_label(label=private_label, new_type=known_type)
+        advance_awareness(label=shifted, to=LabelAwareness.PUBLIC)
+
+        owner_data = (
+            self._client(self.owner).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        )
+        self.assertIsNotNone(owner_data["thread"])
+        owner_known = next(lab for lab in owner_data["labels"] if lab["type_name"] == "Known")
+        self.assertEqual(owner_known["replaced_type_name"], "Secret")
+
+        stranger_data = (
+            self._client(self.stranger).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        )
+        self.assertIsNone(stranger_data["thread"])
+        stranger_known = next(lab for lab in stranger_data["labels"] if lab["type_name"] == "Known")
+        self.assertIsNone(stranger_known["replaced_type_name"])
+
+    def test_third_party_mutual_needs_both_sides_public(self):
+        mutual_type = RelationshipTypeFactory(name="Ally")
+        declare_label(side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC)
+        declare_label(side=self.ba, type=mutual_type, awareness=LabelAwareness.CLANDESTINE)
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+
+        data = self._client(self.stranger).get(url).data
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Ally")
+        self.assertFalse(row["is_mutual"])
+
+        ba_label = RelationshipLabel.objects.get(relationship=self.ba, type=mutual_type)
+        ba_label.awareness = LabelAwareness.PUBLIC
+        ba_label.save(update_fields=["awareness"])
+        data = self._client(self.stranger).get(url).data
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Ally")
+        self.assertTrue(row["is_mutual"])
+
+    def test_companion_side_404s_for_anyone_but_owner_or_staff(self):
+        companion = CompanionFactory(owner=self.a)
+        companion_side = get_or_create_side(source=self.a, target_companion=companion)
+        declare_label(side=companion_side, type=self.lover, awareness=LabelAwareness.PUBLIC)
+        retrieve_url = f"/api/relationships/relationships/{companion_side.pk}/"
+        stream_url = f"/api/relationships/relationships/{companion_side.pk}/stream/"
+
+        self.assertEqual(self._client(self.owner).get(retrieve_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(self._client(self.staff).get(retrieve_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self._client(self.stranger).get(retrieve_url).status_code, status.HTTP_404_NOT_FOUND
+        )
+        self.assertEqual(self._client(self.owner).get(stream_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self._client(self.stranger).get(stream_url).status_code, status.HTTP_404_NOT_FOUND
+        )
+
+    def test_declare_validation_failure_returns_the_honest_shape(self):
+        response = self._client(self.owner).post(
+            "/api/relationships/relationships/declare/",
+            {"type_id": self.lover.pk, "awareness": "public"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["success"])
+        self.assertIn("message", response.data)
+        self.assertIn("data", response.data)
+
+    def test_list_query_budget_stays_flat_across_a_page(self):
+        """``build_tie_page`` adds a small, page-size-independent query count (#3957 review):
+        14 queries for a 6-row page here (session + count + queryset + labels prefetch +
+        reverse sides + reverse labels prefetch + threads + tier ladder, plus session-save
+        bookkeeping) — not one per row.
+        """
+        for i in range(5):
+            target, _ = _owned_sheet(AccountFactory())
+            side = get_or_create_side(source=self.a, target=target)
+            side.scene_depth = 10 * i
+            side.save()
+            declare_label(side=side, type=self.lover, awareness=LabelAwareness.PUBLIC)
+        with CaptureQueriesContext(connection) as ctx:
+            response = self._client(self.owner).get("/api/relationships/relationships/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 6)
+        self.assertLessEqual(len(ctx.captured_queries), 14)

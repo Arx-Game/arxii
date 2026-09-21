@@ -1,20 +1,33 @@
-"""Per-audience reads of one side of a tie (#3957). Writes live in services.py."""
+"""Per-audience reads of one side of a tie (#3957). Writes live in services.py.
+
+``build_tie_page`` is the batched entry point both the tie API's ``list`` and the sheet's
+Ties cast share (#3957 review): it shapes a whole page of sides for one viewer in a small,
+page-size-independent query budget, rather than the per-side reads below (``visible_labels``,
+``depth_breakdown``) firing once per row. Single-row callers (``retrieve``, ``stream``) may
+still use the per-side functions directly, or ``build_tie_page`` with a one-element list —
+either is the same query cost for one row.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from django.db.models import Q
+from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Prefetch, Q
 
 from world.relationships.constants import KNOWN_AWARENESS, LabelAwareness, TieAudience
 from world.relationships.models import (
     CharacterRelationship,
     RelationshipCapstone,
     RelationshipLabel,
+    RelationshipTier,
+    RelationshipType,
 )
 from world.relationships.types import DepthBreakdown, TieStreamItem
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.character_sheets.models import CharacterSheet
 
 
@@ -37,20 +50,114 @@ def third_party_can_see(side: CharacterRelationship) -> bool:
     return side.labels.filter(ended_at__isnull=True, awareness=LabelAwareness.PUBLIC).exists()
 
 
-def visible_labels(side: CharacterRelationship, audience: str) -> list[RelationshipLabel]:
+def has_open_public_label(labels: Iterable[RelationshipLabel]) -> bool:
+    """Pure-Python sibling of ``third_party_can_see`` for an already-loaded label list (#3957)."""
+    return any(
+        label.ended_at is None and label.awareness == LabelAwareness.PUBLIC for label in labels
+    )
+
+
+def _labels_for_audience(
+    labels: Iterable[RelationshipLabel], audience: str
+) -> list[RelationshipLabel]:
     """Owner and staff: all (ended ones too, as former). Other side: known. Third party: public."""
-    qs = side.labels.select_related("type", "type__counterpart").order_by("since")
     if audience in (TieAudience.OWNER, TieAudience.STAFF):
-        return list(qs)
+        return list(labels)
     if audience == TieAudience.OTHER_SIDE:
-        return list(qs.filter(awareness__in=KNOWN_AWARENESS))
-    return list(qs.filter(awareness=LabelAwareness.PUBLIC))
+        return [label for label in labels if label.awareness in KNOWN_AWARENESS]
+    return [label for label in labels if label.awareness == LabelAwareness.PUBLIC]
 
 
-def depth_breakdown(side: CharacterRelationship, audience: str) -> DepthBreakdown | None:
+def visible_labels(side: CharacterRelationship, audience: str) -> list[RelationshipLabel]:
+    """Query one side's labels and filter them for one audience (single-row reads)."""
+    qs = side.labels.select_related("type", "type__counterpart", "replaced__type").order_by("since")
+    return _labels_for_audience(qs, audience)
+
+
+def labels_for_audience(
+    labels: Iterable[RelationshipLabel], audience: str
+) -> list[RelationshipLabel]:
+    """Same filter as ``visible_labels``, applied to an already-loaded (prefetched) list.
+
+    The batched-read sibling: a page of sides prefetches every side's labels in one query
+    (``Prefetch("labels", queryset=...)``), and this filters that already-fetched list in
+    Python instead of ``visible_labels``' fresh per-side query.
+    """
+    return _labels_for_audience(labels, audience)
+
+
+def _replaced_type_name(label: RelationshipLabel, audience: str) -> str | None:
+    """The label's replaced type's name, or None (#3957 review).
+
+    A shift's PRIOR label can be more private than the current one (e.g. Private ->
+    Public), so naming it unconditionally would leak something the audience was never
+    shown. Requires ``replaced__type`` to have been select_related — an unfetched
+    ``label.replaced`` would otherwise cost one query per label.
+    """
+    replaced = label.replaced
+    if replaced is None:
+        return None
+    if audience in (TieAudience.OWNER, TieAudience.STAFF):
+        return replaced.type.name
+    allowed = (LabelAwareness.PUBLIC,) if audience == TieAudience.THIRD_PARTY else KNOWN_AWARENESS
+    return replaced.type.name if replaced.awareness in allowed else None
+
+
+def label_payload(label: RelationshipLabel, audience: str, *, is_mutual: bool) -> dict[str, Any]:
+    """The flat dict shape ``RelationshipLabelSerializer`` reads (#3957).
+
+    Never stamps ``is_mutual`` (or anything else) onto the idmapper-shared
+    ``RelationshipLabel`` instance itself — the row is a plain dict, computed fresh per
+    request. ``note`` is owner/staff-only (#3957 review); everyone else gets an empty string.
+    """
+    owner_or_staff = audience in (TieAudience.OWNER, TieAudience.STAFF)
+    return {
+        "id": label.pk,
+        "type": label.type_id,
+        "type_name": label.type.name,
+        "type_family": label.type.family,
+        "type_valence": label.type.valence,
+        "awareness": label.awareness,
+        "since": label.since,
+        "ended_at": label.ended_at,
+        "replaced_type_name": _replaced_type_name(label, audience),
+        "note": label.note if owner_or_staff else "",
+        "is_mutual": is_mutual,
+    }
+
+
+def _labels_are_mutual(
+    my_labels: Iterable[RelationshipLabel],
+    their_labels: Iterable[RelationshipLabel],
+    label_type: RelationshipType,
+    *,
+    public_only: bool,
+) -> bool:
+    """Pure-Python sibling of ``services.is_mutual`` for two already-loaded label lists.
+
+    Used by the batched page read, where both sides' labels are already prefetched — this
+    avoids the one-query-per-label cost ``services.is_mutual`` pays for a single-row read.
+    Does not replicate ``services.is_mutual``'s open-tenure gate (that gate is about roster
+    succession and RIVALS-mode consent, not about what a browsing/display page shows).
+    """
+    allowed = {LabelAwareness.PUBLIC} if public_only else set(KNOWN_AWARENESS)
+    counterpart = label_type.counterpart_or_self
+    mine = any(
+        label.type_id == label_type.pk and label.ended_at is None and label.awareness in allowed
+        for label in my_labels
+    )
+    theirs = any(
+        label.type_id == counterpart.pk and label.ended_at is None and label.awareness in allowed
+        for label in their_labels
+    )
+    return mine and theirs
+
+
+def _depth_breakdown_from(
+    side: CharacterRelationship, other: CharacterRelationship | None, audience: str
+) -> DepthBreakdown | None:
     if audience == TieAudience.THIRD_PARTY:
         return None
-    other = side.reverse
     owner_or_staff = audience in (TieAudience.OWNER, TieAudience.STAFF)
     return DepthBreakdown(
         tier=side.tier,
@@ -62,10 +169,160 @@ def depth_breakdown(side: CharacterRelationship, audience: str) -> DepthBreakdow
     )
 
 
+def depth_breakdown(side: CharacterRelationship, audience: str) -> DepthBreakdown | None:
+    if audience == TieAudience.THIRD_PARTY:
+        return None
+    return _depth_breakdown_from(side, side.reverse, audience)
+
+
+def resolve_viewer_sheet(request: Any) -> CharacterSheet | None:
+    """The caller's currently selected character's sheet, or None (plays nobody) (#3957).
+
+    Shared by the tie API (``CharacterRelationshipViewSet``) and the character sheet's Ties
+    cast (``_build_ties``) — both need "who is looking, as which of their own characters".
+    """
+    if request is None:
+        return None
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+    actor = character_for_request(request, entry_id=None)
+    if actor is None:
+        return None
+    try:
+        return actor.sheet_data
+    except ObjectDoesNotExist:
+        return None
+
+
+def entry_id_for(sheet: CharacterSheet | None) -> int | None:
+    """The sheet's ``RosterEntry`` pk, or None (no roster row, e.g. a test/NPC sheet) (#3957).
+
+    ``CharacterSheet`` has no ``roster_entry_id`` column of its own — ``roster_entry`` is the
+    reverse side of ``RosterEntry.character_sheet`` — so this reads the safe ``*_or_none``
+    accessor rather than a nonexistent shortcut attribute.
+    """
+    if sheet is None:
+        return None
+    entry = sheet.roster_entry_or_none
+    return entry.pk if entry is not None else None
+
+
+def build_tie_page(
+    sides: list[CharacterRelationship],
+    *,
+    viewer_sheet: CharacterSheet | None,
+    is_staff: bool,
+    force_audience: str | None = None,
+) -> list[dict[str, Any]]:
+    """Shape a whole page of sides for one viewer, in a small page-size-independent query
+    budget (#3957 review — batches what per-side reads used to do once per row).
+
+    Exactly three extra queries total, regardless of page size: the reverse sides (for
+    ``pair_depth``/``their_added_depth`` and mutuality), every side's newest open thread, and
+    the tier ladder. Callers should already have ``sides`` carrying, per side, a labels
+    prefetch (``Prefetch("labels", queryset=RelationshipLabel.objects.select_related("type",
+    "type__counterpart", "replaced__type"))``, ordered by ``since``) and
+    ``select_related("target", "target_companion")`` (``allocation`` too, for an
+    OWNER/STAFF-visible ``ap_this_week``) — a missing prefetch degrades to a per-side query
+    rather than erroring, so this is correct (just not batched) either way.
+
+    Returns one dict per side: ``side`` (the model instance, never mutated), ``audience``,
+    ``labels`` (a list of ``label_payload`` dicts), ``depth``, ``tier``,
+    ``next_tier_threshold``, ``breakdown``, ``ap_this_week``, ``thread``
+    (``{"level":..,"resonance_name":..}`` or None).
+    """
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    reverse_by_target: dict[int, CharacterRelationship] = {}
+    pair_q = Q()
+    for side in sides:
+        if side.target_id is not None:
+            pair_q |= Q(source_id=side.target_id, target_id=side.source_id)
+    if pair_q:
+        reverse_sides = CharacterRelationship.objects.filter(pair_q).prefetch_related(
+            Prefetch(  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
+                "labels",
+                queryset=RelationshipLabel.objects.select_related("type", "type__counterpart"),
+            )
+        )
+        reverse_by_target = {reverse.source_id: reverse for reverse in reverse_sides}
+
+    threads_by_side: dict[int, Thread] = {}
+    for thread in (
+        Thread.objects.filter(target_relationship__in=sides, retired_at__isnull=True)
+        .select_related("resonance")
+        .order_by("-level")
+    ):
+        threads_by_side.setdefault(thread.target_relationship_id, thread)
+
+    tiers_by_number = {tier.tier_number: tier for tier in RelationshipTier.objects.all()}
+
+    rows: list[dict[str, Any]] = []
+    for side in sides:
+        audience = force_audience or tie_audience(side, viewer_sheet, is_staff)
+        numbers = audience != TieAudience.THIRD_PARTY
+        reverse = reverse_by_target.get(side.target_id) if side.target_id is not None else None
+        my_labels = list(side.labels.all())
+        their_labels = list(reverse.labels.all()) if reverse is not None else []
+        visible = _labels_for_audience(my_labels, audience)
+        label_rows = [
+            label_payload(
+                label,
+                audience,
+                is_mutual=(
+                    label.ended_at is None
+                    and _labels_are_mutual(
+                        my_labels,
+                        their_labels,
+                        label.type,
+                        public_only=audience == TieAudience.THIRD_PARTY,
+                    )
+                ),
+            )
+            for label in visible
+        ]
+        next_tier = tiers_by_number.get(side.tier + 1) if numbers else None
+        ap_this_week = None
+        if audience in (TieAudience.OWNER, TieAudience.STAFF):
+            try:
+                ap_this_week = side.allocation.ap_amount
+            except ObjectDoesNotExist:
+                ap_this_week = None
+        thread = threads_by_side.get(side.pk) if numbers else None
+        rows.append(
+            {
+                "side": side,
+                "audience": audience,
+                "labels": label_rows,
+                "depth": (
+                    (side.depth + (reverse.depth if reverse is not None else 0))
+                    if numbers
+                    else None
+                ),
+                "tier": side.tier if numbers else None,
+                "next_tier_threshold": next_tier.depth_threshold if next_tier else None,
+                "breakdown": _depth_breakdown_from(side, reverse, audience),
+                "ap_this_week": ap_this_week,
+                "thread": (
+                    {"level": thread.level, "resonance_name": thread.resonance.name}
+                    if thread is not None
+                    else None
+                ),
+            }
+        )
+    return rows
+
+
 def tie_stream(
     side: CharacterRelationship, viewer_sheet: CharacterSheet | None, is_staff: bool
 ) -> list[TieStreamItem]:
-    """Entries by either side about the other (visibility-filtered) + scenes both posed in."""
+    """Entries by either side about the other (visibility-filtered) + scenes both posed in.
+
+    ``capstone_tier`` is null for a THIRD_PARTY audience — the tier number is the kind of
+    numeric relationship state a stranger never sees — but ``is_capstone`` stays visible
+    regardless: a stranger may see THAT an entry marked a capstone, just not which tier
+    (#3957 review).
+    """
     from world.journals.models import JournalEntry  # noqa: PLC0415
     from world.journals.services import visible_entries_q  # noqa: PLC0415
     from world.scenes.models import Scene  # noqa: PLC0415
@@ -73,6 +330,7 @@ def tie_stream(
     if side.target_id is None:
         return []
     a, b = side.source_id, side.target_id
+    numbers = tie_audience(side, viewer_sheet, is_staff) != TieAudience.THIRD_PARTY
     entries = (
         JournalEntry.objects.filter(visible_entries_q(viewer_sheet=viewer_sheet, is_staff=is_staff))
         .filter(Q(author_id=a, about_id=b) | Q(author_id=b, about_id=a), parent__isnull=True)
@@ -94,7 +352,8 @@ def tie_stream(
             author_name=e.author.character.db_key,
             body=e.body,
             is_public=e.is_public,
-            capstone_tier=capstone_by_entry.get(e.pk),
+            is_capstone=e.pk in capstone_by_entry,
+            capstone_tier=capstone_by_entry.get(e.pk) if numbers else None,
             created_at=e.created_at.isoformat(),
             ic_timestamp=e.ic_timestamp.isoformat() if e.ic_timestamp else None,
         )
@@ -115,6 +374,7 @@ def tie_stream(
             author_name="",
             body="",
             is_public=True,
+            is_capstone=False,
             capstone_tier=None,
             created_at=s.date_started.isoformat(),
             ic_timestamp=None,

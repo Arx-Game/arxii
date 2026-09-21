@@ -2,11 +2,10 @@
 
 from rest_framework import serializers
 
-from world.relationships.constants import LabelAwareness
+from world.relationships.constants import LabelAwareness, TieAudience
 from world.relationships.models import (
     RelationshipCapstone,
     RelationshipCondition,
-    RelationshipLabel,
     RelationshipType,
 )
 
@@ -15,6 +14,7 @@ class RelationshipConditionSerializer(serializers.ModelSerializer):
     class Meta:
         model = RelationshipCondition
         fields = ["id", "name", "description", "display_order"]
+        read_only_fields = fields
 
 
 class RelationshipTypeSerializer(serializers.ModelSerializer):
@@ -35,32 +35,30 @@ class RelationshipTypeSerializer(serializers.ModelSerializer):
             "counterpart_name",
             "display_order",
         ]
+        read_only_fields = fields
 
 
-class RelationshipLabelSerializer(serializers.ModelSerializer):
-    type_name = serializers.CharField(source="type.name", read_only=True)
-    type_family = serializers.CharField(source="type.family", read_only=True)
-    type_valence = serializers.CharField(source="type.valence", read_only=True)
-    replaced_type_name = serializers.CharField(
-        source="replaced.type.name", read_only=True, default=None
-    )
-    is_mutual = serializers.BooleanField(read_only=True)
+class RelationshipLabelSerializer(serializers.Serializer):
+    """One label, as a flat dict built by ``reads.label_payload`` (#3957 review).
 
-    class Meta:
-        model = RelationshipLabel
-        fields = [
-            "id",
-            "type",
-            "type_name",
-            "type_family",
-            "type_valence",
-            "awareness",
-            "since",
-            "ended_at",
-            "replaced_type_name",
-            "note",
-            "is_mutual",
-        ]
+    No ``source=`` indirection: the payload builder — not the model instance — computes
+    every audience-gated value (``replaced_type_name``, ``note``, ``is_mutual``), since a
+    plain model-sourced field can't express "show this only when it clears the viewer's
+    audience." Passing a ``RelationshipLabel`` instance here would also mean stamping
+    computed attributes onto an idmapper-shared row; a dict avoids that entirely.
+    """
+
+    id = serializers.IntegerField()
+    type = serializers.IntegerField()
+    type_name = serializers.CharField()
+    type_family = serializers.CharField()
+    type_valence = serializers.CharField()
+    awareness = serializers.CharField()
+    since = serializers.DateTimeField()
+    ended_at = serializers.DateTimeField(allow_null=True)
+    replaced_type_name = serializers.CharField(allow_null=True)
+    note = serializers.CharField(allow_blank=True)
+    is_mutual = serializers.BooleanField()
 
 
 class DepthBreakdownSerializer(serializers.Serializer):
@@ -87,7 +85,7 @@ class TieSerializer(serializers.Serializer):
     target_name = serializers.CharField()
     other_sheet_id = serializers.IntegerField(allow_null=True)
     other_entry_id = serializers.IntegerField(allow_null=True)
-    audience = serializers.CharField()
+    audience = serializers.ChoiceField(choices=TieAudience.choices)
     labels = RelationshipLabelSerializer(many=True)
     depth = serializers.IntegerField(allow_null=True)
     next_tier_threshold = serializers.IntegerField(allow_null=True)
@@ -106,9 +104,20 @@ class TieStreamItemSerializer(serializers.Serializer):
     author_name = serializers.CharField(allow_blank=True)
     body = serializers.CharField(allow_blank=True)
     is_public = serializers.BooleanField()
+    is_capstone = serializers.BooleanField()
     capstone_tier = serializers.IntegerField(allow_null=True)
     created_at = serializers.CharField()
     ic_timestamp = serializers.CharField(allow_null=True)
+
+
+class TieWriteResultSerializer(serializers.Serializer):
+    """The honest shape every tie write action returns (#3957 review) — used only for the
+    OpenAPI schema; the views build this dict by hand (``success``/``message``/``data``).
+    """
+
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = serializers.DictField()
 
 
 class RelationshipCapstoneSerializer(serializers.ModelSerializer):
@@ -130,6 +139,7 @@ class RelationshipCapstoneSerializer(serializers.ModelSerializer):
             "is_ritual_capstone",
             "created_at",
         ]
+        read_only_fields = fields
 
 
 class RelationshipTargetWriteSerializer(serializers.Serializer):

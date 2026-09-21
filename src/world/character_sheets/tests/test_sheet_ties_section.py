@@ -1,5 +1,7 @@
 """The sheet's Ties cast (#3957): per-viewer cards on ``GET /api/character-sheets/{pk}/``."""
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
@@ -71,3 +73,43 @@ class SheetTiesSectionTests(APITestCase):
         card = self._card(cards, self.ac.pk)
         self.assertIsNone(card["depth"])
         self.assertIsNone(card["tier"])
+
+    def test_staff_sees_both_cards_with_numbers(self):
+        staff = AccountFactory(is_staff=True)
+        cards = self._ties(self.a, staff)
+        ids = {card["relationship_id"] for card in cards}
+        self.assertEqual(ids, {self.ab.pk, self.ac.pk})
+        for card in cards:
+            self.assertIsNotNone(card["depth"])
+
+    def test_cast_query_budget_stays_flat_as_ties_grow(self):
+        """``_build_ties`` batches via ``reads.build_tie_page`` (#3957 review): adding five
+        more ties to the two already on ``self.a`` costs at most a small, flat handful of
+        extra queries on top of the whole sheet payload — not one query per added tie.
+
+        A throwaway warm-up call primes the identity map (Gender/Pronouns/lookup-table
+        singletons etc.) for both measurements equally — without it, the second (7-tie)
+        call can come back CHEAPER than the first purely from caching, masking whatever the
+        added ties actually cost.
+        """
+        self.client.force_authenticate(user=self.owner)
+        url = f"/api/character-sheets/{self.a.pk}/"
+        self.client.get(url)  # warm-up: prime the identity map, not measured
+
+        with CaptureQueriesContext(connection) as baseline_ctx:
+            self.client.get(url)
+        baseline = len(baseline_ctx.captured_queries)
+
+        for i in range(5):
+            target = CharacterSheetFactory()
+            side = get_or_create_side(source=self.a, target=target)
+            side.scene_depth = 10 * i
+            side.save()
+            declare_label(side=side, type=self.lover, awareness=LabelAwareness.PUBLIC)
+
+        with CaptureQueriesContext(connection) as grown_ctx:
+            response = self.client.get(url)
+        grown = len(grown_ctx.captured_queries)
+
+        self.assertEqual(len(response.data["ties"]), 7)
+        self.assertLessEqual(grown - baseline, 8)

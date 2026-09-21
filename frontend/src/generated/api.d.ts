@@ -18428,7 +18428,8 @@ export interface paths {
      *     Bypasses ``get_queryset()`` (own-sides-only) deliberately: any authenticated
      *     viewer may look up any side by pk, and ``tie_audience`` + ``third_party_can_see``
      *     decide what comes back — a third party with no open Public label gets a 404, not
-     *     a 403, so a tie's mere existence is never leaked.
+     *     a 403, so a tie's mere existence is never leaked. A companion-target side 404s for
+     *     anyone but the owner or staff, regardless of label visibility.
      */
     get: operations['relationships_relationships_retrieve'];
     put?: never;
@@ -24607,6 +24608,11 @@ export interface components {
       probing_threshold?: number | null;
       position_id?: number | null;
     };
+    AdvanceWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      journal_entry_id: number;
+    };
     /** @description Schema-only shape of the beat line in an aftermath digest (#3551). */
     AftermathBeat: {
       outcome: string;
@@ -24655,6 +24661,11 @@ export interface components {
       readonly source_note: string;
       /** Format: date-time */
       readonly recorded_at: string;
+    };
+    AllocationWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      ap_amount: number;
     };
     /** @description Write serializer for resolving a PendingAlteration. */
     AlterationResolutionRequest: {
@@ -24864,6 +24875,14 @@ export interface components {
       offer_id: number;
       accept: boolean;
     };
+    /**
+     * @description * `owner` - Owner
+     *     * `other_side` - Other side
+     *     * `third_party` - Third party
+     *     * `staff` - Staff
+     * @enum {string}
+     */
+    AudienceEnum: 'owner' | 'other_side' | 'third_party' | 'staff';
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     AuthoredSecret: {
       readonly id: number;
@@ -24948,6 +24967,10 @@ export interface components {
      * @enum {string}
      */
     AwarenessEnum: 'private' | 'clandestine' | 'public';
+    AwarenessWriteRequest: {
+      label_id: number;
+      awareness: components['schemas']['AwarenessEnum'];
+    };
     /**
      * @description * `TONE` - Tone
      *     * `CONSEQUENCE` - Consequence
@@ -28391,6 +28414,13 @@ export interface components {
      * @enum {string}
      */
     DecisionEnum: 'accept' | 'deny';
+    DeclareWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      type_id: number;
+      /** @default private */
+      awareness: components['schemas']['AwarenessEnum'];
+    };
     /**
      * @description * `none` - None
      *     * `low` - Low
@@ -28488,14 +28518,6 @@ export interface components {
      */
     DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
     DepthBreakdown: {
-      tier: number;
-      scenes: number;
-      invested: number;
-      their_added_depth: number;
-      affection: number | null;
-      conflict: number | null;
-    };
-    DepthBreakdownRequest: {
       tier: number;
       scenes: number;
       invested: number;
@@ -32545,6 +32567,9 @@ export interface components {
       | 'cousin'
       | 'past-incarnation'
       | 'later-incarnation';
+    LabelWriteRequest: {
+      label_id: number;
+    };
     LedgerRow: {
       id: number;
       amount: number;
@@ -38434,21 +38459,6 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Tie'][];
     };
-    PaginatedTieStreamItemList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['TieStreamItem'][];
-    };
     PaginatedTransitionList: {
       /** @example 123 */
       count: number;
@@ -42196,48 +42206,48 @@ export interface components {
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
     RelationshipCapstone: {
       readonly id: number;
-      relationship: number;
-      journal_entry?: number | null;
+      readonly relationship: number;
+      readonly journal_entry: number | null;
       readonly journal_entry_title: string;
       readonly title: string;
-      tier_claimed?: number;
-      xp_spent?: number;
-      is_ritual_capstone?: boolean;
+      readonly tier_claimed: number;
+      readonly xp_spent: number;
+      readonly is_ritual_capstone: boolean;
       /** Format: date-time */
       readonly created_at: string;
     };
     RelationshipCondition: {
       readonly id: number;
       /** @description Condition name (e.g., 'Attracted To', 'Fears', 'Trusts') */
-      name: string;
+      readonly name: string;
       /** @description Description of what this condition represents */
-      description?: string;
+      readonly description: string;
       /** @description Order for display purposes (lower values appear first) */
-      display_order?: number;
+      readonly display_order: number;
     };
+    /**
+     * @description One label, as a flat dict built by ``reads.label_payload`` (#3957 review).
+     *
+     *     No ``source=`` indirection: the payload builder — not the model instance — computes
+     *     every audience-gated value (``replaced_type_name``, ``note``, ``is_mutual``), since a
+     *     plain model-sourced field can't express "show this only when it clears the viewer's
+     *     audience." Passing a ``RelationshipLabel`` instance here would also mean stamping
+     *     computed attributes onto an idmapper-shared row; a dict avoids that entirely.
+     */
     RelationshipLabel: {
-      readonly id: number;
+      id: number;
       type: number;
-      readonly type_name: string;
-      readonly type_family: string;
-      readonly type_valence: string;
-      awareness?: components['schemas']['AwarenessEnum'];
+      type_name: string;
+      type_family: string;
+      type_valence: string;
+      awareness: string;
       /** Format: date-time */
-      since?: string;
+      since: string;
       /** Format: date-time */
-      ended_at?: string | null;
-      readonly replaced_type_name: string;
-      note?: string;
-      readonly is_mutual: boolean;
-    };
-    RelationshipLabelRequest: {
-      type: number;
-      awareness?: components['schemas']['AwarenessEnum'];
-      /** Format: date-time */
-      since?: string;
-      /** Format: date-time */
-      ended_at?: string | null;
-      note?: string;
+      ended_at: string | null;
+      replaced_type_name: string | null;
+      note: string;
+      is_mutual: boolean;
     };
     RelationshipLine: {
       other_being: number;
@@ -42262,17 +42272,17 @@ export interface components {
     RelationshipType: {
       readonly id: number;
       /** @description Type name, e.g. 'Rival'. */
-      name: string;
+      readonly name: string;
       /** @description URL-safe identifier. */
-      slug: string;
+      readonly slug: string;
       /** @description The one line shown in the picker. PLACEHOLDER copy. */
-      description?: string;
-      family?: components['schemas']['FamilyEnum'];
-      valence?: components['schemas']['RelationshipTypeValenceEnum'];
+      readonly description: string;
+      readonly family: components['schemas']['FamilyEnum'];
+      readonly valence: components['schemas']['RelationshipTypeValenceEnum'];
       /** @description The type the other side must hold for this label to be mutual; null = itself. */
-      counterpart?: number | null;
+      readonly counterpart: number | null;
       readonly counterpart_name: string;
-      display_order?: number;
+      readonly display_order: number;
     };
     /**
      * @description * `warm` - Warm
@@ -43621,6 +43631,12 @@ export interface components {
     /** @description POST body for the alternate-self shift endpoint. */
     ShiftFormRequestRequest: {
       alternate_self_id: number;
+    };
+    ShiftWriteRequest: {
+      label_id: number;
+      new_type_id: number;
+      /** @default  */
+      note: string;
     };
     /**
      * @description Read-shape for a ship on the player's "My Ships" view.
@@ -45336,6 +45352,11 @@ export interface components {
      * @enum {string}
      */
     SumTierEnum: 'minor' | 'fair' | 'great';
+    SummaryWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      summary: string;
+    };
     /** @description POST body for responding to a summons. */
     SummonsRespondRequest: {
       accept: boolean;
@@ -46267,7 +46288,7 @@ export interface components {
       target_name: string;
       other_sheet_id: number | null;
       other_entry_id: number | null;
-      audience: string;
+      audience: components['schemas']['AudienceEnum'];
       labels: components['schemas']['RelationshipLabel'][];
       depth: number | null;
       next_tier_threshold: number | null;
@@ -46275,25 +46296,6 @@ export interface components {
       summary: string;
       ap_this_week: number | null;
       thread: components['schemas']['TieThread'] | null;
-      is_soul_tether: boolean;
-    };
-    /** @description One side of a tie, shaped for the viewer's audience (built in the viewset). */
-    TieRequest: {
-      id: number;
-      source: number;
-      target: number | null;
-      target_companion: number | null;
-      target_name: string;
-      other_sheet_id: number | null;
-      other_entry_id: number | null;
-      audience: string;
-      labels: components['schemas']['RelationshipLabelRequest'][];
-      depth: number | null;
-      next_tier_threshold: number | null;
-      breakdown: components['schemas']['DepthBreakdownRequest'] | null;
-      summary: string;
-      ap_this_week: number | null;
-      thread: components['schemas']['TieThreadRequest'] | null;
       is_soul_tether: boolean;
     };
     TieStreamItem: {
@@ -46304,6 +46306,7 @@ export interface components {
       author_name: string;
       body: string;
       is_public: boolean;
+      is_capstone: boolean;
       capstone_tier: number | null;
       created_at: string;
       ic_timestamp: string | null;
@@ -46312,9 +46315,16 @@ export interface components {
       level: number;
       resonance_name: string;
     };
-    TieThreadRequest: {
-      level: number;
-      resonance_name: string;
+    /**
+     * @description The honest shape every tie write action returns (#3957 review) — used only for the
+     *     OpenAPI schema; the views build this dict by hand (``success``/``message``/``data``).
+     */
+    TieWriteResult: {
+      success: boolean;
+      message: string;
+      data: {
+        [key: string]: unknown;
+      };
     };
     /**
      * @description * `1` - Cosmetic Touch
@@ -73113,6 +73123,8 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        target?: number;
+        target_companion?: number;
       };
       header?: never;
       path?: never;
@@ -73155,10 +73167,8 @@ export interface operations {
   relationships_relationships_stream_list: {
     parameters: {
       query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
+        target?: number;
+        target_companion?: number;
       };
       header?: never;
       path: {
@@ -73174,7 +73184,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedTieStreamItemList'];
+          'application/json': components['schemas']['TieStreamItem'][];
         };
       };
     };
@@ -73188,7 +73198,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TieRequest'];
+        'application/json': components['schemas']['AdvanceWriteRequest'];
       };
     };
     responses: {
@@ -73197,7 +73207,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tie'];
+          'application/json': components['schemas']['TieWriteResult'];
         };
       };
     };
@@ -73211,7 +73221,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TieRequest'];
+        'application/json': components['schemas']['AllocationWriteRequest'];
       };
     };
     responses: {
@@ -73220,7 +73230,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tie'];
+          'application/json': components['schemas']['TieWriteResult'];
         };
       };
     };
@@ -73234,7 +73244,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TieRequest'];
+        'application/json': components['schemas']['AwarenessWriteRequest'];
       };
     };
     responses: {
@@ -73243,7 +73253,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tie'];
+          'application/json': components['schemas']['TieWriteResult'];
         };
       };
     };
@@ -73257,7 +73267,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TieRequest'];
+        'application/json': components['schemas']['DeclareWriteRequest'];
       };
     };
     responses: {
@@ -73266,7 +73276,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tie'];
+          'application/json': components['schemas']['TieWriteResult'];
         };
       };
     };
@@ -73280,7 +73290,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TieRequest'];
+        'application/json': components['schemas']['LabelWriteRequest'];
       };
     };
     responses: {
@@ -73289,7 +73299,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tie'];
+          'application/json': components['schemas']['TieWriteResult'];
         };
       };
     };
@@ -73303,7 +73313,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TieRequest'];
+        'application/json': components['schemas']['ShiftWriteRequest'];
       };
     };
     responses: {
@@ -73312,7 +73322,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tie'];
+          'application/json': components['schemas']['TieWriteResult'];
         };
       };
     };
@@ -73326,7 +73336,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TieRequest'];
+        'application/json': components['schemas']['SummaryWriteRequest'];
       };
     };
     responses: {
@@ -73335,7 +73345,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tie'];
+          'application/json': components['schemas']['TieWriteResult'];
         };
       };
     };

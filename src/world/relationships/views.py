@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -26,11 +25,12 @@ from world.relationships.models import (
     RelationshipType,
 )
 from world.relationships.reads import (
-    depth_breakdown,
+    build_tie_page,
+    entry_id_for,
+    resolve_viewer_sheet,
     third_party_can_see,
     tie_audience,
     tie_stream,
-    visible_labels,
 )
 from world.relationships.serializers import (
     AdvanceWriteSerializer,
@@ -45,10 +45,20 @@ from world.relationships.serializers import (
     SummaryWriteSerializer,
     TieSerializer,
     TieStreamItemSerializer,
+    TieWriteResultSerializer,
 )
-from world.relationships.services import is_mutual
 
 NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
+
+# Sides prefetched for a batched read (#3957 review): labels ordered + select_related for
+# label_payload's replaced_type_name gate, plus the relations build_tie_page/_row_to_payload
+# read directly off each side.
+_LABELS_PREFETCH = Prefetch(
+    "labels",
+    queryset=RelationshipLabel.objects.select_related(
+        "type", "type__counterpart", "replaced__type"
+    ).order_by("since"),
+)
 
 
 class RelationshipConditionViewSet(ReadOnlyModelViewSet):
@@ -112,17 +122,21 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
 class CharacterRelationshipViewSet(GenericViewSet):
     """One tie per audience: list is the caller's own sides; retrieve shapes by viewer (#3957).
 
-    ``list`` and ``retrieve`` both emit ``TieSerializer`` rows built by ``_tie_payload``,
-    but from different starting points: ``list`` scopes to the caller's own outbound
-    sides (always audience OWNER — it's only ever the caller's own data), while
-    ``retrieve`` accepts any pk and computes the viewer's actual audience, 404ing for a
-    third party with no public label (so existence is never leaked). The seven POST
-    actions converge on ``actions.definitions.relationships`` — the one seam telnet and
-    the web share (``action.run()``).
+    ``list`` and ``retrieve`` both emit ``TieSerializer`` rows built by
+    ``reads.build_tie_page`` (batched even for ``retrieve``'s one-row page — same query cost,
+    one shared implementation), but from different starting points: ``list`` scopes to the
+    caller's own outbound sides (always audience OWNER — it's only ever the caller's own
+    data), while ``retrieve`` accepts any pk and computes the viewer's actual audience,
+    404ing for a third party with no public label, and for anyone but the owner/staff on a
+    companion-target side (no second player to name on a public card). The seven POST
+    actions converge on ``actions.definitions.relationships`` — the one seam telnet and the
+    web share (``action.run()``).
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = TieSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["target", "target_companion"]
 
     # drf-spectacular sets this to True on the view instance while generating the
     # schema. Declaring the default here keeps get_queryset's guard a plain attribute
@@ -135,7 +149,8 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         drf-spectacular introspects the filterset by calling ``get_queryset()`` with an
         anonymous dummy request; without this guard the user-filter would explode
-        during schema generation.
+        during schema generation. select_related/prefetch here is what makes ``list``'s
+        page a fixed query count rather than one label/allocation/thread lookup per row.
         """
         if self.swagger_fake_view:
             return CharacterRelationship.objects.none()
@@ -147,12 +162,15 @@ class CharacterRelationshipViewSet(GenericViewSet):
             )
             .distinct()
             .select_related(
-                "source", "source__character", "target", "target__character", "target_companion"
+                "source",
+                "source__character",
+                "target",
+                "target__character",
+                "target__roster_entry",
+                "target_companion",
+                "allocation",
             )
-            .prefetch_related(
-                "labels__type",  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
-                "labels__type__counterpart",  # noqa: PREFETCH_STRING
-            )
+            .prefetch_related(_LABELS_PREFETCH)
         )
 
     @extend_schema(responses=TieSerializer)
@@ -160,8 +178,11 @@ class CharacterRelationshipViewSet(GenericViewSet):
         """The caller's own outbound sides, always shaped as their OWNER view."""
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
-        sides = page if page is not None else queryset
-        data = [self._tie_payload(side, TieAudience.OWNER) for side in sides]
+        sides = list(page if page is not None else queryset)
+        rows = build_tie_page(
+            sides, viewer_sheet=None, is_staff=False, force_audience=TieAudience.OWNER
+        )
+        data = [self._row_to_payload(row) for row in rows]
         serializer = TieSerializer(data, many=True)
         if page is not None:
             return self.get_paginated_response(serializer.data)
@@ -174,7 +195,8 @@ class CharacterRelationshipViewSet(GenericViewSet):
         Bypasses ``get_queryset()`` (own-sides-only) deliberately: any authenticated
         viewer may look up any side by pk, and ``tie_audience`` + ``third_party_can_see``
         decide what comes back — a third party with no open Public label gets a 404, not
-        a 403, so a tie's mere existence is never leaked.
+        a 403, so a tie's mere existence is never leaked. A companion-target side 404s for
+        anyone but the owner or staff, regardless of label visibility.
         """
         side = (
             CharacterRelationship.objects.select_related(
@@ -183,21 +205,31 @@ class CharacterRelationshipViewSet(GenericViewSet):
                 "target",
                 "target__character",
                 "target_companion",
+                "allocation",
             )
+            .prefetch_related(_LABELS_PREFETCH)
             .filter(pk=pk)
             .first()
         )
         if side is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        viewer_sheet = self._viewer_sheet(request)
+        viewer_sheet = resolve_viewer_sheet(request)
         is_staff = bool(request.user.is_staff)
         audience = tie_audience(side, viewer_sheet, is_staff)
         if audience == TieAudience.THIRD_PARTY and not third_party_can_see(side):
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(TieSerializer(self._tie_payload(side, audience)).data)
+        if side.target_companion_id is not None and audience not in (
+            TieAudience.OWNER,
+            TieAudience.STAFF,
+        ):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        row = build_tie_page(
+            [side], viewer_sheet=viewer_sheet, is_staff=is_staff, force_audience=audience
+        )[0]
+        return Response(TieSerializer(self._row_to_payload(row)).data)
 
     @extend_schema(responses=TieStreamItemSerializer(many=True))
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get"], pagination_class=None)
     def stream(self, request, pk=None):
         """Journal entries and shared scenes between the two sides, viewer-filtered."""
         side = (
@@ -205,50 +237,24 @@ class CharacterRelationshipViewSet(GenericViewSet):
         )
         if side is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        viewer_sheet = self._viewer_sheet(request)
+        viewer_sheet = resolve_viewer_sheet(request)
         is_staff = bool(request.user.is_staff)
         audience = tie_audience(side, viewer_sheet, is_staff)
         if audience == TieAudience.THIRD_PARTY and not third_party_can_see(side):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if side.target_companion_id is not None and audience not in (
+            TieAudience.OWNER,
+            TieAudience.STAFF,
+        ):
             return Response(status=status.HTTP_404_NOT_FOUND)
         items = tie_stream(side, viewer_sheet, is_staff)
         return Response(TieStreamItemSerializer(items, many=True).data)
 
     # -- shared read-side plumbing ------------------------------------------------
 
-    def _viewer_sheet(self, request) -> Any:
-        """The caller's currently selected character's sheet, or None (plays nobody)."""
-        from world.roster.services.selection import character_for_request  # noqa: PLC0415
-
-        actor = character_for_request(request, entry_id=None)
-        if actor is None:
-            return None
-        try:
-            return actor.sheet_data
-        except ObjectDoesNotExist:
-            return None
-
-    def _tie_payload(self, side: CharacterRelationship, audience: str) -> dict[str, Any]:
-        """Shape one side into the ``TieSerializer`` dict for the given audience."""
-        from world.magic.models import Thread  # noqa: PLC0415
-
-        labels = []
-        for label in visible_labels(side, audience):
-            label.is_mutual = is_mutual(side, label.type) if label.ended_at is None else False
-            labels.append(label)
-        numbers = audience != TieAudience.THIRD_PARTY
-        next_tier = side.next_tier()
-        ap_this_week = None
-        if audience in (TieAudience.OWNER, TieAudience.STAFF):
-            try:
-                ap_this_week = side.allocation.ap_amount
-            except ObjectDoesNotExist:
-                ap_this_week = None
-        thread = (
-            Thread.objects.filter(target_relationship=side, retired_at__isnull=True)
-            .select_related("resonance")
-            .order_by("-level")
-            .first()
-        )
+    def _row_to_payload(self, row: dict[str, Any]) -> dict[str, Any]:
+        """A ``build_tie_page`` row plus the side's own scalars, in ``TieSerializer``'s shape."""
+        side = row["side"]
         return {
             "id": side.pk,
             "source": side.source_id,
@@ -256,21 +262,15 @@ class CharacterRelationshipViewSet(GenericViewSet):
             "target_companion": side.target_companion_id,
             "target_name": side.target_name,
             "other_sheet_id": side.target_id,
-            "other_entry_id": _entry_id_for(side.target),
-            "audience": audience,
-            "labels": labels,
-            "depth": side.pair_depth() if numbers else None,
-            "next_tier_threshold": (next_tier.depth_threshold if next_tier else None)
-            if numbers
-            else None,
-            "breakdown": depth_breakdown(side, audience),
+            "other_entry_id": entry_id_for(side.target),
+            "audience": row["audience"],
+            "labels": row["labels"],
+            "depth": row["depth"],
+            "next_tier_threshold": row["next_tier_threshold"],
+            "breakdown": row["breakdown"],
             "summary": side.summary,
-            "ap_this_week": ap_this_week,
-            "thread": (
-                {"level": thread.level, "resonance_name": thread.resonance.name}
-                if thread is not None
-                else None
-            ),
+            "ap_this_week": row["ap_this_week"],
+            "thread": row["thread"],
             "is_soul_tether": side.is_soul_tether,
         }
 
@@ -278,6 +278,8 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
     def _resolve_actor(self, request):
         """Return the caller's selected character if they own its sheet."""
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
         from world.roster.services.selection import character_for_request  # noqa: PLC0415
 
         actor = character_for_request(request, entry_id=None)
@@ -314,25 +316,11 @@ class CharacterRelationshipViewSet(GenericViewSet):
         if data.get("target_persona_id") is not None:
             persona = self._resolve_target_sheet(data["target_persona_id"])
             if persona is None:
-                return (
-                    None,
-                    None,
-                    Response(
-                        {"success": False, "message": "Target persona not found."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    ),
-                )
+                return None, None, self._error_response("Target persona not found.")
             return persona.character_sheet, None, None
         companion = self._resolve_target_companion(data["target_companion_id"])
         if companion is None:
-            return (
-                None,
-                None,
-                Response(
-                    {"success": False, "message": "Target companion not found."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                ),
-            )
+            return None, None, self._error_response("Target companion not found.")
         return None, companion, None
 
     def _resolve_label(self, label_id: int):
@@ -342,19 +330,28 @@ class CharacterRelationshipViewSet(GenericViewSet):
             .first()
         )
 
+    def _error_response(self, message: str) -> Response:
+        return Response(
+            {"success": False, "message": message, "data": {}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     def _result_response(self, result) -> Response:
         if not result.success:
-            return Response(
-                {"success": False, "message": result.message}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return self._error_response(result.message)
         return Response(
             {"success": True, "message": result.message, "data": result.data or {}},
             status=status.HTTP_200_OK,
         )
 
-    def _no_actor_response(self, error: str) -> Response:
-        return Response({"success": False, "message": error}, status=status.HTTP_400_BAD_REQUEST)
+    def _validation_error_response(self, serializer) -> Response:
+        """Wrap DRF's field-dict validation errors into the same honest write shape (#3957
+        review) — a caller reads one ``message``, not a per-field error tree.
+        """
+        first_field_errors = next(iter(serializer.errors.values()))
+        return self._error_response(str(first_field_errors[0]))
 
+    @extend_schema(request=DeclareWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
     def declare(self, request):
         """Name a type on the caller's side of a tie (#3957)."""
@@ -362,18 +359,17 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return self._no_actor_response(error)
+            return self._error_response(error)
         serializer = DeclareWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
         target_sheet, target_companion, err = self._resolve_target(data)
         if err is not None:
             return err
         rel_type = RelationshipType.objects.filter(pk=data["type_id"]).first()
         if rel_type is None:
-            return Response(
-                {"success": False, "message": "Unknown type."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return self._error_response("Unknown type.")
         result = DeclareLabelAction().run(
             actor=actor,
             target_sheet=target_sheet,
@@ -383,6 +379,7 @@ class CharacterRelationshipViewSet(GenericViewSet):
         )
         return self._result_response(result)
 
+    @extend_schema(request=ShiftWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
     def shift(self, request):
         """Change one label into another (#3957)."""
@@ -390,26 +387,23 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return self._no_actor_response(error)
+            return self._error_response(error)
         serializer = ShiftWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
         label = self._resolve_label(data["label_id"])
         if label is None:
-            return Response(
-                {"success": False, "message": "Label not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return self._error_response("Label not found.")
         new_type = RelationshipType.objects.filter(pk=data["new_type_id"]).first()
         if new_type is None:
-            return Response(
-                {"success": False, "message": "Unknown type."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return self._error_response("Unknown type.")
         result = ShiftLabelAction().run(
             actor=actor, label=label, new_type=new_type, note=data.get("note", "")
         )
         return self._result_response(result)
 
+    @extend_schema(request=LabelWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
     def end(self, request):
         """End an open label; it shows as former from then on (#3957)."""
@@ -417,19 +411,18 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return self._no_actor_response(error)
+            return self._error_response(error)
         serializer = LabelWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
         label = self._resolve_label(data["label_id"])
         if label is None:
-            return Response(
-                {"success": False, "message": "Label not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return self._error_response("Label not found.")
         result = EndLabelAction().run(actor=actor, label=label)
         return self._result_response(result)
 
+    @extend_schema(request=AwarenessWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
     def awareness(self, request):
         """Move a label's awareness forward (#3957)."""
@@ -437,21 +430,20 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return self._no_actor_response(error)
+            return self._error_response(error)
         serializer = AwarenessWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
         label = self._resolve_label(data["label_id"])
         if label is None:
-            return Response(
-                {"success": False, "message": "Label not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return self._error_response("Label not found.")
         result = AdvanceLabelAwarenessAction().run(
             actor=actor, label=label, awareness=data["awareness"]
         )
         return self._result_response(result)
 
+    @extend_schema(request=AllocationWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
     def allocation(self, request):
         """Set this week's AP toward one side of a tie (#3957)."""
@@ -459,9 +451,10 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return self._no_actor_response(error)
+            return self._error_response(error)
         serializer = AllocationWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
         target_sheet, target_companion, err = self._resolve_target(data)
         if err is not None:
@@ -474,6 +467,7 @@ class CharacterRelationshipViewSet(GenericViewSet):
         )
         return self._result_response(result)
 
+    @extend_schema(request=AdvanceWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
     def advance(self, request):
         """Claim the next tier with a capstone journal entry and XP (#3957)."""
@@ -482,24 +476,23 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return self._no_actor_response(error)
+            return self._error_response(error)
         serializer = AdvanceWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
         target_sheet, _target_companion, err = self._resolve_target(data)
         if err is not None:
             return err
         entry = JournalEntry.objects.filter(pk=data["journal_entry_id"]).first()
         if entry is None:
-            return Response(
-                {"success": False, "message": "Entry not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return self._error_response("Entry not found.")
         result = AdvanceRelationshipTierAction().run(
             actor=actor, target_sheet=target_sheet, journal_entry=entry
         )
         return self._result_response(result)
 
+    @extend_schema(request=SummaryWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
     def summary(self, request):
         """Set the player's own paragraph on one side of a tie (#3957)."""
@@ -507,9 +500,10 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return self._no_actor_response(error)
+            return self._error_response(error)
         serializer = SummaryWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
         target_sheet, target_companion, err = self._resolve_target(data)
         if err is not None:
@@ -521,16 +515,3 @@ class CharacterRelationshipViewSet(GenericViewSet):
             summary=data["summary"],
         )
         return self._result_response(result)
-
-
-def _entry_id_for(sheet: Any) -> int | None:
-    """The sheet's ``RosterEntry`` pk, or None (no roster row, e.g. a test/NPC sheet).
-
-    ``CharacterSheet`` has no ``roster_entry_id`` column of its own — ``roster_entry``
-    is the reverse side of ``RosterEntry.character_sheet`` — so this reads the safe
-    ``*_or_none`` accessor rather than a nonexistent shortcut attribute.
-    """
-    if sheet is None:
-        return None
-    entry = sheet.roster_entry_or_none
-    return entry.pk if entry is not None else None

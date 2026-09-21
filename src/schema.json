@@ -29849,6 +29849,14 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: target
+        schema:
+          type: integer
+      - in: query
+        name: target_companion
+        schema:
+          type: integer
       tags:
       - relationships
       security:
@@ -29869,7 +29877,8 @@ paths:
         Bypasses ``get_queryset()`` (own-sides-only) deliberately: any authenticated
         viewer may look up any side by pk, and ``tie_audience`` + ``third_party_can_see``
         decide what comes back — a third party with no open Public label gets a 404, not
-        a 403, so a tie's mere existence is never leaked.
+        a 403, so a tie's mere existence is never leaked. A companion-target side 404s for
+        anyone but the owner or staff, regardless of label visibility.
       parameters:
       - in: path
         name: id
@@ -29899,16 +29908,12 @@ paths:
           type: integer
         description: A unique integer value identifying this character relationship.
         required: true
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
+      - in: query
+        name: target
         schema:
           type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
+      - in: query
+        name: target_companion
         schema:
           type: integer
       tags:
@@ -29920,7 +29925,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedTieStreamItemList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/TieStreamItem'
           description: ''
   /api/relationships/relationships/advance/:
     post:
@@ -29932,7 +29939,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TieRequest'
+              $ref: '#/components/schemas/AdvanceWriteRequest'
         required: true
       security:
       - cookieAuth: []
@@ -29941,7 +29948,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tie'
+                $ref: '#/components/schemas/TieWriteResult'
           description: ''
   /api/relationships/relationships/allocation/:
     post:
@@ -29953,7 +29960,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TieRequest'
+              $ref: '#/components/schemas/AllocationWriteRequest'
         required: true
       security:
       - cookieAuth: []
@@ -29962,7 +29969,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tie'
+                $ref: '#/components/schemas/TieWriteResult'
           description: ''
   /api/relationships/relationships/awareness/:
     post:
@@ -29974,7 +29981,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TieRequest'
+              $ref: '#/components/schemas/AwarenessWriteRequest'
         required: true
       security:
       - cookieAuth: []
@@ -29983,7 +29990,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tie'
+                $ref: '#/components/schemas/TieWriteResult'
           description: ''
   /api/relationships/relationships/declare/:
     post:
@@ -29995,7 +30002,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TieRequest'
+              $ref: '#/components/schemas/DeclareWriteRequest'
         required: true
       security:
       - cookieAuth: []
@@ -30004,7 +30011,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tie'
+                $ref: '#/components/schemas/TieWriteResult'
           description: ''
   /api/relationships/relationships/end/:
     post:
@@ -30016,7 +30023,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TieRequest'
+              $ref: '#/components/schemas/LabelWriteRequest'
         required: true
       security:
       - cookieAuth: []
@@ -30025,7 +30032,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tie'
+                $ref: '#/components/schemas/TieWriteResult'
           description: ''
   /api/relationships/relationships/shift/:
     post:
@@ -30037,7 +30044,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TieRequest'
+              $ref: '#/components/schemas/ShiftWriteRequest'
         required: true
       security:
       - cookieAuth: []
@@ -30046,7 +30053,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tie'
+                $ref: '#/components/schemas/TieWriteResult'
           description: ''
   /api/relationships/relationships/summary/:
     post:
@@ -30058,7 +30065,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TieRequest'
+              $ref: '#/components/schemas/SummaryWriteRequest'
         required: true
       security:
       - cookieAuth: []
@@ -30067,7 +30074,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tie'
+                $ref: '#/components/schemas/TieWriteResult'
           description: ''
   /api/relationships/types/:
     get:
@@ -40162,6 +40169,17 @@ components:
       - name
       - threat_pool_id
       - tier
+    AdvanceWriteRequest:
+      type: object
+      properties:
+        target_persona_id:
+          type: integer
+        target_companion_id:
+          type: integer
+        journal_entry_id:
+          type: integer
+      required:
+      - journal_entry_id
     AftermathBeat:
       type: object
       description: Schema-only shape of the beat line in an aftermath digest (#3551).
@@ -40296,6 +40314,18 @@ components:
       - recorded_at
       - roster_entry
       - source_note
+    AllocationWriteRequest:
+      type: object
+      properties:
+        target_persona_id:
+          type: integer
+        target_companion_id:
+          type: integer
+        ap_amount:
+          type: integer
+          minimum: 0
+      required:
+      - ap_amount
     AlterationResolutionRequest:
       type: object
       description: Write serializer for resolving a PendingAlteration.
@@ -40748,6 +40778,18 @@ components:
       required:
       - accept
       - offer_id
+    AudienceEnum:
+      enum:
+      - owner
+      - other_side
+      - third_party
+      - staff
+      type: string
+      description: |-
+        * `owner` - Owner
+        * `other_side` - Other side
+        * `third_party` - Third party
+        * `staff` - Staff
     AuthoredSecret:
       type: object
       description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.
@@ -40910,6 +40952,16 @@ components:
         * `private` - Private
         * `clandestine` - Clandestine
         * `public` - Public
+    AwarenessWriteRequest:
+      type: object
+      properties:
+        label_id:
+          type: integer
+        awareness:
+          $ref: '#/components/schemas/AwarenessEnum'
+      required:
+      - awareness
+      - label_id
     AxisEnum:
       enum:
       - TONE
@@ -48263,6 +48315,21 @@ components:
       description: |-
         * `accept` - Accept
         * `deny` - Deny
+    DeclareWriteRequest:
+      type: object
+      properties:
+        target_persona_id:
+          type: integer
+        target_companion_id:
+          type: integer
+        type_id:
+          type: integer
+        awareness:
+          allOf:
+          - $ref: '#/components/schemas/AwarenessEnum'
+          default: private
+      required:
+      - type_id
     DeclaredRiskEnum:
       enum:
       - none
@@ -48457,30 +48524,6 @@ components:
         * `table_talk` - Table talk (your place)
         * `mutter` - Mutter (partial echo)
     DepthBreakdown:
-      type: object
-      properties:
-        tier:
-          type: integer
-        scenes:
-          type: integer
-        invested:
-          type: integer
-        their_added_depth:
-          type: integer
-        affection:
-          type: integer
-          nullable: true
-        conflict:
-          type: integer
-          nullable: true
-      required:
-      - affection
-      - conflict
-      - invested
-      - scenes
-      - their_added_depth
-      - tier
-    DepthBreakdownRequest:
       type: object
       properties:
         tier:
@@ -56978,6 +57021,13 @@ components:
         * `cousin` - Cousin
         * `past-incarnation` - Past Incarnation
         * `later-incarnation` - Later Incarnation
+    LabelWriteRequest:
+      type: object
+      properties:
+        label_id:
+          type: integer
+      required:
+      - label_id
     LedgerRow:
       type: object
       properties:
@@ -67260,29 +67310,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tie'
-    PaginatedTieStreamItemList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/TieStreamItem'
     PaginatedTransitionList:
       type: object
       required:
@@ -74143,8 +74170,10 @@ components:
           readOnly: true
         relationship:
           type: integer
+          readOnly: true
         journal_entry:
           type: integer
+          readOnly: true
           nullable: true
         journal_entry_title:
           type: string
@@ -74154,14 +74183,13 @@ components:
           readOnly: true
         tier_claimed:
           type: integer
-          maximum: 32767
-          minimum: 0
+          readOnly: true
         xp_spent:
           type: integer
-          maximum: 2147483647
-          minimum: 0
+          readOnly: true
         is_ritual_capstone:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -74169,9 +74197,13 @@ components:
       required:
       - created_at
       - id
+      - is_ritual_capstone
+      - journal_entry
       - journal_entry_title
       - relationship
+      - tier_claimed
       - title
+      - xp_spent
     RelationshipCondition:
       type: object
       properties:
@@ -74180,38 +74212,44 @@ components:
           readOnly: true
         name:
           type: string
+          readOnly: true
           description: Condition name (e.g., 'Attracted To', 'Fears', 'Trusts')
-          maxLength: 100
         description:
           type: string
+          readOnly: true
           description: Description of what this condition represents
         display_order:
           type: integer
-          maximum: 2147483647
-          minimum: 0
+          readOnly: true
           description: Order for display purposes (lower values appear first)
       required:
+      - description
+      - display_order
       - id
       - name
     RelationshipLabel:
       type: object
+      description: |-
+        One label, as a flat dict built by ``reads.label_payload`` (#3957 review).
+
+        No ``source=`` indirection: the payload builder — not the model instance — computes
+        every audience-gated value (``replaced_type_name``, ``note``, ``is_mutual``), since a
+        plain model-sourced field can't express "show this only when it clears the viewer's
+        audience." Passing a ``RelationshipLabel`` instance here would also mean stamping
+        computed attributes onto an idmapper-shared row; a dict avoids that entirely.
       properties:
         id:
           type: integer
-          readOnly: true
         type:
           type: integer
         type_name:
           type: string
-          readOnly: true
         type_family:
           type: string
-          readOnly: true
         type_valence:
           type: string
-          readOnly: true
         awareness:
-          $ref: '#/components/schemas/AwarenessEnum'
+          type: string
         since:
           type: string
           format: date-time
@@ -74221,40 +74259,23 @@ components:
           nullable: true
         replaced_type_name:
           type: string
-          readOnly: true
+          nullable: true
         note:
           type: string
-          maxLength: 200
         is_mutual:
           type: boolean
-          readOnly: true
       required:
+      - awareness
+      - ended_at
       - id
       - is_mutual
+      - note
       - replaced_type_name
+      - since
       - type
       - type_family
       - type_name
       - type_valence
-    RelationshipLabelRequest:
-      type: object
-      properties:
-        type:
-          type: integer
-        awareness:
-          $ref: '#/components/schemas/AwarenessEnum'
-        since:
-          type: string
-          format: date-time
-        ended_at:
-          type: string
-          format: date-time
-          nullable: true
-        note:
-          type: string
-          maxLength: 200
-      required:
-      - type
     RelationshipLine:
       type: object
       properties:
@@ -74301,22 +74322,28 @@ components:
           readOnly: true
         name:
           type: string
+          readOnly: true
           description: Type name, e.g. 'Rival'.
-          maxLength: 100
         slug:
           type: string
+          readOnly: true
           description: URL-safe identifier.
-          maxLength: 100
           pattern: ^[-a-zA-Z0-9_]+$
         description:
           type: string
+          readOnly: true
           description: The one line shown in the picker. PLACEHOLDER copy.
         family:
-          $ref: '#/components/schemas/FamilyEnum'
+          allOf:
+          - $ref: '#/components/schemas/FamilyEnum'
+          readOnly: true
         valence:
-          $ref: '#/components/schemas/RelationshipTypeValenceEnum'
+          allOf:
+          - $ref: '#/components/schemas/RelationshipTypeValenceEnum'
+          readOnly: true
         counterpart:
           type: integer
+          readOnly: true
           nullable: true
           description: The type the other side must hold for this label to be mutual;
             null = itself.
@@ -74325,13 +74352,17 @@ components:
           readOnly: true
         display_order:
           type: integer
-          maximum: 2147483647
-          minimum: 0
+          readOnly: true
       required:
+      - counterpart
       - counterpart_name
+      - description
+      - display_order
+      - family
       - id
       - name
       - slug
+      - valence
     RelationshipTypeValenceEnum:
       enum:
       - warm
@@ -77112,6 +77143,20 @@ components:
           minimum: 1
       required:
       - alternate_self_id
+    ShiftWriteRequest:
+      type: object
+      properties:
+        label_id:
+          type: integer
+        new_type_id:
+          type: integer
+        note:
+          type: string
+          default: ''
+          maxLength: 200
+      required:
+      - label_id
+      - new_type_id
     ShipDetails:
       type: object
       description: |-
@@ -80689,6 +80734,18 @@ components:
         * `minor` - A minor sum
         * `fair` - A fair sum
         * `great` - A great sum
+    SummaryWriteRequest:
+      type: object
+      properties:
+        target_persona_id:
+          type: integer
+        target_companion_id:
+          type: integer
+        summary:
+          type: string
+          maxLength: 4000
+      required:
+      - summary
     SummonsRespondRequest:
       type: object
       description: POST body for responding to a summons.
@@ -82621,7 +82678,7 @@ components:
           type: integer
           nullable: true
         audience:
-          type: string
+          $ref: '#/components/schemas/AudienceEnum'
         labels:
           type: array
           items:
@@ -82664,75 +82721,6 @@ components:
       - target_companion
       - target_name
       - thread
-    TieRequest:
-      type: object
-      description: One side of a tie, shaped for the viewer's audience (built in the
-        viewset).
-      properties:
-        id:
-          type: integer
-        source:
-          type: integer
-        target:
-          type: integer
-          nullable: true
-        target_companion:
-          type: integer
-          nullable: true
-        target_name:
-          type: string
-          minLength: 1
-        other_sheet_id:
-          type: integer
-          nullable: true
-        other_entry_id:
-          type: integer
-          nullable: true
-        audience:
-          type: string
-          minLength: 1
-        labels:
-          type: array
-          items:
-            $ref: '#/components/schemas/RelationshipLabelRequest'
-        depth:
-          type: integer
-          nullable: true
-        next_tier_threshold:
-          type: integer
-          nullable: true
-        breakdown:
-          allOf:
-          - $ref: '#/components/schemas/DepthBreakdownRequest'
-          nullable: true
-        summary:
-          type: string
-        ap_this_week:
-          type: integer
-          nullable: true
-        thread:
-          allOf:
-          - $ref: '#/components/schemas/TieThreadRequest'
-          nullable: true
-        is_soul_tether:
-          type: boolean
-      required:
-      - ap_this_week
-      - audience
-      - breakdown
-      - depth
-      - id
-      - is_soul_tether
-      - labels
-      - next_tier_threshold
-      - other_entry_id
-      - other_sheet_id
-      - source
-      - summary
-      - target
-      - target_companion
-      - target_name
-      - thread
     TieStreamItem:
       type: object
       properties:
@@ -82751,6 +82739,8 @@ components:
           type: string
         is_public:
           type: boolean
+        is_capstone:
+          type: boolean
         capstone_tier:
           type: integer
           nullable: true
@@ -82767,6 +82757,7 @@ components:
       - created_at
       - ic_timestamp
       - id
+      - is_capstone
       - is_public
       - kind
       - title
@@ -82780,17 +82771,23 @@ components:
       required:
       - level
       - resonance_name
-    TieThreadRequest:
+    TieWriteResult:
       type: object
+      description: |-
+        The honest shape every tie write action returns (#3957 review) — used only for the
+        OpenAPI schema; the views build this dict by hand (``success``/``message``/``data``).
       properties:
-        level:
-          type: integer
-        resonance_name:
+        success:
+          type: boolean
+        message:
           type: string
-          minLength: 1
+        data:
+          type: object
+          additionalProperties: {}
       required:
-      - level
-      - resonance_name
+      - data
+      - message
+      - success
     Tier3f5Enum:
       enum:
       - 1
