@@ -197,7 +197,7 @@ def advance_awareness(*, label: RelationshipLabel, to: str) -> RelationshipLabel
     return label
 
 
-def _known_label_q(
+def known_label_q(
     source_id: int | OuterRef, target_ref, type_ref=None, *, awareness=KNOWN_AWARENESS
 ) -> Q:
     """Labels the OTHER side may see, declared under a still-open tenure.
@@ -236,10 +236,10 @@ def is_mutual(
         return False
     awareness = (LabelAwareness.PUBLIC,) if public_only else KNOWN_AWARENESS
     mine = RelationshipLabel.objects.filter(
-        _known_label_q(side.source_id, side.target_id, type.pk, awareness=awareness)
+        known_label_q(side.source_id, side.target_id, type.pk, awareness=awareness)
     ).exists()
     theirs = RelationshipLabel.objects.filter(
-        _known_label_q(
+        known_label_q(
             side.target_id, side.source_id, type.counterpart_or_self.pk, awareness=awareness
         )
     ).exists()
@@ -250,9 +250,9 @@ def mutual_hostile(a_sheet: CharacterSheet, b_sheet: CharacterSheet) -> bool:
     """The one predicate consent's RIVALS mode and the journals' Retort gate read."""
     hostile = Q(type__valence=TypeValence.HOSTILE)
     return (
-        RelationshipLabel.objects.filter(_known_label_q(a_sheet.pk, b_sheet.pk) & hostile).exists()
+        RelationshipLabel.objects.filter(known_label_q(a_sheet.pk, b_sheet.pk) & hostile).exists()
         and RelationshipLabel.objects.filter(
-            _known_label_q(b_sheet.pk, a_sheet.pk) & hostile
+            known_label_q(b_sheet.pk, a_sheet.pk) & hostile
         ).exists()
     )
 
@@ -261,10 +261,10 @@ def mutual_hostile_expression(viewer_sheet_id: int, other_ref: str = "author_id"
     """``mutual_hostile`` as an annotatable expression against ``OuterRef(other_ref)``."""
     hostile = Q(type__valence=TypeValence.HOSTILE)
     mine = RelationshipLabel.objects.filter(
-        _known_label_q(viewer_sheet_id, OuterRef(other_ref)) & hostile
+        known_label_q(viewer_sheet_id, OuterRef(other_ref)) & hostile
     )
     theirs = RelationshipLabel.objects.filter(
-        _known_label_q(OuterRef(other_ref), viewer_sheet_id) & hostile
+        known_label_q(OuterRef(other_ref), viewer_sheet_id) & hostile
     )
     return ExpressionWrapper(Q(Exists(mine)) & Q(Exists(theirs)), output_field=BooleanField())
 

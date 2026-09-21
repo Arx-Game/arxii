@@ -116,7 +116,7 @@ def label_payload(label: RelationshipLabel, audience: str, *, is_mutual: bool) -
 
 def _label_counts_as_known(label: RelationshipLabel, type_id: int, allowed: set[str]) -> bool:
     """One label of the matching, unended, sufficiently-aware type, declared under a tenure
-    that is still open (#3957 review) — the exact per-label test ``services._known_label_q``
+    that is still open (#3957 review) — the exact per-label test ``services.known_label_q``
     runs in SQL, mirrored here for the batched Python path.
     """
     return (
@@ -141,7 +141,7 @@ def _labels_are_mutual(  # noqa: PLR0913 - both sides' row + labels is the spec,
 
     Used by the batched page read, where both sides' labels are already prefetched — this
     avoids the one-query-per-label cost ``services.is_mutual`` pays for a single-row read.
-    Mirrors ``services.is_mutual``/``_known_label_q`` exactly (#3957 review — the two
+    Mirrors ``services.is_mutual``/``known_label_q`` exactly (#3957 review — the two
     spellings must never drift): both labels need an open ``declared_by_tenure``, and BOTH
     side rows (this side and its reverse) must be ``is_active`` — a frozen side or a label
     declared under a tenure that has since ended never counts, however public the label.

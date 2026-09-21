@@ -21,13 +21,10 @@ from world.journals.factories import (
     JournalTagFactory,
 )
 from world.journals.services import annotate_can_retort, base_entries_queryset, can_retort
-from world.relationships.constants import TrackSign
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
-from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.relationships.constants import LabelAwareness, TypeValence
+from world.relationships.factories import RelationshipTypeFactory
+from world.relationships.services import declare_label, get_or_create_side
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory, grant_test_tenure
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Block, Mute
 
@@ -991,44 +988,56 @@ class NewFiltersAndFieldsTests(TestCase):
 
 
 class CanRetortAnnotationTests(TestCase):
-    """#3941 — the ``viewer_can_retort`` annotation is ``services.can_retort`` in SQL.
+    """#3941/#3957 — the ``viewer_can_retort`` annotation is ``services.can_retort`` in SQL.
 
     Two spellings of one rule (ADR-0307), so they are held against each other on every
     case the rule distinguishes: no viewer, the viewer's own entry, a writer open to
-    anyone, and a negative-track relationship held from either side.
+    anyone, a mutual hostile relationship label held with the viewer (#3957 — each side
+    must have declared the other hostile), and a one-sided hostile label (never enough).
     """
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.viewer = CharacterSheetFactory()
-        cls.negative = RelationshipTrackFactory(name="Rivalry", sign=TrackSign.NEGATIVE)
+        cls.viewer_tenure = grant_test_tenure(cls.viewer)
+        cls.rival = RelationshipTypeFactory(name="Rival", valence=TypeValence.HOSTILE)
 
         stranger = CharacterSheetFactory()
         open_writer = CharacterSheetFactory()
         open_writer.retort_consent = RetortConsent.ANYONE
         open_writer.save(update_fields=["retort_consent"])
-        rival_of_viewer = CharacterSheetFactory()
-        viewers_rival = CharacterSheetFactory()
-        # The rivalry counts from either side of the pair, so one of each direction.
-        RelationshipTrackProgressFactory(
-            relationship=CharacterRelationshipFactory(
-                source=rival_of_viewer, target=cls.viewer, is_pending=False, is_active=True
-            ),
-            track=cls.negative,
+
+        mutual_rival = CharacterSheetFactory()
+        mutual_rival_tenure = grant_test_tenure(mutual_rival)
+        declare_label(
+            side=get_or_create_side(source=cls.viewer, target=mutual_rival),
+            type=cls.rival,
+            awareness=LabelAwareness.PUBLIC,
+            tenure=cls.viewer_tenure,
         )
-        RelationshipTrackProgressFactory(
-            relationship=CharacterRelationshipFactory(
-                source=cls.viewer, target=viewers_rival, is_pending=False, is_active=True
-            ),
-            track=cls.negative,
+        declare_label(
+            side=get_or_create_side(source=mutual_rival, target=cls.viewer),
+            type=cls.rival,
+            awareness=LabelAwareness.PUBLIC,
+            tenure=mutual_rival_tenure,
+        )
+
+        one_sided_rival = CharacterSheetFactory()
+        one_sided_rival_tenure = grant_test_tenure(one_sided_rival)
+        # Only ONE direction declares hostile — #3957's mutual_hostile requires both.
+        declare_label(
+            side=get_or_create_side(source=one_sided_rival, target=cls.viewer),
+            type=cls.rival,
+            awareness=LabelAwareness.PUBLIC,
+            tenure=one_sided_rival_tenure,
         )
 
         cls.expected = {
             JournalEntryFactory(author=stranger, is_public=True).pk: False,
             JournalEntryFactory(author=open_writer, is_public=True).pk: True,
-            JournalEntryFactory(author=rival_of_viewer, is_public=True).pk: True,
-            JournalEntryFactory(author=viewers_rival, is_public=True).pk: True,
-            # Own entry: never retortable, whatever the consent or the rivalries say.
+            JournalEntryFactory(author=mutual_rival, is_public=True).pk: True,
+            JournalEntryFactory(author=one_sided_rival, is_public=True).pk: False,
+            # Own entry: never retortable, whatever the consent or the labels say.
             JournalEntryFactory(author=cls.viewer, is_public=True).pk: False,
         }
 

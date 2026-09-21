@@ -34,13 +34,10 @@ from world.journals.services import (
     visible_entries_q,
 )
 from world.journals.types import JournalError
-from world.relationships.constants import TrackSign
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
-from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.relationships.constants import LabelAwareness, TypeValence
+from world.relationships.factories import RelationshipTypeFactory
+from world.relationships.services import declare_label, get_or_create_side
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory, grant_test_tenure
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Block, Mute
 
@@ -724,12 +721,22 @@ class VisibleEntriesQTest(TestCase):
 
 
 class CanRetortTest(TestCase):
+    """#3957 — ``can_retort``'s rivalry leg reads mutual hostile relationship labels."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.writer = CharacterSheetFactory()
         cls.viewer = CharacterSheetFactory()
-        cls.negative = RelationshipTrackFactory(name="Rivalry", sign=TrackSign.NEGATIVE)
-        cls.positive = RelationshipTrackFactory(name="Friendship", sign=TrackSign.POSITIVE)
+        cls.writer_tenure = grant_test_tenure(cls.writer)
+        cls.viewer_tenure = grant_test_tenure(cls.viewer)
+        cls.rival = RelationshipTypeFactory(name="Rival", valence=TypeValence.HOSTILE)
+        cls.friend = RelationshipTypeFactory(name="Friend", valence=TypeValence.WARM)
+
+    def _declare(
+        self, *, source, target, tenure, label_type, awareness=LabelAwareness.PUBLIC
+    ) -> None:
+        side = get_or_create_side(source=source, target=target)
+        declare_label(side=side, type=label_type, awareness=awareness, tenure=tenure)
 
     def test_default_consent_and_no_relationship_is_closed(self) -> None:
         self.assertFalse(can_retort(viewer_sheet=self.viewer, author=self.writer))
@@ -739,25 +746,59 @@ class CanRetortTest(TestCase):
         self.writer.save(update_fields=["retort_consent"])
         self.assertTrue(can_retort(viewer_sheet=self.viewer, author=self.writer))
 
-    def test_negative_track_either_direction_opens_it(self) -> None:
-        rel = CharacterRelationshipFactory(
-            source=self.writer, target=self.viewer, is_pending=False, is_active=True
+    def test_mutual_hostile_labels_open_it(self) -> None:
+        self._declare(
+            source=self.writer,
+            target=self.viewer,
+            tenure=self.writer_tenure,
+            label_type=self.rival,
         )
-        RelationshipTrackProgressFactory(relationship=rel, track=self.negative)
+        self._declare(
+            source=self.viewer,
+            target=self.writer,
+            tenure=self.viewer_tenure,
+            label_type=self.rival,
+        )
         self.assertTrue(can_retort(viewer_sheet=self.viewer, author=self.writer))
 
-    def test_positive_track_does_not(self) -> None:
-        rel = CharacterRelationshipFactory(
-            source=self.viewer, target=self.writer, is_pending=False, is_active=True
+    def test_one_sided_hostile_label_does_not(self) -> None:
+        self._declare(
+            source=self.writer,
+            target=self.viewer,
+            tenure=self.writer_tenure,
+            label_type=self.rival,
         )
-        RelationshipTrackProgressFactory(relationship=rel, track=self.positive)
         self.assertFalse(can_retort(viewer_sheet=self.viewer, author=self.writer))
 
-    def test_pending_relationship_does_not(self) -> None:
-        rel = CharacterRelationshipFactory(
-            source=self.viewer, target=self.writer, is_pending=True, is_active=True
+    def test_mutual_warm_labels_do_not(self) -> None:
+        self._declare(
+            source=self.writer,
+            target=self.viewer,
+            tenure=self.writer_tenure,
+            label_type=self.friend,
         )
-        RelationshipTrackProgressFactory(relationship=rel, track=self.negative)
+        self._declare(
+            source=self.viewer,
+            target=self.writer,
+            tenure=self.viewer_tenure,
+            label_type=self.friend,
+        )
+        self.assertFalse(can_retort(viewer_sheet=self.viewer, author=self.writer))
+
+    def test_hostile_label_private_on_one_side_does_not(self) -> None:
+        self._declare(
+            source=self.writer,
+            target=self.viewer,
+            tenure=self.writer_tenure,
+            label_type=self.rival,
+        )
+        self._declare(
+            source=self.viewer,
+            target=self.writer,
+            tenure=self.viewer_tenure,
+            label_type=self.rival,
+            awareness=LabelAwareness.PRIVATE,
+        )
         self.assertFalse(can_retort(viewer_sheet=self.viewer, author=self.writer))
 
     def test_no_viewer_is_closed(self) -> None:

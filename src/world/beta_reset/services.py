@@ -58,7 +58,7 @@ numbers on a *kept* character's sheet consistent again.
 
 - ``CharacterSheet`` / ``Persona`` / ``RosterEntry`` / ``RosterTenure`` / ``Organization`` /
   ``Covenant`` — structural identity, out of scope (see the PR 2/PR 3 boundary above).
-- ``GMProfile`` / ``AccountDB`` / kudos / ``Block`` / ``Friendship`` / ``Rivalry`` /
+- ``GMProfile`` / ``AccountDB`` / kudos / ``Block`` / ``Friendship`` /
   ``Mute`` — account-level data (#3055 PR 3's policy layer decides what survives at the
   account boundary; this command never reaches AccountDB-anchored rows).
 - ``CrimeKind`` / ``AreaLaw`` / ``SecretCategory`` / ``Profession`` / catalog & config

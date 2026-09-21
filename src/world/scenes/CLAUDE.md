@@ -424,7 +424,7 @@ Key service functions for scene round lifecycle:
     `persona profile <name> …` (#1270).
 - **`SceneSummaryRevisionViewSet`**: Summary revision management
 
-### `friend_views.py` (#1727, #2170)
+### `friend_views.py` (#1727; rivalry declaration #2170 folded into #3957)
 - **`FriendshipViewSet`**: the web face of the OOC friends list (`friend_services.py`) —
   list/add/remove. `list` returns the player's friendships (made by any of their characters).
   `create` takes **`viewer`/`friend` as `RosterEntry` pks** (web clients speak character ids, not
@@ -439,14 +439,14 @@ Key service functions for scene round lifecycle:
   (`add_friend_all_characters`) loops through `add_friend` per tenure rather than duplicating the
   check; since the block test is player-level, not tenure-level, it resolves identically for
   every one of the player's tenures.
-- **`RivalryViewSet`** (#2170): the web face of rival declarations (`/api/scenes/rivals/`) —
-  list/declare/withdraw, same shape as friendships (`viewer`/`rival` as `RosterEntry` pks,
-  resolved to tenures server-side, calling `declare_rival`). Double opt-in: the list queryset
-  annotates `is_mutual` (an `Exists` on the reciprocal row) and the create response stamps it,
-  so the client can render "mutual rivals" vs "awaiting their declaration"; a DELETE removes
-  only your own side. Telnet parity is `CmdRival`/`CmdUnrival`/`CmdRivals`. React surface:
-  `RivalButton` (`frontend/src/friends/components/`) on another character's sheet page + card
-  drawer, next to the `FriendButton`.
+- **`scenes.Rivalry` / `RivalryViewSet` are GONE (#3957)** — the double-opt-in rival
+  declaration (`/api/scenes/rivals/`, telnet `CmdRival`/`CmdUnrival`/`CmdRivals`) folded into
+  the relationships app's labels: the consent `RIVALS` mode and the journals Retort gate both
+  now read `world.relationships.services.mutual_hostile` (each side must hold an active, known
+  hostile-valence `RelationshipLabel` toward the other) instead of a dedicated declaration.
+  **[ABSENT, frontend follow-up owed]** `RivalButton` (`frontend/src/friends/components/`) still
+  calls the removed endpoint — it 404s until a later task points it at (or replaces it with) the
+  relationships-app label UI.
 
 ### `interaction_views.py`
 - **`InteractionViewSet`**: Interaction read + delete + mark_private
