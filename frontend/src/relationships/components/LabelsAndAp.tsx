@@ -110,7 +110,9 @@ export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
               aside={<span className="refsheet-note">{awarenessLine(label)}</span>}
               tags={
                 former ? (
-                  <span className={labelTagClass(label, label.type_valence)}>
+                  <span
+                    className={labelTagClass({ ...label, is_former: true }, label.type_valence)}
+                  >
                     {labelText({ ...label, is_former: true })}
                   </span>
                 ) : undefined

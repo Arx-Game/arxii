@@ -70,7 +70,7 @@ describe('RelationshipsSection', () => {
   it('draws the soul tether panel with the viewed sheet and its bonds', () => {
     vi.mocked(useMyTetherBonds).mockReturnValue({
       data: [{ relationship_id: 5, bonded_character_name: 'Aria' }],
-    } as ReturnType<typeof useMyTetherBonds>);
+    } as unknown as ReturnType<typeof useMyTetherBonds>);
     renderSection();
     const panel = screen.getByTestId('soul-tether-status-panel');
     expect(panel).toHaveAttribute('data-caller-sheet-id', '42');
@@ -79,7 +79,7 @@ describe('RelationshipsSection', () => {
   });
 
   it('draws the cast from the payload, linking each tie off the roster entry', () => {
-    vi.mocked(useMyTetherBonds).mockReturnValue({ data: [] } as ReturnType<
+    vi.mocked(useMyTetherBonds).mockReturnValue({ data: [] } as unknown as ReturnType<
       typeof useMyTetherBonds
     >);
     renderSection();
@@ -92,7 +92,7 @@ describe('RelationshipsSection', () => {
   });
 
   it('gives the owner the AP ledger and the way in', () => {
-    vi.mocked(useMyTetherBonds).mockReturnValue({ data: [] } as ReturnType<
+    vi.mocked(useMyTetherBonds).mockReturnValue({ data: [] } as unknown as ReturnType<
       typeof useMyTetherBonds
     >);
     renderSection({ isMyCharacter: true, tiesApThisWeek: 12 });
@@ -101,7 +101,7 @@ describe('RelationshipsSection', () => {
   });
 
   it('has no writeups block left to draw', () => {
-    vi.mocked(useMyTetherBonds).mockReturnValue({ data: [] } as ReturnType<
+    vi.mocked(useMyTetherBonds).mockReturnValue({ data: [] } as unknown as ReturnType<
       typeof useMyTetherBonds
     >);
     renderSection({ isMyCharacter: true });
