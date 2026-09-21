@@ -8,8 +8,6 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.constants import TrackSign, TrackSystemKey
-from world.relationships.factories import RelationshipTrackFactory
 from world.relationships.models import RelationshipBump
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
@@ -26,14 +24,11 @@ class ValencedReactionBumpTests(TestCase):
         from evennia.utils.idmapper.models import flush_cache
 
         flush_cache()
-        RelationshipTrackFactory(
-            name="Regard", sign=TrackSign.POSITIVE, system_key=TrackSystemKey.REGARD
-        )
-        RelationshipTrackFactory(
-            name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
-        )
         self.warm_emoji = ReactionEmoji.objects.create(
             emoji="❤️", valence=ReactionValence.POSITIVE, sort_order=1
+        )
+        self.cool_emoji = ReactionEmoji.objects.create(
+            emoji="\U0001f620", valence=ReactionValence.NEGATIVE, sort_order=2
         )
         ReactionEmoji.objects.create(
             emoji="\U0001f44d", valence=ReactionValence.NEUTRAL, sort_order=0
@@ -73,6 +68,19 @@ class ValencedReactionBumpTests(TestCase):
         self.assertEqual(bump.relationship.source, self.reactor_sheet)
         self.assertEqual(bump.relationship.target, self.author_sheet)
         self.assertEqual(bump.source_emoji.emoji, "❤️")
+        # +1 valence moves the side's Affection gauge, never Conflict (#3957).
+        self.assertEqual(bump.relationship.affection, 1)
+        self.assertEqual(bump.relationship.conflict, 0)
+
+    def test_cool_emoji_applies_a_negative_bump_to_conflict(self) -> None:
+        response = self._post_reaction(self.cool_emoji.emoji)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["bump_applied"])
+        bump = RelationshipBump.objects.get()
+        self.assertEqual(bump.valence, -1)
+        # -1 valence moves the side's Conflict gauge, never Affection (#3957).
+        self.assertEqual(bump.relationship.conflict, 1)
+        self.assertEqual(bump.relationship.affection, 0)
 
     def test_toggle_cycle_never_double_bumps(self) -> None:
         first = self._post_reaction("❤️")

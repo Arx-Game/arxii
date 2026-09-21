@@ -57,13 +57,14 @@ class ResolvedBaseDifficultyTests(TestCase):
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_smitten_condition gates on #2698
 class AffectionTierLadderTests(TestCase):
-    """The #1697 ladder: one tier per affection band, rungs from the #1699 system tracks."""
+    """The #1697 ladder: one tier per affection band, rungs from the #3957 tier ladder."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.seeds.relationship_scale import seed_relationship_scale_content
+        from world.relationships.factories import RelationshipTierFactory
 
-        seed_relationship_scale_content()
+        for tier_number, depth_threshold in ((1, 25), (2, 100), (3, 500), (4, 2000)):
+            RelationshipTierFactory(tier_number=tier_number, depth_threshold=depth_threshold)
 
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
@@ -80,25 +81,17 @@ class AffectionTierLadderTests(TestCase):
         return SimpleNamespace(action_template=template, initiator_persona=persona)
 
     def _give_affection(self, amount: int) -> None:
-        """Give the target amount affection toward the actor via system-track points."""
-        from world.relationships.constants import TrackSystemKey
-        from world.relationships.models import (
-            CharacterRelationship,
-            RelationshipTrack,
-            RelationshipTrackProgress,
-        )
+        """Give the target's side `amount` net affection toward the actor (conflict if negative)."""
+        from world.relationships.models import CharacterRelationship
 
-        key = TrackSystemKey.REGARD if amount > 0 else TrackSystemKey.FRICTION
-        track = RelationshipTrack.objects.get(system_key=key)
         relationship, _ = CharacterRelationship.objects.get_or_create(
             source=self.target_sheet, target=self.actor_sheet
         )
-        RelationshipTrackProgress.objects.create(
-            relationship=relationship,
-            track=track,
-            capacity=abs(amount),
-            developed_points=abs(amount),
-        )
+        if amount >= 0:
+            relationship.affection = amount
+        else:
+            relationship.conflict = -amount
+        relationship.save()
 
     def _value(self, tier_modifier: int = 0) -> int:
         return resolved_base_difficulty(
@@ -140,12 +133,6 @@ class AffectionTierLadderTests(TestCase):
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_smitten_condition gates on #2698
 class NonSocialExploitableEasingTests(TestCase):
     """#2241: exploitable_tiers easing extends beyond social-category checks."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from world.seeds.relationship_scale import seed_relationship_scale_content
-
-        seed_relationship_scale_content()
 
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
@@ -215,25 +202,15 @@ class NonSocialExploitableEasingTests(TestCase):
 
     def test_non_social_exploitable_easing_no_affection_base(self) -> None:
         """Non-social easing does NOT apply affection-derived base (social-only)."""
-        from world.relationships.constants import TrackSystemKey
-        from world.relationships.models import (
-            CharacterRelationship,
-            RelationshipTrack,
-            RelationshipTrackProgress,
-        )
+        from world.relationships.models import CharacterRelationship
 
         # Give the target high affection for the actor — should NOT ease a
         # non-social check (affection base is social-only).
-        track = RelationshipTrack.objects.get(system_key=TrackSystemKey.REGARD)
         relationship, _ = CharacterRelationship.objects.get_or_create(
             source=self.target_sheet, target=self.actor_sheet
         )
-        RelationshipTrackProgress.objects.create(
-            relationship=relationship,
-            track=track,
-            capacity=2000,
-            developed_points=2000,
-        )
+        relationship.affection = 2000
+        relationship.save()
         req = self._non_social_request()
         value = resolved_base_difficulty(
             action_request=req,

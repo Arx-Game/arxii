@@ -246,7 +246,7 @@ class MaterialBoonFulfillmentTests(TestCase):
         self.assertIsNone(boon.fulfilled_at)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
+@override_settings(SEED_SAMPLE_CONTENT=True)  # RelationshipType catalogue gates on #3957
 class MaterialBoonResolverE2ETests(TestCase):
     """The full consent path for MATERIAL: dispatch -> NPC auto-accept -> resolver."""
 
@@ -296,3 +296,4 @@ class MaterialBoonResolverE2ETests(TestCase):
         self.assertIsNotNone(request.boon.fulfilled_at)
         shift = AffectionShift.objects.get(boon=request.boon)
         self.assertEqual(shift.amount, -BOON_AFFECTION_COST)
+        self.assertEqual(shift.relationship.conflict, BOON_AFFECTION_COST)

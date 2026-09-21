@@ -1,32 +1,35 @@
-"""Tests for the dramatic-surge content-slice seeder (#2013)."""
+"""Tests for the dramatic-surge content-slice seeder (#2013, #3957)."""
 
 from django.test import TestCase, override_settings
 
 from world.combat.constants import StakesLevel
 from world.combat.models import EscalationCurve, StakesEscalationModifier
-from world.relationships.constants import TrackSign
-from world.relationships.models import RelationshipTrack
+from world.relationships.constants import TypeValence
+from world.relationships.models import RelationshipType
 from world.seeds.game_content.combat import seed_dramatic_surge_content
+from world.seeds.relationship_scale import seed_relationship_scale_content
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedDramaticSurgeContentTests(TestCase):
-    """``relationships.RelationshipTrack`` is content-repo-owned (#2698);
-    SEED_SAMPLE_CONTENT opts this suite into the sample-seeding path."""
+    """``relationships.RelationshipType`` is staff-authored content (#3957);
+    SEED_SAMPLE_CONTENT opts this suite into the sample-seeding path — owned by the
+    ``relationship_scale`` cluster, which ``seed_dramatic_surge_content`` only reads."""
 
-    def test_seeds_relationship_tracks(self):
+    def test_seeds_relationship_types_with_the_right_valence(self):
+        seed_relationship_scale_content()
         seed_dramatic_surge_content()
 
-        bond = RelationshipTrack.objects.get(name="Bond")
-        rivalry = RelationshipTrack.objects.get(name="Rivalry")
-        enemies = RelationshipTrack.objects.get(name="Enemies")
+        friend = RelationshipType.objects.get(name="Friend")
+        rival = RelationshipType.objects.get(name="Rival")
+        enemy = RelationshipType.objects.get(name="Enemy")
 
-        self.assertEqual(bond.sign, TrackSign.POSITIVE)
-        self.assertTrue(bond.fuels_escalation_spikes)
-        self.assertEqual(rivalry.sign, TrackSign.NEGATIVE)
-        self.assertTrue(rivalry.fuels_escalation_spikes)
-        self.assertEqual(enemies.sign, TrackSign.NEGATIVE)
-        self.assertTrue(enemies.fuels_escalation_spikes)
+        self.assertEqual(friend.valence, TypeValence.WARM)
+        self.assertTrue(friend.fuels_escalation_spikes)
+        self.assertEqual(rival.valence, TypeValence.HOSTILE)
+        self.assertTrue(rival.fuels_escalation_spikes)
+        self.assertEqual(enemy.valence, TypeValence.HOSTILE)
+        self.assertTrue(enemy.fuels_escalation_spikes)
 
     def test_seeds_default_curve(self):
         seed_dramatic_surge_content()
@@ -51,11 +54,12 @@ class SeedDramaticSurgeContentTests(TestCase):
             self.assertIsNotNone(rows[level].default_curve)
 
     def test_idempotent(self):
+        seed_relationship_scale_content()
         seed_dramatic_surge_content()
         seed_dramatic_surge_content()
 
         self.assertEqual(
             EscalationCurve.objects.filter(name="Standard Dramatic Escalation").count(), 1
         )
-        self.assertEqual(RelationshipTrack.objects.filter(name="Bond").count(), 1)
+        self.assertEqual(RelationshipType.objects.filter(name="Friend").count(), 1)
         self.assertEqual(StakesEscalationModifier.objects.count(), len(StakesLevel.choices))
