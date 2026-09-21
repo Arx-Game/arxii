@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.factories import CompanionFactory
 from world.journals.factories import JournalEntryFactory
@@ -236,8 +237,15 @@ class TieApiTests(TestCase):
 
     def test_third_party_mutual_needs_both_sides_public(self):
         mutual_type = RelationshipTypeFactory(name="Ally")
-        declare_label(side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC)
-        declare_label(side=self.ba, type=mutual_type, awareness=LabelAwareness.CLANDESTINE)
+        declare_label(
+            side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
+        )
+        declare_label(
+            side=self.ba,
+            type=mutual_type,
+            awareness=LabelAwareness.CLANDESTINE,
+            tenure=self.tenure_b,
+        )
         url = f"/api/relationships/relationships/{self.ab.pk}/"
 
         data = self._client(self.stranger).get(url).data
@@ -250,6 +258,39 @@ class TieApiTests(TestCase):
         data = self._client(self.stranger).get(url).data
         row = next(lab for lab in data["labels"] if lab["type_name"] == "Ally")
         self.assertTrue(row["is_mutual"])
+
+    def test_mutual_needs_an_open_tenure_on_both_labels(self):
+        mutual_type = RelationshipTypeFactory(name="Confidant")
+        declare_label(
+            side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
+        )
+        closed_tenure = RosterTenureFactory(roster_entry=self.b.roster_entry)
+        closed_tenure.end_date = closed_tenure.start_date
+        closed_tenure.save(update_fields=["end_date"])
+        declare_label(
+            side=self.ba, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=closed_tenure
+        )
+        data = (
+            self._client(self.stranger).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        )
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Confidant")
+        self.assertFalse(row["is_mutual"])
+
+    def test_mutual_needs_an_active_reverse_side(self):
+        mutual_type = RelationshipTypeFactory(name="Bonded")
+        declare_label(
+            side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
+        )
+        declare_label(
+            side=self.ba, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_b
+        )
+        self.ba.is_active = False
+        self.ba.save(update_fields=["is_active"])
+        data = (
+            self._client(self.stranger).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        )
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Bonded")
+        self.assertFalse(row["is_mutual"])
 
     def test_companion_side_404s_for_anyone_but_owner_or_staff(self):
         companion = CompanionFactory(owner=self.a)
@@ -296,3 +337,36 @@ class TieApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 6)
         self.assertLessEqual(len(ctx.captured_queries), 14)
+
+    def test_list_matches_reverse_depth_per_target_when_two_owned_characters_share_one(self):
+        """Two characters under one account, each with a side toward the SAME target: the
+        reverse-side map must key on the (source, target) PAIR, not the target alone — both
+        reverse rows share a source_id (the shared target), so a source-only key collides and
+        hands one row the other's depth (#3957 review).
+        """
+        player_data, _ = PlayerData.objects.get_or_create(account=self.owner)
+        second_owned = CharacterSheetFactory()
+        second_entry = RosterEntryFactory(character_sheet=second_owned)
+        RosterTenureFactory(player_data=player_data, roster_entry=second_entry)
+
+        side_a_to_c = get_or_create_side(source=self.a, target=self.c)
+        side_a_to_c.scene_depth = 10
+        side_a_to_c.save()
+        side_second_to_c = get_or_create_side(source=second_owned, target=self.c)
+        side_second_to_c.scene_depth = 20
+        side_second_to_c.save()
+        reverse_c_to_a = get_or_create_side(source=self.c, target=self.a)
+        reverse_c_to_a.scene_depth = 100
+        reverse_c_to_a.save()
+        reverse_c_to_second = get_or_create_side(source=self.c, target=second_owned)
+        reverse_c_to_second.scene_depth = 200
+        reverse_c_to_second.save()
+
+        data = self._client(self.owner).get("/api/relationships/relationships/").data
+        rows = {row["id"]: row for row in data["results"]}
+        row_a = rows[side_a_to_c.pk]
+        row_second = rows[side_second_to_c.pk]
+        self.assertEqual(row_a["depth"], 10 + 100)
+        self.assertEqual(row_a["breakdown"]["their_added_depth"], 100)
+        self.assertEqual(row_second["depth"], 20 + 200)
+        self.assertEqual(row_second["breakdown"]["their_added_depth"], 200)

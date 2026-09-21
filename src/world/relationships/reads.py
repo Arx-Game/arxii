@@ -74,18 +74,6 @@ def visible_labels(side: CharacterRelationship, audience: str) -> list[Relations
     return _labels_for_audience(qs, audience)
 
 
-def labels_for_audience(
-    labels: Iterable[RelationshipLabel], audience: str
-) -> list[RelationshipLabel]:
-    """Same filter as ``visible_labels``, applied to an already-loaded (prefetched) list.
-
-    The batched-read sibling: a page of sides prefetches every side's labels in one query
-    (``Prefetch("labels", queryset=...)``), and this filters that already-fetched list in
-    Python instead of ``visible_labels``' fresh per-side query.
-    """
-    return _labels_for_audience(labels, audience)
-
-
 def _replaced_type_name(label: RelationshipLabel, audience: str) -> str | None:
     """The label's replaced type's name, or None (#3957 review).
 
@@ -126,8 +114,24 @@ def label_payload(label: RelationshipLabel, audience: str, *, is_mutual: bool) -
     }
 
 
-def _labels_are_mutual(
+def _label_counts_as_known(label: RelationshipLabel, type_id: int, allowed: set[str]) -> bool:
+    """One label of the matching, unended, sufficiently-aware type, declared under a tenure
+    that is still open (#3957 review) — the exact per-label test ``services._known_label_q``
+    runs in SQL, mirrored here for the batched Python path.
+    """
+    return (
+        label.type_id == type_id
+        and label.ended_at is None
+        and label.awareness in allowed
+        and label.declared_by_tenure_id is not None
+        and label.declared_by_tenure.end_date is None
+    )
+
+
+def _labels_are_mutual(  # noqa: PLR0913 - both sides' row + labels is the spec, not excess
+    side: CharacterRelationship,
     my_labels: Iterable[RelationshipLabel],
+    reverse: CharacterRelationship | None,
     their_labels: Iterable[RelationshipLabel],
     label_type: RelationshipType,
     *,
@@ -137,19 +141,19 @@ def _labels_are_mutual(
 
     Used by the batched page read, where both sides' labels are already prefetched — this
     avoids the one-query-per-label cost ``services.is_mutual`` pays for a single-row read.
-    Does not replicate ``services.is_mutual``'s open-tenure gate (that gate is about roster
-    succession and RIVALS-mode consent, not about what a browsing/display page shows).
+    Mirrors ``services.is_mutual``/``_known_label_q`` exactly (#3957 review — the two
+    spellings must never drift): both labels need an open ``declared_by_tenure``, and BOTH
+    side rows (this side and its reverse) must be ``is_active`` — a frozen side or a label
+    declared under a tenure that has since ended never counts, however public the label.
+    ``my_labels``/``their_labels`` should carry ``select_related("declared_by_tenure")`` (a
+    label without it still works, just at one query per label the first time it's touched).
     """
+    if not side.is_active or reverse is None or not reverse.is_active:
+        return False
     allowed = {LabelAwareness.PUBLIC} if public_only else set(KNOWN_AWARENESS)
     counterpart = label_type.counterpart_or_self
-    mine = any(
-        label.type_id == label_type.pk and label.ended_at is None and label.awareness in allowed
-        for label in my_labels
-    )
-    theirs = any(
-        label.type_id == counterpart.pk and label.ended_at is None and label.awareness in allowed
-        for label in their_labels
-    )
+    mine = any(_label_counts_as_known(label, label_type.pk, allowed) for label in my_labels)
+    theirs = any(_label_counts_as_known(label, counterpart.pk, allowed) for label in their_labels)
     return mine and theirs
 
 
@@ -213,6 +217,7 @@ def build_tie_page(
     viewer_sheet: CharacterSheet | None,
     is_staff: bool,
     force_audience: str | None = None,
+    include_allocation: bool = True,
 ) -> list[dict[str, Any]]:
     """Shape a whole page of sides for one viewer, in a small page-size-independent query
     budget (#3957 review — batches what per-side reads used to do once per row).
@@ -221,10 +226,13 @@ def build_tie_page(
     ``pair_depth``/``their_added_depth`` and mutuality), every side's newest open thread, and
     the tier ladder. Callers should already have ``sides`` carrying, per side, a labels
     prefetch (``Prefetch("labels", queryset=RelationshipLabel.objects.select_related("type",
-    "type__counterpart", "replaced__type"))``, ordered by ``since``) and
-    ``select_related("target", "target_companion")`` (``allocation`` too, for an
-    OWNER/STAFF-visible ``ap_this_week``) — a missing prefetch degrades to a per-side query
-    rather than erroring, so this is correct (just not batched) either way.
+    "type__counterpart", "replaced__type", "declared_by_tenure"))``, ordered by ``since``) and
+    ``select_related("target", "target_companion")`` — ``allocation`` too, when
+    ``include_allocation`` is left at its default (an OWNER/STAFF-visible ``ap_this_week``) —
+    a missing prefetch degrades to a per-side query rather than erroring, so this is correct
+    (just not batched) either way. Pass ``include_allocation=False`` when the caller's output
+    shape has no per-side AP field (the sheet's Ties cast) to skip the lookup entirely rather
+    than fetch-and-discard it.
 
     Returns one dict per side: ``side`` (the model instance, never mutated), ``audience``,
     ``labels`` (a list of ``label_payload`` dicts), ``depth``, ``tier``,
@@ -233,19 +241,28 @@ def build_tie_page(
     """
     from world.magic.models import Thread  # noqa: PLC0415
 
-    reverse_by_target: dict[int, CharacterRelationship] = {}
+    reverse_by_pair: dict[tuple[int, int], CharacterRelationship] = {}
     pair_q = Q()
     for side in sides:
         if side.target_id is not None:
             pair_q |= Q(source_id=side.target_id, target_id=side.source_id)
     if pair_q:
-        reverse_sides = CharacterRelationship.objects.filter(pair_q).prefetch_related(
+        # is_active=True: a frozen reverse side never counts toward pair depth or mutuality
+        # (#3957 review). Keyed on the (source, target) PAIR, not source alone — two of the
+        # caller's own owned characters can each hold a side toward the same target, and both
+        # reverse rows then share one source_id; a source-only key would collide and hand one
+        # row the other's depth/labels.
+        reverse_sides = CharacterRelationship.objects.filter(
+            pair_q, is_active=True
+        ).prefetch_related(
             Prefetch(  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
                 "labels",
-                queryset=RelationshipLabel.objects.select_related("type", "type__counterpart"),
+                queryset=RelationshipLabel.objects.select_related(
+                    "type", "type__counterpart", "declared_by_tenure"
+                ),
             )
         )
-        reverse_by_target = {reverse.source_id: reverse for reverse in reverse_sides}
+        reverse_by_pair = {(r.source_id, r.target_id): r for r in reverse_sides}
 
     threads_by_side: dict[int, Thread] = {}
     for thread in (
@@ -261,7 +278,11 @@ def build_tie_page(
     for side in sides:
         audience = force_audience or tie_audience(side, viewer_sheet, is_staff)
         numbers = audience != TieAudience.THIRD_PARTY
-        reverse = reverse_by_target.get(side.target_id) if side.target_id is not None else None
+        reverse = (
+            reverse_by_pair.get((side.target_id, side.source_id))
+            if side.target_id is not None
+            else None
+        )
         my_labels = list(side.labels.all())
         their_labels = list(reverse.labels.all()) if reverse is not None else []
         visible = _labels_for_audience(my_labels, audience)
@@ -272,7 +293,9 @@ def build_tie_page(
                 is_mutual=(
                     label.ended_at is None
                     and _labels_are_mutual(
+                        side,
                         my_labels,
+                        reverse,
                         their_labels,
                         label.type,
                         public_only=audience == TieAudience.THIRD_PARTY,
@@ -283,7 +306,7 @@ def build_tie_page(
         ]
         next_tier = tiers_by_number.get(side.tier + 1) if numbers else None
         ap_this_week = None
-        if audience in (TieAudience.OWNER, TieAudience.STAFF):
+        if include_allocation and audience in (TieAudience.OWNER, TieAudience.STAFF):
             try:
                 ap_this_week = side.allocation.ap_amount
             except ObjectDoesNotExist:

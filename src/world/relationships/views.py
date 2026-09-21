@@ -51,12 +51,13 @@ from world.relationships.serializers import (
 NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
 
 # Sides prefetched for a batched read (#3957 review): labels ordered + select_related for
-# label_payload's replaced_type_name gate, plus the relations build_tie_page/_row_to_payload
-# read directly off each side.
+# label_payload's replaced_type_name gate and build_tie_page's mutuality check
+# (declared_by_tenure.end_date), plus the relations build_tie_page/_row_to_payload read
+# directly off each side.
 _LABELS_PREFETCH = Prefetch(
     "labels",
     queryset=RelationshipLabel.objects.select_related(
-        "type", "type__counterpart", "replaced__type"
+        "type", "type__counterpart", "replaced__type", "declared_by_tenure"
     ).order_by("since"),
 )
 

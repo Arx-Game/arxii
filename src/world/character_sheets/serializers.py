@@ -1802,14 +1802,19 @@ def _build_ties(sheet: CharacterSheet, viewer_sheet, *, privileged: bool) -> lis
             Prefetch(  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
                 "labels",
                 queryset=RelationshipLabel.objects.select_related(
-                    "type", "type__counterpart", "replaced__type"
+                    "type", "type__counterpart", "replaced__type", "declared_by_tenure"
                 ).order_by("since"),
             )
         )
         .order_by("-updated_at")
     )
     visible_sides = [side for side in sides if side.target_companion_id is None or privileged]
-    rows = build_tie_page(visible_sides, viewer_sheet=viewer_sheet, is_staff=privileged)
+    # No per-card AP field on TieCardEntry (that total lives in _ties_ap_this_week instead),
+    # so skip build_tie_page's allocation lookup entirely rather than fetch-and-discard it
+    # once per OWNER/STAFF-visible side (#3957 review).
+    rows = build_tie_page(
+        visible_sides, viewer_sheet=viewer_sheet, is_staff=privileged, include_allocation=False
+    )
     cards: list[TieCardEntry] = []
     for row in rows:
         side = row["side"]

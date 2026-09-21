@@ -84,8 +84,10 @@ class SheetTiesSectionTests(APITestCase):
 
     def test_cast_query_budget_stays_flat_as_ties_grow(self):
         """``_build_ties`` batches via ``reads.build_tie_page`` (#3957 review): adding five
-        more ties to the two already on ``self.a`` costs at most a small, flat handful of
-        extra queries on top of the whole sheet payload — not one query per added tie.
+        more ties to the two already on ``self.a`` costs at most one extra query on top of
+        the whole sheet payload — not one query per added tie. (``include_allocation=False``
+        also dropped the per-tie ``side.allocation`` N+1 the cast never needed — a card has
+        no per-tie AP field — so the delta fell from 6 to 1 once that stopped firing.)
 
         A throwaway warm-up call primes the identity map (Gender/Pronouns/lookup-table
         singletons etc.) for both measurements equally — without it, the second (7-tie)
@@ -112,4 +114,4 @@ class SheetTiesSectionTests(APITestCase):
         grown = len(grown_ctx.captured_queries)
 
         self.assertEqual(len(response.data["ties"]), 7)
-        self.assertLessEqual(grown - baseline, 8)
+        self.assertLessEqual(grown - baseline, 3)
