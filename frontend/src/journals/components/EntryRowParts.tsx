@@ -11,28 +11,13 @@
  * Every class here is either Tailwind on the realm tokens or a `.journals`-scoped `jr-*`
  * rule (`journals.css`), so anything rendering these must sit inside `.journals` — which
  * is the whole reason the tie page's stream roots itself in that class.
+ *
+ * The row's own `<article>` classes and the "Black journal" band string live in
+ * `journals/rows.ts` beside the module's other pure helpers.
  */
 import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
-
-/** The band a private entry wears, in both places that draw one. */
-export const BLACK_JOURNAL_BAND = 'Black journal';
-
-/** The `<article>`'s own classes: hairline-separated, night ground when private. */
-export function entryRowClass({
-  isBlack,
-  isRevealed,
-}: {
-  isBlack?: boolean;
-  isRevealed?: boolean;
-} = {}): string {
-  return cn(
-    'grid gap-[.35rem] border-t py-[1.1rem] first:border-t-0 first:pt-0',
-    isBlack && 'jr-black my-[.35rem] border-t-0 px-5',
-    isRevealed && 'border-l-[3px] border-l-primary pl-4'
-  );
-}
 
 /** What the row is, above everything else. Absent when the row is an ordinary one. */
 export function EntryBand({ children, accent }: { children: ReactNode; accent?: boolean }) {

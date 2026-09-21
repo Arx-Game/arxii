@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { Eyebrow, Ledger, QuietDoor } from '@/character_sheets/components/sheet/primitives';
 import { useRelationshipTypes, useShiftLabel } from '@/relationships/queries';
 import type { TieLabel } from '../api';
-import { FAMILIES } from './TypePicker';
+import { FAMILIES } from './families';
 
 export interface RelationshipShiftProps {
   label: TieLabel;

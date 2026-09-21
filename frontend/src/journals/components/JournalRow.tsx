@@ -38,14 +38,8 @@ import {
   QUIET_BUTTON_CLASS,
 } from '../fieldClasses';
 import { PillButton } from './Pill';
-import {
-  BLACK_JOURNAL_BAND,
-  EntryBand,
-  EntryBody,
-  EntryMeta,
-  EntryTitle,
-  entryRowClass,
-} from './EntryRowParts';
+import { EntryBand, EntryBody, EntryMeta, EntryTitle } from './EntryRowParts';
+import { BLACK_JOURNAL_BAND, entryRowClass } from '../rows';
 import {
   journalsKeys,
   useEditJournalEntry,

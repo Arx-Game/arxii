@@ -17,14 +17,8 @@ import { useState } from 'react';
 
 import '@/journals/journals.css';
 import { PillButton } from '@/journals/components/Pill';
-import {
-  BLACK_JOURNAL_BAND,
-  EntryBand,
-  EntryBody,
-  EntryMeta,
-  EntryTitle,
-  entryRowClass,
-} from '@/journals/components/EntryRowParts';
+import { EntryBand, EntryBody, EntryMeta, EntryTitle } from '@/journals/components/EntryRowParts';
+import { BLACK_JOURNAL_BAND, entryRowClass } from '@/journals/rows';
 import { formatIcDate, formatPostingDate } from '@/journals/dates';
 import { useTieStream } from '@/relationships/queries';
 import type { TieStreamItem } from '../api';
