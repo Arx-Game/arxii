@@ -312,6 +312,19 @@ function tieOwner() {
         awareness: 'private',
         since: '1012-09-22T00:00:00Z',
       }),
+      // An ended label stays on the card, quieter — nothing in this feature deletes. Its
+      // type id is deliberately outside the catalogue above, so it neither counts as held
+      // in the picker nor collides with a type the shift select offers.
+      relationshipLabel({
+        id: 3,
+        type: 20,
+        type_name: 'Friend',
+        type_family: 'company',
+        type_valence: 'warm',
+        awareness: 'public',
+        since: '1011-01-05T00:00:00Z',
+        ended_at: '1012-01-05T00:00:00Z',
+      }),
     ],
     depth: 340,
     next_tier_threshold: 500,
@@ -707,6 +720,21 @@ test.describe('Ties, redrawn (#3957)', () => {
     const corvinCard = page.locator('.refsheet-face', { hasText: 'Corvin Ashe' });
     await expectReadable(corvinCard.locator('.refsheet-tag-private'), 'cast private chip');
 
+    // A marker takes the chip whole, so valence does not show through it: clandestine is
+    // the demo's gilt `.tag.shared` and a former label is muted, even though both of
+    // these carry `refsheet-tag-warm` as well (#3957 re-check, new findings 1 and 2).
+    await expectInk(
+      corvinCard.locator('.refsheet-tag-clandestine'),
+      'rgb(163, 134, 62)',
+      'cast clandestine chip'
+    );
+    const marrowCard = page.locator('.refsheet-face', { hasText: 'The Widow Marrow' });
+    await expectInk(
+      marrowCard.locator('.refsheet-tag-former'),
+      'rgb(113, 113, 122)',
+      'cast former chip'
+    );
+
     await shot(page, 'ties-cast-owner');
 
     // Open the tie page from the card.
@@ -759,6 +787,17 @@ test.describe('Ties, redrawn (#3957)', () => {
       plate.locator('.refsheet-tag-private'),
       'rgb(200, 166, 240)',
       'plate private chip'
+    );
+    // The plate's own literals for the same two markers (`ties.html:141, :143`).
+    await expectInk(
+      plate.locator('.refsheet-tag-clandestine'),
+      'rgb(224, 194, 122)',
+      'plate clandestine chip'
+    );
+    await expectInk(
+      plate.locator('.refsheet-tag-former'),
+      'rgb(201, 184, 163)',
+      'plate former chip'
     );
     await expectReadable(plate.getByRole('button', { name: 'Edit' }), 'plate Edit door');
     await expectReadable(
