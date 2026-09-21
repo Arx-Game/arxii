@@ -23,7 +23,39 @@ ISSUE = "1234"
 # so the body is built exactly as a real run builds it, with no network.
 _GH_STUB = """#!/usr/bin/env bash
 case "$*" in
-  *"issue view"*labels*) echo "review:evidence-required" ;;
+  *"issue view"*body*)
+    if [[ "${STUB_NO_APPROVAL:-0}" == "1" ]]; then
+      LABELS=$'status:implementing\nreview:evidence-required'
+      BODY=$'## Discovery assessment\n'
+      BODY+=$'- Outcome: bounded change.\n'
+      BODY+=$'- Success signal: the check passes.\n'
+      BODY+=$'- Stakeholder provenance: roles recorded.\n'
+      BODY+=$'- Impact: low and reversible.\n'
+      BODY+=$'- Lane rationale: existing pattern.\n'
+      BODY+=$'- Users: players.\n- Non-goals: unrelated work.\n'
+      BODY+=$'- Outcome-changing assumptions: none.\n- Options: one.\n'
+      BODY+=$'- Scenarios: one.\n'
+      BODY+='<!-- discovery:lane=standard;state=complete -->\n'
+      BODY+='<!-- spec:start -->\n### Goal\nExample.\n<!-- spec:end -->'
+    else
+      LABELS=$'status:implementing\nspec:approved\nreview:evidence-required'
+      BODY=$'## Discovery assessment\n'
+      BODY+=$'- Outcome: bounded change.\n'
+      BODY+=$'- Success signal: the check passes.\n'
+      BODY+=$'- Stakeholder provenance: roles recorded.\n'
+      BODY+=$'- Impact: low and reversible.\n'
+      BODY+=$'- Lane rationale: existing pattern.\n'
+      BODY+=$'- Users: issue authors.\n- Non-goals: unrelated workflow platform.\n'
+      BODY+=$'- Outcome-changing assumptions: issue body is source of truth.\n'
+      BODY+=$'- Options: orchestration-first.\n'
+      BODY+=$'- Scenarios: clear, ambiguous, and visual work.\n'
+      BODY+='<!-- discovery:lane=standard;state=complete -->\n'
+      BODY+='<!-- spec:start -->\n### Goal\nExample.\n<!-- spec:end -->'
+    fi
+    jq -n --arg labels "$LABELS" --arg body "$BODY" \
+      '{labels: ($labels | split("\n") | map({name: .})), body: $body}'
+    ;;
+  *"issue view"*labels*) echo $'status:implementing\nspec:approved\nreview:evidence-required' ;;
   *"issue view"*title*) echo "Stub issue title" ;;
   *"issue view"*assignees*) echo "stub-user" ;;
   "api user"*) echo "stub-user" ;;
@@ -39,16 +71,23 @@ _STUBS = {
 }
 
 
-def _dry_run_body(evidence_env: dict[str, str]) -> str:
+def _run_dry_run(evidence_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as directory:
         for name, script in _STUBS.items():
             stub = Path(directory) / name
             stub.write_text(script, encoding="utf-8")
             stub.chmod(0o755)
         env = {key: value for key, value in os.environ.items() if not key.startswith("PR_")}
+        env.update(
+            {
+                "PR_DISCOVERY_LANE": "standard: stakeholder-approved packet",
+                "PR_BRAINSTORM_DEMO": "decision: no visual demo; product brief recorded",
+                "PR_QUALITY_REVIEW": "selected: contract; skipped: visual; disposition: pass",
+            }
+        )
         env.update(evidence_env)
         env["PATH"] = f"{directory}{os.pathsep}{env['PATH']}"
-        result = subprocess.run(
+        return subprocess.run(
             ["bash", str(OPEN_PR), "--dry-run", "some-branch", ISSUE],
             capture_output=True,
             text=True,
@@ -56,6 +95,10 @@ def _dry_run_body(evidence_env: dict[str, str]) -> str:
             cwd=ROOT,
             check=False,
         )
+
+
+def _dry_run_body(evidence_env: dict[str, str]) -> str:
+    result = _run_dry_run(evidence_env)
     if result.returncode != 0:
         message = f"open-pr.sh --dry-run failed:\n{result.stderr}"
         raise AssertionError(message)
@@ -75,6 +118,29 @@ class OpenPrBodyTests(unittest.TestCase):
         self.assert_report_line(body, "- Report: `docs/reviews/1234.md`")
         self.assertTrue(body.startswith("Closes #1234\n"))
 
+    def test_open_pr_rejects_unapproved_standard_issue(self) -> None:
+        result = _run_dry_run(
+            {
+                "PR_EVIDENCE_FILE": "docs/reviews/1234.md",
+                "STUB_NO_APPROVAL": "1",
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(
+            "requires spec:approved" in result.stderr
+            or "complete lightweight marker" in result.stderr
+        )
+
+    def test_open_pr_requires_quality_review_disposition(self) -> None:
+        result = _run_dry_run(
+            {
+                "PR_EVIDENCE_FILE": "docs/reviews/1234.md",
+                "PR_QUALITY_REVIEW": "not recorded",
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PR_QUALITY_REVIEW", result.stderr)
+
     def test_keep_open_override_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             for name, script in _STUBS.items():
@@ -82,7 +148,15 @@ class OpenPrBodyTests(unittest.TestCase):
                 stub.write_text(script, encoding="utf-8")
                 stub.chmod(0o755)
             env = {key: value for key, value in os.environ.items() if not key.startswith("PR_")}
-            env.update({"PR_EVIDENCE_FILE": "docs/reviews/1234.md", "PR_KEEP_OPEN": "1"})
+            env.update(
+                {
+                    "PR_EVIDENCE_FILE": "docs/reviews/1234.md",
+                    "PR_KEEP_OPEN": "1",
+                    "PR_DISCOVERY_LANE": "standard: stakeholder-approved packet",
+                    "PR_BRAINSTORM_DEMO": "decision: no visual demo; product brief recorded",
+                    "PR_QUALITY_REVIEW": "selected: contract; skipped: visual; disposition: pass",
+                }
+            )
             env["PATH"] = f"{directory}{os.pathsep}{env['PATH']}"
             result = subprocess.run(
                 ["bash", str(OPEN_PR), "--dry-run", "some-branch", ISSUE],
