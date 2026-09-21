@@ -266,9 +266,17 @@ class CharacterRelationship(SharedMemoryModel):
         """This side's added depth."""
         return self.scene_depth + self.invested_depth
 
-    @cached_property
+    @property
     def reverse(self) -> CharacterRelationship | None:
-        """The other side's row, or None (always None toward a companion)."""
+        """The other side's row, or None (always None toward a companion).
+
+        Deliberately NOT cached (#3957 review): nothing invalidates a per-instance cache on
+        an idmapper-shared model, so a cached reverse would survive the identity-map flush
+        ``_award_depth``/``move_gauges`` do on the OTHER side and hand every later reader a
+        detached, stale row. Hot paths batch the reverse rows themselves
+        (``reads.build_tie_page``'s pair-keyed map), so the cost here is one query per
+        uncached access on the single-row paths that want a live value anyway.
+        """
         if self.target_id is None:
             return None
         return CharacterRelationship.objects.filter(

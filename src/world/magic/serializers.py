@@ -946,7 +946,7 @@ class ThreadSerializer(serializers.ModelSerializer):
     # that kind is the RelationshipType CATALOG id — resolved against the caller's OWN
     # side (CharacterRelationship) toward that persona, which must hold an open label
     # of that type. Same identifier convention as the relationship write serializers
-    # (RelationshipUpdateViewSet._resolve_target_sheet): a Persona pk resolved
+    # (CharacterRelationshipViewSet._resolve_target_sheet): a Persona pk resolved
     # server-side to its CharacterSheet.
     target_persona_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     character_sheet_id = serializers.IntegerField(write_only=True, required=True)
@@ -1048,7 +1048,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         """Resolve ``target_persona_id`` → the partner's CharacterSheet.
 
         Same identifier convention as the relationship write serializers
-        (``RelationshipUpdateViewSet._resolve_target_sheet``): the request names a
+        (``CharacterRelationshipViewSet._resolve_target_sheet``): the request names a
         Persona pk, resolved server-side. Required for RELATIONSHIP_TRACK — a thread
         anchors to the caller's own side of a tie toward one specific partner, and
         ``target_id`` names a ``RelationshipType``, not a relationship row, so the

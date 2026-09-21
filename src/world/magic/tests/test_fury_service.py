@@ -8,6 +8,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import FuryConfigFactory, FuryTierFactory
 from world.magic.services.fury import (
     clamp_tier,
+    provocation_cap,
     provocation_ease,
     resolve_fury,
 )
@@ -210,6 +211,47 @@ class ProvocationEaseTests(TestCase):
     def test_provocation_ease_zero_for_null_anchor(self):
         ease = provocation_ease(self.source_sheet.character, None)
         self.assertEqual(ease, 0)
+
+
+class ProvocationCapReadsOwnSideTests(TestCase):
+    """The cap reads the character's OWN side toward the anchor, any label (#3957 fix round 1).
+
+    Fury's provocation cap has always been one-sided and label-agnostic: a character can be
+    provoked over someone who never declared anything back. It deliberately does NOT go
+    through ``relationships.helpers.get_relationship_tier``, which is training's narrower
+    mentor helper (the lower tier of a MUTUAL Teaching-family tie).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        FuryConfigFactory(provocation_cap_per_tier=1, cap_ease_per_point=2)
+        cls.source_sheet = CharacterSheetFactory()
+        cls.anchor_sheet = CharacterSheetFactory()
+        cls.unrelated_sheet = CharacterSheetFactory()
+        # A one-sided Heart-family (Lover) tie at tier 2: no Teaching label, no reverse row.
+        lover = RelationshipTypeFactory(family=TypeFamily.HEART)
+        side = CharacterRelationshipFactory(
+            source=cls.source_sheet, target=cls.anchor_sheet, tier=2
+        )
+        declare_label(
+            side=side,
+            type=lover,
+            awareness=LabelAwareness.PUBLIC,
+            tenure=grant_test_tenure(cls.source_sheet),
+        )
+
+    def test_one_sided_non_teaching_tie_still_caps_at_its_tier(self):
+        """Tier 2 with per_tier=1 → cap 2, the same value a mutual Mentor/Student tie gives."""
+        self.assertEqual(
+            provocation_cap(self.source_sheet.character, self.anchor_sheet),
+            2,
+        )
+
+    def test_no_tie_gives_zero(self):
+        self.assertEqual(
+            provocation_cap(self.source_sheet.character, self.unrelated_sheet),
+            0,
+        )
 
 
 class _FakeCheck:

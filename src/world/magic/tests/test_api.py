@@ -288,7 +288,7 @@ class ThreadViewSetTests(APITestCase):
         ``target_id`` is the ``RelationshipType`` **catalog** id (#3957) — resolved
         against the caller's OWN side (a ``CharacterRelationship``) toward the named
         partner, which must hold an open label of that type. The fix adds
-        ``target_persona_id`` (same convention as ``RelationshipUpdateViewSet``) to
+        ``target_persona_id`` (same convention as ``CharacterRelationshipViewSet``) to
         name the partner — mirroring telnet's ``CmdWeaveThread._resolve_track_anchor``.
         """
         from world.relationships.factories import (

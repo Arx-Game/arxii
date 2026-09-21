@@ -114,14 +114,33 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
         return obj.target_name
 
 
+class _AuditReadOnlyAdmin(admin.ModelAdmin):
+    """List/search only: rows written by a service are never hand-edited in admin (#3957).
+
+    Allocations, depth transactions and capstones are the audit behind the side row's
+    columns and the tier a player paid XP for. A hand-created row here would desync the
+    running sums (``scene_depth``/``invested_depth``) from their audit, or hand a tier out
+    without the entry and the XP — so staff may read them and nothing else.
+    """
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
 @admin.register(RelationshipAllocation)
-class RelationshipAllocationAdmin(admin.ModelAdmin):
+class RelationshipAllocationAdmin(_AuditReadOnlyAdmin):
     list_display = ["relationship", "ap_amount", "game_week", "updated_at"]
     raw_id_fields = ["relationship"]
 
 
 @admin.register(RelationshipDepthTransaction)
-class RelationshipDepthTransactionAdmin(admin.ModelAdmin):
+class RelationshipDepthTransactionAdmin(_AuditReadOnlyAdmin):
     list_display = ["relationship", "amount", "source", "scene", "game_week", "created_at"]
     list_filter = ["source"]
     raw_id_fields = ["relationship", "scene"]
@@ -129,7 +148,7 @@ class RelationshipDepthTransactionAdmin(admin.ModelAdmin):
 
 
 @admin.register(RelationshipCapstone)
-class RelationshipCapstoneAdmin(admin.ModelAdmin):
+class RelationshipCapstoneAdmin(_AuditReadOnlyAdmin):
     list_display = ["relationship", "tier_claimed", "xp_spent", "is_ritual_capstone", "created_at"]
     list_filter = ["is_ritual_capstone"]
     raw_id_fields = ["relationship", "journal_entry", "ritual"]

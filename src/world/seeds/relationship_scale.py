@@ -12,8 +12,8 @@ rewrite (tier names, type picker lines, emoji selection pending playtest).
 ``relationships.RelationshipType`` is staff-authored content (#3957, mirrors the
 retired ``RelationshipTrack``'s #2698 discipline) — looked up rather than
 invented unless ``SEED_SAMPLE_CONTENT`` is on, via ``authored_or_sample`` so a
-re-seed never clobbers a staff edit. The eighteen-plus starter types below
-(Heart/Company/Contest/Blood-and-oath/Teaching) seed in one pass keyed by
+re-seed never clobbers a staff edit. The twenty-three starter types below
+(Heart 5 / Company 4 / Contest 4 / Blood-and-oath 6 / Teaching 4) seed in one pass keyed by
 ``name``, then a second pass wires each type's ``counterpart`` now that every
 row exists (the self-FK can't be set at creation time when the counterpart
 hasn't been created yet — e.g. Beloved needs Admirer's pk). ``loaddata``
