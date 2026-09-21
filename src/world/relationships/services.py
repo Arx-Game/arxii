@@ -286,22 +286,36 @@ def mutual_hostile_expression(viewer_sheet_id: int, other_ref: str = "author_id"
 # -- depth ---------------------------------------------------------------------
 
 
+def standing_tie_ap(sheet_id: int, *, exclude_side_id: int | None = None) -> int:
+    """AP this character has standing across their tie allocations (#3957).
+
+    The tie half of the shared weekly commitment, kept separate from
+    ``standing_weekly_ap`` because the OTHER door needs exactly this much: training's own
+    budget check already has its training total in hand, so handing it the combined figure
+    would count training twice. ``exclude_side_id`` drops the row being replaced, so
+    re-setting one side's AP is not counted twice either.
+    """
+    ties = RelationshipAllocation.objects.filter(relationship__source_id=sheet_id)
+    if exclude_side_id is not None:
+        ties = ties.exclude(relationship_id=exclude_side_id)
+    return ties.aggregate(total=Sum("ap_amount"))["total"] or 0
+
+
 def standing_weekly_ap(sheet_id: int, *, exclude_side_id: int | None = None) -> int:
     """AP this character has already promised for the week: ties + training (#3957).
 
     Ties and training are ONE weekly commitment, not two budgets: both are standing
     orders paid out of the same ``ActionPointPool`` at the weekly turn, and the
     orchestrator runs training first (``game_clock/tasks.py``), so an unbudgeted tie
-    allocation is simply a tie that silently earns nothing every week. ``exclude_side_id``
-    drops the row being replaced, so re-setting one side's AP is not counted twice.
+    allocation is simply a tie that silently earns nothing every week. Both doors enforce
+    it: this is the tie side's reading, and ``skills.services`` reads
+    ``standing_tie_ap`` alongside its own training total for the training side.
     """
     from world.skills.services import total_allocated_training_ap
 
-    ties = RelationshipAllocation.objects.filter(relationship__source_id=sheet_id)
-    if exclude_side_id is not None:
-        ties = ties.exclude(relationship_id=exclude_side_id)
-    tie_total = ties.aggregate(total=Sum("ap_amount"))["total"] or 0
-    return tie_total + total_allocated_training_ap(sheet_id)
+    return standing_tie_ap(sheet_id, exclude_side_id=exclude_side_id) + (
+        total_allocated_training_ap(sheet_id)
+    )
 
 
 def set_allocation(*, side: CharacterRelationship, ap_amount: int) -> RelationshipAllocation:

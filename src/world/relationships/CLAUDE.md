@@ -96,7 +96,10 @@ Per-tie rows:
    (`world/game_clock/tasks.py` step 4 skills, step 6 ties) — an unbudgeted tie allocation
    would simply earn nothing, every week, in silence. Over-commitment raises
    `AllocationTooLargeError`, the pool's live balance is checked too, and a skip at the
-   weekly turn is logged rather than swallowed. The tie page's `ap_pool` line reports that
+   weekly turn is logged rather than swallowed. **Both doors enforce it:**
+   `skills.services.create_training_allocation` / `update_training_allocation` read
+   `standing_tie_ap` alongside their own training total, so setting ties first no longer
+   leaves a budget training thinks is unspent. The tie page's `ap_pool` line reports that
    same budget and what is left of it. The weekly rollover calls
    `process_weekly_relationship_allocations()`, which spends the AP and converts it at
    `depth_per_ap`. Idempotent per game week — a side already credited with an ALLOCATION

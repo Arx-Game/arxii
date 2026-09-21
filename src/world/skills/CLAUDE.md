@@ -58,8 +58,8 @@ Parent skills and specializations for character abilities. Skills are linked to 
 ### Service Functions (`services.py`)
 
 **CRUD:**
-- `create_training_allocation(character, ap_amount, *, skill, specialization, mentor)` — creates allocation, validates AP budget
-- `update_training_allocation(allocation, *, ap_amount, mentor)` — updates allocation
+- `create_training_allocation(character, ap_amount, *, skill, specialization, mentor)` — creates allocation, validates the weekly AP budget. **That budget is shared with ties (#3957):** the check sums this character's training allocations AND their standing `RelationshipAllocation` rows (`world.relationships.services.standing_tie_ap`) against `ActionPointConfig.get_weekly_regen()`, because both are paid from the one `ActionPointPool` at the weekly turn. The tie door enforces the same total from its side (`set_allocation`, via `standing_weekly_ap`).
+- `update_training_allocation(allocation, *, ap_amount, mentor)` — updates allocation, against that same shared budget (its own row excluded)
 - `remove_training_allocation(allocation)` — deletes allocation
 
 **Calculation:**

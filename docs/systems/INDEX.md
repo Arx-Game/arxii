@@ -769,8 +769,16 @@ allocations that convert AP to development points.
   web `TrainingAllocationViewSet` and telnet `training` command
 - **Cron:** `run_weekly_skill_cron()` registered as `skills.weekly_training` in
   `world/game_clock/tasks.py`
+- **Weekly AP budget (shared with ties, #3957):** `create_training_allocation` /
+  `update_training_allocation` validate the character's training total PLUS their standing
+  `RelationshipAllocation` rows (`relationships.services.standing_tie_ap`) against
+  `ActionPointConfig.get_weekly_regen()`. Ties and training are one weekly commitment paid
+  from one `ActionPointPool`, and BOTH doors enforce it — the tie door reads
+  `standing_weekly_ap` (ties + training), the training door reads its own training total
+  plus `standing_tie_ap`, so neither counts a row twice.
 - **Integrates with:** traits (skill checks), character_creation (skill selection),
-  action_points (weekly AP spend), progression (`DevelopmentTransaction` rows)
+  action_points (weekly AP spend), progression (`DevelopmentTransaction` rows),
+  relationships (the shared weekly AP budget above)
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
 ### Distinctions
@@ -8870,8 +8878,10 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `set_allocation(*, side, ap_amount)` (ties and training share ONE weekly budget —
   `ActionPointConfig.get_weekly_regen()` against this amount + the character's other tie
   allocations + their standing `TrainingAllocation` total, `AllocationTooLargeError` past
-  it; `standing_weekly_ap(sheet_id, *, exclude_side_id=None)` is that sum, and
-  `skills.services.total_allocated_training_ap(character_id)` is the training half),
+  it; `standing_weekly_ap(sheet_id, *, exclude_side_id=None)` is that sum,
+  `standing_tie_ap(...)` its tie half — which the TRAINING door reads alongside its own
+  total, so the rule is enforced from both sides — and
+  `skills.services.total_allocated_training_ap(character_id)` its training half),
   `process_weekly_relationship_allocations()` (idempotent per game week, logs a warning on
   a skip the pool cannot pay), `credit_scene_depth(scene)` (called from `Scene.finish_scene`;
   first scene together per week, both must have taken part — it reads every `Interaction`

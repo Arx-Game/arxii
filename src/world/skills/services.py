@@ -15,6 +15,7 @@ from world.classes.models import CharacterClassLevel
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
+from world.relationships.services import standing_tie_ap
 from world.roster.models import RosterEntry
 from world.skills.models import (
     CharacterSkillValue,
@@ -282,15 +283,16 @@ def create_training_allocation(
         The created TrainingAllocation instance.
 
     Raises:
-        ValueError: If ap_amount is <= 0 or total allocations would exceed
-            the weekly AP budget.
+        ValueError: If ap_amount is <= 0, or the character's standing allocations —
+            training AND ties, which share one weekly purse (#3957) — would exceed the
+            weekly AP budget.
     """
     if ap_amount <= 0:
         msg = "AP amount must be greater than 0."
         raise ValueError(msg)
 
     budget = ActionPointConfig.get_weekly_regen()
-    current_total = total_allocated_training_ap(character.pk)
+    current_total = total_allocated_training_ap(character.pk) + standing_tie_ap(character.pk)
     if current_total + ap_amount > budget:
         msg = (
             f"Total allocated AP ({current_total + ap_amount}) would exceed "
@@ -325,8 +327,9 @@ def update_training_allocation(
         The updated TrainingAllocation instance.
 
     Raises:
-        ValueError: If ap_amount is <= 0 or total allocations would exceed
-            the weekly AP budget.
+        ValueError: If ap_amount is <= 0, or the character's standing allocations —
+            training AND ties, which share one weekly purse (#3957) — would exceed the
+            weekly AP budget.
     """
     if ap_amount is not None:
         if ap_amount <= 0:
@@ -336,7 +339,7 @@ def update_training_allocation(
         budget = ActionPointConfig.get_weekly_regen()
         current_total = total_allocated_training_ap(
             allocation.character_id, exclude_pk=allocation.pk
-        )
+        ) + standing_tie_ap(allocation.character_id)
         if current_total + ap_amount > budget:
             msg = (
                 f"Total allocated AP ({current_total + ap_amount}) would exceed "
