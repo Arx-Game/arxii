@@ -8867,8 +8867,13 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   target_companion=None)`, `declare_label(*, side, type, awareness=PRIVATE, tenure=None)`,
   `shift_label(*, label, new_type, note="")` (old row ends, new row records `replaced`),
   `end_label(*, label)`, `advance_awareness(*, label, to)`, `set_summary`,
-  `set_allocation(*, side, ap_amount)`, `process_weekly_relationship_allocations()`
-  (idempotent per game week), `credit_scene_depth(scene)` (called from `Scene.finish_scene`;
+  `set_allocation(*, side, ap_amount)` (ties and training share ONE weekly budget —
+  `ActionPointConfig.get_weekly_regen()` against this amount + the character's other tie
+  allocations + their standing `TrainingAllocation` total, `AllocationTooLargeError` past
+  it; `standing_weekly_ap(sheet_id, *, exclude_side_id=None)` is that sum, and
+  `skills.services.total_allocated_training_ap(character_id)` is the training half),
+  `process_weekly_relationship_allocations()` (idempotent per game week, logs a warning on
+  a skip the pool cannot pay), `credit_scene_depth(scene)` (called from `Scene.finish_scene`;
   first scene together per week, both must have taken part — it reads every `Interaction`
   in the scene, so a say counts as surely as a pose), `advance_tier(*, side,
   journal_entry)` (cost `xp_per_tier × new tier`), `move_gauges(*, side, amount)`,
@@ -8881,9 +8886,15 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `tier` directly, `world/magic/services/fury.py:_bond_tier`)
 - **Reads (`reads.py`):** `build_tie_page(sides, *, viewer_sheet, is_staff,
   force_audience=None, include_allocation=True)` is the batched entry point the tie API and
-  the sheet cast share (three extra queries regardless of page size); plus `tie_audience`,
+  the sheet cast share (three extra queries regardless of page size — callers MUST pass the
+  labels prefetch: on an idmapper-shared side a missing one serves an earlier request's
+  cache rather than falling back to a query); plus `tie_audience`,
   `third_party_can_see` / `has_open_public_label`, `visible_labels`, `label_payload`,
-  `depth_breakdown`, `tie_stream`, `resolve_viewer_sheet`, `entry_id_for`
+  `depth_breakdown`, `tie_stream(side, viewer_sheet, is_staff, *, account)` (the account is
+  the viewer's, and the scene half of the stream goes through
+  `Scene.objects.viewable_by(account)`), `labels_by_relationship_id(ids, *,
+  open_only=False)` (the batched per-request alternative to a labels prefetch, shared by the
+  telnet reads and magic's crossing helper), `resolve_viewer_sheet`, `entry_id_for`
 - **Exceptions:** `TieError` base + `LabelAlreadyDeclaredError`, `LabelEndedError`,
   `AwarenessBackwardError`, `SameTypeShiftError`, `TierNotReachedError`,
   `CapstoneEntryInvalidError`, `AllocationTooLargeError`, `NotYourTieError`;
@@ -8901,9 +8912,12 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `relationship_bump`) through `action.run()` (ADR-0001). Web:
   `CharacterRelationshipViewSet` at `/api/relationships/relationships/` — `list` (own sides,
   OWNER shape), `retrieve` (any pk, audience computed; every row also carries `is_own_side`,
-  the flag the frontend branches its owner-only doors on), `GET {id}/stream/` (journal entries
-  either side wrote about the other, visibility-filtered row by row, merged with the scenes
-  both took part in), and POST `declare` / `shift` / `end` / `awareness` / `allocation` /
+  the flag the frontend branches its owner-only doors on; `ap_pool` rides `is_own_side` and
+  is null for everyone else, staff included — it reports the week's budget and what is left
+  of it after every standing tie AND training commitment), `GET {id}/stream/` (journal
+  entries either side wrote about the other, visibility-filtered row by row, merged with the
+  scenes both took part in that the viewer may see — `Scene.objects.viewable_by(account)`,
+  so a PRIVATE or EPHEMERAL scene reaches only a participant or staff), and POST `declare` / `shift` / `end` / `awareness` / `allocation` /
   `advance` / `summary`; `RelationshipTypeViewSet` (`/api/relationships/types/`) is the
   picker catalogue. Sheet payload carries `ties` (`_build_ties`, one `TieCardEntry` per
   visible side) and `ties_ap_this_week` (owner/staff only); the cast is the Ties section and

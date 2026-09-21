@@ -88,8 +88,16 @@ Per-tie rows:
    the scene, so a say or a mechanical action counts as surely as a pose does. Gauges move on
    their own through bumps,
    affection shifts, grievances and the NPC mirror.
-3. **Allocate.** `set_allocation` sets this week's AP against one side (checked against the
-   `ActionPointPool`); the weekly rollover (`world/game_clock/tasks.py`) calls
+3. **Allocate.** `set_allocation` sets this week's AP against one side. **Ties and training
+   share ONE weekly budget** (`ActionPointConfig.get_weekly_regen()`): the check is this
+   amount plus the character's other `RelationshipAllocation` rows plus their standing
+   `TrainingAllocation` total, because all of them are paid out of the same
+   `ActionPointPool` at the weekly turn, and training runs first
+   (`world/game_clock/tasks.py` step 4 skills, step 6 ties) — an unbudgeted tie allocation
+   would simply earn nothing, every week, in silence. Over-commitment raises
+   `AllocationTooLargeError`, the pool's live balance is checked too, and a skip at the
+   weekly turn is logged rather than swallowed. The tie page's `ap_pool` line reports that
+   same budget and what is left of it. The weekly rollover calls
    `process_weekly_relationship_allocations()`, which spends the AP and converts it at
    `depth_per_ap`. Idempotent per game week — a side already credited with an ALLOCATION
    transaction for the current week is skipped, so a repeat call never double-spends.
@@ -112,10 +120,22 @@ from the read.
 
 | Audience | Labels | Numbers |
 |---|---|---|
-| OWNER | all, including Private and former | pair depth, both tiers, breakdown, **Affection and Conflict**, `ap_this_week` |
-| OTHER_SIDE | Clandestine + Public | pair depth, both tiers, breakdown; **no gauges** |
+| OWNER | all, including Private and former | pair depth, both tiers, breakdown, **Affection and Conflict**, `ap_this_week`, `ap_pool` |
+| OTHER_SIDE | Clandestine + Public | pair depth, both tiers, breakdown; **no gauges**, **no `ap_pool`** |
 | THIRD_PARTY | Public only | **none at all**; a side with no open Public label is absent from lists and **404s** on retrieve (never 403) |
-| STAFF | everything | everything |
+| STAFF | everything | everything **except `ap_pool`** |
+
+**`ap_pool` is the one field staff do not get on a foreign tie.** It rides `is_own_side`,
+not `audience`, because it is not tie state at all: it is the owner's own weekly spend
+control (their budget and what is left of it), so it is null for everyone but the
+character's own player — a staffer reading someone else's tie included.
+
+**The stream is gated on both halves.** `GET {id}/stream/` merges journal entries with the
+scenes both sides took part in, and each half goes through its own app's visibility rule:
+journals through `visible_entries_q`, scenes through `Scene.objects.viewable_by(account)`
+(the scenes app's single source of truth), with the viewer's account threaded in from the
+view. A PRIVATE or EPHEMERAL scene therefore reaches only a participant or staff, and each
+row reports the scene's own privacy mode rather than a blanket `is_public=True`.
 
 Every **tie API** payload (`TieSerializer`, set in `views._row_to_payload`) also carries
 **`is_own_side`**: true when the viewer is looking at their own side. The sheet cast's
@@ -188,7 +208,9 @@ Both surfaces converge on `actions/definitions/relationships.py` — `declare_la
 - **Web.** `CharacterRelationshipViewSet` under `/api/relationships/relationships/`: `list`
   (the caller's own sides, always the OWNER shape), `retrieve` (any pk, audience computed,
   404 rules above), `GET {id}/stream/` (journal entries either side wrote about the other,
-  visibility-filtered row by row, merged with the scenes both took part in), and seven POST
+  visibility-filtered row by row, merged with the scenes both took part in that the viewer
+  may see — `Scene.objects.viewable_by(account)`, so a PRIVATE or EPHEMERAL scene reaches
+  only a participant or staff), and seven POST
   actions — `declare`, `shift`, `end`, `awareness`, `allocation`, `advance`, `summary`.
   `RelationshipTypeViewSet` (`/api/relationships/types/`) is the read-only catalogue for the
   picker; `RelationshipCapstoneViewSet` and `RelationshipConditionViewSet` are unchanged.

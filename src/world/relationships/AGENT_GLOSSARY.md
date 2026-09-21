@@ -129,8 +129,11 @@ _Avoid_: level up, unlock, promote.
 
 **Allocation** (`RelationshipAllocation`):
 This week's AP set against one side, one row per side (`OneToOne`), mirroring
-`TrainingAllocation`. `set_allocation` checks the pool can afford it; the weekly turn spends
-it and converts it at `depth_per_ap`.
+`TrainingAllocation`. `set_allocation` checks the pool can afford it AND that the whole
+weekly budget is not over-committed — ties and training draw on one purse, so the check sums
+the character's other tie allocations and their standing training allocations against
+`ActionPointConfig.get_weekly_regen()`. The weekly turn spends it and converts it at
+`depth_per_ap`.
 _Avoid_: investment (use "invested depth" for the result), contribution, weekly spend.
 
 **Audience** (`TieAudience`):
