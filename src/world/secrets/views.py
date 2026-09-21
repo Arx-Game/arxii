@@ -25,7 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from world.relationships.models import GrievanceOption, RelationshipTrack
+from world.relationships.models import GrievanceOption
 from world.roster.models import RosterEntry
 from world.secrets.constants import GossipAction
 from world.secrets.filters import KnownSecretFilter
@@ -156,7 +156,7 @@ class GrievanceOptionListView(ListAPIView):
     pagination_class = None
 
     def get_queryset(self) -> QuerySet[GrievanceOption]:
-        return GrievanceOption.objects.filter(is_active=True).select_related("track")
+        return GrievanceOption.objects.filter(is_active=True)
 
 
 class SecretGrievanceView(APIView):
@@ -185,11 +185,8 @@ class SecretGrievanceView(APIView):
             return Response({"detail": "No such secret."}, status=status.HTTP_404_NOT_FOUND)
 
         option = None
-        custom_track = None
         if payload.get("option") is not None:
             option = GrievanceOption.objects.filter(pk=payload["option"], is_active=True).first()
-        else:
-            custom_track = RelationshipTrack.objects.filter(pk=payload["custom_track"]).first()
 
         try:
             register_secret_grievance(
@@ -197,7 +194,6 @@ class SecretGrievanceView(APIView):
                 secret=secret,
                 option=option,
                 custom_points=payload.get("custom_points"),
-                custom_track=custom_track,
             )
         except SecretError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)

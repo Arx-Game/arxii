@@ -78,35 +78,6 @@ def seed_spread_assist_kudos_category() -> None:
     )
 
 
-def seed_relationship_writeup_kudos_category() -> None:
-    """Seed the relationship_writeup KudosSourceCategory (#2026).
-
-    ``world.relationships.services.give_writeup_kudos`` does a plain ``.get()`` on
-    this category (no self-heal) — when it's missing, the commendation row is still
-    recorded but no kudos are awarded (silent no-op, only a warning log). Name and
-    amount must match ``RELATIONSHIP_WRITEUP_KUDOS_CATEGORY`` / ``WRITEUP_KUDOS_AMOUNT``
-    in ``world.relationships.constants`` exactly. Idempotent via update_or_create.
-    """
-    from world.progression.models import KudosSourceCategory  # noqa: PLC0415
-    from world.relationships.constants import (  # noqa: PLC0415
-        RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
-        WRITEUP_KUDOS_AMOUNT,
-    )
-
-    KudosSourceCategory.objects.update_or_create(
-        name=RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
-        defaults={
-            "display_name": "Writeup Commended",
-            "description": (
-                "Another character commended a relationship writeup written about them."
-            ),
-            "default_amount": WRITEUP_KUDOS_AMOUNT,
-            "is_active": True,
-            "staff_only": False,
-        },
-    )
-
-
 def seed_xp_kudos_claim_category() -> None:
     """Seed the 'xp' KudosClaimCategory — convert kudos to account XP (#2026).
 
@@ -135,17 +106,15 @@ def seed_xp_kudos_claim_category() -> None:
 def seed_kudos_content() -> None:
     """Seed every kudos source/claim category the kudos economy needs (#2026).
 
-    Without this, ``grant_social_engagement_kudos`` (weekly good-sport grant) and
-    ``give_writeup_kudos`` (relationship-writeup commend) both silently no-op on a
-    fresh DB — their category lookups raise ``DoesNotExist``, caught and logged as
-    a warning rather than awarding anything — and the kudos-claim UI has no
+    Without this, ``grant_social_engagement_kudos`` (weekly good-sport grant) silently
+    no-ops on a fresh DB — its category lookup raises ``DoesNotExist``, caught and logged
+    as a warning rather than awarding anything — and the kudos-claim UI has no
     ``KudosClaimCategory`` to offer. Registered as the "kudos" cluster in
     ``world.seeds.clusters``.
     """
     seed_social_engagement_kudos_category()
     seed_pose_kudos_category()
     seed_spread_assist_kudos_category()
-    seed_relationship_writeup_kudos_category()
     seed_xp_kudos_claim_category()
 
 

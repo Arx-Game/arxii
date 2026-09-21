@@ -2,12 +2,11 @@
 
 Before this seed step existed, `KudosSourceCategory` rows for `pose_kudos` /
 `spread_assist` self-healed lazily via `get_or_create` inside their reaction-kind
-helpers, but `social_engagement` (weekly good-sport grant) and
-`relationship_writeup` (writeup commend) both do a plain `.get()` with no
-self-heal — on a fresh DB neither category exists, so both award paths silently
-log a warning and skip the kudos award. These tests cover the seed step itself
-(every row exists with the shape the consuming services expect) and confirm the
-two previously silent no-ops now actually produce a `KudosTransaction`.
+helpers, but `social_engagement` (weekly good-sport grant) does a plain `.get()`
+with no self-heal — on a fresh DB the category doesn't exist, so the award path
+silently logs a warning and skips the kudos award. These tests cover the seed step
+itself (every row exists with the shape the consuming services expect) and confirm
+that previously silent no-op now actually produces a `KudosTransaction`.
 """
 
 from __future__ import annotations
@@ -27,23 +26,11 @@ from world.progression.models import (
 from world.progression.seeds import (
     seed_kudos_content,
     seed_pose_kudos_category,
-    seed_relationship_writeup_kudos_category,
     seed_social_engagement_kudos_category,
     seed_spread_assist_kudos_category,
     seed_xp_kudos_claim_category,
 )
 from world.progression.services.engagement import accrue, grant_social_engagement_kudos
-from world.relationships.constants import (
-    RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
-    WRITEUP_KUDOS_AMOUNT,
-    UpdateVisibility,
-)
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipUpdateFactory,
-)
-from world.relationships.services import give_writeup_kudos
-from world.roster.factories import RosterTenureFactory
 
 
 def _flush_kudos_caches() -> None:
@@ -52,19 +39,13 @@ def _flush_kudos_caches() -> None:
     KudosPointsData.flush_instance_cache()
 
 
-def _make_linked_account(character_sheet):
-    """Create a RosterTenure that links character_sheet.character to a fresh account."""
-    tenure = RosterTenureFactory(roster_entry__character_sheet__character=character_sheet.character)
-    return tenure.player_data.account
-
-
 class SeedKudosContentTest(TestCase):
     """seed_kudos_content() seeds every category the kudos economy needs."""
 
     def setUp(self):
         _flush_kudos_caches()
 
-    def test_seeds_all_four_source_categories_and_the_claim_category(self):
+    def test_seeds_all_three_source_categories_and_the_claim_category(self):
         seed_kudos_content()
 
         names = set(KudosSourceCategory.objects.values_list("name", flat=True))
@@ -74,17 +55,9 @@ class SeedKudosContentTest(TestCase):
                 "pose_kudos",
                 "spread_assist",
                 "social_engagement",
-                RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
             },
         )
         self.assertTrue(KudosClaimCategory.objects.filter(name="xp", is_active=True).exists())
-
-    def test_relationship_writeup_category_matches_service_constants(self):
-        seed_relationship_writeup_kudos_category()
-
-        category = KudosSourceCategory.objects.get(name=RELATIONSHIP_WRITEUP_KUDOS_CATEGORY)
-        self.assertEqual(category.default_amount, WRITEUP_KUDOS_AMOUNT)
-        self.assertTrue(category.is_active)
 
     def test_pose_kudos_category_matches_reaction_kind_defaults(self):
         seed_pose_kudos_category()
@@ -138,31 +111,3 @@ class SeededGoodSportGrantTest(TestCase):
         kudos_transaction = KudosTransaction.objects.get(account=self.account)
         self.assertEqual(kudos_transaction.amount, 1)
         self.assertEqual(kudos_transaction.source_category.name, "social_engagement")
-
-
-class SeededWriteupKudosTest(TestCase):
-    """give_writeup_kudos() no longer no-ops once the DB is seeded."""
-
-    def setUp(self):
-        _flush_kudos_caches()
-        seed_relationship_writeup_kudos_category()
-
-        rel = CharacterRelationshipFactory()
-        self.author_sheet = rel.source
-        self.subject_sheet = rel.target
-        self.author_account = _make_linked_account(self.author_sheet)
-        self.subject_account = _make_linked_account(self.subject_sheet)
-        self.update = RelationshipUpdateFactory(
-            relationship=rel,
-            author=self.author_sheet,
-            visibility=UpdateVisibility.SHARED,
-        )
-
-    def test_commend_awards_kudos_transaction_on_seeded_db(self):
-        give_writeup_kudos(giver_account=self.subject_account, writeup=self.update)
-
-        kudos_transaction = KudosTransaction.objects.get(account=self.author_account)
-        self.assertEqual(kudos_transaction.amount, WRITEUP_KUDOS_AMOUNT)
-        self.assertEqual(
-            kudos_transaction.source_category.name, RELATIONSHIP_WRITEUP_KUDOS_CATEGORY
-        )

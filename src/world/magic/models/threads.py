@@ -574,13 +574,13 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=TECHNIQUE; null otherwise.",
     )
-    target_relationship_track = models.ForeignKey(
-        "arxii.RelationshipTrackProgress",
+    target_relationship = models.ForeignKey(
+        "arxii.CharacterRelationship",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="anchored_threads",
-        help_text="Set when target_kind=RELATIONSHIP_TRACK; null otherwise.",
+        help_text="Set when target_kind=RELATIONSHIP_TRACK; the weaver's own side of the tie.",
     )
     target_capstone = models.ForeignKey(
         "arxii.RelationshipCapstone",
@@ -675,7 +675,7 @@ class Thread(SharedMemoryModel):
                 name="uniq_thread_technique",
             ),
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_relationship_track"],
+                fields=["owner", "resonance", "target_relationship"],
                 condition=models.Q(target_kind=TargetKind.RELATIONSHIP_TRACK),
                 name="uniq_thread_rel_track",
             ),
@@ -692,7 +692,7 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=False)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -710,7 +710,7 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=False)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -728,7 +728,7 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=False)
+                        & models.Q(target_relationship__isnull=False)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -746,7 +746,7 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=False)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -776,7 +776,7 @@ class Thread(SharedMemoryModel):
                         models.Q(target_facet__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
                         & models.Q(target_gift__isnull=True)
@@ -803,7 +803,7 @@ class Thread(SharedMemoryModel):
                         models.Q(target_covenant_role__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_gift__isnull=True)
@@ -839,7 +839,7 @@ class Thread(SharedMemoryModel):
                         models.Q(target_gift__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -866,7 +866,7 @@ class Thread(SharedMemoryModel):
                         models.Q(target_mantle__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -918,7 +918,7 @@ class Thread(SharedMemoryModel):
                         & ~models.Q(slot_kind="")
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -947,7 +947,7 @@ class Thread(SharedMemoryModel):
                         models.Q(target_organization__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_relationship__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -980,7 +980,7 @@ class Thread(SharedMemoryModel):
         _kind_to_attr: dict[str, str] = {
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
-            TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+            TargetKind.RELATIONSHIP_TRACK: "target_relationship",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.FACET: "target_facet",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
@@ -1004,7 +1004,7 @@ class Thread(SharedMemoryModel):
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
             TargetKind.FACET: "target_facet",
-            TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+            TargetKind.RELATIONSHIP_TRACK: "target_relationship",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
             TargetKind.GIFT: "target_gift",
@@ -1016,7 +1016,7 @@ class Thread(SharedMemoryModel):
             "target_trait",
             "target_technique",
             "target_facet",
-            "target_relationship_track",
+            "target_relationship",
             "target_capstone",
             "target_covenant_role",
             "target_gift",

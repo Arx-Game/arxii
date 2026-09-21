@@ -541,7 +541,7 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
     Character-intrinsic like every sibling requirement (#2116): counts the
     character's own ``RelationshipTrackProgress`` rows (as the relationship's
     ``source``) that have reached ``minimum_tier`` on a track, optionally
-    narrowed to one ``required_track_kind``. Met when at least
+    narrowed to one ``required_type``. Met when at least
     ``minimum_count`` such tracks qualify. Replaces the former freeform
     ``relationship_target``/``minimum_level`` shape — a specific-named-person
     gate was rejected (target resolution by name is ambiguous/renameable and
@@ -549,13 +549,13 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
     needs-design follow-up if content design wants it later).
     """
 
-    required_track_kind = models.ForeignKey(
-        "arxii.RelationshipTrack",
+    required_type = models.ForeignKey(
+        "arxii.RelationshipType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="+",
-        help_text="Track this requirement gates. Null = any track qualifies.",
+        help_text="Label type this requirement gates. Null = any type.",
     )
     minimum_tier = models.PositiveIntegerField(
         help_text="Minimum RelationshipTier.tier_number the track must have reached.",
@@ -583,8 +583,8 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
             relationship__source=sheet,
             relationship__is_active=True,
         ).select_related("track")
-        if self.required_track_kind_id is not None:
-            qs = qs.filter(track=self.required_track_kind_id)
+        if self.required_type_id is not None:
+            qs = qs.filter(track=self.required_type_id)
 
         count = 0
         for progress in qs:
@@ -605,16 +605,14 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
 
     def _gate_description(self) -> str:
         """Authored-gate text only — never names another character's tracks."""
-        track_clause = (
-            f"on {self.required_track_kind.name}" if self.required_track_kind_id else "any track"
-        )
+        track_clause = f"on {self.required_type.name}" if self.required_type_id else "any track"
         return (
             f"Need {self.minimum_count} relationship track(s) {track_clause} "
             f"at tier >= {self.minimum_tier}"
         )
 
     def __str__(self) -> str:
-        track_name = self.required_track_kind.name if self.required_track_kind_id else "Any"
+        track_name = self.required_type.name if self.required_type_id else "Any"
         return f"Relationship: {track_name} tier >= {self.minimum_tier} (x{self.minimum_count})"
 
 

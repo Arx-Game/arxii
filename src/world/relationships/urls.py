@@ -1,26 +1,15 @@
-"""URL configuration for relationships API."""
+"""URL configuration for relationships API (#3957)."""
 
 from rest_framework.routers import DefaultRouter
 
-from world.relationships.views import (
-    CharacterRelationshipViewSet,
-    HybridRelationshipTypeViewSet,
-    RelationshipCapstoneViewSet,
-    RelationshipConditionViewSet,
-    RelationshipTrackViewSet,
-    RelationshipUpdateViewSet,
-)
+from world.relationships.views import RelationshipCapstoneViewSet, RelationshipConditionViewSet
 
 app_name = "relationships"
 
 router = DefaultRouter()
 router.register("conditions", RelationshipConditionViewSet)
-router.register("tracks", RelationshipTrackViewSet)
-router.register("hybrid-types", HybridRelationshipTypeViewSet)
-router.register("relationships", CharacterRelationshipViewSet, basename="relationship")
 router.register(
     "relationship-capstones", RelationshipCapstoneViewSet, basename="relationship-capstone"
 )
-router.register("relationship-updates", RelationshipUpdateViewSet, basename="relationship-update")
 
 urlpatterns = router.urls

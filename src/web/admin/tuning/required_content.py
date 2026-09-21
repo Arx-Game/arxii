@@ -746,9 +746,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
         TECHNIQUE_TRAINING_CHECK_TYPE_NAME,
     )
     from world.mechanics.succor_shared import SUCCOR_CHALLENGE_NAME  # noqa: PLC0415
-    from world.relationships.constants import (  # noqa: PLC0415
-        RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
-    )
     from world.room_features.seeds import SANCTUM_KIND_NAME  # noqa: PLC0415
     from world.secrets.constants import GOSSIP_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.traits.models import TraitType  # noqa: PLC0415
@@ -1142,19 +1139,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "Property.DoesNotExist instead of updating their position."
             ),
             probe=NamedRowsProbe(label="Property", names=(AERIAL_PROPERTY_NAME,)),
-        ),
-        ContentDependency(
-            key="relationship-writeup-kudos-category",
-            label="Relationship Writeup kudos category",
-            tier=DependencyTier.REQUIRED,
-            consumer="world/relationships/services.py:578 give_writeup_kudos()",
-            consequence=(
-                "Commending a relationship writeup silently skips the author's "
-                "kudos award - logged as a warning, never delivered."
-            ),
-            probe=NamedRowsProbe(
-                label="KudosSourceCategory", names=(RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,)
-            ),
         ),
         ContentDependency(
             key="social-engagement-kudos-category",

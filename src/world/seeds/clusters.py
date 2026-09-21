@@ -715,9 +715,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "building_listings": _seed_building_listings,
     "agriculture": _seed_agriculture,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
-    # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
-    # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
-    # any other cluster.
+    # reaction-kind + weekly-grant paths need, plus the "xp" KudosClaimCategory the claim UI
+    # needs to offer anything (#2026). No dependencies on any other cluster.
     "kudos": _seed_kudos,
     # Survivability: the knockout/default-death/default-wound pools + Bleeding
     # Out staged condition + Unconscious capability zeroing + foundational
@@ -1062,9 +1061,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Building listings: a placeholder for-sale Building so purchase_building
         # is exercisable on a fresh dev DB before real sale inventory is authored (#2991).
         "building_listings": [BuildingListing],
-        # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
-        # relationship_writeup) + the "xp" KudosClaimCategory; represented by
-        # KudosSourceCategory (#2026).
+        # Kudos: 3 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement)
+        # + the "xp" KudosClaimCategory; represented by KudosSourceCategory (#2026).
         "kudos": [KudosSourceCategory],
         # Survivability: knockout/default-death/default-wound pools + Bleeding Out
         # staged condition + foundational CapabilityTypes + dream room (#2287).

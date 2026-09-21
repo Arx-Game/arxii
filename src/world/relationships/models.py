@@ -1,16 +1,18 @@
-"""Models for character-to-character relationships with track-based progression."""
+"""Models for ties between characters (#3957).
+
+A tie is two directed sides. ``CharacterRelationship`` is one side: its labels
+(``RelationshipLabel``), the depth it added (``scene_depth`` + ``invested_depth``),
+the tier it has claimed, and the two play-moved gauges (``affection``, ``conflict``).
+The pair's depth is the sum of both sides. Labels carry awareness and history and
+are never deleted.
+"""
 
 from __future__ import annotations
 
-from datetime import timedelta
-import math
-
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
 from django.utils import timezone
 from django.utils.functional import cached_property
-from evennia.accounts.models import AccountDB
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
@@ -18,22 +20,19 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import SoulTetherRole
 from world.relationships.constants import (
-    DECAY_DAYS,
     BumpValence,
-    FirstImpressionColoring,
-    ReferenceMode,
-    TrackSign,
-    TrackSystemKey,
-    UpdateVisibility,
+    DepthSource,
+    LabelAwareness,
+    TypeFamily,
+    TypeValence,
 )
-
-# Django related_name template producing a per-concrete-subclass reverse accessor.
-CLASS_SET_RELATED_NAME = "%(class)s_set"
 
 # Cross-app FK string constants (SonarCloud python:S1192 duplicate-literal).
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 SCENE_MODEL = "arxii.Scene"
 COMPANION_MODEL = "arxii.Companion"
+ROSTER_TENURE_MODEL = "arxii.RosterTenure"
+GAME_WEEK_MODEL = "arxii.GameWeek"
 
 
 class RelationshipCondition(SharedMemoryModel):
@@ -85,13 +84,13 @@ class RelationshipCondition(SharedMemoryModel):
         return list(self.gates_modifiers.all())
 
 
-class RelationshipTrack(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
-    """
-    A named axis along which a relationship can develop.
+class RelationshipType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """The catalogue of what one character may call another (#3957).
 
-    Tracks represent different dimensions of how characters relate to each other,
-    such as Trust, Respect, Rivalry, or Fear. Each track has a sign indicating
-    whether it represents positive or negative feelings.
+    Staff-authored, credited content (#2698). ``valence`` is what consent, journals and
+    the surge engine read; ``family`` is how the picker groups the list; ``counterpart``
+    is the type the OTHER side must hold for the label to be mutual (null = symmetric:
+    Friend pairs with Friend; Mentor pairs with Student).
     """
 
     class NaturalKeyConfig:
@@ -99,232 +98,90 @@ class RelationshipTrack(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     objects = NaturalKeyManager()
 
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Track name (e.g., 'Trust', 'Respect', 'Rivalry', 'Fear')",
-    )
-    slug = models.SlugField(
-        max_length=100,
-        unique=True,
-        help_text="URL-safe identifier for this track",
-    )
+    name = models.CharField(max_length=100, unique=True, help_text="Type name, e.g. 'Rival'.")
+    slug = models.SlugField(max_length=100, unique=True, help_text="URL-safe identifier.")
     description = models.TextField(
+        blank=True, help_text="The one line shown in the picker. PLACEHOLDER copy."
+    )
+    family = models.CharField(max_length=20, choices=TypeFamily.choices, default=TypeFamily.COMPANY)
+    valence = models.CharField(
+        max_length=10, choices=TypeValence.choices, default=TypeValence.NEUTRAL
+    )
+    counterpart = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
         blank=True,
-        help_text="Description of what this track represents",
+        related_name="counterpart_of",
+        help_text="The type the other side must hold for this label to be mutual; null = itself.",
     )
-    sign = models.CharField(
-        max_length=20,
-        choices=TrackSign.choices,
-        help_text="Whether this track represents positive or negative feelings",
-    )
-    display_order = models.PositiveIntegerField(
-        default=0,
-        help_text="Order for display purposes (lower values appear first)",
-    )
+    display_order = models.PositiveIntegerField(default=0)
     fuels_escalation_spikes = models.BooleanField(
         default=False,
         help_text=(
-            "Whether bonds on this track qualify for combat escalation intensity "
-            "spikes — when the bonded character falls, enters mortal peril, or "
-            "(for negative-sign tracks) is fought as a hated foe (#872, #2013)."
+            "Whether a tie labelled with this type qualifies for combat escalation spikes "
+            "when the other character falls or is fought as a hated foe (#872, #2013)."
         ),
-    )
-    system_key = models.CharField(
-        max_length=20,
-        choices=TrackSystemKey.choices,
-        null=True,
-        blank=True,
-        unique=True,
-        help_text="Set only on the generic system tracks ambient bumps write to (#1699).",
     )
 
     class Meta:
-        ordering = ["display_order", "name"]
+        ordering = ["family", "display_order", "name"]
 
     def __str__(self) -> str:
         return self.name
 
-    @cached_property
-    def cached_tiers(self) -> list[RelationshipTier]:
-        """Tiers for this track. Supports Prefetch(to_attr=)."""
-        return list(self.tiers.all())
+    @property
+    def counterpart_or_self(self) -> RelationshipType:
+        return self.counterpart if self.counterpart_id is not None else self
 
 
 class RelationshipTier(SharedMemoryModel):
-    """
-    A milestone level within a relationship track.
+    """One rung of the single tier ladder every tie shares (#3957)."""
 
-    Tiers represent significant thresholds of progression along a track,
-    unlocking narrative and mechanical effects. For example, Trust track
-    might have tiers like "Wary" (0), "Acquaintance" (10), "Confidant" (50).
-    """
-
-    track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.CASCADE,
-        related_name="tiers",
-        help_text="The track this tier belongs to",
+    tier_number = models.PositiveSmallIntegerField(unique=True)
+    name = models.CharField(max_length=100, help_text="PLACEHOLDER tier word.")
+    depth_threshold = models.PositiveIntegerField(
+        help_text="Pair depth a side needs before it may advance to this tier."
     )
-    name = models.CharField(
-        max_length=100,
-        help_text="Tier name (e.g., 'Wary', 'Acquaintance', 'Confidant')",
-    )
-    tier_number = models.PositiveIntegerField(
-        help_text="Numeric rank of this tier within the track (0 = lowest)",
-    )
-    point_threshold = models.PositiveIntegerField(
-        help_text="Minimum points required to reach this tier",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Narrative description of what this tier represents",
-    )
-    mechanical_bonus_description = models.TextField(
-        blank=True,
-        help_text="Description of mechanical bonuses unlocked at this tier",
+    description = models.TextField(blank=True)
+    combat_bonus = models.PositiveSmallIntegerField(
+        default=0, help_text="The bond combat bonus a side at this tier grants."
     )
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["track", "tier_number"], name="unique_tier_per_track"),
-        ]
-        ordering = ["track", "tier_number"]
+        ordering = ["tier_number"]
 
     def __str__(self) -> str:
-        return f"{self.track.name} - {self.name} (Tier {self.tier_number})"
-
-
-class HybridRelationshipType(SharedMemoryModel):
-    """
-    A special relationship type unlocked by meeting thresholds on multiple tracks.
-
-    Hybrid types represent complex emotional states that emerge from combinations
-    of track progression. For example, "Rivalry" might require both high Respect
-    and high Antagonism.
-    """
-
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Hybrid type name (e.g., 'Rivalry', 'Devotion')",
-    )
-    slug = models.SlugField(
-        max_length=100,
-        unique=True,
-        help_text="URL-safe identifier for this hybrid type",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Description of what this hybrid type represents",
-    )
-    mechanical_bonus_description = models.TextField(
-        blank=True,
-        help_text="Description of mechanical bonuses granted by this hybrid type",
-    )
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self) -> str:
-        return self.name
-
-    @cached_property
-    def cached_requirements(self) -> list[HybridRequirement]:
-        """Requirements for this hybrid type. Supports Prefetch(to_attr=)."""
-        return list(self.requirements.select_related("track"))
-
-
-class HybridRequirement(SharedMemoryModel):
-    """
-    A single track/tier requirement for unlocking a hybrid relationship type.
-
-    Each hybrid type has one or more requirements specifying which tracks
-    must reach which minimum tier for the hybrid to activate.
-    """
-
-    hybrid_type = models.ForeignKey(
-        HybridRelationshipType,
-        on_delete=models.CASCADE,
-        related_name="requirements",
-        help_text="The hybrid type this requirement belongs to",
-    )
-    track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.CASCADE,
-        help_text="The track that must meet the minimum tier",
-    )
-    minimum_tier = models.PositiveIntegerField(
-        help_text="The minimum tier number that must be reached on this track",
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["hybrid_type", "track"], name="unique_track_per_hybrid"
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.hybrid_type.name} requires {self.track.name} >= Tier {self.minimum_tier}"
+        return f"{self.name} (Tier {self.tier_number})"
 
 
 class GrievanceOption(SharedMemoryModel):
-    """An authored preset a wronged character may register against whoever harmed them (#1429).
+    """An authored preset a wronged character may register (#1429); adds Conflict (#3957)."""
 
-    When a secret's victim learns who wronged them, they pick one of these (or enter a custom
-    value) and it applies a one-sided relationship capstone toward the perpetrator. The ``label``
-    is player-facing flavor; ``track`` + ``points`` are the mechanical swing — both staff-editable
-    data, so the menu can be tuned without code. Grievances are negative by construction: ``track``
-    must be a NEGATIVE-sign track (``clean`` enforces it).
-    """
-
-    label = models.CharField(
-        max_length=60,
-        unique=True,
-        help_text="Player-facing flavor, e.g. 'Furious Revelation'. PLACEHOLDER (author pass).",
-    )
-    track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.CASCADE,
-        related_name="grievance_options",
-        help_text="The negative-sign track this grievance lands on.",
-    )
-    points = models.PositiveIntegerField(
-        help_text="Magnitude of the capstone swing applied to the track.",
-    )
-    display_order = models.PositiveSmallIntegerField(
-        default=0, help_text="Order in the victim's menu."
-    )
-    is_active = models.BooleanField(default=True, help_text="Offer this option to victims.")
+    label = models.CharField(max_length=60, unique=True, help_text="PLACEHOLDER flavor.")
+    conflict_points = models.PositiveIntegerField(help_text="Conflict added on the victim's side.")
+    display_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["display_order", "label"]
 
     def __str__(self) -> str:
-        return f"{self.label} ({self.track.name} +{self.points})"
-
-    def clean(self) -> None:
-        super().clean()
-        if self.track_id and self.track.sign != TrackSign.NEGATIVE:
-            raise ValidationError({"track": "A grievance must land on a negative-sign track."})
+        return f"{self.label} (+{self.conflict_points} conflict)"
 
 
 class CharacterRelationship(SharedMemoryModel):
-    """
-    One character's relationship toward another, tracked across multiple dimensions.
+    """One character's side of a tie toward another character or a bonded companion (#3957).
 
-    Relationships use a track-based progression system where points accumulate
-    along different axes (Trust, Respect, Fear, etc.). Characters can display
-    a different track/tier than their actual one (deceit mechanics), and
-    relationships require mutual consent (is_pending) before becoming active.
+    ``scene_depth`` and ``invested_depth`` are this side's added depth (audited by
+    ``RelationshipDepthTransaction``); the pair's depth is ``pair_depth()``. ``tier`` is the
+    tier this side has claimed by capstone and XP. ``affection`` and ``conflict`` are moved
+    only by play (bumps, shifts, grievances, the NPC mirror). ``summary`` is the player's
+    own paragraph. Labels hang off ``labels``.
     """
 
     source = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
-        related_name="relationships_as_source",
-        help_text="The character who holds this relationship",
+        CHARACTER_SHEET_MODEL, on_delete=models.CASCADE, related_name="relationships_as_source"
     )
     target = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
@@ -332,109 +189,33 @@ class CharacterRelationship(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="relationships_as_target",
-        help_text=(
-            "The character this relationship is about; null when target_companion is set "
-            "(#3575). Exactly one of target / target_companion is set."
-        ),
+        help_text="Null when target_companion is set (#3575); exactly one is set.",
     )
-    # FK direction (ADR-0010): relationships depend on companions, never the reverse.
-    # A companion has no CharacterSheet by design (#2608, ADR-0272), so the owner's
-    # bond toward it points at the Companion row. Only the bonded owner may hold one,
-    # and it is active from creation (the bind is the consent) - enforced in
-    # ``world.relationships.services.companion_target_error``, app layer only.
     target_companion = models.ForeignKey(
         COMPANION_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="relationships_as_companion_target",
-        help_text=(
-            "The bonded companion this relationship is about (#3575); null when target "
-            "is set. Only the companion's owner may hold such a row."
-        ),
+        help_text="The bonded companion this side is about (#3575); only its owner may hold it.",
     )
-    is_active = models.BooleanField(
-        default=True,
-        help_text="Whether this relationship is currently active",
-    )
-    is_pending = models.BooleanField(
-        default=True,
-        help_text="Whether this relationship is awaiting mutual consent",
-    )
-
-    # Deceit mechanics: what the character publicly displays
-    displayed_track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Track displayed publicly (for deceit); null = show actual",
-    )
-    displayed_tier = models.ForeignKey(
-        RelationshipTier,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Tier displayed publicly (for deceit); null = show actual",
-    )
-    is_deceitful = models.BooleanField(
-        default=False,
-        help_text="Whether the displayed track/tier differs from the actual values",
-    )
-
-    # Conditions on this relationship
+    is_active = models.BooleanField(default=True, help_text="A frozen side takes no credit.")
     conditions = models.ManyToManyField(
-        RelationshipCondition,
-        blank=True,
-        related_name="character_relationships",
-        help_text="Conditions that exist on this relationship",
+        RelationshipCondition, blank=True, related_name="character_relationships"
     )
+    scene_depth = models.PositiveIntegerField(default=0, help_text="Depth from scenes together.")
+    invested_depth = models.PositiveIntegerField(default=0, help_text="Depth from weekly AP.")
+    tier = models.PositiveSmallIntegerField(default=0, help_text="The tier this side claimed.")
+    affection = models.PositiveIntegerField(default=0, help_text="Moved by play, never set.")
+    conflict = models.PositiveIntegerField(default=0, help_text="Moved by play, never set.")
+    summary = models.TextField(blank=True, help_text="The player's own paragraph.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    # Weekly rate limiting
-    game_week = models.ForeignKey(
-        "arxii.GameWeek",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="relationships",
-        help_text="GameWeek these weekly counters belong to",
-    )
-    developments_this_week = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of development updates submitted this week (max 7)",
-    )
-    changes_this_week = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of relationship changes submitted this week",
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this relationship was created",
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text="When this relationship was last modified",
-    )
-
-    # Soul-tether fields (Spec A §2.2 — migrated from old Thread concept).
-    # Spec B will own the soul-tether mechanics; these fields are storage only.
-    is_soul_tether = models.BooleanField(
-        default=False,
-        help_text="Whether this relationship is a soul-tether bond (Spec B mechanics).",
-    )
-    soul_tether_role = models.CharField(
-        max_length=16,
-        choices=SoulTetherRole.choices,
-        blank=True,
-        help_text="Soul-tether role (SINNER or SINEATER); empty when not a tether.",
-    )
-    magical_flavor = models.TextField(
-        blank=True,
-        help_text="Player-authored descriptor of the bond's magical quality.",
-    )
+    # Soul-tether fields (Spec A §2.2); Spec B owns the mechanics.
+    is_soul_tether = models.BooleanField(default=False)
+    soul_tether_role = models.CharField(max_length=16, choices=SoulTetherRole.choices, blank=True)
+    magical_flavor = models.TextField(blank=True)
 
     class Meta:
         constraints = [
@@ -448,7 +229,6 @@ class CharacterRelationship(SharedMemoryModel):
                 condition=models.Q(target_companion__isnull=False),
                 name="unique_relationship_companion_pair",
             ),
-            # Exactly one target kind (#3575).
             models.CheckConstraint(
                 condition=(
                     models.Q(target__isnull=False, target_companion__isnull=True)
@@ -456,10 +236,6 @@ class CharacterRelationship(SharedMemoryModel):
                 ),
                 name="relationship_target_xor_companion",
             ),
-            # Enforce the self-relationship prohibition at the DB layer: clean()
-            # is bypassed by get_or_create/objects.create, which the services use,
-            # so a DB constraint is the only reliable guard (#1485 - now that the
-            # verbs are player-reachable from web + telnet). A null target passes.
             models.CheckConstraint(
                 condition=~models.Q(source=models.F("target")),
                 name="relationship_source_not_target",
@@ -471,60 +247,45 @@ class CharacterRelationship(SharedMemoryModel):
 
     @property
     def target_name(self) -> str:
-        """Display name of whoever this row is about: the companion's name, else the
-        target character's key (#3575). Safe on either target kind."""
         if self.target_companion_id is not None:
             return self.target_companion.name
         return self.target.character.db_key
 
     def clean(self) -> None:
-        """Validate relationship constraints."""
         super().clean()
-        has_sheet = self.target_id is not None
-        has_companion = self.target_companion_id is not None
-        if has_sheet == has_companion:
+        if (self.target_id is not None) == (self.target_companion_id is not None):
             msg = "A relationship needs exactly one of a character target or a companion target."
             raise ValidationError(msg)
         if self.source_id is not None and self.source_id == self.target_id:
             msg = "A character cannot have a relationship with themselves."
             raise ValidationError(msg)
-        if (
-            self.displayed_tier_id
-            and self.displayed_track_id
-            and self.displayed_tier.track_id != self.displayed_track_id
-        ):
-            msg = "Displayed tier must belong to displayed track."
-            raise ValidationError(msg)
 
     @property
-    def cached_track_progress(self) -> list[RelationshipTrackProgress]:
-        """Track progress entries. Uses Prefetch(to_attr=) when available, else queries."""
-        try:
-            return self._cached_track_progress
-        except AttributeError:
-            return list(self.track_progress.select_related("track"))
+    def depth(self) -> int:
+        """This side's added depth."""
+        return self.scene_depth + self.invested_depth
 
-    @cached_track_progress.setter
-    def cached_track_progress(self, value: list[RelationshipTrackProgress]) -> None:
-        """Allow Prefetch(to_attr='cached_track_progress') to set this."""
-        self._cached_track_progress = value
+    @cached_property
+    def reverse(self) -> CharacterRelationship | None:
+        """The other side's row, or None (always None toward a companion)."""
+        if self.target_id is None:
+            return None
+        return CharacterRelationship.objects.filter(
+            source_id=self.target_id, target_id=self.source_id
+        ).first()
 
-    @property
-    def cached_updates(self) -> list[RelationshipUpdate]:
-        """Relationship updates. Uses Prefetch(to_attr=) when available, else queries."""
-        try:
-            return self._cached_updates
-        except AttributeError:
-            return list(self.updates.all())
+    def pair_depth(self) -> int:
+        other = self.reverse
+        return self.depth + (other.depth if other is not None else 0)
 
-    @cached_updates.setter
-    def cached_updates(self, value: list[RelationshipUpdate]) -> None:
-        """Allow Prefetch(to_attr='cached_updates') to set this."""
-        self._cached_updates = value
+    def open_labels(self):
+        return self.labels.filter(ended_at__isnull=True).select_related("type", "type__counterpart")
+
+    def next_tier(self) -> RelationshipTier | None:
+        return RelationshipTier.objects.filter(tier_number=self.tier + 1).first()
 
     @property
     def cached_conditions(self) -> list[RelationshipCondition]:
-        """Conditions on this relationship. Uses Prefetch(to_attr=) when available, else queries."""
         try:
             return self._cached_conditions
         except AttributeError:
@@ -532,368 +293,175 @@ class CharacterRelationship(SharedMemoryModel):
 
     @cached_conditions.setter
     def cached_conditions(self, value: list[RelationshipCondition]) -> None:
-        """Allow Prefetch(to_attr='cached_conditions') to set this."""
         self._cached_conditions = value
 
-    @property
-    def absolute_value(self) -> int:
-        """Total points across all tracks including temporary (unsigned sum)."""
-        return sum(tp.total_points for tp in self.cached_track_progress)
 
-    @property
-    def developed_absolute_value(self) -> int:
-        """Sum of developed (permanent) points across all tracks."""
-        return sum(tp.developed_points for tp in self.cached_track_progress)
+class RelationshipLabel(SharedMemoryModel):
+    """One side naming one type, at one awareness, with its history (#3957).
 
-    @property
-    def developed_signed_sums(self) -> tuple[int, int]:
-        """Developed points split by track sign: (positive_sum, negative_sum).
-
-        Same points measure as developed_absolute_value (developed_points, not
-        total_points) — pos + neg always equals developed_absolute_value.
-        """
-        positive_sum = 0
-        negative_sum = 0
-        for tp in self.cached_track_progress:
-            if tp.track.sign == TrackSign.POSITIVE:
-                positive_sum += tp.developed_points
-            else:
-                negative_sum += tp.developed_points
-        return positive_sum, negative_sum
-
-    @property
-    def mechanical_bonus(self) -> float:
-        """Cube root of absolute developed value — modest mechanical bonus."""
-        return round(math.pow(self.developed_absolute_value, 1 / 3), 1)
-
-    @property
-    def affection(self) -> int:
-        """Signed sum: positive tracks add, negative tracks subtract."""
-        total = 0
-        for tp in self.cached_track_progress:
-            if tp.track.sign == TrackSign.POSITIVE:
-                total += tp.total_points
-            else:
-                total -= tp.total_points
-        return total
-
-
-class RelationshipTrackProgress(SharedMemoryModel):
-    """
-    Points accumulated on a specific track within a character relationship.
-
-    Tracks two types of points:
-    - **capacity**: Maximum developed points allowed (increased by updates and capstones)
-    - **developed_points**: Permanent points (from development updates and capstones)
-
-    Temporary points are derived from active RelationshipUpdate records on this track,
-    decaying linearly over DECAY_DAYS.
+    Never deleted: a shift ends this row and starts another whose ``replaced`` points
+    back here; an end sets ``ended_at`` and the label shows as former. Awareness only
+    moves forward (``advance_awareness``). ``declared_by_tenure`` is read by consent only:
+    a roster successor inherits the label but the RIVALS gate needs a label declared under
+    a tenure that is still open.
     """
 
     relationship = models.ForeignKey(
-        CharacterRelationship,
-        on_delete=models.CASCADE,
-        related_name="track_progress",
-        help_text="The relationship this progress belongs to",
+        CharacterRelationship, on_delete=models.CASCADE, related_name="labels"
     )
-    track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.CASCADE,
-        help_text="The track being progressed",
+    type = models.ForeignKey(RelationshipType, on_delete=models.PROTECT, related_name="labels")
+    awareness = models.CharField(
+        max_length=12, choices=LabelAwareness.choices, default=LabelAwareness.PRIVATE
     )
-    capacity = models.PositiveIntegerField(
-        default=0,
-        help_text="Maximum developed points allowed on this track",
+    declared_by_tenure = models.ForeignKey(
+        ROSTER_TENURE_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The tenure that declared it; consent reads whether it is still open.",
     )
-    developed_points = models.PositiveIntegerField(
-        default=0,
-        help_text="Permanent points earned through development and capstones",
+    since = models.DateTimeField(default=timezone.now)
+    clandestine_at = models.DateTimeField(null=True, blank=True)
+    public_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    replaced = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replaced_by",
+        help_text="The label this one was changed from.",
     )
+    note = models.CharField(max_length=200, blank=True)
 
     class Meta:
+        ordering = ["since"]
         constraints = [
             models.UniqueConstraint(
-                fields=["relationship", "track"], name="unique_progress_per_track"
+                fields=["relationship", "type"],
+                condition=models.Q(ended_at__isnull=True),
+                name="one_open_label_per_type",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.relationship} - {self.track.name}: {self.developed_points}/{self.capacity}"
+        return f"{self.type.name} on {self.relationship} ({self.awareness})"
 
     @property
-    def temporary_points(self) -> int:
-        """Sum of current temporary contributions from all updates on this track.
-
-        Uses cached_updates (populated by Prefetch(to_attr=) or property
-        fallback) to avoid N+1 queries.
-        """
-        now = timezone.now()
-        track_id = self.track_id
-        total = 0
-        for update in self.relationship.cached_updates:
-            if update.track_id == track_id:
-                total += update.current_temporary_value(now)
-        return total
-
-    @property
-    def total_points(self) -> int:
-        """Developed + temporary points."""
-        return self.developed_points + self.temporary_points
-
-    @property
-    def current_tier(self) -> RelationshipTier | None:
-        """Return the highest tier where point_threshold <= developed_points, or None."""
-        return (
-            self.track.tiers.filter(point_threshold__lte=self.developed_points)
-            .order_by("-tier_number")
-            .first()
-        )
+    def is_former(self) -> bool:
+        return self.ended_at is not None
 
 
-class RelationshipUpdate(SharedMemoryModel):
-    """
-    A narrative writeup that adds temporary points and capacity to a track.
+class RelationshipAllocation(SharedMemoryModel):
+    """This week's AP set against one side of a tie (#3957); mirrors ``TrainingAllocation``."""
 
-    Updates are unlimited and represent significant moments. The points_earned
-    value sets both the capacity increase (permanent) and the temporary point
-    contribution (decays linearly over DECAY_DAYS).
-    """
+    relationship = models.OneToOneField(
+        CharacterRelationship, on_delete=models.CASCADE, related_name="allocation"
+    )
+    ap_amount = models.PositiveIntegerField(default=0)
+    game_week = models.ForeignKey(
+        GAME_WEEK_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.ap_amount} AP on {self.relationship}"
+
+
+class RelationshipDepthTransaction(SharedMemoryModel):
+    """Audit of one depth award to a side (#3957); the columns are the running sums."""
 
     relationship = models.ForeignKey(
-        CharacterRelationship,
-        on_delete=models.CASCADE,
-        related_name="updates",
-        help_text="The relationship this update applies to",
+        CharacterRelationship, on_delete=models.CASCADE, related_name="depth_transactions"
     )
-    author = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
-        help_text="The character who wrote this update",
+    amount = models.PositiveIntegerField()
+    source = models.CharField(max_length=12, choices=DepthSource.choices)
+    scene = models.ForeignKey(
+        SCENE_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
-    title = models.CharField(
-        max_length=200,
-        help_text="Brief title summarizing the update",
+    game_week = models.ForeignKey(
+        GAME_WEEK_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
-    writeup = models.TextField(
-        help_text="Narrative writeup describing how the relationship developed",
-    )
-    track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.PROTECT,
-        help_text="The track that gains points from this update",
-    )
-    points_earned = models.PositiveIntegerField(
-        help_text="Points earned: increases capacity and sets temporary value base",
-    )
-    coloring = models.CharField(
-        max_length=20,
-        choices=FirstImpressionColoring.choices,
-        blank=True,
-        help_text="Emotional coloring for first impressions (blank for normal updates)",
-    )
-    visibility = models.CharField(
-        max_length=20,
-        choices=UpdateVisibility.choices,
-        default=UpdateVisibility.SHARED,
-        help_text="Who can see this update",
-    )
-    is_first_impression = models.BooleanField(
-        default=False,
-        help_text="Whether this is a first impression update",
-    )
-    linked_scene = models.ForeignKey(
-        SCENE_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="Optional scene this update is based on",
-    )
-    linked_interaction = models.ForeignKey(
-        "arxii.Interaction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        db_constraint=False,
-        related_name="referencing_updates",
-        help_text="Specific interaction this update references (no DB FK constraint "
-        "— partitioned table, application-level integrity)",
-    )
-    reference_mode = models.CharField(
-        max_length=30,
-        choices=ReferenceMode.choices,
-        default=ReferenceMode.ALL_WEEKLY,
-        help_text="How this update references RP",
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this update was created",
-    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"Update: {self.title} ({self.relationship})"
-
-    def clean(self) -> None:
-        """Validate coloring is set for first impressions and blank otherwise."""
-        super().clean()
-        if self.is_first_impression and not self.coloring:
-            msg = "First impression updates must have an emotional coloring."
-            raise ValidationError(msg)
-        if not self.is_first_impression and self.coloring:
-            msg = "Only first impression updates may have an emotional coloring."
-            raise ValidationError(msg)
-
-    def current_temporary_value(self, now: timezone.datetime | None = None) -> int:
-        """Calculate remaining temporary points based on linear decay.
-
-        Decays at 10% of original per day, reaching zero after DECAY_DAYS.
-        """
-        if now is None:
-            now = timezone.now()
-        elapsed = now - self.created_at
-        days = elapsed / timedelta(days=1)
-        if days >= DECAY_DAYS:
-            return 0
-        remaining = self.points_earned - (self.points_earned * days / DECAY_DAYS)
-        return max(0, int(remaining))
+        return f"+{self.amount} {self.source} on {self.relationship}"
 
 
-class RelationshipDevelopment(SharedMemoryModel):
-    """
-    A development update that adds permanent points to a track.
+class RelationshipGrowthConfig(SharedMemoryModel):
+    """Singleton tuning (pk=1) for how ties grow (#3957). All values PLACEHOLDER."""
 
-    Limited to 7 per week across all relationships. Involves a social roll
-    to determine points earned, up to the track's current capacity. Awards
-    XP to the character.
-    """
+    objects = ArxSharedMemoryManager()
 
-    relationship = models.ForeignKey(
-        CharacterRelationship,
-        on_delete=models.CASCADE,
-        related_name="developments",
-        help_text="The relationship this development applies to",
+    scene_base_gain = models.PositiveSmallIntegerField(
+        default=10, help_text="Depth a side gains for the first scene together in a week."
     )
-    author = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
-        help_text="The character who performed this development",
+    depth_per_ap = models.PositiveSmallIntegerField(default=5)
+    xp_per_tier = models.PositiveSmallIntegerField(
+        default=10, help_text="Advance cost = this × the new tier."
     )
-    title = models.CharField(
-        max_length=200,
-        help_text="Brief title summarizing the development",
+    thread_min_tier = models.PositiveSmallIntegerField(
+        default=2, help_text="Claimed tier a weaver needs to weave a relationship thread."
     )
-    writeup = models.TextField(
-        help_text="Narrative writeup describing the reflection or development",
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
-    track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.PROTECT,
-        help_text="The track that gains permanent points",
-    )
-    points_earned = models.PositiveIntegerField(
-        help_text="Permanent points added to the track (up to capacity)",
-    )
-    xp_awarded = models.PositiveIntegerField(
-        default=0,
-        help_text="XP awarded to the character for this development",
-    )
-    visibility = models.CharField(
-        max_length=20,
-        choices=UpdateVisibility.choices,
-        default=UpdateVisibility.SHARED,
-        help_text="Who can see this development",
-    )
-    linked_scene = models.ForeignKey(
-        SCENE_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="Optional scene this development is based on",
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this development was created",
-    )
-
-    class Meta:
-        ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"Development: {self.title} ({self.relationship})"
+        return f"RelationshipGrowthConfig(pk={self.pk})"
 
 
 class RelationshipCapstone(SharedMemoryModel):
-    """
-    A capstone event that adds both permanent points and capacity.
+    """The receipt of one side advancing a tier (#3957), or a ritual formation event.
 
-    Capstones represent truly monumental moments. They are always allowed
-    (unlimited) and add to both developed_points and capacity simultaneously.
-    Real mechanical power is gated behind magical tethers (future PR).
+    ``journal_entry`` is the entry the player marked as the capstone; a ritual capstone
+    (soul tether formation) has none and ``is_ritual_capstone`` says so.
     """
 
     relationship = models.ForeignKey(
-        CharacterRelationship,
-        on_delete=models.CASCADE,
-        related_name="capstones",
-        help_text="The relationship this capstone applies to",
+        CharacterRelationship, on_delete=models.CASCADE, related_name="capstones"
     )
-    author = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
-        help_text="The character who recorded this capstone",
-    )
-    title = models.CharField(
-        max_length=200,
-        help_text="Title of the monumental moment",
-    )
-    writeup = models.TextField(
-        help_text="Narrative description of the capstone event",
-    )
-    track = models.ForeignKey(
-        RelationshipTrack,
+    journal_entry = models.OneToOneField(
+        "arxii.JournalEntry",
         on_delete=models.PROTECT,
-        help_text="The track that gains points and capacity",
-    )
-    points = models.PositiveIntegerField(
-        help_text="Points added to both capacity and developed_points",
-    )
-    visibility = models.CharField(
-        max_length=20,
-        choices=UpdateVisibility.choices,
-        default=UpdateVisibility.SHARED,
-        help_text="Who can see this capstone",
-    )
-    linked_scene = models.ForeignKey(
-        SCENE_MODEL,
-        on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="Optional scene this capstone is based on",
+        related_name="capstone",
     )
-    is_ritual_capstone = models.BooleanField(
-        default=False,
-        help_text="Whether this capstone was created via a Ritual Capstone (Spec B §12.1).",
-    )
+    tier_claimed = models.PositiveSmallIntegerField(default=0)
+    xp_spent = models.PositiveIntegerField(default=0)
+    is_ritual_capstone = models.BooleanField(default=False)
     ritual = models.ForeignKey(
         "arxii.Ritual",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="capstone_events",
-        help_text="Set when is_ritual_capstone=True; references the Ritual that was performed.",
     )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this capstone was recorded",
-    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(journal_entry__isnull=False) | models.Q(is_ritual_capstone=True),
+                name="capstone_has_entry_or_is_ritual",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"Capstone: {self.title} ({self.relationship})"
+        return f"Capstone tier {self.tier_claimed} on {self.relationship}"
+
+    @property
+    def title(self) -> str:
+        if self.journal_entry_id is not None:
+            return self.journal_entry.title
+        return "Soul Tether Formation"
 
 
 class RelationshipBump(SharedMemoryModel):
@@ -1018,161 +586,6 @@ class AffectionShift(SharedMemoryModel):
         return f"AffectionShift {self.amount:+d} on {self.relationship} (scene {self.scene_id})"
 
 
-class RelationshipChange(SharedMemoryModel):
-    """
-    A narrative writeup that moves developed points from one track to another.
-
-    Changes represent shifts in how a character feels about another,
-    transferring permanent points between tracks to reflect evolving
-    dynamics.
-    """
-
-    relationship = models.ForeignKey(
-        CharacterRelationship,
-        on_delete=models.CASCADE,
-        related_name="changes",
-        help_text="The relationship this change applies to",
-    )
-    author = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
-        help_text="The character who authored this change",
-    )
-    title = models.CharField(
-        max_length=200,
-        help_text="Brief title summarizing the change",
-    )
-    writeup = models.TextField(
-        help_text="Narrative writeup describing why the relationship changed",
-    )
-    source_track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.PROTECT,
-        related_name="changes_from",
-        help_text="The track losing points",
-    )
-    target_track = models.ForeignKey(
-        RelationshipTrack,
-        on_delete=models.PROTECT,
-        related_name="changes_to",
-        help_text="The track gaining points",
-    )
-    points_moved = models.PositiveIntegerField(
-        help_text="Number of points moved between tracks",
-    )
-    visibility = models.CharField(
-        max_length=20,
-        choices=UpdateVisibility.choices,
-        default=UpdateVisibility.SHARED,
-        help_text="Who can see this change",
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this change was created",
-    )
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self) -> str:
-        return f"Change: {self.title} ({self.relationship})"
-
-
-class WriteupFeedbackBase(SharedMemoryModel):
-    """Abstract: feedback attached to exactly one relationship writeup."""
-
-    update = models.ForeignKey(
-        "arxii.RelationshipUpdate",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name=CLASS_SET_RELATED_NAME,
-    )
-    development = models.ForeignKey(
-        "arxii.RelationshipDevelopment",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name=CLASS_SET_RELATED_NAME,
-    )
-    capstone = models.ForeignKey(
-        "arxii.RelationshipCapstone",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name=CLASS_SET_RELATED_NAME,
-    )
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        abstract = True
-        constraints = [
-            models.CheckConstraint(
-                name="%(class)s_exactly_one_writeup",
-                condition=(
-                    Q(update__isnull=False, development__isnull=True, capstone__isnull=True)
-                    | Q(update__isnull=True, development__isnull=False, capstone__isnull=True)
-                    | Q(update__isnull=True, development__isnull=True, capstone__isnull=False)
-                ),
-            )
-        ]
-
-    @property
-    def writeup(self):
-        return self.update or self.development or self.capstone
-
-    @property
-    def author_sheet(self):
-        return self.writeup.author
-
-    @property
-    def subject_sheet(self):
-        return self.writeup.relationship.target
-
-
-class WriteupKudos(WriteupFeedbackBase):
-    """A subject's one-way, non-revocable commendation of a writeup about them."""
-
-    account = models.ForeignKey(
-        AccountDB,
-        on_delete=models.CASCADE,
-        related_name="writeup_kudos_given",
-        help_text="The subject's controlling account (the commender).",
-    )
-
-    class Meta(WriteupFeedbackBase.Meta):
-        constraints = [
-            *WriteupFeedbackBase.Meta.constraints,
-            models.UniqueConstraint(
-                fields=["account", "update"],
-                name="unique_kudos_account_update",
-                condition=Q(update__isnull=False),
-            ),
-            models.UniqueConstraint(
-                fields=["account", "development"],
-                name="unique_kudos_account_development",
-                condition=Q(development__isnull=False),
-            ),
-            models.UniqueConstraint(
-                fields=["account", "capstone"],
-                name="unique_kudos_account_capstone",
-                condition=Q(capstone__isnull=False),
-            ),
-        ]
-
-
-class WriteupComplaint(WriteupFeedbackBase):
-    """A bad-faith-RP complaint flagged for staff triage. Zero player-facing signal."""
-
-    complainant = models.ForeignKey(
-        AccountDB,
-        on_delete=models.CASCADE,
-        related_name="writeup_complaints_filed",
-    )
-    reason = models.TextField(help_text="Complainant's free-text rationale for staff review.")
-    resolved = models.BooleanField(default=False, help_text="Staff triage flag.")
-
-
 class TemporaryRelationshipCondition(SharedMemoryModel):
     """A time-limited :class:`RelationshipCondition` on a directed relationship (#1697).
 
@@ -1212,29 +625,14 @@ class TemporaryRelationshipCondition(SharedMemoryModel):
 
 
 class BondCombatConfig(SharedMemoryModel):
-    """Singleton tuning surface (pk=1) for relationship bond combat bonuses (#2021).
-
-    Controls the co-combat passive: while a PC and a bonded character (relationship
-    above ``min_developed_absolute_value``) are co-combatants and the ally is standing,
-    the PC gains ``int(mechanical_bonus)`` as a ``ModifierContribution(RELATIONSHIP)``
-    on every combat check. When the pair is soul-tethered, the bonus is multiplied by
-    ``soul_tether_multiplier``.
-
-    Access via ``get_bond_combat_config()`` — singleton-by-convention, no DB-level
-    uniqueness constraint (mirrors ``SoulTetherConfig``).
-    """
+    """Singleton tuning surface (pk=1) for the bond combat bonus (#2021, #3957)."""
 
     objects = ArxSharedMemoryManager()
 
-    min_developed_absolute_value = models.PositiveSmallIntegerField(
-        default=10,
-        help_text="Floor below which a relationship grants no combat bonus.",
+    min_tier = models.PositiveSmallIntegerField(
+        default=1, help_text="Claimed tier below which a side grants no combat bonus."
     )
-    soul_tether_multiplier = models.PositiveSmallIntegerField(
-        default=2,
-        help_text="Multiplier on mechanical_bonus when the pair is soul-tethered.",
-    )
-
+    soul_tether_multiplier = models.PositiveSmallIntegerField(default=2)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "accounts.AccountDB",

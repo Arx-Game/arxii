@@ -75,30 +75,26 @@ class GrievanceOptionSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(read_only=True)
     label = serializers.CharField(read_only=True)
-    points = serializers.IntegerField(read_only=True)
-    track = serializers.CharField(source="track.name", read_only=True)
+    conflict_points = serializers.IntegerField(read_only=True)
 
 
 class SecretGrievanceSerializer(serializers.Serializer):
     """Input for a secret-victim registering a grievance (#1429).
 
-    Exactly one of ``option`` or (``custom_points`` + ``custom_track``) is supplied; the view
-    resolves the viewing character and enforces victimhood via the service.
+    Exactly one of ``option`` or ``custom_points`` is supplied; the view resolves the
+    viewing character and enforces victimhood via the service.
     """
 
     secret = serializers.IntegerField()
     viewer = serializers.IntegerField(help_text="The active (viewing) character's RosterEntry pk.")
     option = serializers.IntegerField(required=False, allow_null=True)
     custom_points = serializers.IntegerField(required=False, allow_null=True, min_value=1)
-    custom_track = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
         has_option = attrs.get("option") is not None
-        has_custom = (
-            attrs.get("custom_points") is not None and attrs.get("custom_track") is not None
-        )
+        has_custom = attrs.get("custom_points") is not None
         if has_option == has_custom:
-            msg = "Provide either an option or both custom_points and custom_track."
+            msg = "Provide either an option or custom_points, not both, not neither."
             raise serializers.ValidationError(msg)
         return attrs
 

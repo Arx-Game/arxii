@@ -1,4 +1,4 @@
-"""Admin configuration for relationships models."""
+"""Admin configuration for the relationships app (#3957)."""
 
 from django.contrib import admin
 from django.db.models import Count
@@ -7,17 +7,14 @@ from world.relationships.models import (
     BondCombatConfig,
     CharacterRelationship,
     GrievanceOption,
-    HybridRelationshipType,
-    HybridRequirement,
+    RelationshipAllocation,
     RelationshipCapstone,
-    RelationshipChange,
     RelationshipCondition,
-    RelationshipDevelopment,
+    RelationshipDepthTransaction,
+    RelationshipGrowthConfig,
+    RelationshipLabel,
     RelationshipTier,
-    RelationshipTrack,
-    RelationshipTrackProgress,
-    RelationshipUpdate,
-    WriteupComplaint,
+    RelationshipType,
 )
 
 DESCRIPTION_TRUNCATE_LENGTH = 50
@@ -25,11 +22,10 @@ DESCRIPTION_TRUNCATE_LENGTH = 50
 
 @admin.register(GrievanceOption)
 class GrievanceOptionAdmin(admin.ModelAdmin):
-    list_display = ["label", "track", "points", "display_order", "is_active"]
-    list_editable = ["points", "display_order", "is_active"]
-    list_filter = ["is_active", "track"]
+    list_display = ["label", "conflict_points", "display_order", "is_active"]
+    list_editable = ["conflict_points", "display_order", "is_active"]
+    list_filter = ["is_active"]
     search_fields = ["label"]
-    ordering = ["display_order", "label"]
 
 
 @admin.register(RelationshipCondition)
@@ -54,34 +50,28 @@ class RelationshipConditionAdmin(admin.ModelAdmin):
         return obj._modifier_count  # noqa: SLF001
 
 
-@admin.register(RelationshipTrack)
-class RelationshipTrackAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "sign", "display_order"]
+@admin.register(RelationshipType)
+class RelationshipTypeAdmin(admin.ModelAdmin):
+    list_display = ["name", "family", "valence", "counterpart", "display_order"]
     list_editable = ["display_order"]
+    list_filter = ["family", "valence"]
     search_fields = ["name"]
     prepopulated_fields = {"slug": ("name",)}
+    autocomplete_fields = ["counterpart"]
 
 
 @admin.register(RelationshipTier)
 class RelationshipTierAdmin(admin.ModelAdmin):
-    list_display = ["track", "name", "tier_number", "point_threshold"]
-    list_filter = ["track"]
-    search_fields = ["name"]
-    list_select_related = ["track"]
+    list_display = ["tier_number", "name", "depth_threshold", "combat_bonus"]
+    list_editable = ["name", "depth_threshold", "combat_bonus"]
 
 
-@admin.register(HybridRelationshipType)
-class HybridRelationshipTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug"]
-    search_fields = ["name"]
-    prepopulated_fields = {"slug": ("name",)}
-
-
-@admin.register(HybridRequirement)
-class HybridRequirementAdmin(admin.ModelAdmin):
-    list_display = ["hybrid_type", "track", "minimum_tier"]
-    list_filter = ["hybrid_type", "track"]
-    list_select_related = ["hybrid_type", "track"]
+class RelationshipLabelInline(admin.TabularInline):
+    model = RelationshipLabel
+    extra = 0
+    fields = ["type", "awareness", "since", "ended_at", "replaced", "note"]
+    readonly_fields = ["since", "replaced"]
+    autocomplete_fields = ["type"]
 
 
 @admin.register(CharacterRelationship)
@@ -89,13 +79,15 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
     list_display = [
         "source_name",
         "target_name",
+        "tier",
+        "scene_depth",
+        "invested_depth",
+        "affection",
+        "conflict",
         "is_active",
-        "is_pending",
-        "is_deceitful",
-        "condition_count",
         "created_at",
     ]
-    list_filter = ["is_active", "is_pending", "is_deceitful", "conditions"]
+    list_filter = ["is_active", "tier", "is_soul_tether"]
     search_fields = [
         "source__character__db_key",
         "target__character__db_key",
@@ -111,9 +103,7 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
     raw_id_fields = ["source", "target", "target_companion"]
     filter_horizontal = ["conditions"]
     readonly_fields = ["created_at", "updated_at"]
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).annotate(_condition_count=Count("conditions"))
+    inlines = [RelationshipLabelInline]
 
     @admin.display(description="Source")
     def source_name(self, obj):
@@ -123,129 +113,37 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
     def target_name(self, obj):
         return obj.target_name
 
-    @admin.display(description="Conditions")
-    def condition_count(self, obj):
-        return obj._condition_count  # noqa: SLF001
+
+@admin.register(RelationshipAllocation)
+class RelationshipAllocationAdmin(admin.ModelAdmin):
+    list_display = ["relationship", "ap_amount", "game_week", "updated_at"]
+    raw_id_fields = ["relationship"]
 
 
-@admin.register(RelationshipTrackProgress)
-class RelationshipTrackProgressAdmin(admin.ModelAdmin):
-    list_display = ["relationship", "track", "capacity", "developed_points"]
-    list_filter = ["track"]
-    list_select_related = ["relationship", "track"]
-
-
-@admin.register(RelationshipUpdate)
-class RelationshipUpdateAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["author", "linked_interaction", "linked_scene"]
-    list_display = ["title", "relationship", "track", "points_earned", "visibility", "created_at"]
-    list_filter = ["visibility", "is_first_impression", "track"]
-    search_fields = ["title"]
-    list_select_related = ["relationship", "track"]
-    readonly_fields = ["created_at"]
-
-
-@admin.register(RelationshipDevelopment)
-class RelationshipDevelopmentAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["author", "linked_scene"]
-    list_display = [
-        "title",
-        "relationship",
-        "track",
-        "points_earned",
-        "xp_awarded",
-        "visibility",
-        "created_at",
-    ]
-    list_filter = ["visibility", "track"]
-    search_fields = ["title"]
-    list_select_related = ["relationship", "track"]
+@admin.register(RelationshipDepthTransaction)
+class RelationshipDepthTransactionAdmin(admin.ModelAdmin):
+    list_display = ["relationship", "amount", "source", "scene", "game_week", "created_at"]
+    list_filter = ["source"]
+    raw_id_fields = ["relationship", "scene"]
     readonly_fields = ["created_at"]
 
 
 @admin.register(RelationshipCapstone)
 class RelationshipCapstoneAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["author", "linked_scene"]
-    list_display = ["title", "relationship", "track", "points", "visibility", "created_at"]
-    list_filter = ["visibility", "track"]
-    search_fields = ["title"]
-    list_select_related = ["relationship", "track"]
+    list_display = ["relationship", "tier_claimed", "xp_spent", "is_ritual_capstone", "created_at"]
+    list_filter = ["is_ritual_capstone"]
+    raw_id_fields = ["relationship", "journal_entry", "ritual"]
     readonly_fields = ["created_at"]
 
 
-@admin.register(RelationshipChange)
-class RelationshipChangeAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["author"]
-    list_display = [
-        "title",
-        "relationship",
-        "source_track",
-        "target_track",
-        "points_moved",
-        "visibility",
-        "created_at",
-    ]
-    list_filter = ["visibility", "source_track", "target_track"]
-    search_fields = ["title"]
-    list_select_related = ["relationship", "source_track", "target_track"]
-    readonly_fields = ["created_at"]
-
-
-@admin.register(WriteupComplaint)
-class WriteupComplaintAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["complainant"]
-    list_display = [
-        "writeup_ref",
-        "author_sheet_col",
-        "subject_sheet_col",
-        "complainant",
-        "created_at",
-        "resolved",
-    ]
-    list_filter = ["resolved"]
-    search_fields = ["reason"]
-    list_editable = ["resolved"]
-    list_select_related = [
-        "complainant",
-        "update__author",
-        "development__author",
-        "capstone__author",
-    ]
-    readonly_fields = ["created_at"]
-
-    @admin.display(description="Writeup")
-    def writeup_ref(self, obj):
-        writeup = obj.writeup
-        return writeup.title if writeup else "—"
-
-    @admin.display(description="Author")
-    def author_sheet_col(self, obj):
-        writeup = obj.writeup
-        return writeup.author if writeup else "—"
-
-    @admin.display(description="Subject")
-    def subject_sheet_col(self, obj):
-        writeup = obj.writeup
-        if writeup is None:
-            return "—"
-        return writeup.relationship.target_name
+@admin.register(RelationshipGrowthConfig)
+class RelationshipGrowthConfigAdmin(admin.ModelAdmin):
+    list_display = ["pk", "scene_base_gain", "depth_per_ap", "xp_per_tier", "thread_min_tier"]
+    autocomplete_fields = ["updated_by"]
 
 
 @admin.register(BondCombatConfig)
 class BondCombatConfigAdmin(admin.ModelAdmin):
-    """Singleton tuning config for relationship bond combat bonuses (#2021)."""
-
+    list_display = ["pk", "min_tier", "soul_tether_multiplier", "updated_at", "updated_by"]
+    readonly_fields = ["updated_at"]
     autocomplete_fields = ["updated_by"]
-
-    list_display = (
-        "pk",
-        "min_developed_absolute_value",
-        "soul_tether_multiplier",
-        "updated_at",
-    )
-
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002
-        return not BondCombatConfig.objects.exists()
-
-    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
-        return False
