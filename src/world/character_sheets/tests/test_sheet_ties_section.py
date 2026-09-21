@@ -108,6 +108,28 @@ class SheetTiesSectionTests(APITestCase):
         for card in cards:
             self.assertIsNotNone(card["depth"])
 
+    def test_a_sheet_with_no_ties_pays_one_query_for_the_whole_block(self):
+        """The ties block costs ONE query when there is nothing to show (#3957 CI round).
+
+        ``build_tie_page``'s reads are per-PAGE, not per-row, so an empty page still paid
+        for the tier ladder, and ``_ties_ap_this_week`` fired its SUM whether or not the
+        owner had a single side — four queries on a sheet with no ties, which is what
+        ``character_sheets.tests.test_viewset.TestCharacterSheetQueryCount`` counts.
+        ``self.b`` owns no sides (every side in the fixture is ``self.a``'s), and its own
+        player is looking, so the owner-only AP total is in play too.
+        """
+        self.client.force_authenticate(user=self.other)
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(f"/api/character-sheets/{self.b.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["ties"], [])
+        self.assertEqual(response.data["ties_ap_this_week"], 0)
+        sql = [q["sql"] for q in ctx.captured_queries]
+        sides = [q for q in sql if "arxii_characterrelationship" in q]
+        self.assertEqual(len(sides), 1, sides)
+        self.assertEqual([q for q in sql if "arxii_relationshiptier" in q], [])
+        self.assertEqual([q for q in sql if "arxii_relationshipallocation" in q], [])
+
     def test_cast_query_budget_stays_flat_as_ties_grow(self):
         """``_build_ties`` batches via ``reads.build_tie_page`` (#3957 review): adding five
         more ties to the two already on ``self.a`` costs at most one extra query on top of
