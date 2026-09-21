@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { fetchScene, SceneDetail } from '../queries';
 import { createActionRequest, fetchPlaces } from '../actionQueries';
 import { AttachedActionSubmissionGuard } from '../actionSubmissionGuard';
+import { useDetachedActionIds } from '../useDetachedActionIds';
 import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
@@ -212,19 +213,8 @@ export function SceneDetailPage() {
   const viewerEntryId = activeEntry?.id ?? null;
 
   // Track IDs the user has detached from the auto-attach chip strip.
-  const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
-
-  const handleDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
-  }, []);
-
-  const handleUndoDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => prev.filter((id) => id !== actionId));
-  }, []);
-
-  const handlePoseSubmitted = useCallback(() => {
-    setDetachedActionIds([]);
-  }, []);
+  const { detachedActionIds, handleDetach, handleUndoDetach, handlePoseSubmitted } =
+    useDetachedActionIds();
 
   // Pending unlinked actions for the chip strip.
   const { data: pendingActions } = usePendingUnlinkedActions(id, personaId);
@@ -233,7 +223,7 @@ export function SceneDetailPage() {
   const [composerMode, setComposerMode] = useState<ComposerMode>({
     command: 'pose',
     targets: [],
-    label: `Pose \u2192 Room`,
+    label: `Pose → Room`,
   });
 
   const [targetToAppend, setPendingTarget] = useState<string | null>(null);

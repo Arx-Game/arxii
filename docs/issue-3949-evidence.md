@@ -18,4 +18,4 @@ Baseline reviewed: `origin/main` `c40bcef394371ac88093c20626ddc8f85e12dbd6` (pos
 - One visible `Roleplay` section owns the live web RP feed.
 - Sidebar resize exposes a keyboard/pointer control bounded to 240–360px and the layout switches below 960px.
 
-The issue-linked PR is #3954. This evidence does not modify or close #3751.
+The issue-linked PR is #3954. The evidence document was refreshed with the shared attachment-guard and pose-renderer deduplication review. This evidence does not modify or close #3751.

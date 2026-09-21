@@ -58,6 +58,7 @@ import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
 import { fetchScene } from '@/scenes/queries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { AttachedActionSubmissionGuard } from '@/scenes/actionSubmissionGuard';
+import { useDetachedActionIds } from '@/scenes/useDetachedActionIds';
 import type { Interaction, SceneDetail } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
@@ -840,16 +841,8 @@ export function GamePage() {
   );
   const pendingActionIds = useMemo(() => pendingActions.map((a) => a.id), [pendingActions]);
 
-  const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
-  const handleDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
-  }, []);
-  const handleUndoDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => prev.filter((id) => id !== actionId));
-  }, []);
-  const handlePoseSubmitted = useCallback(() => {
-    setDetachedActionIds([]);
-  }, []);
+  const { detachedActionIds, handleDetach, handleUndoDetach, handlePoseSubmitted } =
+    useDetachedActionIds();
 
   const [targetToAppend, setPendingTarget] = useState<string | null>(null);
   const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
