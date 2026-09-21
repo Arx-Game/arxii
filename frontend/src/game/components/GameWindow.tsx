@@ -30,6 +30,7 @@ import { FeedChipStrip } from './FeedChipStrip';
 import { FeedBlockControlsContext, type FeedBlockControls } from '../feedBlockControls';
 import { AttentionBadge } from '@/game/components/AttentionBadge';
 import { loadConversationAnchor, usePlayPreferences } from '../playPreferences';
+import { getNarrativeBody } from '../narrativeRetention';
 
 /** The active scene's live feed, composed once by `GamePage` (#2156). */
 export interface GameWindowSceneFeed {
@@ -37,6 +38,7 @@ export interface GameWindowSceneFeed {
   interactions: Interaction[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
+  retention?: { retained: number; evicted: number; warning: boolean; gap: boolean };
 }
 
 interface GameWindowProps {
@@ -602,7 +604,12 @@ export function GameWindow({
   }, [sceneFeed, reference, chipState, dismissedKeys]);
   const visibleAmbient = useMemo(() => {
     const items = ambientInteractions ?? activeSessionForFeed?.ambientInteractions ?? [];
-    return visibleInteractions(items, chipState, dismissedKeys);
+    const hydrated = items.map((item) => ({
+      ...item,
+      content: item.content || getNarrativeBody(item)?.content || '',
+      line: item.line || getNarrativeBody(item)?.line,
+    }));
+    return visibleInteractions(hydrated, chipState, dismissedKeys);
   }, [ambientInteractions, activeSessionForFeed?.ambientInteractions, chipState, dismissedKeys]);
   const visibleNoteList = useMemo(() => {
     const items = notes ?? activeSessionForFeed?.notes ?? [];

@@ -14,6 +14,7 @@ import type { MyRosterEntry } from '@/roster/types';
 import { queryClient } from '@/queryClient';
 import { getThreadKey } from '@/scenes/hooks/useThreading';
 import { wsPayloadToInteraction } from '@/scenes/hooks/useSceneInteractions';
+import { narrativeBodyCache } from '@/game/narrativeRetention';
 
 export function handleInteractionPayload(
   character: MyRosterEntry['name'],
@@ -21,6 +22,8 @@ export function handleInteractionPayload(
   dispatch: AppDispatch,
   navigate: NavigateFunction
 ) {
+  // Redux keeps bounded metadata only; body text lives in the normalized LRU.
+  narrativeBodyCache.put(payload);
   if (payload.scene_id == null) {
     dispatch(addAmbientInteraction({ character, interaction: payload }));
   } else {

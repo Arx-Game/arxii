@@ -4,18 +4,24 @@ import { createSelector } from '@reduxjs/toolkit';
 import { fetchInteractions } from '../queries';
 import type { Interaction } from '../types';
 import { useAppSelector } from '@/store/hooks';
-import type { InteractionWsPayload } from '@/hooks/types';
+import type { InteractionWsMetadata, InteractionWsPayload } from '@/hooks/types';
+import { getNarrativeBody } from '@/game/narrativeRetention';
 import type { RootState } from '@/store/store';
 
 /** Convert a WebSocket interaction payload to the full Interaction shape for display. */
-export function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
+export function wsPayloadToInteraction(
+  payload: InteractionWsPayload | InteractionWsMetadata
+): Interaction {
   return {
     id: payload.id,
     persona: payload.persona,
-    content: payload.content,
-    // The rendered sentence (#3858) travels with the row; a payload from a
-    // server without it leaves the readers on `content`.
-    line: payload.line,
+    content:
+      ('content' in payload ? payload.content : undefined) ??
+      getNarrativeBody(payload)?.content ??
+      '',
+    // The rendered sentence (#3858) travels with the row; metadata rows resolve
+    // it from the bounded body cache and older payloads fall back to content.
+    line: ('line' in payload ? payload.line : undefined) ?? getNarrativeBody(payload)?.line,
     mode: payload.mode,
     visibility: 'default',
     timestamp: payload.timestamp,
@@ -54,6 +60,7 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
  */
 export function useSceneInteractions(sceneId: string | undefined, viewerKey?: string | null) {
   const activeCharacter = useAppSelector((state) => state.game.active);
+  const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
   const queryViewerKey = viewerKey === null ? undefined : (viewerKey ?? activeCharacter);
 
   // Memoized selector: only recomputes when the sceneInteractions array reference changes,
@@ -79,8 +86,11 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
   }>({
     queryKey: [
       'scene-interactions',
+      accountId ?? 'anonymous',
       sceneId ?? 'none',
-      ...(queryViewerKey ? [queryViewerKey] : []),
+      queryViewerKey ?? 'all',
+      // Cursor pages are scoped to the authorized snapshot/filter identity.
+      'retained',
     ],
     queryFn: ({ pageParam }) =>
       fetchInteractions(sceneId as string, pageParam as string | undefined),
@@ -94,6 +104,7 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
       }
     },
     initialPageParam: undefined as string | undefined,
+    maxPages: 12,
     enabled: sceneId !== undefined,
   });
 
@@ -113,8 +124,19 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
     return [...restInteractions, ...newFromWs];
   }, [interactionsQuery.data?.pages, wsInteractions]);
 
+  const retention = useAppSelector(
+    (state) =>
+      state.game.sessions[activeCharacter ?? '']?.sceneRetention ?? {
+        retained: 0,
+        evicted: 0,
+        warning: false,
+        gap: false,
+      }
+  );
+
   return {
     allInteractions,
+    retention,
     hasNextPage: interactionsQuery.hasNextPage,
     fetchNextPage: interactionsQuery.fetchNextPage,
   };

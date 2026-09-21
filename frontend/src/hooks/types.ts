@@ -318,3 +318,6 @@ export interface InteractionWsPayload {
   attributed_companion_id?: number | null;
   attributed_companion_name?: string | null;
 }
+
+/** Redux-owned pose metadata. Full body text is intentionally absent. */
+export type InteractionWsMetadata = Omit<InteractionWsPayload, 'content' | 'line'>;

@@ -23,6 +23,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAccountPlayStorage } from '@/game/playStorage';
+import { clearNarrativeBodyCache } from '@/game/narrativeRetention';
 
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
@@ -58,9 +59,11 @@ export function useAccountQuery() {
     const nextAccountId = account?.id ?? null;
     if (previousAccountId.current !== null && previousAccountId.current !== nextAccountId) {
       clearAccountPlayStorage(previousAccountId.current);
+      clearNarrativeBodyCache();
     }
     if (nextAccountId === null && previousAccountId.current !== null) {
       clearAccountPlayStorage();
+      clearNarrativeBodyCache();
     }
     previousAccountId.current = nextAccountId;
     dispatch(setAccount(account));
