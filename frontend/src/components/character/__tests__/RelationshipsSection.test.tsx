@@ -46,6 +46,7 @@ const TIE: CharacterSheetTie = {
   other_companion_id: null,
   labels: [
     {
+      label_id: 101,
       type_name: 'Lover',
       awareness: 'public',
       valence: 'warm',

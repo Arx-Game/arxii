@@ -72,9 +72,15 @@ const ILSAVET_ENTRY = {
   created_for_table_name: null,
 };
 
-/** A `CharacterSheetTieLabel`. `valence` colours the chip, so every fixture carries it. */
+let nextLabelId = 1;
+
+/**
+ * A `CharacterSheetTieLabel`. `valence` colours the chip, so every fixture carries it,
+ * and `label_id` is what the cast keys the chip on (#3957) — unique per fixture row.
+ */
 function tieLabel(over: Record<string, unknown>) {
   return {
+    label_id: nextLabelId++,
     type_name: '',
     awareness: 'public',
     valence: 'neutral',

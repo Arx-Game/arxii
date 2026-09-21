@@ -19,6 +19,7 @@ const CORVIN: CharacterSheetTie = {
   other_companion_id: null,
   labels: [
     {
+      label_id: 101,
       type_name: 'Lover',
       awareness: 'clandestine',
       valence: 'warm',
@@ -26,6 +27,7 @@ const CORVIN: CharacterSheetTie = {
       is_mutual: false,
     },
     {
+      label_id: 102,
       type_name: 'Rival',
       awareness: 'public',
       valence: 'hostile',
@@ -46,7 +48,14 @@ const MARROW: CharacterSheetTie = {
   other_entry_id: 35,
   other_companion_id: null,
   labels: [
-    { type_name: 'Kin', awareness: 'public', valence: 'warm', is_former: false, is_mutual: false },
+    {
+      label_id: 201,
+      type_name: 'Kin',
+      awareness: 'public',
+      valence: 'warm',
+      is_former: false,
+      is_mutual: false,
+    },
   ],
   depth: null,
   tier: null,

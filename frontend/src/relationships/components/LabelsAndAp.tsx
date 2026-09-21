@@ -76,7 +76,9 @@ export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
   }
 
   function end(label: TieLabel) {
-    if (!window.confirm(`End ${label.type_name}?`)) return;
+    // No confirm dialog (#3957 final review): ending a label deletes nothing — the row
+    // stays as former — so there is nothing to guard against, and the browser's own
+    // modal is chrome in a surface whose copy is otherwise bare.
     setError(null);
     endLabel.mutate({ label_id: label.id }, { onError: report });
   }

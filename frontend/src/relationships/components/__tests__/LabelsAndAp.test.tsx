@@ -110,16 +110,15 @@ describe('LabelsAndAp', () => {
     );
   });
 
-  it('confirms before ending a label, and never deletes one', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('ends a label on the first click, with no confirm dialog', () => {
+    // End is reversible by design (#3957 User Story 6): the label becomes former and
+    // nothing is deleted, so a browser modal guards against nothing and is chrome in a
+    // surface whose copy is otherwise bare.
+    const confirm = vi.spyOn(window, 'confirm');
     renderBlock();
     fireEvent.click(within(labelRow('Lover')).getByRole('button', { name: 'End' }));
-    expect(confirm).toHaveBeenCalledWith('End Lover?');
-    expect(end).not.toHaveBeenCalled();
-
-    confirm.mockReturnValue(true);
-    fireEvent.click(within(labelRow('Lover')).getByRole('button', { name: 'End' }));
     expect(end).toHaveBeenCalledWith({ label_id: 1 }, expect.anything());
+    expect(confirm).not.toHaveBeenCalled();
     confirm.mockRestore();
   });
 

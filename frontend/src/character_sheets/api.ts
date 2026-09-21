@@ -408,8 +408,13 @@ export interface CharacterSheetPayload {
  * chips are colour-coded the way the tie page's already are: without it the grid was
  * monochrome and a reader could not tell a lover from an enemy without opening each
  * tie.
+ *
+ * `label_id` is the label row's own id and the only safe React key for a chip: two
+ * FORMER labels of one type are identical in every other field, so a key built from
+ * type/awareness/former collides after declare -> end -> declare -> end.
  */
 export interface CharacterSheetTieLabel {
+  label_id: number;
   type_name: string;
   awareness: string;
   valence: string;

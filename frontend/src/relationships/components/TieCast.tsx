@@ -60,10 +60,7 @@ export function TieCast({ ties, entryId, isMyCharacter, apThisWeek }: TieCastPro
               {tie.labels.length > 0 && (
                 <div className="refsheet-tags">
                   {tie.labels.map((label) => (
-                    <span
-                      key={`${label.type_name}-${label.awareness}-${String(label.is_former)}`}
-                      className={labelTagClass(label, label.valence)}
-                    >
+                    <span key={label.label_id} className={labelTagClass(label, label.valence)}>
                       {labelText(label)}
                       {mutualSuffix(label)}
                     </span>
