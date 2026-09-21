@@ -1698,17 +1698,21 @@ def _load_category_consent_data(
 
         actor_sheet = actor_tenure.roster_entry.character_sheet
         hostile = Q(type__valence=TypeValence.HOSTILE)
-        # F("relationship__target_id") self-compares to leave the target unconstrained
-        # (any target) while still applying known_label_q's known-ness checks.
+        # known_label_q's target_ref=None leaves the target unconstrained (any target) while
+        # still applying its known-ness checks — the actor's own hostile labels, any direction.
         actor_hostile_target_ids = set(
-            RelationshipLabel.objects.filter(
-                known_label_q(actor_sheet.pk, F("relationship__target_id")) & hostile
-            ).values_list("relationship__target_id", flat=True)
+            RelationshipLabel.objects.filter(known_label_q(actor_sheet.pk, None) & hostile)
+            .order_by()
+            .values_list("relationship__target_id", flat=True)
         )
+        # The mirror "any source, target fixed" case has no native shortcut (only the target
+        # slot takes None) — F("relationship__source_id") self-compares to the same effect.
         hostile_toward_actor_source_ids = set(
             RelationshipLabel.objects.filter(
                 known_label_q(F("relationship__source_id"), actor_sheet.pk) & hostile
-            ).values_list("relationship__source_id", flat=True)
+            )
+            .order_by()
+            .values_list("relationship__source_id", flat=True)
         )
         mutual_hostile_sheet_ids = actor_hostile_target_ids & hostile_toward_actor_source_ids
         # One query: map the mutually-hostile sheet ids back to the owning tenures.

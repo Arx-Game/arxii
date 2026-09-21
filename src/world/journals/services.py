@@ -141,7 +141,8 @@ def annotate_can_retort(
     ``world.journals.tests.test_views.CanRetortAnnotationTests`` asserts the two agree).
     A feed serializing the predicate per row would otherwise run one EXISTS per entry;
     this folds all of them into the list query itself, so the query count no longer grows
-    with the page size.
+    with the page size. The rivalry leg reads mutual hostile labels (#3957) via
+    ``mutual_hostile_expression``.
     """
     if viewer_sheet is None:
         return queryset.annotate(viewer_can_retort=Value(False, output_field=BooleanField()))

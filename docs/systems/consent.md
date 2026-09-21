@@ -21,10 +21,13 @@ consent preferences gating which social actions a character may receive (#1141).
 # EVERYONE          - Any actor may use this category against the owner (default)
 # ALL_BUT_BLACKLIST - Anyone EXCEPT tenures on the SocialConsentBlacklist for this category
 # FRIENDS_WHITELIST - Only OOC friends (scenes.Friendship) + tenures on the whitelist
-# RIVALS            - Only declared MUTUAL rivals (scenes.Rivalry) + tenures on the whitelist
-#                     (#2170 — double opt-in; both sides must have declared each other)
-# ALLOWLIST         - Only tenures on the SocialConsentWhitelist (strict; friendship/rivalry
-#                     alone is not enough)
+# RIVALS            - Only characters holding a MUTUAL hostile relationship label with the
+#                     owner (world.relationships.services.mutual_hostile, #3957) + tenures on
+#                     the whitelist (double opt-in in effect: each side must hold its own
+#                     unended HOSTILE-valence label toward the other, Clandestine or Public,
+#                     declared under a still-open tenure)
+# ALLOWLIST         - Only tenures on the SocialConsentWhitelist (strict; friendship/mutual
+#                     hostile labels alone is not enough)
 ```
 
 ---
@@ -53,16 +56,19 @@ consent preferences gating which social actions a character may receive (#1141).
 passes every category. The owner having friended the actor (`friender_tenure=owner`) admits
 them; the reverse direction does not.
 
-**Rivals (`RIVALS`, #2170):** the rival check reads `scenes.Rivalry`
-(`friend_services.is_rival`) and requires a **mutual** declaration — both the owner and the
-actor must have declared the other a rival. Double opt-in by design (unlike one-directional
-friendship): the mode lets a character open an antagonism category to the people they have an
-IC rivalry with, and no one is dragged into that category one-sidedly. Telnet:
-`rival`/`unrival`/`rivals` (`commands/social/rivals.py`). Web: `RivalryViewSet`
-(`/api/scenes/rivals/` — list/declare/withdraw, `world/scenes/friend_views.py`; the list
-annotates `is_mutual`), surfaced as the `RivalButton`
-(`frontend/src/friends/components/RivalButton.tsx`) on another character's sheet page and
-card drawer, next to the `FriendButton`.
+**Rivals (`RIVALS`, #2170/#3957):** the rival check reads
+`world.relationships.services.mutual_hostile(owner_sheet, actor_sheet)` — a **mutual** hostile
+relationship label: each side must hold its own unended, HOSTILE-valence `RelationshipLabel`
+toward the other, at Clandestine or Public awareness, declared under a still-open tenure (both
+sides' `CharacterRelationship` row must also be active). Double opt-in in effect (unlike
+one-directional friendship): the mode lets a character open an antagonism category to the
+people they hold a live mutual rivalry with, and no one is dragged into that category
+one-sidedly by a single label. There is no dedicated rivalry-declaration surface — a
+HOSTILE-valence label declared on the tie page (or telnet `relationship declare`,
+`actions/definitions/relationships.py`'s `DeclareLabelAction`) IS the declaration; reciprocating
+from the other side makes it mutual. (`scenes.Rivalry`, `RivalryViewSet`
+(`/api/scenes/rivals/`), and the telnet `rival`/`unrival`/`rivals` commands were removed in
+#3957 — the mutual-label predicate replaces the dedicated double-opt-in model entirely.)
 
 **ActionTemplate link:** `ActionTemplate.consent_category` (nullable FK → `SocialConsentCategory`,
 `on_delete=SET_NULL`) tags each social template with its category. Uncategorized templates
@@ -287,8 +293,7 @@ REGISTRY action through `dispatch_player_action()` — the same seam the web use
 | `consent` | — | Show the caller's social-consent summary. |
 | `consent on` | `set_social_consent_preference` | Allow all social actions. |
 | `consent off` | `set_social_consent_preference` | Block all social actions. |
-| `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `whitelist`, `blacklist` (= ALL_BUT_BLACKLIST), `friends` (= FRIENDS_WHITELIST), `rivals` (= RIVALS, mutual only), or `default` (clear the rule). |
-| `rival <name>` / `unrival <name>` / `rivals` | — (thin over `friend_services`) | Declare / withdraw / list your IC rivals (`commands/social/rivals.py`, #2170). Rivalry gates `RIVALS` mode and needs both sides to declare. |
+| `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `whitelist`, `blacklist` (= ALL_BUT_BLACKLIST), `friends` (= FRIENDS_WHITELIST), `rivals` (= RIVALS, mutual hostile labels only — #3957), or `default` (clear the rule). |
 | `consent whitelist add\|remove\|list …` | `add`/`remove_social_consent_whitelist` | People you always allow. |
 | `consent blacklist add\|remove\|list …` (#1698) | `add`/`remove_social_consent_blacklist` | People barred under `blacklist` mode. |
 

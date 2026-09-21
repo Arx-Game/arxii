@@ -85,13 +85,14 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Retort/Condemn consent gate (#3941, ADR-0307)** — `ResponseType.CONDEMN` (praise's
   antagonistic opposite; XP mirrors retort) joins praise/retort. Retort and Condemn are offered
   only when the writer's `CharacterSheet.retort_consent` (`RetortConsent`: `RIVALS` default /
-  `ANYONE`) is `ANYONE`, or the viewer is a rival — for now, an active, non-pending
-  `CharacterRelationship` in either direction with progress on a negative-sign track
-  (`journals.services.can_retort`, one function so a future dedicated Rivalry relationship kind
-  narrows it there). Enforced server-side in `create_journal_response`; a refusal is the neutral
-  shared `JournalError.UNAVAILABLE`, never naming the reason. Praise and a Nomination are never
-  gated. The owner's consent choice is set via `GET/PATCH /api/journals/entries/disposition/`
-  (widened, see below) or telnet `journal consent rivals|anyone`.
+  `ANYONE`) is `ANYONE`, or the viewer holds a mutual hostile relationship label with the writer
+  (`world.relationships.services.mutual_hostile`, #3957 — each side must hold its own unended
+  HOSTILE-valence label toward the other, at Clandestine or Public awareness, declared under a
+  still-open tenure) read via `journals.services.can_retort`. Enforced server-side in
+  `create_journal_response`; a refusal is the neutral shared `JournalError.UNAVAILABLE`, never
+  naming the reason. Praise and a Nomination are never gated. The owner's consent choice is set
+  via `GET/PATCH /api/journals/entries/disposition/` (widened, see below) or telnet `journal
+  consent rivals|anyone`.
 - **Post mortems (#3941)** — the interface word for a `revealed_at`-stamped entry (ADR-0229's
   mechanics unchanged); banded on the row, filterable (`?post_mortem=1`). A post mortem is not
   public, so it takes no Praise, Retort, Condemn, or Nomination (see `character-progression.md`).
@@ -126,6 +127,14 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   surface and telnet `journal disposition` set the sheet default and per-entry override.
   This closes the "no afterlife" gap noted in #3287's spec (private entries were previously
   a write-only drawer that died with the character).
+- **Rivalry as a specific relationship kind (#3957, "Ties, redrawn")** — delivered. The
+  structural rivalry predicate `can_retort` shipped with (#3941, "an active, non-pending
+  `CharacterRelationship` in either direction on a negative-sign track") is gone; the Retort/
+  Condemn gate now reads `world.relationships.services.mutual_hostile` — a **mutual** HOSTILE-
+  valence `RelationshipLabel` (each side must hold its own, at Clandestine or Public, declared
+  under a still-open tenure). This also folded in and deleted the standalone `scenes.Rivalry`
+  double-opt-in declaration model, its web/telnet surfaces, and the RIVALS consent mode's
+  predicate (`world.consent.services.consent_blocks_targeting`) — one predicate, one place.
 
 ## Deferred (depends on systems that don't exist yet)
 - **Fame signal emission from praises** — praises should emit fame signal (needs fame/reputation system)
@@ -135,10 +144,6 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Great Archive IC location gating** — writing a First Journal at the Great Archive in play
   still needs no non-standard access point; a standard entry never requires being in-game there
   (#3941 confirms this stays out of scope; needs world building)
-- **Rivalry as a specific relationship kind (#3941, ADR-0307)** — `can_retort`'s rivalry
-  predicate is structural today (an active, non-pending `CharacterRelationship` in either
-  direction on a negative-sign track); a dedicated Rivalry relationship kind is a later
-  relationships pass, and `can_retort` narrows to it there without any caller changing
 - **A game-wide display of the week's most nominated journal** — the payout already runs
   (`progression.constants.MOST_NOMINATED_JOURNAL_XP`); no UI surfaces the week's winner (#3941
   out of scope, a future feature)

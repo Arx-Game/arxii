@@ -198,23 +198,37 @@ def advance_awareness(*, label: RelationshipLabel, to: str) -> RelationshipLabel
 
 
 def known_label_q(
-    source_id: int | OuterRef, target_ref, type_ref=None, *, awareness=KNOWN_AWARENESS
+    source_id: int | OuterRef,
+    target_ref: int | OuterRef | F | None = None,
+    type_ref=None,
+    *,
+    awareness=KNOWN_AWARENESS,
 ) -> Q:
     """Labels the OTHER side may see, declared under a still-open tenure.
 
     ``awareness`` narrows which awareness stages count as "known" — the default is
     Clandestine-or-Public (what the OTHER side of a tie may see); a caller reading what a
     THIRD PARTY may see passes ``awareness=(LabelAwareness.PUBLIC,)`` instead (#3957 review).
+
+    ``target_ref=None`` (the default) leaves the target UNCONSTRAINED — any target counts —
+    for a caller asking "does this source hold ANY known hostile label," not one aimed at a
+    specific other sheet (#3957 fix round 1: the consent picker sweep in
+    ``actions.player_interface._load_category_consent_data`` is that caller, on the
+    source-fixed/target-open side of its intersection). The mirror "any source, target
+    fixed" case has no native shortcut here — that caller passes an explicit
+    ``F("relationship__source_id")`` self-comparison for ``source_id`` instead, since only
+    the target slot gets this None treatment.
     """
     q = Q(
         relationship__source_id=source_id,
-        relationship__target_id=target_ref,
         relationship__is_active=True,
         ended_at__isnull=True,
         awareness__in=awareness,
         declared_by_tenure__isnull=False,
         declared_by_tenure__end_date__isnull=True,
     )
+    if target_ref is not None:
+        q &= Q(relationship__target_id=target_ref)
     if type_ref is not None:
         q &= Q(type_id=type_ref)
     return q
