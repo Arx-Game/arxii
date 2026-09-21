@@ -1,4 +1,4 @@
-"""Service functions for the relationships app."""
+"""Service functions for ties (#3957): labels, depth, tiers, gauges, predicates."""
 
 from __future__ import annotations
 
@@ -8,67 +8,409 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import BooleanField, Exists, ExpressionWrapper, F, OuterRef, Q
 from django.utils import timezone
 
-from world.achievements.models import StatDefinition
-from world.achievements.services import increment_stat_for_group
-from world.progression.constants import FIRST_IMPRESSION_AUTHOR_XP, FIRST_IMPRESSION_TARGET_XP
-from world.progression.models import KudosSourceCategory
-from world.progression.services.awards import award_xp
-from world.progression.services.kudos import award_kudos
-from world.progression.types import ProgressionReason
+from world.progression.services.xp_ledger import spend_xp_for_character
 from world.relationships.constants import (
+    AWARENESS_RANK,
     BUMP_POINTS,
-    MAX_DEVELOPMENTS_PER_WEEK,
-    RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
-    WRITEUP_KUDOS_AMOUNT,
-    TrackSign,
-    TrackSystemKey,
-    UpdateVisibility,
+    KNOWN_AWARENESS,
+    DepthSource,
+    LabelAwareness,
+    TypeValence,
 )
 from world.relationships.exceptions import (
+    AllocationTooLargeError,
     AlreadyAcknowledgedError,
-    AlreadyCommendedError,
-    CannotCommendOwnWriteupError,
-    NotWriteupSubjectError,
-    SystemTracksNotSeededError,
-    WriteupNotSharedError,
-    WriteupNotVisibleError,
+    AwarenessBackwardError,
+    CapstoneEntryInvalidError,
+    LabelAlreadyDeclaredError,
+    LabelEndedError,
+    SameTypeShiftError,
+    TierNotReachedError,
 )
 from world.relationships.models import (
     AffectionShift,
     CharacterRelationship,
+    RelationshipAllocation,
     RelationshipBump,
     RelationshipCapstone,
-    RelationshipChange,
     RelationshipCondition,
-    RelationshipDevelopment,
-    RelationshipTrack,
-    RelationshipTrackProgress,
-    RelationshipUpdate,
+    RelationshipDepthTransaction,
+    RelationshipGrowthConfig,
+    RelationshipLabel,
+    RelationshipTier,
+    RelationshipType,
     TemporaryRelationshipCondition,
-    WriteupComplaint,
-    WriteupKudos,
 )
-from world.roster.selectors import get_account_for_character
 
 if TYPE_CHECKING:
-    from evennia.accounts.models import AccountDB
-
     from evennia_extensions.models import ObjectDB
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import ConsequenceEffect
     from world.checks.types import ModifierContribution
     from world.combat.models import CombatEncounter
     from world.companions.models import Companion
+    from world.journals.models import JournalEntry
     from world.npc_services.models import NpcRegardEvent
-    from world.relationships.constants import FirstImpressionColoring
-    from world.relationships.models import BondCombatConfig, GrievanceOption, RelationshipTrack
+    from world.relationships.models import BondCombatConfig, GrievanceOption
+    from world.roster.models import RosterTenure
     from world.scenes.boon_models import Boon
     from world.scenes.models import Interaction, ReactionEmoji, Scene
 
 logger = logging.getLogger(__name__)
+
+
+# -- config --------------------------------------------------------------------
+
+
+def get_growth_config() -> RelationshipGrowthConfig:
+    cfg = RelationshipGrowthConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = RelationshipGrowthConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+# -- sides ---------------------------------------------------------------------
+
+
+def get_or_create_side(
+    *,
+    source: CharacterSheet,
+    target: CharacterSheet | None = None,
+    target_companion: Companion | None = None,
+) -> CharacterRelationship:
+    """One character's side of a tie, created on first touch (#3957)."""
+    if (target is None) == (target_companion is None):
+        msg = "Provide exactly one of target or target_companion."
+        raise ValueError(msg)
+    if target is not None and source.pk == target.pk:
+        msg = "You cannot record a relationship with yourself."
+        raise ValidationError(msg)
+    if target_companion is not None:
+        side, _ = CharacterRelationship.objects.get_or_create(
+            source=source, target_companion=target_companion
+        )
+        return side
+    side, _ = CharacterRelationship.objects.get_or_create(source=source, target=target)
+    return side
+
+
+def set_summary(*, side: CharacterRelationship, summary: str) -> CharacterRelationship:
+    side.summary = summary.strip()
+    side.save(update_fields=["summary", "updated_at"])
+    return side
+
+
+# -- labels --------------------------------------------------------------------
+
+
+def declare_label(
+    *,
+    side: CharacterRelationship,
+    type: RelationshipType,  # noqa: A002 - the model field is named type
+    awareness: str = LabelAwareness.PRIVATE,
+    tenure: RosterTenure | None = None,
+) -> RelationshipLabel:
+    """Name one type on this side, Private unless told otherwise (#3957)."""
+    if awareness not in AWARENESS_RANK:
+        raise AwarenessBackwardError
+    now = timezone.now()
+    try:
+        with transaction.atomic():
+            return RelationshipLabel.objects.create(
+                relationship=side,
+                type=type,
+                awareness=awareness,
+                declared_by_tenure=tenure,
+                since=now,
+                clandestine_at=now if awareness == LabelAwareness.CLANDESTINE else None,
+                public_at=now if awareness == LabelAwareness.PUBLIC else None,
+            )
+    except IntegrityError:
+        raise LabelAlreadyDeclaredError from None
+
+
+def shift_label(
+    *, label: RelationshipLabel, new_type: RelationshipType, note: str = ""
+) -> RelationshipLabel:
+    """Change one label into another: the old row ends, the new one remembers it."""
+    if label.ended_at is not None:
+        raise LabelEndedError
+    if new_type.pk == label.type_id:
+        raise SameTypeShiftError
+    now = timezone.now()
+    with transaction.atomic():
+        # Create the new row FIRST: if it collides with the partial unique constraint,
+        # nothing has mutated yet, so there is no stale identity-map instance to leave
+        # behind on rollback (ADR-0008's addendum; lint-idmapper-mutation-order).
+        try:
+            new_label = RelationshipLabel.objects.create(
+                relationship=label.relationship,
+                type=new_type,
+                awareness=label.awareness,
+                declared_by_tenure=label.declared_by_tenure,
+                since=now,
+                clandestine_at=label.clandestine_at,
+                public_at=label.public_at,
+                replaced=label,
+                note=note.strip()[:200],
+            )
+        except IntegrityError:
+            raise LabelAlreadyDeclaredError from None
+        label.ended_at = now
+        label.save(update_fields=["ended_at"])
+    return new_label
+
+
+def end_label(*, label: RelationshipLabel) -> RelationshipLabel:
+    if label.ended_at is not None:
+        raise LabelEndedError
+    label.ended_at = timezone.now()
+    label.save(update_fields=["ended_at"])
+    return label
+
+
+def advance_awareness(*, label: RelationshipLabel, to: str) -> RelationshipLabel:
+    """Private -> Clandestine -> Public, or Private -> Public. Never backward."""
+    if label.ended_at is not None:
+        raise LabelEndedError
+    if to not in AWARENESS_RANK or AWARENESS_RANK[to] <= AWARENESS_RANK[label.awareness]:
+        raise AwarenessBackwardError
+    now = timezone.now()
+    label.awareness = to
+    fields = ["awareness"]
+    if to == LabelAwareness.CLANDESTINE:
+        label.clandestine_at = now
+        fields.append("clandestine_at")
+    else:
+        label.public_at = now
+        fields.append("public_at")
+        if label.clandestine_at is None:
+            label.clandestine_at = now
+            fields.append("clandestine_at")
+    label.save(update_fields=fields)
+    return label
+
+
+def _known_label_q(source_id: int, target_ref, type_ref=None) -> Q:
+    """Labels the OTHER side may see, declared under a still-open tenure."""
+    q = Q(
+        relationship__source_id=source_id,
+        relationship__target_id=target_ref,
+        relationship__is_active=True,
+        ended_at__isnull=True,
+        awareness__in=KNOWN_AWARENESS,
+        declared_by_tenure__isnull=False,
+        declared_by_tenure__end_date__isnull=True,
+    )
+    if type_ref is not None:
+        q &= Q(type_id=type_ref)
+    return q
+
+
+def is_mutual(side: CharacterRelationship, type: RelationshipType) -> bool:  # noqa: A002
+    """Both sides hold counterpart labels at Clandestine or Public (#3957)."""
+    if side.target_id is None:
+        return False
+    mine = RelationshipLabel.objects.filter(
+        _known_label_q(side.source_id, side.target_id, type.pk)
+    ).exists()
+    theirs = RelationshipLabel.objects.filter(
+        _known_label_q(side.target_id, side.source_id, type.counterpart_or_self.pk)
+    ).exists()
+    return mine and theirs
+
+
+def mutual_hostile(a_sheet: CharacterSheet, b_sheet: CharacterSheet) -> bool:
+    """The one predicate consent's RIVALS mode and the journals' Retort gate read."""
+    hostile = Q(type__valence=TypeValence.HOSTILE)
+    return (
+        RelationshipLabel.objects.filter(_known_label_q(a_sheet.pk, b_sheet.pk) & hostile).exists()
+        and RelationshipLabel.objects.filter(
+            _known_label_q(b_sheet.pk, a_sheet.pk) & hostile
+        ).exists()
+    )
+
+
+def mutual_hostile_expression(viewer_sheet_id: int, other_ref: str = "author_id"):
+    """``mutual_hostile`` as an annotatable expression against ``OuterRef(other_ref)``."""
+    hostile = Q(type__valence=TypeValence.HOSTILE)
+    mine = RelationshipLabel.objects.filter(
+        _known_label_q(viewer_sheet_id, OuterRef(other_ref)) & hostile
+    )
+    theirs = RelationshipLabel.objects.filter(
+        Q(
+            relationship__source_id=OuterRef(other_ref),
+            relationship__target_id=viewer_sheet_id,
+            relationship__is_active=True,
+            ended_at__isnull=True,
+            awareness__in=KNOWN_AWARENESS,
+            declared_by_tenure__isnull=False,
+            declared_by_tenure__end_date__isnull=True,
+        )
+        & hostile
+    )
+    return ExpressionWrapper(Q(Exists(mine)) & Q(Exists(theirs)), output_field=BooleanField())
+
+
+# -- depth ---------------------------------------------------------------------
+
+
+def set_allocation(*, side: CharacterRelationship, ap_amount: int) -> RelationshipAllocation:
+    from world.action_points.models import ActionPointPool
+    from world.game_clock.week_services import get_current_game_week
+
+    if ap_amount < 0:
+        raise AllocationTooLargeError
+    pool = ActionPointPool.get_or_create_for_character(side.source.character)
+    if pool is None or (ap_amount and not pool.can_afford(ap_amount)):
+        raise AllocationTooLargeError
+    allocation, _ = RelationshipAllocation.objects.update_or_create(
+        relationship=side,
+        defaults={"ap_amount": ap_amount, "game_week": get_current_game_week()},
+    )
+    return allocation
+
+
+def _award_depth(
+    side: CharacterRelationship, amount: int, source: str, *, scene: Scene | None = None
+) -> None:
+    from world.game_clock.week_services import get_current_game_week
+
+    field = "invested_depth" if source == DepthSource.ALLOCATION else "scene_depth"
+    with transaction.atomic():
+        CharacterRelationship.objects.filter(pk=side.pk).update_with_reason(
+            reason="issue #3957: intentional atomic write", **{field: F(field) + amount}
+        )
+        RelationshipDepthTransaction.objects.create(
+            relationship=side,
+            amount=amount,
+            source=source,
+            scene=scene,
+            game_week=get_current_game_week(),
+        )
+    # Full (not fields=[...]) refresh: idmapper's __call__ re-caches whatever partial
+    # instance a .only()-style refresh constructs, so a single-field refresh right after
+    # flush_from_cache would leave the OTHER fields permanently deferred on the cached
+    # object (world/npc_services/regard.py's mirror_npc_regard_event bridge uses the same
+    # flush-then-full-refresh pairing for the same reason).
+    side.flush_from_cache(force=True)
+    side.refresh_from_db()
+
+
+def process_weekly_relationship_allocations() -> int:
+    """The weekly turn: every allocation the pool can pay becomes depth (#3957)."""
+    from world.action_points.models import ActionPointPool
+
+    cfg = get_growth_config()
+    processed = 0
+    allocations = RelationshipAllocation.objects.filter(
+        ap_amount__gt=0, relationship__is_active=True
+    ).select_related("relationship__source__character")
+    for allocation in allocations:
+        side = allocation.relationship
+        pool = ActionPointPool.get_or_create_for_character(side.source.character)
+        if pool is None or not pool.spend(allocation.ap_amount):
+            continue
+        _award_depth(side, allocation.ap_amount * cfg.depth_per_ap, DepthSource.ALLOCATION)
+        processed += 1
+    return processed
+
+
+def credit_scene_depth(scene: Scene) -> int:
+    """First scene together in a game week credits each side ``scene_base_gain`` (#3957).
+
+    Both characters must have POSED in the scene. Returns the number of sides credited.
+    """
+    from world.game_clock.week_services import get_current_game_week
+    from world.scenes.models import Interaction
+
+    sheet_ids = sorted(
+        {
+            sid
+            for sid in Interaction.objects.filter(scene=scene).values_list(
+                "persona__character_sheet_id", flat=True
+            )
+            if sid is not None
+        }
+    )
+    if len(sheet_ids) < 2:  # noqa: PLR2004
+        return 0
+    from world.character_sheets.models import CharacterSheet
+
+    sheets = {s.pk: s for s in CharacterSheet.objects.filter(pk__in=sheet_ids)}
+    cfg = get_growth_config()
+    week = get_current_game_week()
+    credited = 0
+    for i, a_id in enumerate(sheet_ids):
+        for b_id in sheet_ids[i + 1 :]:
+            for src, tgt in ((a_id, b_id), (b_id, a_id)):
+                side = get_or_create_side(source=sheets[src], target=sheets[tgt])
+                if not side.is_active:
+                    continue
+                already = RelationshipDepthTransaction.objects.filter(
+                    relationship=side, source=DepthSource.SCENE, game_week=week
+                ).exists()
+                if already:
+                    continue
+                _award_depth(side, cfg.scene_base_gain, DepthSource.SCENE, scene=scene)
+                credited += 1
+    return credited
+
+
+# -- tiers ---------------------------------------------------------------------
+
+
+def advance_tier(
+    *, side: CharacterRelationship, journal_entry: JournalEntry
+) -> RelationshipCapstone:
+    """Claim the next tier with a capstone entry and XP (#3957). Cost = xp_per_tier x new tier."""
+    nxt = side.next_tier()
+    if nxt is None or side.pair_depth() < nxt.depth_threshold:
+        raise TierNotReachedError
+    if (
+        journal_entry.author_id != side.source_id
+        or side.target_id is None
+        or journal_entry.about_id != side.target_id
+        or journal_entry.parent_id is not None
+    ):
+        raise CapstoneEntryInvalidError
+    if RelationshipCapstone.objects.filter(journal_entry=journal_entry).exists():
+        raise CapstoneEntryInvalidError
+    cost = get_growth_config().xp_per_tier * nxt.tier_number
+    with transaction.atomic():
+        spend_xp_for_character(side.source, cost, f"Relationship tier {nxt.tier_number}")
+        receipt = RelationshipCapstone.objects.create(
+            relationship=side,
+            journal_entry=journal_entry,
+            tier_claimed=nxt.tier_number,
+            xp_spent=cost,
+        )
+        side.tier = nxt.tier_number
+        side.save(update_fields=["tier", "updated_at"])
+    return receipt
+
+
+# -- gauges --------------------------------------------------------------------
+
+
+def move_gauges(*, side: CharacterRelationship, amount: int) -> None:
+    """Positive adds Affection, negative adds Conflict; both floors are zero."""
+    if amount > 0:
+        CharacterRelationship.objects.filter(pk=side.pk).update_with_reason(
+            reason="issue #3957: intentional atomic write", affection=F("affection") + amount
+        )
+    elif amount < 0:
+        CharacterRelationship.objects.filter(pk=side.pk).update_with_reason(
+            reason="issue #3957: intentional atomic write", conflict=F("conflict") + (-amount)
+        )
+    # Full refresh, same reason as _award_depth: a fields=[...] refresh right after
+    # flush_from_cache leaves every OTHER field permanently deferred on the re-cached
+    # instance (idmapper's __call__ caches whatever partial instance the refresh builds).
+    side.flush_from_cache(force=True)
+    side.refresh_from_db()
 
 
 def companion_target_error(source: CharacterSheet, companion: Companion) -> str:
@@ -86,290 +428,6 @@ def companion_target_error(source: CharacterSheet, companion: Companion) -> str:
     return ""
 
 
-def create_first_impression(  # noqa: PLR0913
-    *,
-    source: CharacterSheet,
-    target: CharacterSheet | None = None,
-    target_companion: Companion | None = None,
-    title: str,
-    writeup: str,
-    track: RelationshipTrack,
-    points: int,
-    coloring: FirstImpressionColoring,
-    visibility: UpdateVisibility,
-    linked_scene: Scene | None = None,
-) -> CharacterRelationship:
-    """
-    Create a pending relationship with an initial update and track progress.
-
-    The update adds temporary points and capacity to the track. If the target
-    already has a reciprocal relationship, both become active and stats fire.
-
-    A companion target (#3575) is the owner's bond toward their own bonded
-    companion: the row is active from creation (no reciprocal row can exist),
-    only the author earns XP, and ``companion_target_error`` gates who may write it.
-    """
-    if (target is None) == (target_companion is None):
-        msg = "A first impression needs exactly one target."
-        raise ValidationError(msg)
-    if target_companion is not None:
-        error = companion_target_error(source, target_companion)
-        if error:
-            raise ValidationError(error)
-
-    with transaction.atomic():
-        if target_companion is not None:
-            relationship, created = CharacterRelationship.objects.get_or_create(
-                source=source,
-                target_companion=target_companion,
-                defaults={"is_pending": False},
-            )
-        else:
-            relationship, created = CharacterRelationship.objects.get_or_create(
-                source=source,
-                target=target,
-                defaults={"is_pending": True},
-            )
-
-        if not created and relationship.updates.filter(is_first_impression=True).exists():
-            msg = "A first impression already exists for this relationship."
-            raise ValidationError(msg)
-
-        RelationshipUpdate.objects.create(
-            relationship=relationship,
-            author=source,
-            title=title,
-            writeup=writeup,
-            track=track,
-            points_earned=points,
-            coloring=coloring,
-            visibility=visibility,
-            is_first_impression=True,
-            linked_scene=linked_scene,
-        )
-
-        progress, _created = RelationshipTrackProgress.objects.get_or_create(
-            relationship=relationship,
-            track=track,
-            defaults={"capacity": 0, "developed_points": 0},
-        )
-        progress.capacity += points
-        progress.save(update_fields=["capacity"])
-
-        # Award First Impression XP
-        author_account = get_account_for_character(source.character)
-        if author_account:
-            award_xp(
-                author_account,
-                FIRST_IMPRESSION_AUTHOR_XP,
-                reason=ProgressionReason.FIRST_IMPRESSION,
-                description=f"First impression of {relationship.target_name}",
-                character=source,
-            )
-        if target is None:
-            return relationship
-
-        _award_reciprocal_first_impression(source=source, target=target, relationship=relationship)
-        return relationship
-
-
-def _award_reciprocal_first_impression(
-    *, source: CharacterSheet, target: CharacterSheet, relationship: CharacterRelationship
-) -> None:
-    """Award the target's First Impression XP, then activate both rows if reciprocal.
-
-    A reciprocal (target -> source) row that is still pending means the target
-    already wrote their own first impression of the source: both rows go active
-    and the "relationships established" stat fires for both parties.
-    """
-    target_account = get_account_for_character(target.character)
-    if target_account:
-        award_xp(
-            target_account,
-            FIRST_IMPRESSION_TARGET_XP,
-            reason=ProgressionReason.FIRST_IMPRESSION,
-            description=f"First impression from {source.character.db_key}",
-            character=target,
-        )
-
-    try:
-        reciprocal = CharacterRelationship.objects.get(source=target, target=source)
-    except CharacterRelationship.DoesNotExist:
-        return
-    if not reciprocal.is_pending:
-        return
-
-    reciprocal.is_pending = False
-    reciprocal.save(update_fields=["is_pending"])
-    relationship.is_pending = False
-    relationship.save(update_fields=["is_pending"])
-
-    stat_def = StatDefinition.objects.get(key="relationships.total_established")
-    increment_stat_for_group([source, target], stat_def)
-
-
-def redistribute_points(  # noqa: PLR0913
-    *,
-    relationship: CharacterRelationship,
-    author: CharacterSheet,
-    title: str,
-    writeup: str,
-    source_track: RelationshipTrack,
-    target_track: RelationshipTrack,
-    points: int,
-    visibility: UpdateVisibility,
-) -> RelationshipChange:
-    """
-    Move developed points from one track to another. No new value is added.
-
-    Raises ValidationError if the source track does not have enough developed points.
-    """
-    with transaction.atomic():
-        try:
-            source_progress = RelationshipTrackProgress.objects.select_for_update().get(
-                relationship=relationship,
-                track=source_track,
-            )
-        except RelationshipTrackProgress.DoesNotExist:
-            msg = "Source track has no progress to redistribute."
-            raise ValidationError(msg) from None
-
-        if source_progress.developed_points < points:
-            msg = (
-                f"Cannot move {points} points from {source_track.name}: "
-                f"only {source_progress.developed_points} available."
-            )
-            raise ValidationError(msg)
-
-        source_progress.developed_points -= points
-        source_progress.save(update_fields=["developed_points"])
-
-        target_progress, _created = (
-            RelationshipTrackProgress.objects.select_for_update().get_or_create(
-                relationship=relationship,
-                track=target_track,
-                defaults={"capacity": 0, "developed_points": 0},
-            )
-        )
-        target_progress.developed_points += points
-        target_progress.save(update_fields=["developed_points"])
-
-        return RelationshipChange.objects.create(
-            relationship=relationship,
-            author=author,
-            title=title,
-            writeup=writeup,
-            source_track=source_track,
-            target_track=target_track,
-            points_moved=points,
-            visibility=visibility,
-        )
-
-
-def create_development(  # noqa: PLR0913
-    *,
-    relationship: CharacterRelationship,
-    author: CharacterSheet,
-    title: str,
-    writeup: str,
-    track: RelationshipTrack,
-    points: int,
-    xp_awarded: int = 0,
-    visibility: UpdateVisibility,
-    linked_scene: Scene | None = None,
-) -> RelationshipDevelopment:
-    """
-    Add permanent (developed) points to a track, up to capacity.
-
-    Raises ValidationError if the track has no capacity remaining or if the
-    character has used all 7 weekly development updates.
-    """
-    with transaction.atomic():
-        # Enforce weekly limit — reset counters if game week has changed
-        from world.game_clock.week_services import get_current_game_week
-
-        current_week = get_current_game_week()
-        if relationship.game_week_id != current_week.pk:
-            relationship.developments_this_week = 0
-            relationship.game_week = current_week
-            relationship.save(update_fields=["developments_this_week", "game_week"])
-
-        if relationship.developments_this_week >= MAX_DEVELOPMENTS_PER_WEEK:
-            msg = f"Weekly development limit reached ({MAX_DEVELOPMENTS_PER_WEEK} per week)."
-            raise ValidationError(msg)
-
-        progress, _created = RelationshipTrackProgress.objects.select_for_update().get_or_create(
-            relationship=relationship,
-            track=track,
-            defaults={"capacity": 0, "developed_points": 0},
-        )
-
-        available = progress.capacity - progress.developed_points
-        if available <= 0:
-            msg = f"Track {track.name} has no remaining capacity for development."
-            raise ValidationError(msg)
-
-        actual_points = min(points, available)
-
-        progress.developed_points += actual_points
-        progress.save(update_fields=["developed_points"])
-
-        relationship.developments_this_week += 1
-        relationship.save(update_fields=["developments_this_week"])
-
-        return RelationshipDevelopment.objects.create(
-            relationship=relationship,
-            author=author,
-            title=title,
-            writeup=writeup,
-            track=track,
-            points_earned=actual_points,
-            xp_awarded=xp_awarded,
-            visibility=visibility,
-            linked_scene=linked_scene,
-        )
-
-
-def create_capstone(  # noqa: PLR0913
-    *,
-    relationship: CharacterRelationship,
-    author: CharacterSheet,
-    title: str,
-    writeup: str,
-    track: RelationshipTrack,
-    points: int,
-    visibility: UpdateVisibility,
-    linked_scene: Scene | None = None,
-) -> RelationshipCapstone:
-    """
-    Record a capstone event — adds points to both capacity and developed_points.
-
-    Capstones are always allowed (unlimited). They represent monumental moments
-    and are never gated.
-    """
-    with transaction.atomic():
-        progress, _created = RelationshipTrackProgress.objects.select_for_update().get_or_create(
-            relationship=relationship,
-            track=track,
-            defaults={"capacity": 0, "developed_points": 0},
-        )
-
-        progress.capacity += points
-        progress.developed_points += points
-        progress.save(update_fields=["capacity", "developed_points"])
-
-        return RelationshipCapstone.objects.create(
-            relationship=relationship,
-            author=author,
-            title=title,
-            writeup=writeup,
-            track=track,
-            points=points,
-            visibility=visibility,
-            linked_scene=linked_scene,
-        )
-
-
 def apply_relationship_bump(
     *,
     source: CharacterSheet,
@@ -378,48 +436,21 @@ def apply_relationship_bump(
     valence: int,
     source_emoji: ReactionEmoji | None = None,
 ) -> RelationshipBump:
-    """Apply an ambient ±1 bump to source's regard toward target (#1699).
-
-    Permanent, ungated, tiny: adds BUMP_POINTS to both capacity and
-    developed_points (the capstone write-shape at bump scale) on the generic
-    Regard (positive) or Friction (negative) system track. The bump row's
-    unique constraint per (relationship, interaction) is the only cap — the
-    bump-row create runs first inside the transaction so a duplicate rolls
-    back cleanly with no points applied.
-
-    Raises ValidationError (self-target), SystemTracksNotSeededError, or
-    AlreadyAcknowledgedError.
-    """
+    """Ambient +/-1 on source's Affection or Conflict toward target (#1699, #3957)."""
     if source.pk == target.pk:
         msg = "You cannot record a relationship with yourself."
         raise ValidationError(msg)
-    key = TrackSystemKey.REGARD if valence > 0 else TrackSystemKey.FRICTION
-    try:
-        track = RelationshipTrack.objects.get(system_key=key)
-    except RelationshipTrack.DoesNotExist:
-        raise SystemTracksNotSeededError from None
     try:
         with transaction.atomic():
-            relationship, _ = CharacterRelationship.objects.get_or_create(
-                source=source,
-                target=target,
-                defaults={"is_pending": True},
-            )
+            side = get_or_create_side(source=source, target=target)
             bump = RelationshipBump.objects.create(
-                relationship=relationship,
+                relationship=side,
                 interaction=interaction,
                 timestamp=interaction.timestamp,
                 valence=1 if valence > 0 else -1,
                 source_emoji=source_emoji,
             )
-            progress, _ = RelationshipTrackProgress.objects.select_for_update().get_or_create(
-                relationship=relationship,
-                track=track,
-                defaults={"capacity": 0, "developed_points": 0},
-            )
-            progress.capacity += BUMP_POINTS
-            progress.developed_points += BUMP_POINTS
-            progress.save(update_fields=["capacity", "developed_points"])
+            move_gauges(side=side, amount=BUMP_POINTS if valence > 0 else -BUMP_POINTS)
     except IntegrityError:
         raise AlreadyAcknowledgedError from None
     return bump
@@ -434,300 +465,54 @@ def apply_affection_shift(  # noqa: PLR0913 - two provenance modes share one wri
     amount: int,
     boon: Boon | None = None,
 ) -> AffectionShift | None:
-    """Apply a social action's automatic affection shift (#1697, boon mode #2540).
-
-    Moves ``source``'s relationship toward ``target`` by ``amount`` on the
-    Regard (positive) or Friction (negative) system track, using the capstone
-    write-shape (capacity + developed together — the same as ambient bumps).
-    Provenance is ``effect`` (a SHIFT_AFFECTION ConsequenceEffect — deduped
-    first-per-scene-per-pair, the diminishing-returns rule) or ``boon`` (a
-    granted Boon — deduped on the Boon itself, so serial boons stack within a
-    scene); exactly one must be passed. Returns ``None`` on the dedup no-op.
-    Direction note: callers pass the social action's TARGET as ``source`` —
-    it is *their* regard for the actor that moves.
-    """
+    """A social action's automatic shift on the target's gauges (#1697, #2540, #3957)."""
     if (effect is None) == (boon is None):
         msg = "An affection shift carries exactly one provenance: effect or boon."
         raise ValueError(msg)
     if amount == 0 or source.pk == target.pk:
         return None
-    key = TrackSystemKey.REGARD if amount > 0 else TrackSystemKey.FRICTION
-    try:
-        track = RelationshipTrack.objects.get(system_key=key)
-    except RelationshipTrack.DoesNotExist:
-        raise SystemTracksNotSeededError from None
     try:
         with transaction.atomic():
-            relationship, _ = CharacterRelationship.objects.get_or_create(
-                source=source,
-                target=target,
-                defaults={"is_pending": True},
-            )
+            side = get_or_create_side(source=source, target=target)
             shift = AffectionShift.objects.create(
-                relationship=relationship,
-                scene=scene,
-                effect=effect,
-                boon=boon,
-                amount=amount,
+                relationship=side, scene=scene, effect=effect, boon=boon, amount=amount
             )
-            progress, _ = RelationshipTrackProgress.objects.select_for_update().get_or_create(
-                relationship=relationship,
-                track=track,
-                defaults={"capacity": 0, "developed_points": 0},
-            )
-            points = abs(amount)
-            progress.capacity += points
-            progress.developed_points += points
-            progress.save(update_fields=["capacity", "developed_points"])
+            move_gauges(side=side, amount=amount)
     except IntegrityError:
         return None
     return shift
 
 
-def mirror_npc_regard_event_to_track(event: NpcRegardEvent) -> RelationshipTrackProgress | None:
-    """Mirror one NpcRegardEvent onto the PC's Regard/Friction system track (#2039).
-
-    Reuses ``apply_affection_shift``'s track-selection + capstone write-shape, but
-    dedups on the ``NpcRegardEvent`` row itself (one mirror write per event, folded
-    into the same call) rather than requiring a Scene+ConsequenceEffect —
-    ``apply_affection_shift`` can't be called directly here since combat/GM/chargen-
-    authored events don't carry those. #2013's hated-foe surge
-    (``world/combat/escalation.py``'s ``_maybe_surge_hated_foe``) reads
-    ``source=<PC's own CharacterSheet>, target=<NPC's CharacterSheet>`` — so this
-    helper always writes in that fixed direction regardless of which side of the
-    NpcRegardEvent caused it. Returns ``None`` if the event's regard row isn't
-    persona-targeted, or the amount is zero.
-    """
+def mirror_npc_regard_event(event: NpcRegardEvent) -> CharacterRelationship | None:
+    """Mirror one NpcRegardEvent onto the PC's gauges toward the NPC (#2039, #3957)."""
     regard = event.regard
     target_persona = regard.target_persona
     if target_persona is None:
-        # Only PERSONA-targeted regard rows have a PC to mirror onto; org/society
-        # targets have no CharacterSheet and can't feed the #2013 bridge.
         return None
-    npc_persona = regard.holder_persona
-
     pc_sheet = target_persona.character_sheet
-    npc_sheet = npc_persona.character_sheet
-    if pc_sheet.pk == npc_sheet.pk:
+    npc_sheet = regard.holder_persona.character_sheet
+    if pc_sheet.pk == npc_sheet.pk or event.amount == 0:
         return None
-
-    points = abs(event.amount)
-    if points == 0:
-        return None
-
-    key = TrackSystemKey.REGARD if event.amount > 0 else TrackSystemKey.FRICTION
-    try:
-        track = RelationshipTrack.objects.get(system_key=key)
-    except RelationshipTrack.DoesNotExist:
-        # Unlike apply_affection_shift/apply_relationship_bump, this bridge is
-        # wired unconditionally into record_npc_regard_event's write seam — the
-        # core NPC regard buildup path must not blow up just because the
-        # relationships system tracks haven't been seeded yet.
-        return None
-
-    try:
-        with transaction.atomic():
-            relationship, _ = CharacterRelationship.objects.get_or_create(
-                source=pc_sheet,
-                target=npc_sheet,
-                defaults={"is_pending": True},
-            )
-            progress, _ = RelationshipTrackProgress.objects.select_for_update().get_or_create(
-                relationship=relationship,
-                track=track,
-                defaults={"capacity": 0, "developed_points": 0},
-            )
-            progress.capacity += points
-            progress.developed_points += points
-            progress.save(update_fields=["capacity", "developed_points"])
-    except IntegrityError:
-        return None
-    return progress
+    side = get_or_create_side(source=pc_sheet, target=npc_sheet)
+    move_gauges(side=side, amount=event.amount)
+    return side
 
 
-def _writeup_field_name(writeup) -> str:
-    """Return the FK field name on WriteupFeedbackBase for this writeup type.
-
-    Returns "update", "development", or "capstone" depending on which concrete
-    writeup model the object is an instance of.
-    """
-    if isinstance(writeup, RelationshipUpdate):
-        return "update"  # noqa: STRING_LITERAL
-    if isinstance(writeup, RelationshipDevelopment):
-        return "development"  # noqa: STRING_LITERAL
-    if isinstance(writeup, RelationshipCapstone):
-        return "capstone"  # noqa: STRING_LITERAL
-    msg = f"Unknown writeup type: {type(writeup)!r}"
-    raise TypeError(msg)
-
-
-def _writeup_subject_account(writeup) -> AccountDB | None:
-    """The account controlling the writeup's subject, or None.
-
-    A companion-targeted writeup (#3575) has no subject account: the companion
-    cannot view, commend or be the subject of anything.
-    """
-    subject = writeup.relationship.target
-    if subject is None:
-        return None
-    return get_account_for_character(subject.character)
-
-
-def _can_view_writeup(account: AccountDB, writeup) -> bool:
-    """Return True if account may view this writeup.
-
-    SHARED, GOSSIP, and PUBLIC writeups are visible to any account.
-    PRIVATE writeups are visible only to the author's account or the subject's account.
-
-    No existing visibility predicate was found in views.py, selectors.py, or
-    serializers.py (grep confirmed only the ``visibility`` *field* appears there),
-    so this minimal helper is authoritative.
-    """
-    if writeup.visibility != UpdateVisibility.PRIVATE:
-        return True
-    author_account = get_account_for_character(writeup.author.character)
-    subject_account = _writeup_subject_account(writeup)
-    viewable_pks = {a.pk for a in [author_account, subject_account] if a is not None}
-    return account.pk in viewable_pks
-
-
-def give_writeup_kudos(*, giver_account: AccountDB, writeup) -> WriteupKudos:
-    """Award a non-revocable commendation to the writeup author on behalf of the subject.
-
-    Only the subject of the writeup (relationship.target's controlling account) may
-    commend. The author cannot self-commend. The writeup must not be PRIVATE.
-    Each (account, writeup) pair is unique; a second attempt raises AlreadyCommendedError.
-
-    When the ``KudosSourceCategory`` for ``RELATIONSHIP_WRITEUP_KUDOS_CATEGORY`` is
-    absent (pre-seeded state), logs a warning and still records the WriteupKudos row
-    without awarding kudos — mirroring the pattern in
-    ``world.progression.services.engagement.grant_social_engagement_kudos``.
-
-    Returns:
-        The newly created WriteupKudos instance.
-
-    Raises:
-        WriteupNotSharedError: writeup.visibility is PRIVATE.
-        CannotCommendOwnWriteupError: giver is the author of the writeup.
-        NotWriteupSubjectError: giver is not the subject (relationship.target) of the
-            writeup, or the writeup is companion-targeted and so has no subject account
-            (#3575).
-        AlreadyCommendedError: this account has already commended this writeup.
-    """
-    if writeup.visibility == UpdateVisibility.PRIVATE:
-        raise WriteupNotSharedError
-
-    # Author check before subject check so "I wrote this" surfaces before "you're not the subject".
-    author_account = get_account_for_character(writeup.author.character)
-    if author_account and author_account.pk == giver_account.pk:
-        raise CannotCommendOwnWriteupError
-
-    subject_account = _writeup_subject_account(writeup)
-    if subject_account is None or giver_account.pk != subject_account.pk:
-        raise NotWriteupSubjectError
-
-    field = _writeup_field_name(writeup)
-    if WriteupKudos.objects.filter(account=giver_account, **{field: writeup}).exists():
-        raise AlreadyCommendedError
-
-    with transaction.atomic():
-        try:
-            kudos = WriteupKudos.objects.create(account=giver_account, **{field: writeup})
-        except IntegrityError:
-            # Race: two concurrent commends from the same account both passed the
-            # exists() pre-check; the second hits the DB unique constraint.
-            raise AlreadyCommendedError from None
-        if author_account:
-            try:
-                category = KudosSourceCategory.objects.get(name=RELATIONSHIP_WRITEUP_KUDOS_CATEGORY)
-            except KudosSourceCategory.DoesNotExist:
-                logger.warning(
-                    "give_writeup_kudos: KudosSourceCategory %r not seeded; skipping award.",
-                    RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
-                )
-            else:
-                # Award anonymously — do NOT pass awarded_by=giver_account.
-                # The commender is the writeup's subject; surfacing their account username
-                # to the author would link an IC character to its OOC player account,
-                # violating player-behind-character privacy (ADR-0033).
-                award_kudos(
-                    author_account,
-                    WRITEUP_KUDOS_AMOUNT,
-                    category,
-                    "Relationship writeup commended",
-                )
-    return kudos
-
-
-def file_writeup_complaint(
-    *, complainant_account: AccountDB, writeup, reason: str
-) -> WriteupComplaint:
-    """File a bad-faith-RP complaint against a writeup for staff triage.
-
-    Any account that can view the writeup may file a complaint. No player-facing
-    signal is generated; complaints are staff-internal (admin-only surface).
-
-    Returns:
-        The newly created WriteupComplaint instance (resolved=False).
-
-    Raises:
-        WriteupNotVisibleError: the complainant's account cannot view the writeup.
-    """
-    if not _can_view_writeup(complainant_account, writeup):
-        raise WriteupNotVisibleError
-
-    field = _writeup_field_name(writeup)
-    return WriteupComplaint.objects.create(
-        complainant=complainant_account,
-        **{field: writeup},
-        reason=reason,
-    )
-
-
-def register_grievance(  # noqa: PLR0913 — keyword-only; each arg is a distinct grievance field
+def register_grievance(
     *,
     source: CharacterSheet,
     target: CharacterSheet,
     option: GrievanceOption | None = None,
     custom_points: int | None = None,
-    custom_track: RelationshipTrack | None = None,
-    writeup: str = "",
-    visibility: UpdateVisibility = UpdateVisibility.PRIVATE,
-) -> RelationshipCapstone:
-    """Register a wronged character's one-sided grievance against whoever harmed them (#1429).
-
-    Resolves the swing from a ``GrievanceOption`` preset, or a ``custom_points`` + ``custom_track``
-    pair, then applies it as a relationship **capstone** on the (source→target) relationship.
-    Unilateral: it never needs the target's consent — the relationship simply stays ``is_pending``
-    until/unless the target reciprocates, while the victim's feelings are recorded immediately.
-    The track must be NEGATIVE-sign (a grievance is, by definition, negative).
-    """
-    if option is not None:
-        track, points, title = option.track, option.points, option.label
-    elif custom_points is not None and custom_track is not None:
-        track, points, title = custom_track, custom_points, "A personal grievance"
-    else:
-        msg = "Provide either a GrievanceOption or both custom_points and custom_track."
+) -> CharacterRelationship:
+    """A wronged character's one-sided grievance: Conflict added on their side (#1429, #3957)."""
+    points = option.conflict_points if option is not None else custom_points
+    if points is None or points <= 0:
+        msg = "A grievance must add a positive amount of conflict."
         raise ValidationError(msg)
-    if points <= 0:
-        msg = "A grievance swing must be a positive magnitude."
-        raise ValidationError(msg)
-    if track.sign != TrackSign.NEGATIVE:
-        msg = "A grievance must land on a negative-sign track."
-        raise ValidationError(msg)
-
-    relationship, _ = CharacterRelationship.objects.get_or_create(
-        source=source, target=target, defaults={"is_pending": True}
-    )
-    return create_capstone(
-        relationship=relationship,
-        author=source,
-        title=title,
-        writeup=writeup,
-        track=track,
-        points=points,
-        visibility=visibility,
-    )
+    side = get_or_create_side(source=source, target=target)
+    move_gauges(side=side, amount=-points)
+    return side
 
 
 def relationship_gated_contributions(
@@ -740,14 +525,14 @@ def relationship_gated_contributions(
     gating relationship-condition toward them. For the directed
     ``CharacterRelationship(source=perceiver, target=perceived)``, each active
     ``RelationshipCondition.gates_modifiers`` target folds in the **perceived's**
-    ``get_modifier_total`` of that target — **once per gating condition**. So two allure-gating
-    conditions (``Attracted To`` + ``Very Attracted``) count the perceived's allure twice — the
+    ``get_modifier_total`` of that target -- **once per gating condition**. So two allure-gating
+    conditions (``Attracted To`` + ``Very Attracted``) count the perceived's allure twice -- the
     "double" effect falls out of the count, with no allure-specific code.
 
     Returns ``[]`` with no active relationship or no gating condition (the common case until
     Flirt/Seduction set the conditions). **Permanent** conditions ("Attracted To") live on the
     ``conditions`` M2M; **temporary** ones ("Very Attracted") live in ``temporary_conditions`` with
-    an ``expires_at`` and are unioned here only while unexpired (#1697) — so a live Very Attracted
+    an ``expires_at`` and are unioned here only while unexpired (#1697) -- so a live Very Attracted
     is the second, doubling allure application that lapses on its own.
     """
     from world.checks.constants import ModifierSourceKind
@@ -791,18 +576,15 @@ def add_relationship_condition(
     condition: RelationshipCondition,
     duration: timedelta | None = None,
 ) -> None:
-    """Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).
+    """Add a ``RelationshipCondition`` to the directed ``source -> target`` relationship (#1697).
 
-    ``duration is None`` → a **permanent** condition on the ``conditions`` M2M ("Attracted To").
-    A ``timedelta`` → a **temporary** condition (``TemporaryRelationshipCondition`` with
+    ``duration is None`` -> a **permanent** condition on the ``conditions`` M2M ("Attracted To").
+    A ``timedelta`` -> a **temporary** condition (``TemporaryRelationshipCondition`` with
     ``expires_at = now + duration``), refreshed in place if it already exists ("Very Attracted",
-    re-upped each flirt). Get-or-creates the relationship (left ``is_pending`` — the gating reader
-    only checks ``is_active``). The flirt/seduce TARGET becomes attracted to the actor, so callers
-    pass ``source=<the flirt's target>, target=<the actor>``.
+    re-upped each flirt). Get-or-creates the side. The flirt/seduce TARGET becomes attracted to
+    the actor, so callers pass ``source=<the flirt's target>, target=<the actor>``.
     """
-    relationship, _ = CharacterRelationship.objects.get_or_create(
-        source=source, target=target, defaults={"is_pending": True}
-    )
+    relationship = get_or_create_side(source=source, target=target)
     if duration is None:
         relationship.conditions.add(condition)
         return
@@ -814,7 +596,7 @@ def add_relationship_condition(
 
 
 def clear_very_attracted(sheets) -> None:
-    """Drop Very Attracted for the given characters — the scene-end early clear (#1697).
+    """Drop Very Attracted for the given characters -- the scene-end early clear (#1697).
 
     Very Attracted (the temporary allure double) lasts to **end of scene OR ~2 IC days, whichever
     first**; the duration cap is the backstop and this is the primary path. Deletes
@@ -857,7 +639,7 @@ def soul_tether_active(a_sheet: CharacterSheet, b_sheet: CharacterSheet) -> bool
     from world.magic.constants import TargetKind
     from world.magic.models import Thread
 
-    # Check a→b direction (Sinner owns the capstone thread)
+    # Check a->b direction (Sinner owns the capstone thread)
     if Thread.objects.filter(
         owner=a_sheet,
         target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
@@ -867,7 +649,7 @@ def soul_tether_active(a_sheet: CharacterSheet, b_sheet: CharacterSheet) -> bool
     ).exists():
         return True
 
-    # Check b→a direction
+    # Check b->a direction
     return Thread.objects.filter(
         owner=b_sheet,
         target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
@@ -877,61 +659,42 @@ def soul_tether_active(a_sheet: CharacterSheet, b_sheet: CharacterSheet) -> bool
     ).exists()
 
 
+def _tier_bonus(tier_number: int) -> int:
+    tier = RelationshipTier.objects.filter(tier_number=tier_number).first()
+    return tier.combat_bonus if tier is not None else 0
+
+
 def bond_combat_bonus(
     sheet: CharacterSheet, encounter: CombatEncounter
 ) -> list[ModifierContribution]:
-    """Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.
-
-    For each ACTIVE co-combatant (other than ``sheet``), checks for a directed
-    CharacterRelationship(source=sheet, target=ally) that is active, non-pending,
-    and above the config's ``min_developed_absolute_value`` floor. If found,
-    appends a contribution with ``int(mechanical_bonus)`` as the value. When the
-    pair is soul-tethered, the bonus is multiplied by ``soul_tether_multiplier``.
-
-    Directed (one-sided) by design: only the character who invested in the
-    relationship gets the bonus. Mirrors the directed-allure pattern (#1696).
-
-    Returns an empty list when there are no qualifying bonds.
-    """
+    """One contribution per bonded ACTIVE co-combatant, valued by this side's tier (#2021)."""
     from world.checks.constants import ModifierSourceKind
     from world.checks.types import ModifierContribution
     from world.combat.constants import ParticipantStatus
 
     config = get_bond_combat_config()
     contributions: list[ModifierContribution] = []
-
     participants = (
         encounter.participants.filter(status=ParticipantStatus.ACTIVE)
         .exclude(character_sheet=sheet)
         .select_related("character_sheet")
     )
-
     for participant in participants:
         ally_sheet = participant.character_sheet
-        bond = (
-            CharacterRelationship.objects.filter(
-                source=sheet,
-                target=ally_sheet,
-                is_active=True,
-                is_pending=False,
-            )
-            .prefetch_related("track_progress__track")  # noqa: PREFETCH_STRING
-            .first()
-        )
-        if bond is None:
+        bond = CharacterRelationship.objects.filter(
+            source=sheet, target=ally_sheet, is_active=True
+        ).first()
+        if bond is None or bond.tier < config.min_tier:
             continue
-        if bond.developed_absolute_value < config.min_developed_absolute_value:
+        bonus = _tier_bonus(bond.tier)
+        if bonus == 0:
             continue
-
-        bonus = int(bond.mechanical_bonus)
         if soul_tether_active(sheet, ally_sheet):
             bonus *= config.soul_tether_multiplier
-
-        ally_name = str(ally_sheet)
         contributions.append(
             ModifierContribution(
                 source_kind=ModifierSourceKind.RELATIONSHIP,
-                source_label=f"Bond: {ally_name}",
+                source_label=f"Bond: {ally_sheet}",
                 value=bonus,
             )
         )
@@ -939,25 +702,14 @@ def bond_combat_bonus(
 
 
 def bond_bonus(actor: ObjectDB, protected: ObjectDB) -> int:
-    """Return the bond bonus for protection checks (INTERPOSE/SUCCOR).
-
-    Looks up the directed relationship actor→protected and returns
-    ``int(mechanical_bonus)`` if above the config floor, else 0.
-    """
     actor_sheet = actor.character_sheet
     protected_sheet = protected.character_sheet
     if actor_sheet is None or protected_sheet is None:
         return 0
-
     config = get_bond_combat_config()
     bond = CharacterRelationship.objects.filter(
-        source=actor_sheet,
-        target=protected_sheet,
-        is_active=True,
-        is_pending=False,
+        source=actor_sheet, target=protected_sheet, is_active=True
     ).first()
-    if bond is None:
+    if bond is None or bond.tier < config.min_tier:
         return 0
-    if bond.developed_absolute_value < config.min_developed_absolute_value:
-        return 0
-    return int(bond.mechanical_bonus)
+    return _tier_bonus(bond.tier)

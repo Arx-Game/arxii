@@ -140,9 +140,9 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
             regard.flush_from_cache(force=True)
             regard.refresh_from_db()
 
-        from world.relationships.services import mirror_npc_regard_event_to_track  # noqa: PLC0415
+        from world.relationships.services import mirror_npc_regard_event  # noqa: PLC0415
 
-        mirror_npc_regard_event_to_track(event)
+        mirror_npc_regard_event(event)
 
         from world.stories.services.reactivity import on_character_state_changed  # noqa: PLC0415
 

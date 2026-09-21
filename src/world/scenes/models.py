@@ -257,6 +257,10 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             }
             clear_very_attracted(sheets)
 
+            from world.relationships.services import credit_scene_depth  # noqa: PLC0415
+
+            credit_scene_depth(self)
+
 
 class SceneClock(SharedMemoryModel):
     """An authored countdown on the beat a scene is running (#3567).

@@ -1,19 +1,13 @@
-"""Tests for automatic affection shifts (#1697): service, effect handler, seeds."""
+"""Tests for automatic affection shifts (#1697): service, effect handler, seeds (#3957: gauges)."""
 
 from __future__ import annotations
 
 from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.constants import TrackSystemKey
-from world.relationships.models import (
-    AffectionShift,
-    CharacterRelationship,
-    RelationshipTrackProgress,
-)
+from world.relationships.models import AffectionShift, CharacterRelationship
 from world.relationships.services import apply_affection_shift
 from world.scenes.factories import SceneFactory
-from world.seeds.relationship_scale import seed_relationship_scale_content
 
 
 def _shift_effect(amount: int):
@@ -34,19 +28,14 @@ def _shift_effect(amount: int):
     )
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
 class ApplyAffectionShiftTests(TestCase):
     def setUp(self) -> None:
-        from evennia.utils.idmapper.models import flush_cache
-
-        flush_cache()
-        seed_relationship_scale_content()
         # source = the social action's TARGET (their regard moves toward the actor).
         self.target_of_action = CharacterSheetFactory()
         self.actor = CharacterSheetFactory()
         self.scene = SceneFactory()
 
-    def test_positive_shift_lands_on_regard(self) -> None:
+    def test_positive_shift_adds_affection(self) -> None:
         effect = _shift_effect(5)
         shift = apply_affection_shift(
             source=self.target_of_action,
@@ -60,13 +49,9 @@ class ApplyAffectionShiftTests(TestCase):
             source=self.target_of_action, target=self.actor
         )
         self.assertEqual(relationship.affection, 5)
-        progress = RelationshipTrackProgress.objects.get(
-            relationship=relationship, track__system_key=TrackSystemKey.REGARD
-        )
-        self.assertEqual(progress.developed_points, 5)
-        self.assertEqual(progress.capacity, 5)
+        self.assertEqual(relationship.conflict, 0)
 
-    def test_negative_shift_lands_on_friction(self) -> None:
+    def test_negative_shift_adds_conflict(self) -> None:
         effect = _shift_effect(-10)
         apply_affection_shift(
             source=self.target_of_action,
@@ -78,12 +63,8 @@ class ApplyAffectionShiftTests(TestCase):
         relationship = CharacterRelationship.objects.get(
             source=self.target_of_action, target=self.actor
         )
-        self.assertEqual(relationship.affection, -10)
-        self.assertTrue(
-            RelationshipTrackProgress.objects.filter(
-                relationship=relationship, track__system_key=TrackSystemKey.FRICTION
-            ).exists()
-        )
+        self.assertEqual(relationship.conflict, 10)
+        self.assertEqual(relationship.affection, 0)
 
     def test_repeat_in_same_scene_is_deduped(self) -> None:
         effect = _shift_effect(5)
@@ -133,15 +114,10 @@ class ApplyAffectionShiftTests(TestCase):
         self.assertEqual(relationship.affection, 10)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
 class BoonProvenanceShiftTests(TestCase):
-    """Boon-keyed shifts (#2540): per-Boon dedup — serial boons stack within one scene."""
+    """Boon-keyed shifts (#2540): per-Boon dedup -- serial boons stack within one scene."""
 
     def setUp(self) -> None:
-        from evennia.utils.idmapper.models import flush_cache
-
-        flush_cache()
-        seed_relationship_scale_content()
         self.granter = CharacterSheetFactory()
         self.asker = CharacterSheetFactory()
         self.scene = SceneFactory()
@@ -174,7 +150,7 @@ class BoonProvenanceShiftTests(TestCase):
         self.assertIsNotNone(first)
         self.assertIsNotNone(second)
         relationship = CharacterRelationship.objects.get(source=self.granter, target=self.asker)
-        self.assertEqual(relationship.affection, -30)  # stacks — serial asks wear out welcome
+        self.assertEqual(relationship.conflict, 30)  # stacks -- serial asks wear out welcome
 
     def test_provenance_is_exactly_one_of_effect_or_boon(self) -> None:
         with self.assertRaises(ValueError):
