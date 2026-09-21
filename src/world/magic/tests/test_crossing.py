@@ -763,13 +763,16 @@ class AnchorLabelTests(TestCase):
             level=2,
         )
 
-    def test_track_anchor_label_includes_partner_and_track(self) -> None:
+    def test_track_anchor_label_includes_partner_and_type(self) -> None:
         from world.magic.crossing.handlers import _anchor_label_for
+        from world.relationships.factories import RelationshipLabelFactory, RelationshipTypeFactory
+
+        rel_type = RelationshipTypeFactory(name="Loyalty")
+        RelationshipLabelFactory(relationship=self.track_thread.target_relationship, type=rel_type)
 
         label = _anchor_label_for(self.track_thread)
         self.assertIn("bond with", label)
-        track = self.track_thread.target_relationship_track
-        self.assertIn(track.track.name, label)
+        self.assertIn(rel_type.name, label)
 
     def test_capstone_anchor_label_includes_title_and_partner(self) -> None:
         from world.magic.crossing.handlers import _anchor_label_for
@@ -786,25 +789,27 @@ class AnchorLabelTests(TestCase):
         from world.magic.factories import ThreadFactory
         from world.relationships.factories import (
             CharacterRelationshipFactory,
-            RelationshipTrackProgressFactory,
+            RelationshipLabelFactory,
+            RelationshipTypeFactory,
         )
 
         companion = CompanionFactory(owner=self.sheet, name="Ash")
         relationship = CharacterRelationshipFactory(
-            source=self.sheet, target=None, target_companion=companion, is_pending=False
+            source=self.sheet, target=None, target_companion=companion
         )
-        progress = RelationshipTrackProgressFactory(relationship=relationship)
+        rel_type = RelationshipTypeFactory(name="Bonded")
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
         thread = ThreadFactory(
             owner=self.sheet,
             resonance=self.resonance,
             level=2,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
-            target_relationship_track=progress,
+            target_relationship=relationship,
             target_trait=None,
         )
         label = _anchor_label_for(thread)
         self.assertIn("Ash", label)
-        self.assertIn(progress.track.name, label)
+        self.assertIn(rel_type.name, label)
 
 
 # ---------------------------------------------------------------------------

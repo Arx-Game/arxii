@@ -11,12 +11,28 @@ from world.magic.services.fury import (
     provocation_ease,
     resolve_fury,
 )
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTierFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
+from world.relationships.constants import LabelAwareness, TypeFamily
+from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
+from world.relationships.services import declare_label
+from world.roster.factories import grant_test_tenure
+
+
+def _mutual_teaching_bond_at_tier(*, source_sheet, target_sheet, tier: int):
+    """Establish a mutual Mentor/Student bond at the given tier on both sides
+    (#3957 — get_relationship_tier requires two mutually-consented TEACHING labels)."""
+    mentor = RelationshipTypeFactory(family=TypeFamily.TEACHING)
+    student = RelationshipTypeFactory(family=TypeFamily.TEACHING, counterpart=mentor)
+    mentor.counterpart = student
+    mentor.save(update_fields=["counterpart"])
+    forward = CharacterRelationshipFactory(source=source_sheet, target=target_sheet, tier=tier)
+    backward = CharacterRelationshipFactory(source=target_sheet, target=source_sheet, tier=tier)
+    forward_tenure = grant_test_tenure(source_sheet)
+    backward_tenure = grant_test_tenure(target_sheet)
+    declare_label(side=forward, type=mentor, awareness=LabelAwareness.PUBLIC, tenure=forward_tenure)
+    declare_label(
+        side=backward, type=student, awareness=LabelAwareness.PUBLIC, tenure=backward_tenure
+    )
+    return forward
 
 
 class ClampTierTests(TestCase):
@@ -103,25 +119,11 @@ class ResolveFuryRealBondTests(TestCase):
             lucid_grade_floor=3,
             berserk_severity=5,
         )
-        # Build a real bonded pair: source sheet bonds to target sheet at tier 2.
+        # Build a real bonded pair: mutual Mentor/Student bond at tier 2.
         cls.source_sheet = CharacterSheetFactory()
         cls.anchor_sheet = CharacterSheetFactory()
-        track = RelationshipTrackFactory()
-        # RelationshipTier at tier_number=2 with point_threshold=20.
-        tier_row = RelationshipTierFactory(
-            track=track,
-            tier_number=2,
-            point_threshold=20,
-        )
-        rel = CharacterRelationshipFactory(
-            source=cls.source_sheet,
-            target=cls.anchor_sheet,
-        )
-        RelationshipTrackProgressFactory(
-            relationship=rel,
-            track=track,
-            developed_points=tier_row.point_threshold,
-            capacity=tier_row.point_threshold,
+        _mutual_teaching_bond_at_tier(
+            source_sheet=cls.source_sheet, target_sheet=cls.anchor_sheet, tier=2
         )
 
     def test_cap_gate_clamps_deep_tier(self):
@@ -193,17 +195,8 @@ class ProvocationEaseTests(TestCase):
         )
         cls.source_sheet = CharacterSheetFactory()
         cls.anchor_sheet = CharacterSheetFactory()
-        track = RelationshipTrackFactory()
-        tier_row = RelationshipTierFactory(track=track, tier_number=2, point_threshold=20)
-        rel = CharacterRelationshipFactory(
-            source=cls.source_sheet,
-            target=cls.anchor_sheet,
-        )
-        RelationshipTrackProgressFactory(
-            relationship=rel,
-            track=track,
-            developed_points=tier_row.point_threshold,
-            capacity=tier_row.point_threshold,
+        _mutual_teaching_bond_at_tier(
+            source_sheet=cls.source_sheet, target_sheet=cls.anchor_sheet, tier=2
         )
 
     def test_provocation_ease_uses_cap_ease_per_point(self):
