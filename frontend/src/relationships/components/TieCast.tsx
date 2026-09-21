@@ -62,7 +62,7 @@ export function TieCast({ ties, entryId, isMyCharacter, apThisWeek }: TieCastPro
                   {tie.labels.map((label) => (
                     <span
                       key={`${label.type_name}-${label.awareness}-${String(label.is_former)}`}
-                      className={labelTagClass(label)}
+                      className={labelTagClass(label, label.valence)}
                     >
                       {labelText(label)}
                       {mutualSuffix(label)}

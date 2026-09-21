@@ -45,13 +45,51 @@ function keep(item: TieStreamItem, slice: Slice, ownerSheetId: number, otherShee
   }
 }
 
-/** `Capstone · tier 2` where the viewer may know the tier, `Capstone` where they may not. */
+/** First to tenth in words, numerals past that — the demo's own way of saying a tier. */
+const ORDINAL_WORDS = [
+  'first',
+  'second',
+  'third',
+  'fourth',
+  'fifth',
+  'sixth',
+  'seventh',
+  'eighth',
+  'ninth',
+  'tenth',
+];
+
+function ordinal(tier: number): string {
+  const word = ORDINAL_WORDS[tier - 1];
+  if (word) return word;
+  const remainder = tier % 100;
+  if (remainder >= 11 && remainder <= 13) return `${tier}th`;
+  return `${tier}${['th', 'st', 'nd', 'rd'][tier % 10] ?? 'th'}`;
+}
+
+/**
+ * The band over an entry: who claimed which tier with it, and whether it is black.
+ *
+ * `Capstone · Ilsavet's second tier · Black journal` — the approved design names the
+ * writer and spells the journal out, because a band that says only "tier 2" makes the
+ * reader look at the meta line to learn whose tier it was. The clauses are appended
+ * rather than returned early: a black entry that is ALSO a capstone is both things at
+ * once, and the earlier spelling dropped the black clause on exactly those rows.
+ *
+ * `BLACK_JOURNAL_BAND` rather than a second literal, so the Reading Room and the tie
+ * stream keep one spelling of it (the band renders uppercase either way).
+ */
 function bandText(item: TieStreamItem): string | null {
+  const parts: string[] = [];
   if (item.is_capstone) {
-    return item.capstone_tier == null ? 'Capstone' : `Capstone · tier ${item.capstone_tier}`;
+    parts.push('Capstone');
+    if (item.capstone_tier != null) {
+      const who = item.author_name ? `${firstName(item.author_name)}'s ` : '';
+      parts.push(`${who}${ordinal(item.capstone_tier)} tier`);
+    }
   }
-  if (!item.is_public) return BLACK_JOURNAL_BAND;
-  return null;
+  if (!item.is_public) parts.push(BLACK_JOURNAL_BAND);
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 export interface TieStreamProps {

@@ -18,8 +18,20 @@ const CORVIN: CharacterSheetTie = {
   other_entry_id: 34,
   other_companion_id: null,
   labels: [
-    { type_name: 'Lover', awareness: 'clandestine', is_former: false, is_mutual: false },
-    { type_name: 'Rival', awareness: 'public', is_former: false, is_mutual: true },
+    {
+      type_name: 'Lover',
+      awareness: 'clandestine',
+      valence: 'warm',
+      is_former: false,
+      is_mutual: false,
+    },
+    {
+      type_name: 'Rival',
+      awareness: 'public',
+      valence: 'hostile',
+      is_former: false,
+      is_mutual: true,
+    },
   ],
   depth: 340,
   tier: 2,
@@ -33,7 +45,9 @@ const MARROW: CharacterSheetTie = {
   other_sheet_id: 13,
   other_entry_id: 35,
   other_companion_id: null,
-  labels: [{ type_name: 'Kin', awareness: 'public', is_former: false, is_mutual: false }],
+  labels: [
+    { type_name: 'Kin', awareness: 'public', valence: 'warm', is_former: false, is_mutual: false },
+  ],
   depth: null,
   tier: null,
   summary_line: 'Has the seal. Says she does not.',
@@ -81,6 +95,17 @@ describe('TieCast', () => {
     expect(screen.getByText('Rival · mutual')).toBeInTheDocument();
     expect(screen.getByText('Lover · Clandestine')).toBeInTheDocument();
     expect(screen.getByText('Kin')).toBeInTheDocument();
+  });
+
+  it('colours each chip by its valence, the way the tie page already does', () => {
+    renderCast();
+    // The cast was monochrome before the card carried `valence` (#3957 demo-fidelity
+    // Finding 3) — a reader could not tell a lover from a rival across the grid.
+    expect(screen.getByText('Lover · Clandestine')).toHaveClass('refsheet-tag-warm');
+    expect(screen.getByText('Rival · mutual')).toHaveClass('refsheet-tag-hostile');
+    // Awareness still rides the border, independently of the ink.
+    expect(screen.getByText('Lover · Clandestine')).toHaveClass('refsheet-tag-clandestine');
+    expect(screen.getByText('Kin')).not.toHaveClass('refsheet-tag-hostile');
   });
 
   it('shows the thread line when the tie carries one', () => {

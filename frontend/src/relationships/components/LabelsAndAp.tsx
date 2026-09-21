@@ -12,8 +12,10 @@
  * - A former label has no doors at all. It is a thing that happened.
  *
  * AP is ONE number for the whole tie, not one per label — the point of the redesign.
- * The week's budget is not on the tie payload, so the field stands alone rather than
- * printing a total this block would have to go and fetch to be honest about.
+ * Beside it stands the week's whole purse, `remaining / total`, which the tie payload
+ * now carries (`ap_pool`, owner-only): the approved design puts it there because it is
+ * what tells a player whether they may spend on this tie at all, and a field with no
+ * budget beside it makes them go and look somewhere else to find out.
  */
 
 import { useState } from 'react';
@@ -106,6 +108,15 @@ export function LabelsAndAp({ tie, targetPersonaId }: LabelsAndApProps) {
             onChange={(event) => setAp(event.target.value)}
           />
         </div>
+        {/* Bare numbers, no label: the field beside them already says what they count,
+            and the pool vanishes rather than printing a zero for a viewer who is not
+            the owner (nobody else is ever shown this block, but the null is the
+            server's answer and the block reads it rather than assuming). */}
+        {tie.ap_pool && (
+          <span className="refsheet-note">
+            {tie.ap_pool.remaining} / {tie.ap_pool.total}
+          </span>
+        )}
         <QuietDoor onClick={keepAp} disabled={!canWrite || setAllocation.isPending}>
           Keep
         </QuietDoor>

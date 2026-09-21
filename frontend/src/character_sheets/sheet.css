@@ -34,6 +34,31 @@
   --sheet-hair: hsl(var(--border) / 0.6);
 }
 
+/*
+ * The sheet's own ink when nothing set a realm (#3957 demo-fidelity review, Findings 1
+ * and 6).
+ *
+ * `--accent` is a REALM token, and the sheet and tie routes never establish a realm:
+ * only the Gatefold and realm pages force one, and character creation persists one to
+ * localStorage. A player who arrived any other way gets shadcn's defaults, where
+ * `--accent` is #f4f4f5 — so every eyebrow, and the private label chip, rendered
+ * near-white on white paper. That is a reachable production state, not a harness
+ * artifact.
+ *
+ * So the Reference Sheet carries the Folio inks itself for that case, rather than
+ * leaving its whole palette hostage to a global the route never sets. The values are
+ * `[data-realm='arx']`'s own (`index.css`), and the `:not([data-realm])` guard means a
+ * realm — any realm — still wins: this is a fallback, not an override.
+ */
+:root:not([data-realm]) .refsheet {
+  --accent: 43 45% 44%;
+  --primary: 10 60% 34%;
+}
+:root:not([data-realm]).dark .refsheet {
+  --accent: 43 45% 45%;
+  --primary: 43 45% 50%;
+}
+
 .refsheet a {
   color: hsl(var(--primary));
   text-decoration: underline;
@@ -502,15 +527,21 @@
 }
 
 /* Label chips on a tie (#3957). Awareness is drawn in the BORDER, valence in the ink,
-   so a warm private label says both at once without a third chip. A public label is
-   the plain `.refsheet-tag` — the resting state carries no marker at all. */
+   so a clandestine warm label says both at once without a third chip. A public label is
+   the plain `.refsheet-tag` — the resting state carries no marker at all.
+
+   A PRIVATE chip is the one exception, and the demo makes it one too (`.tag.secret`):
+   it takes the staff purple whole, ink and border, because a label nobody else can see
+   is not first a lover or an enemy — it is a thing only the owner knows, and that is
+   what the reader needs off the chip. It is declared AFTER the two valence rules for
+   exactly that reason: equal specificity, later in the source, so it wins on cascade
+   order the way the demo's own stylesheet does, rather than by `!important`. Before
+   this the cast's private chip took `--accent` and the plate's took `--destructive`,
+   so the same class painted two different colours depending on which caller happened
+   to know the type's valence. */
 .refsheet-tag-former {
   opacity: 0.7;
   border-style: dotted;
-}
-.refsheet-tag-private {
-  border-style: dashed;
-  color: hsl(var(--accent));
 }
 .refsheet-tag-clandestine {
   border-style: dashed;
@@ -520,6 +551,62 @@
 }
 .refsheet-tag-hostile {
   color: hsl(var(--destructive));
+}
+.refsheet-tag-private {
+  border-style: dashed;
+  color: hsl(268 30% 42%);
+  border-color: hsl(268 30% 42%);
+}
+.dark .refsheet-tag-private {
+  color: hsl(268 40% 70%);
+  border-color: hsl(268 40% 70%);
+}
+
+/* The same chips, on the night plate (#3957 demo-fidelity review, Finding 2).
+   The paper palette does not survive `--plate-ground`: warm read 3.3:1 there and a
+   neutral public chip 3.5:1, at 10px tracked caps. The demo therefore re-colours every
+   chip inside the plate (`ties.html:89-91, :141, :143`), and these are its literals —
+   not tokens — so the plate is the same object in light, dark and plain mode, which is
+   the rule the plate already follows for its ground and its accent.
+
+   Ordered base-then-variant because all five selectors weigh the same; specificity over
+   the unscoped rules above is what makes the layer apply at all. */
+.refsheet-plate .refsheet-tag {
+  color: #c9b8a3;
+  border-color: rgb(255 255 255 / 25%);
+}
+.refsheet-plate .refsheet-tag-accent {
+  color: #e0c27a;
+  border-color: #e0c27a;
+}
+.refsheet-plate .refsheet-tag-warm {
+  color: #8fd1a8;
+  border-color: #8fd1a8;
+}
+.refsheet-plate .refsheet-tag-hostile {
+  color: #e58a8a;
+  border-color: #e58a8a;
+}
+.refsheet-plate .refsheet-tag-private,
+.dark .refsheet-plate .refsheet-tag-private {
+  color: #c8a6f0;
+  border-color: #c8a6f0;
+}
+.refsheet-plate .refsheet-tag-former {
+  color: #c9b8a3;
+  border-color: rgb(255 255 255 / 25%);
+}
+
+/* A door on the plate is the plate's accent, as every other link there already is
+   (`ties.html:91`) — the summary's Edit was `--muted-foreground` grey on #1c1210. */
+.refsheet-plate .refsheet-quiet-door {
+  color: var(--plate-accent);
+  border-bottom-color: rgb(255 255 255 / 25%);
+}
+.refsheet-plate .refsheet-quiet-door:hover,
+.refsheet-plate .refsheet-quiet-door:focus-visible {
+  color: #f1e6d6;
+  border-bottom-color: #f1e6d6;
 }
 
 /* The cast's per-face extras (#3957): the label chips sit under the name, and the

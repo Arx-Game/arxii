@@ -5,7 +5,7 @@
  * awareness only ever moves forward, a label is never deleted, and a former label has
  * no doors left to open.
  */
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LabelsAndAp } from '../LabelsAndAp';
@@ -46,6 +46,17 @@ describe('LabelsAndAp', () => {
     // reads as a duplicate to anyone hearing the page.
     expect(screen.queryByRole('heading', { name: 'Corvin Ashe' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('AP this week')).toHaveValue('9');
+  });
+
+  it("prints the week's budget beside the field, and nothing where there is no pool", () => {
+    renderBlock();
+    expect(screen.getByText('31 / 40')).toBeInTheDocument();
+    // Bare numbers: no "remaining", no "of", no help text.
+    expect(screen.queryByText(/remaining|budget|left/i)).not.toBeInTheDocument();
+
+    cleanup();
+    renderBlock(makeTie({ ap_pool: null }));
+    expect(screen.queryByText(/\/ 40/)).not.toBeInTheDocument();
   });
 
   it('sends the AP the owner typed for this tie', () => {

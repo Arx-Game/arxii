@@ -403,10 +403,16 @@ export interface CharacterSheetPayload {
  * Mirrors `world.character_sheets.types.TieLabelEntry` (#3957) — one label on a tie
  * card. `awareness` is `public` for an unmarked label, and a third party only ever
  * receives public, unended ones.
+ *
+ * `valence` is the label TYPE's warm/hostile/neutral. It rides the card so the cast's
+ * chips are colour-coded the way the tie page's already are: without it the grid was
+ * monochrome and a reader could not tell a lover from an enemy without opening each
+ * tie.
  */
 export interface CharacterSheetTieLabel {
   type_name: string;
   awareness: string;
+  valence: string;
   is_former: boolean;
   is_mutual: boolean;
 }

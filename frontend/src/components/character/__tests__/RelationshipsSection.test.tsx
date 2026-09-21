@@ -44,7 +44,15 @@ const TIE: CharacterSheetTie = {
   other_sheet_id: 12,
   other_entry_id: 34,
   other_companion_id: null,
-  labels: [{ type_name: 'Lover', awareness: 'public', is_former: false, is_mutual: false }],
+  labels: [
+    {
+      type_name: 'Lover',
+      awareness: 'public',
+      valence: 'warm',
+      is_former: false,
+      is_mutual: false,
+    },
+  ],
   depth: 340,
   tier: 2,
   summary_line: 'He was waiting at the north gate.',

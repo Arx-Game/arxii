@@ -62,6 +62,7 @@ export function makeTie(overrides: Partial<Tie> = {}): Tie {
     },
     summary: 'He was waiting at the north gate.',
     ap_this_week: 9,
+    ap_pool: { remaining: 31, total: 40 },
     thread: null,
     is_soul_tether: false,
     ...overrides,

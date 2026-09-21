@@ -29,8 +29,10 @@ export function labelText(label: LabelLike): string {
 
 /**
  * The chip's classes. Awareness sets the border (dotted for ended, dashed for a label
- * not everyone may know); the type's `valence` — which only the tie page's own payload
- * carries — colours it warm or hostile.
+ * not everyone may know); the type's `valence` colours it warm or hostile. Both the
+ * tie payload and the sheet's own tie cards carry `valence`, so every surface that
+ * draws a chip passes it — a chip's colour must not depend on which caller happened to
+ * know it (#3957 demo-fidelity review, Finding 3).
  */
 export function labelTagClass(label: LabelLike, valence?: string | null): string {
   const parts = ['refsheet-tag'];
