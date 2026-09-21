@@ -19,8 +19,13 @@ from world.roster.factories import grant_test_tenure
 
 
 def _mutual_teaching_bond_at_tier(*, source_sheet, target_sheet, tier: int):
-    """Establish a mutual Mentor/Student bond at the given tier on both sides
-    (#3957 — get_relationship_tier requires two mutually-consented TEACHING labels)."""
+    """Establish a mutual Mentor/Student bond at the given tier on both sides.
+
+    Fury itself needs only the SOURCE side's tier (``fury._bond_tier``, any label), so this
+    builds more than the cap strictly reads: it is kept mutual-TEACHING so these fixtures
+    keep proving the cap is unchanged for the shape training's ``get_relationship_tier``
+    also recognises. ``ProvocationCapReadsOwnSideTests`` covers the one-sided case.
+    """
     mentor = RelationshipTypeFactory(family=TypeFamily.TEACHING)
     student = RelationshipTypeFactory(family=TypeFamily.TEACHING, counterpart=mentor)
     mentor.counterpart = student

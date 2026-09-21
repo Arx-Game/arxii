@@ -117,8 +117,9 @@ from the read.
 | THIRD_PARTY | Public only | **none at all**; a side with no open Public label is absent from lists and **404s** on retrieve (never 403) |
 | STAFF | everything | everything |
 
-Every tie payload also carries **`is_own_side`** (`TieSerializer`, set in
-`views._row_to_payload`): true when the viewer is looking at their own side. `list` passes it
+Every **tie API** payload (`TieSerializer`, set in `views._row_to_payload`) also carries
+**`is_own_side`**: true when the viewer is looking at their own side. The sheet cast's
+`TieCardEntry` has no such field -- every card there is the sheet owner's own side already. `list` passes it
 unconditionally (its queryset is a tenure join on `source`), `retrieve` derives it from the
 viewer sheet. It is the flag the frontend branches its owner-only doors on, so a client never
 has to re-derive ownership from `audience`.

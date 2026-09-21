@@ -384,9 +384,11 @@ def process_weekly_relationship_allocations() -> int:
 def credit_scene_depth(scene: Scene) -> int:
     """First scene together in a game week credits each side ``scene_base_gain`` (#3957).
 
-    Both characters must have POSED in the scene. Returns the number of sides credited.
-    Every posed-together pair opens a row on each side (spec) -- the already-credited
-    set is fetched once up front so the per-pair loop costs no extra query per side.
+    Both characters must have TAKEN PART in the scene: the read is over every
+    ``Interaction`` the scene carries, and a say or a mechanical action writes one as
+    surely as a pose does. Returns the number of sides credited. Every such pair opens a
+    row on each side (spec) -- the already-credited set is fetched once up front so the
+    per-pair loop costs no extra query per side.
     """
     from world.game_clock.week_services import get_current_game_week
     from world.scenes.models import Interaction

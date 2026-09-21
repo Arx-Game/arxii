@@ -115,7 +115,7 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
 
 
 class _AuditReadOnlyAdmin(admin.ModelAdmin):
-    """List/search only: rows written by a service are never hand-edited in admin (#3957).
+    """List only: rows written by a service are never hand-edited in admin (#3957).
 
     Allocations, depth transactions and capstones are the audit behind the side row's
     columns and the tier a player paid XP for. A hand-created row here would desync the

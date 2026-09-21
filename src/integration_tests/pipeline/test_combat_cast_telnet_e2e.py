@@ -455,7 +455,7 @@ class CombatCastTelnetE2ETests(TestCase):
         # Resolve: bond gives a real provocation cap; control check succeeds (no Berserk).
         with (
             patch("world.combat.services.perform_check") as mock_offense,
-            patch("world.magic.services.fury.get_relationship_tier", return_value=2),
+            patch("world.magic.services.fury._bond_tier", return_value=2),
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)
@@ -503,7 +503,7 @@ class CombatCastTelnetE2ETests(TestCase):
 
         with (
             patch("world.combat.services.perform_check") as mock_offense,
-            patch("world.magic.services.fury.get_relationship_tier", return_value=2),
+            patch("world.magic.services.fury._bond_tier", return_value=2),
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)
@@ -593,7 +593,7 @@ class CombatCastTelnetE2ETests(TestCase):
 
         with (
             patch("world.combat.services.perform_check") as mock_offense,
-            patch("world.magic.services.fury.get_relationship_tier", return_value=2),
+            patch("world.magic.services.fury._bond_tier", return_value=2),
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)

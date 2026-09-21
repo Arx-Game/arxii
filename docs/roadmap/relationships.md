@@ -27,8 +27,9 @@ the woven thread.
   another that remembers it; End leaves a former label on the card. A known thing cannot be
   unsaid, so awareness never moves backward.
 - **Depth grows from play.** The first scene in a game week that two characters both take
-  part in credits each side (a say or a mechanical action counts, not only a pose); weekly AP converts to depth on the rollover. No decay, no weekly cap, one AP number
-  per tie, and every award leaves an audit row.
+  part in credits each side (a say or a mechanical action counts, not only a pose); weekly
+  AP converts to depth on the rollover. No decay, no weekly cap, one AP number per tie, and
+  every award leaves an audit row.
 - **A tier is claimed, not reached.** Pair depth opens the rung; a capstone journal entry and
   XP claim it. Bonuses ride the claimed tier.
 - **Feeling is a record, not a dial.** Bumps, Flirt/Seduce shifts, boon drains, grievances and

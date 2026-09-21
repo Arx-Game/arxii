@@ -341,7 +341,7 @@ def build_tie_page(
 def tie_stream(
     side: CharacterRelationship, viewer_sheet: CharacterSheet | None, is_staff: bool
 ) -> list[TieStreamItem]:
-    """Entries by either side about the other (visibility-filtered) + scenes both posed in.
+    """Entries by either side about the other (visibility-filtered) + scenes both took part in.
 
     ``capstone_tier`` is null for a THIRD_PARTY audience — the tier number is the kind of
     numeric relationship state a stranger never sees — but ``is_capstone`` stays visible
