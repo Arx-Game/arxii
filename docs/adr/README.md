@@ -355,4 +355,5 @@ treat those names as hints to confirm, not gospel.
 - [0305 - Location access is a four-rung ladder carried on the grant](0305-location-access-is-a-four-rung-ladder-on-the-grant.md) (#3902; guest/tenant/trustee on `LocationTenancy.kind`, owner stays on `LocationOwnership`; `is_tenant` removed; relates ADR-0010)
 - [0306 - Compatibility text is tagged, and every frontend decides what to render](0306-tagged-compatibility-text-frontends-decide.md) (#3933; `core.wire_options` tags the frame, no per-protocol filter in `ServerSession.data_out`; related ADR-0294, #3856, #3857)
 - [0307 - Retort and Condemn are consent-gated by rivalry or by choice; Praise and Nominate never are](0307-retort-and-condemn-are-consent-gated.md) (#3941; amends #2160's ungated retort; related ADR-0229, #2996)
+- [0308 - A tie is two sides that pool one depth; labels carry awareness and history, never points](0308-a-tie-is-two-sides-that-pool-one-depth.md) (#3957; amends ADR-0117; related ADR-0024, ADR-0092, ADR-0110, ADR-0307)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)
