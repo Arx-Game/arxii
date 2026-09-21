@@ -1,14 +1,16 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, connection, transaction
+from django.db.models import Prefetch
 from django.test import TestCase, tag
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.scenes.factories import InteractionFactory
-from world.scenes.models import InteractionReadReceipt
+from world.scenes.models import Interaction, InteractionReadReceipt
 from world.scenes.read_state_services import mark_conversation_read, mark_poses_read
 
 
@@ -17,7 +19,7 @@ class InteractionReadReceiptModelTests(TestCase):
         account = AccountFactory()
         interaction = InteractionFactory()
         receipt = InteractionReadReceipt.objects.create(
-            interaction=interaction,
+            interaction_id=interaction.pk,
             timestamp=interaction.timestamp,
             account=account,
         )
@@ -27,13 +29,13 @@ class InteractionReadReceiptModelTests(TestCase):
         account = AccountFactory()
         interaction = InteractionFactory()
         InteractionReadReceipt.objects.create(
-            interaction=interaction,
+            interaction_id=interaction.pk,
             timestamp=interaction.timestamp,
             account=account,
         )
         with self.assertRaises(IntegrityError):
             InteractionReadReceipt.objects.create(
-                interaction=interaction,
+                interaction_id=interaction.pk,
                 timestamp=interaction.timestamp,
                 account=account,
             )
@@ -51,7 +53,9 @@ class MarkPosesReadServiceTests(TestCase):
         self.assertEqual(created_first, 1)
         self.assertEqual(created_second, 0)
         self.assertEqual(
-            InteractionReadReceipt.objects.filter(account=account, interaction=interaction).count(),
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=interaction.pk
+            ).count(),
             1,
         )
 
@@ -139,7 +143,81 @@ class PartitionedMetadataIntegrityTests(TestCase):
         account = AccountFactory()
         interaction = InteractionFactory()
         receipt = InteractionReadReceipt.objects.create(
-            interaction=interaction, timestamp=interaction.timestamp, account=account
+            interaction_id=interaction.pk, timestamp=interaction.timestamp, account=account
         )
         interaction.delete()
         self.assertFalse(InteractionReadReceipt.objects.filter(pk=receipt.pk).exists())
+
+    def test_duplicate_ids_fail_closed_and_database_cascade_uses_pair(self) -> None:
+        """The global sequence forbids duplicate ids; pair cleanup stays exact if encountered."""
+        account = AccountFactory()
+        first = InteractionFactory()
+        second = InteractionFactory()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE arxii_interaction SET id = %s WHERE id = %s AND "timestamp" = %s',
+                [first.pk, second.pk, second.timestamp],
+            )
+
+        first_receipt = InteractionReadReceipt.objects.create(
+            interaction_id=first.pk, timestamp=first.timestamp, account=account
+        )
+        second_receipt = InteractionReadReceipt.objects.create(
+            interaction_id=first.pk, timestamp=second.timestamp, account=account
+        )
+        self.assertEqual(first_receipt.resolve_interaction().timestamp, first.timestamp)
+        # Evennia's identity map is scalar-id keyed. Refuse the ambiguous cached
+        # row rather than returning metadata for the other timestamp.
+        self.assertIsNone(second_receipt.resolve_interaction())
+        with self.assertRaises(ObjectDoesNotExist):
+            _ = second_receipt.interaction
+
+        # Delete the exact parent pair at the database boundary. Django's
+        # Interaction.delete() is intentionally not used for unsupported duplicate ids.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'DELETE FROM arxii_interaction WHERE id = %s AND "timestamp" = %s',
+                [first.pk, first.timestamp],
+            )
+        self.assertFalse(InteractionReadReceipt.objects.filter(pk=first_receipt.pk).exists())
+        self.assertTrue(InteractionReadReceipt.objects.filter(pk=second_receipt.pk).exists())
+
+    def test_composite_relation_assignment_and_pair_filter(self) -> None:
+        account = AccountFactory()
+        interaction = InteractionFactory()
+        receipt = InteractionReadReceipt(account=account, interaction=interaction)
+        self.assertEqual(receipt.interaction_id, interaction.pk)
+        self.assertEqual(receipt.timestamp, interaction.timestamp)
+        receipt.save()
+        relation_query = str(InteractionReadReceipt.objects.filter(interaction=interaction).query)
+        self.assertIn("interaction_id", relation_query)
+        self.assertIn('"timestamp"', relation_query)
+        self.assertEqual(
+            InteractionReadReceipt.objects.filter(interaction=interaction).get().pk,
+            receipt.pk,
+        )
+        reverse_query = str(interaction.read_receipts.filter(pk=receipt.pk).query)
+        self.assertIn('"timestamp"', reverse_query)
+        self.assertTrue(interaction.read_receipts.filter(pk=receipt.pk).exists())
+        self.assertTrue(Interaction.objects.filter(read_receipts=receipt).exists())
+
+    def test_composite_relation_select_related_uses_pair(self) -> None:
+        account = AccountFactory()
+        interaction = InteractionFactory()
+        receipt = InteractionReadReceipt.objects.create(
+            account=account, interaction_id=interaction.pk, timestamp=interaction.timestamp
+        )
+        loaded = InteractionReadReceipt.objects.select_related("interaction").get(pk=receipt.pk)
+        self.assertEqual(loaded.interaction_id, interaction.pk)
+        self.assertEqual(loaded.interaction.timestamp, interaction.timestamp)
+
+    def test_composite_relation_prefetch_uses_pair(self) -> None:
+        account = AccountFactory()
+        interaction = InteractionFactory()
+        receipt = InteractionReadReceipt.objects.create(
+            account=account, interaction_id=interaction.pk, timestamp=interaction.timestamp
+        )
+        loaded = InteractionReadReceipt.objects.prefetch_related(  # noqa: PREFETCH_STRING
+            Prefetch("interaction")  # noqa: PREFETCH_STRING
+        ).get(pk=receipt.pk)
+        self.assertEqual(loaded.interaction.timestamp, interaction.timestamp)

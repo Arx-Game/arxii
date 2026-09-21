@@ -862,11 +862,10 @@ class PoseSubmissionDetailView(APIView):
 
     def get(self, request: Request, client_request_id: uuid.UUID) -> Response:
         persona_ids = get_account_personas(request)
-        # Finding 6.1 (#3760 final review): only `interaction_id` (a plain FK
-        # column already on this row) is read below -- `.interaction` (the
-        # related object) is never touched, so the `select_related` inherited
-        # from an earlier ViewSet-shaped draft of this endpoint was a wasted
-        # join. Dropped.
+        # Finding 6.1 (#3760 final review): only the scalar `interaction_id`
+        # column is read below. The complete `(interaction_id, timestamp)`
+        # reference is enforced by PostgreSQL; the related Interaction object
+        # is never dereferenced by this writer-only endpoint.
         submission = PoseSubmission.objects.filter(
             persona_id__in=persona_ids,
             client_request_id=client_request_id,

@@ -1462,13 +1462,11 @@ def idempotent_record_interaction(
     first delivery push, on every branch (ephemeral and persisted alike).
     """
     record_fn = record_fn or record_interaction
-    existing = (
-        PoseSubmission.objects.filter(persona=persona, client_request_id=client_request_id)
-        .select_related("interaction")
-        .first()
-    )
+    existing = PoseSubmission.objects.filter(
+        persona=persona, client_request_id=client_request_id
+    ).first()
     if existing is not None:
-        stored = existing.interaction
+        stored = existing.resolve_interaction()
         if stored is None:
             # Ephemeral-scene acceptance: nothing was persisted the first time either, so
             # there is nothing to compare against and nothing left to (re)execute - a clean
@@ -1482,7 +1480,7 @@ def idempotent_record_interaction(
         PoseSubmission.objects.create(
             persona=persona,
             client_request_id=client_request_id,
-            interaction=interaction_for_ledger,
+            interaction_id=(interaction_for_ledger.id if interaction_for_ledger else None),
             # Partitioned Interaction rows are identified by (id, timestamp).
             # Ephemeral acceptances intentionally keep both reference columns null.
             timestamp=(interaction_for_ledger.timestamp if interaction_for_ledger else None),
@@ -1492,11 +1490,11 @@ def idempotent_record_interaction(
         with transaction.atomic():
             interaction = record_fn(on_before_push=_write_ledger, **record_kwargs)
     except IntegrityError:
-        winner = PoseSubmission.objects.select_related("interaction").get(
+        winner = PoseSubmission.objects.get(
             persona=persona, client_request_id=client_request_id
         )
         return IdempotentSubmissionResult(
-            interaction=winner.interaction, replayed=True, conflict=False
+            interaction=winner.resolve_interaction(), replayed=True, conflict=False
         )
 
     return IdempotentSubmissionResult(interaction=interaction, replayed=False, conflict=False)
