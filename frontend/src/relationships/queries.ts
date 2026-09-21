@@ -122,3 +122,17 @@ export function useAdvanceTier() {
 export function useSetTieSummary() {
   return useTieWriteMutation((body: SummaryBody) => api.setTieSummary(body));
 }
+
+/**
+ * The other side's persona id, for the writes that name their target by persona.
+ *
+ * Long-lived: a character's primary persona does not move while a tie page is open.
+ */
+export function useTargetPersonaId(characterSheetId: number | null | undefined) {
+  return useQuery({
+    queryKey: [...relationshipsKeys.all, 'target-persona', characterSheetId ?? 0] as const,
+    queryFn: () => api.getPersonaIdForSheet(characterSheetId as number),
+    enabled: characterSheetId != null,
+    staleTime: 5 * 60_000,
+  });
+}

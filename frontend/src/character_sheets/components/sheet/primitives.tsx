@@ -151,13 +151,26 @@ export function QuietDoor({
   children,
   onClick,
   disabled,
+  expanded,
+  title,
 }: {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  /** Set when the door opens something in place, so the state is a fact for a reader too. */
+  expanded?: boolean;
+  /** The one thing a door may say about itself on hover — a cost, never an explanation. */
+  title?: string;
 }) {
   return (
-    <button type="button" className="refsheet-quiet-door" onClick={onClick} disabled={disabled}>
+    <button
+      type="button"
+      className="refsheet-quiet-door"
+      onClick={onClick}
+      disabled={disabled}
+      aria-expanded={expanded}
+      title={title}
+    >
       {children}
     </button>
   );

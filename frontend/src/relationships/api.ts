@@ -178,3 +178,41 @@ export async function advanceTier(body: AdvanceTierBody): Promise<TieWriteResult
 export async function setTieSummary(body: SummaryBody): Promise<TieWriteResult> {
   return postTieAction('summary', body, 'Failed to save this summary');
 }
+
+/**
+ * GET /api/personas/?character_sheet=
+ *
+ * The tie writes name their target by PERSONA (`_resolve_target` in the viewset), while
+ * every tie payload names it by CharacterSheet — so one lookup stands between reading a
+ * tie and writing to it. It lives here rather than in a page because the weave wizard
+ * asks the same question about the same people.
+ *
+ * Returns the sheet's primary persona, falling back to its first: a character with no
+ * primary is a data state, not a reason to refuse the write.
+ */
+export async function getPersonaIdForSheet(characterSheetId: number): Promise<number | null> {
+  const res = await apiFetch(`/api/personas/?character_sheet=${characterSheetId}&page_size=50`);
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    results?: Array<{ id: number; persona_type: string }>;
+  };
+  const personas = data.results ?? [];
+  return personas.find((p) => p.persona_type === 'primary')?.id ?? personas[0]?.id ?? null;
+}
+
+/** Exactly one of the two target keys the write serializers demand (#3957). */
+export interface TieTargetRef {
+  target_persona_id?: number;
+  target_companion_id?: number;
+}
+
+/**
+ * Which side a tie write names. The serializers reject both keys and reject neither, so
+ * this is the one place that picks: a companion tie by companion, everything else by the
+ * other side's persona.
+ */
+export function tieTargetRef(tie: Tie, targetPersonaId: number | null): TieTargetRef {
+  if (tie.target_companion != null) return { target_companion_id: tie.target_companion };
+  if (targetPersonaId != null) return { target_persona_id: targetPersonaId };
+  return {};
+}

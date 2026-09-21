@@ -1,0 +1,146 @@
+/** Shared tie fixtures for the #3957 component tests. Placeholder names throughout. */
+import type { RelationshipType, Tie, TieLabel, TieStreamItem } from '../../api';
+
+export function makeLabel(overrides: Partial<TieLabel> = {}): TieLabel {
+  return {
+    id: 1,
+    type: 3,
+    type_name: 'Lover',
+    type_family: 'heart',
+    type_valence: 'warm',
+    awareness: 'clandestine',
+    since: '1012-09-01T00:00:00Z',
+    ended_at: null,
+    replaced_type_name: null,
+    note: '',
+    is_mutual: false,
+    ...overrides,
+  };
+}
+
+export function makeTie(overrides: Partial<Tie> = {}): Tie {
+  return {
+    id: 77,
+    source: 5,
+    target: 12,
+    target_companion: null,
+    target_name: 'Corvin Ashe',
+    other_sheet_id: 12,
+    other_entry_id: 34,
+    audience: 'owner',
+    labels: [
+      makeLabel({ id: 1, replaced_type_name: 'Friend' }),
+      makeLabel({
+        id: 2,
+        type: 9,
+        type_name: 'Enemy',
+        type_family: 'contest',
+        type_valence: 'hostile',
+        awareness: 'private',
+        since: '1012-09-22T00:00:00Z',
+      }),
+      makeLabel({
+        id: 3,
+        type: 4,
+        type_name: 'Friend',
+        type_family: 'company',
+        awareness: 'public',
+        since: '1011-01-05T00:00:00Z',
+        ended_at: '1012-01-05T00:00:00Z',
+      }),
+    ],
+    depth: 340,
+    next_tier_threshold: 500,
+    breakdown: {
+      tier: 2,
+      scenes: 48,
+      invested: 184,
+      their_added_depth: 108,
+      affection: 41,
+      conflict: 28,
+    },
+    summary: 'He was waiting at the north gate.',
+    ap_this_week: 9,
+    thread: null,
+    is_soul_tether: false,
+    ...overrides,
+  };
+}
+
+export const TYPES: RelationshipType[] = [
+  {
+    id: 3,
+    name: 'Lover',
+    slug: 'lover',
+    description: 'Together, and not hiding it from yourself.',
+    family: 'heart',
+    valence: 'warm',
+    counterpart: null,
+    counterpart_name: 'Lover',
+    display_order: 1,
+  },
+  {
+    id: 4,
+    name: 'Friend',
+    slug: 'friend',
+    description: 'Chosen company.',
+    family: 'company',
+    valence: 'warm',
+    counterpart: null,
+    counterpart_name: 'Friend',
+    display_order: 2,
+  },
+  {
+    id: 11,
+    name: 'Mentor',
+    slug: 'mentor',
+    description: 'Teaches you. Pairs with Student.',
+    family: 'teaching',
+    valence: 'neutral',
+    counterpart: 12,
+    counterpart_name: 'Student',
+    display_order: 3,
+  },
+];
+
+export const STREAM: TieStreamItem[] = [
+  {
+    kind: 'entry',
+    id: 501,
+    title: 'What I did not say to Corvin',
+    author_id: 5,
+    author_name: 'Ilsavet du Verane',
+    body: 'I let him finish.',
+    is_public: false,
+    is_capstone: true,
+    capstone_tier: 2,
+    created_at: '2026-09-22T00:00:00Z',
+    ic_timestamp: '1012-09-22T00:00:00Z',
+  },
+  {
+    kind: 'entry',
+    id: 502,
+    title: 'Third correction',
+    author_id: 12,
+    author_name: 'Corvin Ashe',
+    body: 'The Lady du Verane corrected me before the council.',
+    is_public: true,
+    is_capstone: false,
+    capstone_tier: null,
+    created_at: '2026-09-18T00:00:00Z',
+    ic_timestamp: '1012-09-18T00:00:00Z',
+  },
+  {
+    kind: 'scene',
+    id: 503,
+    title: 'Tolls and other promises',
+    author_id: null,
+    author_name: 'A scene, both present',
+    body: '',
+    is_public: true,
+    is_capstone: false,
+    capstone_tier: null,
+    created_at: '2026-09-16T00:00:00Z',
+    ic_timestamp: '1012-09-16T00:00:00Z',
+  },
+];

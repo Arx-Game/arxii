@@ -23,6 +23,7 @@ import { BlocksSettingsPage } from './social/pages/BlocksSettingsPage';
 import { MutesSettingsPage } from './social/pages/MutesSettingsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
+import { TiePage } from './relationships/pages/TiePage';
 import { CharacterCreationPage } from './character-creation';
 import { RosterListPage } from './roster/pages/RosterListPage';
 import { FriendsTab } from '@/friends/components/FriendsTab';
@@ -454,6 +455,7 @@ function App() {
           <Route path="/roster" element={<RosterListPage />} />
           <Route path="/characters/create" element={<CharacterCreationPage />} />
           <Route path="/characters/:id" element={<CharacterSheetPage />} />
+          <Route path="/characters/:id/ties/:tieId" element={<TiePage />} />
           <Route path="/missions/journal" element={<JournalPage />} />
           <Route
             path="/journals"
