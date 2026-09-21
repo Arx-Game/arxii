@@ -29779,50 +29779,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/RelationshipCondition'
           description: ''
-  /api/relationships/hybrid-types/:
-    get:
-      operationId: relationships_hybrid_types_list
-      description: List and retrieve hybrid relationship types with nested requirements.
-      tags:
-      - relationships
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/HybridRelationshipType'
-          description: ''
-  /api/relationships/hybrid-types/{id}/:
-    get:
-      operationId: relationships_hybrid_types_retrieve
-      description: List and retrieve hybrid relationship types with nested requirements.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this hybrid relationship type.
-        required: true
-      tags:
-      - relationships
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HybridRelationshipType'
-          description: ''
   /api/relationships/relationship-capstones/:
     get:
       operationId: relationships_relationship_capstones_list
       description: |-
-        Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+        Read-only ViewSet exposing the caller's RelationshipCapstone rows (#3957).
 
         Used by the frontend to populate the Soul Tether ritual perform form's
         capstone picker. The ``?other_character_sheet_id=`` filter narrows to
@@ -29849,7 +29810,7 @@ paths:
     get:
       operationId: relationships_relationship_capstones_retrieve
       description: |-
-        Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+        Read-only ViewSet exposing the caller's RelationshipCapstone rows (#3957).
 
         Used by the frontend to populate the Soul Tether ritual perform form's
         capstone picker. The ``?other_character_sheet_id=`` filter narrows to
@@ -29871,246 +29832,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/RelationshipCapstone'
           description: ''
-  /api/relationships/relationship-updates/:
-    get:
-      operationId: relationships_relationship_updates_list
-      description: |-
-        Mutation actions for relationship-building verbs, plus a narrow list route.
-
-        Detail/browsing of relationship state in general remains on
-        CharacterRelationshipViewSet; the ``list`` action here exists only to feed
-        the commend button on the requesting user's own writeups-about-them (the
-        subject side of ``give_writeup_kudos``'s rule) — it is not a general
-        writeup browser. Scoped to writeups where the caller's character is the
-        parent relationship's ``target`` (the writeup's commendable subject) and
-        visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
-        here regardless of subject. Subject eligibility is tenure-based (current,
-        un-ended ``RosterTenure``, mirroring ``get_account_for_character``), not
-        Evennia's live-puppet ``db_account`` field, so a subject browsing while
-        not currently puppeting the character still sees writeups they can
-        legally commend. ``?subject_character=<CharacterSheet pk>`` narrows to one
-        owned character sheet (see ``RelationshipUpdateFilter``) for accounts with
-        several owned characters.
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      tags:
-      - relationships
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedRelationshipUpdateList'
-          description: ''
-  /api/relationships/relationship-updates/capstone/:
-    post:
-      operationId: relationships_relationship_updates_capstone_create
-      description: Record a monumental relationship capstone.
-      tags:
-      - relationships
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CapstoneWriteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CapstoneWrite'
-          description: ''
-  /api/relationships/relationship-updates/complaint/:
-    post:
-      operationId: relationships_relationship_updates_complaint_create
-      description: File a bad-faith-RP complaint against a writeup for staff triage.
-      tags:
-      - relationships
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WriteupComplaintWriteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WriteupComplaintWrite'
-          description: ''
-  /api/relationships/relationship-updates/develop/:
-    post:
-      operationId: relationships_relationship_updates_develop_create
-      description: Solidify temporary points into permanent developed points.
-      tags:
-      - relationships
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DevelopmentWriteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DevelopmentWrite'
-          description: ''
-  /api/relationships/relationship-updates/first_impression/:
-    post:
-      operationId: relationships_relationship_updates_first_impression_create
-      description: Record a first impression toward another character.
-      tags:
-      - relationships
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FirstImpressionWriteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FirstImpressionWrite'
-          description: ''
-  /api/relationships/relationship-updates/kudos/:
-    post:
-      operationId: relationships_relationship_updates_kudos_create
-      description: Commend a shared relationship writeup on behalf of its subject.
-      tags:
-      - relationships
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WriteupKudosWriteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WriteupKudosWrite'
-          description: ''
-  /api/relationships/relationship-updates/redistribute/:
-    post:
-      operationId: relationships_relationship_updates_redistribute_create
-      description: Move developed points between tracks in an existing relationship.
-      tags:
-      - relationships
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RedistributeWriteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RedistributeWrite'
-          description: ''
-  /api/relationships/relationship-updates/timeline/:
-    get:
-      operationId: relationships_relationship_updates_timeline_list
-      description: |-
-        Merged Update/Development/Capstone writeup history (#2159).
-
-        Exactly one of `about_character` or `relationship` must be provided (400
-        otherwise); see ``_timeline_about_character_queryset`` /
-        ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
-        are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
-        viewset's ``pagination_class``.
-      parameters:
-      - in: query
-        name: about_character
-        schema:
-          type: integer
-        description: CharacterSheet pk. Every non-PRIVATE writeup about this character
-          from any author, plus PRIVATE writeups where the caller is the author or
-          the subject. Mutually exclusive with `relationship`.
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - in: query
-        name: relationship
-        schema:
-          type: integer
-        description: CharacterRelationship pk. Full history (incl. PRIVATE) of one
-          relationship; caller must be its tenure-owned source. Mutually exclusive
-          with `about_character`.
-      tags:
-      - relationships
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedRelationshipTimelineEntryList'
-          description: ''
   /api/relationships/relationships/:
     get:
       operationId: relationships_relationships_list
-      description: List and retrieve character relationships.
+      description: The caller's own outbound sides, always shaped as their OWNER view.
       parameters:
-      - in: query
-        name: is_active
-        schema:
-          type: boolean
-      - in: query
-        name: is_pending
-        schema:
-          type: boolean
-      - in: query
-        name: is_soul_tether
-        schema:
-          type: boolean
       - name: page
         required: false
         in: query
         description: A page number within the paginated result set.
         schema:
           type: integer
-      - in: query
-        name: source
-        schema:
-          type: integer
-      - in: query
-        name: target
-        schema:
-          type: integer
-      - in: query
-        name: target_companion
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
         schema:
           type: integer
       tags:
@@ -30122,12 +29858,18 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedCharacterRelationshipListList'
+                $ref: '#/components/schemas/PaginatedTieList'
           description: ''
   /api/relationships/relationships/{id}/:
     get:
       operationId: relationships_relationships_retrieve
-      description: List and retrieve character relationships.
+      description: |-
+        One side of a tie, shaped for whoever is asking.
+
+        Bypasses ``get_queryset()`` (own-sides-only) deliberately: any authenticated
+        viewer may look up any side by pk, and ``tie_audience`` + ``third_party_can_see``
+        decide what comes back — a third party with no open Public label gets a 404, not
+        a 403, so a tie's mere existence is never leaked.
       parameters:
       - in: path
         name: id
@@ -30144,12 +29886,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CharacterRelationship'
+                $ref: '#/components/schemas/Tie'
           description: ''
-  /api/relationships/tracks/:
+  /api/relationships/relationships/{id}/stream/:
     get:
-      operationId: relationships_tracks_list
-      description: List and retrieve relationship tracks with nested tiers.
+      operationId: relationships_relationships_stream_list
+      description: Journal entries and shared scenes between the two sides, viewer-filtered.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character relationship.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - relationships
       security:
@@ -30159,20 +29920,221 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RelationshipTrack'
+                $ref: '#/components/schemas/PaginatedTieStreamItemList'
           description: ''
-  /api/relationships/tracks/{id}/:
+  /api/relationships/relationships/advance/:
+    post:
+      operationId: relationships_relationships_advance_create
+      description: Claim the next tier with a capstone journal entry and XP (#3957).
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TieRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tie'
+          description: ''
+  /api/relationships/relationships/allocation/:
+    post:
+      operationId: relationships_relationships_allocation_create
+      description: Set this week's AP toward one side of a tie (#3957).
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TieRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tie'
+          description: ''
+  /api/relationships/relationships/awareness/:
+    post:
+      operationId: relationships_relationships_awareness_create
+      description: Move a label's awareness forward (#3957).
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TieRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tie'
+          description: ''
+  /api/relationships/relationships/declare/:
+    post:
+      operationId: relationships_relationships_declare_create
+      description: Name a type on the caller's side of a tie (#3957).
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TieRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tie'
+          description: ''
+  /api/relationships/relationships/end/:
+    post:
+      operationId: relationships_relationships_end_create
+      description: End an open label; it shows as former from then on (#3957).
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TieRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tie'
+          description: ''
+  /api/relationships/relationships/shift/:
+    post:
+      operationId: relationships_relationships_shift_create
+      description: Change one label into another (#3957).
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TieRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tie'
+          description: ''
+  /api/relationships/relationships/summary/:
+    post:
+      operationId: relationships_relationships_summary_create
+      description: Set the player's own paragraph on one side of a tie (#3957).
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TieRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tie'
+          description: ''
+  /api/relationships/types/:
     get:
-      operationId: relationships_tracks_retrieve
-      description: List and retrieve relationship tracks with nested tiers.
+      operationId: relationships_types_list
+      description: List and retrieve the catalogue of tie types (#3957).
+      parameters:
+      - in: query
+        name: family
+        schema:
+          type: string
+          enum:
+          - blood_and_oath
+          - company
+          - contest
+          - heart
+          - teaching
+        description: |-
+          * `heart` - Heart
+          * `company` - Company
+          * `contest` - Contest
+          * `blood_and_oath` - Blood and oath
+          * `teaching` - Teaching
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: valence
+        schema:
+          type: string
+          enum:
+          - hostile
+          - neutral
+          - warm
+        description: |-
+          * `warm` - Warm
+          * `hostile` - Hostile
+          * `neutral` - Neutral
+      tags:
+      - relationships
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRelationshipTypeList'
+          description: ''
+  /api/relationships/types/{id}/:
+    get:
+      operationId: relationships_types_retrieve
+      description: List and retrieve the catalogue of tie types (#3957).
       parameters:
       - in: path
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this relationship track.
+        description: A unique integer value identifying this relationship type.
         required: true
       tags:
       - relationships
@@ -30183,7 +30145,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RelationshipTrack'
+                $ref: '#/components/schemas/RelationshipType'
           description: ''
   /api/risk-calibrations/:
     get:
@@ -40938,6 +40900,16 @@ components:
       - soulfray_warning
       - technique_id
       - technique_name
+    AwarenessEnum:
+      enum:
+      - private
+      - clandestine
+      - public
+      type: string
+      description: |-
+        * `private` - Private
+        * `clandestine` - Clandestine
+        * `public` - Public
     AxisEnum:
       enum:
       - TONE
@@ -43534,60 +43506,6 @@ components:
       - description
       - id
       - name
-    CapstoneWrite:
-      type: object
-      description: Serializer for creating a relationship capstone event.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-        writeup:
-          type: string
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: shared
-      required:
-      - points
-      - title
-      - track_id
-      - writeup
-    CapstoneWriteRequest:
-      type: object
-      description: Serializer for creating a relationship capstone event.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-          minLength: 1
-        writeup:
-          type: string
-          minLength: 1
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: shared
-      required:
-      - points
-      - title
-      - track_id
-      - writeup
     CastPullRequestRequest:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
@@ -45287,171 +45205,6 @@ components:
           minimum: 0
           format: int64
           description: Coppers on hand.
-    CharacterRelationship:
-      type: object
-      description: Full serializer for CharacterRelationship detail view.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        source:
-          type: integer
-          description: The character who holds this relationship
-          readOnly: true
-        source_name:
-          type: string
-          readOnly: true
-        target:
-          type: integer
-          description: The character this relationship is about; null when target_companion
-            is set (#3575). Exactly one of target / target_companion is set.
-          readOnly: true
-          nullable: true
-        target_companion:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: The bonded companion this relationship is about (#3575); null
-            when target is set. Only the companion's owner may hold such a row.
-        target_name:
-          type: string
-          readOnly: true
-        is_active:
-          type: boolean
-          readOnly: true
-          description: Whether this relationship is currently active
-        is_pending:
-          type: boolean
-          readOnly: true
-          description: Whether this relationship is awaiting mutual consent
-        is_deceitful:
-          type: boolean
-          readOnly: true
-          description: Whether the displayed track/tier differs from the actual values
-        track_progress:
-          type: array
-          items:
-            $ref: '#/components/schemas/RelationshipTrackProgress'
-          readOnly: true
-        absolute_value:
-          type: integer
-          readOnly: true
-        developed_absolute_value:
-          type: integer
-          readOnly: true
-        mechanical_bonus:
-          type: number
-          format: double
-          readOnly: true
-        affection:
-          type: integer
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-          description: When this relationship was created
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-          description: When this relationship was last modified
-      required:
-      - absolute_value
-      - affection
-      - created_at
-      - developed_absolute_value
-      - id
-      - is_active
-      - is_deceitful
-      - is_pending
-      - mechanical_bonus
-      - source
-      - source_name
-      - target
-      - target_companion
-      - target_name
-      - track_progress
-      - updated_at
-    CharacterRelationshipList:
-      type: object
-      description: Lightweight serializer for CharacterRelationship list view.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        source:
-          type: integer
-          description: The character who holds this relationship
-          readOnly: true
-        source_name:
-          type: string
-          readOnly: true
-        target:
-          type: integer
-          description: The character this relationship is about; null when target_companion
-            is set (#3575). Exactly one of target / target_companion is set.
-          readOnly: true
-          nullable: true
-        target_companion:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: The bonded companion this relationship is about (#3575); null
-            when target is set. Only the companion's owner may hold such a row.
-        target_name:
-          type: string
-          readOnly: true
-        is_active:
-          type: boolean
-          readOnly: true
-          description: Whether this relationship is currently active
-        is_pending:
-          type: boolean
-          readOnly: true
-          description: Whether this relationship is awaiting mutual consent
-        is_soul_tether:
-          type: boolean
-          readOnly: true
-          description: Whether this relationship is a soul-tether bond (Spec B mechanics).
-        soul_tether_role:
-          allOf:
-          - $ref: '#/components/schemas/SoulTetherRoleEnum'
-          readOnly: true
-          description: |-
-            Soul-tether role (SINNER or SINEATER); empty when not a tether.
-
-            * `SINEATER` - Sineater
-            * `SINNER` - Sinner
-        absolute_value:
-          type: integer
-          readOnly: true
-        developed_absolute_value:
-          type: integer
-          readOnly: true
-        affection:
-          type: integer
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-          description: When this relationship was last modified
-      required:
-      - absolute_value
-      - affection
-      - developed_absolute_value
-      - id
-      - is_active
-      - is_pending
-      - is_soul_tether
-      - soul_tether_role
-      - source
-      - source_name
-      - target
-      - target_companion
-      - target_name
-      - updated_at
     CharacterRequest:
       type: object
       description: Serialize character data for roster entry views.
@@ -46446,16 +46199,6 @@ components:
       - name
       - parent_name
       - path
-    ColoringEnum:
-      enum:
-      - positive
-      - neutral
-      - negative
-      type: string
-      description: |-
-        * `positive` - Positive
-        * `neutral` - Neutral
-        * `negative` - Negative
     ColumnEnum:
       enum:
       - win
@@ -48713,6 +48456,54 @@ components:
         * `whisper` - Whisper (target only)
         * `table_talk` - Table talk (your place)
         * `mutter` - Mutter (partial echo)
+    DepthBreakdown:
+      type: object
+      properties:
+        tier:
+          type: integer
+        scenes:
+          type: integer
+        invested:
+          type: integer
+        their_added_depth:
+          type: integer
+        affection:
+          type: integer
+          nullable: true
+        conflict:
+          type: integer
+          nullable: true
+      required:
+      - affection
+      - conflict
+      - invested
+      - scenes
+      - their_added_depth
+      - tier
+    DepthBreakdownRequest:
+      type: object
+      properties:
+        tier:
+          type: integer
+        scenes:
+          type: integer
+        invested:
+          type: integer
+        their_added_depth:
+          type: integer
+        affection:
+          type: integer
+          nullable: true
+        conflict:
+          type: integer
+          nullable: true
+      required:
+      - affection
+      - conflict
+      - invested
+      - scenes
+      - their_added_depth
+      - tier
     DerivedAnchor:
       type: object
       description: |-
@@ -48732,66 +48523,6 @@ components:
       - id
       - influence
       - name
-    DevelopmentWrite:
-      type: object
-      description: Serializer for creating a relationship development update.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-        writeup:
-          type: string
-        xp_awarded:
-          type: integer
-          default: 0
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: private
-      required:
-      - points
-      - title
-      - track_id
-      - writeup
-    DevelopmentWriteRequest:
-      type: object
-      description: Serializer for creating a relationship development update.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-          minLength: 1
-        writeup:
-          type: string
-          minLength: 1
-        xp_awarded:
-          type: integer
-          default: 0
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: private
-      required:
-      - points
-      - title
-      - track_id
-      - writeup
     DifficultyChoiceEnum:
       enum:
       - trivial
@@ -52172,6 +51903,20 @@ components:
       - kind
       - name
       - taken_in_particle
+    FamilyEnum:
+      enum:
+      - heart
+      - company
+      - contest
+      - blood_and_oath
+      - teaching
+      type: string
+      description: |-
+        * `heart` - Heart
+        * `company` - Company
+        * `contest` - Contest
+        * `blood_and_oath` - Blood and oath
+        * `teaching` - Teaching
     FamilyKind:
       type: object
       description: Serializer for a family's authored kind (#3617).
@@ -52438,68 +52183,6 @@ components:
         * `never_do` - What would you never do?
         * `protect` - What would you protect at all costs?
         * `fear` - What are you deathly afraid of?
-    FirstImpressionWrite:
-      type: object
-      description: Serializer for creating a first impression.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-        writeup:
-          type: string
-        coloring:
-          allOf:
-          - $ref: '#/components/schemas/ColoringEnum'
-          default: neutral
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: private
-      required:
-      - points
-      - title
-      - track_id
-      - writeup
-    FirstImpressionWriteRequest:
-      type: object
-      description: Serializer for creating a first impression.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-          minLength: 1
-        writeup:
-          type: string
-          minLength: 1
-        coloring:
-          allOf:
-          - $ref: '#/components/schemas/ColoringEnum'
-          default: neutral
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: private
-      required:
-      - points
-      - title
-      - track_id
-      - writeup
     FixtureAffinity:
       type: object
       description: One axis a fixture kind mitigates (negative value = mitigation).
@@ -54480,17 +54163,13 @@ components:
         label:
           type: string
           readOnly: true
-        points:
+        conflict_points:
           type: integer
           readOnly: true
-        track:
-          type: string
-          readOnly: true
       required:
+      - conflict_points
       - id
       - label
-      - points
-      - track
     GroupBallotState:
       type: object
       description: Read-only mirror of :class:`world.missions.types.GroupBallotState`
@@ -55417,56 +55096,6 @@ components:
       - explanation
       - kind
       - until
-    HybridRelationshipType:
-      type: object
-      description: Serializer for HybridRelationshipType with nested requirements.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-          description: Hybrid type name (e.g., 'Rivalry', 'Devotion')
-        slug:
-          type: string
-          readOnly: true
-          description: URL-safe identifier for this hybrid type
-          pattern: ^[-a-zA-Z0-9_]+$
-        description:
-          type: string
-          readOnly: true
-          description: Description of what this hybrid type represents
-        requirements:
-          type: array
-          items:
-            $ref: '#/components/schemas/HybridRequirement'
-          readOnly: true
-      required:
-      - description
-      - id
-      - name
-      - requirements
-      - slug
-    HybridRequirement:
-      type: object
-      description: Serializer for a single track/tier requirement on a hybrid type.
-      properties:
-        track:
-          type: integer
-          readOnly: true
-          description: The track that must meet the minimum tier
-        track_name:
-          type: string
-          readOnly: true
-        minimum_tier:
-          type: integer
-          readOnly: true
-          description: The minimum tier number that must be reached on this track
-      required:
-      - minimum_tier
-      - track
-      - track_name
     ImpactTierEnum:
       enum:
       - table
@@ -57152,16 +56781,6 @@ components:
       - family
       - id
       - parent_names
-    Kind4adEnum:
-      enum:
-      - update
-      - development
-      - capstone
-      type: string
-      description: |-
-        * `update` - update
-        * `development` - development
-        * `capstone` - capstone
     Kind989Enum:
       enum:
       - wall
@@ -63696,29 +63315,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CharacterCovenantRole'
-    PaginatedCharacterRelationshipListList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/CharacterRelationshipList'
     PaginatedCheckProposalDetailList:
       type: object
       required:
@@ -66376,7 +65972,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RelationshipCapstone'
-    PaginatedRelationshipTimelineEntryList:
+    PaginatedRelationshipTypeList:
       type: object
       required:
       - count
@@ -66398,30 +65994,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/RelationshipTimelineEntry'
-    PaginatedRelationshipUpdateList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/RelationshipUpdate'
+            $ref: '#/components/schemas/RelationshipType'
     PaginatedResonanceGrantList:
       type: object
       required:
@@ -67664,6 +67237,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ThreatPool'
+    PaginatedTieList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tie'
+    PaginatedTieStreamItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TieStreamItem'
     PaginatedTransitionList:
       type: object
       required:
@@ -70841,7 +70460,7 @@ components:
             * `TRAIT` - Trait
             * `TECHNIQUE` - Technique
             * `FACET` - Facet
-            * `RELATIONSHIP_TRACK` - Relationship Track
+            * `RELATIONSHIP_TRACK` - Relationship
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
             * `MANTLE` - Mantle
@@ -74506,66 +74125,6 @@ components:
       description: |-
         * `commissioned` - Commissioned
         * `recorded` - Recorded
-    RedistributeWrite:
-      type: object
-      description: Serializer for redistributing relationship points between tracks.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        source_track_id:
-          type: integer
-        target_track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-        writeup:
-          type: string
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: private
-      required:
-      - points
-      - source_track_id
-      - target_track_id
-      - title
-      - writeup
-    RedistributeWriteRequest:
-      type: object
-      description: Serializer for redistributing relationship points between tracks.
-      properties:
-        target_persona_id:
-          type: integer
-        target_companion_id:
-          type: integer
-        source_track_id:
-          type: integer
-        target_track_id:
-          type: integer
-        points:
-          type: integer
-          minimum: 0
-        title:
-          type: string
-          minLength: 1
-        writeup:
-          type: string
-          minLength: 1
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          default: private
-      required:
-      - points
-      - source_track_id
-      - target_track_id
-      - title
-      - writeup
     ReferencedMilestoneTypeEnum:
       enum:
       - story_resolved
@@ -74578,104 +74137,124 @@ components:
         * `episode_reached` - Episode reached or passed
     RelationshipCapstone:
       type: object
-      description: Serializer for relationship capstone events.
       properties:
         id:
           type: integer
           readOnly: true
-        author:
+        relationship:
           type: integer
-          description: The character who recorded this capstone
-          readOnly: true
-        author_name:
+        journal_entry:
+          type: integer
+          nullable: true
+        journal_entry_title:
           type: string
           readOnly: true
         title:
           type: string
           readOnly: true
-          description: Title of the monumental moment
-        writeup:
-          type: string
-          readOnly: true
-          description: Narrative description of the capstone event
-        track:
+        tier_claimed:
           type: integer
-          readOnly: true
-          description: The track that gains points and capacity
-        track_name:
-          type: string
-          readOnly: true
-        points:
+          maximum: 32767
+          minimum: 0
+        xp_spent:
           type: integer
-          readOnly: true
-          description: Points added to both capacity and developed_points
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          readOnly: true
-          description: |-
-            Who can see this capstone
-
-            * `private` - Private
-            * `shared` - Shared
-            * `gossip` - Gossip
-            * `public` - Public
-        linked_scene:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: Optional scene this capstone is based on
+          maximum: 2147483647
+          minimum: 0
+        is_ritual_capstone:
+          type: boolean
         created_at:
           type: string
           format: date-time
           readOnly: true
-          description: When this capstone was recorded
-        kudos_count:
-          type: integer
-          description: Return pre-annotated kudos count, or fall back to a query.
-          readOnly: true
-        viewer_has_kudosed:
-          type: boolean
-          description: Return True if the request user has kudosed this capstone.
-          readOnly: true
       required:
-      - author
-      - author_name
       - created_at
       - id
-      - kudos_count
-      - linked_scene
-      - points
+      - journal_entry_title
+      - relationship
       - title
-      - track
-      - track_name
-      - viewer_has_kudosed
-      - visibility
-      - writeup
     RelationshipCondition:
       type: object
-      description: Serializer for RelationshipCondition lookup table.
       properties:
         id:
           type: integer
           readOnly: true
         name:
           type: string
-          readOnly: true
           description: Condition name (e.g., 'Attracted To', 'Fears', 'Trusts')
+          maxLength: 100
         description:
           type: string
-          readOnly: true
           description: Description of what this condition represents
         display_order:
           type: integer
-          readOnly: true
+          maximum: 2147483647
+          minimum: 0
           description: Order for display purposes (lower values appear first)
       required:
-      - description
-      - display_order
       - id
       - name
+    RelationshipLabel:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        type:
+          type: integer
+        type_name:
+          type: string
+          readOnly: true
+        type_family:
+          type: string
+          readOnly: true
+        type_valence:
+          type: string
+          readOnly: true
+        awareness:
+          $ref: '#/components/schemas/AwarenessEnum'
+        since:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        replaced_type_name:
+          type: string
+          readOnly: true
+        note:
+          type: string
+          maxLength: 200
+        is_mutual:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_mutual
+      - replaced_type_name
+      - type
+      - type_family
+      - type_name
+      - type_valence
+    RelationshipLabelRequest:
+      type: object
+      properties:
+        type:
+          type: integer
+        awareness:
+          $ref: '#/components/schemas/AwarenessEnum'
+        since:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        note:
+          type: string
+          maxLength: 200
+      required:
+      - type
     RelationshipLine:
       type: object
       properties:
@@ -74714,257 +74293,55 @@ components:
         * `rival` - Rival
         * `feud` - Feud
         * `unknown` - Unclear
-    RelationshipTier:
+    RelationshipType:
       type: object
-      description: Serializer for RelationshipTier.
       properties:
         id:
           type: integer
           readOnly: true
         name:
           type: string
-          readOnly: true
-          description: Tier name (e.g., 'Wary', 'Acquaintance', 'Confidant')
-        tier_number:
-          type: integer
-          readOnly: true
-          description: Numeric rank of this tier within the track (0 = lowest)
-        point_threshold:
-          type: integer
-          readOnly: true
-          description: Minimum points required to reach this tier
-        description:
-          type: string
-          readOnly: true
-          description: Narrative description of what this tier represents
-      required:
-      - description
-      - id
-      - name
-      - point_threshold
-      - tier_number
-    RelationshipTimelineEntry:
-      type: object
-      description: |-
-        One row of the merged Update/Development/Capstone writeup timeline (#2159).
-
-        Serializes a plain dict row (not a model instance) — projected by
-        ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
-        which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
-        ``RelationshipCapstone`` rows the same shared column shape regardless of which
-        of the three writeup models a given row came from.
-      properties:
-        kind:
-          $ref: '#/components/schemas/Kind4adEnum'
-        id:
-          type: integer
-        relationship:
-          type: integer
-        author:
-          type: integer
-        author_name:
-          type: string
-        track:
-          type: integer
-        track_name:
-          type: string
-        title:
-          type: string
-        writeup:
-          type: string
-        visibility:
-          $ref: '#/components/schemas/VisibilityFdaEnum'
-        created_at:
-          type: string
-          format: date-time
-      required:
-      - author
-      - author_name
-      - created_at
-      - id
-      - kind
-      - relationship
-      - title
-      - track
-      - track_name
-      - visibility
-      - writeup
-    RelationshipTrack:
-      type: object
-      description: Serializer for RelationshipTrack with nested tiers.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-          description: Track name (e.g., 'Trust', 'Respect', 'Rivalry', 'Fear')
+          description: Type name, e.g. 'Rival'.
+          maxLength: 100
         slug:
           type: string
-          readOnly: true
-          description: URL-safe identifier for this track
+          description: URL-safe identifier.
+          maxLength: 100
           pattern: ^[-a-zA-Z0-9_]+$
         description:
           type: string
+          description: The one line shown in the picker. PLACEHOLDER copy.
+        family:
+          $ref: '#/components/schemas/FamilyEnum'
+        valence:
+          $ref: '#/components/schemas/RelationshipTypeValenceEnum'
+        counterpart:
+          type: integer
+          nullable: true
+          description: The type the other side must hold for this label to be mutual;
+            null = itself.
+        counterpart_name:
+          type: string
           readOnly: true
-          description: Description of what this track represents
-        sign:
-          allOf:
-          - $ref: '#/components/schemas/SignEnum'
-          readOnly: true
-          description: |-
-            Whether this track represents positive or negative feelings
-
-            * `positive` - Positive
-            * `negative` - Negative
-        tiers:
-          type: array
-          items:
-            $ref: '#/components/schemas/RelationshipTier'
-          readOnly: true
+        display_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
       required:
-      - description
+      - counterpart_name
       - id
       - name
-      - sign
       - slug
-      - tiers
-    RelationshipTrackProgress:
-      type: object
-      description: Serializer for track progress within a relationship.
-      properties:
-        track:
-          type: integer
-          readOnly: true
-          description: The track being progressed
-        track_name:
-          type: string
-          readOnly: true
-        track_sign:
-          type: string
-          readOnly: true
-        capacity:
-          type: integer
-          readOnly: true
-          description: Maximum developed points allowed on this track
-        developed_points:
-          type: integer
-          readOnly: true
-          description: Permanent points earned through development and capstones
-        temporary_points:
-          type: integer
-          readOnly: true
-        total_points:
-          type: integer
-          readOnly: true
-        current_tier_name:
-          type: string
-          nullable: true
-          description: Return the name of the current tier, or None if no tier reached.
-          readOnly: true
-      required:
-      - capacity
-      - current_tier_name
-      - developed_points
-      - temporary_points
-      - total_points
-      - track
-      - track_name
-      - track_sign
-    RelationshipUpdate:
-      type: object
-      description: Serializer for relationship updates.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        author:
-          type: integer
-          description: The character who wrote this update
-          readOnly: true
-        author_name:
-          type: string
-          readOnly: true
-        title:
-          type: string
-          readOnly: true
-          description: Brief title summarizing the update
-        writeup:
-          type: string
-          readOnly: true
-          description: Narrative writeup describing how the relationship developed
-        track:
-          type: integer
-          readOnly: true
-          description: The track that gains points from this update
-        track_name:
-          type: string
-          readOnly: true
-        points_earned:
-          type: integer
-          readOnly: true
-          description: 'Points earned: increases capacity and sets temporary value
-            base'
-        coloring:
-          allOf:
-          - $ref: '#/components/schemas/ColoringEnum'
-          readOnly: true
-          description: |-
-            Emotional coloring for first impressions (blank for normal updates)
-
-            * `positive` - Positive
-            * `neutral` - Neutral
-            * `negative` - Negative
-        visibility:
-          allOf:
-          - $ref: '#/components/schemas/VisibilityFdaEnum'
-          readOnly: true
-          description: |-
-            Who can see this update
-
-            * `private` - Private
-            * `shared` - Shared
-            * `gossip` - Gossip
-            * `public` - Public
-        is_first_impression:
-          type: boolean
-          readOnly: true
-          description: Whether this is a first impression update
-        linked_scene:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: Optional scene this update is based on
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-          description: When this update was created
-        kudos_count:
-          type: integer
-          description: Return pre-annotated kudos count, or fall back to a query.
-          readOnly: true
-        viewer_has_kudosed:
-          type: boolean
-          description: Return True if the request user has kudosed this update.
-          readOnly: true
-      required:
-      - author
-      - author_name
-      - coloring
-      - created_at
-      - id
-      - is_first_impression
-      - kudos_count
-      - linked_scene
-      - points_earned
-      - title
-      - track
-      - track_name
-      - viewer_has_kudosed
-      - visibility
-      - writeup
+    RelationshipTypeValenceEnum:
+      enum:
+      - warm
+      - hostile
+      - neutral
+      type: string
+      description: |-
+        * `warm` - Warm
+        * `hostile` - Hostile
+        * `neutral` - Neutral
     Renown:
       type: object
       description: |-
@@ -77862,14 +77239,6 @@ components:
       description: |-
         * `attacker` - Attacker
         * `defender` - Defender
-    SignEnum:
-      enum:
-      - positive
-      - negative
-      type: string
-      description: |-
-        * `positive` - Positive
-        * `negative` - Negative
     SilhouetteRead:
       type: object
       description: 'A piece''s form (#2907): name + family + the prose noun the UI
@@ -78617,14 +77986,6 @@ components:
       - resonance_id
       - scene_id
       - sinner_sheet_id
-    SoulTetherRoleEnum:
-      enum:
-      - SINEATER
-      - SINNER
-      type: string
-      description: |-
-        * `SINEATER` - Sineater
-        * `SINNER` - Sinner
     SoulfrayWarning:
       type: object
       description: Minimal read-only representation of a SoulfrayWarning dataclass.
@@ -82893,7 +82254,7 @@ components:
             * `TRAIT` - Trait
             * `TECHNIQUE` - Technique
             * `FACET` - Facet
-            * `RELATIONSHIP_TRACK` - Relationship Track
+            * `RELATIONSHIP_TRACK` - Relationship
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
             * `MANTLE` - Mantle
@@ -83102,7 +82463,7 @@ components:
             * `TRAIT` - Trait
             * `TECHNIQUE` - Technique
             * `FACET` - Facet
-            * `RELATIONSHIP_TRACK` - Relationship Track
+            * `RELATIONSHIP_TRACK` - Relationship
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
             * `MANTLE` - Mantle
@@ -83147,7 +82508,7 @@ components:
         * `TRAIT` - Trait
         * `TECHNIQUE` - Technique
         * `FACET` - Facet
-        * `RELATIONSHIP_TRACK` - Relationship Track
+        * `RELATIONSHIP_TRACK` - Relationship
         * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
         * `COVENANT_ROLE` - Covenant Role
         * `MANTLE` - Mantle
@@ -83236,6 +82597,200 @@ components:
       - description
       - id
       - name
+    Tie:
+      type: object
+      description: One side of a tie, shaped for the viewer's audience (built in the
+        viewset).
+      properties:
+        id:
+          type: integer
+        source:
+          type: integer
+        target:
+          type: integer
+          nullable: true
+        target_companion:
+          type: integer
+          nullable: true
+        target_name:
+          type: string
+        other_sheet_id:
+          type: integer
+          nullable: true
+        other_entry_id:
+          type: integer
+          nullable: true
+        audience:
+          type: string
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationshipLabel'
+        depth:
+          type: integer
+          nullable: true
+        next_tier_threshold:
+          type: integer
+          nullable: true
+        breakdown:
+          allOf:
+          - $ref: '#/components/schemas/DepthBreakdown'
+          nullable: true
+        summary:
+          type: string
+        ap_this_week:
+          type: integer
+          nullable: true
+        thread:
+          allOf:
+          - $ref: '#/components/schemas/TieThread'
+          nullable: true
+        is_soul_tether:
+          type: boolean
+      required:
+      - ap_this_week
+      - audience
+      - breakdown
+      - depth
+      - id
+      - is_soul_tether
+      - labels
+      - next_tier_threshold
+      - other_entry_id
+      - other_sheet_id
+      - source
+      - summary
+      - target
+      - target_companion
+      - target_name
+      - thread
+    TieRequest:
+      type: object
+      description: One side of a tie, shaped for the viewer's audience (built in the
+        viewset).
+      properties:
+        id:
+          type: integer
+        source:
+          type: integer
+        target:
+          type: integer
+          nullable: true
+        target_companion:
+          type: integer
+          nullable: true
+        target_name:
+          type: string
+          minLength: 1
+        other_sheet_id:
+          type: integer
+          nullable: true
+        other_entry_id:
+          type: integer
+          nullable: true
+        audience:
+          type: string
+          minLength: 1
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationshipLabelRequest'
+        depth:
+          type: integer
+          nullable: true
+        next_tier_threshold:
+          type: integer
+          nullable: true
+        breakdown:
+          allOf:
+          - $ref: '#/components/schemas/DepthBreakdownRequest'
+          nullable: true
+        summary:
+          type: string
+        ap_this_week:
+          type: integer
+          nullable: true
+        thread:
+          allOf:
+          - $ref: '#/components/schemas/TieThreadRequest'
+          nullable: true
+        is_soul_tether:
+          type: boolean
+      required:
+      - ap_this_week
+      - audience
+      - breakdown
+      - depth
+      - id
+      - is_soul_tether
+      - labels
+      - next_tier_threshold
+      - other_entry_id
+      - other_sheet_id
+      - source
+      - summary
+      - target
+      - target_companion
+      - target_name
+      - thread
+    TieStreamItem:
+      type: object
+      properties:
+        kind:
+          type: string
+        id:
+          type: integer
+        title:
+          type: string
+        author_id:
+          type: integer
+          nullable: true
+        author_name:
+          type: string
+        body:
+          type: string
+        is_public:
+          type: boolean
+        capstone_tier:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+        ic_timestamp:
+          type: string
+          nullable: true
+      required:
+      - author_id
+      - author_name
+      - body
+      - capstone_tier
+      - created_at
+      - ic_timestamp
+      - id
+      - is_public
+      - kind
+      - title
+    TieThread:
+      type: object
+      properties:
+        level:
+          type: integer
+        resonance_name:
+          type: string
+      required:
+      - level
+      - resonance_name
+    TieThreadRequest:
+      type: object
+      properties:
+        level:
+          type: integer
+        resonance_name:
+          type: string
+          minLength: 1
+      required:
+      - level
+      - resonance_name
     Tier3f5Enum:
       enum:
       - 1
@@ -85012,18 +84567,6 @@ components:
         * `default` - Default
         * `perceived_only` - Perceived Only
         * `very_private` - Very Private
-    VisibilityFdaEnum:
-      enum:
-      - private
-      - shared
-      - gossip
-      - public
-      type: string
-      description: |-
-        * `private` - Private
-        * `shared` - Shared
-        * `gossip` - Gossip
-        * `public` - Public
     VisibilityModeEnum:
       enum:
       - public
@@ -86483,85 +86026,6 @@ components:
           maxLength: 100
       required:
       - name
-    WriteupComplaintWrite:
-      type: object
-      description: |-
-        Validate input for the complaint endpoint.
-
-        Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
-        Permissions (visibility check) are enforced inside the action / service.
-      properties:
-        writeup_type:
-          $ref: '#/components/schemas/WriteupTypeEnum'
-        writeup_id:
-          type: integer
-        reason:
-          type: string
-      required:
-      - reason
-      - writeup_id
-      - writeup_type
-    WriteupComplaintWriteRequest:
-      type: object
-      description: |-
-        Validate input for the complaint endpoint.
-
-        Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
-        Permissions (visibility check) are enforced inside the action / service.
-      properties:
-        writeup_type:
-          $ref: '#/components/schemas/WriteupTypeEnum'
-        writeup_id:
-          type: integer
-        reason:
-          type: string
-          minLength: 1
-      required:
-      - reason
-      - writeup_id
-      - writeup_type
-    WriteupKudosWrite:
-      type: object
-      description: |-
-        Validate input for the kudos endpoint.
-
-        ``writeup_type`` selects which of the three writeup models the ID refers to.
-        ``writeup_id`` is the pk of that writeup. Existence is validated inside the
-        action (raises WriteupFeedbackError → mapped to a 400 response body).
-      properties:
-        writeup_type:
-          $ref: '#/components/schemas/WriteupTypeEnum'
-        writeup_id:
-          type: integer
-      required:
-      - writeup_id
-      - writeup_type
-    WriteupKudosWriteRequest:
-      type: object
-      description: |-
-        Validate input for the kudos endpoint.
-
-        ``writeup_type`` selects which of the three writeup models the ID refers to.
-        ``writeup_id`` is the pk of that writeup. Existence is validated inside the
-        action (raises WriteupFeedbackError → mapped to a 400 response body).
-      properties:
-        writeup_type:
-          $ref: '#/components/schemas/WriteupTypeEnum'
-        writeup_id:
-          type: integer
-      required:
-      - writeup_id
-      - writeup_type
-    WriteupTypeEnum:
-      enum:
-      - update
-      - development
-      - capstone
-      type: string
-      description: |-
-        * `update` - update
-        * `development` - development
-        * `capstone` - capstone
     ZoneEnum:
       enum:
       - fresh

@@ -68,6 +68,8 @@ from world.character_sheets.types import (
     StorySection,
     TechniqueEntry,
     ThemingSection,
+    TieCardEntry,
+    TieLabelEntry,
     VacancyRef,
     WornEntry,
 )
@@ -482,6 +484,27 @@ def _presented_bio_profile(
     ):
         return active.profile
     return None
+
+
+def _resolve_viewer_sheet(request: Request | None) -> CharacterSheet | None:
+    """The viewer's own currently-selected character's sheet, or None (plays nobody).
+
+    Feeds ``_build_ties``'s per-audience gate (#3957): the viewer's OWN sheet, not the
+    sheet being rendered — a stranger browsing Alice's page has ``viewer_sheet`` pointing
+    at their own character, which is what ``tie_audience`` compares against each side's
+    ``target`` to tell an OTHER_SIDE viewer from a THIRD_PARTY one.
+    """
+    if request is None:
+        return None
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+    actor = character_for_request(request, entry_id=None)
+    if actor is None:
+        return None
+    try:
+        return actor.sheet_data
+    except ObjectDoesNotExist:
+        return None
 
 
 def _viewer_is_privileged(sheet: CharacterSheet, user: Any) -> bool:
@@ -1774,6 +1797,96 @@ def _build_mentors(sheet: CharacterSheet, *, privileged: bool) -> list[MentorBon
     return entries
 
 
+def _entry_id_for(target_sheet: CharacterSheet | None) -> int | None:
+    """The target's ``RosterEntry`` pk, or None (no roster row, e.g. a test/NPC sheet).
+
+    ``CharacterSheet`` has no ``roster_entry_id`` column of its own — ``roster_entry``
+    is the reverse side of ``RosterEntry.character_sheet`` — so this reads the safe
+    ``*_or_none`` accessor rather than a nonexistent shortcut attribute.
+    """
+    if target_sheet is None:
+        return None
+    entry = target_sheet.roster_entry_or_none
+    return entry.pk if entry is not None else None
+
+
+def _build_ties(sheet: CharacterSheet, viewer_sheet, *, privileged: bool) -> list[TieCardEntry]:
+    """The cast (#3957): one card per active side, shaped for who is looking.
+
+    Owner and staff see every card with numbers; the other party of a tie sees that
+    card's known labels and numbers; anyone else sees public labels and the first line
+    of the summary, and a tie with no public label is not on their list at all. Companion
+    cards (``target_companion`` set) are owner/staff-only — a companion has no player of
+    its own to weigh being named on a public tie card.
+    """
+    from world.magic.models import Thread  # noqa: PLC0415
+    from world.relationships.constants import TieAudience  # noqa: PLC0415
+    from world.relationships.reads import (  # noqa: PLC0415
+        third_party_can_see,
+        tie_audience,
+        visible_labels,
+    )
+    from world.relationships.services import is_mutual  # noqa: PLC0415
+
+    sides = (
+        sheet.relationships_as_source.filter(is_active=True)
+        .select_related("target", "target__character", "target__roster_entry", "target_companion")
+        .prefetch_related("labels__type")  # noqa: PREFETCH_STRING - per-request queryset
+        .order_by("-updated_at")
+    )
+    cards: list[TieCardEntry] = []
+    for side in sides:
+        if side.target_companion_id is not None and not privileged:
+            continue
+        audience = (
+            TieAudience.STAFF
+            if privileged and viewer_sheet is None
+            else tie_audience(side, viewer_sheet, privileged)
+        )
+        if audience == TieAudience.THIRD_PARTY and not third_party_can_see(side):
+            continue
+        numbers = audience != TieAudience.THIRD_PARTY
+        thread = (
+            Thread.objects.filter(target_relationship=side, retired_at__isnull=True)
+            .select_related("resonance")
+            .order_by("-level")
+            .first()
+        )
+        cards.append(
+            TieCardEntry(
+                relationship_id=side.pk,
+                other_name=side.target_name,
+                other_sheet_id=side.target_id,
+                other_entry_id=_entry_id_for(side.target),
+                other_companion_id=side.target_companion_id,
+                labels=[
+                    TieLabelEntry(
+                        type_name=label.type.name,
+                        awareness=label.awareness,
+                        is_former=label.ended_at is not None,
+                        is_mutual=label.ended_at is None and is_mutual(side, label.type),
+                    )
+                    for label in visible_labels(side, audience)
+                ],
+                depth=side.pair_depth() if numbers else None,
+                tier=side.tier if numbers else None,
+                summary_line=side.summary.split("\n", 1)[0][:160],
+                thread=f"Thread, level {thread.level}, {thread.resonance.name}" if thread else None,
+            )
+        )
+    return cards
+
+
+def _ties_ap_this_week(sheet: CharacterSheet) -> int:
+    """Total AP the owner has set across every side of their ties this week (#3957)."""
+    from world.relationships.models import RelationshipAllocation  # noqa: PLC0415
+
+    total = RelationshipAllocation.objects.filter(relationship__source=sheet).aggregate(
+        total=models.Sum("ap_amount")
+    )["total"]
+    return total or 0
+
+
 _WORN_SELECT_RELATED: tuple[str, ...] = ()
 # The layer walk reads the template's `is_revealing` and both silhouettes, so they are
 # selected here rather than left to fire one query per worn piece. No ``to_attr``
@@ -1918,6 +2031,7 @@ class CharacterSheetSerializer(serializers.Serializer):
         request: Request | None = self.context.get("request")
         roster_entry = sheet.roster_entry
         user = request.user if request else None
+        viewer_sheet = _resolve_viewer_sheet(request)
 
         # Per-viewer identity gating (#1109): close the de-anonymization leaks. Only the owner /
         # staff see the full secret alt list (which would link every face); a non-privileged
@@ -1999,6 +2113,10 @@ class CharacterSheetSerializer(serializers.Serializer):
             # whether this character may enter it is a tenancy question, not this one.
             "domains": _build_domains(sheet, privileged=privileged),
             "keyring": _build_keyring(sheet, privileged=privileged),
+            # Ties' cast (#3957): one card per active side, shaped per-viewer; the
+            # weekly AP total is owner/staff-only, like the allocations it sums.
+            "ties": _build_ties(sheet, viewer_sheet, privileged=privileged),
+            "ties_ap_this_week": _ties_ap_this_week(sheet) if privileged else None,
         }
 
 

@@ -494,6 +494,30 @@ class MentorBondEntry(TypedDict):
     covenant: str
 
 
+class TieLabelEntry(TypedDict):
+    """One label on a tie card (#3957). ``awareness`` is ``public`` for an unmarked label."""
+
+    type_name: str
+    awareness: str
+    is_former: bool
+    is_mutual: bool
+
+
+class TieCardEntry(TypedDict):
+    """One card on the Ties cast (#3957). Numbers are null for a third party."""
+
+    relationship_id: int
+    other_name: str
+    other_sheet_id: int | None
+    other_entry_id: int | None
+    other_companion_id: int | None
+    labels: list[TieLabelEntry]
+    depth: int | None
+    tier: int | None
+    summary_line: str
+    thread: str | None
+
+
 class WornEntry(TypedDict):
     """One piece the character has on, for the sheet's Physical section (#3898).
 
