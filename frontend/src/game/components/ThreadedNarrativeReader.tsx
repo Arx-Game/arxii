@@ -1386,7 +1386,12 @@ export function ThreadedNarrativeReader({
                       }}
                     >
                       <PoseReadTarget
-                        pose={{ id: item.id, timestamp: item.timestamp, name: item.persona.name }}
+                        pose={{
+                          id: item.id,
+                          timestamp: item.timestamp,
+                          name: item.persona.name,
+                          availability: item.availability,
+                        }}
                         observe={observe}
                         highlighted={String(item.id) === highlightedPoseId}
                         readEligible={!poseCollapsed}
@@ -1486,7 +1491,12 @@ export function ThreadedNarrativeReader({
                 return (
                   <div key={group.key} data-thread-id={group.key}>
                     <PoseReadTarget
-                      pose={{ id: item.id, timestamp: item.timestamp, name: item.persona.name }}
+                      pose={{
+                        id: item.id,
+                        timestamp: item.timestamp,
+                        name: item.persona.name,
+                        availability: item.availability,
+                      }}
                       observe={observe}
                       highlighted={String(item.id) === highlightedPoseId}
                       readEligible={!poseCollapsed}
@@ -1662,6 +1672,7 @@ export function ThreadedNarrativeReader({
                               id: item.id,
                               timestamp: item.timestamp,
                               name: item.persona.name,
+                              availability: item.availability,
                             }}
                             observe={observe}
                             highlighted={String(item.id) === highlightedPoseId}
