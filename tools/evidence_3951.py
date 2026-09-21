@@ -2,7 +2,8 @@
 """Generate and validate the exact-revision #3951 A01-A22 evidence ledger.
 
 This harness never upgrades a missing live prerequisite to PASS.  Reviewers may
-replace a row only with captured evidence from the same reviewed revision.
+replace a row only with captured evidence from the same reviewed revision. The
+rendered report is posted to the issue or pull-request review, not committed.
 """
 
 # The subprocess calls intentionally invoke trusted local tools discovered on PATH.
