@@ -350,7 +350,12 @@ def _anchor_label_for(thread: Thread) -> str:
         side = thread.target_relationship
         if side is not None:
             partner_name = side.target_name
-            label = side.open_labels().first()
+            # Read off the prefetched `labels` cache in Python rather than
+            # `side.open_labels()` (a fresh filtered query per thread — N+1
+            # across a thread list). `RelationshipLabel.Meta.ordering =
+            # ["since"]` is the manager's default order, so this matches
+            # `open_labels().first()`'s "earliest open label" pick.
+            label = next((lbl for lbl in side.labels.all() if lbl.ended_at is None), None)
             label_desc = label.type.name if label is not None else "unlabeled"
             return f"bond with {partner_name} ({label_desc})"
     if kind == TargetKind.RELATIONSHIP_CAPSTONE:

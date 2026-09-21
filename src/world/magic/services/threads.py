@@ -58,6 +58,7 @@ if TYPE_CHECKING:
         ThreadWeavingUnlock,
     )
     from world.magic.models.gifts import Gift
+    from world.relationships.models import CharacterRelationship, RelationshipCapstone
 
 logger = logging.getLogger(__name__)
 
@@ -565,6 +566,21 @@ def _validate_organization_anchor(
         raise WeavingUnlockMissing(msg)
 
 
+def relationship_side_from_row(
+    row: CharacterRelationship | RelationshipCapstone,
+) -> CharacterRelationship:
+    """Narrow a RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE anchor row to its
+    ``CharacterRelationship`` side (#3957).
+
+    ``row`` is either a ``CharacterRelationship`` (RELATIONSHIP_TRACK — the side
+    itself) or a ``RelationshipCapstone`` (RELATIONSHIP_CAPSTONE — exposes
+    ``.relationship``). Shared by ``_validate_relationship_ownership`` (this module)
+    and ``_relationship_target_present`` (``services/resonance.py``) so the two
+    ``hasattr`` narrowing spellings can't drift (review Minor 12).
+    """
+    return row if hasattr(row, "source_id") else row.relationship  # type: ignore[union-attr]
+
+
 def _validate_relationship_ownership(
     character_sheet: CharacterSheet,
     target: object,
@@ -580,7 +596,7 @@ def _validate_relationship_ownership(
     check means an unlocked-but-unauthorized caller sees WeavingUnlockMissing first,
     never learning whether the foreign row even exists.
     """
-    side = target if hasattr(target, "source_id") else target.relationship  # type: ignore[union-attr]
+    side = relationship_side_from_row(target)  # type: ignore[arg-type]
     if side.source_id != character_sheet.pk:
         raise RelationshipBondNotOwned
 
@@ -762,7 +778,10 @@ def update_thread_narrative(
 # query; ThreadHubSummaryView calls all three, so a hub render is 3 thread queries plus
 # any per-kind anchor-cap queries (compute_anchor_cap hits CharacterTraitValue,
 # current_tier traversal, etc.). Acceptable at low thread counts but worth profiling
-# if a character grows past ~20 threads.
+# if a character grows past ~20 threads. RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE anchor
+# caps (#3957) additionally call CharacterRelationship.pair_depth(), which reads the
+# OTHER side via CharacterRelationship.reverse — a fresh query per relationship-anchored
+# thread that select_related cannot reach (it isn't an FK from the thread's own row).
 
 
 def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
@@ -777,6 +796,7 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
             "target_technique",
             "target_relationship",
             "target_capstone",
+            "target_capstone__relationship",
         )
     )
     crs = {

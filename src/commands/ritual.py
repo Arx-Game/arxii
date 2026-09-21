@@ -19,7 +19,7 @@ Single-actor path (SERVICE/CEREMONY kind):
 Multi-participant session path:
     ``ritual sessions``                              — list pending sessions
     ``ritual draft <name> invite=<char>[,<char>]``  — draft a session
-        (add ``role=sinner|sineater resonance=<name> [writeup=...]`` for rituals
+        (add ``role=sinner|sineater resonance=<name>`` for rituals
         that carry setup info, e.g. the soul-tether BILATERAL)
     ``ritual join <id> [role=sinner|sineater]``      — accept your invitation
     ``ritual decline <id>``                          — decline your invitation
@@ -93,7 +93,7 @@ def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
     - ``invite=<csv>`` is parsed as the invitee list.
     - ``key=value`` tokens go into *kwargs*; if the next tokens contain no
       ``=`` they are consumed as the value's remainder — matching
-      ``writeup=``/``declaration=``-style trailing-text behaviour.
+      ``declaration=``-style trailing-text behaviour.
     - All other tokens are accumulated as the ritual name.
     """
     tokens = rest.split()
@@ -109,7 +109,7 @@ def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
         elif "=" in token and not token.startswith("="):
             key, _, val = token.partition("=")
             # Consume any following tokens that are not themselves key=value pairs
-            # (trailing-value semantics: writeup=<narrative> spans remaining tokens).
+            # (trailing-value semantics: declaration=<text> spans remaining tokens).
             j = index + 1
             trailing: list[str] = []
             while j < len(tokens) and "=" not in tokens[j]:
@@ -169,7 +169,7 @@ class CmdRitual(ArxCommand):
     **Multi-participant session lifecycle:**
         ``ritual sessions``                              - list pending sessions
         ``ritual draft <name> invite=<char>[,<char>]``   - draft a session
-            (add ``role=sinner|sineater resonance=<name> [writeup=...]`` for
+            (add ``role=sinner|sineater resonance=<name>`` for
             rituals that carry setup info, e.g. the soul-tether BILATERAL)
         ``ritual join <id> [role=sinner|sineater]``       - accept your invitation
         ``ritual decline <id>``                           - decline your invitation
@@ -257,7 +257,7 @@ class CmdRitual(ArxCommand):
 
         usage = (
             "Usage: ritual draft <ritual_name> invite=<character>[,<character>]\n"
-            "       [role=sinner|sineater resonance=<name> [writeup=<narrative>]]"
+            "       [role=sinner|sineater resonance=<name>]"
         )
         if not name:
             raise CommandError(usage)

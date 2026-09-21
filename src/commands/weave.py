@@ -198,7 +198,9 @@ class CmdWeaveThread(ArxCommand):
         from world.relationships.models import RelationshipCapstone  # noqa: PLC0415
 
         sheet = self.caller.sheet_data
-        candidates = RelationshipCapstone.objects.filter(relationship__source=sheet)
+        candidates = RelationshipCapstone.objects.filter(relationship__source=sheet).select_related(
+            "journal_entry"
+        )
         if value.isdigit():
             capstone = candidates.filter(pk=int(value)).first()
         else:

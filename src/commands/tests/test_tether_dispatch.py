@@ -22,7 +22,7 @@ class TetherDispatchTests(TestCase):
         assert "tether" in cmd.caller.msg.call_args[0][0].lower()
 
     def test_burden_search_miss_sends_error(self):
-        cmd = self._run("burden Nobody resonance=Embers writeup=test")
+        cmd = self._run("burden Nobody resonance=Embers")
         cmd.caller.msg.assert_called()
         msg = cmd.caller.msg.call_args[0][0]
         assert "Could not find" in msg or "could not find" in msg.lower()
@@ -33,21 +33,10 @@ class TetherDispatchTests(TestCase):
         target = MagicMock()
         target.sheet_data = MagicMock()
         cmd.caller.search.return_value = target
-        cmd.args = "burden Bob writeup=test"
+        cmd.args = "burden Bob"
         cmd.func()
         msg = cmd.caller.msg.call_args[0][0]
         assert "resonance" in msg.lower()
-
-    def test_burden_missing_writeup_sends_error(self):
-        cmd = CmdTether()
-        cmd.caller = MagicMock()
-        target = MagicMock()
-        target.sheet_data = MagicMock()
-        cmd.caller.search.return_value = target
-        cmd.args = "burden Bob resonance=Embers"
-        cmd.func()
-        msg = cmd.caller.msg.call_args[0][0]
-        assert "writeup" in msg.lower()
 
     def test_dissolve_no_tether_sends_error(self):
         from evennia_extensions.factories import ObjectDBFactory

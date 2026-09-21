@@ -246,7 +246,7 @@ actions, backends, and service functions.
   - `ritual sessions` — list pending sessions
   - `ritual draft <name> invite=<char>[,<char>] [<extra k=v ...>]`
     — draft a session; extra kwargs are adapter-specific (see `ritual_adapters.py`):
-    - soul-tether BILATERAL: `role=sinner|sineater resonance=<name> [writeup=...]`
+    - soul-tether BILATERAL: `role=sinner|sineater resonance=<name>`
     - covenant induction: `covenant=<name>` (the covenant to induct into)
     - banner-call rise: `covenant=<name>` (the dormant STANDING covenant to rise)
     - organization induction: `organization=<name>` (the non-Covenant organization to induct into)
@@ -271,7 +271,7 @@ actions, backends, and service functions.
   `ritual.service_function_path`. Adapters translate the flat `key=value` tokens that
   `CmdRitual._handle_draft`/`_handle_join` parse into `DraftParse`/`JoinParse` dataclasses
   the session services accept. Five concrete adapters:
-  - `SoulTetherAdapter` — `role=` / `resonance=` / `writeup=` for the soul-tether BILATERAL
+  - `SoulTetherAdapter` — `role=` / `resonance=` for the soul-tether BILATERAL
     session.
   - `CovenantInductionAdapter` — `covenant=<name>` on draft (emits a session-level COVENANT
     reference); `role=<covenant role name>` on join (emits a COVENANT_ROLE reference the

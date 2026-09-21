@@ -164,7 +164,6 @@ def _make_tethered_pair(
         partner_sheet=sineater,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Integration test bond.",
         ritual_components=[],
     )
     return sinner, sineater, resonance, capstone
@@ -306,7 +305,6 @@ class SoulTetherFullPipelineTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="A bond is forged in the witch-light.",
             ritual_components=[],
         )
 
@@ -540,7 +538,6 @@ class AntiResentmentInvariantTests(TestCase):
             partner_sheet=cls.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance,
-            writeup="A bond sealed in candlelight.",
             ritual_components=[],
         )
 
@@ -724,7 +721,6 @@ class ManyToManyIndependenceTests(TestCase):
             partner_sheet=cls.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance_a,
-            writeup="First bond — dark resonance.",
             ritual_components=[],
         )
 
@@ -734,7 +730,6 @@ class ManyToManyIndependenceTests(TestCase):
             partner_sheet=cls.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance_b,
-            writeup="Second bond — primal resonance.",
             ritual_components=[],
         )
 

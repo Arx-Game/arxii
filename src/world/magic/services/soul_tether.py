@@ -156,12 +156,11 @@ def _get_or_create_relationship(
 # =============================================================================
 
 
-def accept_soul_tether(  # noqa: PLR0913
+def accept_soul_tether(
     initiator_sheet: CharacterSheet,
     partner_sheet: CharacterSheet,
     sinner_role: SoulTetherRoleEnum,
     resonance: Resonance,
-    writeup: str,  # noqa: ARG001
     ritual_components: list[Any],  # noqa: ARG001
 ) -> RelationshipCapstone:
     """Form a Soul Tether bond (Spec B §12.4).
@@ -176,9 +175,6 @@ def accept_soul_tether(  # noqa: PLR0913
         sinner_role: Which role the INITIATOR has. If SINNER, initiator is the
             Sinner. If SINEATER, initiator is the Sineater (partner is Sinner).
         resonance: The Resonance the Sinner's Thread will channel.
-        writeup: Narrative description of the bond's formation. No longer persisted —
-            ``RelationshipCapstone`` is a receipt (#3957) and a ritual capstone carries
-            no journal entry; kept for caller/session-kwarg compatibility.
         ritual_components: Items consumed by the ritual (validated by caller).
 
     Returns:
@@ -535,7 +531,7 @@ def _compute_per_scene_sineating_cap(
     Defaults reproduce original behaviour (hard_max=20, level_mult=2, base=5).
     When no Sinner Thread exists the bond has no Hollow; cap is 0.
     The ``relationship`` parameter is accepted for future formula tuning
-    (e.g., capping on ``developed_absolute_value``).
+    (e.g. capping on the tie's pair depth).
 
     Args:
         sinner_thread: The Sinner's RELATIONSHIP_CAPSTONE Thread for the bond
@@ -1976,16 +1972,13 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
         "resonance_id" (int): PK of the Resonance the Sinner's Thread will
             channel. Required; raises RequiredReferenceMissingError if absent
             or invalid.
-        "writeup" (str): Narrative description of the bond formation. Optional;
-            defaults to empty string if not provided.
         "ritual_components" (list): Component items (validated by caller).
             Optional; defaults to [].
 
-    NOTE (Slice B scope): resonance and writeup come from session_kwargs as
-    scalar values (ID and string). The frontend draft dialog (Phase 9) will
-    populate these via the session draft. No session_reference kinds exist yet
-    for Resonance objects — if that changes, this wrapper should be updated to
-    read from references instead.
+    NOTE (Slice B scope): resonance comes from session_kwargs as a scalar ID
+    value. The frontend draft dialog (Phase 9) will populate it via the session
+    draft. No session_reference kinds exist yet for Resonance objects — if that
+    changes, this wrapper should be updated to read from references instead.
 
     Raises:
         RequiredReferenceMissingError: If participant count != 2, any
@@ -2027,7 +2020,6 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
     except Resonance.DoesNotExist as exc:
         raise RequiredReferenceMissingError from exc
 
-    writeup: str = session.session_kwargs.get("writeup", "")
     ritual_components: list[Any] = session.session_kwargs.get("ritual_components", [])
 
     # 4. Build the accept_soul_tether call using its initiator/partner + sinner_role shape.
@@ -2038,6 +2030,5 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
         partner_sheet=role_to_sheet[SoulTetherRoleEnum.SINEATER],
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup=writeup,
         ritual_components=ritual_components,
     )

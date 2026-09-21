@@ -471,6 +471,43 @@ class RelationshipBondModulationFraughtDevotionTests(TestCase):
         self.assertNotEqual(total_before, total_after)
         self.assertGreater(total_after, total_before)
 
+    def test_devotion_keys_on_depth_not_affection(self) -> None:
+        """Devotion is keyed on ``pair_depth()``, not the affection gauge (review
+        Minor 11, #3957). Move depth alone (invested_depth=100, gauges at 0/0,
+        devotion must fire past devotion_threshold=60) versus affection alone
+        (affection=100, invested_depth stays 0, devotion must NOT fire since it
+        never reads affection/conflict -- only ``depth``)."""
+        RelationshipBondPullTuning.objects.create(pk=1)
+
+        owner_depth = CharacterSheetFactory()
+        target_depth = CharacterSheetFactory()
+        thread_depth = _relationship_track_thread(
+            owner=owner_depth, threaded_sheet=target_depth, invested_depth=100
+        )
+        total_depth = relationship_bond_modulation(
+            thread_depth, target_depth.character, None, base_scaled=0
+        )
+
+        owner_affection = CharacterSheetFactory()
+        target_affection = CharacterSheetFactory()
+        thread_affection = _relationship_track_thread(
+            owner=owner_affection, threaded_sheet=target_affection, invested_depth=0
+        )
+        bond_affection = owner_affection.relationships_as_source.get(target=target_affection)
+        bond_affection.affection = 100
+        bond_affection.save()
+        total_affection = relationship_bond_modulation(
+            thread_affection, target_affection.character, None, base_scaled=0
+        )
+
+        # base@depth=100: round(20*100/130) = 15; devotion@depth=100: max(0,40) ->
+        # round(10*40/70) = 6; fraught: min(0,0)=0 -> 0.
+        self.assertEqual(total_depth, 15 + 6)
+        # base@depth=0: 0; devotion@depth=0: max(0,0-60)=0 -> 0; fraught:
+        # min(affection=100, conflict=0)=0 -> 0. Affection alone moves nothing.
+        self.assertEqual(total_affection, 0)
+        self.assertGreater(total_depth, total_affection)
+
 
 class CompanionTargetedThreadTests(TestCase):
     """A thread woven on a companion-targeted side earns no bond term (#3575)."""

@@ -194,7 +194,6 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
                 partner_sheet=sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="A bond is forged.",
                 ritual_components=[],
             )
         self.assertIn("Sineater", ctx.exception.user_message)
@@ -214,7 +213,6 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
                 partner_sheet=sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="A bond is forged.",
                 ritual_components=[],
             )
         self.assertIn("Sinner", ctx.exception.user_message)
@@ -236,7 +234,6 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="A celestial bond.",
             ritual_components=[],
         )
 
@@ -270,7 +267,6 @@ class AcceptSoulTetherUnlockTests(TestCase):
                 partner_sheet=sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="No unlock.",
                 ritual_components=[],
             )
 
@@ -289,7 +285,6 @@ class AcceptSoulTetherUnlockTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Has unlock.",
             ritual_components=[],
         )
 
@@ -318,7 +313,6 @@ class AcceptSoulTetherHappyPathTests(TestCase):
             partner_sheet=cls.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance,
-            writeup="They knelt and joined hands beneath the witch-light.",
             ritual_components=[],
         )
 
@@ -327,11 +321,6 @@ class AcceptSoulTetherHappyPathTests(TestCase):
 
     def test_capstone_ritual_is_accept_soul_tether(self) -> None:
         self.assertEqual(self.capstone.ritual.name, "accept_soul_tether")
-
-    def test_capstone_carries_no_writeup_column(self) -> None:
-        """RelationshipCapstone is a receipt (#3957) — the formation writeup is
-        accepted for caller/session-kwarg compatibility but never persisted."""
-        self.assertFalse(hasattr(self.capstone, "writeup"))
 
     def test_capstone_tier_claimed_matches_relationship_tier(self) -> None:
         rel_out = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater)
@@ -421,7 +410,6 @@ class AcceptSoulTetherIdempotencyTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="First bond.",
             ritual_components=[],
         )
         # Second formation — should raise
@@ -431,7 +419,6 @@ class AcceptSoulTetherIdempotencyTests(TestCase):
                 partner_sheet=self.sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="Duplicate bond.",
                 ritual_components=[],
             )
         self.assertIn("already exists", ctx.exception.user_message)
@@ -464,7 +451,6 @@ class AcceptSoulTetherMultiTetherTests(TestCase):
             partner_sheet=sineater1,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance1,
-            writeup="First bond.",
             ritual_components=[],
         )
 
@@ -481,7 +467,6 @@ class AcceptSoulTetherMultiTetherTests(TestCase):
             partner_sheet=sineater2,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance2,
-            writeup="Second bond.",
             ritual_components=[],
         )
 
@@ -506,7 +491,6 @@ class AcceptSoulTetherMultiTetherTests(TestCase):
             partner_sheet=sineater1,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance1,
-            writeup="First bond.",
             ritual_components=[],
         )
 
@@ -522,7 +506,6 @@ class AcceptSoulTetherMultiTetherTests(TestCase):
             partner_sheet=sineater2,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance2,
-            writeup="Second bond.",
             ritual_components=[],
         )
 
@@ -562,7 +545,6 @@ def _make_tethered_pair(
         partner_sheet=sineater,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Bond forged for Sineating tests.",
         ritual_components=[],
     )
     relationship = CharacterRelationship.objects.get(source=sinner, target=sineater)
@@ -643,7 +625,6 @@ class RequestSineatingValidationTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Seed a CharacterResonance so the resonance gate passes too.
@@ -667,7 +648,6 @@ class RequestSineatingValidationTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Use a *different* resonance that Sinner has no CharacterResonance for.
@@ -700,7 +680,6 @@ class RequestSineatingValidationTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Seed a CharacterResonance so the resonance gate passes.
@@ -974,7 +953,6 @@ class PerSceneCapTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         rel = CharacterRelationship.objects.get(source=sinner, target=sineater)
@@ -998,7 +976,6 @@ class PerSceneCapTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Seed CharacterResonance for the Sinner so the resonance gate passes.
@@ -1032,7 +1009,6 @@ class PerSceneCapTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         rel = CharacterRelationship.objects.get(source=sinner, target=sineater)
@@ -1115,7 +1091,6 @@ def _make_tethered_pair_with_corruption(
         partner_sheet=sineater,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Bond forged for rescue tests.",
         ritual_components=[],
     )
 
@@ -1327,7 +1302,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=2)
@@ -1388,7 +1362,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=3)
@@ -1421,7 +1394,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=3)
@@ -1455,7 +1427,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=3)
@@ -1495,7 +1466,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Use stage 5 with success_level=0 (failure) so budget=250, reducing from
@@ -1592,7 +1562,6 @@ class DissolveSoulTetherSingleTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="A bond is formed.",
             ritual_components=[],
         )
         self.relationship = CharacterRelationship.objects.get(
@@ -1757,7 +1726,6 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
             partner_sheet=self.sineater1,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance1,
-            writeup="First bond.",
             ritual_components=[],
         )
 
@@ -1773,7 +1741,6 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
             partner_sheet=self.sineater2,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance2,
-            writeup="Second bond.",
             ritual_components=[],
         )
 
@@ -1903,7 +1870,6 @@ class DissolveSoulTetherEmitTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="A bond is formed.",
             ritual_components=[],
         )
         self.relationship = CharacterRelationship.objects.get(

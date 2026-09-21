@@ -132,7 +132,6 @@ class SoulTetherAcceptViewTests(APITestCase):
             "partner_sheet_id": self.sineater_sheet.pk,
             "sinner_role": "SINNER",
             "resonance_id": self.resonance.pk,
-            "writeup": "A bond woven between darkness and light, twenty or more chars.",
         }
 
     def test_happy_path_creates_tether_returns_201(self) -> None:
@@ -182,14 +181,6 @@ class SoulTetherAcceptViewTests(APITestCase):
         response = self._post(payload)
         self.assertEqual(response.status_code, 400, response.content)
 
-    def test_writeup_too_short_returns_400(self) -> None:
-        """Writeup shorter than 20 chars is rejected."""
-        self.client.force_authenticate(user=self.sinner_account)
-        payload = self._valid_payload()
-        payload["writeup"] = "Short."
-        response = self._post(payload)
-        self.assertEqual(response.status_code, 400, response.content)
-
     def test_invalid_sinner_role_returns_400(self) -> None:
         """Unknown sinner_role is rejected."""
         self.client.force_authenticate(user=self.sinner_account)
@@ -208,7 +199,6 @@ class SoulTetherAcceptViewTests(APITestCase):
             partner_sheet=self.sineater_sheet,
             sinner_role=SoulTetherRole.SINNER,
             resonance=self.resonance,
-            writeup="A bond woven between darkness and light, first formation.",
             ritual_components=[],
         )
         self.client.force_authenticate(user=self.sinner_account)
@@ -244,7 +234,6 @@ class SoulTetherDetailViewTests(APITestCase):
             partner_sheet=cls.sineater_sheet,
             sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
-            writeup="A bond woven in darkness, twenty or more characters here.",
             ritual_components=[],
         )
         # Find the outgoing (Sinner→Sineater) relationship row
@@ -338,7 +327,6 @@ class SoulTetherDissolveViewTests(APITestCase):
             partner_sheet=sineater_sheet,
             sinner_role=SoulTetherRole.SINNER,
             resonance=resonance,
-            writeup="A bond woven in darkness, dissolve test version here.",
             ritual_components=[],
         )
         relationship = CharacterRelationship.objects.get(
@@ -422,7 +410,6 @@ class SineatingRequestViewTests(APITestCase):
             partner_sheet=cls.sineater_sheet,
             sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
-            writeup="A bond woven in darkness, sineating test version long enough.",
             ritual_components=[],
         )
         # Add CharacterResonance for sinner so resonance check passes
@@ -519,7 +506,6 @@ class SineatingRespondViewTests(APITestCase):
             partner_sheet=cls.sineater_sheet,
             sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
-            writeup="A bond woven in darkness, respond test version long enough.",
             ritual_components=[],
         )
         CharacterResonanceFactory(
@@ -634,7 +620,6 @@ class SoulTetherRescueViewTests(APITestCase):
             partner_sheet=cls.sineater_sheet,
             sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
-            writeup="A bond woven in darkness, rescue test version long enough.",
             ritual_components=[],
         )
         CharacterResonanceFactory(

@@ -158,7 +158,6 @@ def _form_tether(sinner: object, sineater: object, resonance: object) -> object:
         partner_sheet=sineater,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Test bond.",
         ritual_components=[],
     )
 

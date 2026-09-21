@@ -37,6 +37,7 @@ from world.magic.services.threads import (
     get_imbue_cost_multiplier,
     get_pull_cost,
     recompute_max_health_with_threads,
+    relationship_side_from_row,
     thread_level_multiplier,
 )
 from world.magic.types import (
@@ -728,7 +729,7 @@ def _relationship_target_present(
     location = character.location
     if owner_row is None or location is None:
         return False
-    side = owner_row if hasattr(owner_row, "target_id") else owner_row.relationship
+    side = relationship_side_from_row(owner_row)
     target_pk = side.target_id
     return any(obj.pk == target_pk for obj in location.contents)
 

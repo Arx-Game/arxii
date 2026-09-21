@@ -2386,13 +2386,6 @@ class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
                     "scope": "owned_by_caller",
                     "help": "The resonance that will channel the bond.",
                 },
-                {
-                    "name": "writeup",
-                    "label": "Bond Writeup",
-                    "type": "text",
-                    "required": False,
-                    "help": "Narrative description of the bond formation.",
-                },
             ],
             "participant_fields": [
                 {
@@ -2793,13 +2786,6 @@ def wire_soul_tether_content() -> object:
                         "required": True,
                         "scope": "owned_by_caller",
                         "help": "The resonance that will channel the bond.",
-                    },
-                    {
-                        "name": "writeup",
-                        "label": "Bond Writeup",
-                        "type": "text",
-                        "required": False,
-                        "help": "Narrative description of the bond formation.",
                     },
                 ],
                 "participant_fields": [

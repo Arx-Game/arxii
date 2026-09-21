@@ -55,20 +55,31 @@ class CmdThreads(ArxCommand):
         from world.magic.crossing.handlers import _anchor_label_for  # noqa: PLC0415
         from world.magic.models import Thread  # noqa: PLC0415
 
-        threads = Thread.objects.filter(
-            owner=sheet,
-            retired_at__isnull=True,
-        ).select_related(
-            "resonance",
-            "target_trait",
-            "target_facet",
-            "target_technique",
-            "target_mantle",
-            "target_relationship__target__character",
-            "target_relationship__target_companion",
-            "target_capstone__relationship__target__character",
-            "target_capstone__relationship__target_companion",
-            "target_sanctum_details__feature_instance__room_profile__objectdb",
+        threads = (
+            Thread.objects.filter(
+                owner=sheet,
+                retired_at__isnull=True,
+            )
+            .select_related(
+                "resonance",
+                "target_trait",
+                "target_facet",
+                "target_technique",
+                "target_mantle",
+                "target_relationship__target__character",
+                "target_relationship__target_companion",
+                "target_capstone__relationship__target__character",
+                "target_capstone__relationship__target_companion",
+                "target_sanctum_details__feature_instance__room_profile__objectdb",
+            )
+            # A bare-string prefetch is normally rejected (goes stale on an
+            # identity-mapped parent) in favor of a Prefetch() object naming a
+            # cached-attr target, but that target is sanctioned only when it is a
+            # PrunedCachedProperty, and this two-hop chain (Thread ->
+            # CharacterRelationship -> RelationshipLabel, a model this fix round
+            # does not own) has none yet; _anchor_label_for reads the cache once
+            # per call via side.labels.all(), never re-filters.
+            .prefetch_related("target_relationship__labels__type")  # noqa: PREFETCH_STRING
         )
         if not threads:
             self.msg("You have no active threads.")
@@ -89,16 +100,21 @@ class CmdThreads(ArxCommand):
             PendingCrossingOffer,
         )
 
-        offers = PendingCrossingOffer.objects.filter(thread__owner=sheet).select_related(
-            "thread__resonance",
-            "thread__target_trait",
-            "thread__target_facet",
-            "thread__target_mantle",
-            "thread__target_relationship__target__character",
-            "thread__target_relationship__target_companion",
-            "thread__target_capstone__relationship__target__character",
-            "thread__target_capstone__relationship__target_companion",
-            "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
+        offers = (
+            PendingCrossingOffer.objects.filter(thread__owner=sheet)
+            .select_related(
+                "thread__resonance",
+                "thread__target_trait",
+                "thread__target_facet",
+                "thread__target_mantle",
+                "thread__target_relationship__target__character",
+                "thread__target_relationship__target_companion",
+                "thread__target_capstone__relationship__target__character",
+                "thread__target_capstone__relationship__target_companion",
+                "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
+            )
+            # See the identical comment in _list_threads above.
+            .prefetch_related("thread__target_relationship__labels__type")  # noqa: PREFETCH_STRING
         )
         if not offers:
             self.msg("You have no pending crossing offers.")

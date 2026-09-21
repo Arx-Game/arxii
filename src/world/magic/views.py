@@ -1531,7 +1531,7 @@ class SoulTetherAcceptView(APIView):
 
     POST /api/magic/soul-tether/accept/
 
-    Accepts ``{actor_sheet_id, partner_sheet_id, sinner_role, resonance_id, writeup}``.
+    Accepts ``{actor_sheet_id, partner_sheet_id, sinner_role, resonance_id}``.
     Calls ``accept_soul_tether``; returns the RelationshipCapstone PK on success.
     Service-level typed exceptions carry ``user_message`` and are mapped to HTTP 400
     inside the serializer.
@@ -2116,6 +2116,11 @@ class PendingCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
                 "thread__target_sanctum_details",
                 "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
             )
+            # See commands/threads.py's _list_threads for why this stays a bare-string
+            # prefetch rather than a Prefetch() object naming a cached-attr target:
+            # the chain crosses two hops into a model (RelationshipLabel) this fix
+            # round does not own, with no PrunedCachedProperty to point at yet.
+            .prefetch_related("thread__target_relationship__labels__type")  # noqa: PREFETCH_STRING
             .order_by("-created_at")
             .distinct()
         )

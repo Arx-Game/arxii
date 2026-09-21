@@ -134,7 +134,6 @@ def _make_tethered_pair_with_tenures(track=None):
         partner_sheet=sineater_sheet,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Bond for stage advance tests, at least twenty chars.",
         ritual_components=[],
     )
 
@@ -265,7 +264,6 @@ class PendingStageAdvanceOfferUniquenessTests(TestCase):
             partner_sheet=sineater_sheet,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance,
-            writeup="Bond for uniqueness constraint test, at least twenty chars.",
             ritual_components=[],
         )
 
@@ -336,7 +334,6 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
             partner_sheet=self.sineater_sheet,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond for subscriber DB write test, at least twenty chars.",
             ritual_components=[],
         )
         CharacterResonanceFactory(character_sheet=self.sinner_sheet, resonance=self.resonance)
@@ -486,7 +483,6 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
             partner_sheet=self.sineater_sheet,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond for no-scene DB skip test, at least twenty chars.",
             ritual_components=[],
         )
         CharacterResonanceFactory(character_sheet=self.sinner_sheet, resonance=self.resonance)

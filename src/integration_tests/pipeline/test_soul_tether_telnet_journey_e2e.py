@@ -112,7 +112,7 @@ class SoulTetherTelnetJourneyTests(TestCase):
             CmdRitual,
             self.sinner_char,
             f"draft accept_soul_tether invite=JourneySineater "
-            f"role=sinner resonance={self.resonance.name} writeup=A bond sworn in shadow",
+            f"role=sinner resonance={self.resonance.name}",
         )
         cmd.caller.search = MagicMock(return_value=self.sineater_char)
         cmd.func()
@@ -121,7 +121,6 @@ class SoulTetherTelnetJourneyTests(TestCase):
         session = RitualSession.objects.get(ritual__name="accept_soul_tether")
         self.assertEqual(session.initiator, self.sinner_sheet)
         self.assertEqual(session.session_kwargs["resonance_id"], self.resonance.pk)
-        self.assertEqual(session.session_kwargs["writeup"], "A bond sworn in shadow")
         initiator_part = session.participants.get(character_sheet=self.sinner_sheet)
         self.assertEqual(
             initiator_part.participant_kwargs["soul_tether_role"], SoulTetherRole.SINNER

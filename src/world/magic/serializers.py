@@ -1901,7 +1901,6 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
 _ERR_SOUL_TETHER_NOT_FOUND = "Soul Tether relationship not found."
 _ERR_RESONANCE_NOT_FOUND = "Resonance not found."
 _ERR_SELF_TETHER = "Cannot form a Soul Tether with yourself."
-_ERR_WRITEUP_TOO_SHORT = "Writeup must be at least 20 characters."
 _ERR_MAX_UNITS_POSITIVE = "max_units must be a positive integer."
 _ERR_UNITS_ACCEPTED_NON_NEGATIVE = "units_accepted must be zero or greater."
 _ERR_SCENE_NOT_FOUND = "Scene not found."
@@ -1914,14 +1913,12 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
     ``partner_sheet_id`` identifies the partner's character sheet.
     ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
     ``resonance_id`` selects the resonance for the Sinner's Thread.
-    ``writeup`` is the narrative description of the bond (20+ chars).
     """
 
     actor_sheet_id = serializers.IntegerField()
     partner_sheet_id = serializers.IntegerField()
     sinner_role = serializers.ChoiceField(choices=["SINNER", "SINEATER"])
     resonance_id = serializers.IntegerField()
-    writeup = serializers.CharField(min_length=20, max_length=4000)
 
     def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve actor sheet with ownership check."""
@@ -1954,14 +1951,12 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
         partner_sheet: CharacterSheet = validated_data["partner_sheet_id"]
         sinner_role = SoulTetherRole(validated_data["sinner_role"])
         resonance: Resonance = validated_data["resonance_id"]
-        writeup: str = validated_data["writeup"]
         try:
             return accept_soul_tether(
                 initiator_sheet=actor_sheet,
                 partner_sheet=partner_sheet,
                 sinner_role=sinner_role,
                 resonance=resonance,
-                writeup=writeup,
                 ritual_components=[],
             )
         except SoulTetherError as exc:

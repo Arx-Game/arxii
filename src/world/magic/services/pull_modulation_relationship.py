@@ -54,8 +54,9 @@ def _relationship_pull_would_trigger(x_sheet: CharacterSheet, y_sheet: Character
 
     True when:
     - ``x_sheet == y_sheet`` (direct: the live target IS the threaded person), or
-    - ``x_sheet`` holds an active, mutually-consented, net-negative
-      ``CharacterRelationship`` toward ``y_sheet`` (indirect: X is hostile to Y).
+    - ``x_sheet`` holds an active, net-negative ``CharacterRelationship`` side toward
+      ``y_sheet`` (indirect: X is hostile to Y). Each side is independent (#3957) —
+      no reciprocity is required from Y's own side.
     """
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
@@ -93,8 +94,8 @@ def relationship_bond_modulation(
     person, when the live ``target`` IS that person or is hostile toward them.
 
     Returns ``base_scaled`` unchanged when there is no resolvable target sheet,
-    neither trigger condition holds, or the owner has no active/consented bond
-    to the threaded person.
+    neither trigger condition holds, or the owner has no active bond to the
+    threaded person.
 
     Three additive terms are layered on ``base_scaled`` when a bond is found
     (#2034, #3957):

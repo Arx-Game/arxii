@@ -34,7 +34,6 @@ from world.scenes.interaction_services import get_active_scene
 
 _RESONANCE_KWARG = "resonance"
 _SINS_KWARG = "sins"
-_WRITEUP_KWARG = "writeup"
 
 
 # ---------------------------------------------------------------------------
@@ -49,25 +48,13 @@ def _split_first(args: str) -> tuple[str, str]:
 
 
 def _parse_kwargs(args: str) -> dict[str, str]:
-    """Parse ``key=value`` tokens left to right.
-
-    ``writeup=`` greedily consumes the remainder of the line (including spaces)
-    so narrative descriptions may contain spaces.
-    """
+    """Parse ``key=value`` tokens left to right."""
     out: dict[str, str] = {}
-    tokens = args.split()
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
+    for token in args.split():
         if "=" not in token:
-            index += 1
             continue
         key, _, value = token.partition("=")
-        if key == _WRITEUP_KWARG:
-            out[_WRITEUP_KWARG] = " ".join([value, *tokens[index + 1 :]]).strip()
-            break
         out[key] = value
-        index += 1
     return out
 
 
@@ -124,8 +111,8 @@ class CmdTether(ArxCommand):
     """Soul Tether bond commands.
 
     Usage:
-        tether burden <partner> resonance=<name> writeup=<narrative>
-        tether bear <partner> resonance=<name> writeup=<narrative>
+        tether burden <partner> resonance=<name>
+        tether bear <partner> resonance=<name>
         tether dissolve [<partner>]
         tether entreat <sineater> sins=<n>
 
@@ -173,7 +160,7 @@ class CmdTether(ArxCommand):
         self._form_tether(
             args,
             verb="burden",
-            usage="  tether burden <partner> resonance=<name> writeup=<narrative>",
+            usage="  tether burden <partner> resonance=<name>",
             sinner_role=_SoulTetherRoleEnum.SINNER,
             success_fmt="The burden is bound. A Soul Tether forms between you and {partner}.",
         )
@@ -183,7 +170,7 @@ class CmdTether(ArxCommand):
         self._form_tether(
             args,
             verb="bear",
-            usage="  tether bear <partner> resonance=<name> writeup=<narrative>",
+            usage="  tether bear <partner> resonance=<name>",
             sinner_role=_SoulTetherRoleEnum.SINEATER,
             success_fmt="You bear the burden. A Soul Tether forms between you and {partner}.",
         )
@@ -213,11 +200,6 @@ class CmdTether(ArxCommand):
             msg = "Specify a resonance: resonance=<name>."
             raise CommandError(msg)
 
-        writeup = kwargs.get(_WRITEUP_KWARG, "").strip()
-        if not writeup:
-            msg = "Describe the bond: writeup=<narrative>."
-            raise CommandError(msg)
-
         resonance = Resonance.objects.filter(name__iexact=resonance_name).first()
         if resonance is None:
             msg = f"No resonance named '{resonance_name}'."
@@ -229,7 +211,6 @@ class CmdTether(ArxCommand):
                 partner_sheet=partner_sheet,
                 sinner_role=sinner_role,
                 resonance=resonance,
-                writeup=writeup,
                 ritual_components=[],
             )
         except SoulTetherError as exc:

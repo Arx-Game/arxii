@@ -286,14 +286,16 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
 
         # RELATIONSHIP_TRACK unlock
-        cls.track = RelationshipTypeFactory(name="Loyalty")
-        cls.track_unlock = ThreadWeavingUnlockFactory(
+        cls.relationship_type = RelationshipTypeFactory(name="Loyalty")
+        cls.relationship_type_unlock = ThreadWeavingUnlockFactory(
             target_kind="RELATIONSHIP_TRACK",
             unlock_trait=None,
             unlock_gift=None,
-            unlock_type=cls.track,
+            unlock_type=cls.relationship_type,
         )
-        CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.track_unlock)
+        CharacterThreadWeavingUnlockFactory(
+            character=cls.sheet, unlock=cls.relationship_type_unlock
+        )
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
@@ -337,10 +339,10 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         self.assertEqual(techniques[0]["gift_id"], self.gift.pk)
         self.assertEqual(techniques[0]["gift_name"], "TestGift")
 
-    def test_relationship_track_id_appears(self) -> None:
+    def test_relationship_type_id_appears(self) -> None:
         response = self.client.get(_URL)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(self.track.pk, response.data["weavable_relationship_type_ids"])
+        self.assertIn(self.relationship_type.pk, response.data["weavable_relationship_type_ids"])
 
     def test_empty_character_has_empty_picker_lists(self) -> None:
         """Character with no weaving unlocks gets empty picker lists."""

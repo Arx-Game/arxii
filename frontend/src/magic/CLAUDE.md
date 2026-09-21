@@ -415,7 +415,7 @@ not this generic wizard. Step 2: select anchor — for RELATIONSHIP_TRACK this i
 whom" partner-then-track picker (#2159): partner choices come from
 `@/relationships/api.getMyOutboundRelationships` filtered to relationships with at least
 one `track_progress` row (fetched per-partner via `getRelationshipDetail` — the list
-serializer omits it) among `ThreadHubSummary.weavable_relationship_track_ids`; picking a
+serializer omits it) among `ThreadHubSummary.weavable_relationship_type_ids`; picking a
 partner reveals only that partner's qualifying tracks, still within step 2
 (`renderRelationshipTrackStep2`). The payload adds `target_persona_id` (the partner's
 primary Persona pk, resolved via `/api/personas/?character_sheet=`) for this kind only —
