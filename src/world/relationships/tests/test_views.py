@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
-from world.action_points.models import ActionPointPool
+from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.factories import CompanionFactory
 from world.journals.factories import JournalEntryFactory
@@ -26,6 +26,9 @@ from world.relationships.services import (
 )
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
+from world.scenes.constants import ScenePrivacyMode
+from world.scenes.factories import InteractionFactory, SceneFactory
+from world.skills.factories import TrainingAllocationFactory
 
 
 def _owned_sheet(account):
@@ -229,6 +232,65 @@ class TieApiTests(TestCase):
         data = self._client(self.other).get(url).data
         self.assertEqual([i["title"] for i in data], ["White"])
 
+    def _shared_scene(self, privacy_mode, *, participants):
+        """A scene both sides took part in, at ``privacy_mode``, with those participants."""
+        scene = SceneFactory(
+            name=f"Scene {privacy_mode}", privacy_mode=privacy_mode, participants=participants
+        )
+        for sheet in (self.a, self.b):
+            persona = sheet.personas.first() or sheet.personas.create(name=sheet.character.db_key)
+            InteractionFactory(scene=scene, persona=persona)
+        return scene
+
+    def _stream_scene_ids(self, account, side=None):
+        url = f"/api/relationships/relationships/{(side or self.ab).pk}/stream/"
+        response = self._client(account).get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return {row["id"] for row in response.data if row["kind"] == "scene"}
+
+    def _make_lover_public(self):
+        """Open the side to a THIRD_PARTY, which is the audience the leak reached."""
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+
+    def test_stream_scenes_go_through_the_scenes_app_privacy_rule(self):
+        """A PRIVATE scene the two shared reaches only who ``viewable_by`` admits (#3957).
+
+        The scene half of the stream used to list every shared scene and stamp it
+        ``is_public=True``, so a stranger who could see one public label learned that the
+        two had been alone together — exactly the fact Clandestine exists to protect.
+        """
+        self._make_lover_public()
+        private = self._shared_scene(ScenePrivacyMode.PRIVATE, participants=[self.owner])
+
+        self.assertNotIn(private.pk, self._stream_scene_ids(self.stranger))
+        self.assertNotIn(private.pk, self._stream_scene_ids(self.other))
+        self.assertIn(private.pk, self._stream_scene_ids(self.owner))
+        self.assertIn(private.pk, self._stream_scene_ids(self.staff))
+
+    def test_stream_hides_an_ephemeral_scene_from_non_participants(self):
+        """EPHEMERAL is gated by the same rule, and never re-labelled public."""
+        self._make_lover_public()
+        ephemeral = self._shared_scene(ScenePrivacyMode.EPHEMERAL, participants=[self.owner])
+
+        self.assertNotIn(ephemeral.pk, self._stream_scene_ids(self.stranger))
+        self.assertNotIn(ephemeral.pk, self._stream_scene_ids(self.other))
+        self.assertIn(ephemeral.pk, self._stream_scene_ids(self.owner))
+
+        url = f"/api/relationships/relationships/{self.ab.pk}/stream/"
+        rows = self._client(self.owner).get(url).data
+        row = next(r for r in rows if r["kind"] == "scene" and r["id"] == ephemeral.pk)
+        self.assertFalse(row["is_public"])
+
+    def test_stream_keeps_a_public_scene_for_every_audience(self):
+        """The gate is the scenes app's own, not a blanket refusal of the scene half."""
+        self._make_lover_public()
+        public = self._shared_scene(ScenePrivacyMode.PUBLIC, participants=[])
+
+        for account in (self.stranger, self.other, self.owner, self.staff):
+            self.assertIn(public.pk, self._stream_scene_ids(account), account)
+
     def test_types_catalogue(self):
         data = self._client(self.stranger).get("/api/relationships/types/").data
         names = {row["name"] for row in data.get("results", data)}
@@ -254,14 +316,20 @@ class TieApiTests(TestCase):
 
         Gated on the side being the viewer's OWN, not on audience — so the other party
         gets null, and so does a staff account, whose own purse this is not.
+
+        ``total`` is the WEEK's budget and ``remaining`` is what is left of it after every
+        standing commitment, ties and training alike (#3957 final review): reading the
+        pool's live balance against its maximum let the line read "31 / 40" while the
+        character had already promised the week away twice over.
         """
-        pool = ActionPointPool.get_or_create_for_character(self.a.character)
-        pool.maximum, pool.current = 40, 31
-        pool.save(update_fields=["maximum", "current"])
+        ActionPointPool.get_or_create_for_character(self.a.character)
+        budget = ActionPointConfig.get_weekly_regen()
+        RelationshipAllocation.objects.create(relationship=self.ab, ap_amount=6)
+        TrainingAllocationFactory(character=self.a, ap_amount=3)
         url = f"/api/relationships/relationships/{self.ab.pk}/"
 
         owner_data = self._client(self.owner).get(url).data
-        self.assertEqual(owner_data["ap_pool"], {"remaining": 31, "total": 40})
+        self.assertEqual(owner_data["ap_pool"], {"remaining": budget - 9, "total": budget})
 
         self.assertIsNone(self._client(self.other).get(url).data["ap_pool"])
         self.assertIsNone(self._client(self.staff).get(url).data["ap_pool"])
@@ -404,12 +472,14 @@ class TieApiTests(TestCase):
 
     def test_list_query_budget_stays_flat_across_a_page(self):
         """``build_tie_page`` adds a small, page-size-independent query count (#3957 review):
-        15 queries for a 6-row page here (session + count + queryset + labels prefetch +
+        17 queries for a 6-row page here (session + count + queryset + labels prefetch +
         reverse sides + reverse labels prefetch + threads + tier ladder + the owners' AP
-        pools, plus session-save bookkeeping) — not one per row.
+        purse, plus session-save bookkeeping) — not one per row.
 
-        The AP-pool lookup is the fifteenth and is batched over the page's distinct
-        OWNERS, so it is asserted by count rather than left to the ceiling: a per-row
+        The AP purse costs three of those and each is batched over the page's distinct
+        OWNERS (#3957 final review: the pool row, then the tie-allocation and
+        training-allocation totals standing against the week's budget). The pool lookup is
+        asserted by count rather than left to the ceiling: a per-row
         ``side.source.action_points`` would pass the ceiling on a small page and fail on
         a full one.
         """
@@ -426,7 +496,7 @@ class TieApiTests(TestCase):
         pool_table = ActionPointPool._meta.db_table
         pool_queries = [q for q in ctx.captured_queries if pool_table in q["sql"]]
         self.assertEqual(len(pool_queries), 1)
-        self.assertLessEqual(len(ctx.captured_queries), 15)
+        self.assertLessEqual(len(ctx.captured_queries), 17)
 
     def test_list_matches_reverse_depth_per_target_when_two_owned_characters_share_one(self):
         """Two characters under one account, each with a side toward the SAME target: the

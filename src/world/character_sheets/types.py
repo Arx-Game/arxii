@@ -497,6 +497,11 @@ class MentorBondEntry(TypedDict):
 class TieLabelEntry(TypedDict):
     """One label on a tie card (#3957). ``awareness`` is ``public`` for an unmarked label.
 
+    ``label_id`` is the ``RelationshipLabel`` row's pk, and it is what the cast keys its
+    chips on (#3957 final review): the open-label unique is partial on ``ended_at IS
+    NULL``, so declare/end/declare/end leaves two FORMER labels of the same type whose
+    type/awareness/former triple is identical, and a key built from those collides.
+
     ``valence`` is the label TYPE's own warm/hostile/neutral, not a judgement about this
     tie: it is what colours the chip so a reader can tell a lover from an enemy across
     the whole cast at a glance, the way the approved design does. It rides the card
@@ -504,6 +509,7 @@ class TieLabelEntry(TypedDict):
     request the cast would have to make before it could paint itself.
     """
 
+    label_id: int
     type_name: str
     awareness: str
     valence: str

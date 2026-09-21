@@ -343,26 +343,25 @@ def _open_labels_by_relationship_id(
     relationships.py``, ``commands/account/sheet_sections.py``) would then
     serve whatever got cached here until a label change elsewhere refreshed
     the instance. A plain batched query has no such cache and cannot leak.
+
+    The query itself now lives in ``relationships.reads.labels_by_relationship_id``,
+    which the telnet readers named above share (#3957 final review). It returns rows in
+    ``RelationshipLabel.Meta.ordering``'s ``since`` order, so the FIRST open row per
+    relationship is ``open_labels().first()``'s "earliest open label" tie-break.
     """
-    from world.relationships.models import RelationshipLabel  # noqa: PLC0415
+    from world.relationships.reads import labels_by_relationship_id  # noqa: PLC0415
 
     relationship_ids = {
         t.target_relationship_id
         for t in threads
         if t.target_kind == TargetKind.RELATIONSHIP_TRACK and t.target_relationship_id is not None
     }
-    if not relationship_ids:
-        return {}
-    labels = RelationshipLabel.objects.filter(
-        relationship_id__in=relationship_ids, ended_at__isnull=True
-    ).select_related("type")
-    # RelationshipLabel.Meta.ordering = ["since"], so iterating in default order
-    # and keeping only the FIRST hit per relationship reproduces
-    # open_labels().first()'s "earliest open label" tie-break.
-    result: dict[int, RelationshipLabel] = {}
-    for label in labels:
-        result.setdefault(label.relationship_id, label)
-    return result
+    return {
+        relationship_id: labels[0]
+        for relationship_id, labels in labels_by_relationship_id(
+            relationship_ids, open_only=True
+        ).items()
+    }
 
 
 def _anchor_label_for(

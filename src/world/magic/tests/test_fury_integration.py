@@ -118,8 +118,11 @@ def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
         berserk_severity=3,
     )
 
-    # Mutual Mentor/Student bond at bond_tier_number (#3957 — get_relationship_tier
-    # requires two mutually-consented TEACHING labels, not a track catalog entry).
+    # Mutual Mentor/Student bond at bond_tier_number. Fury itself reads only the SOURCE
+    # side's tier (``fury._bond_tier``, any label), so this fixture builds more than the cap
+    # strictly needs: it stays mutual-TEACHING so the integration path keeps proving the cap
+    # is unchanged for the shape training's ``get_relationship_tier`` also recognises
+    # (#3957 final review — the old rationale named get_relationship_tier as fury's read).
     mentor = RelationshipTypeFactory(family=TypeFamily.TEACHING)
     student = RelationshipTypeFactory(family=TypeFamily.TEACHING, counterpart=mentor)
     mentor.counterpart = student

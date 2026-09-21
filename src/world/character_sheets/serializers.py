@@ -1799,7 +1799,10 @@ def _build_ties(sheet: CharacterSheet, viewer_sheet, *, privileged: bool) -> lis
         sheet.relationships_as_source.filter(is_active=True)
         .select_related("target", "target__character", "target__roster_entry", "target_companion")
         .prefetch_related(
-            Prefetch(  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
+            # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly as a
+            # bare string does. Contained because this queryset's own rows are the only ones
+            # read here; never read .labels.all() off a side this queryset did not load.
+            Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
                 "labels",
                 queryset=RelationshipLabel.objects.select_related(
                     "type", "type__counterpart", "replaced__type", "declared_by_tenure"
@@ -1831,6 +1834,9 @@ def _build_ties(sheet: CharacterSheet, viewer_sheet, *, privileged: bool) -> lis
                 other_companion_id=side.target_companion_id,
                 labels=[
                     TieLabelEntry(
+                        # Already on the row (``label_payload``'s "id"), so keying the
+                        # chips on the label itself costs no extra query.
+                        label_id=label["id"],
                         type_name=label["type_name"],
                         awareness=label["awareness"],
                         # Already on the row: ``label_payload`` reads it off the

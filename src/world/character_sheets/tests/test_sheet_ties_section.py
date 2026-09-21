@@ -8,7 +8,7 @@ from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import LabelAwareness, TypeValence
 from world.relationships.factories import RelationshipTypeFactory
-from world.relationships.services import declare_label, get_or_create_side
+from world.relationships.services import declare_label, end_label, get_or_create_side
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
 
@@ -83,6 +83,22 @@ class SheetTiesSectionTests(APITestCase):
         by_id = {card["relationship_id"]: card for card in cards}
         self.assertEqual([lab["valence"] for lab in by_id[self.ab.pk]["labels"]], ["warm"])
         self.assertEqual([lab["valence"] for lab in by_id[self.ac.pk]["labels"]], ["hostile"])
+
+    def test_each_chip_carries_its_own_label_row_id(self):
+        """Two FORMER labels of one type are told apart only by ``label_id`` (#3957).
+
+        The open-label unique is partial on ``ended_at IS NULL``, so
+        declare/end/declare/end leaves two Lover rows whose type, awareness and
+        former-ness are identical; the cast keys its chips on the row id for that case.
+        """
+        first = self.ab.labels.get(type=self.lover, ended_at__isnull=True)
+        end_label(label=first)
+        second = declare_label(side=self.ab, type=self.lover, awareness=LabelAwareness.CLANDESTINE)
+        end_label(label=second)
+
+        card = self._card(self._ties(self.a, self.owner), self.ab.pk)
+        label_ids = [lab["label_id"] for lab in card["labels"]]
+        self.assertCountEqual(label_ids, [first.pk, second.pk])
 
     def test_staff_sees_both_cards_with_numbers(self):
         staff = AccountFactory(is_staff=True)

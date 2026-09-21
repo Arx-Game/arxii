@@ -6,7 +6,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from world.action_points.models import ActionPointPool
+from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.factories import JournalEntryFactory, PraiseFactory
 from world.progression.exceptions import InsufficientXPError
@@ -28,6 +28,7 @@ from world.relationships.services import (
     set_allocation,
 )
 from world.scenes.factories import InteractionFactory, SceneFactory
+from world.skills.factories import TrainingAllocationFactory
 
 
 def _pool(sheet, current):
@@ -42,7 +43,10 @@ class AllocationTests(TestCase):
     def setUpTestData(cls):
         cls.a = CharacterSheetFactory()
         cls.b = CharacterSheetFactory()
+        cls.c = CharacterSheetFactory()
         cls.side = get_or_create_side(source=cls.a, target=cls.b)
+        cls.other_side = get_or_create_side(source=cls.a, target=cls.c)
+        cls.budget = ActionPointConfig.get_weekly_regen()
 
     def test_set_and_replace(self):
         _pool(self.a, 40)
@@ -55,6 +59,30 @@ class AllocationTests(TestCase):
         _pool(self.a, 3)
         with self.assertRaises(AllocationTooLargeError):
             set_allocation(side=self.side, ap_amount=9)
+
+    def test_a_second_tie_cannot_spend_the_week_twice(self):
+        """Ties share ONE weekly budget (#3957 final review).
+
+        Before this, every side was validated against the pool alone, so five ties could
+        each claim the whole week and four of them silently earned nothing.
+        """
+        _pool(self.a, 200)
+        set_allocation(side=self.side, ap_amount=self.budget - 5)
+        with self.assertRaises(AllocationTooLargeError):
+            set_allocation(side=self.other_side, ap_amount=6)
+
+    def test_training_already_committed_counts_against_a_tie_allocation(self):
+        """Training spends the same purse and runs FIRST at the weekly turn."""
+        _pool(self.a, 200)
+        TrainingAllocationFactory(character=self.a, ap_amount=self.budget - 4)
+        with self.assertRaises(AllocationTooLargeError):
+            set_allocation(side=self.side, ap_amount=5)
+
+    def test_committing_the_budget_exactly_is_allowed(self):
+        _pool(self.a, 200)
+        set_allocation(side=self.side, ap_amount=self.budget - 5)
+        allocation = set_allocation(side=self.other_side, ap_amount=5)
+        self.assertEqual(allocation.ap_amount, 5)
 
     def test_negative_amount_raises_tie_error(self):
         with self.assertRaises(TieError):

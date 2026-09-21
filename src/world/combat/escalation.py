@@ -424,7 +424,6 @@ def apply_relationship_escalation_spike(
                     is_active=True,
                     labels__ended_at__isnull=True,
                     labels__type__fuels_escalation_spikes=True,
-                    scene_depth__gte=0,
                 )
                 .annotate(_depth=F("scene_depth") + F("invested_depth"))
                 .filter(_depth__gte=curve.spike_minimum_track_points)
@@ -504,7 +503,6 @@ def apply_peril_escalation_spike(
                     is_active=True,
                     labels__ended_at__isnull=True,
                     labels__type__fuels_escalation_spikes=True,
-                    scene_depth__gte=0,
                 )
                 .annotate(_depth=F("scene_depth") + F("invested_depth"))
                 .filter(_depth__gte=curve.spike_minimum_track_points)

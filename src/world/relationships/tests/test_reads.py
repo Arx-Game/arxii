@@ -86,22 +86,27 @@ class ReadTests(TestCase):
         JournalEntryFactory(author=self.a, about=self.b, is_public=True, title="White")
         JournalEntryFactory(author=self.a, about=self.b, is_public=False, title="Black")
         JournalEntryFactory(author=self.b, about=self.a, is_public=True, title="Theirs")
-        titles = [i["title"] for i in tie_stream(self.ab, self.b, False)]
+        titles = [i["title"] for i in tie_stream(self.ab, self.b, False, account=None)]
         self.assertEqual(titles, ["Theirs", "White"])
-        titles = [i["title"] for i in tie_stream(self.ab, self.a, False)]
+        titles = [i["title"] for i in tie_stream(self.ab, self.a, False, account=None)]
         self.assertIn("Black", titles)
 
     def test_stream_staff_with_no_viewer_sees_black_entries(self):
         JournalEntryFactory(author=self.a, about=self.b, is_public=False, title="Black")
-        titles = [i["title"] for i in tie_stream(self.ab, None, True)]
+        titles = [i["title"] for i in tie_stream(self.ab, None, True, account=None)]
         self.assertIn("Black", titles)
 
     def test_stream_includes_a_scene_both_posed_in(self):
+        """A PUBLIC scene reaches even the anonymous (``account=None``) audience.
+
+        The privacy gate itself is request-level (``test_views``): ``viewable_by`` needs a
+        real account to tell a participant from a stranger.
+        """
         scene = SceneFactory(name="The Gate")
         for sheet in (self.a, self.b):
             persona = sheet.personas.first() or sheet.personas.create(name=sheet.character.db_key)
             InteractionFactory(scene=scene, persona=persona)
-        items = tie_stream(self.ab, self.b, False)
+        items = tie_stream(self.ab, self.b, False, account=None)
         scene_items = [i for i in items if i["kind"] == "scene"]
         self.assertEqual(len(scene_items), 1)
         self.assertEqual(scene_items[0]["title"], "The Gate")

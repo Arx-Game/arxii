@@ -177,7 +177,6 @@ def _render_relationships_section(command: Command) -> list[str]:
     relationships = (
         CharacterRelationship.objects.filter(source=viewer)
         .select_related("target__character", "target_companion")
-        .prefetch_related("labels__type")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
         .order_by("-updated_at")
     )
     return _format_relationships(list(relationships))
@@ -195,11 +194,21 @@ def _label_text(label: RelationshipLabel) -> str:
 
 
 def _format_relationships(relationships: list) -> list[str]:
+    """One line per side, with every side's labels read in ONE batched query.
+
+    Not ``prefetch_related("labels__type")`` on the feeding queryset (#3957 final review):
+    a prefetch writes its rows onto the idmapper-shared ``CharacterRelationship``, which
+    outlives the request and answers the next reader with this one's labels. The dict here
+    is per-request and cannot leak.
+    """
+    from world.relationships.reads import labels_by_relationship_id  # noqa: PLC0415
+
     if not relationships:
         return ["You have no relationships recorded."]
+    labels_by_id = labels_by_relationship_id(rel.pk for rel in relationships)
     lines = []
     for relationship in relationships:
-        labels = [_label_text(label) for label in relationship.labels.all()]
+        labels = [_label_text(label) for label in labels_by_id.get(relationship.pk, ())]
         label_text = ", ".join(labels) if labels else "no labels"
         lines.append(
             f"  {relationship.target_name}: {label_text} | depth {relationship.pair_depth()} "

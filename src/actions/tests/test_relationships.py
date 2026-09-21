@@ -15,6 +15,7 @@ from evennia_extensions.factories import CharacterFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import LabelAwareness
+from world.relationships.exceptions import NotYourTieError
 from world.relationships.factories import RelationshipTypeFactory
 from world.relationships.models import CharacterRelationship, RelationshipLabel
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -89,7 +90,7 @@ class TieActionTests(TestCase):
         label = RelationshipLabel.objects.get()
         result = EndLabelAction().run(actor=self.other, label=label)
         self.assertFalse(result.success)
-        self.assertEqual(result.message, "That is not your relationship.")
+        self.assertEqual(result.message, NotYourTieError.user_message)
 
     def test_allocation_and_summary(self):
         pool = ActionPointPool.get_or_create_for_character(self.actor)

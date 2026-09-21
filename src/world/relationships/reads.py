@@ -28,6 +28,8 @@ from world.relationships.types import DepthBreakdown, TieStreamItem
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
 
 
@@ -211,6 +213,34 @@ def entry_id_for(sheet: CharacterSheet | None) -> int | None:
     return entry.pk if entry is not None else None
 
 
+def labels_by_relationship_id(
+    relationship_ids: Iterable[int], *, open_only: bool = False
+) -> dict[int, list[RelationshipLabel]]:
+    """Every side's labels in ONE query, keyed by relationship id (#3957 final review).
+
+    The per-request alternative to ``prefetch_related("labels")`` for callers that only
+    need to render labels. A prefetch — bare string or ``Prefetch`` without ``to_attr``
+    alike — writes ``_prefetched_objects_cache["labels"]`` onto the
+    ``CharacterRelationship`` instance, which is idmapper-shared and outlives the request:
+    every later reader of ``side.labels.all()`` in the process is then served whatever this
+    request cached, with no query to make the staleness visible. A plain batched query has
+    no such cache and cannot leak.
+
+    Rows come back in ``RelationshipLabel.Meta.ordering``'s ``since`` order, so a caller
+    after the earliest open label takes the first hit with ``open_only=True``.
+    """
+    ids = list(relationship_ids)
+    if not ids:
+        return {}
+    labels = RelationshipLabel.objects.filter(relationship_id__in=ids).select_related("type")
+    if open_only:
+        labels = labels.filter(ended_at__isnull=True)
+    by_id: dict[int, list[RelationshipLabel]] = {}
+    for label in labels:
+        by_id.setdefault(label.relationship_id, []).append(label)
+    return by_id
+
+
 def build_tie_page(
     sides: list[CharacterRelationship],
     *,
@@ -228,9 +258,12 @@ def build_tie_page(
     prefetch (``Prefetch("labels", queryset=RelationshipLabel.objects.select_related("type",
     "type__counterpart", "replaced__type", "declared_by_tenure"))``, ordered by ``since``) and
     ``select_related("target", "target_companion")`` — ``allocation`` too, when
-    ``include_allocation`` is left at its default (an OWNER/STAFF-visible ``ap_this_week``) —
-    a missing prefetch degrades to a per-side query rather than erroring, so this is correct
-    (just not batched) either way. Pass ``include_allocation=False`` when the caller's output
+    ``include_allocation`` is left at its default (an OWNER/STAFF-visible ``ap_this_week``).
+    The labels prefetch is REQUIRED, not an optimisation (#3957 final review): a side is
+    idmapper-shared, so a caller that passes un-prefetched sides does not fall back to a
+    per-side query — ``side.labels.all()`` serves whatever an earlier request left in that
+    instance's ``_prefetched_objects_cache``, silently and with no query to notice it by.
+    Pass ``include_allocation=False`` when the caller's output
     shape has no per-side AP field (the sheet's Ties cast) to skip the lookup entirely rather
     than fetch-and-discard it.
 
@@ -257,7 +290,10 @@ def build_tie_page(
         # hold a side toward the same target, and both reverse rows then share one source_id;
         # a source-only key would collide and hand one row the other's depth/labels.
         reverse_sides = CharacterRelationship.objects.filter(pair_q).prefetch_related(
-            Prefetch(  # noqa: PREFETCH_STRING - per-request queryset, no to_attr leak
+            # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly as a
+            # bare string does. Contained because every reader re-prefetches on the queryset
+            # it reads from; never read .labels.all() off a side this queryset did not load.
+            Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
                 "labels",
                 queryset=RelationshipLabel.objects.select_related(
                     "type", "type__counterpart", "declared_by_tenure"
@@ -339,9 +375,22 @@ def build_tie_page(
 
 
 def tie_stream(
-    side: CharacterRelationship, viewer_sheet: CharacterSheet | None, is_staff: bool
+    side: CharacterRelationship,
+    viewer_sheet: CharacterSheet | None,
+    is_staff: bool,
+    *,
+    account: AccountDB | None,
 ) -> list[TieStreamItem]:
-    """Entries by either side about the other (visibility-filtered) + scenes both took part in.
+    """Entries by either side about the other + scenes both took part in, both gated.
+
+    Both halves are visibility-filtered, and each through its own app's single source of
+    truth: journals through ``visible_entries_q``, scenes through
+    ``Scene.objects.viewable_by(account)`` (#3957 final review — the scene half used to
+    list every shared scene regardless of ``ScenePrivacyMode``, so a stranger who could
+    see one public label learned that the two had been alone together). ``account`` is
+    the VIEWER's account, required rather than defaulted: ``None`` is the anonymous
+    audience and sees public scenes only. Staff visibility is ``viewable_by``'s own rule,
+    never a second one here, and ``is_public`` is each scene's own privacy mode.
 
     ``capstone_tier`` is null for a THIRD_PARTY audience — the tier number is the kind of
     numeric relationship state a stranger never sees — but ``is_capstone`` stays visible
@@ -385,7 +434,8 @@ def tie_stream(
         for e in entries
     ]
     scenes = (
-        Scene.objects.filter(interactions__persona__character_sheet_id=a)
+        Scene.objects.viewable_by(account)
+        .filter(interactions__persona__character_sheet_id=a)
         .filter(interactions__persona__character_sheet_id=b)
         .distinct()
         .order_by("-date_started")
@@ -398,7 +448,7 @@ def tie_stream(
             author_id=None,
             author_name="",
             body="",
-            is_public=True,
+            is_public=s.is_public,
             is_capstone=False,
             capstone_tier=None,
             created_at=s.date_started.isoformat(),

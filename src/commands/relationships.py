@@ -25,7 +25,7 @@ or provoke the target's behavior (ADR-0024).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
@@ -319,19 +319,27 @@ class CmdRelationship(ArxCommand):
     def _show_list(self) -> None:
         """Render one line per side of a tie the caller has touched (source side)."""
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+        from world.relationships.reads import labels_by_relationship_id  # noqa: PLC0415
 
         sheet = self._actor_sheet(self.caller)
         qs = (
             CharacterRelationship.objects.filter(source=sheet)
             .select_related("target", "target__character", "target_companion")
-            .prefetch_related("labels__type")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
             .order_by("-updated_at")
         )
         relationships = list(qs)
         if not relationships:
             self.msg("You have recorded no relationships.")
             return
-        self.msg("\n".join(self._render_list_row(rel) for rel in relationships))
+        # One batched query rather than prefetch_related("labels__type") (#3957 final
+        # review): a prefetch caches its rows on the idmapper-shared side, where the next
+        # request reads them back; a dict built per request cannot leak that way.
+        labels_by_id = labels_by_relationship_id(rel.pk for rel in relationships)
+        self.msg(
+            "\n".join(
+                self._render_list_row(rel, labels_by_id.get(rel.pk, ())) for rel in relationships
+            )
+        )
 
     def _show_detail(self, rest: str) -> None:
         """Render a single side by target name or relationship id."""
@@ -421,10 +429,8 @@ class CmdRelationship(ArxCommand):
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
         ref = ref.strip().removeprefix("#")
-        qs = (
-            CharacterRelationship.objects.filter(source=sheet)
-            .select_related("target", "target__character", "target_companion")
-            .prefetch_related("labels__type")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
+        qs = CharacterRelationship.objects.filter(source=sheet).select_related(
+            "target", "target__character", "target_companion"
         )
         if ref.isdigit():
             relationship = qs.filter(pk=int(ref)).first()
@@ -460,25 +466,35 @@ class CmdRelationship(ArxCommand):
             return label.type.name
         return f"{label.type.name} ({label.awareness})"
 
-    def _render_labels(self, side: CharacterRelationship) -> str:
-        texts = [self._label_text(label) for label in side.labels.all()]
+    def _render_labels(self, labels: Iterable[RelationshipLabel]) -> str:
+        """The label texts for one side, from rows the caller already fetched.
+
+        Labels are passed in rather than read off ``side.labels.all()`` (#3957 final
+        review) so the read is one batched query per command, and so no prefetch cache is
+        written onto the idmapper-shared side for a later request to pick up.
+        """
+        texts = [self._label_text(label) for label in labels]
         return ", ".join(texts) if texts else "no labels"
 
-    def _render_list_row(self, side: CharacterRelationship) -> str:
+    def _render_list_row(
+        self, side: CharacterRelationship, labels: Iterable[RelationshipLabel]
+    ) -> str:
         """One summary line for a side of a tie: labels, depth, tier."""
-        labels = self._render_labels(side)
-        return f"{side.target_name}: {labels} | depth {side.pair_depth()} | tier {side.tier}"
+        rendered = self._render_labels(labels)
+        return f"{side.target_name}: {rendered} | depth {side.pair_depth()} | tier {side.tier}"
 
     def _render_detail(self, side: CharacterRelationship) -> str:
         """A two-line detail view: the list row, then gauges + AP + summary."""
         from world.relationships.models import RelationshipAllocation  # noqa: PLC0415
+        from world.relationships.reads import labels_by_relationship_id  # noqa: PLC0415
 
         try:
             ap_this_week = side.allocation.ap_amount
         except RelationshipAllocation.DoesNotExist:
             ap_this_week = 0
+        labels = labels_by_relationship_id([side.pk]).get(side.pk, ())
         lines = [
-            self._render_list_row(side),
+            self._render_list_row(side, labels),
             f"scenes {side.scene_depth} | invested {side.invested_depth} | "
             f"affection {side.affection} | conflict {side.conflict} | "
             f"ap this week {ap_this_week}",

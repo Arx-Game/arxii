@@ -148,6 +148,15 @@ class _LabelRowAction(BaseRelationshipAction):
     """Shared: resolve ``label`` and refuse one the actor does not own."""
 
     def _own_label(self, actor: ObjectDB, kwargs: dict[str, Any]) -> tuple[Any, Any, str]:
+        """Resolve the label, raising ``NotYourTieError`` when it is someone else's.
+
+        Raised rather than returned as a sentence (#3957 final review) so telnet, the web
+        viewset and the action all refuse in the exact same words — the exception owns the
+        spelling. Each caller already wraps its service call in ``except TieError``, so the
+        action's failure shape is unchanged.
+        """
+        from world.relationships.exceptions import NotYourTieError  # noqa: PLC0415
+
         sheet = self._sheet(actor)
         label = kwargs.get("label")
         if sheet is None:
@@ -155,7 +164,7 @@ class _LabelRowAction(BaseRelationshipAction):
         if label is None:
             return None, None, "No label selected."
         if label.relationship.source_id != sheet.pk:
-            return None, None, "That is not your relationship."
+            raise NotYourTieError
         return sheet, label, ""
 
 
@@ -177,13 +186,13 @@ class ShiftLabelAction(_LabelRowAction):
         from world.relationships.exceptions import TieError  # noqa: PLC0415
         from world.relationships.services import shift_label  # noqa: PLC0415
 
-        _sheet, label, err = self._own_label(actor, kwargs)
-        new_type = kwargs.get("new_type")
-        if not err and new_type is None:
-            err = "No type selected."
-        if err:
-            return ActionResult(success=False, message=err)
         try:
+            _sheet, label, err = self._own_label(actor, kwargs)
+            new_type = kwargs.get("new_type")
+            if not err and new_type is None:
+                err = "No type selected."
+            if err:
+                return ActionResult(success=False, message=err)
             new = shift_label(label=label, new_type=new_type, note=kwargs.get("note", ""))
         except TieError as exc:
             return _tie_error(exc)
@@ -212,10 +221,10 @@ class EndLabelAction(_LabelRowAction):
         from world.relationships.exceptions import TieError  # noqa: PLC0415
         from world.relationships.services import end_label  # noqa: PLC0415
 
-        _sheet, label, err = self._own_label(actor, kwargs)
-        if err:
-            return ActionResult(success=False, message=err)
         try:
+            _sheet, label, err = self._own_label(actor, kwargs)
+            if err:
+                return ActionResult(success=False, message=err)
             end_label(label=label)
         except TieError as exc:
             return _tie_error(exc)
@@ -244,10 +253,10 @@ class AdvanceLabelAwarenessAction(_LabelRowAction):
         from world.relationships.exceptions import TieError  # noqa: PLC0415
         from world.relationships.services import advance_awareness  # noqa: PLC0415
 
-        _sheet, label, err = self._own_label(actor, kwargs)
-        if err:
-            return ActionResult(success=False, message=err)
         try:
+            _sheet, label, err = self._own_label(actor, kwargs)
+            if err:
+                return ActionResult(success=False, message=err)
             advance_awareness(label=label, to=kwargs.get("awareness", ""))
         except TieError as exc:
             return _tie_error(exc)

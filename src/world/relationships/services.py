@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import BooleanField, Exists, ExpressionWrapper, F, OuterRef, Q
+from django.db.models import BooleanField, Exists, ExpressionWrapper, F, OuterRef, Q, Sum
 from django.utils import timezone
 
 from world.progression.services.xp_ledger import spend_xp_for_character
@@ -286,8 +286,36 @@ def mutual_hostile_expression(viewer_sheet_id: int, other_ref: str = "author_id"
 # -- depth ---------------------------------------------------------------------
 
 
+def standing_weekly_ap(sheet_id: int, *, exclude_side_id: int | None = None) -> int:
+    """AP this character has already promised for the week: ties + training (#3957).
+
+    Ties and training are ONE weekly commitment, not two budgets: both are standing
+    orders paid out of the same ``ActionPointPool`` at the weekly turn, and the
+    orchestrator runs training first (``game_clock/tasks.py``), so an unbudgeted tie
+    allocation is simply a tie that silently earns nothing every week. ``exclude_side_id``
+    drops the row being replaced, so re-setting one side's AP is not counted twice.
+    """
+    from world.skills.services import total_allocated_training_ap
+
+    ties = RelationshipAllocation.objects.filter(relationship__source_id=sheet_id)
+    if exclude_side_id is not None:
+        ties = ties.exclude(relationship_id=exclude_side_id)
+    tie_total = ties.aggregate(total=Sum("ap_amount"))["total"] or 0
+    return tie_total + total_allocated_training_ap(sheet_id)
+
+
 def set_allocation(*, side: CharacterRelationship, ap_amount: int) -> RelationshipAllocation:
-    from world.action_points.models import ActionPointPool
+    """Set this week's standing AP on one side, against the whole weekly budget (#3957).
+
+    Refuses when this amount plus everything else the character has standing — their
+    other tie allocations AND their training allocations — would exceed the week's AP
+    budget (``ActionPointConfig.get_weekly_regen()``), which is exactly the rule
+    ``skills.services.create_training_allocation`` enforces on the other side of the same
+    purse (#3957 final review: five ties could each claim the whole pool before this).
+    The pool's live balance is checked too: an allocation it cannot pay today is refused
+    at set-time rather than dropped unannounced at the weekly turn.
+    """
+    from world.action_points.models import ActionPointConfig, ActionPointPool
     from world.game_clock.week_services import get_current_game_week
 
     if ap_amount < 0:
@@ -295,6 +323,9 @@ def set_allocation(*, side: CharacterRelationship, ap_amount: int) -> Relationsh
         raise TieError(msg)
     pool = ActionPointPool.get_or_create_for_character(side.source.character)
     if pool is None or (ap_amount and not pool.can_afford(ap_amount)):
+        raise AllocationTooLargeError
+    committed = standing_weekly_ap(side.source_id, exclude_side_id=side.pk)
+    if committed + ap_amount > ActionPointConfig.get_weekly_regen():
         raise AllocationTooLargeError
     allocation, _ = RelationshipAllocation.objects.update_or_create(
         relationship=side,
@@ -373,6 +404,15 @@ def process_weekly_relationship_allocations() -> int:
         # to exist before an allocation with ap_amount > 0 could be set).
         pool = ActionPointPool.objects.filter(character_id=side.source_id).first()
         if pool is None or not pool.spend(allocation.ap_amount):
+            # Never a bare skip (#3957 final review): a player set this AP as a standing
+            # order and it produced no depth this week, so the reason has to be findable.
+            logger.warning(
+                "Tie allocation skipped: side=%s owner=%s ap=%s pool_current=%s",
+                side.pk,
+                side.source_id,
+                allocation.ap_amount,
+                pool.current if pool is not None else None,
+            )
             continue
         _award_depth(
             side, allocation.ap_amount * cfg.depth_per_ap, DepthSource.ALLOCATION, week=week
@@ -741,6 +781,16 @@ def _tier_bonus(tier_number: int) -> int:
     return tier.combat_bonus if tier is not None else 0
 
 
+def _combat_bonus_by_tier() -> dict[int, int]:
+    """The whole ladder in one query (#3957 final review).
+
+    ``_tier_bonus`` re-reads the four-row ladder per call, which a per-participant loop
+    pays once per co-combatant. Callers looping over participants hoist this above the
+    loop instead; single-bond callers keep ``_tier_bonus``.
+    """
+    return {tier.tier_number: tier.combat_bonus for tier in RelationshipTier.objects.all()}
+
+
 def bond_combat_bonus(
     sheet: CharacterSheet, encounter: CombatEncounter
 ) -> list[ModifierContribution]:
@@ -750,6 +800,7 @@ def bond_combat_bonus(
     from world.combat.constants import ParticipantStatus
 
     config = get_bond_combat_config()
+    bonus_by_tier = _combat_bonus_by_tier()
     contributions: list[ModifierContribution] = []
     participants = (
         encounter.participants.filter(status=ParticipantStatus.ACTIVE)
@@ -763,7 +814,7 @@ def bond_combat_bonus(
         ).first()
         if bond is None or bond.tier < config.min_tier:
             continue
-        bonus = _tier_bonus(bond.tier)
+        bonus = bonus_by_tier.get(bond.tier, 0)
         if bonus == 0:
             continue
         if soul_tether_active(sheet, ally_sheet):

@@ -54,30 +54,51 @@ NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
 def _ap_pools_for(sheet_ids: set[int]) -> dict[int, dict[str, int]]:
     """Each owner's weekly AP purse, keyed by CharacterSheet pk (#3957).
 
+    ``total`` is the week's AP budget and ``remaining`` is what is left of it after EVERY
+    standing weekly commitment the character has made — tie allocations and training
+    allocations alike, because both are spent from the one ``ActionPointPool`` at the
+    weekly turn (#3957 final review: the line used to read the pool's live balance against
+    its maximum, which let "31 / 40" sit above allocations already promising 80).
+
     Keyed and batched rather than read off ``side.source`` per row: ``list`` pages over
     every side of every character the ACCOUNT plays, so the loop is over distinct owners
-    (one, in practice) and never over ties. ``get_effective_maximum`` consults the
-    character's modifiers, which is why this is not a single values() query.
+    (one, in practice) and never over ties. The pool row is still what makes a purse
+    exist — a character with no pool has no AP economy to show — but its columns no
+    longer answer the budget question.
     """
-    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from django.db.models import Sum  # noqa: PLC0415
 
-    pools = ActionPointPool.objects.filter(character_id__in=sheet_ids)
+    from world.action_points.models import ActionPointConfig, ActionPointPool  # noqa: PLC0415
+    from world.relationships.models import RelationshipAllocation  # noqa: PLC0415
+    from world.skills.models import TrainingAllocation  # noqa: PLC0415
+
+    owner_ids = set(
+        ActionPointPool.objects.filter(character_id__in=sheet_ids).values_list(
+            "character_id", flat=True
+        )
+    )
+    if not owner_ids:
+        return {}
+    budget = ActionPointConfig.get_weekly_regen()
+    committed: dict[int, int] = dict.fromkeys(owner_ids, 0)
+    tie_rows = (
+        RelationshipAllocation.objects.filter(relationship__source_id__in=owner_ids)
+        .values("relationship__source_id")
+        .annotate(total=Sum("ap_amount"))
+    )
+    for row in tie_rows:
+        committed[row["relationship__source_id"]] += row["total"] or 0
+    training_rows = (
+        TrainingAllocation.objects.filter(character_id__in=owner_ids)
+        .values("character_id")
+        .annotate(total=Sum("ap_amount"))
+    )
+    for row in training_rows:
+        committed[row["character_id"]] += row["total"] or 0
     return {
-        pool.character_id: {"remaining": pool.current, "total": pool.get_effective_maximum()}
-        for pool in pools
+        owner_id: {"remaining": max(budget - spoken_for, 0), "total": budget}
+        for owner_id, spoken_for in committed.items()
     }
-
-
-# Sides prefetched for a batched read (#3957 review): labels ordered + select_related for
-# label_payload's replaced_type_name gate and build_tie_page's mutuality check
-# (declared_by_tenure.end_date), plus the relations build_tie_page/_row_to_payload read
-# directly off each side.
-_LABELS_PREFETCH = Prefetch(
-    "labels",
-    queryset=RelationshipLabel.objects.select_related(
-        "type", "type__counterpart", "replaced__type", "declared_by_tenure"
-    ).order_by("since"),
-)
 
 
 class RelationshipConditionViewSet(ReadOnlyModelViewSet):
@@ -189,7 +210,18 @@ class CharacterRelationshipViewSet(GenericViewSet):
                 "target_companion",
                 "allocation",
             )
-            .prefetch_related(_LABELS_PREFETCH)
+            .prefetch_related(
+                # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly
+                # as a bare string does. Contained because every reader re-prefetches on
+                # the queryset it reads from; never read .labels.all() off a side this
+                # queryset did not load.
+                Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
+                    "labels",
+                    queryset=RelationshipLabel.objects.select_related(
+                        "type", "type__counterpart", "replaced__type", "declared_by_tenure"
+                    ).order_by("since"),
+                )
+            )
         )
 
     @extend_schema(responses=TieSerializer)
@@ -232,7 +264,18 @@ class CharacterRelationshipViewSet(GenericViewSet):
                 "target_companion",
                 "allocation",
             )
-            .prefetch_related(_LABELS_PREFETCH)
+            .prefetch_related(
+                # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly
+                # as a bare string does. Contained because every reader re-prefetches on
+                # the queryset it reads from; never read .labels.all() off a side this
+                # queryset did not load.
+                Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
+                    "labels",
+                    queryset=RelationshipLabel.objects.select_related(
+                        "type", "type__counterpart", "replaced__type", "declared_by_tenure"
+                    ).order_by("since"),
+                )
+            )
             .filter(pk=pk)
             .first()
         )
@@ -277,7 +320,7 @@ class CharacterRelationshipViewSet(GenericViewSet):
             TieAudience.STAFF,
         ):
             return Response(status=status.HTTP_404_NOT_FOUND)
-        items = tie_stream(side, viewer_sheet, is_staff)
+        items = tie_stream(side, viewer_sheet, is_staff, account=request.user)
         return Response(TieStreamItemSerializer(items, many=True).data)
 
     # -- shared read-side plumbing ------------------------------------------------

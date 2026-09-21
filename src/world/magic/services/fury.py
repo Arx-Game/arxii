@@ -35,7 +35,7 @@ def _config() -> FuryConfig:
     return FuryConfig.objects.filter(pk=1).first() or FuryConfig()
 
 
-def _bond_tier(character: ObjectDB, anchor: CharacterSheet) -> int:
+def _bond_tier(character: CharacterSheet | ObjectDB, anchor: CharacterSheet) -> int:
     """The claimed tier of ``character``'s OWN side toward ``anchor``, else 0 (#3957).
 
     Deliberately NOT ``relationships.helpers.get_relationship_tier``: that helper is
@@ -51,7 +51,9 @@ def _bond_tier(character: ObjectDB, anchor: CharacterSheet) -> int:
     return side.tier if side is not None else 0
 
 
-def provocation_cap(character: ObjectDB | None, anchor: CharacterSheet | None) -> int:
+def provocation_cap(
+    character: CharacterSheet | ObjectDB | None, anchor: CharacterSheet | None
+) -> int:
     """Bond-derived ceiling on fury depth.
 
     Returns 0 when fury is unavailable (missing character or anchor, or the
@@ -66,7 +68,9 @@ def provocation_cap(character: ObjectDB | None, anchor: CharacterSheet | None) -
     return bond // per if per else bond
 
 
-def provocation_ease(character: ObjectDB | None, anchor: CharacterSheet | None) -> int:
+def provocation_ease(
+    character: CharacterSheet | ObjectDB | None, anchor: CharacterSheet | None
+) -> int:
     """Check-difficulty reduction from the bond (cap * cap_ease_per_point)."""
     return provocation_cap(character, anchor) * _config().cap_ease_per_point
 
