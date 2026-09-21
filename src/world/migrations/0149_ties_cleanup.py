@@ -10,6 +10,12 @@ rows are alpha play state, deliberately discarded rather than migrated forward.
 
 Deletes dependents first where a PROTECT FK would otherwise block a Thread
 delete, and nulls SecretGrievance.capstone before 0150 drops that column.
+
+0150 also drops HybridRelationshipType and HybridRequirement outright (DeleteModel,
+no RunPython here) - a deliberate discard, not a restructure (ADR-0237): no seed
+ever wrote either table and no staff-authoring path exists for them (``grep -rn
+HybridRelationshipType src/world/seeds`` finds nothing), so both are empty in
+production by construction.
 """
 
 from django.db import migrations
@@ -22,6 +28,7 @@ def cleanup_relationships_play_state(apps, schema_editor):
     RelationshipTier = apps.get_model("arxii", "RelationshipTier")
     RelationshipCapstone = apps.get_model("arxii", "RelationshipCapstone")
     Thread = apps.get_model("arxii", "Thread")
+    ThreadLevelUnlock = apps.get_model("arxii", "ThreadLevelUnlock")
     CombatPullResolvedEffect = apps.get_model("arxii", "CombatPullResolvedEffect")
     TreatmentAttempt = apps.get_model("arxii", "TreatmentAttempt")
     SceneActionRequest = apps.get_model("arxii", "SceneActionRequest")
@@ -35,6 +42,7 @@ def cleanup_relationships_play_state(apps, schema_editor):
         # (JournalEntry.related_threads, ActionPullDeclaration.threads,
         # CombatPull.threads) need no explicit handling - Django's own delete
         # collector clears those automatically.
+        ThreadLevelUnlock.objects.filter(thread_id__in=stale_thread_ids).delete()
         CombatPullResolvedEffect.objects.filter(source_thread_id__in=stale_thread_ids).delete()
         TreatmentAttempt.objects.filter(thread_used_id__in=stale_thread_ids).update(
             thread_used=None
