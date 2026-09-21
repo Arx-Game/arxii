@@ -31,7 +31,7 @@ from world.magic.factories import (
 from world.magic.models import Thread
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
+    RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
 
@@ -68,15 +68,15 @@ def _set_aura(sheet: object, *, celestial: str, primal: str, abyssal: str) -> No
 def _grant_track_unlock(sheet: object, track: object) -> object:
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     return CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
 
 
 def _make_active_relationship(source: object, target: object) -> object:
-    CharacterRelationshipFactory(source=source, target=target, is_pending=False)
-    return CharacterRelationshipFactory(source=target, target=source, is_pending=False)
+    CharacterRelationshipFactory(source=source, target=target)
+    return CharacterRelationshipFactory(source=target, target=source)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
@@ -86,7 +86,7 @@ class SoulTetherTelnetJourneyTests(TestCase):
     def setUp(self) -> None:
         # setUp (not setUpTestData) avoids the DbHolder deepcopy flake in CI shards.
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         self.abyssal_affinity = AffinityFactory(name=_ABYSSAL)
         self.resonance = ResonanceFactory(affinity=self.abyssal_affinity)
 

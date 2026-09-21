@@ -51,7 +51,7 @@ from world.magic.factories import (
 )
 from world.magic.models import Thread
 from world.magic.models.soul_tether import PendingStageAdvanceOffer, SineatingPendingOffer
-from world.relationships.factories import CharacterRelationshipFactory, RelationshipTrackFactory
+from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.relationships.models import CharacterRelationship
 from world.scenes.factories import SceneFactory
 
@@ -102,7 +102,7 @@ def _set_primal_primary(sheet: object) -> None:
 def _grant_track_unlock(sheet: object, track: object) -> object:
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     return CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -160,19 +160,17 @@ class SoulTetherJourneyTests(TestCase):
         # Sinner needs a CharacterResonance row for request_sineating validation.
         CharacterResonanceFactory(character_sheet=self.sinner_sheet, resonance=self.resonance)
 
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
         _grant_track_unlock(self.sinner_sheet, track)
 
         # Both directional relationship rows must pre-exist before formation.
         CharacterRelationshipFactory(
             source=self.sinner_sheet,
             target=self.sineater_sheet,
-            is_pending=False,
         )
         CharacterRelationshipFactory(
             source=self.sineater_sheet,
             target=self.sinner_sheet,
-            is_pending=False,
         )
 
         self.scene = SceneFactory(is_active=True, location=self.room)

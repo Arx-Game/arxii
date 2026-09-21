@@ -34,7 +34,6 @@ from world.magic.types.corruption import CorruptionSource
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipCapstoneFactory,
-    RelationshipTrackFactory,
 )
 
 
@@ -57,29 +56,22 @@ def _make_sineater_thread_for(
         (CharacterResonance, Thread) — the resonance row and the created Thread.
     """
     sinner_sheet = CharacterSheetFactory()
-    track = RelationshipTrackFactory()
 
     # Create both directional relationship rows (Sineater→Sinner, Sinner→Sineater).
     rel_sineater_to_sinner = CharacterRelationshipFactory(
         source=sineater_sheet,
         target=sinner_sheet,
-        is_pending=False,
         is_soul_tether=True,
         soul_tether_role=SoulTetherRole.SINEATER,
     )
     CharacterRelationshipFactory(
         source=sinner_sheet,
         target=sineater_sheet,
-        is_pending=False,
         is_soul_tether=True,
         soul_tether_role=SoulTetherRole.SINNER,
     )
 
-    capstone = RelationshipCapstoneFactory(
-        relationship=rel_sineater_to_sinner,
-        author=sineater_sheet,
-        track=track,
-    )
+    capstone = RelationshipCapstoneFactory(relationship=rel_sineater_to_sinner)
 
     # Create directly to avoid the factory defaulting to TRAIT kind + target_trait.
     thread = Thread.objects.create(
@@ -382,21 +374,15 @@ class ResolveCorruptionResistancePullEffectTests(TestCase):
         from world.magic.constants import EffectKind
         from world.magic.models import ThreadPullEffect
 
-        track = RelationshipTrackFactory()
         sinner_sheet = CharacterSheetFactory()
 
         rel_sineater_to_sinner = CharacterRelationshipFactory(
             source=self.sineater,
             target=sinner_sheet,
-            is_pending=False,
             is_soul_tether=True,
             soul_tether_role=SoulTetherRole.SINEATER,
         )
-        capstone = RelationshipCapstoneFactory(
-            relationship=rel_sineater_to_sinner,
-            author=self.sineater,
-            track=track,
-        )
+        capstone = RelationshipCapstoneFactory(relationship=rel_sineater_to_sinner)
 
         # Create directly to avoid the factory defaulting to TRAIT kind + target_trait.
         thread = Thread.objects.create(

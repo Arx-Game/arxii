@@ -70,7 +70,7 @@ def _grant_relationship_track_unlock(sheet: object, track: object) -> None:
 
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -85,7 +85,7 @@ def _make_eligible_pair_with_accounts(track=None):
     Soul Tether authored content is seeded.
     """
     from world.magic.factories import ResonanceFactory, wire_soul_tether_content
-    from world.relationships.factories import RelationshipTrackFactory
+    from world.relationships.factories import RelationshipTypeFactory
     from world.roster.factories import RosterTenureFactory
 
     wire_soul_tether_content()
@@ -96,7 +96,7 @@ def _make_eligible_pair_with_accounts(track=None):
     _set_primary_affinity_abyssal(sinner_sheet)
     _set_primary_affinity_primal(sineater_sheet)
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     _grant_relationship_track_unlock(sinner_sheet, track)
     resonance = ResonanceFactory()
     return sinner_tenure, sineater_tenure, resonance
@@ -113,9 +113,9 @@ class SoulTetherAcceptViewTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.relationships.factories import RelationshipTrackFactory
+        from world.relationships.factories import RelationshipTypeFactory
 
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
             cls.track
         )
@@ -229,9 +229,9 @@ class SoulTetherDetailViewTests(APITestCase):
     def setUpTestData(cls) -> None:
         from world.magic.services.soul_tether import accept_soul_tether
         from world.magic.types.soul_tether import SoulTetherRole
-        from world.relationships.factories import RelationshipTrackFactory
+        from world.relationships.factories import RelationshipTypeFactory
 
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
             cls.track
         )
@@ -319,10 +319,10 @@ class SoulTetherDissolveViewTests(APITestCase):
     def setUpTestData(cls) -> None:
         # Seed authored content once for the class.
         from world.magic.factories import wire_soul_tether_content
-        from world.relationships.factories import RelationshipTrackFactory
+        from world.relationships.factories import RelationshipTypeFactory
 
         wire_soul_tether_content()
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
 
     def _form_tether(self):
         """Form a fresh Soul Tether per-test and return (account, sinner_sheet, relationship)."""
@@ -405,10 +405,10 @@ class SineatingRequestViewTests(APITestCase):
     def setUpTestData(cls) -> None:
         from world.magic.services.soul_tether import accept_soul_tether
         from world.magic.types.soul_tether import SoulTetherRole
-        from world.relationships.factories import RelationshipTrackFactory
+        from world.relationships.factories import RelationshipTypeFactory
         from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
             cls.track
         )
@@ -502,10 +502,10 @@ class SineatingRespondViewTests(APITestCase):
         from world.magic.factories import CharacterResonanceFactory
         from world.magic.services.soul_tether import accept_soul_tether
         from world.magic.types.soul_tether import SoulTetherRole
-        from world.relationships.factories import RelationshipTrackFactory
+        from world.relationships.factories import RelationshipTypeFactory
         from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
             cls.track
         )
@@ -617,10 +617,10 @@ class SoulTetherRescueViewTests(APITestCase):
         from world.magic.factories import CharacterResonanceFactory
         from world.magic.services.soul_tether import accept_soul_tether
         from world.magic.types.soul_tether import SoulTetherRole
-        from world.relationships.factories import RelationshipTrackFactory
+        from world.relationships.factories import RelationshipTypeFactory
         from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
             cls.track
         )

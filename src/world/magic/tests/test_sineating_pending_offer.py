@@ -39,7 +39,7 @@ from world.magic.services.soul_tether import (
 from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
+    RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
 from world.roster.factories import RosterTenureFactory
@@ -94,7 +94,7 @@ def _grant_relationship_track_unlock(sheet: object, track: object) -> None:
     """Give the character a RELATIONSHIP_TRACK CharacterThreadWeavingUnlock."""
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -108,7 +108,7 @@ def _make_tethered_pair_with_tenures(track=None):
     """
     wire_soul_tether_content()
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     abyssal_affinity = AffinityFactory(name="Abyssal")
     resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -121,8 +121,8 @@ def _make_tethered_pair_with_tenures(track=None):
     _set_primary_affinity_primal(sineater_sheet)
     _grant_relationship_track_unlock(sinner_sheet, track)
 
-    CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet, is_pending=False)
-    CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet, is_pending=False)
+    CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet)
+    CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet)
 
     accept_soul_tether(
         initiator_sheet=sinner_sheet,
@@ -173,7 +173,7 @@ class SineatingPendingOfferUniquenessTests(TestCase):
         from django.db import IntegrityError
 
         wire_soul_tether_content()
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
         resonance = ResonanceFactory()
         sinner_tenure = RosterTenureFactory()
         sineater_tenure = RosterTenureFactory()
@@ -184,8 +184,8 @@ class SineatingPendingOfferUniquenessTests(TestCase):
         _set_primary_affinity_primal(sineater_sheet)
         _grant_relationship_track_unlock(sinner_sheet, track)
 
-        CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet, is_pending=False)
-        CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet, is_pending=False)
+        CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet)
+        CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet)
 
         accept_soul_tether(
             initiator_sheet=sinner_sheet,

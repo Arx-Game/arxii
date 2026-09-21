@@ -56,7 +56,7 @@ from world.magic.types.soul_tether import (
 )
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
+    RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
 
@@ -114,7 +114,7 @@ def _set_primal_primary(sheet: object) -> None:
 def _grant_track_unlock(sheet: object, track: object) -> object:
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     return CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -122,8 +122,8 @@ def _grant_track_unlock(sheet: object, track: object) -> object:
 
 def _make_active_relationship(source: object, target: object) -> object:
     """Create both directional CharacterRelationship rows (non-pending)."""
-    rel = CharacterRelationshipFactory(source=source, target=target, is_pending=False)
-    CharacterRelationshipFactory(source=target, target=source, is_pending=False)
+    rel = CharacterRelationshipFactory(source=source, target=target)
+    CharacterRelationshipFactory(source=target, target=source)
     return rel
 
 
@@ -138,7 +138,7 @@ def _make_eligible_pair(*, track: object | None = None) -> tuple:
     _set_abyssal_primary(sinner)
     _set_primal_primary(sineater)
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     _grant_track_unlock(sinner, track)
     return sinner, sineater
 
@@ -154,7 +154,7 @@ def _make_tethered_pair(
     """
     wire_soul_tether_content()
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     abyssal_affinity = AffinityFactory(name="Abyssal")
     resonance = ResonanceFactory(affinity=abyssal_affinity)
     sinner, sineater = _make_eligible_pair(track=track)
@@ -281,7 +281,7 @@ class SoulTetherFullPipelineTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         self.sinner, self.sineater = _make_eligible_pair(track=self.track)
@@ -514,7 +514,7 @@ class AntiResentmentInvariantTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         wire_soul_tether_content()
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         cls.resonance = ResonanceFactory(affinity=abyssal_affinity)
         cls.sinner, cls.sineater = _make_eligible_pair(track=cls.track)
@@ -682,9 +682,9 @@ class ManyToManyIndependenceTests(TestCase):
         wire_soul_tether_content()
 
         # Shared track for Sinner A (required for RELATIONSHIP_TRACK unlock).
-        cls.track_a = RelationshipTrackFactory()
+        cls.track_a = RelationshipTypeFactory()
         # Separate track for Sinner B's second tether (unlock specificity).
-        cls.track_b = RelationshipTrackFactory()
+        cls.track_b = RelationshipTypeFactory()
 
         abyssal_affinity = AffinityFactory(name="Abyssal")
         primal_affinity = AffinityFactory(name="Primal")

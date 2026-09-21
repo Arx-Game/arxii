@@ -66,7 +66,7 @@ from world.magic.types.corruption import CorruptionSource
 from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
+    RelationshipTypeFactory,
 )
 
 # ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ def _set_primary_affinity_primal(sheet: object) -> None:
 def _grant_relationship_track_unlock(sheet: object, track: object) -> object:
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     return CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -140,14 +140,14 @@ def _make_eligible_pair(track: object | None = None) -> tuple:
     _set_primary_affinity_abyssal(sinner)
     _set_primary_affinity_primal(sineater)
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     _grant_relationship_track_unlock(sinner, track)
     return sinner, sineater
 
 
 def _make_active_relationship(source: object, target: object) -> object:
-    rel = CharacterRelationshipFactory(source=source, target=target, is_pending=False)
-    CharacterRelationshipFactory(source=target, target=source, is_pending=False)
+    rel = CharacterRelationshipFactory(source=source, target=target)
+    CharacterRelationshipFactory(source=target, target=source)
     return rel
 
 
@@ -193,7 +193,7 @@ class FullAbsorptionTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_FullAbsorb")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         # Corruption ConditionTemplate required so accrue_corruption has a template
@@ -266,7 +266,7 @@ class PartialAbsorptionTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_PartialAbsorb")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         CorruptionConditionTemplateFactory(corruption_resonance=self.resonance)
@@ -338,7 +338,7 @@ class NoTetherPassthroughTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_NoTether")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         CorruptionConditionTemplateFactory(corruption_resonance=self.resonance)
@@ -386,8 +386,8 @@ class MultiTetherPriorityTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_MultiTether")
-        self.track1 = RelationshipTrackFactory()
-        self.track2 = RelationshipTrackFactory()
+        self.track1 = RelationshipTypeFactory()
+        self.track2 = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         CorruptionConditionTemplateFactory(corruption_resonance=self.resonance)
@@ -485,7 +485,7 @@ class ResonanceMismatchTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_ResMatch")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         primal_affinity = AffinityFactory(name="Primal")
         self.abyssal_resonance = ResonanceFactory(affinity=abyssal_affinity)
@@ -597,7 +597,7 @@ class StageAdvancePromptFiresWhenSineaterInSceneTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_StagePrompt")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -686,7 +686,7 @@ class StageAdvancePromptNoSineaterInSceneTests(TestCase):
     def setUp(self) -> None:
         self.room = _create_room("Room_NoSineater")
         self.other_room = _create_room("Room_SineaterElsewhere")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -742,7 +742,7 @@ class StageAdvancePromptNonCorruptionConditionTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_NonCorruption")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -809,7 +809,7 @@ class StageAdvanceBonusAcceptTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_BonusAccept")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -906,7 +906,7 @@ class StageAdvanceBonusDeclineTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _create_room("Room_BonusDecline")
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
