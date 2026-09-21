@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
+from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.factories import CompanionFactory
 from world.journals.factories import JournalEntryFactory
@@ -248,6 +249,34 @@ class TieApiTests(TestCase):
         stranger_data = self._client(self.stranger).get(url).data
         self.assertIsNone(stranger_data["ap_this_week"])
 
+    def test_ap_pool_is_the_owners_own_and_nobody_elses(self):
+        """The budget line beside the AP field (#3957): remaining over the week's total.
+
+        Gated on the side being the viewer's OWN, not on audience — so the other party
+        gets null, and so does a staff account, whose own purse this is not.
+        """
+        pool = ActionPointPool.get_or_create_for_character(self.a.character)
+        pool.maximum, pool.current = 40, 31
+        pool.save(update_fields=["maximum", "current"])
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+
+        owner_data = self._client(self.owner).get(url).data
+        self.assertEqual(owner_data["ap_pool"], {"remaining": 31, "total": 40})
+
+        self.assertIsNone(self._client(self.other).get(url).data["ap_pool"])
+        self.assertIsNone(self._client(self.staff).get(url).data["ap_pool"])
+
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+        self.assertIsNone(self._client(self.stranger).get(url).data["ap_pool"])
+
+    def test_ap_pool_is_null_when_the_owner_has_no_pool_row(self):
+        """No pool row is a data state, not a reason to refuse the page."""
+        ActionPointPool.objects.filter(character=self.a).delete()
+        data = self._client(self.owner).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        self.assertIsNone(data["ap_pool"])
+
     def test_breakdown_conflict_null_for_other_side(self):
         data = self._client(self.other).get(f"/api/relationships/relationships/{self.ab.pk}/").data
         self.assertIsNone(data["breakdown"]["conflict"])
@@ -375,9 +404,14 @@ class TieApiTests(TestCase):
 
     def test_list_query_budget_stays_flat_across_a_page(self):
         """``build_tie_page`` adds a small, page-size-independent query count (#3957 review):
-        14 queries for a 6-row page here (session + count + queryset + labels prefetch +
-        reverse sides + reverse labels prefetch + threads + tier ladder, plus session-save
-        bookkeeping) — not one per row.
+        15 queries for a 6-row page here (session + count + queryset + labels prefetch +
+        reverse sides + reverse labels prefetch + threads + tier ladder + the owners' AP
+        pools, plus session-save bookkeeping) — not one per row.
+
+        The AP-pool lookup is the fifteenth and is batched over the page's distinct
+        OWNERS, so it is asserted by count rather than left to the ceiling: a per-row
+        ``side.source.action_points`` would pass the ceiling on a small page and fail on
+        a full one.
         """
         for i in range(5):
             target, _ = _owned_sheet(AccountFactory())
@@ -389,7 +423,10 @@ class TieApiTests(TestCase):
             response = self._client(self.owner).get("/api/relationships/relationships/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 6)
-        self.assertLessEqual(len(ctx.captured_queries), 14)
+        pool_table = ActionPointPool._meta.db_table
+        pool_queries = [q for q in ctx.captured_queries if pool_table in q["sql"]]
+        self.assertEqual(len(pool_queries), 1)
+        self.assertLessEqual(len(ctx.captured_queries), 15)
 
     def test_list_matches_reverse_depth_per_target_when_two_owned_characters_share_one(self):
         """Two characters under one account, each with a side toward the SAME target: the

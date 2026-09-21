@@ -46186,8 +46186,22 @@ export interface components {
       breakdown: components['schemas']['DepthBreakdown'] | null;
       summary: string;
       ap_this_week: number | null;
+      ap_pool: components['schemas']['TieApPool'] | null;
       thread: components['schemas']['TieThread'] | null;
       is_soul_tether: boolean;
+    };
+    /**
+     * @description The owner's whole weekly AP purse, as the budget line beside the tie's AP field
+     *     reads it (#3957): what is left to spend over what the week holds.
+     *
+     *     Not the same number as ``ap_this_week``, which is this ONE tie's standing order.
+     *     ``remaining`` is ``ActionPointPool.current`` — the spendable balance every other AP
+     *     surface means by "current" — and ``total`` is ``get_effective_maximum()``, so a
+     *     distinction that widens the purse widens this line too.
+     */
+    TieApPool: {
+      remaining: number;
+      total: number;
     };
     TieStreamItem: {
       kind: string;

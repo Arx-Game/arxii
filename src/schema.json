@@ -82521,6 +82521,10 @@ components:
         ap_this_week:
           type: integer
           nullable: true
+        ap_pool:
+          allOf:
+          - $ref: '#/components/schemas/TieApPool'
+          nullable: true
         thread:
           allOf:
           - $ref: '#/components/schemas/TieThread'
@@ -82528,6 +82532,7 @@ components:
         is_soul_tether:
           type: boolean
       required:
+      - ap_pool
       - ap_this_week
       - audience
       - breakdown
@@ -82545,6 +82550,24 @@ components:
       - target_companion
       - target_name
       - thread
+    TieApPool:
+      type: object
+      description: |-
+        The owner's whole weekly AP purse, as the budget line beside the tie's AP field
+        reads it (#3957): what is left to spend over what the week holds.
+
+        Not the same number as ``ap_this_week``, which is this ONE tie's standing order.
+        ``remaining`` is ``ActionPointPool.current`` — the spendable balance every other AP
+        surface means by "current" — and ``total`` is ``get_effective_maximum()``, so a
+        distinction that widens the purse widens this line too.
+      properties:
+        remaining:
+          type: integer
+        total:
+          type: integer
+      required:
+      - remaining
+      - total
     TieStreamItem:
       type: object
       properties:

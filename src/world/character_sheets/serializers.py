@@ -1833,6 +1833,10 @@ def _build_ties(sheet: CharacterSheet, viewer_sheet, *, privileged: bool) -> lis
                     TieLabelEntry(
                         type_name=label["type_name"],
                         awareness=label["awareness"],
+                        # Already on the row: ``label_payload`` reads it off the
+                        # select_related ``type``, so colouring the cast's chips costs
+                        # nothing the card was not already paying for.
+                        valence=label["type_valence"],
                         is_former=label["ended_at"] is not None,
                         is_mutual=label["is_mutual"],
                     )

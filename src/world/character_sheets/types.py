@@ -495,10 +495,18 @@ class MentorBondEntry(TypedDict):
 
 
 class TieLabelEntry(TypedDict):
-    """One label on a tie card (#3957). ``awareness`` is ``public`` for an unmarked label."""
+    """One label on a tie card (#3957). ``awareness`` is ``public`` for an unmarked label.
+
+    ``valence`` is the label TYPE's own warm/hostile/neutral, not a judgement about this
+    tie: it is what colours the chip so a reader can tell a lover from an enemy across
+    the whole cast at a glance, the way the approved design does. It rides the card
+    because the type is already joined for ``type_name`` — no extra query, and no second
+    request the cast would have to make before it could paint itself.
+    """
 
     type_name: str
     awareness: str
+    valence: str
     is_former: bool
     is_mutual: bool
 

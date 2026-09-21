@@ -75,6 +75,20 @@ class TieThreadSerializer(serializers.Serializer):
     resonance_name = serializers.CharField()
 
 
+class TieApPoolSerializer(serializers.Serializer):
+    """The owner's whole weekly AP purse, as the budget line beside the tie's AP field
+    reads it (#3957): what is left to spend over what the week holds.
+
+    Not the same number as ``ap_this_week``, which is this ONE tie's standing order.
+    ``remaining`` is ``ActionPointPool.current`` — the spendable balance every other AP
+    surface means by "current" — and ``total`` is ``get_effective_maximum()``, so a
+    distinction that widens the purse widens this line too.
+    """
+
+    remaining = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
 class TieSerializer(serializers.Serializer):
     """One side of a tie, shaped for the viewer's audience (built in the viewset)."""
 
@@ -100,6 +114,11 @@ class TieSerializer(serializers.Serializer):
     breakdown = DepthBreakdownSerializer(allow_null=True)
     summary = serializers.CharField(allow_blank=True)
     ap_this_week = serializers.IntegerField(allow_null=True)
+    # The viewer's OWN purse, so it rides ``is_own_side`` rather than ``audience``: a
+    # staff account reading someone else's tie has no business being shown that
+    # character's balance, and the number would be useless to them anyway — every write
+    # door on that page is closed to them.
+    ap_pool = TieApPoolSerializer(allow_null=True)
     thread = TieThreadSerializer(allow_null=True)
     is_soul_tether = serializers.BooleanField()
 

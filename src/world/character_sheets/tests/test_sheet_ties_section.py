@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.constants import LabelAwareness
+from world.relationships.constants import LabelAwareness, TypeValence
 from world.relationships.factories import RelationshipTypeFactory
 from world.relationships.services import declare_label, get_or_create_side
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -33,8 +33,8 @@ class SheetTiesSectionTests(APITestCase):
         cls.a = _owned_sheet(cls.owner)
         cls.b = _owned_sheet(cls.other)
         cls.c = CharacterSheetFactory()
-        cls.lover = RelationshipTypeFactory(name="Lover")
-        cls.rival = RelationshipTypeFactory(name="Rival")
+        cls.lover = RelationshipTypeFactory(name="Lover", valence=TypeValence.WARM)
+        cls.rival = RelationshipTypeFactory(name="Rival", valence=TypeValence.HOSTILE)
         # Alice -> Bob, Clandestine: visible to Alice (owner) and Bob (other side).
         cls.ab = get_or_create_side(source=cls.a, target=cls.b)
         cls.ab.scene_depth = 30
@@ -73,6 +73,16 @@ class SheetTiesSectionTests(APITestCase):
         card = self._card(cards, self.ac.pk)
         self.assertIsNone(card["depth"])
         self.assertIsNone(card["tier"])
+
+    def test_cards_carry_each_labels_valence(self):
+        """A cast chip is coloured by its TYPE's valence (#3957 demo fidelity), so the
+        card ships it: a reader tells a lover from a rival across the grid without
+        opening either tie.
+        """
+        cards = self._ties(self.a, self.owner)
+        by_id = {card["relationship_id"]: card for card in cards}
+        self.assertEqual([lab["valence"] for lab in by_id[self.ab.pk]["labels"]], ["warm"])
+        self.assertEqual([lab["valence"] for lab in by_id[self.ac.pk]["labels"]], ["hostile"])
 
     def test_staff_sees_both_cards_with_numbers(self):
         staff = AccountFactory(is_staff=True)

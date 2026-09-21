@@ -50,6 +50,24 @@ from world.relationships.serializers import (
 
 NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
 
+
+def _ap_pools_for(sheet_ids: set[int]) -> dict[int, dict[str, int]]:
+    """Each owner's weekly AP purse, keyed by CharacterSheet pk (#3957).
+
+    Keyed and batched rather than read off ``side.source`` per row: ``list`` pages over
+    every side of every character the ACCOUNT plays, so the loop is over distinct owners
+    (one, in practice) and never over ties. ``get_effective_maximum`` consults the
+    character's modifiers, which is why this is not a single values() query.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    pools = ActionPointPool.objects.filter(character_id__in=sheet_ids)
+    return {
+        pool.character_id: {"remaining": pool.current, "total": pool.get_effective_maximum()}
+        for pool in pools
+    }
+
+
 # Sides prefetched for a batched read (#3957 review): labels ordered + select_related for
 # label_payload's replaced_type_name gate and build_tie_page's mutuality check
 # (declared_by_tenure.end_date), plus the relations build_tie_page/_row_to_payload read
@@ -185,7 +203,11 @@ class CharacterRelationshipViewSet(GenericViewSet):
         )
         # Every row here came through ``get_queryset``'s tenure join on ``source``, so
         # each one is by construction a side of the caller's own.
-        data = [self._row_to_payload(row, is_own_side=True) for row in rows]
+        pools = _ap_pools_for({side.source_id for side in sides})
+        data = [
+            self._row_to_payload(row, is_own_side=True, ap_pool=pools.get(row["side"].source_id))
+            for row in rows
+        ]
         serializer = TieSerializer(data, many=True)
         if page is not None:
             return self.get_paginated_response(serializer.data)
@@ -230,7 +252,11 @@ class CharacterRelationshipViewSet(GenericViewSet):
             [side], viewer_sheet=viewer_sheet, is_staff=is_staff, force_audience=audience
         )[0]
         is_own_side = viewer_sheet is not None and side.source_id == viewer_sheet.pk
-        return Response(TieSerializer(self._row_to_payload(row, is_own_side=is_own_side)).data)
+        pools = _ap_pools_for({side.source_id}) if is_own_side else {}
+        payload = self._row_to_payload(
+            row, is_own_side=is_own_side, ap_pool=pools.get(side.source_id)
+        )
+        return Response(TieSerializer(payload).data)
 
     @extend_schema(responses=TieStreamItemSerializer(many=True))
     @action(detail=True, methods=["get"], pagination_class=None)
@@ -256,12 +282,23 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
     # -- shared read-side plumbing ------------------------------------------------
 
-    def _row_to_payload(self, row: dict[str, Any], *, is_own_side: bool) -> dict[str, Any]:
+    def _row_to_payload(
+        self,
+        row: dict[str, Any],
+        *,
+        is_own_side: bool,
+        ap_pool: dict[str, int] | None = None,
+    ) -> dict[str, Any]:
         """A ``build_tie_page`` row plus the side's own scalars, in ``TieSerializer``'s shape.
 
         ``is_own_side`` is passed rather than derived here: ``list`` already knows it is
         True for every row it builds (its queryset is a tenure join on ``source``) and
         would otherwise have to resolve a viewer sheet it never needs.
+
+        ``ap_pool`` is passed in for the same reason and for one more: it is fetched once
+        per request by the caller (ADR-0260 leaves a view nowhere to memoise it), so a
+        page of ties costs one pool lookup rather than one per row. A caller that passes
+        nothing sends null, which is the right answer for anyone but the side's owner.
         """
         side = row["side"]
         return {
@@ -280,6 +317,7 @@ class CharacterRelationshipViewSet(GenericViewSet):
             "breakdown": row["breakdown"],
             "summary": side.summary,
             "ap_this_week": row["ap_this_week"],
+            "ap_pool": ap_pool if is_own_side else None,
             "thread": row["thread"],
             "is_soul_tether": side.is_soul_tether,
         }
