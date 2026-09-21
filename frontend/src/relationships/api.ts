@@ -1,97 +1,57 @@
 /**
- * Relationships API functions (#2031, #2159)
+ * Ties: the read and write surface for one side of a relationship (#3957).
  *
- * Covers the read surface backing the commend button on relationship
- * writeups: GET /api/relationships/relationship-updates/ (tenure-scoped —
- * only SHARED/PUBLIC writeups where the requesting user's account currently
- * holds tenure over the parent relationship's target, i.e. the writeup's
- * commendable subject; see RelationshipUpdateViewSet.get_queryset) and POST
- * .../kudos/ to commend one.
+ * A tie is two people; this module speaks for ONE side of it — the caller's own, or
+ * whichever side a page was opened on. Everything the viewer is allowed to know is
+ * decided server-side and arrives already shaped: `audience` says which of the four
+ * views came back, and a value a third party may not have (`depth`, `next_tier_threshold`,
+ * `breakdown`, `thread`, `ap_this_week`) arrives as null rather than as a number the UI
+ * would then have to decide whether to print. The frontend never re-derives any of it.
  *
- * Also covers the four positive relationship-building write actions
- * (`first_impression`/`develop`/`capstone`/`redistribute`, all on the same
- * `/api/relationships/relationship-updates/` viewset), the track catalog
- * (`GET /api/relationships/tracks/`), and a narrow read of the caller's own
- * relationship toward one target (`GET /api/relationships/relationships/
- * ?target=<CharacterSheet pk>`, scoped server-side by
- * `CharacterRelationshipViewSet.get_queryset` to rows the caller's tenure-owned
- * characters authored) — used by `RelationshipWriteupDialog` and the
- * card-drawer quick action to branch between impression/development mode.
+ * A tie with no open Public label simply does not exist for a third party: `getTie`
+ * answers 404, never 403, so a tie's mere existence is never leaked by the shape of a
+ * refusal. The page renders that as "not found".
+ *
+ * The seven writes all POST to their own verb on the tie collection and converge on
+ * `action.run()` server-side, so they all answer with the same `{success, message, data}`
+ * envelope and all report a refusal through `message`.
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
 
-export type RelationshipWriteup = components['schemas']['RelationshipUpdate'];
-export type GiveWriteupKudosRequest = components['schemas']['WriteupKudosWriteRequest'];
-export type RelationshipTrack = components['schemas']['RelationshipTrack'];
-export type CharacterRelationshipList = components['schemas']['CharacterRelationshipList'];
-export type CharacterRelationship = components['schemas']['CharacterRelationship'];
-export type RelationshipTimelineEntry = components['schemas']['RelationshipTimelineEntry'];
-export type WriteupTypeEnum = components['schemas']['WriteupTypeEnum'];
-export type WriteupComplaintWriteRequest = components['schemas']['WriteupComplaintWriteRequest'];
-export type FirstImpressionWriteRequest = components['schemas']['FirstImpressionWriteRequest'];
-export type DevelopmentWriteRequest = components['schemas']['DevelopmentWriteRequest'];
-export type CapstoneWriteRequest = components['schemas']['CapstoneWriteRequest'];
-export type RedistributeWriteRequest = components['schemas']['RedistributeWriteRequest'];
+export type Tie = components['schemas']['Tie'];
+export type TieLabel = components['schemas']['RelationshipLabel'];
+export type TieStreamItem = components['schemas']['TieStreamItem'];
+export type TieThread = components['schemas']['TieThread'];
+export type DepthBreakdown = components['schemas']['DepthBreakdown'];
+export type RelationshipType = components['schemas']['RelationshipType'];
+export type TieWriteResult = components['schemas']['TieWriteResult'];
+export type TieAudience = components['schemas']['AudienceEnum'];
+export type Awareness = components['schemas']['AwarenessEnum'];
+export type RelationshipTypeFamily = components['schemas']['FamilyEnum'];
 
-/**
- * Runtime shape of every write action's response.
- *
- * The generated OpenAPI response schemas for `first_impression`/`develop`/
- * `capstone`/`redistribute` (`FirstImpressionWrite` etc.) are wrong — drf-spectacular
- * infers them from the request serializer since `RelationshipUpdateViewSet`'s
- * actions don't declare a response serializer. The views actually return
- * `{success, message, data}` (see `_run_action` in `world/relationships/views.py`),
- * matching the kudos/complaint feedback actions.
- */
-export interface RelationshipWriteResult {
-  success: boolean;
-  message: string;
-  data: Record<string, unknown>;
-}
+export type DeclareLabelBody = components['schemas']['DeclareWriteRequest'];
+export type ShiftLabelBody = components['schemas']['ShiftWriteRequest'];
+export type EndLabelBody = components['schemas']['LabelWriteRequest'];
+export type AwarenessBody = components['schemas']['AwarenessWriteRequest'];
+export type AllocationBody = components['schemas']['AllocationWriteRequest'];
+export type AdvanceTierBody = components['schemas']['AdvanceWriteRequest'];
+export type SummaryBody = components['schemas']['SummaryWriteRequest'];
 
-const RELATIONSHIP_UPDATES_URL = '/api/relationships/relationship-updates';
-const RELATIONSHIPS_URL = '/api/relationships/relationships';
-const RELATIONSHIP_TRACKS_URL = '/api/relationships/tracks';
+const TIES_URL = '/api/relationships/relationships';
+const TYPES_URL = '/api/relationships/types';
 
 function jsonHeaders(): HeadersInit {
   return { 'Content-Type': 'application/json' };
 }
 
 /**
- * GET /api/relationships/relationship-updates/
- *
- * Returns SHARED/PUBLIC writeups where the requesting user's account holds
- * tenure over the subject character — the writeups the caller may commend.
- * This is NOT a general writeup browser: the endpoint is scoped to the
- * requesting user's tenure-owned characters, so it only makes sense to call
- * this while viewing one of the caller's own sheets.
- *
- * Pass `subjectCharacterId` (the viewed CharacterSheet pk) to narrow to that
- * one owned character's writeups — required for accounts with more than one
- * owned character, so a sibling character's writeups don't get mislabeled as
- * belonging to the one currently being viewed (fix wave, Finding 2).
- */
-export async function getMyWriteups(subjectCharacterId?: number): Promise<RelationshipWriteup[]> {
-  const params = new URLSearchParams({ page_size: '100' });
-  if (subjectCharacterId != null) {
-    params.set('subject_character', String(subjectCharacterId));
-  }
-  const res = await apiFetch(`${RELATIONSHIP_UPDATES_URL}/?${params.toString()}`);
-  if (!res.ok) throw new Error('Failed to load relationship writeups');
-  const data = (await res.json()) as { results?: RelationshipWriteup[] } | RelationshipWriteup[];
-  return Array.isArray(data) ? data : (data.results ?? []);
-}
-
-/**
  * Parse an Action-backed endpoint's failure body: `{success: false, message}`.
  *
- * This is NOT the DRF `{detail}` shape `readErrorDetail` (lib/errors) parses,
- * so that helper is not reusable here — the kudos/complaint/first_impression/
- * develop/capstone/redistribute actions all return their own `result.message`
- * from the underlying Action, not a DRF exception. Shared by the kudos call
- * below and the four relationship-building write actions (#2159).
+ * NOT the DRF `{detail}` shape `readErrorDetail` (lib/errors) parses — every tie write
+ * returns its underlying Action's own `result.message`, which is the sentence the
+ * player is meant to read ("You have already made that public.").
  */
 async function readActionErrorMessage(res: Response, fallback: string): Promise<never> {
   let message = fallback;
@@ -106,159 +66,74 @@ async function readActionErrorMessage(res: Response, fallback: string): Promise<
   throw new Error(message);
 }
 
-/**
- * POST /api/relationships/relationship-updates/kudos/
- *
- * The writeup's subject commends it, awarding the author kudos points.
- * Rejected with the exact `WriteupFeedbackError.user_message` on 400
- * (already-commended, non-subject, private writeup, etc).
- */
-export async function giveWriteupKudos(body: GiveWriteupKudosRequest): Promise<void> {
-  const res = await apiFetch(`${RELATIONSHIP_UPDATES_URL}/kudos/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    await readActionErrorMessage(res, 'Failed to commend this writeup');
+/** Raised by `getTie` for a tie the viewer may not see — which is indistinguishable, */
+/** deliberately, from one that does not exist. */
+export class TieNotFoundError extends Error {
+  constructor() {
+    super('Tie not found');
+    this.name = 'TieNotFoundError';
   }
 }
 
 /**
- * GET /api/relationships/tracks/
+ * GET /api/relationships/relationships/{id}/
  *
- * The full relationship-track catalog (with nested tiers) — unpaginated
- * (`RelationshipTrackViewSet.pagination_class = None`). Feeds every track
- * picker in `RelationshipWriteupDialog`.
+ * One side, shaped for whoever is asking. A 404 here is the audience rule, not an
+ * error to report: the caller renders the page's not-found treatment.
  */
-export async function getRelationshipTracks(): Promise<RelationshipTrack[]> {
-  const res = await apiFetch(`${RELATIONSHIP_TRACKS_URL}/`);
-  if (!res.ok) throw new Error('Failed to load relationship tracks');
-  return (await res.json()) as RelationshipTrack[];
+export async function getTie(relationshipId: number): Promise<Tie> {
+  const res = await apiFetch(`${TIES_URL}/${relationshipId}/`);
+  if (res.status === 404) throw new TieNotFoundError();
+  if (!res.ok) throw new Error('Failed to load this tie');
+  return (await res.json()) as Tie;
 }
 
 /**
- * GET /api/relationships/relationships/?target=<CharacterSheet pk>
+ * GET /api/relationships/relationships/
  *
- * The caller's own outbound relationship(s) toward one target character.
- * `CharacterRelationshipViewSet.get_queryset` is already scoped server-side
- * to rows whose `source` belongs to one of the caller's tenure-owned
- * characters (plus a universally-readable `is_soul_tether` carve-out — see
- * ADR-0117) — this call only narrows that scoped set to one `target`, it
- * cannot widen it. Used to branch `RelationshipWriteupDialog` between
- * development mode (a relationship already exists) and impression mode
- * (none yet).
+ * The caller's own outbound sides, always shaped as their OWNER view — the list
+ * endpoint is scoped server-side and cannot be widened by a query param.
  */
-export async function getMyRelationshipToTarget(
-  targetCharacterSheetId: number
-): Promise<CharacterRelationshipList[]> {
-  const params = new URLSearchParams({ target: String(targetCharacterSheetId) });
-  const res = await apiFetch(`${RELATIONSHIPS_URL}/?${params.toString()}`);
-  if (!res.ok) throw new Error('Failed to load relationship');
-  const data = (await res.json()) as
-    | { results?: CharacterRelationshipList[] }
-    | CharacterRelationshipList[];
+export async function listMyTies(): Promise<Tie[]> {
+  const res = await apiFetch(`${TIES_URL}/?page_size=100`);
+  if (!res.ok) throw new Error('Failed to load your ties');
+  const data = (await res.json()) as { results?: Tie[] } | Tie[];
   return Array.isArray(data) ? data : (data.results ?? []);
 }
 
 /**
- * GET /api/relationships/relationships/?source=<CharacterSheet pk>
+ * GET /api/relationships/relationships/{id}/stream/
  *
- * The caller's full outbound relationship list from one of their own
- * characters — server-scoped the same way as `getMyRelationshipToTarget`
- * (`CharacterRelationshipViewSet.get_queryset`'s tenure join), just narrowed
- * by `source` instead of `target`. Feeds `RelationshipPanel`'s own-sheet arm
- * (target name, affection, absolute/developed values per relationship row).
+ * The journal entries and shared scenes between the two sides, already filtered to what
+ * this viewer may read. Unpaginated (`pagination_class = None` on the action).
  */
-export async function getMyOutboundRelationships(
-  sourceCharacterSheetId: number
-): Promise<CharacterRelationshipList[]> {
-  const params = new URLSearchParams({
-    source: String(sourceCharacterSheetId),
-    page_size: '100',
-  });
-  const res = await apiFetch(`${RELATIONSHIPS_URL}/?${params.toString()}`);
-  if (!res.ok) throw new Error('Failed to load relationships');
-  const data = (await res.json()) as
-    | { results?: CharacterRelationshipList[] }
-    | CharacterRelationshipList[];
+export async function getTieStream(relationshipId: number): Promise<TieStreamItem[]> {
+  const res = await apiFetch(`${TIES_URL}/${relationshipId}/stream/`);
+  if (res.status === 404) throw new TieNotFoundError();
+  if (!res.ok) throw new Error('Failed to load this tie');
+  const data = (await res.json()) as { results?: TieStreamItem[] } | TieStreamItem[];
   return Array.isArray(data) ? data : (data.results ?? []);
 }
 
 /**
- * GET /api/relationships/relationships/<id>/
+ * GET /api/relationships/types/
  *
- * Full relationship detail — the only variant carrying `track_progress`
- * (per-track developed/temporary points and current tier); the list
- * serializer used by `getMyOutboundRelationships` omits it
- * (`CharacterRelationshipListSerializer`). Used to expand one relationship
- * row in `RelationshipPanel`'s own-sheet arm.
+ * The whole label catalogue — eighteen-odd authored rows, so one page of 100 is the
+ * whole thing and the picker groups it client-side by `family`.
  */
-export async function getRelationshipDetail(
-  relationshipId: number
-): Promise<CharacterRelationship> {
-  const res = await apiFetch(`${RELATIONSHIPS_URL}/${relationshipId}/`);
-  if (!res.ok) throw new Error('Failed to load relationship detail');
-  return (await res.json()) as CharacterRelationship;
-}
-
-export interface RelationshipTimelineParams {
-  /** CharacterRelationship pk — own-full-history arm. Mutually exclusive with `aboutCharacter`. */
-  relationship?: number;
-  /** CharacterSheet pk — visibility-scoped arm. Mutually exclusive with `relationship`. */
-  aboutCharacter?: number;
-}
-
-/**
- * GET /api/relationships/relationship-updates/timeline/
- *
- * Merged Update/Development/Capstone writeup history (#2159), type-tagged
- * via `kind`. Exactly one of `relationship`/`aboutCharacter` must be set —
- * mirrors `RelationshipUpdateViewSet.timeline`'s mutually-exclusive 400.
- */
-export async function getRelationshipTimeline(
-  params: RelationshipTimelineParams
-): Promise<RelationshipTimelineEntry[]> {
-  const query = new URLSearchParams({ page_size: '100' });
-  if (params.relationship != null) {
-    query.set('relationship', String(params.relationship));
-  }
-  if (params.aboutCharacter != null) {
-    query.set('about_character', String(params.aboutCharacter));
-  }
-  const res = await apiFetch(`${RELATIONSHIP_UPDATES_URL}/timeline/?${query.toString()}`);
-  if (!res.ok) throw new Error('Failed to load relationship timeline');
-  const data = (await res.json()) as
-    | { results?: RelationshipTimelineEntry[] }
-    | RelationshipTimelineEntry[];
+export async function getRelationshipTypes(): Promise<RelationshipType[]> {
+  const res = await apiFetch(`${TYPES_URL}/?page_size=100`);
+  if (!res.ok) throw new Error('Failed to load relationship types');
+  const data = (await res.json()) as { results?: RelationshipType[] } | RelationshipType[];
   return Array.isArray(data) ? data : (data.results ?? []);
 }
 
-/**
- * POST /api/relationships/relationship-updates/complaint/
- *
- * File a bad-faith-RP complaint against a SHARED/PUBLIC writeup, for staff
- * triage only — `WriteupComplaint` never appears in any player-facing
- * serializer, so there is no follow-up read surface for this write. Rejected
- * with the exact `WriteupNotVisibleError.user_message` on 400.
- */
-export async function fileWriteupComplaint(body: WriteupComplaintWriteRequest): Promise<void> {
-  const res = await apiFetch(`${RELATIONSHIP_UPDATES_URL}/complaint/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    await readActionErrorMessage(res, 'Failed to file this complaint');
-  }
-}
-
-async function postWriteAction(
-  action: 'first_impression' | 'develop' | 'capstone' | 'redistribute',
+async function postTieAction(
+  verb: 'declare' | 'shift' | 'end' | 'awareness' | 'allocation' | 'advance' | 'summary',
   body: unknown,
   fallback: string
-): Promise<RelationshipWriteResult> {
-  const res = await apiFetch(`${RELATIONSHIP_UPDATES_URL}/${action}/`, {
+): Promise<TieWriteResult> {
+  const res = await apiFetch(`${TIES_URL}/${verb}/`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(body),
@@ -266,31 +141,40 @@ async function postWriteAction(
   if (!res.ok) {
     await readActionErrorMessage(res, fallback);
   }
-  return (await res.json()) as RelationshipWriteResult;
+  return (await res.json()) as TieWriteResult;
 }
 
-/** POST .../first_impression/ — unilateral, creates a pending relationship. */
-export async function postFirstImpression(
-  body: FirstImpressionWriteRequest
-): Promise<RelationshipWriteResult> {
-  return postWriteAction('first_impression', body, 'Failed to record this impression');
+/** POST .../declare/ — name a type on the caller's side. Free, and one-sided. */
+export async function declareLabel(body: DeclareLabelBody): Promise<TieWriteResult> {
+  return postTieAction('declare', body, 'Failed to declare this label');
 }
 
-/** POST .../develop/ — solidifies temporary points into permanent developed points. */
-export async function postDevelopment(
-  body: DevelopmentWriteRequest
-): Promise<RelationshipWriteResult> {
-  return postWriteAction('develop', body, 'Failed to record this development');
+/** POST .../shift/ — end one label and declare its replacement, which remembers it. */
+export async function shiftLabel(body: ShiftLabelBody): Promise<TieWriteResult> {
+  return postTieAction('shift', body, 'Failed to change this label');
 }
 
-/** POST .../capstone/ — records a monumental relationship moment. */
-export async function postCapstone(body: CapstoneWriteRequest): Promise<RelationshipWriteResult> {
-  return postWriteAction('capstone', body, 'Failed to record this capstone');
+/** POST .../end/ — stamp `ended_at`. The row stays; nothing here deletes. */
+export async function endLabel(body: EndLabelBody): Promise<TieWriteResult> {
+  return postTieAction('end', body, 'Failed to end this label');
 }
 
-/** POST .../redistribute/ — moves developed points between tracks. */
-export async function postRedistribute(
-  body: RedistributeWriteRequest
-): Promise<RelationshipWriteResult> {
-  return postWriteAction('redistribute', body, 'Failed to redistribute points');
+/** POST .../awareness/ — private → clandestine → public, forward only. */
+export async function advanceAwareness(body: AwarenessBody): Promise<TieWriteResult> {
+  return postTieAction('awareness', body, 'Failed to change this label');
+}
+
+/** POST .../allocation/ — this week's AP for the whole tie, not per label. */
+export async function setTieAllocation(body: AllocationBody): Promise<TieWriteResult> {
+  return postTieAction('allocation', body, 'Failed to set AP for this tie');
+}
+
+/** POST .../advance/ — claim the next tier against a capstone entry, for XP. */
+export async function advanceTier(body: AdvanceTierBody): Promise<TieWriteResult> {
+  return postTieAction('advance', body, 'Failed to advance this tier');
+}
+
+/** POST .../summary/ — the paragraph on the tie page, in the owner's own words. */
+export async function setTieSummary(body: SummaryBody): Promise<TieWriteResult> {
+  return postTieAction('summary', body, 'Failed to save this summary');
 }

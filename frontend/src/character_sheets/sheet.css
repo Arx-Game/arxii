@@ -501,6 +501,36 @@
   border-color: hsl(var(--accent));
 }
 
+/* Label chips on a tie (#3957). Awareness is drawn in the BORDER, valence in the ink,
+   so a warm private label says both at once without a third chip. A public label is
+   the plain `.refsheet-tag` — the resting state carries no marker at all. */
+.refsheet-tag-former {
+  opacity: 0.7;
+  border-style: dotted;
+}
+.refsheet-tag-private {
+  border-style: dashed;
+  color: hsl(var(--accent));
+}
+.refsheet-tag-clandestine {
+  border-style: dashed;
+}
+.refsheet-tag-warm {
+  color: hsl(150 30% 34%);
+}
+.refsheet-tag-hostile {
+  color: hsl(var(--destructive));
+}
+
+/* The cast's per-face extras (#3957): the label chips sit under the name, and the
+   thread line is the quietest thing on the card. */
+.refsheet-face-thread {
+  font-size: 0.8125rem;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--sheet-caps);
+  letter-spacing: 0.04em;
+}
+
 /* Distinctions as pills — the trait chips an OC sheet always carries. A disadvantage
    is dashed and muted rather than red: it is part of the character, not a warning. */
 .refsheet-pills {
