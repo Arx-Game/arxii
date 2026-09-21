@@ -1,15 +1,16 @@
 ---
-description: Use when working on a GitHub issue from start to merged PR. Picks up an issue (or prompts for one), drafts the spec onto the issue for team review, implements after a member approves it (spec:approved label), opens a PR, watches CI and fixes failures, and handles post-merge cleanup including filing follow-up issues.
+description: Use when working on a GitHub issue from start to merged PR. Picks up an issue (or prompts for one), assesses discovery, collaborates on the product brief and technical spec, implements after member approval except for validated lightweight work, opens a PR, watches CI and fixes failures, and handles post-merge cleanup including filing follow-up issues.
 ---
 
 # issue-to-merged-pr
 
 This skill carries a GitHub issue from pickup through to a merged PR. It is
 **multi-invocation**: the agent works up to a human gate, then exits while
-review is async. There are **two** such gates — **spec review on the issue**
-(a member applies the `spec:approved` label) and **code review on the PR** —
-plus CI. The user re-invokes the skill in a new session; the agent reads the
-issue + PR state and picks up the right phase.
+review is async. Standard/heavyweight work has **two** such gates — **spec review
+on the issue** (a member applies the `spec:approved` label) and **code review on
+the PR** — plus CI. A clearly bounded lightweight issue may bypass the spec gate
+only with its validated discovery marker. The user re-invokes the skill in a new
+session; the agent reads the issue + PR state and picks up the right phase.
 **No persistent on-disk workflow state — GitHub (labels + issue body + PR)
 holds the truth. New specs live in the issue body rather than as committed
 `docs/superpowers/` files.**
@@ -50,14 +51,25 @@ only once a PR exists — the **PR state** table further down.
 gh issue view <N> --json state,labels,body
 ```
 
-Read the `status:*` and `spec:approved` labels. First match wins:
+Read the `status:*`, `spec:approved`, and discovery state in the issue body. The
+actual discovery marker must be outside the `<!-- spec:start -->` /
+`<!-- spec:end -->` region. Run `scripts/validate-discovery.sh <N>` whenever a
+marker is present or a phase transition is requested. First match wins:
 
-| labels on the issue | Phase |
+| issue state | Phase |
 |---|---|
+| `status:implementing` with `discovery:lane=lightweight;state=complete`, no `spec:approved` | **Lightweight implementation** — the explicit bounded-work exception; continue building |
+| `status:spec-draft` with a complete lightweight marker, no `spec:approved` | **Lightweight handoff** — validate, flip to `status:implementing`, then build |
+| `status:spec-draft` with standard/heavyweight `state=awaiting-stakeholder` | **Discovery-awaiting** — exit; the stakeholder conversation is active |
+| `status:spec-draft` with standard/heavyweight `state=complete` | **Technical design** — draft or revise the technical spec, then use normal spec review |
 | `spec:approved` present, no open PR yet | **Implementation** — flip `status:spec-review`→`status:implementing`, then build |
 | `status:spec-review`, no `spec:approved` | **Await-approval** — spec is on the issue; a member must apply `spec:approved`. Exit (review is on the human). |
-| `status:spec-draft` (or no `<!-- spec:start -->` marker in the body) | **Design** — draft the spec into the issue body |
+| `status:spec-draft` without a valid discovery marker (or no `<!-- spec:start -->` marker) | **Discovery assessment** — assess the lane before any design skip |
 | no `status:*` label | **Pickup** (fresh) |
+
+A complete lightweight marker is the only path to `status:implementing` without
+`spec:approved`. A standard/heavyweight packet still requires the member-only
+spec gate after its product brief and technical design are complete.
 
 **The agent MUST NEVER apply `spec:approved` itself.** Only a human org member
 applies it — GitHub restricts label-writes to Triage+, so outsiders can't, but
@@ -155,37 +167,68 @@ Await-approval, and Implementation.
   In workflow scripts (`agent()` calls), set `opts.model` consistently with
   the above mapping so subagents inherit the right tier.
 
-### 2. Design (skipped for trivial issue types)
+### 2. Discovery and design
 
-Skip the design step when:
-- Issue label is `chore`, `docs`, `dep-bump`, or `ci-fix`.
-- Issue body is < 300 characters AND has no markdown section headers.
-- Issue title starts with `fix(<scope>): typo|lint|format|…`.
+Every claimed issue gets a quick **Discovery assessment** before any type-label or
+short-issue heuristic can skip collaboration. Record this visible section before
+the `<!-- spec:start -->` marker with:
 
-When skipping, go straight to Implementation (claim `status:implementing`).
+- `Outcome:` the user or maintainer outcome in concrete terms;
+- `Success signal:` how we will know it worked;
+- `Stakeholder provenance:` reporter, affected users, implementer, and decision-maker;
+  use roles or approved pseudonyms in public artifacts and redact private IC/OOC details;
+- `Impact:` affected surfaces, reversibility, privacy, and risk;
+- `Lane rationale:` why this is lightweight, standard, or heavyweight.
 
-**Player- or staff-facing work takes the architectural path, always (#3659).**
-If the issue touches anything a player or staff member sees or operates (a React
-surface, a CG stage, a telnet verb, an admin flow), the brainstorm is never
-classified bounded, the questions stage is not skipped, and the design stage
-produces a **demo page** before the spec is posted: use the `demoing-a-feature`
-skill. The spec links the demo at its top, every user story names a screen on it,
-and every open fork is a ruling on it cited by id; the reviewer prompt checks that
-coverage. The demo travels inside `status:spec-review`; there is no extra label.
+The assessment must distinguish observations from proposals and ratified decisions.
+A type label is only a candidate signal. If there is an outcome-changing fork,
+user-facing impact, meaningful provenance uncertainty, or material risk, select
+standard/heavyweight even when the issue is labeled `docs` or `chore`.
 
-Otherwise, claim the draft lane (`status:spec-draft`; pickup sets this) and
-invoke `superpowers:brainstorming`. **Override two superpowers substeps:**
+For clearly bounded work — an obvious bug or routine maintenance with an explicit
+outcome, an existing pattern, no meaningful fork, and low impact — write
+`<!-- discovery:lane=lightweight;state=complete -->` outside the spec markers.
+Run `scripts/validate-discovery.sh <N>`, then flip `status:spec-draft` to
+`status:implementing` and proceed without `spec:approved`. This reason must remain
+visible in the assessment. Do not use the lightweight lane merely because a label
+looks simple.
 
-- **Spec destination:** write the spec into the **issue body**, between
-  `<!-- spec:start -->` and `<!-- spec:end -->` markers, preserving the original
-  problem statement above them (`gh issue edit <N> --body-file`). Don't create a
-  new committed `docs/superpowers/` spec file for this work. Use the section layout
-  in `docs/spec-template.md`, and before drafting consult `docs/adr/` for decisions
-  that already constrain the work and `AGENT_GLOSSARY_MAP.md` for canonical terms.
-- **Spec-review dispatch:** when the brainstorming flow reaches "dispatch
-  spec-document-reviewer," dispatch with the prompt at
-  `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead of
-  superpowers' default.
+For standard or heavyweight work, write the corresponding awaiting marker outside
+the spec markers and use the collaborative brainstorming lane. The root agent and
+stakeholder produce a product brief/PRD together: users, desired outcome, success
+signal, non-goals, provenance, outcome-changing assumptions, 1–3 options with
+consequences, and concrete scenarios or state transitions. The agent facilitates
+and records decisions; it must not silently choose taste or priorities. Dispatch
+`intent-ambiguity-critic` and `scope-simplicity-critic` in parallel before the
+stakeholder conversation; fold their evidence into the PRD, then record the
+stakeholder ruling.
+
+For player- or staff-facing or otherwise high-risk work, use the heavyweight lane
+when the discovery assessment says alternatives need to be made visible. Invoke
+`tools/skills/demoing-a-feature/SKILL.md` before technical approval. Create two or
+more low-cost, read-only demo directions or screenshot variants that show the
+meaningful tradeoffs. Let the stakeholder choose, reject, or amend one in chat;
+republish the artifact and record the ruling before writing the technical design.
+For nonvisual work use concrete traces, payloads, or state-transition walkthroughs
+instead. The later `demo-fidelity-reviewer` checks implementation fidelity against
+the approved direction; it does not replace this product conversation.
+
+When the stakeholder conversation is complete, retain the marker with
+`state=complete`, run the validator, and then draft the technical spec. Keep the
+product brief/PRD and technical design in separate sections. Standard/heavyweight
+work follows the normal `status:spec-review` → member-only `spec:approved` gate.
+An awaiting marker must not restart the conversation on re-invocation.
+
+For the issue body, use `<!-- discovery:... -->` outside the
+`<!-- spec:start -->` / `<!-- spec:end -->` region. The spec remains between those
+markers and uses `docs/spec-template.md`; consult `docs/adr/` and
+`AGENT_GLOSSARY_MAP.md` before drafting. Do not create a committed
+`docs/superpowers/` spec file.
+
+**Spec-review dispatch:** when the brainstorming flow reaches
+"dispatch spec-document-reviewer," dispatch with the prompt at
+`tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead of
+superpowers' default.
 
 **MANDATORY before posting the spec: run the `verify-against-code` pass**
 (skill at `tools/skills/verify-against-code/`). For every new surface the design
@@ -299,6 +342,37 @@ before opening a PR" into a dispatch to a sub-skill unless the user explicitly
 asked for that checkpoint.
 
 Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect the screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict.
+
+### Conditional implementation-quality review
+
+Before opening the PR, inspect the actual diff and record selected/skipped lanes
+in the PR Notes. Dispatch only reviewers whose triggers match the touched surfaces;
+do not convene a permanent council. Existing narrow reviewers take precedence:
+
+| Diff/risk signal | Required review |
+|---|---|
+| New model, field, FK, constraint, or relational shape | `schema-shape-reviewer` |
+| Migration, backfill, seed, destructive change, or migration collision | `migration-reviewer` |
+| Shared guard, validation, required argument, or broad abstraction | `blast-radius-reviewer`; use the `scope-simplicity-critic` for abstraction cost |
+| Framework hook, network boundary, or changed mock/double | `mock-fidelity-reviewer` and real-boundary contract coverage |
+| Persisted player-facing outcome or audience delivery | `outcome-delivery-reviewer` |
+| Evennia typeclass row creation or repair | `typeclass-creation-reviewer` |
+| Derived eligibility/safety classifier or hand-enumerated choice/visibility family | `derived-classifier-reviewer` or `enumerated-set-reviewer` |
+| Portal, websocket, telnet protocol, or Portal-read setting | `portal-code-deploy-reviewer` |
+| Approved visual/demo surface | `demo-fidelity-reviewer` |
+| Auth, permissions, privileged writes, input/trust boundary, IC/OOC audience, private content, query/resource cost, recovery, or operational burden with no narrower trigger | `implementation-quality-reviewer` with exactly the selected lens and a focused prompt |
+
+The fallback reviewer is not a generic approval. Its report must name the lens,
+file/line evidence, consequence, severity, confidence, recommendation, and one of
+`fix`, accepted consequence with rationale, substantial follow-up, or
+informational. An unresolved high-impact finding blocks the PR. A lane may be
+skipped only with a visible reason tied to the diff. The reviewer matrix applies to
+both code and workflow/documentation changes when their touched surface changes
+how agents make product, permission, privacy, or operational decisions.
+Set the optional `PR_DISCOVERY_LANE` rationale (the lane itself is derived from the
+validated issue marker), plus `PR_BRAINSTORM_DEMO` and `PR_QUALITY_REVIEW` with the
+collaborative PRD or explicit lightweight non-applicability and selected/skipped
+reviewer dispositions. `open-pr.sh` rejects missing or placeholder values.
 
 Whichever delivery mechanism is used, the report must record the exact revision,
 build/environment, ordinary user interactions, fixture/live boundaries, visual

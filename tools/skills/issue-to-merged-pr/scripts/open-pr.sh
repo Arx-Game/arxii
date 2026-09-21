@@ -3,8 +3,9 @@
 #
 # Pushes the branch (--force-with-lease if it was rebased) and opens a PR
 # whose body is composed from templates/pr-body.md with substitutions:
-#   {{issue_number}}, {{summary}}, {{followup_list}},
-#   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}
+#   {{issue_number}}, {{spec_gate_status}}, {{summary}}, {{followup_list}},
+#   {{ran_or_skipped}}, {{discovery_lane}}, {{brainstorm_demo_summary}},
+#   {{quality_review_summary}}, {{sync_summary}}, {{evidence_file}}
 #
 # Required env vars (set exactly one):
 #   PR_EVIDENCE_URL  - GitHub issue/PR comment containing the review report
@@ -16,9 +17,12 @@
 #                       PR_EVIDENCE_URL instead - see SKILL.md's evidence section)
 #
 # Optional env vars (used as substitution sources if set):
-#   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
-#   PR_RAN_OR_SKIPPED - replaces {{ran_or_skipped}} (default: "ran")
-#   PR_SYNC_SUMMARY   - replaces {{sync_summary}} (default: "(no rebase performed)")
+#   PR_SUMMARY              - replaces {{summary}} (default: "(no summary provided)")
+#   PR_RAN_OR_SKIPPED       - replaces {{ran_or_skipped}} (default: "ran")
+#   PR_DISCOVERY_LANE       - optional rationale note; lane is derived and checked
+#   PR_BRAINSTORM_DEMO      - required concise PRD/demo decision note
+#   PR_QUALITY_REVIEW       - required selected/skipped lane disposition note
+#   PR_SYNC_SUMMARY         - replaces {{sync_summary}} (default: "(no rebase performed)")
 #   PR_TITLE          - PR title (default: derived from issue title)
 #
 # Every PR opened by this script closes its issue. If the work is a partial
@@ -61,8 +65,56 @@ TEMPLATE="$SCRIPT_DIR/../templates/pr-body.md"
 
 SUMMARY="${PR_SUMMARY:-(no summary provided)}"
 RAN_OR_SKIPPED="${PR_RAN_OR_SKIPPED:-ran}"
+DISCOVERY_LANE="${PR_DISCOVERY_LANE:-}"
+BRAINSTORM_DEMO_SUMMARY="${PR_BRAINSTORM_DEMO:-}"
+QUALITY_REVIEW_SUMMARY="${PR_QUALITY_REVIEW:-}"
 SYNC_SUMMARY="${PR_SYNC_SUMMARY:-(no rebase performed)}"
-ISSUE_LABELS=$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')
+ISSUE_METADATA=$(gh issue view "$ISSUE" --json labels,body)
+ISSUE_LABELS=$(jq -r '[.labels[].name] | join("\n")' <<<"$ISSUE_METADATA")
+VALIDATOR="$SCRIPT_DIR/validate-discovery.sh"
+VALIDATION_RESULT=$("$VALIDATOR" "$ISSUE" --allow-approved-legacy) || {
+  echo "ERROR: discovery validation failed for issue #$ISSUE." >&2
+  exit 1
+}
+if ! grep -qx "status:implementing" <<<"$ISSUE_LABELS"; then
+  echo "ERROR: issue #$ISSUE must carry status:implementing before opening a PR." >&2
+  exit 1
+fi
+has_issue_label() {
+  grep -qx "$1" <<<"$ISSUE_LABELS"
+}
+if ! has_issue_label spec:approved && [[ "$VALIDATION_RESULT" != *"lane=lightweight state=complete"* ]]; then
+  echo "ERROR: issue #$ISSUE requires spec:approved unless it has a complete lightweight discovery marker." >&2
+  exit 1
+fi
+if [[ "$VALIDATION_RESULT" == *"legacy-approved"* ]]; then
+  VALIDATED_LANE="legacy-approved"
+else
+  VALIDATED_LANE=$(sed -E 's/.*lane=([^ ]+) state=.*/\1/' <<<"$VALIDATION_RESULT")
+fi
+if [[ ! "$VALIDATED_LANE" =~ ^(lightweight|standard|heavyweight|legacy-approved)$ ]]; then
+  echo "ERROR: discovery validator returned no usable lane for issue #$ISSUE." >&2
+  exit 1
+fi
+if [[ -z "$DISCOVERY_LANE" ]]; then
+  DISCOVERY_LANE="$VALIDATED_LANE: validated from issue body"
+elif [[ "$DISCOVERY_LANE" != "$VALIDATED_LANE:"* ]]; then
+  echo "ERROR: PR_DISCOVERY_LANE disagrees with the validated issue marker ($VALIDATED_LANE)." >&2
+  exit 1
+fi
+if [[ -z "$BRAINSTORM_DEMO_SUMMARY" || "$BRAINSTORM_DEMO_SUMMARY" == *"not recorded"* ]]; then
+  echo "ERROR: PR_BRAINSTORM_DEMO must record the PRD/demo decision or explicit lightweight non-applicability." >&2
+  exit 1
+fi
+if [[ -z "$QUALITY_REVIEW_SUMMARY" || "$QUALITY_REVIEW_SUMMARY" != *"selected:"* || "$QUALITY_REVIEW_SUMMARY" != *"skipped:"* || "$QUALITY_REVIEW_SUMMARY" != *"disposition:"* ]]; then
+  echo "ERROR: PR_QUALITY_REVIEW must include selected:, skipped:, and disposition: entries." >&2
+  exit 1
+fi
+if has_issue_label spec:approved; then
+  SPEC_GATE_STATUS="member-approved"
+else
+  SPEC_GATE_STATUS="validated-lightweight-bypass"
+fi
 EVIDENCE_REQUIRED=0
 if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
   EVIDENCE_REQUIRED=1
@@ -136,9 +188,13 @@ fi
 # implementation had.
 BODY=$(cat "$TEMPLATE")
 BODY=${BODY//\{\{issue_number\}\}/$ISSUE}
+BODY=${BODY//\{\{spec_gate_status\}\}/$SPEC_GATE_STATUS}
 BODY=${BODY//\{\{summary\}\}/$SUMMARY}
 BODY=${BODY//\{\{followup_list\}\}/$FOLLOWUP_LIST}
 BODY=${BODY//\{\{ran_or_skipped\}\}/$RAN_OR_SKIPPED}
+BODY=${BODY//\{\{discovery_lane\}\}/$DISCOVERY_LANE}
+BODY=${BODY//\{\{brainstorm_demo_summary\}\}/$BRAINSTORM_DEMO_SUMMARY}
+BODY=${BODY//\{\{quality_review_summary\}\}/$QUALITY_REVIEW_SUMMARY}
 BODY=${BODY//\{\{sync_summary\}\}/$SYNC_SUMMARY}
 BODY=${BODY//\{\{evidence_file\}\}/$EVIDENCE_REFERENCE}
 BODY=${BODY//\{\{evidence_marker\}\}/$EVIDENCE_MARKER}

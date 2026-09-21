@@ -16,7 +16,10 @@ Closes #{{issue_number}}
 
 ## Notes
 
-- Spec: reviewed & approved on #{{issue_number}} (in the issue body)
+- Spec gate: {{spec_gate_status}} on #{{issue_number}} (in the issue body)
+- Discovery lane and rationale: {{discovery_lane}}
+- Brainstorm/PRD and demo exploration: {{brainstorm_demo_summary}}
+- Quality review lanes selected/skipped and dispositions: {{quality_review_summary}}
 - Brainstorm/plan: {{ran_or_skipped}}
 - Sync-with-main: {{sync_summary}}
 
