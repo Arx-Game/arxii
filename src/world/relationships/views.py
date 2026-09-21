@@ -183,7 +183,9 @@ class CharacterRelationshipViewSet(GenericViewSet):
         rows = build_tie_page(
             sides, viewer_sheet=None, is_staff=False, force_audience=TieAudience.OWNER
         )
-        data = [self._row_to_payload(row) for row in rows]
+        # Every row here came through ``get_queryset``'s tenure join on ``source``, so
+        # each one is by construction a side of the caller's own.
+        data = [self._row_to_payload(row, is_own_side=True) for row in rows]
         serializer = TieSerializer(data, many=True)
         if page is not None:
             return self.get_paginated_response(serializer.data)
@@ -227,7 +229,8 @@ class CharacterRelationshipViewSet(GenericViewSet):
         row = build_tie_page(
             [side], viewer_sheet=viewer_sheet, is_staff=is_staff, force_audience=audience
         )[0]
-        return Response(TieSerializer(self._row_to_payload(row)).data)
+        is_own_side = viewer_sheet is not None and side.source_id == viewer_sheet.pk
+        return Response(TieSerializer(self._row_to_payload(row, is_own_side=is_own_side)).data)
 
     @extend_schema(responses=TieStreamItemSerializer(many=True))
     @action(detail=True, methods=["get"], pagination_class=None)
@@ -253,8 +256,13 @@ class CharacterRelationshipViewSet(GenericViewSet):
 
     # -- shared read-side plumbing ------------------------------------------------
 
-    def _row_to_payload(self, row: dict[str, Any]) -> dict[str, Any]:
-        """A ``build_tie_page`` row plus the side's own scalars, in ``TieSerializer``'s shape."""
+    def _row_to_payload(self, row: dict[str, Any], *, is_own_side: bool) -> dict[str, Any]:
+        """A ``build_tie_page`` row plus the side's own scalars, in ``TieSerializer``'s shape.
+
+        ``is_own_side`` is passed rather than derived here: ``list`` already knows it is
+        True for every row it builds (its queryset is a tenure join on ``source``) and
+        would otherwise have to resolve a viewer sheet it never needs.
+        """
         side = row["side"]
         return {
             "id": side.pk,
@@ -265,6 +273,7 @@ class CharacterRelationshipViewSet(GenericViewSet):
             "other_sheet_id": side.target_id,
             "other_entry_id": entry_id_for(side.target),
             "audience": row["audience"],
+            "is_own_side": is_own_side,
             "labels": row["labels"],
             "depth": row["depth"],
             "next_tier_threshold": row["next_tier_threshold"],

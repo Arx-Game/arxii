@@ -86,6 +86,14 @@ class TieSerializer(serializers.Serializer):
     other_sheet_id = serializers.IntegerField(allow_null=True)
     other_entry_id = serializers.IntegerField(allow_null=True)
     audience = serializers.ChoiceField(choices=TieAudience.choices)
+    # Whether this side belongs to the viewer's own character — the ONLY thing the web
+    # client may gate a write door on (#3957 review). ``audience`` cannot answer it:
+    # ``tie_audience`` short-circuits on ``is_staff`` first, so a staff account reading
+    # ANY tie gets STAFF, and four of the seven writes resolve their side as
+    # ``get_or_create(source=the caller's own sheet, ...)``. Gating on the enum therefore
+    # offered staff an Edit/Declare door on someone else's tie whose press wrote a
+    # durable row on the staff character's own side.
+    is_own_side = serializers.BooleanField()
     labels = RelationshipLabelSerializer(many=True)
     depth = serializers.IntegerField(allow_null=True)
     next_tier_threshold = serializers.IntegerField(allow_null=True)

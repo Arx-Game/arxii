@@ -77,6 +77,11 @@ class TieApiTests(TestCase):
             side=cls.ab, type=cls.lover, awareness=LabelAwareness.CLANDESTINE, tenure=cls.tenure_a
         )
         declare_label(side=cls.ab, type=cls.enemy, tenure=cls.tenure_a)
+        # A staff account that also PLAYS someone, so "staff reading a foreign tie" and
+        # "staff reading their own" are two distinguishable cases (#3957 review C2).
+        cls.s, cls.tenure_s = _owned_sheet(cls.staff)
+        cls.sa = get_or_create_side(source=cls.s, target=cls.a)
+        declare_label(side=cls.sa, type=cls.rival, tenure=cls.tenure_s)
 
     def _client(self, account):
         client = APIClient()
@@ -122,6 +127,48 @@ class TieApiTests(TestCase):
         data = self._client(self.staff).get(f"/api/relationships/relationships/{self.ab.pk}/").data
         self.assertEqual(data["audience"], "staff")
         self.assertEqual(len(data["labels"]), 2)
+
+    def test_is_own_side_true_only_for_the_side_the_viewer_plays(self):
+        """The one flag the web client gates a write door on (#3957 review C2).
+
+        ``audience`` cannot serve: ``tie_audience`` short-circuits on ``is_staff``, so a
+        staff account reading ANY tie gets STAFF. Four of the seven writes resolve their
+        side as ``get_or_create(source=the caller's own sheet, ...)``, so a door offered on
+        that basis would have written a durable row on the staff character's own side.
+        """
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        self.assertTrue(self._client(self.owner).get(url).data["is_own_side"])
+
+    def test_is_own_side_false_for_the_other_party(self):
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.other).get(url).data
+        self.assertEqual(data["audience"], "other_side")
+        self.assertFalse(data["is_own_side"])
+
+    def test_is_own_side_false_for_a_third_party(self):
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.stranger).get(url).data
+        self.assertEqual(data["audience"], "third_party")
+        self.assertFalse(data["is_own_side"])
+
+    def test_is_own_side_false_for_staff_on_someone_elses_tie(self):
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.staff).get(url).data
+        self.assertEqual(data["audience"], "staff")
+        self.assertFalse(data["is_own_side"])
+
+    def test_is_own_side_true_for_staff_on_their_own_tie(self):
+        url = f"/api/relationships/relationships/{self.sa.pk}/"
+        data = self._client(self.staff).get(url).data
+        self.assertEqual(data["audience"], "staff")
+        self.assertTrue(data["is_own_side"])
+
+    def test_list_rows_are_all_own_sides(self):
+        data = self._client(self.owner).get("/api/relationships/relationships/").data
+        self.assertTrue(all(row["is_own_side"] for row in data["results"]))
 
     def test_list_is_own_sides_only(self):
         data = self._client(self.owner).get("/api/relationships/relationships/").data

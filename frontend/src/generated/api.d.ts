@@ -46179,6 +46179,7 @@ export interface components {
       other_sheet_id: number | null;
       other_entry_id: number | null;
       audience: components['schemas']['AudienceEnum'];
+      is_own_side: boolean;
       labels: components['schemas']['RelationshipLabel'][];
       depth: number | null;
       next_tier_threshold: number | null;

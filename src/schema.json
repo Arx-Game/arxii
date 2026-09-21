@@ -82500,6 +82500,8 @@ components:
           nullable: true
         audience:
           $ref: '#/components/schemas/AudienceEnum'
+        is_own_side:
+          type: boolean
         labels:
           type: array
           items:
@@ -82531,6 +82533,7 @@ components:
       - breakdown
       - depth
       - id
+      - is_own_side
       - is_soul_tether
       - labels
       - next_tier_threshold
