@@ -276,6 +276,9 @@ function tieOwner() {
     other_sheet_id: CORVIN_SHEET_ID,
     other_entry_id: 34,
     audience: 'owner',
+    // The write blocks gate on this, never on `audience` (#3957 review round 1) —
+    // staff reading someone else's tie are `audience: 'staff'` but do not own the side.
+    is_own_side: true,
     labels: [
       relationshipLabel({
         id: 1,
@@ -327,6 +330,7 @@ function tieOther() {
   return {
     ...owner,
     audience: 'other_side',
+    is_own_side: false,
     labels: [owner.labels[0]],
     breakdown: { ...owner.breakdown, affection: null, conflict: null },
     ap_this_week: null,
@@ -395,6 +399,47 @@ const TIE_STREAM = [
   },
 ];
 
+/**
+ * The label catalogue `RelationshipShift`'s picker reads. `Lover` (held, so excluded
+ * from its own picker) and `Betrothed` share the Heart family — the demo's own
+ * "Lover becomes Betrothed" example (#3957 demo, Screen 3).
+ */
+const RELATIONSHIP_TYPES = [
+  {
+    id: 3,
+    name: 'Lover',
+    slug: 'lover',
+    description: 'Together, and not hiding it from yourself.',
+    family: 'heart',
+    valence: 'warm',
+    counterpart: null,
+    counterpart_name: 'Lover',
+    display_order: 1,
+  },
+  {
+    id: 4,
+    name: 'Betrothed',
+    slug: 'betrothed',
+    description: 'Promised.',
+    family: 'heart',
+    valence: 'warm',
+    counterpart: null,
+    counterpart_name: 'Betrothed',
+    display_order: 2,
+  },
+  {
+    id: 9,
+    name: 'Enemy',
+    slug: 'enemy',
+    description: 'Open hostility. Opens antagonism when mutual.',
+    family: 'contest',
+    valence: 'hostile',
+    counterpart: null,
+    counterpart_name: 'Enemy',
+    display_order: 3,
+  },
+];
+
 interface Scenario {
   /** `CharacterSheetPage`'s ties cast, or null if this run never visits the sheet. */
   cast: unknown[] | null;
@@ -406,11 +451,21 @@ interface Scenario {
   tie: ReturnType<typeof tieOwner> | null;
 }
 
-/** Installs one `/api/**` handler answering every request this page mount makes. */
-async function mockApi(page: Page, scenario: Scenario): Promise<void> {
+/**
+ * Installs one `/api/**` handler answering every request this page mount makes.
+ * Returns `shiftRequests`, which the POST .../shift/ branch appends every body to, so a
+ * test can assert what the Relationship Shift door actually sent.
+ */
+async function mockApi(page: Page, scenario: Scenario): Promise<{ shiftRequests: unknown[] }> {
+  const shiftRequests: unknown[] = [];
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+
+    if (path === '/api/relationships/relationships/shift/' && route.request().method() === 'POST') {
+      shiftRequests.push(route.request().postDataJSON());
+      return route.fulfill({ json: { success: true, message: '', data: {} } });
+    }
 
     if (path === '/api/user/') {
       return route.fulfill({ json: accountPayload() });
@@ -436,7 +491,14 @@ async function mockApi(page: Page, scenario: Scenario): Promise<void> {
       return route.fulfill({ json: { count: 0, next: null, previous: null, results: [] } });
     }
     if (path === '/api/relationships/types/') {
-      return route.fulfill({ json: { count: 0, next: null, previous: null, results: [] } });
+      return route.fulfill({
+        json: {
+          count: RELATIONSHIP_TYPES.length,
+          next: null,
+          previous: null,
+          results: RELATIONSHIP_TYPES,
+        },
+      });
     }
     if (path === `/api/roster/kin/tree/${SHEET_ID}/`) {
       // KinshipPanel, the Ties tab's own Kin rail (not part of #3957, but on the same
@@ -488,6 +550,7 @@ async function mockApi(page: Page, scenario: Scenario): Promise<void> {
     }
     return route.fulfill({ status: 404, json: { detail: 'Not provided by this fixture.' } });
   });
+  return { shiftRequests };
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -497,7 +560,7 @@ async function shot(page: Page, name: string): Promise<void> {
 
 test.describe('Ties, redrawn (#3957)', () => {
   test('the cast and the tie page, as the owner (Ilsavet)', async ({ page }) => {
-    await mockApi(page, {
+    const { shiftRequests } = await mockApi(page, {
       cast: OWNER_CAST,
       apThisWeek: 12,
       ownEntry: true,
@@ -540,16 +603,18 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
     await expect(page.getByText('Thread: none yet.')).toBeVisible();
 
-    // Labels and AP: the AP field, both labels with their awareness lines and doors, and
-    // the "Replaced Friend" gloss the demo's Screen 3 carries.
+    // Labels and AP: the AP field, both labels' markers (bare — no date, since
+    // `RelationshipLabel.since` is a posting timestamp, not in-character prose) and
+    // doors, and the "Replaced Friend" gloss the demo's Screen 3 carries. Both labels
+    // carry Change/End/Make public; only the private Enemy also carries Make clandestine.
     await expect(page.getByLabel('AP this week')).toHaveValue('9');
-    await expect(page.getByText(/Clandestine · since/)).toBeVisible();
-    await expect(page.getByText(/Private · since/)).toBeVisible();
+    await expect(page.getByText('Clandestine', { exact: true })).toBeVisible();
+    await expect(page.getByText('Private', { exact: true })).toBeVisible();
     await expect(page.getByText('Replaced Friend')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Change' }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'End' }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Make public' }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Make clandestine' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Change' })).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'End' })).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Make public' })).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Make clandestine' })).toHaveCount(1);
 
     // Advance Relationship Tier: the ratio, the cost line, and a disabled Advance (no
     // capstone picked yet).
@@ -561,6 +626,32 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect(page.getByRole('button', { name: 'Advance' })).toBeDisabled();
 
     await shot(page, 'ties-page-owner');
+
+    // Relationship Shift: Change on a label opens it (its own eyebrow, the "becomes"
+    // line, the type picker); Keep as is closes it without writing; picking a type and
+    // its own Change submits the shift and closes it on success. Scoped to the Lover
+    // row for the opening click (Change is ambiguous across both labels), and to the
+    // shift block itself once open (its own submit door is ALSO labelled "Change").
+    const loverRow = page.locator('.refsheet-entry', { hasText: 'Lover' });
+    // `.refsheet-block` nests: LabelsAndAp's own root also "has" this text, as an
+    // ancestor of the shift block — `.last()` lands on the innermost match, the shift
+    // block's own root, since a parent always precedes its descendant in DOM order.
+    const shiftBlock = () =>
+      page.locator('.refsheet-block', { hasText: 'Relationship Shift' }).last();
+
+    await loverRow.getByRole('button', { name: 'Change' }).click();
+    await expect(shiftBlock().getByText('Relationship Shift')).toBeVisible();
+    await expect(shiftBlock().getByText('Lover becomes')).toBeVisible();
+    await expect(page.getByLabel('Lover becomes')).toBeVisible();
+    await shiftBlock().getByRole('button', { name: 'Keep as is' }).click();
+    await expect(page.getByText('Relationship Shift')).toHaveCount(0);
+
+    await loverRow.getByRole('button', { name: 'Change' }).click();
+    await page.getByLabel('Lover becomes').selectOption({ label: 'Betrothed' });
+    await shiftBlock().getByRole('button', { name: 'Change' }).click();
+    await expect.poll(() => shiftRequests.length).toBe(1);
+    expect(shiftRequests[0]).toEqual({ label_id: 1, new_type_id: 4, note: '' });
+    await expect(page.getByText('Relationship Shift')).toHaveCount(0);
 
     // The breakdown panel: Tier, Scenes, Invested, Their Added Depth, and — owner only —
     // Affection and Conflict. Scoped to the popover: "Scenes" also names one of the
@@ -646,6 +737,18 @@ test.describe('Ties, redrawn (#3957)', () => {
     await expect(page.getByText('Does not know what the shop is for.')).toBeVisible();
     await expect(page.getByText('Priced her first secret.')).toBeVisible();
     await expect(page.getByText(/Depth/)).toHaveCount(0);
+
+    // Every label on the three visible cards is Public already — the stranger sees the
+    // same chips the owner does — and nothing Clandestine or Private ever leaks to them.
+    await expect(page.getByText('Rival · mutual')).toBeVisible();
+    await expect(page.getByText('Friend · former')).toBeVisible();
+    // Scoped to the card: "Kin" bare is also the rail block's own heading further down.
+    const tamCard = page.locator('.refsheet-face', { hasText: 'Tam du Verane' });
+    await expect(tamCard.getByText('Kin', { exact: true })).toBeVisible();
+    await expect(page.getByText('Mentor · mutual')).toBeVisible();
+    await expect(page.getByText('Friend', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Clandestine/)).toHaveCount(0);
+    await expect(page.getByText(/Private/)).toHaveCount(0);
 
     await shot(page, 'ties-cast-stranger');
 
