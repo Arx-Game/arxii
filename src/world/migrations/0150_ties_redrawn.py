@@ -7,12 +7,11 @@ import django.utils.timezone
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0148_journal_about_consent_visit"),
+        ("arxii", "0149_ties_cleanup"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
     operations = [
         migrations.RenameModel(old_name="RelationshipTrack", new_name="RelationshipType"),
-        migrations.RemoveField(model_name="relationshiptype", name="sign"),
         migrations.RemoveField(model_name="relationshiptype", name="system_key"),
         migrations.AddField(
             model_name="relationshiptype",
@@ -149,6 +148,9 @@ class Migration(migrations.Migration):
             options={"ordering": ["since"]},
         ),
         migrations.AlterModelOptions(
+            name="characterrelationship", options={"ordering": ["-updated_at"]}
+        ),
+        migrations.AlterModelOptions(
             name="relationshiptier", options={"ordering": ["tier_number"]}
         ),
         migrations.AlterModelOptions(
@@ -178,6 +180,7 @@ class Migration(migrations.Migration):
         migrations.RemoveConstraint(
             model_name="threadweavingunlock", name="threadweaving_track_payload"
         ),
+        migrations.RemoveField(model_name="secretgrievance", name="capstone"),
         migrations.RemoveField(model_name="hybridrequirement", name="hybrid_type"),
         migrations.RemoveField(model_name="hybridrequirement", name="track"),
         migrations.RemoveField(model_name="relationshipchange", name="author"),
@@ -420,6 +423,13 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AlterField(
+            model_name="affectionshift",
+            name="amount",
+            field=models.IntegerField(
+                help_text="Signed points applied: positive → Affection, negative → Conflict"
+            ),
+        ),
+        migrations.AlterField(
             model_name="bondcombatconfig",
             name="soul_tether_multiplier",
             field=models.PositiveSmallIntegerField(default=2),
@@ -548,6 +558,14 @@ class Migration(migrations.Migration):
                 ],
                 max_length=32,
                 null=True,
+            ),
+        ),
+        migrations.AlterField(
+            model_name="relationshipbump",
+            name="valence",
+            field=models.SmallIntegerField(
+                choices=[(1, "Positive"), (-1, "Negative")],
+                help_text="+1 adds Affection, -1 adds Conflict",
             ),
         ),
         migrations.AlterField(

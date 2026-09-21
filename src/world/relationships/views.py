@@ -45,11 +45,11 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
     filterset_class = RelationshipCapstoneFilter
 
     def get_queryset(self):  # type: ignore[override]
-        """Return capstones authored on relationships the caller's sheets source."""
-        return (
-            RelationshipCapstone.objects.filter(
-                relationship__source__character__db_account=self.request.user
-            )
-            .select_related("journal_entry", "relationship")
-            .order_by("-created_at")
-        )
+        """Return capstones authored on relationships the caller's sheets source.
+
+        Newest first via the model's own ``Meta.ordering`` — no explicit ``order_by``
+        needed here.
+        """
+        return RelationshipCapstone.objects.filter(
+            relationship__source__character__db_account=self.request.user
+        ).select_related("journal_entry", "relationship")

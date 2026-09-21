@@ -218,6 +218,7 @@ class CharacterRelationship(SharedMemoryModel):
     magical_flavor = models.TextField(blank=True)
 
     class Meta:
+        ordering = ["-updated_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["source", "target"],
@@ -472,7 +473,8 @@ class RelationshipBump(SharedMemoryModel):
     emoji reactions on the web both land here. The unique constraint per
     (relationship, interaction) IS the anti-spam mechanism: a pose can only be
     acknowledged once, so the per-scene budget (no more bumps than the target
-    has posed) emerges without counters.
+    has posed) emerges without counters. Moves the directed side's play-moved
+    gauges (#3957): +1 adds Affection, -1 adds Conflict.
     """
 
     relationship = models.ForeignKey(
@@ -493,7 +495,7 @@ class RelationshipBump(SharedMemoryModel):
     )
     valence = models.SmallIntegerField(
         choices=BumpValence.choices,
-        help_text="+1 warms (Regard system track), -1 cools (Friction system track)",
+        help_text="+1 adds Affection, -1 adds Conflict",
     )
     source_emoji = models.ForeignKey(
         "arxii.ReactionEmoji",
@@ -524,8 +526,9 @@ class AffectionShift(SharedMemoryModel):
 
     The generic, valence-signed success consequence (SHIFT_AFFECTION): a
     successful Flirt (+5) or Seduce (+50) — and gated offensive actions
-    with negative amounts — moves the TARGET's relationship toward the actor
-    on the Regard/Friction system tracks. Two provenance modes (#2540):
+    with negative amounts — moves the TARGET's relationship toward the actor:
+    positive amounts add Affection, negative amounts add Conflict (#3957). Two
+    provenance modes (#2540):
     effect-keyed rows keep the per-(relationship, scene, effect)
     diminishing-returns rule — only the first success of a given effect per
     scene per pair shifts; repeats no-op (conditions still refresh) — while
@@ -564,7 +567,7 @@ class AffectionShift(SharedMemoryModel):
         "non-null, so a boon-keyed row's provenance dies with the boon.",
     )
     amount = models.IntegerField(
-        help_text="Signed points applied: positive → Regard, negative → Friction",
+        help_text="Signed points applied: positive → Affection, negative → Conflict",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
