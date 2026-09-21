@@ -272,44 +272,8 @@ def build_tie_page(
     ``next_tier_threshold``, ``breakdown``, ``ap_this_week``, ``thread``
     (``{"level":..,"resonance_name":..}`` or None).
     """
-    from world.magic.models import Thread  # noqa: PLC0415
-
-    reverse_by_pair: dict[tuple[int, int], CharacterRelationship] = {}
-    pair_q = Q()
-    for side in sides:
-        if side.target_id is not None:
-            pair_q |= Q(source_id=side.target_id, target_id=side.source_id)
-    if pair_q:
-        # No is_active filter here (#3957 review, spec Decision 2): a frozen side takes no
-        # credit of either kind until reactivated, but it KEEPS the depth it already earned —
-        # displayed depth/breakdown.their_added_depth must match the model's own unfiltered
-        # pair_depth(), which services.advance_tier also gates on. Mutuality is the one thing
-        # that DOES require both sides active, and that check lives inside
-        # _labels_are_mutual itself (reverse.is_active), not here. Keyed on the (source,
-        # target) PAIR, not source alone — two of the caller's own owned characters can each
-        # hold a side toward the same target, and both reverse rows then share one source_id;
-        # a source-only key would collide and hand one row the other's depth/labels.
-        reverse_sides = CharacterRelationship.objects.filter(pair_q).prefetch_related(
-            # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly as a
-            # bare string does. Contained because every reader re-prefetches on the queryset
-            # it reads from; never read .labels.all() off a side this queryset did not load.
-            Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
-                "labels",
-                queryset=RelationshipLabel.objects.select_related(
-                    "type", "type__counterpart", "declared_by_tenure"
-                ),
-            )
-        )
-        reverse_by_pair = {(r.source_id, r.target_id): r for r in reverse_sides}
-
-    threads_by_side: dict[int, Thread] = {}
-    for thread in (
-        Thread.objects.filter(target_relationship__in=sides, retired_at__isnull=True)
-        .select_related("resonance")
-        .order_by("-level")
-    ):
-        threads_by_side.setdefault(thread.target_relationship_id, thread)
-
+    reverse_by_pair = _reverse_sides_by_pair(sides)
+    threads_by_side = _newest_open_thread_by_side(sides)
     tiers_by_number = {tier.tier_number: tier for tier in RelationshipTier.objects.all()}
 
     rows: list[dict[str, Any]] = []
@@ -321,57 +285,135 @@ def build_tie_page(
             if side.target_id is not None
             else None
         )
-        my_labels = list(side.labels.all())
-        their_labels = list(reverse.labels.all()) if reverse is not None else []
-        visible = _labels_for_audience(my_labels, audience)
-        label_rows = [
-            label_payload(
-                label,
-                audience,
-                is_mutual=(
-                    label.ended_at is None
-                    and _labels_are_mutual(
-                        side,
-                        my_labels,
-                        reverse,
-                        their_labels,
-                        label.type,
-                        public_only=audience == TieAudience.THIRD_PARTY,
-                    )
-                ),
-            )
-            for label in visible
-        ]
-        next_tier = tiers_by_number.get(side.tier + 1) if numbers else None
-        ap_this_week = None
-        if include_allocation and audience in (TieAudience.OWNER, TieAudience.STAFF):
-            try:
-                ap_this_week = side.allocation.ap_amount
-            except ObjectDoesNotExist:
-                ap_this_week = None
-        thread = threads_by_side.get(side.pk) if numbers else None
         rows.append(
-            {
-                "side": side,
-                "audience": audience,
-                "labels": label_rows,
-                "depth": (
-                    (side.depth + (reverse.depth if reverse is not None else 0))
-                    if numbers
-                    else None
-                ),
-                "tier": side.tier if numbers else None,
-                "next_tier_threshold": next_tier.depth_threshold if next_tier else None,
-                "breakdown": _depth_breakdown_from(side, reverse, audience),
-                "ap_this_week": ap_this_week,
-                "thread": (
-                    {"level": thread.level, "resonance_name": thread.resonance.name}
-                    if thread is not None
-                    else None
-                ),
-            }
+            _tie_page_row(
+                side,
+                reverse=reverse,
+                audience=audience,
+                next_tier=tiers_by_number.get(side.tier + 1) if numbers else None,
+                thread=threads_by_side.get(side.pk) if numbers else None,
+                include_allocation=include_allocation,
+            )
         )
     return rows
+
+
+def _reverse_sides_by_pair(
+    sides: list[CharacterRelationship],
+) -> dict[tuple[int, int], CharacterRelationship]:
+    """The other side of every tie on the page, in ONE query, keyed on the (source, target)
+    PAIR (#3957 review).
+
+    No is_active filter (spec Decision 2): a frozen side takes no credit of either kind
+    until reactivated, but it KEEPS the depth it already earned — displayed
+    depth/breakdown.their_added_depth must match the model's own unfiltered
+    ``pair_depth()``, which ``services.advance_tier`` also gates on. Mutuality is the one
+    thing that DOES require both sides active, and that check lives inside
+    ``_labels_are_mutual`` itself (``reverse.is_active``), not here.
+
+    Keyed on the pair, not on source alone: two of the caller's own owned characters can
+    each hold a side toward the same target, and both reverse rows then share one
+    ``source_id`` — a source-only key would collide and hand one row the other's
+    depth and labels.
+    """
+    pair_q = Q()
+    for side in sides:
+        if side.target_id is not None:
+            pair_q |= Q(source_id=side.target_id, target_id=side.source_id)
+    if not pair_q:
+        return {}
+    reverse_sides = CharacterRelationship.objects.filter(pair_q).prefetch_related(
+        # Why this is suppressed (#3957 review): a Prefetch without to_attr writes
+        # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly as a
+        # bare string does. Contained because every reader re-prefetches on the queryset
+        # it reads from; never read .labels.all() off a side this queryset did not load.
+        Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
+            "labels",
+            queryset=RelationshipLabel.objects.select_related(
+                "type", "type__counterpart", "declared_by_tenure"
+            ),
+        )
+    )
+    return {(r.source_id, r.target_id): r for r in reverse_sides}
+
+
+def _newest_open_thread_by_side(sides: list[CharacterRelationship]) -> dict[int, Any]:
+    """Each side's highest-level open thread, in ONE query for the whole page (#3957)."""
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    threads_by_side: dict[int, Thread] = {}
+    for thread in (
+        Thread.objects.filter(target_relationship__in=sides, retired_at__isnull=True)
+        .select_related("resonance")
+        .order_by("-level")
+    ):
+        threads_by_side.setdefault(thread.target_relationship_id, thread)
+    return threads_by_side
+
+
+def _tie_page_row(  # noqa: PLR0913 - one row needs its side, its pair and the page's batches
+    side: CharacterRelationship,
+    *,
+    reverse: CharacterRelationship | None,
+    audience: str,
+    next_tier: RelationshipTier | None,
+    thread: Any | None,
+    include_allocation: bool,
+) -> dict[str, Any]:
+    """One side's row of ``build_tie_page``'s output, for an audience already decided.
+
+    Takes ``next_tier`` and ``thread`` already resolved (and already nulled for a
+    THIRD_PARTY by the caller) rather than the page's maps: the numbers gate is one
+    decision, made once per side where the audience is known, not re-asked per field.
+    """
+    numbers = audience != TieAudience.THIRD_PARTY
+    my_labels = list(side.labels.all())
+    their_labels = list(reverse.labels.all()) if reverse is not None else []
+    label_rows = [
+        label_payload(
+            label,
+            audience,
+            is_mutual=(
+                label.ended_at is None
+                and _labels_are_mutual(
+                    side,
+                    my_labels,
+                    reverse,
+                    their_labels,
+                    label.type,
+                    public_only=audience == TieAudience.THIRD_PARTY,
+                )
+            ),
+        )
+        for label in _labels_for_audience(my_labels, audience)
+    ]
+    ap_this_week = None
+    if include_allocation and audience in (TieAudience.OWNER, TieAudience.STAFF):
+        try:
+            ap_this_week = side.allocation.ap_amount
+        except ObjectDoesNotExist:
+            ap_this_week = None
+    # A plain statement rather than a conditional inside the payload's conditional: the
+    # pair's depth is one idea, and reading it took two nested ternaries to see (#3957 CI
+    # round, Sonar MAJOR).
+    their_added_depth = reverse.depth if reverse is not None else 0
+    pair_depth = side.depth + their_added_depth
+    thread_payload = (
+        {"level": thread.level, "resonance_name": thread.resonance.name}
+        if thread is not None
+        else None
+    )
+    return {
+        "side": side,
+        "audience": audience,
+        "labels": label_rows,
+        "depth": pair_depth if numbers else None,
+        "tier": side.tier if numbers else None,
+        "next_tier_threshold": next_tier.depth_threshold if next_tier else None,
+        "breakdown": _depth_breakdown_from(side, reverse, audience),
+        "ap_this_week": ap_this_week,
+        "thread": thread_payload,
+    }
 
 
 def tie_stream(

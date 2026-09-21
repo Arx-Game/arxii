@@ -192,21 +192,22 @@ class CmdRelationship(ArxCommand):
         """Syntax: ``shift <name>=<from>,<to>[,note]``."""
         from actions.definitions.relationships import ShiftLabelAction  # noqa: PLC0415
 
+        msg = "Usage: relationship shift <name>=<from>,<to>[,note]"
         name, sep, rhs = rest.partition("=")
         parts = rhs.split(",", 2) if sep else []
-        if (
-            not name.strip()
-            or len(parts) < _MIN_LABEL_REF_PARTS
-            or not parts[0].strip()
-            or not parts[1].strip()
-        ):
-            msg = "Usage: relationship shift <name>=<from>,<to>[,note]"
+        if not name.strip() or len(parts) < _MIN_LABEL_REF_PARTS:
+            raise CommandError(msg)
+        # Unpacked rather than indexed: the length guard above is what makes parts[0] and
+        # parts[1] safe, and a reader (static analysis included) has to carry that guard
+        # in their head to see it. The star soaks up the optional note.
+        old_name, new_name, *note_parts = parts
+        if not old_name.strip() or not new_name.strip():
             raise CommandError(msg)
         sheet = self._actor_sheet(self.caller)
         target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
-        label = self._own_open_label(sheet, target_sheet, target_companion, parts[0].strip())
-        new_type = self._resolve_type(parts[1].strip())
-        note = parts[2].strip() if len(parts) > _MIN_LABEL_REF_PARTS else ""
+        label = self._own_open_label(sheet, target_sheet, target_companion, old_name.strip())
+        new_type = self._resolve_type(new_name.strip())
+        note = note_parts[0].strip() if note_parts else ""
         result = ShiftLabelAction().run(
             actor=self.caller, label=label, new_type=new_type, note=note
         )
@@ -232,20 +233,20 @@ class CmdRelationship(ArxCommand):
         """Syntax: ``reveal <name>=<type>,<clandestine|public>``."""
         from actions.definitions.relationships import AdvanceLabelAwarenessAction  # noqa: PLC0415
 
+        msg = "Usage: relationship reveal <name>=<type>,<clandestine|public>"
         name, sep, rhs = rest.partition("=")
         parts = rhs.split(",", 1) if sep else []
-        if (
-            not name.strip()
-            or len(parts) < _MIN_LABEL_REF_PARTS
-            or not parts[0].strip()
-            or not parts[1].strip()
-        ):
-            msg = "Usage: relationship reveal <name>=<type>,<clandestine|public>"
+        if not name.strip() or len(parts) < _MIN_LABEL_REF_PARTS:
+            raise CommandError(msg)
+        # Unpacked for the same reason as ``_dispatch_shift``'s parse: the guard above is
+        # the whole safety argument for reading two fields out of this split.
+        type_name, to_awareness = parts
+        if not type_name.strip() or not to_awareness.strip():
             raise CommandError(msg)
         sheet = self._actor_sheet(self.caller)
         target_sheet, target_companion = self._resolve_target(self.caller, name.strip())
-        label = self._own_open_label(sheet, target_sheet, target_companion, parts[0].strip())
-        awareness = parts[1].strip().lower()
+        label = self._own_open_label(sheet, target_sheet, target_companion, type_name.strip())
+        awareness = to_awareness.strip().lower()
         result = AdvanceLabelAwarenessAction().run(
             actor=self.caller, label=label, awareness=awareness
         )

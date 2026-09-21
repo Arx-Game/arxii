@@ -211,6 +211,7 @@ class CharacterRelationshipViewSet(GenericViewSet):
                 "allocation",
             )
             .prefetch_related(
+                # Why this is suppressed (#3957 review): a Prefetch without to_attr writes
                 # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly
                 # as a bare string does. Contained because every reader re-prefetches on
                 # the queryset it reads from; never read .labels.all() off a side this
@@ -265,6 +266,7 @@ class CharacterRelationshipViewSet(GenericViewSet):
                 "allocation",
             )
             .prefetch_related(
+                # Why this is suppressed (#3957 review): a Prefetch without to_attr writes
                 # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly
                 # as a bare string does. Contained because every reader re-prefetches on
                 # the queryset it reads from; never read .labels.all() off a side this
