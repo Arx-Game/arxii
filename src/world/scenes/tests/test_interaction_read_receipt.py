@@ -1,7 +1,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, tag
 from django.urls import reverse
 from rest_framework.test import APITestCase
@@ -61,10 +61,8 @@ class MarkConversationReadCapOrderingTests(TestCase):
 
     This is a direct unit test of the service function itself -- deliberately
     NOT going through the full HTTP/DB path with thousands of real rows.
-    `InteractionReadReceipt.interaction` is `db_constraint=False` (a real FK,
-    but the DB never enforces it -- see the model's own docstring), so
-    synthetic `(id, timestamp)` pairs that don't correspond to any real
-    `Interaction` row are enough to prove the slicing behavior in isolation.
+    The test uses three real interactions because PostgreSQL enforces the
+    receipt's composite `(id, timestamp)` reference.
 
     The correctness of `poses[-N:]` depends entirely on the caller (in
     practice, `play_views._mark_conversation_read`) handing this function an
@@ -76,13 +74,11 @@ class MarkConversationReadCapOrderingTests(TestCase):
 
     def test_over_cap_keeps_the_newest_poses_not_the_oldest(self) -> None:
         account = AccountFactory()
-        # Ascending (oldest-first), matching `_queryset`'s `order_by`. IDs are
-        # synthetic -- no real `Interaction` rows exist for them, and none are
-        # needed (see class docstring).
+        # Ascending (oldest-first), matching `_queryset`'s `order_by`. Use
+        # real rows because PostgreSQL now enforces the composite reference.
+        interactions = [InteractionFactory() for _ in range(3)]
         ascending_poses = [
-            (1, "2026-01-01T00:01:00Z"),
-            (2, "2026-01-01T00:02:00Z"),
-            (3, "2026-01-01T00:03:00Z"),
+            (interaction.pk, interaction.timestamp.isoformat()) for interaction in interactions
         ]
 
         with patch("world.scenes.read_state_services.MAX_CONVERSATION_MARK_READ", 2):
@@ -94,10 +90,9 @@ class MarkConversationReadCapOrderingTests(TestCase):
                 "interaction_id", flat=True
             )
         )
-        # The tail of the input list (ids 2, 3 -- the NEWEST two), never the
-        # head (id 1, the oldest) -- a `poses[:N]` regression would instead
-        # keep {1, 2} and this assertion would catch it.
-        self.assertEqual(marked_ids, {2, 3})
+        # The tail of the input list (the NEWEST two), never the head (oldest)
+        # -- a `poses[:N]` regression would instead keep the first two.
+        self.assertEqual(marked_ids, {interactions[1].pk, interactions[2].pk})
 
 
 class IsUnreadSerializerFieldTests(APITestCase):
@@ -133,6 +128,12 @@ class PartitionedMetadataIntegrityTests(TestCase):
                     timestamp=interaction.timestamp + timedelta(seconds=1),
                     account=account,
                 )
+                # The production FK is intentionally deferred for delete
+                # ordering. Force it now so this test can assert the mismatch.
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SET CONSTRAINTS interactionreadreceipt_interaction_fk IMMEDIATE"
+                    )
 
     def test_deleting_interaction_cleans_receipt(self) -> None:
         account = AccountFactory()
