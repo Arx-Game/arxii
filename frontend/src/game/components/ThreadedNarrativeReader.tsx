@@ -384,6 +384,7 @@ interface ThreadedNarrativeReaderProps {
   notes?: FeedNote[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
+  retention?: { retained: number; evicted: number; warning: boolean; gap: boolean };
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   onAddTarget?: (name: string) => void;
   onAttachAction?: (action: ActionAttachmentInfo) => void;
@@ -465,6 +466,7 @@ export function ThreadedNarrativeReader({
   notes = NO_NOTES,
   hasNextPage,
   fetchNextPage,
+  retention,
   onAvatarClick,
   onAddTarget,
   onAttachAction,
@@ -749,6 +751,17 @@ export function ThreadedNarrativeReader({
     () => interleaveNotes(chronologicalItems, notes),
     [chronologicalItems, notes]
   );
+  // Virtualized rows are efficient for sighted reading; this semantic pager is
+  // the bounded full-text fallback for keyboard and screen-reader users.
+  const [accessibleMode, setAccessibleMode] = useState(false);
+  const [accessiblePage, setAccessiblePage] = useState(0);
+  const ACCESSIBLE_PAGE_SIZE = 25;
+  const accessibleItems = chronologicalItems;
+  const accessiblePageCount = Math.max(1, Math.ceil(accessibleItems.length / ACCESSIBLE_PAGE_SIZE));
+  const accessibleRows = accessibleItems.slice(
+    accessiblePage * ACCESSIBLE_PAGE_SIZE,
+    (accessiblePage + 1) * ACCESSIBLE_PAGE_SIZE
+  );
   const chronoParentRef = useRef<HTMLDivElement>(null);
   const chronoVirtualizer = useVirtualizer({
     count: chronoRows.length,
@@ -756,6 +769,19 @@ export function ThreadedNarrativeReader({
     estimateSize: () => 160,
     overscan: 8,
   });
+  // Threads use the same measured variable-height strategy as Chronological.
+  const threadVirtualizer = useVirtualizer({
+    count: threadRows.length,
+    getScrollElement: () => findScrollContainer(rootRef.current),
+    estimateSize: () => 220,
+    overscan: 8,
+  });
+  // jsdom and a cold reader have no measurable viewport yet; render all rows
+  // until the browser can provide a virtual window.
+  const threadVirtualItems = threadVirtualizer.getVirtualItems();
+  const renderThreadVirtualItems = threadVirtualItems.length
+    ? threadVirtualItems
+    : threadRows.map((_, index) => ({ index, key: index, start: 0, size: 0 }));
 
   // Shared read-merge-write so a collapse toggle never clobbers a
   // concurrently-saved anchor (and vice versa): both sides of this feature
@@ -1268,6 +1294,29 @@ export function ThreadedNarrativeReader({
       }}
     >
       <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-[var(--play-density-gap,0.75rem)] px-4 py-4">
+        {retention?.gap && (
+          <div
+            className="rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm"
+            role="status"
+            data-testid="narrative-retention-gap"
+          >
+            <strong>Some live history is no longer in this tab.</strong> {retention.evicted}{' '}
+            temporary pose{retention.evicted === 1 ? '' : 's'} were evicted to keep browser memory
+            bounded.
+            {hasNextPage
+              ? ' Load earlier history to recover older retained poses.'
+              : ' Use History search to recover retained poses.'}
+          </div>
+        )}
+        {retention?.warning && !retention.gap && (
+          <div
+            className="rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm"
+            role="status"
+            data-testid="narrative-retention-warning"
+          >
+            This tab is nearing its adjustable live-history memory budget.
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
             {/* realThreadGroups, not groups (#3759 Wave 9 fix-round-1 re-review
@@ -1309,6 +1358,14 @@ export function ThreadedNarrativeReader({
             )}
             <button
               className="underline"
+              onClick={() => setAccessibleMode((enabled) => !enabled)}
+              aria-controls="semantic-narrative-text"
+              aria-pressed={accessibleMode}
+            >
+              {accessibleMode ? 'Hide accessible full text' : 'Accessible full text'}
+            </button>
+            <button
+              className="underline"
               aria-pressed={chronological}
               onClick={() => update({ readerMode: chronological ? 'threads' : 'chronological' })}
             >
@@ -1316,6 +1373,45 @@ export function ThreadedNarrativeReader({
             </button>
           </div>
         </div>
+        {accessibleMode && (
+          <section
+            id="semantic-narrative-text"
+            className="sr-only focus-within:not-sr-only"
+            aria-label="Accessible narrative full text"
+          >
+            <h2>Accessible full text</h2>
+            {accessibleRows.map((item) => (
+              <article key={`accessible:${conversationKey}:${item.id}:${item.timestamp}`}>
+                <h3>{item.persona.name}</h3>
+                <p>{item.line ?? item.content}</p>
+                <time dateTime={item.timestamp}>{item.timestamp}</time>
+              </article>
+            ))}
+            <div className="not-sr-only flex items-center gap-2">
+              <button
+                type="button"
+                className="underline"
+                disabled={accessiblePage === 0}
+                onClick={() => setAccessiblePage((page) => Math.max(0, page - 1))}
+              >
+                Previous text page
+              </button>
+              <span>
+                Text page {accessiblePage + 1} of {accessiblePageCount}
+              </span>
+              <button
+                type="button"
+                className="underline"
+                disabled={accessiblePage >= accessiblePageCount - 1}
+                onClick={() =>
+                  setAccessiblePage((page) => Math.min(accessiblePageCount - 1, page + 1))
+                }
+              >
+                Next text page
+              </button>
+            </div>
+          </section>
+        )}
         {chronological &&
           (chronoRows.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 text-center">
@@ -1469,288 +1565,315 @@ export function ThreadedNarrativeReader({
               </p>
             </div>
           ) : (
-            threadRows.map((row) => {
-              if (row.type === 'note') {
+            <div style={{ height: threadVirtualizer.getTotalSize(), position: 'relative' }}>
+              {renderThreadVirtualItems.map((virtualRow) => {
+                const row = threadRows[virtualRow.index];
                 return (
-                  <div key={row.note.id} data-feed-row={`note:${row.note.id}`}>
-                    <FeedNoteBlock note={row.note} />
-                  </div>
-                );
-              }
-              const { group } = row.item;
-              const root = group.interactions[0];
-              // #3759 Wave 9 fix round 1 finding I-5: `thread_id` is only
-              // set for an interaction that's an EXPLICIT reply
-              // (`interaction_services.py`) -- ordinary, un-replied room
-              // narration is the COMMON case and gets `thread_id=null`,
-              // keyed `legacy:${id}` here (see `groups`'s own grouping key
-              // above). Since that key is unique per interaction id, a
-              // `legacy:`-keyed group can never hold more than its one
-              // pose -- checking the key prefix is equivalent to "this
-              // pose was never replied to" and doesn't need a separate
-              // length check. F1 makes every group always visible, so
-              // without this branch, EVERY ordinary un-replied pose in a
-              // scene would render as its own always-visible collapsible
-              // "thread" card (header, chevron, collapse toggle) -- a real
-              // scene of ordinary room chatter would be a wall of
-              // one-pose accordions. A group with a real, explicit
-              // `thread_id` (even one with only a single reply so far --
-              // more could still arrive) keeps the full card treatment
-              // below, unchanged.
-              //
-              // Deviation from the fix-round brief's literal wording (noted
-              // in the wave report): the brief describes this as "the same
-              // visual form Chronological view already gives a single
-              // pose," which has NO "Show less"/"Reply" footer at all. That
-              // exact substitution regressed a real, tested integration
-              // (`GamePage.test.tsx`'s reference-mode round-trip test): its
-              // fixture pose has no `thread_id` either -- the single most
-              // common shape a scene starts in -- and replying to a
-              // standalone pose is literally how a NEW thread begins.
-              // Keeping the per-pose fold/Reply footer (identical to a real
-              // thread's own per-pose footer, just below) doesn't
-              // reintroduce anything THREAD-level (no header/chevron/
-              // collapse toggle survives), so it still satisfies the
-              // brief's own explicit, unambiguous requirement.
-              if (group.key.startsWith('legacy:')) {
-                const item = root;
-                const poseCollapsed = collapsedPoses.has(item.id);
-                return (
-                  <div key={group.key} data-thread-id={group.key}>
-                    <PoseReadTarget
-                      pose={{
-                        id: item.id,
-                        timestamp: item.timestamp,
-                        name: item.persona.name,
-                        availability: item.availability,
-                      }}
-                      observe={observe}
-                      highlighted={String(item.id) === highlightedPoseId}
-                      readEligible={!poseCollapsed}
-                    >
-                      {/* #3759 Wave 9 review Minor M-1: `poseRoleLabel` itself
+                  <div
+                    key={`thread-virtual:${virtualRow.key}`}
+                    data-index={virtualRow.index}
+                    ref={threadVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    {(() => {
+                      if (row.type === 'note') {
+                        return (
+                          <div key={row.note.id} data-feed-row={`note:${row.note.id}`}>
+                            <FeedNoteBlock note={row.note} />
+                          </div>
+                        );
+                      }
+                      const { group } = row.item;
+                      const root = group.interactions[0];
+                      // #3759 Wave 9 fix round 1 finding I-5: `thread_id` is only
+                      // set for an interaction that's an EXPLICIT reply
+                      // (`interaction_services.py`) -- ordinary, un-replied room
+                      // narration is the COMMON case and gets `thread_id=null`,
+                      // keyed `legacy:${id}` here (see `groups`'s own grouping key
+                      // above). Since that key is unique per interaction id, a
+                      // `legacy:`-keyed group can never hold more than its one
+                      // pose -- checking the key prefix is equivalent to "this
+                      // pose was never replied to" and doesn't need a separate
+                      // length check. F1 makes every group always visible, so
+                      // without this branch, EVERY ordinary un-replied pose in a
+                      // scene would render as its own always-visible collapsible
+                      // "thread" card (header, chevron, collapse toggle) -- a real
+                      // scene of ordinary room chatter would be a wall of
+                      // one-pose accordions. A group with a real, explicit
+                      // `thread_id` (even one with only a single reply so far --
+                      // more could still arrive) keeps the full card treatment
+                      // below, unchanged.
+                      //
+                      // Deviation from the fix-round brief's literal wording (noted
+                      // in the wave report): the brief describes this as "the same
+                      // visual form Chronological view already gives a single
+                      // pose," which has NO "Show less"/"Reply" footer at all. That
+                      // exact substitution regressed a real, tested integration
+                      // (`GamePage.test.tsx`'s reference-mode round-trip test): its
+                      // fixture pose has no `thread_id` either -- the single most
+                      // common shape a scene starts in -- and replying to a
+                      // standalone pose is literally how a NEW thread begins.
+                      // Keeping the per-pose fold/Reply footer (identical to a real
+                      // thread's own per-pose footer, just below) doesn't
+                      // reintroduce anything THREAD-level (no header/chevron/
+                      // collapse toggle survives), so it still satisfies the
+                      // brief's own explicit, unambiguous requirement.
+                      if (group.key.startsWith('legacy:')) {
+                        const item = root;
+                        const poseCollapsed = collapsedPoses.has(item.id);
+                        return (
+                          <div key={group.key} data-thread-id={group.key}>
+                            <PoseReadTarget
+                              pose={{
+                                id: item.id,
+                                timestamp: item.timestamp,
+                                name: item.persona.name,
+                                availability: item.availability,
+                              }}
+                              observe={observe}
+                              highlighted={String(item.id) === highlightedPoseId}
+                              readEligible={!poseCollapsed}
+                            >
+                              {/* #3759 Wave 9 review Minor M-1: `poseRoleLabel` itself
                           returns "Standalone" here (gated on `item.thread_id`,
                           not merely "is this the group's root"), never
                           "Opening pose" -- that label asserts a thread that
                           doesn't exist for a genuinely un-replied pose. */}
-                      <p className="text-xs text-muted-foreground">
-                        {poseRoleLabel(item, root, group.key)}
-                      </p>
-                      {poseCollapsed ? (
-                        <article
-                          className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
-                          data-testid={`collapsed-pose-${item.id}`}
-                        >
-                          <strong>{item.persona.name}</strong>
-                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                            {item.line ?? item.content}
-                          </p>
-                          <button
-                            type="button"
-                            className="mt-1 min-h-9 underline"
-                            onClick={() => togglePose(item.id)}
-                          >
-                            Show full pose
-                          </button>
-                        </article>
-                      ) : (
-                        <>
-                          {/* #3787 D1: the involved viewer reads the row ONCE,
+                              <p className="text-xs text-muted-foreground">
+                                {poseRoleLabel(item, root, group.key)}
+                              </p>
+                              {poseCollapsed ? (
+                                <article
+                                  className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
+                                  data-testid={`collapsed-pose-${item.id}`}
+                                >
+                                  <strong>{item.persona.name}</strong>
+                                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
+                                    {item.line ?? item.content}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    className="mt-1 min-h-9 underline"
+                                    onClick={() => togglePose(item.id)}
+                                  >
+                                    Show full pose
+                                  </button>
+                                </article>
+                              ) : (
+                                <>
+                                  {/* #3787 D1: the involved viewer reads the row ONCE,
                               inside the marked treatment, instead of reading the
                               plain bubble and then a restatement of the same
                               sentence. `poseBody` is the identical per-viewer
                               rendering either way. */}
-                          {renderPoseBody(item)}
-                          <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
-                            <button
-                              type="button"
-                              className="inline-flex min-h-9 items-center gap-1 underline"
-                              onClick={() => togglePose(item.id)}
-                            >
-                              Show less
-                            </button>
-                            {onReply && !readOnly && !isInvolvingViewer(item, viewerPersonaId) && (
-                              <ReplyControl
-                                item={item}
-                                onReply={onReply}
-                                involved={false}
-                                venue={viewerVenue}
-                              />
-                            )}
+                                  {renderPoseBody(item)}
+                                  <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
+                                    <button
+                                      type="button"
+                                      className="inline-flex min-h-9 items-center gap-1 underline"
+                                      onClick={() => togglePose(item.id)}
+                                    >
+                                      Show less
+                                    </button>
+                                    {onReply &&
+                                      !readOnly &&
+                                      !isInvolvingViewer(item, viewerPersonaId) && (
+                                        <ReplyControl
+                                          item={item}
+                                          onReply={onReply}
+                                          involved={false}
+                                          venue={viewerVenue}
+                                        />
+                                      )}
+                                  </div>
+                                </>
+                              )}
+                            </PoseReadTarget>
                           </div>
-                        </>
-                      )}
-                    </PoseReadTarget>
-                  </div>
-                );
-              }
-              const isCollapsed = !expandedKeys.has(group.key);
-              const unread = group.interactions.filter(isEffectivelyUnread).length;
-              // #3759 Wave 9 (F1/F2): per-thread pose window, replacing the
-              // old flat whole-list tail-slice. `end < group.interactions.length`
-              // ("more poses hidden after what's shown") is only ever true
-              // once THIS thread has an explicit `threadWindows` entry whose
-              // `end` has fallen behind the thread's current length -- e.g.
-              // new poses arrived in this thread after the user had already
-              // paged earlier into its history. The untouched default
-              // (`resolveThreadWindow`'s no-entry branch) always recomputes
-              // `end` from the CURRENT length, so it never falls behind.
-              const { start, end } = resolveThreadWindow(group);
-              const clampedStart = Math.min(start, end);
-              const visiblePoses = isCollapsed ? [] : group.interactions.slice(clampedStart, end);
-              const hiddenEarlierCount = clampedStart;
-              const hiddenLaterCount = Math.max(0, group.interactions.length - end);
-              return (
-                <section
-                  key={group.key}
-                  className="overflow-hidden rounded-lg border bg-card/60"
-                  data-thread-id={group.key}
-                >
-                  <button
-                    type="button"
-                    className="flex min-h-11 w-full items-start gap-2 px-3 py-2 text-left hover:bg-accent/40"
-                    aria-expanded={!isCollapsed}
-                    aria-controls={`thread-${group.key}`}
-                    onClick={() => toggleThread(group.key)}
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />
-                    ) : (
-                      <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate font-medium">
-                          {root?.persona.name ?? 'Conversation'}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {group.interactions.length}{' '}
-                          {group.interactions.length === 1 ? 'pose' : 'poses'}
-                        </span>
-                        {unread > 0 && (
-                          <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] text-primary-foreground">
-                            {unread} new
-                          </span>
-                        )}
-                      </div>
-                      {/* #3759 Wave 9 review finding F3: opening-pose excerpt +
+                        );
+                      }
+                      const isCollapsed = !expandedKeys.has(group.key);
+                      const unread = group.interactions.filter(isEffectivelyUnread).length;
+                      // #3759 Wave 9 (F1/F2): per-thread pose window, replacing the
+                      // old flat whole-list tail-slice. `end < group.interactions.length`
+                      // ("more poses hidden after what's shown") is only ever true
+                      // once THIS thread has an explicit `threadWindows` entry whose
+                      // `end` has fallen behind the thread's current length -- e.g.
+                      // new poses arrived in this thread after the user had already
+                      // paged earlier into its history. The untouched default
+                      // (`resolveThreadWindow`'s no-entry branch) always recomputes
+                      // `end` from the CURRENT length, so it never falls behind.
+                      const { start, end } = resolveThreadWindow(group);
+                      const clampedStart = Math.min(start, end);
+                      const visiblePoses = isCollapsed
+                        ? []
+                        : group.interactions.slice(clampedStart, end);
+                      const hiddenEarlierCount = clampedStart;
+                      const hiddenLaterCount = Math.max(0, group.interactions.length - end);
+                      return (
+                        <section
+                          key={group.key}
+                          className="overflow-hidden rounded-lg border bg-card/60"
+                          data-thread-id={group.key}
+                        >
+                          <button
+                            type="button"
+                            className="flex min-h-11 w-full items-start gap-2 px-3 py-2 text-left hover:bg-accent/40"
+                            aria-expanded={!isCollapsed}
+                            aria-controls={`thread-${group.key}`}
+                            onClick={() => toggleThread(group.key)}
+                          >
+                            {isCollapsed ? (
+                              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />
+                            ) : (
+                              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="min-w-0 flex-1 truncate font-medium">
+                                  {root?.persona.name ?? 'Conversation'}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {group.interactions.length}{' '}
+                                  {group.interactions.length === 1 ? 'pose' : 'poses'}
+                                </span>
+                                {unread > 0 && (
+                                  <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] text-primary-foreground">
+                                    {unread} new
+                                  </span>
+                                )}
+                              </div>
+                              {/* #3759 Wave 9 review finding F3: opening-pose excerpt +
                           timestamp (reuses PoseUnit.tsx's own `toLocaleString()`
                           convention for consistency with every per-pose
                           timestamp elsewhere in the reader). */}
-                      {root && (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {excerptOf(root.line ?? root.content)} ·{' '}
-                          {new Date(root.timestamp).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                  </button>
-                  {!isCollapsed && (
-                    <div id={`thread-${group.key}`} className="border-t px-2 py-2">
-                      {hiddenEarlierCount > 0 && (
-                        <button
-                          type="button"
-                          className="mb-2 w-full rounded border px-3 py-2 text-sm"
-                          onClick={() =>
-                            setThreadWindows((previous) => ({
-                              ...previous,
-                              [group.key]: {
-                                start: Math.max(0, clampedStart - THREAD_PAGE_SIZE),
-                                end,
-                              },
-                            }))
-                          }
-                        >
-                          Load earlier replies · {hiddenEarlierCount} before this page
-                        </button>
-                      )}
-                      {visiblePoses.map((item) => {
-                        const poseCollapsed = collapsedPoses.has(item.id);
-                        const roleLabel = poseRoleLabel(item, root, group.key);
-                        return (
-                          <PoseReadTarget
-                            key={`pose-${item.id}`}
-                            pose={{
-                              id: item.id,
-                              timestamp: item.timestamp,
-                              name: item.persona.name,
-                              availability: item.availability,
-                            }}
-                            observe={observe}
-                            highlighted={String(item.id) === highlightedPoseId}
-                            readEligible={!poseCollapsed}
-                          >
-                            {/* #3759 Wave 9 review finding F4. */}
-                            {roleLabel && (
-                              <p className="text-xs text-muted-foreground">{roleLabel}</p>
-                            )}
-                            {poseCollapsed ? (
-                              <article
-                                className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
-                                data-testid={`collapsed-pose-${item.id}`}
-                              >
-                                <strong>{item.persona.name}</strong>
-                                <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                                  {item.line ?? item.content}
+                              {root && (
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                  {excerptOf(root.line ?? root.content)} ·{' '}
+                                  {new Date(root.timestamp).toLocaleString()}
                                 </p>
+                              )}
+                            </div>
+                          </button>
+                          {!isCollapsed && (
+                            <div id={`thread-${group.key}`} className="border-t px-2 py-2">
+                              {hiddenEarlierCount > 0 && (
                                 <button
                                   type="button"
-                                  className="mt-1 min-h-9 underline"
-                                  onClick={() => togglePose(item.id)}
+                                  className="mb-2 w-full rounded border px-3 py-2 text-sm"
+                                  onClick={() =>
+                                    setThreadWindows((previous) => ({
+                                      ...previous,
+                                      [group.key]: {
+                                        start: Math.max(0, clampedStart - THREAD_PAGE_SIZE),
+                                        end,
+                                      },
+                                    }))
+                                  }
                                 >
-                                  Show full pose
+                                  Load earlier replies · {hiddenEarlierCount} before this page
                                 </button>
-                              </article>
-                            ) : (
-                              <>
-                                {/* #3787 D1 -- see the Chronological branch. */}
-                                {renderPoseBody(item)}
-                                <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
-                                  <button
-                                    type="button"
-                                    className="inline-flex min-h-9 items-center gap-1 underline"
-                                    onClick={() => togglePose(item.id)}
+                              )}
+                              {visiblePoses.map((item) => {
+                                const poseCollapsed = collapsedPoses.has(item.id);
+                                const roleLabel = poseRoleLabel(item, root, group.key);
+                                return (
+                                  <PoseReadTarget
+                                    key={`pose-${item.id}`}
+                                    pose={{
+                                      id: item.id,
+                                      timestamp: item.timestamp,
+                                      name: item.persona.name,
+                                      availability: item.availability,
+                                    }}
+                                    observe={observe}
+                                    highlighted={String(item.id) === highlightedPoseId}
+                                    readEligible={!poseCollapsed}
                                   >
-                                    Show less
-                                  </button>
-                                  {onReply &&
-                                    !readOnly &&
-                                    !isInvolvingViewer(item, viewerPersonaId) && (
-                                      <ReplyControl
-                                        item={item}
-                                        onReply={onReply}
-                                        involved={false}
-                                        venue={viewerVenue}
-                                      />
+                                    {/* #3759 Wave 9 review finding F4. */}
+                                    {roleLabel && (
+                                      <p className="text-xs text-muted-foreground">{roleLabel}</p>
                                     )}
-                                </div>
-                              </>
-                            )}
-                          </PoseReadTarget>
-                        );
-                      })}
-                      {hiddenLaterCount > 0 && (
-                        <button
-                          type="button"
-                          className="mt-2 w-full rounded border px-3 py-2 text-sm"
-                          onClick={() =>
-                            setThreadWindows((previous) => ({
-                              ...previous,
-                              [group.key]: {
-                                start: clampedStart,
-                                end: Math.min(group.interactions.length, end + THREAD_PAGE_SIZE),
-                              },
-                            }))
-                          }
-                        >
-                          Load later replies
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </section>
-              );
-            })
+                                    {poseCollapsed ? (
+                                      <article
+                                        className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
+                                        data-testid={`collapsed-pose-${item.id}`}
+                                      >
+                                        <strong>{item.persona.name}</strong>
+                                        <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
+                                          {item.line ?? item.content}
+                                        </p>
+                                        <button
+                                          type="button"
+                                          className="mt-1 min-h-9 underline"
+                                          onClick={() => togglePose(item.id)}
+                                        >
+                                          Show full pose
+                                        </button>
+                                      </article>
+                                    ) : (
+                                      <>
+                                        {/* #3787 D1 -- see the Chronological branch. */}
+                                        {renderPoseBody(item)}
+                                        <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
+                                          <button
+                                            type="button"
+                                            className="inline-flex min-h-9 items-center gap-1 underline"
+                                            onClick={() => togglePose(item.id)}
+                                          >
+                                            Show less
+                                          </button>
+                                          {onReply &&
+                                            !readOnly &&
+                                            !isInvolvingViewer(item, viewerPersonaId) && (
+                                              <ReplyControl
+                                                item={item}
+                                                onReply={onReply}
+                                                involved={false}
+                                                venue={viewerVenue}
+                                              />
+                                            )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </PoseReadTarget>
+                                );
+                              })}
+                              {hiddenLaterCount > 0 && (
+                                <button
+                                  type="button"
+                                  className="mt-2 w-full rounded border px-3 py-2 text-sm"
+                                  onClick={() =>
+                                    setThreadWindows((previous) => ({
+                                      ...previous,
+                                      [group.key]: {
+                                        start: clampedStart,
+                                        end: Math.min(
+                                          group.interactions.length,
+                                          end + THREAD_PAGE_SIZE
+                                        ),
+                                      },
+                                    }))
+                                  }
+                                >
+                                  Load later replies
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })()}
+                  </div>
+                );
+              })}
+            </div>
           ))}
         {/* #3759 Wave 9 (F1/F2): this is now the ONLY remaining whole-list
             control -- fetching MORE data from the server (a different

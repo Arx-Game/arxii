@@ -9,6 +9,7 @@ import type {
   RoomStateObject,
   SceneSummary,
 } from '@/hooks/types';
+import { DEFAULT_NARRATIVE_RETENTION_LIMITS, narrativeBodyCache } from '@/game/narrativeRetention';
 import type { MyRosterEntry } from '@/roster/types';
 import type { CommandSpec } from '@/game/types';
 
@@ -60,6 +61,8 @@ export interface Session {
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
+  /** Bounded live-buffer state. A gap means the socket evicted rows that REST/history can recover. */
+  sceneRetention?: { retained: number; evicted: number; warning: boolean; gap: boolean };
   /** Structured scene-less interactions for the current room, kept in memory only. */
   ambientInteractions?: InteractionWsPayload[];
   /** Connection diagnostics are kept separate from authored/system story text. */
@@ -333,32 +336,44 @@ export const gameSlice = createSlice({
               session.openThreadTabs = [];
               session.activeThreadTab = null;
               session.sceneInteractions = [];
+              session.sceneRetention = { retained: 0, evicted: 0, warning: false, gap: false };
             }
             session.scene = action.payload.scene;
           }
         }
       }
     },
-    addAmbientInteraction: (
-      state,
-      action: PayloadAction<{
-        character: MyRosterEntry['name'];
-        interaction: InteractionWsPayload;
-      }>
-    ) => {
-      const session = state.sessions[action.payload.character];
-      if (!session) return;
-      const frameTime = Date.parse(action.payload.interaction.timestamp);
-      if (
-        session.ambientRoomEnteredAt &&
-        Number.isFinite(frameTime) &&
-        frameTime < session.ambientRoomEnteredAt
-      )
-        return;
-      const ambient = session.ambientInteractions ?? (session.ambientInteractions = []);
-      if (ambient.some((item) => item.id === action.payload.interaction.id)) return;
-      ambient.push(action.payload.interaction);
-      if (ambient.length > 100) session.ambientInteractions = ambient.slice(-100);
+    addAmbientInteraction: {
+      prepare(payload: { character: MyRosterEntry['name']; interaction: InteractionWsPayload }) {
+        narrativeBodyCache.put(payload.interaction);
+        return { payload };
+      },
+      reducer: (
+        state,
+        action: PayloadAction<{
+          character: MyRosterEntry['name'];
+          interaction: InteractionWsPayload;
+        }>
+      ) => {
+        const session = state.sessions[action.payload.character];
+        if (!session) return;
+        const frameTime = Date.parse(action.payload.interaction.timestamp);
+        if (
+          session.ambientRoomEnteredAt &&
+          Number.isFinite(frameTime) &&
+          frameTime < session.ambientRoomEnteredAt
+        )
+          return;
+        const ambient = session.ambientInteractions ?? (session.ambientInteractions = []);
+        if (ambient.some((item) => item.id === action.payload.interaction.id)) return;
+        const { content: _content, line: _line, ...metadata } = action.payload.interaction;
+        ambient.push(metadata as InteractionWsPayload);
+        if (ambient.length > DEFAULT_NARRATIVE_RETENTION_LIMITS.maxTemporaryPoses) {
+          session.ambientInteractions = ambient.slice(
+            -DEFAULT_NARRATIVE_RETENTION_LIMITS.maxTemporaryPoses
+          );
+        }
+      },
     },
     clearAmbientInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
@@ -492,6 +507,7 @@ export const gameSlice = createSlice({
           // erased every pose/whisper buffered since the last REST fetch.
           // Clearing only on a real scene change keeps the feed intact.
           session.sceneInteractions = [];
+          session.sceneRetention = { retained: 0, evicted: 0, warning: false, gap: false };
         }
         session.scene = scene;
         if (revision !== undefined) {
@@ -500,23 +516,49 @@ export const gameSlice = createSlice({
         }
       }
     },
-    addSceneInteraction: (
-      state,
-      action: PayloadAction<{
-        character: MyRosterEntry['name'];
-        interaction: InteractionWsPayload;
-      }>
-    ) => {
-      const { character, interaction } = action.payload;
-      const session = state.sessions[character];
-      if (session) {
-        const MAX_WS_INTERACTIONS = 200;
-        if (session.sceneInteractions.some((item) => item.id === interaction.id)) return;
-        session.sceneInteractions.push(interaction);
-        if (session.sceneInteractions.length > MAX_WS_INTERACTIONS) {
-          session.sceneInteractions = session.sceneInteractions.slice(-MAX_WS_INTERACTIONS);
+    addSceneInteraction: {
+      prepare(payload: { character: MyRosterEntry['name']; interaction: InteractionWsPayload }) {
+        // Direct dispatches (including replay fixtures) use the same boundary
+        // as the socket handler, ensuring Redux never owns the body bytes.
+        narrativeBodyCache.put(payload.interaction);
+        return { payload };
+      },
+      reducer: (
+        state,
+        action: PayloadAction<{
+          character: MyRosterEntry['name'];
+          interaction: InteractionWsPayload;
+        }>
+      ) => {
+        const { character, interaction } = action.payload;
+        const session = state.sessions[character];
+        if (session) {
+          const MAX_TEMPORARY_POSES = DEFAULT_NARRATIVE_RETENTION_LIMITS.maxTemporaryPoses;
+          if (session.sceneInteractions.some((item) => item.id === interaction.id)) return;
+          // Keep only bounded identity/visibility metadata in Redux. The socket
+          // handler stores the body in narrativeBodyCache before dispatching.
+          const { content: _content, line: _line, ...metadata } = interaction;
+          session.sceneInteractions.push(metadata as InteractionWsPayload);
+          const previous = session.sceneRetention ?? {
+            retained: 0,
+            evicted: 0,
+            warning: false,
+            gap: false,
+          };
+          let evicted = previous.evicted;
+          if (session.sceneInteractions.length > MAX_TEMPORARY_POSES) {
+            const drop = session.sceneInteractions.length - MAX_TEMPORARY_POSES;
+            session.sceneInteractions = session.sceneInteractions.slice(drop);
+            evicted += drop;
+          }
+          session.sceneRetention = {
+            retained: session.sceneInteractions.length,
+            evicted,
+            warning: session.sceneInteractions.length >= MAX_TEMPORARY_POSES * 0.8,
+            gap: evicted > 0,
+          };
         }
-      }
+      },
     },
     // Deliberately does NOT touch `sceneBaselineId` (#2156 review fix 2): this
     // reducer is dispatched on every ROOM_STATE broadcast (handleRoomStatePayload),
@@ -529,6 +571,7 @@ export const gameSlice = createSlice({
       const session = state.sessions[action.payload];
       if (session) {
         session.sceneInteractions = [];
+        session.sceneRetention = { retained: 0, evicted: 0, warning: false, gap: false };
       }
     },
     // Scene-load baseline scalar (#2156 review fix): set once by GamePage's

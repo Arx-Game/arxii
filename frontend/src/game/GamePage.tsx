@@ -173,10 +173,11 @@ function sceneFeedProps(
       : never
     : never,
   hasNextPage: boolean,
-  fetchNextPage: () => void
+  fetchNextPage: () => void,
+  retention?: { retained: number; evicted: number; warning: boolean; gap: boolean }
 ): ComponentProps<typeof GameWindow>['sceneFeed'] {
   if (!sceneId) return undefined;
-  return { sceneId, interactions, hasNextPage, fetchNextPage };
+  return { sceneId, interactions, hasNextPage, fetchNextPage, retention };
 }
 
 /** How the composer labels the speaker, when a character is assumed. */
@@ -545,7 +546,10 @@ export function GamePage() {
   // (SceneMessages + composer). Called unconditionally — sceneId is simply
   // undefined with no active scene, which both hooks handle without firing
   // network calls or producing threads.
-  const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId, active);
+  const { allInteractions, retention, hasNextPage, fetchNextPage } = useSceneInteractions(
+    sceneId,
+    active
+  );
   const threadLastSeen = activeSession?.threadLastSeen ?? EMPTY_THREAD_LAST_SEEN;
   const sceneBaselineId = activeSession?.sceneBaselineId ?? null;
   const threading = useThreading(allInteractions, roomName, {
@@ -950,7 +954,7 @@ export function GamePage() {
   const roomTabLabel = deriveRoomTabLabel(focus.current, roomData?.name);
   const displaySceneFeed = reference
     ? sceneFeedProps(referenceSceneId ?? 'history', referencePage?.results ?? [], false, () => {})
-    : sceneFeedProps(sceneId, tabInteractions, hasNextPage, fetchNextPage);
+    : sceneFeedProps(sceneId, tabInteractions, hasNextPage, fetchNextPage, retention);
 
   const gameWindowProps: ComponentProps<typeof GameWindow> = {
     characters,
