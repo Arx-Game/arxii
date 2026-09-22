@@ -181,41 +181,66 @@ const KIND_SET = new Set<string>(FEED_KINDS);
  * once (first chip wins), booleans coerced, labels clamped, at most three
  * custom chips. Anything that is not a non-empty list yields the defaults.
  */
+function normalizeChipKinds(rawKinds: unknown, seenKinds: Set<FeedKind>): FeedKind[] {
+  if (!Array.isArray(rawKinds)) return [];
+  return rawKinds.flatMap((kind): FeedKind[] => {
+    if (typeof kind !== 'string' || !KIND_SET.has(kind) || seenKinds.has(kind as FeedKind))
+      return [];
+    const typedKind = kind as FeedKind;
+    seenKinds.add(typedKind);
+    return [typedKind];
+  });
+}
+
+function normalizeRawChip(
+  raw: unknown,
+  seenIds: Set<string>,
+  seenKinds: Set<FeedKind>,
+  customCount: number
+): FeedChip | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const id = typeof record.id === 'string' ? record.id : '';
+  if (!id || seenIds.has(id)) return null;
+  const custom = Boolean(record.custom);
+  if (custom && customCount >= MAX_CUSTOM_CHIPS) return null;
+  const label =
+    (typeof record.label === 'string' ? record.label.trim().slice(0, MAX_CHIP_LABEL) : '') ||
+    'Chip';
+  return {
+    id,
+    label,
+    kinds: normalizeChipKinds(record.kinds, seenKinds),
+    on: Boolean(record.on),
+    wake: Boolean(record.wake),
+    custom,
+  };
+}
+
+function migrateLegacySystemChip(chips: FeedChip[], seenKinds: Set<FeedKind>): void {
+  const system = chips.find((chip) => chip.id === 'sy' && !chip.custom);
+  if (system && !seenKinds.has('system') && sameKinds(system.kinds, LEGACY_SYSTEM_KINDS)) {
+    system.kinds = [...system.kinds, 'system'];
+  }
+}
+
 export function normalizeFeedChips(value: unknown): FeedChip[] {
-  if (!Array.isArray(value) || value.length === 0) return DEFAULT_FEED_CHIPS.map((c) => ({ ...c }));
+  if (!Array.isArray(value) || value.length === 0) {
+    return DEFAULT_FEED_CHIPS.map((chip) => ({ ...chip }));
+  }
   const seenIds = new Set<string>();
   const seenKinds = new Set<FeedKind>();
   const chips: FeedChip[] = [];
   let customCount = 0;
   for (const raw of value) {
-    if (!raw || typeof raw !== 'object') continue;
-    const record = raw as Record<string, unknown>;
-    const id = typeof record.id === 'string' ? record.id : '';
-    if (!id || seenIds.has(id)) continue;
-    const custom = Boolean(record.custom);
-    if (custom && customCount >= MAX_CUSTOM_CHIPS) continue;
-    const kinds: FeedKind[] = [];
-    for (const kind of Array.isArray(record.kinds) ? record.kinds : []) {
-      if (typeof kind === 'string' && KIND_SET.has(kind) && !seenKinds.has(kind as FeedKind)) {
-        kinds.push(kind as FeedKind);
-        seenKinds.add(kind as FeedKind);
-      }
-    }
-    const label =
-      (typeof record.label === 'string' ? record.label.trim().slice(0, MAX_CHIP_LABEL) : '') ||
-      'Chip';
-    chips.push({ id, label, kinds, on: Boolean(record.on), wake: Boolean(record.wake), custom });
-    seenIds.add(id);
-    if (custom) customCount += 1;
+    const chip = normalizeRawChip(raw, seenIds, seenKinds, customCount);
+    if (!chip) continue;
+    chips.push(chip);
+    seenIds.add(chip.id);
+    if (chip.custom) customCount += 1;
   }
-  if (!chips.length) return DEFAULT_FEED_CHIPS.map((c) => ({ ...c }));
-  // #3933: accounts that stored the pre-#3933 default System chip never got
-  // `system`; give it to them once, only when nothing else owns it and the chip
-  // still has exactly the old default kinds (a re-kinded chip is the player's).
-  const system = chips.find((chip) => chip.id === 'sy' && !chip.custom);
-  if (system && !seenKinds.has('system') && sameKinds(system.kinds, LEGACY_SYSTEM_KINDS)) {
-    system.kinds = [...system.kinds, 'system'];
-  }
+  if (!chips.length) return DEFAULT_FEED_CHIPS.map((chip) => ({ ...chip }));
+  migrateLegacySystemChip(chips, seenKinds);
   return chips;
 }
 

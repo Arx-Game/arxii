@@ -267,44 +267,67 @@ class _RoundActionEffects:
 # ---------------------------------------------------------------------------
 
 
-def _build_outcome_detail(
-    action_interaction_id: int,
-    user: object,
-    persona_ids: list[int] | None = None,
+def _empty_outcome_detail(
+    action_interaction_id: int, ledger: PowerLedger | None = None
 ) -> ActionOutcomeDetail:
-    """Derive effect rows from existing models for one ACTION Interaction.
+    """Return a detail object with no visible effects."""
+    return ActionOutcomeDetail(
+        action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
+    )
 
-    Walks Interaction.pk → CombatRoundAction (or ClashContribution) → effects
-    derived from action.combo_upgrade, ConditionInstance correlation, and
-    target status. No audit-row reads — purely derived from existing state.
-    """
+
+def _build_round_action_detail(
+    action: CombatRoundAction,
+    action_interaction_id: int,
+    ledger: PowerLedger | None,
+    interaction: Interaction | None,
+) -> ActionOutcomeDetail:
+    """Build the detail for a regular combat-round action."""
+    return ActionOutcomeDetail(
+        action_interaction_id=action_interaction_id,
+        effects=_RoundActionEffects(action).rows,
+        power_ledger=ledger,
+        strain_committed=interaction.strain_committed if interaction else None,
+        strain_effective=interaction.strain_effective if interaction else None,
+        strain_power_bonus=interaction.strain_power_bonus if interaction else None,
+    )
+
+
+def _outcome_interaction(
+    action_interaction_id: int,
+    account: AccountDB | None,
+    viewer: object,
+    persona_ids: list[int] | None,
+) -> tuple[Interaction | None, PowerLedger | None]:
+    """Load the visible interaction and its optional power ledger."""
     from world.scenes.models import Interaction  # noqa: PLC0415
     from world.scenes.power_ledger_services import (  # noqa: PLC0415
         load_persisted_ledger,
         viewer_can_see_ledger,
     )
 
-    # Per-interaction read gate (#2734). The encounter-level checks below answer "may
-    # you see effects in this fight" — they cannot answer "did you perceive THIS act",
-    # so without this a concealed cast's effect rows (applied conditions, target
-    # status) were readable by anyone in the encounter who passed its id. Reuses the
-    # single source of truth for interaction read-visibility rather than restating it.
+    interaction_qs = Interaction.objects.filter(pk=action_interaction_id)
+    if not interaction_qs.visible_to(account, persona_ids=persona_ids or []).exists():
+        return None, None
+    interaction = interaction_qs.first()
+    ledger = (
+        load_persisted_ledger(action_interaction_id)
+        if interaction is not None and viewer_can_see_ledger(interaction, viewer)
+        else None
+    )
+    return interaction, ledger
+
+
+def _build_outcome_detail(
+    action_interaction_id: int,
+    user: object,
+    persona_ids: list[int] | None = None,
+) -> ActionOutcomeDetail:
+    """Derive visible effect rows for one action interaction."""
     account = user if isinstance(user, AccountDB) else None
-    if (
-        not Interaction.objects.filter(pk=action_interaction_id)
-        .visible_to(account, persona_ids=persona_ids or [])
-        .exists()
-    ):
-        return ActionOutcomeDetail(
-            action_interaction_id=action_interaction_id, effects=[], power_ledger=None
-        )
-
-    ledger = None
-    _interaction = Interaction.objects.filter(pk=action_interaction_id).first()
-    if _interaction is not None and viewer_can_see_ledger(_interaction, user):
-        ledger = load_persisted_ledger(action_interaction_id)
-
-    # Try CombatRoundAction first.
+    interaction, ledger = _outcome_interaction(action_interaction_id, account, user, persona_ids)
+    if interaction is None:
+        return _empty_outcome_detail(action_interaction_id)
     action = (
         CombatRoundAction.objects.filter(interaction_id=action_interaction_id)
         .select_related(
@@ -320,20 +343,8 @@ def _build_outcome_detail(
     )
     if action is not None:
         if not can_view_encounter_effects(user, action.participant.encounter):
-            return ActionOutcomeDetail(
-                action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
-            )
-        effects = _RoundActionEffects(action).rows
-        return ActionOutcomeDetail(
-            action_interaction_id=action_interaction_id,
-            effects=effects,
-            power_ledger=ledger,
-            strain_committed=_interaction.strain_committed if _interaction else None,
-            strain_effective=_interaction.strain_effective if _interaction else None,
-            strain_power_bonus=_interaction.strain_power_bonus if _interaction else None,
-        )
-
-    # Fall back to ClashContribution.
+            return _empty_outcome_detail(action_interaction_id, ledger)
+        return _build_round_action_detail(action, action_interaction_id, ledger, interaction)
     contribution = (
         ClashContribution.objects.filter(interaction_id=action_interaction_id)
         .select_related(
@@ -345,18 +356,13 @@ def _build_outcome_detail(
         )
         .first()
     )
-    if contribution is not None:
-        encounter = contribution.clash_round.clash.encounter
-        if not can_view_encounter_effects(user, encounter):
-            return ActionOutcomeDetail(
-                action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
-            )
-        return _build_clash_contribution_detail(
-            contribution, action_interaction_id, ledger, interaction=_interaction
-        )
-
-    return ActionOutcomeDetail(
-        action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
+    if contribution is None:
+        return _empty_outcome_detail(action_interaction_id, ledger)
+    encounter = contribution.clash_round.clash.encounter
+    if not can_view_encounter_effects(user, encounter):
+        return _empty_outcome_detail(action_interaction_id, ledger)
+    return _build_clash_contribution_detail(
+        contribution, action_interaction_id, ledger, interaction=interaction
     )
 
 

@@ -29,7 +29,12 @@ import { NominateButton } from '@/components/NominateButton';
 import { useCreateBlock, useCreateMute } from '@/social/queries';
 import { cn } from '@/lib/utils';
 
-import type { JournalEntrySummary, JournalResponseType, PosthumousOverride } from '../api';
+import type {
+  JournalEntryDetail,
+  JournalEntrySummary,
+  JournalResponseType,
+  PosthumousOverride,
+} from '../api';
 import { formatIcDate, formatPostingDate } from '../dates';
 import {
   FIELD_INPUT_CLASS,
@@ -440,22 +445,218 @@ function Moderation({
   );
 }
 
+function JournalRowHeader({
+  entry,
+  open,
+  band,
+  body,
+  onToggle,
+  onKeyDown,
+}: {
+  entry: JournalEntrySummary;
+  open: boolean;
+  band: string | null;
+  body: string | null;
+  onToggle: () => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      onClick={onToggle}
+      onKeyDown={onKeyDown}
+      className="grid cursor-pointer gap-[.2rem]"
+    >
+      {band ? (
+        <div
+          className={cn(
+            'jr-sans jr-soft text-[.6875rem] uppercase tracking-[.14em] text-muted-foreground',
+            entry.revealed_at && 'text-primary'
+          )}
+        >
+          {band}
+        </div>
+      ) : null}
+      <div className="jr-sans jr-soft flex flex-wrap items-baseline gap-x-[.9rem] gap-y-1 text-[.8125rem] text-muted-foreground">
+        <span className="jr-strong font-body text-[1.05rem] font-semibold text-foreground">
+          <WriterLink to={`/journals?writer=${entry.author}`}>{entry.author_name}</WriterLink>
+        </span>
+        <DateStamp entry={entry} />
+      </div>
+      <h3 className="m-0 font-body text-[1.4rem] font-medium leading-[1.2]">{entry.title}</h3>
+      {entry.about_name ? (
+        <div className="jr-sans jr-soft text-[.8125rem] text-muted-foreground">
+          About <b className="jr-strong font-semibold text-foreground">{entry.about_name}</b>
+        </div>
+      ) : null}
+      {body ? <div className={cn('jr-body font-body', !open && 'jr-clamp')}>{body}</div> : null}
+    </div>
+  );
+}
+
+function JournalTags({ tags }: { tags: JournalEntrySummary['tags'] }) {
+  if (tags.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tags.map((tag) => (
+        <span key={tag.id} className={CHIP_CLASS}>
+          {tag.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function JournalActionBar({
+  entry,
+  isOwn,
+  respondKind,
+  onEdit,
+  onRespond,
+}: {
+  entry: JournalEntrySummary;
+  isOwn: boolean;
+  respondKind: JournalResponseType | null;
+  onEdit: () => void;
+  onRespond: (kind: JournalResponseType) => void;
+}) {
+  return (
+    <div className="jr-sans flex flex-wrap items-center gap-[1.1rem] text-[.8125rem]">
+      {isOwn ? (
+        <button type="button" className={ACTION_CLASS} onClick={onEdit}>
+          Edit
+        </button>
+      ) : null}
+      {!isOwn ? (
+        <button
+          type="button"
+          className={ACTION_CLASS}
+          aria-pressed={respondKind === 'praise'}
+          onClick={() => onRespond('praise')}
+        >
+          Praise
+        </button>
+      ) : null}
+      {!isOwn ? (
+        <NominateButton targetType="journal" targetId={entry.id} nomineeName={entry.author_name} />
+      ) : null}
+      {!isOwn && entry.can_retort ? (
+        <button
+          type="button"
+          className={ACTION_CLASS}
+          aria-pressed={respondKind === 'retort'}
+          onClick={() => onRespond('retort')}
+        >
+          Retort
+        </button>
+      ) : null}
+      {!isOwn && entry.can_retort ? (
+        <button
+          type="button"
+          className={ACTION_CLASS}
+          aria-pressed={respondKind === 'condemn'}
+          onClick={() => onRespond('condemn')}
+        >
+          Condemn
+        </button>
+      ) : null}
+      {entry.response_count > 0 ? (
+        <span className="jr-soft text-muted-foreground">
+          {entry.response_count} response{entry.response_count === 1 ? '' : 's'}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function JournalRowExpanded({
+  entry,
+  detail,
+  isOwn,
+  isBlack,
+  isRevealed,
+  canModerate,
+  editing,
+  respondKind,
+  viewer,
+  onEdit,
+  onEditingDone,
+  onRespond,
+  onRespondDone,
+}: {
+  entry: JournalEntrySummary;
+  detail?: JournalEntryDetail;
+  isOwn: boolean;
+  isBlack: boolean;
+  isRevealed: boolean;
+  canModerate: boolean;
+  editing: boolean;
+  respondKind: JournalResponseType | null;
+  viewer: RowViewer;
+  onEdit: () => void;
+  onEditingDone: () => void;
+  onRespond: (kind: JournalResponseType) => void;
+  onRespondDone: () => void;
+}) {
+  const responses = detail?.responses ?? [];
+  return (
+    <div className="grid gap-4 pt-3">
+      <JournalTags tags={entry.tags} />
+      {editing ? (
+        <InlineEditor
+          entry={entry}
+          initialTitle={detail?.title ?? entry.title}
+          initialBody={detail?.body ?? entry.body}
+          onDone={onEditingDone}
+        />
+      ) : null}
+      {!editing && isBlack && isOwn ? (
+        <>
+          <div className="jr-sans flex flex-wrap gap-[1.1rem] text-[.8125rem]">
+            <button type="button" className={ACTION_CLASS} onClick={onEdit}>
+              Edit
+            </button>
+          </div>
+          <AfterDeathPills entry={entry} />
+        </>
+      ) : null}
+      {!editing && !isBlack && !isRevealed ? (
+        <JournalActionBar
+          entry={entry}
+          isOwn={isOwn}
+          respondKind={respondKind}
+          onEdit={onEdit}
+          onRespond={onRespond}
+        />
+      ) : null}
+      {!editing && responses.length > 0 ? (
+        <div className="grid gap-3 border-l-2 pl-4">
+          {responses.map((response) => (
+            <ResponseItem key={response.id} response={response} />
+          ))}
+        </div>
+      ) : null}
+      {!editing && respondKind !== null ? (
+        <RespondForm entry={entry} kind={respondKind} onDone={onRespondDone} />
+      ) : null}
+      {!editing && canModerate && viewer.personaId !== null ? (
+        <Moderation entry={entry} viewerPersonaId={viewer.personaId} />
+      ) : null}
+    </div>
+  );
+}
+
 export function JournalRow({ entry, open, onToggle, viewer }: JournalRowProps) {
   const [editing, setEditing] = useState(false);
   const [respondKind, setRespondKind] = useState<JournalResponseType | null>(null);
   const { data: detail } = useJournalEntry(entry.id, open);
-
   const isOwn = entry.is_own || (viewer.sheetId !== null && entry.author === viewer.sheetId);
   const isBlack = !entry.is_public && !entry.revealed_at;
   const isRevealed = entry.revealed_at !== null;
   const band = bandText(entry);
-  // Collapsed, always the row's own text. Opened, the detail's if it has arrived:
-  // it is the fresher of the two after an edit elsewhere.
   const body = open ? (detail?.body ?? entry.body) : entry.body;
-  const responses = detail?.responses ?? [];
-  // A black row takes no actions at all, the owner's Edit aside — which includes
-  // the staff reader who reached it through `black_only`: a private entry is not
-  // a thing to praise, answer, or mute its writer over.
   const canModerate =
     !isOwn &&
     !isBlack &&
@@ -482,139 +683,30 @@ export function JournalRow({ entry, open, onToggle, viewer }: JournalRowProps) {
       )}
       data-entry-id={entry.id}
     >
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        onClick={onToggle}
+      <JournalRowHeader
+        entry={entry}
+        open={open}
+        band={band}
+        body={body}
+        onToggle={onToggle}
         onKeyDown={handleKeyDown}
-        className="grid cursor-pointer gap-[.2rem]"
-      >
-        {band ? (
-          <div
-            className={cn(
-              'jr-sans jr-soft text-[.6875rem] uppercase tracking-[.14em] text-muted-foreground',
-              isRevealed && 'text-primary'
-            )}
-          >
-            {band}
-          </div>
-        ) : null}
-        <div className="jr-sans jr-soft flex flex-wrap items-baseline gap-x-[.9rem] gap-y-1 text-[.8125rem] text-muted-foreground">
-          <span className="jr-strong font-body text-[1.05rem] font-semibold text-foreground">
-            <WriterLink to={`/journals?writer=${entry.author}`}>{entry.author_name}</WriterLink>
-          </span>
-          <DateStamp entry={entry} />
-        </div>
-        <h3 className="m-0 font-body text-[1.4rem] font-medium leading-[1.2]">{entry.title}</h3>
-        {entry.about_name ? (
-          <div className="jr-sans jr-soft text-[.8125rem] text-muted-foreground">
-            About <b className="jr-strong font-semibold text-foreground">{entry.about_name}</b>
-          </div>
-        ) : null}
-        {body ? <div className={cn('jr-body font-body', !open && 'jr-clamp')}>{body}</div> : null}
-      </div>
-
+      />
       {open ? (
-        <div className="grid gap-4 pt-3">
-          {entry.tags.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {entry.tags.map((tag) => (
-                <span key={tag.id} className={CHIP_CLASS}>
-                  {tag.name}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          {editing ? (
-            <InlineEditor
-              entry={entry}
-              initialTitle={detail?.title ?? entry.title}
-              initialBody={detail?.body ?? entry.body}
-              onDone={() => setEditing(false)}
-            />
-          ) : null}
-
-          {!editing && isBlack && isOwn ? (
-            <>
-              <div className="jr-sans flex flex-wrap gap-[1.1rem] text-[.8125rem]">
-                <button type="button" className={ACTION_CLASS} onClick={() => setEditing(true)}>
-                  Edit
-                </button>
-              </div>
-              <AfterDeathPills entry={entry} />
-            </>
-          ) : null}
-
-          {!editing && !isBlack && !isRevealed ? (
-            <div className="jr-sans flex flex-wrap items-center gap-[1.1rem] text-[.8125rem]">
-              {isOwn ? (
-                <button type="button" className={ACTION_CLASS} onClick={() => setEditing(true)}>
-                  Edit
-                </button>
-              ) : null}
-              {!isOwn ? (
-                <button
-                  type="button"
-                  className={ACTION_CLASS}
-                  aria-pressed={respondKind === 'praise'}
-                  onClick={() => respondWith('praise')}
-                >
-                  Praise
-                </button>
-              ) : null}
-              {!isOwn ? (
-                <NominateButton
-                  targetType="journal"
-                  targetId={entry.id}
-                  nomineeName={entry.author_name}
-                />
-              ) : null}
-              {!isOwn && entry.can_retort ? (
-                <button
-                  type="button"
-                  className={ACTION_CLASS}
-                  aria-pressed={respondKind === 'retort'}
-                  onClick={() => respondWith('retort')}
-                >
-                  Retort
-                </button>
-              ) : null}
-              {!isOwn && entry.can_retort ? (
-                <button
-                  type="button"
-                  className={ACTION_CLASS}
-                  aria-pressed={respondKind === 'condemn'}
-                  onClick={() => respondWith('condemn')}
-                >
-                  Condemn
-                </button>
-              ) : null}
-              {entry.response_count > 0 ? (
-                <span className="jr-soft text-muted-foreground">
-                  {entry.response_count} response{entry.response_count === 1 ? '' : 's'}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-
-          {!editing && responses.length > 0 ? (
-            <div className="grid gap-3 border-l-2 pl-4">
-              {responses.map((response) => (
-                <ResponseItem key={response.id} response={response} />
-              ))}
-            </div>
-          ) : null}
-
-          {!editing && respondKind !== null ? (
-            <RespondForm entry={entry} kind={respondKind} onDone={() => setRespondKind(null)} />
-          ) : null}
-
-          {!editing && canModerate && viewer.personaId !== null ? (
-            <Moderation entry={entry} viewerPersonaId={viewer.personaId} />
-          ) : null}
-        </div>
+        <JournalRowExpanded
+          entry={entry}
+          detail={detail}
+          isOwn={isOwn}
+          isBlack={isBlack}
+          isRevealed={isRevealed}
+          canModerate={canModerate}
+          editing={editing}
+          respondKind={respondKind}
+          viewer={viewer}
+          onEdit={() => setEditing(true)}
+          onEditingDone={() => setEditing(false)}
+          onRespond={respondWith}
+          onRespondDone={() => setRespondKind(null)}
+        />
       ) : null}
     </article>
   );

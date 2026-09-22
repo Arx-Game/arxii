@@ -310,51 +310,76 @@ def _tier_for(scope: str, points: int) -> ConsecrationTier | None:
     )
 
 
+def _site_row(  # noqa: PLR0913
+    *,
+    kind: str,
+    name: str,
+    place: str,
+    points: int,
+    scope: str,
+    founder_name: str | None,
+) -> dict[str, Any]:
+    """Build one temple or shrine dashboard row."""
+    tier = _tier_for(scope, points)
+    return {
+        "kind": kind,
+        "name": name,
+        "place": place,
+        "consecration_points": points,
+        "tier_name": tier.name if tier else "",
+        "bonus_percent": tier.bonus_percent if tier else 0,
+        "founder_name": founder_name,
+    }
+
+
 def _site_rows(being: WorshippedBeing) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for temple in (
-        TempleDedication.objects.filter(being=being, dissolved_at__isnull=True)
-        .select_related("building__area", "founder_character_sheet__character")
-        .order_by("-consecration_points")
-    ):
-        tier = _tier_for(ConsecrationScope.TEMPLE, temple.consecration_points)
-        rows.append(
-            {
-                "kind": "temple",
-                "name": str(temple.building),
-                "place": temple.building.area.name if temple.building.area_id else "",
-                "consecration_points": temple.consecration_points,
-                "tier_name": tier.name if tier else "",
-                "bonus_percent": tier.bonus_percent if tier else 0,
-                "founder_name": temple.founder_character_sheet.character.key
+    """Build dashboard rows for the being's temples and shrines."""
+    rows = [
+        _site_row(
+            kind="temple",
+            name=str(temple.building),
+            place=temple.building.area.name if temple.building.area_id else "",
+            points=temple.consecration_points,
+            scope=ConsecrationScope.TEMPLE,
+            founder_name=(
+                temple.founder_character_sheet.character.key
                 if temple.founder_character_sheet_id
-                else None,
-            }
+                else None
+            ),
         )
-    for shrine in (
-        ShrineDetails.objects.filter(being=being, feature_instance__dissolved_at__isnull=True)
-        .select_related(
-            "feature_instance__room_profile__objectdb",
-            "feature_instance__room_profile__area",
-            "founder_character_sheet__character",
+        for temple in (
+            TempleDedication.objects.filter(being=being, dissolved_at__isnull=True)
+            .select_related("building__area", "founder_character_sheet__character")
+            .order_by("-consecration_points")
         )
-        .order_by("-consecration_points")
-    ):
-        tier = _tier_for(ConsecrationScope.SHRINE, shrine.consecration_points)
-        profile = shrine.feature_instance.room_profile
-        rows.append(
-            {
-                "kind": "shrine",
-                "name": profile.objectdb.key,
-                "place": profile.area.name if profile.area_id else "",
-                "consecration_points": shrine.consecration_points,
-                "tier_name": tier.name if tier else "",
-                "bonus_percent": tier.bonus_percent if tier else 0,
-                "founder_name": shrine.founder_character_sheet.character.key
+    ]
+    rows.extend(
+        _site_row(
+            kind="shrine",
+            name=shrine.feature_instance.room_profile.objectdb.key,
+            place=(
+                shrine.feature_instance.room_profile.area.name
+                if shrine.feature_instance.room_profile.area_id
+                else ""
+            ),
+            points=shrine.consecration_points,
+            scope=ConsecrationScope.SHRINE,
+            founder_name=(
+                shrine.founder_character_sheet.character.key
                 if shrine.founder_character_sheet_id
-                else None,
-            }
+                else None
+            ),
         )
+        for shrine in (
+            ShrineDetails.objects.filter(being=being, feature_instance__dissolved_at__isnull=True)
+            .select_related(
+                "feature_instance__room_profile__objectdb",
+                "feature_instance__room_profile__area",
+                "founder_character_sheet__character",
+            )
+            .order_by("-consecration_points")
+        )
+    )
     return rows
 
 

@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { startScene, finishScene } from '@/scenes/queries';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setSessionScene } from '@/store/gameSlice';
+import { setSessionScene, type RoomStateResyncStatus } from '@/store/gameSlice';
 import type { HubTidings, NpcGiver, RoomStateObject, SceneSummary } from '@/hooks/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -79,6 +79,141 @@ interface RoomPanelProps {
   viewerThumbnailUrl?: string | null;
 }
 
+function RoomLocationRecovery({
+  character,
+  isConnected,
+  status,
+  error,
+  requestRoomState,
+  connect,
+  send,
+}: {
+  character: string | null;
+  isConnected: boolean;
+  status: RoomStateResyncStatus;
+  error?: string;
+  requestRoomState: (character: string) => void;
+  connect: (character: string) => Promise<unknown>;
+  send: (character: string, command: string) => void;
+}) {
+  const locationTitle = character
+    ? 'Location not confirmed yet'
+    : 'Choose a character to enter the world';
+  let locationCopy = 'Select a character above to see room information.';
+  if (character) {
+    locationCopy = isConnected
+      ? `Connected as ${character}, but the game has not confirmed your location yet.`
+      : `${character} is selected, but the game connection is not ready.`;
+  }
+  let retryLabel = 'Reconnect';
+  if (status === 'pending') retryLabel = 'Refreshing location…';
+  else if (isConnected) retryLabel = 'Refresh location';
+  const retryLocation = () => {
+    if (!character) return;
+    if (isConnected) requestRoomState(character);
+    else void connect(character).catch(() => {});
+  };
+  return (
+    <div
+      className="flex flex-col gap-3 p-4 text-sm"
+      role={status === 'failure' ? 'alert' : 'status'}
+    >
+      <div>
+        <h3 className="font-semibold">{locationTitle}</h3>
+        <p className="mt-1 text-muted-foreground">{locationCopy}</p>
+      </div>
+      {character && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={retryLocation}
+            disabled={status === 'pending'}
+          >
+            {retryLabel}
+          </Button>
+          {isConnected && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => send(character, `@ic ${character}`)}
+            >
+              Re-enter as {character}
+            </Button>
+          )}
+          <Link
+            to="/hall"
+            className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
+          >
+            Return to Hall
+          </Link>
+        </div>
+      )}
+      {status !== 'idle' && (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {status === 'pending' && 'Waiting for the location response…'}
+          {status === 'success' && 'Location refreshed.'}
+          {status === 'partial' && 'Location arrived, but confirmation was lost. Try again.'}
+          {status === 'failure' && (error ?? 'Location refresh failed. Try again.')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TenancyAction({
+  characterId,
+  isOwner,
+  buildingId,
+  isTenant,
+  isPrimaryHome,
+  setHomePending,
+  onSetHome,
+}: {
+  characterId: number;
+  isOwner: boolean;
+  buildingId?: number | null;
+  isTenant?: boolean;
+  isPrimaryHome?: boolean;
+  setHomePending: boolean;
+  onSetHome: () => void;
+}) {
+  const [builderOpen, setBuilderOpen] = useState(false);
+  if (isOwner && buildingId != null) {
+    return (
+      <div className="border-b p-2">
+        <Button variant="outline" size="sm" className="w-full" onClick={() => setBuilderOpen(true)}>
+          Manage Building
+        </Button>
+        <BuildingBuilderDialog
+          buildingId={buildingId}
+          characterId={characterId}
+          open={builderOpen}
+          onOpenChange={setBuilderOpen}
+        />
+      </div>
+    );
+  }
+  if (isTenant && !isPrimaryHome) {
+    return (
+      <div className="border-b p-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={setHomePending}
+          onClick={onSetHome}
+        >
+          Set as Home
+        </Button>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function RoomPanel({
   character,
   characterId,
@@ -101,7 +236,6 @@ export function RoomPanel({
   const roomStateResyncError = session?.roomStateResyncError;
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
-  const [builderOpen, setBuilderOpen] = useState(false);
 
   // Which building this room belongs to + what the viewer may do here
   // (owner → manage; tenant → set home). Booleans and ids only.
@@ -148,126 +282,22 @@ export function RoomPanel({
   });
 
   if (!room || !character) {
-    const locationTitle = character
-      ? 'Location not confirmed yet'
-      : 'Choose a character to enter the world';
-    let locationCopy = 'Select a character above to see room information.';
-    if (character) {
-      locationCopy = isConnected
-        ? `Connected as ${character}, but the game has not confirmed your location yet.`
-        : `${character} is selected, but the game connection is not ready.`;
-    }
-    let retryLabel = 'Reconnect';
-    if (roomStateResyncStatus === 'pending') {
-      retryLabel = 'Refreshing location…';
-    } else if (isConnected) {
-      retryLabel = 'Refresh location';
-    }
-
-    const retryLocation = () => {
-      if (!character) return;
-      if (isConnected) {
-        requestRoomState(character);
-      } else {
-        void connect(character).catch(() => {});
-      }
-    };
-
     return (
-      <div
-        className="flex flex-col gap-3 p-4 text-sm"
-        role={roomStateResyncStatus === 'failure' ? 'alert' : 'status'}
-      >
-        <div>
-          <h3 className="font-semibold">{locationTitle}</h3>
-          <p className="mt-1 text-muted-foreground">{locationCopy}</p>
-        </div>
-        {character && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={retryLocation}
-              disabled={roomStateResyncStatus === 'pending'}
-            >
-              {retryLabel}
-            </Button>
-            {isConnected && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => send(character, `@ic ${character}`)}
-              >
-                Re-enter as {character}
-              </Button>
-            )}
-            <Link
-              to="/hall"
-              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
-            >
-              Return to Hall
-            </Link>
-          </div>
-        )}
-        {roomStateResyncStatus !== 'idle' && (
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            {roomStateResyncStatus === 'pending' && 'Waiting for the location response…'}
-            {roomStateResyncStatus === 'success' && 'Location refreshed.'}
-            {roomStateResyncStatus === 'partial' &&
-              'Location arrived, but confirmation was lost. Try again.'}
-            {roomStateResyncStatus === 'failure' &&
-              (session?.roomStateResyncError ?? 'Location refresh failed. Try again.')}
-          </p>
-        )}
-      </div>
+      <RoomLocationRecovery
+        character={character}
+        isConnected={isConnected}
+        status={roomStateResyncStatus}
+        error={roomStateResyncError}
+        requestRoomState={requestRoomState}
+        connect={connect}
+        send={send}
+      />
     );
   }
 
   const handleExit = (exit: RoomStateObject) => {
     const cmd = exit.commands[0] ?? exit.name;
     send(character, cmd);
-  };
-
-  // Owner and tenant get different affordances here, and a visitor gets none.
-  const renderTenancyAction = (charId: number) => {
-    if (room.is_owner && forRoom.data?.building_id != null) {
-      return (
-        <div className="border-b p-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => setBuilderOpen(true)}
-          >
-            Manage Building
-          </Button>
-          <BuildingBuilderDialog
-            buildingId={forRoom.data.building_id}
-            characterId={charId}
-            open={builderOpen}
-            onOpenChange={setBuilderOpen}
-          />
-        </div>
-      );
-    }
-    if (forRoom.data?.is_tenant && !forRoom.data.is_primary_home_here) {
-      return (
-        <div className="border-b p-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            disabled={setHome.isPending}
-            onClick={() => setHome.mutate()}
-          >
-            Set as Home
-          </Button>
-        </div>
-      );
-    }
-    return null;
   };
 
   return (
@@ -311,7 +341,17 @@ export function RoomPanel({
         </Dialog>
       )}
 
-      {characterId != null && renderTenancyAction(characterId)}
+      {characterId != null && (
+        <TenancyAction
+          characterId={characterId}
+          isOwner={room.is_owner}
+          buildingId={forRoom.data?.building_id}
+          isTenant={forRoom.data?.is_tenant}
+          isPrimaryHome={forRoom.data?.is_primary_home_here}
+          setHomePending={setHome.isPending}
+          onSetHome={() => setHome.mutate()}
+        />
+      )}
 
       {characterId != null && (forRoom.data?.is_tenant || forRoom.data?.is_owner) && (
         <RoomAuraPicker characterId={characterId} roomId={room.id} />
