@@ -255,7 +255,9 @@ class PlayReadViewTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["marked"], 1)
         self.assertTrue(
-            InteractionReadReceipt.objects.filter(account=account, interaction=interaction).exists()
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=interaction.pk
+            ).exists()
         )
 
     def test_rejects_more_than_100_poses(self) -> None:
@@ -309,7 +311,9 @@ class PlayReadViewTests(APITestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.json()["marked"], 0)
         self.assertEqual(
-            InteractionReadReceipt.objects.filter(account=account, interaction=interaction).count(),
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=interaction.pk
+            ).count(),
             1,
         )
 
@@ -340,7 +344,7 @@ class PlayReadViewMarkConversationReadTests(APITestCase):
         for interaction in interactions:
             self.assertTrue(
                 InteractionReadReceipt.objects.filter(
-                    account=account, interaction=interaction
+                    account=account, interaction_id=interaction.pk
                 ).exists()
             )
 
@@ -367,10 +371,14 @@ class PlayReadViewMarkConversationReadTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["marked"], 1)
         self.assertTrue(
-            InteractionReadReceipt.objects.filter(account=account, interaction=visible).exists()
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=visible.pk
+            ).exists()
         )
         self.assertFalse(
-            InteractionReadReceipt.objects.filter(account=account, interaction=hidden).exists()
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=hidden.pk
+            ).exists()
         )
 
     def test_timestamp_after_before_is_not_marked(self) -> None:
