@@ -30,6 +30,7 @@ from world.societies.houses.almanach import (
     describe_demesne,
     liege_for_title,
     name_rung,
+    open_household_position,
     plan_estate,
     record_kin,
 )
@@ -145,6 +146,37 @@ def family_name_is_taken(name: str) -> bool:
     )
 
 
+def land_name_is_taken(name: str) -> bool:
+    """A named rung or demesne already wears this name (#3983).
+
+    ``Title.name`` and ``Domain.name`` each carry a partial unique
+    (``name > ''``), and ``name_rung`` writes both at finalize — so a
+    founder naming an undefined rung after a land that already exists used
+    to pass every submit gate and blow up as an ``IntegrityError`` at the
+    last step of character creation. Both constraints are repo-wide, not
+    per-realm, so this check is too: a realm-scoped one would still let the
+    cross-realm collision through to the same 500.
+    """
+    return (
+        Title.objects.filter(name__iexact=name).exists()
+        or Domain.objects.filter(name__iexact=name).exists()
+    )
+
+
+def _refuse_taken_land_name(name: str, *, already_named: set[str]) -> None:
+    """Refuse a land name already taken on the Atlas, or used twice in this
+    same claim (two rungs of one claim named alike collide with each other
+    at finalize just as surely)."""
+    key = name.strip().lower()
+    if key in already_named:
+        msg = f"land name {name!r} used twice in one claim"
+        raise HousesServiceError(msg, user_message="Two lands cannot share a name.")
+    if land_name_is_taken(name):
+        msg = f"land name {name!r} collides with an existing title or domain"
+        raise HousesServiceError(msg, user_message="A land by that name already exists.")
+    already_named.add(key)
+
+
 def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     *,
     draft: CharacterDraft,
@@ -230,7 +262,7 @@ def _validate_stylings(*, words: str, colors: str, sigil_description: str) -> No
 _FOUNDER_NEEDS_HEAD = (ClaimKinRelation.CHILD, ClaimKinRelation.SIBLING, ClaimKinRelation.SPOUSE)
 
 
-def _validate_kin_and_lands(  # noqa: C901, PLR0913 — keyword-only; one arg per gate input
+def _validate_kin_and_lands(  # noqa: C901, PLR0912, PLR0913 — one gate per rule, keyword-only
     *,
     draft: CharacterDraft,
     title: Title,
@@ -251,6 +283,19 @@ def _validate_kin_and_lands(  # noqa: C901, PLR0913 — keyword-only; one arg pe
     if founder_relation in _FOUNDER_NEEDS_HEAD and not has_head:
         msg = f"founder_relation {founder_relation} needs a head-of-house row"
         raise HousesServiceError(msg, user_message="Write the head of house first.")
+    if founder_relation == ClaimKinRelation.POSITION:
+        msg = "founder placed as a household position"
+        raise HousesServiceError(msg, user_message="A position is a post, not a person.")
+    # A household row titles its own Vacancy, and ``Vacancy`` is unique on
+    # (organization, name): an unnamed ward or post has nothing to title it
+    # with, and a second one would silently take the first's row (#3983
+    # ruling I2). Family rows may stay nameless — those are app-in slots.
+    for row in kin:
+        if row.relation in (ClaimKinRelation.WARD, ClaimKinRelation.POSITION) and not row.name:
+            msg = f"household row of relation {row.relation} has no name"
+            raise HousesServiceError(
+                msg, user_message="Name the ward or the position before recording it."
+            )
     has_parent = any(
         row.relation in (ClaimKinRelation.MOTHER, ClaimKinRelation.FATHER) for row in kin
     )
@@ -262,6 +307,7 @@ def _validate_kin_and_lands(  # noqa: C901, PLR0913 — keyword-only; one arg pe
             msg = f"lands given for landless title {title.pk}"
             raise HousesServiceError(msg, user_message="That title has no land to describe.")
         grants_by_pk = {t.pk: t for t in claim_grants(title)}
+        named: set[str] = set()
         for land in lands:
             granted = grants_by_pk.get(land.title_id)
             if granted is None:
@@ -274,6 +320,8 @@ def _validate_kin_and_lands(  # noqa: C901, PLR0913 — keyword-only; one arg pe
             if land.hall_name and land.hall_name.strip().lower() == effective_name.strip().lower():
                 msg = f"hall name repeats land name for title {granted.pk}"
                 raise HousesServiceError(msg, user_message="The hall needs a name of its own.")
+            if land.land_name and not granted.name:
+                _refuse_taken_land_name(land.land_name, already_named=named)
     if estate_name:
         realm = draft.selected_area.realm if draft.selected_area_id else None
         if realm is None or not Area.objects.filter(realm=realm, is_capital=True).exists():
@@ -383,10 +431,16 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
                     claim=claim, definition_id=definition_id, option_id=option_id
                 )
         for index, row in enumerate(kin):
-            if row.relation == ClaimKinRelation.SPOUSE:
-                row_basis = row.basis or MembershipBasis.MARRIED_IN
-            else:
-                row_basis = row.basis or MembershipBasis.BORN
+            # A row that names the family it was BORN into came into this
+            # house some other way, so its membership here is MARRIED_IN,
+            # not a second birth (#3983 review M1) — the client sends a
+            # blank basis for every row, so this default is what lands.
+            married_in = row.relation == ClaimKinRelation.SPOUSE or (
+                row.born_into_id is not None
+                and row.relation in (ClaimKinRelation.MOTHER, ClaimKinRelation.FATHER)
+            )
+            default_basis = MembershipBasis.MARRIED_IN if married_in else MembershipBasis.BORN
+            row_basis = row.basis or default_basis
             HouseClaimKin.objects.create(
                 claim=claim,
                 name=row.name,
@@ -504,15 +558,15 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
 def _place_claim_row(*, org: Organization, row: HouseClaimKin, **kin_kwargs) -> Kinsperson:
     """Place one ``HouseClaimKin`` row via ``record_kin`` (#3983 Plan B).
 
-    WARD/POSITION rows are household retainers, never family members
-    (#3983 Decision 1, ``almanach.record_kin``'s own docstring) — never
-    forward the row's own ``basis`` for them, even though
-    ``HouseClaimKin.basis`` defaults non-blank (``MembershipBasis.BORN``),
-    or they'd pick up a family membership a household placement must not get.
+    WARD rows are household retainers, never family members (#3983
+    Decision 1, ``almanach.record_kin``'s own docstring) — never forward the
+    row's own ``basis`` for them, even though ``HouseClaimKin.basis``
+    defaults non-blank (``MembershipBasis.BORN``), or they'd pick up a
+    family membership a household placement must not get. POSITION rows
+    never reach here at all: an open post is a bare Vacancy
+    (``open_household_position``), not a person.
     """
-    row_basis = (
-        "" if row.relation in (ClaimKinRelation.WARD, ClaimKinRelation.POSITION) else row.basis
-    )
+    row_basis = "" if row.relation == ClaimKinRelation.WARD else row.basis
     node, _vacancy = record_kin(
         house=org,
         name=row.name,
@@ -563,11 +617,32 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
         msg = f"claim {claim.pk} has no head-of-house row for a non-head founder"
         raise HousesServiceError(msg, user_message="The house needs a head of house.")
     template = claim.template
+    top = claim.title
+    # The liege the new house swears to is the holder of the nearest HELD
+    # rung above the claimed one (#3983's Liege rule): a county claimed
+    # under a duchy a player house holds swears to that duke, not to the
+    # crown. ``template.liege`` is the fallback only when no ancestor rung
+    # is held (or the title is landless). Computed here, before the first
+    # write, because ``assign_holder`` below seats this house on the chain
+    # and would then answer "itself".
+    served_liege = liege_for_title(top) if top.seat_domain_id is not None else None
+    # Marriage vocabulary, resolved before the first write for the same
+    # reason: ``record_union`` refuses a null kind, and a raise mid-way
+    # would leave identity-mapped rows poisoned behind the rollback.
+    marriage_kind = UnionKind.objects.filter(name=MARRIAGE_KIND_NAME).first()
+    needs_marriage = (
+        claim.founder_relation == ClaimKinRelation.SPOUSE
+        or claim.kin.filter(relation=ClaimKinRelation.SPOUSE).exists()
+    )
+    if needs_marriage and marriage_kind is None:
+        msg = f"claim {claim.pk} places a spouse with no marriage UnionKind"
+        raise HousesServiceError(msg, user_message="Marriage is not configured for this realm.")
     family, org = build_family_org(
         template,
         claim.house_name,
         description=claim.backstory,
         aspect_picks=_claim_aspect_picks(claim),
+        served_house=served_liege,
     )
     org.words = claim.words
     org.colors = claim.colors
@@ -585,7 +660,6 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
     sheet.family = family
     sheet.save()
 
-    top = claim.title
     if top.seat_domain_id is not None:
         grants = claim_grants(top)
         own_chain_pks = {t.pk for t in _require_chain_top(top)}
@@ -647,7 +721,6 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
     by_relation: dict[str, list[HouseClaimKin]] = {}
     for row in rows:
         by_relation.setdefault(row.relation, []).append(row)
-    marriage_kind = UnionKind.objects.filter(name=MARRIAGE_KIND_NAME).first()
     founder = ensure_node_for_sheet(sheet, family=None)
 
     # The founder_relation != HEAD case is guaranteed a head_row by the gate
@@ -684,9 +757,19 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
     for row in by_relation.get(ClaimKinRelation.WARD, ()):
         _place_claim_row(org=org, row=row)
     for row in by_relation.get(ClaimKinRelation.POSITION, ()):
-        _place_claim_row(org=org, row=row)
+        # A titled post with nobody in it yet, never a phantom NPC named
+        # after the job (#3983 ruling I2): the founder writes "Master-at-arms"
+        # and the household reads "Master-at-arms · position · open".
+        open_household_position(house=org, position=row.name)
 
     if claim.founder_relation == ClaimKinRelation.CHILD:
+        # BORN explicitly, exactly like the SIBLING/MOTHER/FATHER/GRANDPARENT
+        # branches below and like every founder-written CHILD row (#3983
+        # ruling I1). Without it ``record_kin``'s realm-recognition walk
+        # runs, and it cannot match here — the head's own ``Title.holder``
+        # is written further down, after this — so it fell through to
+        # ``acknowledge_into_family`` and stamped the founder LEGITIMIZED,
+        # which then styles their own name with the taken-in particle.
         record_kin(
             house=org,
             name="",
@@ -694,6 +777,7 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
             node=founder,
             parent=head_node,
             parents=[spouse_node] if spouse_node else (),
+            basis=MembershipBasis.BORN,
         )
     elif claim.founder_relation == ClaimKinRelation.SIBLING:
         record_kin(
@@ -731,9 +815,9 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
             child=mother_node or father_node,
             basis=MembershipBasis.BORN,
         )
-    elif claim.founder_relation in (ClaimKinRelation.WARD, ClaimKinRelation.POSITION):
+    elif claim.founder_relation == ClaimKinRelation.WARD:
         record_kin(
-            house=org, name="", relation=claim.founder_relation, node=founder, is_household=True
+            house=org, name="", relation=ClaimKinRelation.WARD, node=founder, is_household=True
         )
     # else: founder_relation == HEAD, already placed as head_node above.
 

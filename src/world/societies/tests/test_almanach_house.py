@@ -9,7 +9,7 @@ from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.locations.models import LocationOwnership
 from world.roster.factories import FamilyFactory, KinspersonFactory
-from world.roster.models import FamilyMembership, ParentageEdge
+from world.roster.models import FamilyMembership, Kinsperson, ParentageEdge
 from world.societies.constants import VACANCY_BASIS_RETAINER
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import (
@@ -19,6 +19,7 @@ from world.societies.houses.almanach import (
     claim_grants,
     describe_demesne,
     name_rung,
+    open_household_position,
     plan_estate,
     plant_rung,
     publish_house,
@@ -27,7 +28,7 @@ from world.societies.houses.almanach import (
     set_house_state,
     unpublish_house,
 )
-from world.societies.houses.constants import HouseState, TitleTier
+from world.societies.houses.constants import ClaimKinRelation, HouseState, TitleTier
 from world.societies.houses.models import LandShape, Title
 from world.societies.houses.services import HousesServiceError
 from world.societies.models import OrganizationMembership, Vacancy
@@ -119,6 +120,57 @@ class HouseServiceTests(TestCase):
         second = add_household_member(house=self.house, kinsperson=ward, position="Steward")
         assert first.pk == second.pk
         assert Vacancy.objects.filter(organization=self.house, name="Steward").count() == 1
+
+    def test_two_wards_get_a_row_each(self) -> None:
+        """#3983 review I2(a): ``Vacancy`` is unique on (organization, name),
+        so naming every ward "Ward" made the second ward silently take the
+        first's row — the first ward vanished from the household."""
+        first = KinspersonFactory(name="Marisol")
+        second = KinspersonFactory(name="Corvin")
+        record_kin(
+            house=self.house, name="", relation=ClaimKinRelation.WARD, node=first, is_household=True
+        )
+        record_kin(
+            house=self.house,
+            name="",
+            relation=ClaimKinRelation.WARD,
+            node=second,
+            is_household=True,
+        )
+        holders = set(
+            Vacancy.objects.filter(organization=self.house).values_list(
+                "holder_kinsperson_id", flat=True
+            )
+        )
+        assert {first.pk, second.pk} <= holders
+
+    def test_an_open_position_has_a_title_and_nobody_in_it(self) -> None:
+        """#3983 ruling I2: a household POST is not a person. The plate's
+        "Master-at-arms · position · open" is a Vacancy with no holder."""
+        vacancy = open_household_position(house=self.house, position="Master-at-arms")
+        assert vacancy.name == "Master-at-arms"
+        assert vacancy.holder_kinsperson_id is None
+        assert vacancy.count_remaining == 1
+        assert vacancy.is_open
+        assert vacancy.rank.name == HOUSEHOLD_RANK_TITLE
+        # Re-posting the same title re-opens the same row, never a duplicate.
+        again = open_household_position(house=self.house, position="Master-at-arms")
+        assert again.pk == vacancy.pk
+
+    def test_an_untitled_position_is_refused(self) -> None:
+        with self.assertRaises(HousesServiceError):
+            open_household_position(house=self.house, position="  ")
+
+    def test_record_kin_refuses_a_position(self) -> None:
+        """The seam is explicit: a POSITION never mints a Kinsperson."""
+        with self.assertRaises(HousesServiceError):
+            record_kin(
+                house=self.house,
+                name="Captain",
+                relation=ClaimKinRelation.POSITION,
+                is_household=True,
+            )
+        assert not Kinsperson.objects.filter(name="Captain").exists()
 
     def test_sheeted_household_member_gets_a_real_membership(self) -> None:
         sheet = CharacterSheetFactory()

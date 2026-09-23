@@ -147,6 +147,49 @@ class PlantRungTests(TestCase):
         assert not FealtyEdge.objects.filter(vassal=self.crown).exists()
         assert FealtyEdge.objects.get(vassal=ardor_house).liege == self.crown
 
+    def test_rehome_leaves_a_superiors_loose_barony_held_not_sworn(self) -> None:
+        """#3983 C2, the plate's Seawatch case in the other order: the crown
+        holds one barony inside a county that is later granted away. The new
+        count must not become the crown's liege — ``swear_fealty``'s cycle
+        guard would raise and roll the whole seating back, and at CG finalize
+        that surfaces as a founder losing their house at the last step."""
+        ardor_county = plant_rung(
+            realm=self.realm, tier=TitleTier.COUNTY, name="Ardor", parent_title=self.kingdom
+        )
+        seawatch = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.BARONY,
+            name="Seawatch",
+            parent_title=ardor_county,
+            held_by=self.crown,
+        )
+        solano = OrganizationFactory(name="Solano")
+        assign_holder(ardor_county, solano)
+        assert FealtyEdge.objects.get(vassal=solano).liege == self.crown
+        assert not FealtyEdge.objects.filter(vassal=self.crown).exists()
+        assert Title.objects.get(pk=seawatch.pk).house_id == self.crown.pk
+
+    def test_rehome_leaves_an_unrelated_houses_fealty_alone(self) -> None:
+        """A house whose real allegiance is elsewhere and which happens to
+        own one barony under the new rung keeps its own liege (and its
+        tithe): that oath is not this county's to delete."""
+        luxen = OrganizationFactory(name="Luxen")
+        brasa = OrganizationFactory(name="Brasa")
+        swear_fealty(vassal=brasa, liege=luxen)
+        ardor_county = plant_rung(
+            realm=self.realm, tier=TitleTier.COUNTY, name="Ardor", parent_title=self.kingdom
+        )
+        plant_rung(
+            realm=self.realm,
+            tier=TitleTier.BARONY,
+            name="Seawatch",
+            parent_title=ardor_county,
+            held_by=brasa,
+        )
+        solano = OrganizationFactory(name="Solano")
+        assign_holder(ardor_county, solano)
+        assert FealtyEdge.objects.get(vassal=brasa).liege == luxen
+
     def test_assign_holder_refuses_an_internal_chain_member(self) -> None:
         fervor = plant_rung(
             realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom

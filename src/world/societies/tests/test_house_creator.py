@@ -1,5 +1,6 @@
 """Tests for the CG house creator (#1884 Phase D): gates, review, materialization."""
 
+from django.db import IntegrityError
 from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
@@ -51,7 +52,7 @@ from world.societies.houses.models import (
 )
 from world.societies.houses.services import HousesServiceError
 from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft
-from world.societies.models import OrganizationMembership, Vacancy
+from world.societies.models import Organization, OrganizationMembership, Vacancy
 
 
 class HouseCreatorTestData(TestCase):
@@ -521,10 +522,20 @@ class FounderJourneyTests(HouseCreatorTestData):
         assert slot.is_appable
         assert slot.sheet_id is None
 
-        # The household position is a filled Vacancy, not a family member.
-        captain = Kinsperson.objects.get(name="Captain")
-        vacancy = Vacancy.objects.get(holder_kinsperson=captain)
-        assert vacancy.name == "Household position"
+        # The household POSITION is an open post titled by the row's own
+        # name — no Kinsperson at all (#3983 ruling I2): "Captain · position
+        # · open", never a phantom NPC called Captain.
+        assert not Kinsperson.objects.filter(name="Captain").exists()
+        vacancy = Vacancy.objects.get(organization=org, name="Captain")
+        assert vacancy.holder_kinsperson_id is None
+        assert vacancy.is_open
+        assert vacancy.count_remaining == 1
+
+        # The founder came in BORN, not LEGITIMIZED: they are the head's own
+        # child, and a legitimized basis would style their own name with the
+        # taken-in particle (#3983 ruling I1).
+        founder_membership = FamilyMembership.objects.get(kinsperson=founder, family=org.family)
+        assert founder_membership.basis == MembershipBasis.BORN
 
         # The estate planted under the realm's capital.
         estate = Area.objects.get(name="Casa Candela")
@@ -534,3 +545,175 @@ class FounderJourneyTests(HouseCreatorTestData):
         ).exists()
 
         assert KinSlotPool.objects.filter(family=org.family).exists()
+
+
+class FounderLiegeTests(HouseCreatorTestData):
+    """#3983 C1: whom a founder's new house actually swears to."""
+
+    def _claim_and_materialize(self, title, name="Solfataran"):
+        claim = submit_house_claim(
+            draft=self.draft,
+            title=title,
+            template=self.template,
+            house_name=name,
+            backstory="x",
+            words="w",
+            colors="c",
+            sigil_description="s",
+        )
+        approve_house_claim(claim, reviewer=AccountFactory())
+        return materialize_house_claim(claim, sheet=CharacterSheetFactory())
+
+    def test_a_county_under_a_held_duchy_swears_to_that_duke(self) -> None:
+        """Plate F-I b / user story 12: the template's ``liege`` is the
+        crown, but the claimed county lies inside a duchy House Candela
+        holds — so the new house owes Candela, not the crown."""
+        candela = OrganizationFactory(name="Candela")
+        duchy = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="Candelaria", held_by=candela
+        )
+        publish_house(candela)
+        county = plant_rung(
+            realm=self.realm, tier=TitleTier.COUNTY, name="Solfatara", parent_title=duchy
+        )
+        assert self.template.liege == self.crown, "the fallback that must NOT win here"
+
+        org = self._claim_and_materialize(county)
+
+        edge = FealtyEdge.objects.get(vassal=org)
+        assert edge.liege_id == candela.pk
+
+    def test_with_no_held_ancestor_the_template_liege_is_the_fallback(self) -> None:
+        loose = plant_rung(realm=self.realm, tier=TitleTier.DUCHY, name="Vagario")
+        org = self._claim_and_materialize(loose, name="Vagarian")
+        assert FealtyEdge.objects.get(vassal=org).liege_id == self.crown.pk
+
+    def test_a_superiors_loose_barony_under_the_claim_stays_held_not_sworn(self) -> None:
+        """#3983 C2 at finalize: the crown keeps one barony inside the county
+        a founder claims. Re-homing it would swear the crown to its own new
+        vassal, and the cycle guard would roll the entire claim back."""
+        vampa = plant_rung(realm=self.realm, tier=TitleTier.DUCHY, name="Vampa", held_by=self.crown)
+        ardor = plant_rung(
+            realm=self.realm, tier=TitleTier.COUNTY, name="Ardor", parent_title=vampa
+        )
+        seawatch = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.BARONY,
+            name="Seawatch",
+            parent_title=ardor,
+            held_by=self.crown,
+        )
+
+        org = self._claim_and_materialize(ardor, name="Ardoran")
+
+        assert FealtyEdge.objects.get(vassal=org).liege_id == self.crown.pk
+        assert not FealtyEdge.objects.filter(vassal=self.crown).exists()
+        assert Title.objects.get(pk=seawatch.pk).house_id == self.crown.pk
+
+
+class FinalizeRefusalTests(HouseCreatorTestData):
+    """#3983 I7: a refusal at the very last step of CG must not 500, and
+    must not leave the character wearing a house that was rolled back.
+
+    Every rung here is minted per method, never shared on the class:
+    ``materialize_house_claim`` mutates identity-mapped ``Title`` rows
+    through its own fetched instances, and those mutations outlive a test's
+    DB rollback (``reference_idmapper_rollback_staleness.md``).
+    """
+
+    def _own_chain(self, name: str, *, loose: int = 1):
+        """A fresh unclaimed duchy plus ``loose`` unclaimed baronies inside
+        its own county — the rungs a claim on the duchy grants."""
+        duchy = plant_rung(realm=self.realm, tier=TitleTier.DUCHY, name=name)
+        county = Title.objects.get(tier=TitleTier.COUNTY, seat_domain=duchy.seat_domain)
+        extras = batch_unclaimed(parent_title=county, tier=TitleTier.BARONY, count=loose)
+        return duchy, extras
+
+    def _submit_naming_lands(self, *, duchy, lands, house_name):
+        return submit_house_claim(
+            draft=self.draft,
+            title=duchy,
+            template=self.template,
+            house_name=house_name,
+            backstory="x",
+            words="w",
+            colors="c",
+            sigil_description="s",
+            lands=lands,
+        )
+
+    def test_submit_refuses_a_land_name_already_on_the_atlas(self) -> None:
+        duchy, (extra,) = self._own_chain("Atlasward")
+        with self.assertRaises(HousesServiceError):
+            self._submit_naming_lands(
+                duchy=duchy,
+                lands=[ClaimLandDraft(title_id=extra.pk, land_name="Thornmere")],
+                house_name="Atlaswarden",
+            )
+
+    def test_submit_refuses_the_same_land_name_twice_in_one_claim(self) -> None:
+        duchy, (first, second) = self._own_chain("Twiceward", loose=2)
+        with self.assertRaises(HousesServiceError):
+            self._submit_naming_lands(
+                duchy=duchy,
+                lands=[
+                    ClaimLandDraft(title_id=first.pk, land_name="Cinis"),
+                    ClaimLandDraft(title_id=second.pk, land_name="cinis"),
+                ],
+                house_name="Twicewarden",
+            )
+
+    def test_submit_refuses_an_unnamed_ward_or_position(self) -> None:
+        for index, relation in enumerate((ClaimKinRelation.WARD, ClaimKinRelation.POSITION)):
+            duchy, _extras = self._own_chain(f"Nameless{index}")
+            with self.assertRaises(HousesServiceError):
+                submit_house_claim(
+                    draft=self.draft,
+                    title=duchy,
+                    template=self.template,
+                    house_name=f"Namelessward{index}",
+                    backstory="x",
+                    words="w",
+                    colors="c",
+                    sigil_description="s",
+                    kin=[ClaimKinDraft(name="", relation=relation, is_household=True)],
+                )
+
+    def _approved_claim_whose_land_name_gets_stolen(self, key: str):
+        """An approved claim that named an undefined rung, with another rung
+        given that same name between approval and finalize: the submit gate
+        passed, the partial unique on ``Title.name`` has not."""
+        duchy, (extra,) = self._own_chain(f"{key}ward")
+        claim = self._submit_naming_lands(
+            duchy=duchy,
+            lands=[ClaimLandDraft(title_id=extra.pk, land_name=f"{key}stone")],
+            house_name=f"{key}warden",
+        )
+        approve_house_claim(claim, reviewer=AccountFactory())
+        _stolen_duchy, (stolen,) = self._own_chain(f"{key}thief")
+        name_rung(stolen, f"{key}stone")
+        return claim
+
+    def test_a_name_taken_after_submit_rolls_the_whole_claim_back(self) -> None:
+        claim = self._approved_claim_whose_land_name_gets_stolen("Rollback")
+        sheet = CharacterSheetFactory()
+        with self.assertRaises(IntegrityError):
+            materialize_house_claim(claim, sheet=sheet)
+        assert not Organization.objects.filter(name="House Rollbackwarden").exists()
+        assert not Family.objects.filter(name="Rollbackwarden").exists()
+
+    def test_the_bind_seam_leaves_the_character_houseless(self) -> None:
+        """``_bind_house_claim`` is the CG-finalize seam that owns this
+        refusal (a private of ``character_creation.services``, imported here
+        because this module owns the claim fixtures): it swallows the
+        refusal, and puts back the ``family`` that materialize had already
+        stamped on the identity-mapped sheet."""
+        from world.character_creation.services import _bind_house_claim
+
+        self._approved_claim_whose_land_name_gets_stolen("Bind")
+        sheet = CharacterSheetFactory()
+
+        _bind_house_claim(self.draft, sheet)
+
+        assert sheet.family is None, "no dangling FK left on the shared instance"
+        assert not Organization.objects.filter(name="House Bindwarden").exists()

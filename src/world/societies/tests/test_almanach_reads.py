@@ -75,6 +75,46 @@ class LadderReadTests(TestCase):
         assert arsura.seat_domain_id == fervor.seat_domain_id
         chain_rows = [r for r in payload.rows if r.seat_domain_id == fervor.seat_domain_id]
         assert len(chain_rows) == 3, "Fervor's duchy, county (Arsura) and barony"
+        # chain_top_id is what a client groups a chain by: every member
+        # points at the top, and the top points at itself. Unlike
+        # ``comes_with`` (a NAME) it survives an undefined top.
+        assert fervor.chain_top_id == fervor.title_id
+        assert all(r.chain_top_id == fervor.title_id for r in chain_rows)
+
+    def test_an_undefined_chain_top_still_groups_its_own_chain(self) -> None:
+        """#3983 review I5: ``comes_with`` is the top's name, so it is "" for
+        an undefined duchy and name-matching silently lost the whole chain —
+        exactly the rows a founder claiming an undefined slot must see."""
+        undefined_duchy = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="", parent_title=self.kingdom
+        )
+        payload = ladder_for_realm(self.realm)
+        chain = [r for r in payload.rows if r.chain_top_id == undefined_duchy.pk]
+        assert len(chain) == 3, "the undefined duchy, its county and its seat barony"
+        assert {r.tier for r in chain} == {
+            TitleTier.DUCHY,
+            TitleTier.COUNTY,
+            TitleTier.BARONY,
+        }
+        assert all(r.comes_with == "" for r in chain), "the name-keyed field cannot do this"
+
+    def test_a_contested_title_reports_its_claimant(self) -> None:
+        """Deferred item 2: the plate's "Brasa · Luxen · claimed · Piropa"
+        row. The write path is the hidden-heir work; the read is here."""
+        luxen = OrganizationFactory(name="Luxen")
+        brasa = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.DUCHY,
+            name="Brasa",
+            parent_title=self.kingdom,
+            held_by=luxen,
+        )
+        brasa.claimant_org = self.crown
+        brasa.save(update_fields=["claimant_org"])
+        payload = ladder_for_realm(self.realm)
+        row = next(r for r in payload.rows if r.title_id == brasa.pk)
+        assert row.claimant_name == "Piropa"
+        assert all(r.claimant_name == "" for r in payload.rows if r.title_id != brasa.pk)
 
     def test_founder_ladder_hides_unpublished_houses(self) -> None:
         other = OrganizationFactory(name="Solano")
@@ -95,14 +135,34 @@ class LadderReadTests(TestCase):
 
 class DocumentReadTests(TestCase):
     def test_document_folds_lands_and_lists_vassals(self) -> None:
-        realm = RealmFactory(name="Inferna")
+        realm = RealmFactory(name="Inferna", default_tithe_pct=10, theme="luxen")
         crown = OrganizationFactory(name="Piropa")
+        # The document's realm block reads the house's OWN realm (through its
+        # society, ``realm_for_house`` — the same seam the particle and the
+        # tithe already use), so the fixture seats the crown in the realm its
+        # titles lie in rather than the factory's incidental one.
+        crown.society.realm = realm
+        crown.society.save(update_fields=["realm"])
         plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Inferna", held_by=crown)
         doc = document_for_house(crown, viewer=None, staff=True)
         assert doc.house["name"] == "Piropa"
         assert doc.lands["count"] == 1
         assert doc.lands["baronies"][0]["is_seat"] is True
         assert doc.realm["holds"] == "Inferna"
+        # The realm itself, so the document can prefill a tithe, link the
+        # ladder, and know whether Gentry is a standing this realm offers.
+        assert doc.realm["realm_id"] == realm.pk
+        assert doc.realm["default_tithe_pct"] == realm.default_tithe_pct
+        assert doc.realm["realm_theme"] == realm.theme
+
+    def test_a_societyless_house_still_reports_the_realm_keys(self) -> None:
+        """An org outside any society (a covenant) has no realm standing at
+        all; the block keeps its shape so no reader tests for the key."""
+        wanderers = OrganizationFactory(name="Wanderers", society=None)
+        doc = document_for_house(wanderers, viewer=None, staff=True)
+        assert doc.realm["realm_id"] is None
+        assert doc.realm["default_tithe_pct"] == 0
+        assert doc.realm["realm_theme"] == ""
 
     def test_household_lists_retainers_and_excludes_kin_vacancies(self) -> None:
         realm = RealmFactory(name="Inferna")

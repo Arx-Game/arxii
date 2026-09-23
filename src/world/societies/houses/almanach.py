@@ -335,6 +335,34 @@ def assign_holder(title: Title, house: Organization) -> Title:
     return title
 
 
+def _may_rehome_to(
+    *, vassal: Organization, holder: Organization, current_edge: FealtyEdge | None
+) -> bool:
+    """Whether a house holding land beneath a freshly seated rung should be
+    re-sworn to its new holder (#3983 Decision 3).
+
+    Interposition is the only case that moves an oath: a house sworn to the
+    crown by containment, with a duke now seated between them, owes the
+    duke. Everything else stays HELD, not sworn —
+
+    - a house ``holder`` itself answers to (the crown's own loose barony
+      lying inside one of its vassals' counties). Swearing that back would
+      invert the tree, and ``swear_fealty``'s cycle guard would raise and
+      roll the whole seating back;
+    - a house whose real fealty is elsewhere entirely, which merely owns one
+      barony down here. Its primary ``FealtyEdge`` (and its tithe) are not
+      this rung's to delete.
+    """
+    if vassal.pk == holder.pk:
+        return False
+    holder_chain = liege_chain_of(holder)
+    if any(org.pk == vassal.pk for org in holder_chain):
+        return False
+    if current_edge is None:
+        return True
+    return any(org.pk == current_edge.liege_id for org in holder_chain)
+
+
 @transaction.atomic
 def rehome_vassals(title: Title) -> int:
     """Re-swear every held chain beneath ``title`` whose nearest held
@@ -368,6 +396,8 @@ def rehome_vassals(title: Title) -> int:
             continue
         current_edge = FealtyEdge.objects.filter(vassal_id=org_id).first()
         if current_edge is not None and current_edge.liege_id == holder.pk:
+            continue
+        if not _may_rehome_to(vassal=family_top.house, holder=holder, current_edge=current_edge):
             continue
         swear_fealty(vassal=family_top.house, liege=holder)
         moved += 1
@@ -466,6 +496,18 @@ def plan_estate(
     return estate
 
 
+_VACANCY_NAME_MAX = 120
+
+
+def _ward_title(node: Kinsperson) -> str:
+    """The Vacancy name a ward's own household row wears: "Ward: <name>",
+    or plain "Ward" for a ward still to be named. ``Vacancy`` is unique on
+    (organization, name), so the name has to carry the person."""
+    name = node.display_name
+    title = f"Ward: {name}" if name else "Ward"
+    return title[:_VACANCY_NAME_MAX]
+
+
 def _household_rank(house: Organization) -> OrganizationRank:
     """The house's Household rank rung, minted one tier below its current
     lowest rank the first time a household member needs it."""
@@ -516,6 +558,36 @@ def add_household_member(
         persona = kinsperson.sheet.personas.filter(persona_type=PersonaType.PRIMARY).first()
     if persona is not None and active_membership_for_persona(house, persona) is None:
         join_organization(house, persona, rank=effective_rank, vacancy=vacancy)
+    return vacancy
+
+
+@transaction.atomic
+def open_household_position(*, house: Organization, position: str) -> Vacancy:
+    """Post an OPEN household position — a title with nobody in it yet (#3983).
+
+    The counterpart of ``add_household_member``: that one records a person
+    the house already has, this one records a post the house has yet to fill
+    ("Master-at-arms · position · open" on the plate). No ``Kinsperson`` is
+    minted for it — a post is not a person, and inventing a phantom NPC to
+    hold it is exactly the defect this replaces — so the row is a retainer
+    Vacancy at the same Household rank with ``count_remaining=1`` and no
+    holder. ``Vacancy`` is unique on (organization, name), so re-posting the
+    same title re-opens the existing row rather than colliding; an existing
+    holder on that row is left alone (filling a post is
+    ``add_household_member``'s job, never this one's).
+    """
+    if house.family_id is None:
+        msg = f"house {house.pk} has no family on record"
+        raise HousesServiceError(msg, user_message="That house has no family on record.")
+    title = position.strip()
+    if not title:
+        msg = f"house {house.pk} household position has no title"
+        raise HousesServiceError(msg, user_message="Name the position.")
+    vacancy, _created = Vacancy.objects.update_or_create(
+        organization=house,
+        name=title[:_VACANCY_NAME_MAX],
+        defaults={"rank": _household_rank(house), "count_remaining": 1, "is_active": True},
+    )
     return vacancy
 
 
@@ -570,13 +642,18 @@ def record_kin(  # noqa: C901, PLR0912, PLR0913 — straight-line relation dispa
     ``acknowledge_into_family``); any relation WITH an explicit ``basis``
     (the materialize path, for MOTHER/FATHER/GRANDPARENT/SIBLING/CHILD rows
     the founder wrote in directly) joins the house's family on that basis.
-    WARD/POSITION rows never get a family membership — household retainers
-    are staff/service-placed, not family (#3983 Decision 1) — so callers
-    placing one must leave ``basis`` empty.
+    WARD rows never get a family membership — household retainers are
+    staff/service-placed, not family (#3983 Decision 1) — so callers placing
+    one must leave ``basis`` empty. A POSITION is refused outright: an open
+    household post has no person in it, so it is a bare Vacancy
+    (``open_household_position``), never a Kinsperson.
     """
     if house.family_id is None:
         msg = f"house {house.pk} has no family on record"
         raise HousesServiceError(msg, user_message="That house has no family on record.")
+    if relation == ClaimKinRelation.POSITION:
+        msg = f"house {house.pk}: a household POSITION is not a person"
+        raise HousesServiceError(msg, user_message="A position is a post, not a person.")
     if node is None:
         node = Kinsperson.objects.create(
             definition_tier=tier,
@@ -618,8 +695,12 @@ def record_kin(  # noqa: C901, PLR0912, PLR0913 — straight-line relation dispa
 
     vacancy = None
     if is_household:
-        position = dict(ClaimKinRelation.choices).get(relation) or "Ward"
-        vacancy = add_household_member(house=house, kinsperson=node, position=position)
+        # One household row per person, named after the person: ``Vacancy``
+        # is unique on (organization, name), so naming every ward "Ward"
+        # made the second ward overwrite the first's holder. A POSITION is
+        # not a person at all and never comes through here (the guard at the
+        # top of this function) — it is ``open_household_position``'s row.
+        vacancy = add_household_member(house=house, kinsperson=node, position=_ward_title(node))
 
     if believed_deceased:
         record_public_belief(node, believed_deceased=True)

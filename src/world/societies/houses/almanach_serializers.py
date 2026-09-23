@@ -45,6 +45,8 @@ class LadderRowSerializer(serializers.Serializer):
     claimable = serializers.BooleanField()
     seat_domain_id = serializers.IntegerField(allow_null=True)
     comes_with = serializers.CharField(allow_blank=True)
+    chain_top_id = serializers.IntegerField()
+    claimant_name = serializers.CharField(allow_blank=True)
 
     def get_name(self, obj) -> str:
         """The dataclass keeps the raw (possibly empty) name; the API

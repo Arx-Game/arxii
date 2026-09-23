@@ -30,6 +30,15 @@ realm, ordered by the Area's ancestry depth then name.
   reports the same liege name with no suffix (nothing is sworn yet); with no
   held ancestor at all it falls back to the immediate parent rung's own name
   (or "Undefined" for an unnamed parent), and with no parent at all it is "".
+- ``chain_top_id`` is the title_id of the chain top this row belongs to
+  (itself, for a chain top). It is what a client keys chain membership on:
+  ``comes_with`` carries the top's NAME, which is "" for an undefined top,
+  so name-matching silently failed for exactly the rows the founder most
+  needs to see grouped (#3983 review I5). ``comes_with`` stays display-only.
+- ``claimant_name`` is ``Title.claimant_org``'s name, "" when nothing
+  contests the title: the contested-title row the plate draws as
+  "Brasa · Cinderus · Luxen · claimed · Piropa" (ADR-0313). The write path
+  belongs to the hidden-heir work; this is the read.
 - ``is_seat_of`` fires only for a BARONY-tier, held, non-top row: it names
   the house holding the higher rung whose seat this barony is.
 - ``demesne``: a held row counts BARONY-tier titles in its own Area subtree
@@ -93,10 +102,12 @@ from world.societies.houses.models import (
     NobiliaryParticle,
     Title,
 )
-from world.societies.houses.services import resolve_particle
+from world.societies.houses.services import realm_for_house, resolve_particle
 from world.societies.models import Organization, Vacancy
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.realms.models import Realm
 
 
@@ -120,6 +131,8 @@ class LadderRow:
     claimable: bool
     seat_domain_id: int | None
     comes_with: str
+    chain_top_id: int
+    claimant_name: str
 
 
 @dataclass
@@ -288,7 +301,11 @@ class _RealmGraph:
 def _realm_graph(realm_id: int) -> _RealmGraph | None:
     """One Title query, one Area query, everything else walked in memory.
     ``None`` when the realm has no titles at all."""
-    titles = list(Title.objects.filter(realm_id=realm_id).select_related("house", "seat_domain"))
+    titles = list(
+        Title.objects.filter(realm_id=realm_id).select_related(
+            "house", "seat_domain", "claimant_org"
+        )
+    )
     if not titles:
         return None
 
@@ -411,6 +428,8 @@ def _row_for(t: Title, graph: _RealmGraph) -> LadderRow:
         claimable=t.is_claimable,
         seat_domain_id=t.seat_domain_id,
         comes_with=comes_with,
+        chain_top_id=graph.family_top_by_seat.get(t.seat_domain_id, t.pk),
+        claimant_name=t.claimant_org.name if t.claimant_org_id is not None else "",
     )
 
 
@@ -456,6 +475,18 @@ def _row_summary(row: LadderRow) -> dict:
 
 def _house_titles(house: Organization) -> list[Title]:
     return list(house.titles.select_related("house", "seat_domain").all())
+
+
+def demesne_count(titles: Sequence[Title]) -> int:
+    """How many baronies a house holds personally, given its own titles.
+
+    The same rule ``_realm_payload``'s ``demesne`` list follows — a barony
+    is the unit of land a house holds, wherever it lies (spec Decision 3) —
+    expressed over a title list so a caller that already has the house's
+    titles in hand (``OrganizationSerializer.house``, reading its
+    prefetched ``titles``) gets the document's number with no second read.
+    """
+    return sum(1 for t in titles if t.tier == TitleTier.BARONY)
 
 
 _PARTICLE_EXAMPLE_KIN_COUNT = 2
@@ -525,6 +556,10 @@ def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict
     if house.family_id is None:
         return {"nodes": [], "parentage": [], "unions": []}
     payload = family_tree_for(house.family, OMNISCIENT if staff else viewer)
+    # The staff cut's nodes already carry ``believed_deceased`` (the node
+    # dict is viewer-aware since #3983's leak fix); this one query keeps the
+    # key present on the non-staff cut too, where the node dict deliberately
+    # omits it, so the document's shape never depends on who is reading.
     node_ids = [node["id"] for node in payload.nodes]
     believed = dict(
         Kinsperson.objects.filter(pk__in=node_ids).values_list("pk", "believed_deceased")
@@ -565,9 +600,31 @@ def _household_payload(house: Organization) -> list[dict]:
     return out
 
 
+def _realm_facts(house: Organization) -> dict:
+    """The house's realm itself: which one, what it tithes by default, and
+    the theme its houses are styled by (#3983). ``realm_theme`` is what
+    gates a Luxen house's Gentry standing — spec Decision 12 — so the
+    document has to carry it; a house whose society has no realm reports a
+    null id and empty defaults."""
+    realm = realm_for_house(house)
+    return {
+        "realm_id": realm.pk if realm is not None else None,
+        "default_tithe_pct": realm.default_tithe_pct if realm is not None else 0,
+        "realm_theme": realm.theme if realm is not None else "",
+    }
+
+
 def _realm_payload(house: Organization, titles: list[Title], all_rows: list[LadderRow]) -> dict:
+    facts = _realm_facts(house)
     if not titles:
-        return {"sworn_to": "", "obligation_pct": None, "holds": "", "demesne": [], "vassals": []}
+        return {
+            "sworn_to": "",
+            "obligation_pct": None,
+            "holds": "",
+            "demesne": [],
+            "vassals": [],
+            **facts,
+        }
     top = _family_top(titles)
     try:
         fealty = house.fealty
@@ -600,6 +657,7 @@ def _realm_payload(house: Organization, titles: list[Title], all_rows: list[Ladd
         "holds": top.name,
         "demesne": demesne,
         "vassals": vassals,
+        **facts,
     }
 
 

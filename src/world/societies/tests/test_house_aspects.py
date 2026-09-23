@@ -304,6 +304,11 @@ class DisplaySurfaceTests(AspectTestData):
         self.assertIn(("House Virtue", "Fortitude"), picked)
         self.assertEqual(len(house["aspects"]), 3)
         self.assertEqual(house["features"][0]["slug"], "hearth-right")
+        # #3983: standing and land are on the house block itself, so an org
+        # page never needs a second call into the Almanach for them. The
+        # count is the document's own demesne rule (baronies held).
+        self.assertEqual(house["house_state"], self.org.house_state)
+        self.assertEqual(house["demesne"], 1)
 
     def test_sheet_house_section_lists_identity(self):
         from types import SimpleNamespace
