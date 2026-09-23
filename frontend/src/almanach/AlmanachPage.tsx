@@ -12,16 +12,24 @@
  *
  * The record rail's "on record" `<dl>` leads with `crown` (derived from a
  * row's own " (crown)"-suffixed `sworn_to`, review fix round 1) plus
- * `default tithe` (`AlmanachRealm.default_tithe_pct`) — the plate's other
- * charter fields (succession law, particle, quiddities) need realm/house
- * data no Task 7 API exposes yet, so they stay for a future Charter page
- * rather than being invented here.
+ * `default tithe` (`AlmanachRealm.default_tithe_pct`), followed by a
+ * `useCharter(realmId)`-backed "Charter" section (final review deferred
+ * item 1) — succession (with its codex link), particle (born · taken-in),
+ * and the realm's own quiddity prompt, the same three facts the contents
+ * rail's inert "Charter" `<li>` promises without a page to back them; that
+ * `<li>` stays inert (no separate Charter route built) since the record
+ * rail already surfaces the same three facts on the page it's already on.
+ *
+ * Plant a rung offers a root option (final review I9) whenever the level
+ * bar sits on the ladder's own shallowest tier, or the ladder is empty —
+ * `PlantRungDialog`'s `allowRoot`/`parent={null}` respectively; nested
+ * planting under a selected rung is otherwise unchanged.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
-import { useAlmanachMutation, useHouses, useLadder, useRealms } from './queries';
-import { buildLadderTree, defaultPressedTier } from './ladder/tree';
+import { useAlmanachMutation, useCharter, useHouses, useLadder, useRealms } from './queries';
+import { buildLadderTree, defaultPressedTier, levelBarTiers } from './ladder/tree';
 import { LevelBar } from './ladder/LevelBar';
 import { LadderTable } from './ladder/LadderTable';
 import { PlantRungDialog } from './ladder/PlantRungDialog';
@@ -105,6 +113,7 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
   const plantMutation = useAlmanachMutation('almanach_plant_rung');
   const batchMutation = useAlmanachMutation('almanach_batch_unclaimed');
 
+  const { data: charter } = useCharter(realmId);
   const houses = housesPayload?.results ?? [];
   // The savebar's plant/batch "under" context (review fix round 1, #3983
   // Task 8): whichever rung the staffer selected by clicking its name in the
@@ -114,6 +123,11 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
     (selectedTitleId != null ? rows.find((row) => row.title_id === selectedTitleId) : undefined) ??
     tree[0]?.row ??
     null;
+  // I9: root-planting is offered whenever the level bar sits on the
+  // ladder's own top tier (there's nothing shallower to nest a new
+  // empire/kingdom/duchy under) or the ladder carries no rows at all.
+  const topTier = levelBarTiers(rows)[0] ?? null;
+  const allowRootPlant = topTier === null || effectivePressedTier === topTier;
   // Plate I's tier span reads "Grand Principality · Piropa" — the realm's
   // own formal name plus whoever holds its crown, read off any row's own
   // " (crown)"-suffixed `sworn_to` (`almanach_reads`'s only place that
@@ -194,12 +208,7 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
             onSelectRow={(row) => setSelectedTitleId(row.title_id)}
           />
           <div className="savebar">
-            <button
-              type="button"
-              className="btn quiet"
-              disabled={!selectedRow}
-              onClick={() => setPlantOpen(true)}
-            >
+            <button type="button" className="btn quiet" onClick={() => setPlantOpen(true)}>
               ⊕ plant a rung
             </button>
             <button
@@ -226,55 +235,85 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
               )}
             </dd>
           </dl>
+          <h4>Charter</h4>
+          <dl>
+            <dt>succession</dt>
+            <dd>
+              {charter?.succession_law ? (
+                <>
+                  {charter.succession_law.name}
+                  {charter.succession_law.codex_entry_id != null && (
+                    <>
+                      {' · '}
+                      <Link to={`/codex/${charter.succession_law.codex_entry_id}`}>codex</Link>
+                    </>
+                  )}
+                </>
+              ) : (
+                <abbr title="none">—</abbr>
+              )}
+            </dd>
+            <dt>particle</dt>
+            <dd>
+              {charter ? (
+                `${charter.particle.born} · ${charter.particle.taken_in}`
+              ) : (
+                <abbr title="none">—</abbr>
+              )}
+            </dd>
+            <dt>quiddity</dt>
+            <dd>{charter?.quiddity_prompt || <abbr title="none">—</abbr>}</dd>
+          </dl>
         </aside>
       </div>
-      {selectedRow && (
-        <>
-          <PlantRungDialog
-            parent={{
-              title_id: selectedRow.title_id,
-              name: selectedRow.is_defined ? selectedRow.name : 'Undefined',
-              tier: selectedRow.tier,
-            }}
-            open={plantOpen}
-            onClose={() => setPlantOpen(false)}
-            realmId={realmId}
-            onConfirm={async (payload) => {
-              const result = await plantMutation.mutateAsync({
-                realm_id: realmId,
-                parent_title_id: selectedRow.title_id,
-                tier: payload.tier,
-                name: payload.name,
-                ...(payload.held_by_org_id != null
-                  ? { held_by_org_id: payload.held_by_org_id }
-                  : {}),
-              });
-              const newTitleId = result.data?.title_id;
-              if (result.success !== false && typeof newTitleId === 'number') {
-                setSelectedTitleId(newTitleId);
+      <PlantRungDialog
+        parent={
+          selectedRow
+            ? {
+                title_id: selectedRow.title_id,
+                name: selectedRow.is_defined ? selectedRow.name : 'Undefined',
+                tier: selectedRow.tier,
               }
-            }}
-          />
-          <BatchUnclaimedDialog
-            parent={{
-              title_id: selectedRow.title_id,
-              name: selectedRow.is_defined ? selectedRow.name : 'Undefined',
-              tier: selectedRow.tier,
-            }}
-            open={batchOpen}
-            onClose={() => setBatchOpen(false)}
-            onConfirm={(payload) => {
-              batchMutation.mutate({
-                parent_title_id: selectedRow.title_id,
-                tier: payload.tier,
-                count: payload.count,
-                ...(payload.baronies_per_county != null
-                  ? { baronies_per_county: payload.baronies_per_county }
-                  : {}),
-              });
-            }}
-          />
-        </>
+            : null
+        }
+        allowRoot={allowRootPlant}
+        open={plantOpen}
+        onClose={() => setPlantOpen(false)}
+        realmId={realmId}
+        onConfirm={async (payload) => {
+          const result = await plantMutation.mutateAsync({
+            realm_id: realmId,
+            tier: payload.tier,
+            name: payload.name,
+            ...(!payload.atRoot && selectedRow ? { parent_title_id: selectedRow.title_id } : {}),
+            ...(payload.held_by_org_id != null ? { held_by_org_id: payload.held_by_org_id } : {}),
+          });
+          const newTitleId = result.data?.title_id;
+          if (result.success !== false && typeof newTitleId === 'number') {
+            setSelectedTitleId(newTitleId);
+          }
+        }}
+      />
+      {selectedRow && (
+        <BatchUnclaimedDialog
+          parent={{
+            title_id: selectedRow.title_id,
+            name: selectedRow.is_defined ? selectedRow.name : 'Undefined',
+            tier: selectedRow.tier,
+          }}
+          open={batchOpen}
+          onClose={() => setBatchOpen(false)}
+          onConfirm={(payload) => {
+            batchMutation.mutate({
+              parent_title_id: selectedRow.title_id,
+              tier: payload.tier,
+              count: payload.count,
+              ...(payload.baronies_per_county != null
+                ? { baronies_per_county: payload.baronies_per_county }
+                : {}),
+            });
+          }}
+        />
       )}
     </div>
   );

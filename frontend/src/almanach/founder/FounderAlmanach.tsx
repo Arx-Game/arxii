@@ -265,7 +265,14 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
     fd.title_id != null ? rows.find((row) => row.title_id === fd.title_id) : undefined;
 
   const title = titles.find((t) => t.id === fd.title_id);
-  const template = title?.templates.find((t) => t.id === fd.template_id);
+  // `fd.template_id` can be persisted `null` (M8, final review) when
+  // `handleClaim` ran before `useClaimableTitles()` resolved — falling back
+  // to the title's own first template keeps that draft usable instead of
+  // showing "Loading…" on every later visit forever.
+  const template =
+    fd.template_id != null
+      ? title?.templates.find((t) => t.id === fd.template_id)
+      : title?.templates[0];
   const quiddityName = quiddityNameOf(template, fd.aspect_picks);
   const features = (template?.features ?? []).map((feature) => ({
     name: feature.name,

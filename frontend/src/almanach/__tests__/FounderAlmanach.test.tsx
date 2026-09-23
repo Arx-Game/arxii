@@ -29,6 +29,8 @@ const rows = [
     claimable: false,
     seat_domain_id: null,
     comes_with: '',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 2,
@@ -47,6 +49,8 @@ const rows = [
     claimable: true,
     seat_domain_id: null,
     comes_with: '',
+    chain_top_id: 2,
+    claimant_name: '',
   },
   // Fervor's own internal chain (its seat county Arsura, its seat barony
   // Ascua) plus a loose unclaimed barony under Arsura — the contents
@@ -69,6 +73,8 @@ const rows = [
     claimable: false,
     seat_domain_id: 10,
     comes_with: 'Fervor',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 4,
@@ -87,6 +93,8 @@ const rows = [
     claimable: false,
     seat_domain_id: 10,
     comes_with: 'Fervor',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 5,
@@ -105,11 +113,18 @@ const rows = [
     claimable: true,
     seat_domain_id: 11,
     comes_with: '',
+    chain_top_id: 5,
+    claimant_name: '',
   },
 ] satisfies LadderRow[];
 
+// Mutable indirection (mirrors `SeatPicker.test.tsx`'s own pattern) so the
+// M8 fallback test can hand `useClaimableTitles` a title with templates
+// without a second mock factory; every other test keeps the empty default.
+let mockTitles: unknown[] = [];
+
 vi.mock('@/character-creation/queries', () => ({
-  useClaimableTitles: () => ({ data: [] }),
+  useClaimableTitles: () => ({ data: mockTitles }),
   useHouseClaim: () => ({ data: null }),
 }));
 
@@ -195,4 +210,42 @@ test('the Land rail entry nests the granted rungs in chain-then-extras order, .c
     li.textContent?.startsWith('The Land')
   );
   expect(landTopLi).toHaveClass('cur');
+});
+
+test(`a stored template_id: null falls back to the title's first template instead of "Loading…" forever (M8)`, () => {
+  mockTitles = [
+    {
+      id: 1,
+      name: 'Fervor',
+      tier: 'duchy',
+      realm_name: 'Inferna',
+      seat_domain_name: '',
+      templates: [
+        {
+          id: 99,
+          name: 'Ducal Charter',
+          kind: 1,
+          aspect_definitions: [],
+          features: [],
+          holdings: [],
+          default_succession_law: null,
+          starting_kin_slots: 3,
+        },
+      ],
+    },
+  ];
+  try {
+    const draft = createMockDraft({ id: 504 });
+    window.localStorage.setItem(
+      'almanach-founder-504',
+      JSON.stringify({ title_id: 1, realm_id: 1, template_id: null })
+    );
+
+    renderWithProviders(<FounderAlmanach draft={draft} />);
+
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('name')).toBeInTheDocument();
+  } finally {
+    mockTitles = [];
+  }
 });
