@@ -1,4 +1,5 @@
-"""URLs for the Almanach de Catenys API (#3983): staff-only house-builder reads."""
+"""URLs for the Almanach de Catenys API (#3983): the house-builder reads
+(realm/founder reads open to any authenticated account; houses stay staff-only)."""
 
 from rest_framework.routers import DefaultRouter
 

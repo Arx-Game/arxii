@@ -1,10 +1,13 @@
-"""Tests for the Almanach de Catenys read payloads (#3983): the ladder and
-the house document."""
+"""Tests for the Almanach de Catenys read payloads (#3983): the ladder, the
+house document, and the realm charter (Plan B Task 3)."""
 
 from django.test import TestCase
 
+from world.areas.constants import AreaLevel
+from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
-from world.roster.factories import FamilyFactory, KinspersonFactory
+from world.roster.constants import NOBLE_KIND_NAME
+from world.roster.factories import FamilyFactory, FamilyKindFactory, KinspersonFactory
 from world.societies.factories import OrganizationFactory, VacancyFactory
 from world.societies.houses.almanach import (
     add_household_member,
@@ -14,9 +17,19 @@ from world.societies.houses.almanach import (
     plant_rung,
     publish_house,
 )
-from world.societies.houses.almanach_reads import document_for_house, ladder_for_realm
-from world.societies.houses.constants import TitleTier
-from world.societies.houses.models import Title
+from world.societies.houses.almanach_reads import (
+    charter_for_realm,
+    document_for_house,
+    ladder_for_realm,
+)
+from world.societies.houses.constants import SuccessionDerivation, TitleTier
+from world.societies.houses.models import (
+    HouseAspectDefinition,
+    HouseTemplate,
+    NobiliaryParticle,
+    SuccessionLaw,
+    Title,
+)
 
 
 class LadderReadTests(TestCase):
@@ -142,3 +155,86 @@ class DocumentReadTests(TestCase):
         assert "Seawatch" in demesne_names, "a barony held directly inside a vassal's county"
         assert len(doc.realm["vassals"]) == 1, "the vassal house, once"
         assert doc.realm["vassals"][0]["held_by"] == "Solano"
+
+
+class CharterReadTests(TestCase):
+    """#3983 Plan B Task 3: the founder ladder's realm-level defaults."""
+
+    def test_charter_reads_the_tierless_templates_law_and_blank_floor_particle(self) -> None:
+        realm = RealmFactory(name="Inferna")
+        crown = OrganizationFactory(name="Piropa")
+        kind = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        tiered_law = SuccessionLaw.objects.create(
+            name="Tiered Law", derivation=SuccessionDerivation.PRIMOGENITURE_WEDLOCK
+        )
+        tierless_law = SuccessionLaw.objects.create(
+            name="Tierless Law", derivation=SuccessionDerivation.PRIMOGENITURE_WEDLOCK
+        )
+        HouseTemplate.objects.create(
+            name="Tiered Charter",
+            realm=realm,
+            tier=TitleTier.DUCHY,
+            kind=kind,
+            society=crown.society,
+            org_type=crown.org_type,
+            liege=crown,
+            default_succession_law=tiered_law,
+        )
+        tierless_template = HouseTemplate.objects.create(
+            name="Tierless Charter",
+            realm=realm,
+            kind=kind,
+            society=crown.society,
+            org_type=crown.org_type,
+            liege=crown,
+            default_succession_law=tierless_law,
+        )
+        quiddity = HouseAspectDefinition.objects.create(
+            name="Charter Quiddity", prompt="Which virtue rules the house?"
+        )
+        tierless_template.aspect_definitions.add(quiddity)
+        # A banded particle that must NOT win over the blank-floor default.
+        NobiliaryParticle.objects.create(
+            realm=realm, kind=kind, tier_floor=TitleTier.DUCHY, particle="du"
+        )
+        NobiliaryParticle.objects.create(
+            realm=realm, kind=kind, particle="de", taken_in_particle="d'"
+        )
+        AreaFactory(level=AreaLevel.CITY, realm=realm, is_capital=True, name="Piropa City")
+
+        charter = charter_for_realm(realm)
+        assert charter.succession_law == {"name": "Tierless Law", "codex_entry_id": None}
+        assert charter.particle == {"born": "de", "taken_in": "d'"}
+        assert charter.quiddity_prompt == "Which virtue rules the house?"
+        assert charter.capital_name == "Piropa City"
+
+    def test_charter_falls_back_to_the_first_template_when_none_is_tierless(self) -> None:
+        realm = RealmFactory(name="Umbros")
+        crown = OrganizationFactory(name="Solano")
+        kind = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        only_law = SuccessionLaw.objects.create(
+            name="Only Law", derivation=SuccessionDerivation.PRIMOGENITURE_WEDLOCK
+        )
+        HouseTemplate.objects.create(
+            name="Only Charter",
+            realm=realm,
+            tier=TitleTier.BARONY,
+            kind=kind,
+            society=crown.society,
+            org_type=crown.org_type,
+            liege=crown,
+            default_succession_law=only_law,
+        )
+        charter = charter_for_realm(realm)
+        assert charter.succession_law == {"name": "Only Law", "codex_entry_id": None}
+        assert charter.particle == {"born": "", "taken_in": ""}
+        assert charter.quiddity_prompt == ""
+        assert charter.capital_name == ""
+
+    def test_charter_with_no_authored_rows_is_all_blank(self) -> None:
+        realm = RealmFactory(name="Charterless Realm")
+        charter = charter_for_realm(realm)
+        assert charter.succession_law is None
+        assert charter.particle == {"born": "", "taken_in": ""}
+        assert charter.quiddity_prompt == ""
+        assert charter.capital_name == ""

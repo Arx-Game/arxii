@@ -81,11 +81,18 @@ from django.core.exceptions import ObjectDoesNotExist
 from world.areas.constants import AreaLevel
 from world.areas.models import Area
 from world.locations.models import LocationOwnership
+from world.roster.constants import NOBLE_KIND_NAME
 from world.roster.models import Kinsperson
 from world.roster.services.kinship import OMNISCIENT, family_tree_for
 from world.societies.houses.almanach import HOUSEHOLD_RANK_TITLE, UNDEFINED_AREA_NAME, _family_top
 from world.societies.houses.constants import TIER_TO_AREA_LEVEL, TITLE_TIER_RANK, TitleTier
-from world.societies.houses.models import Domain, DomainHolding, Title
+from world.societies.houses.models import (
+    Domain,
+    DomainHolding,
+    HouseTemplate,
+    NobiliaryParticle,
+    Title,
+)
 from world.societies.houses.services import resolve_particle
 from world.societies.models import Organization, Vacancy
 
@@ -133,6 +140,19 @@ class HouseDocument:
     realm: dict
     lands: dict
     estate: list[dict]
+
+
+@dataclass
+class RealmCharter:
+    """The realm-level defaults the founder ladder shows before any claim
+    exists (Task 3, #3983 Plan B): mirrors ``_house_payload``'s
+    ``default_succession_law`` shape for the law, and ``resolve_particle``'s
+    band rule (blank-floor row) for the particle."""
+
+    succession_law: dict | None
+    particle: dict
+    quiddity_prompt: str
+    capital_name: str
 
 
 def _subtree_area_ids(root: int, children_by_area: dict[int | None, list[int]]) -> set[int]:
@@ -677,4 +697,44 @@ def document_for_house(house: Organization, *, viewer: object, staff: bool) -> H
         realm=_realm_payload(house, titles, all_rows),
         lands=_lands_payload(house, titles),
         estate=_estate_payload(house),
+    )
+
+
+def _realm_default_template(realm_id: int) -> HouseTemplate | None:
+    """The realm's tier-less fallback template (``templates_for_title``'s own
+    fallback rung), else its first by name; ``None`` for an unauthored realm."""
+    templates = list(HouseTemplate.objects.filter(realm_id=realm_id))
+    tierless = next((t for t in templates if not t.tier), None)
+    return tierless or (templates[0] if templates else None)
+
+
+def charter_for_realm(realm: Realm) -> RealmCharter:
+    """The realm's charter defaults for the founder ladder (#3983 Plan B,
+    Task 3), read before any claim exists so nothing here touches
+    ``HouseClaim``: the default template's succession law, the blank-floor
+    Noble particle (``resolve_particle``'s own band rule), the default
+    template's first aspect prompt, and the realm's capital name."""
+    template = _realm_default_template(realm.pk)
+    law = template.default_succession_law if template is not None else None
+    law_payload = (
+        {"name": law.name, "codex_entry_id": law.codex_entry_id} if law is not None else None
+    )
+    particle_row = NobiliaryParticle.objects.filter(
+        realm=realm, kind__name=NOBLE_KIND_NAME, tier_floor=""
+    ).first()
+    particle = {
+        "born": particle_row.particle if particle_row is not None else "",
+        "taken_in": (
+            (particle_row.taken_in_particle or particle_row.particle)
+            if particle_row is not None
+            else ""
+        ),
+    }
+    definition = template.aspect_definitions.all().first() if template is not None else None
+    capital = Area.objects.filter(realm=realm, is_capital=True).first()
+    return RealmCharter(
+        succession_law=law_payload,
+        particle=particle,
+        quiddity_prompt=definition.prompt if definition is not None else "",
+        capital_name=capital.name if capital is not None else "",
     )

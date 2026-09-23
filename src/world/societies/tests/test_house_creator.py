@@ -211,6 +211,18 @@ class GateTests(HouseCreatorTestData):
         with self.assertRaises(HousesServiceError):
             self._submit()
 
+    def test_head_founder_refuses_a_kin_head_row(self):
+        """#3983 Plan B fold-in: a founder writing HEAD for themselves who
+        ALSO writes a kin row for the head of house is refused — that
+        second row would otherwise be silently orphaned at materialize
+        (``materialize_house_claim`` always places the founder as the head
+        node and never looks at a written HEAD row in that branch)."""
+        with self.assertRaises(HousesServiceError):
+            self._submit(
+                founder_relation=ClaimKinRelation.HEAD,
+                kin=[ClaimKinDraft(name="Someone Else", relation=ClaimKinRelation.HEAD)],
+            )
+
 
 class TemplatesForTitleTests(HouseCreatorTestData):
     """``templates_for_title`` prefers the title's own tier row over the
@@ -328,6 +340,31 @@ class MaterializationTests(HouseCreatorTestData):
         # No accidental auto-membership rows beyond the rank ladder.
         self.assertEqual(OrganizationMembership.objects.filter(organization=org).count(), 0)
 
+    def test_estate_lands_under_the_drafts_realm_capital(self):
+        """#3983 Plan B fold-in: ``materialize_house_claim`` resolves the
+        estate's realm draft-first, sheet-second (see the comment above that
+        fallback in ``creator.py``) — with the draft's own ``selected_area``
+        set, the estate plants under ITS realm's capital, not the sheet's.
+
+        A dedicated, method-local title — never the class-shared
+        ``self.title`` — for the same idmapper-rollback-staleness reason
+        ``test_full_package_materializes`` above uses ``own_title``.
+        """
+        own_title = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.BARONY,
+            name="Estatecastle",
+            parent_title=self.crown_county,
+        )
+        claim = self._submit(
+            title=own_title, estate_name="Casa Marchwood", estate_description="a townhouse"
+        )
+        approve_house_claim(claim, reviewer=AccountFactory())
+        sheet = CharacterSheetFactory()
+        materialize_house_claim(claim, sheet=sheet)
+        estate = Area.objects.get(name="Casa Marchwood")
+        self.assertEqual(estate.parent_id, self.capital.pk)
+
     @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_seed_creator_rows_exist(self):
         """``realms.Realm`` is content-repo-owned (#2698); SEED_SAMPLE_CONTENT
@@ -422,10 +459,14 @@ class FounderJourneyTests(HouseCreatorTestData):
         org = materialize_house_claim(claim, sheet=sheet)
 
         # The chain plus the loose barony extra are all seated on the house.
-        # Fresh fetches, never ``refresh_from_db()`` — a no-op on
-        # SharedMemoryModel (idmapper rollback-staleness corollary): the
-        # nested ``@transaction.atomic`` seams inside materialize mutate
-        # their OWN fetched instances, never these already-held ones.
+        # ``self.fervor`` (``top``) is the exact instance materialize's final
+        # mirror-write lands on, so ``refresh_from_db()`` on it is correct
+        # and sufficient. The other chain members below are NOT that same
+        # instance — materialize's nested ``@transaction.atomic`` seams
+        # mutate their own fetched instances — so those use fresh
+        # ``Title.objects.get(pk=...)`` fetches instead of a
+        # ``refresh_from_db()`` (a no-op on SharedMemoryModel; idmapper
+        # rollback-staleness corollary).
         self.fervor.refresh_from_db()
         assert self.fervor.house_id == org.pk
         arsura = Title.objects.get(pk=self.arsura.pk)

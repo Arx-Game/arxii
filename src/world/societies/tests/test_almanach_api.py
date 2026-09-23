@@ -1,5 +1,6 @@
-"""Tests for the Almanach de Catenys API (#3983 Task 5): the staff-only
-realm ladder, house document, and land-shape reads."""
+"""Tests for the Almanach de Catenys API (#3983 Task 5, Plan B Task 3): the
+realm/founder reads (open to any authenticated account), plus the
+staff-only ladder cut, house list/document, and house-authoring surface."""
 
 from unittest.mock import patch
 
@@ -7,14 +8,22 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from world.areas.constants import AreaLevel
+from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
-from world.roster.factories import FamilyFactory
+from world.roster.constants import NOBLE_KIND_NAME
+from world.roster.factories import FamilyFactory, FamilyKindFactory
 from world.roster.services.kinship import OMNISCIENT
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import plant_rung, publish_house
 from world.societies.houses.almanach_reads import document_for_house
 from world.societies.houses.constants import SuccessionDerivation, TitleTier
-from world.societies.houses.models import SuccessionLaw
+from world.societies.houses.models import (
+    HouseAspectDefinition,
+    HouseTemplate,
+    NobiliaryParticle,
+    SuccessionLaw,
+)
 
 
 class AlmanachApiTests(TestCase):
@@ -71,7 +80,9 @@ class AlmanachApiTests(TestCase):
         assert res.status_code == 200
         assert mock_document_for_house.call_args.kwargs["viewer"] is OMNISCIENT
 
-    def test_ladder_founder_cut_is_also_staff_gated(self) -> None:
+    def test_staff_can_still_reach_the_founder_ladder_cut(self) -> None:
+        """The ``?for=founder`` cut opened to every authenticated account
+        (#3983 Plan B Task 3) stays reachable by staff too."""
         client = APIClient()
         client.force_authenticate(self.staff)
         res = client.get(f"/api/almanach/realms/{self.realm.pk}/ladder/?for=founder")
@@ -104,12 +115,84 @@ class AlmanachApiTests(TestCase):
         assert res.status_code == 200
         assert res.data["family_id"] == self.crown.family_id
 
-    def test_players_are_refused(self) -> None:
+    def test_players_are_refused_the_staff_cut_and_the_house_document(self) -> None:
+        """#3983 Plan B Task 3: only the ``?for=staff`` ladder cut and the
+        houses viewset (list/document) stay admin-only for a non-staff
+        account — see ``test_non_staff_reaches_the_founder_reads`` for the
+        surfaces opened to every authenticated account."""
         client = APIClient()
         client.force_authenticate(self.player)
         assert client.get(f"/api/almanach/realms/{self.realm.pk}/ladder/").status_code == 403
+        assert (
+            client.get(f"/api/almanach/realms/{self.realm.pk}/ladder/?for=staff").status_code == 403
+        )
+        assert client.get(f"/api/almanach/houses/{self.crown.pk}/").status_code == 403
         assert client.get(f"/api/almanach/houses/{self.crown.pk}/document/").status_code == 403
-        assert client.get("/api/almanach/land-shapes/").status_code == 403
+
+    def test_non_staff_reaches_the_founder_reads(self) -> None:
+        """#3983 Plan B Task 3: the realm picker, the founder ladder cut, the
+        land-shape catalog, and the realm charter are open to any
+        authenticated account so a founder can read them mid-draft."""
+        client = APIClient()
+        client.force_authenticate(self.player)
+        assert client.get("/api/almanach/realms/").status_code == 200
+        res = client.get(f"/api/almanach/realms/{self.realm.pk}/ladder/?for=founder")
+        assert res.status_code == 200
+        assert client.get("/api/almanach/land-shapes/").status_code == 200
+        assert client.get(f"/api/almanach/realms/{self.realm.pk}/charter/").status_code == 200
+
+    def test_anonymous_requests_are_refused_the_founder_reads_too(self) -> None:
+        client = APIClient()
+        assert client.get("/api/almanach/realms/").status_code in (401, 403)
+        assert client.get("/api/almanach/land-shapes/").status_code in (401, 403)
+        assert client.get(f"/api/almanach/realms/{self.realm.pk}/charter/").status_code in (
+            401,
+            403,
+        )
+
+    def test_charter_reads_the_realms_defaults(self) -> None:
+        """#3983 Plan B Task 3: the default template's succession law, the
+        blank-floor Noble particle, the default template's first aspect
+        prompt, and the realm's capital name."""
+        template = HouseTemplate.objects.create(
+            name="Almanach API Charter Template",
+            realm=self.realm,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
+            society=self.crown.society,
+            org_type=self.crown.org_type,
+            liege=self.crown,
+            default_succession_law=self.law,
+        )
+        quiddity = HouseAspectDefinition.objects.create(
+            name="Almanach API Quiddity", prompt="Which virtue rules the house?"
+        )
+        template.aspect_definitions.add(quiddity)
+        NobiliaryParticle.objects.create(
+            realm=self.realm, kind=template.kind, particle="del", taken_in_particle="von"
+        )
+        AreaFactory(
+            level=AreaLevel.CITY, realm=self.realm, is_capital=True, name="Almanach API Capital"
+        )
+
+        client = APIClient()
+        client.force_authenticate(self.player)
+        res = client.get(f"/api/almanach/realms/{self.realm.pk}/charter/")
+        assert res.status_code == 200
+        assert res.data["succession_law"]["name"] == self.law.name
+        assert res.data["particle"] == {"born": "del", "taken_in": "von"}
+        assert res.data["quiddity_prompt"] == "Which virtue rules the house?"
+        assert res.data["capital_name"] == "Almanach API Capital"
+
+    def test_charter_with_no_authored_rows_is_all_blank(self) -> None:
+        empty_realm = RealmFactory(name="Charterless")
+        client = APIClient()
+        client.force_authenticate(self.player)
+        res = client.get(f"/api/almanach/realms/{empty_realm.pk}/charter/")
+        assert res.status_code == 200
+        assert res.data["succession_law"] is None
+        assert res.data["particle"] == {"born": "", "taken_in": ""}
+        assert res.data["quiddity_prompt"] == ""
+        assert res.data["capital_name"] == ""
 
     def test_anonymous_requests_are_refused(self) -> None:
         client = APIClient()

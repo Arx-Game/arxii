@@ -163,3 +163,22 @@ class LandShapeSerializer(serializers.ModelSerializer):
     class Meta:
         model = LandShape
         fields = ["id", "name", "description", "sort_order"]
+
+
+class RealmCharterParticleSerializer(serializers.Serializer):
+    """Mirrors ``almanach_reads.charter_for_realm``'s ``particle`` dict."""
+
+    born = serializers.CharField(allow_blank=True)
+    taken_in = serializers.CharField(allow_blank=True)
+
+
+class RealmCharterSerializer(serializers.Serializer):
+    """The realm's charter defaults for the founder ladder (mirrors
+    ``almanach_reads.RealmCharter``, #3983 Plan B Task 3); ``succession_law``
+    reuses ``AlmanachSuccessionLawSerializer``'s ``{name, codex_entry_id}``
+    shape, the same one the house document already renders."""
+
+    succession_law = AlmanachSuccessionLawSerializer(allow_null=True)
+    particle = RealmCharterParticleSerializer()
+    quiddity_prompt = serializers.CharField(allow_blank=True)
+    capital_name = serializers.CharField(allow_blank=True)

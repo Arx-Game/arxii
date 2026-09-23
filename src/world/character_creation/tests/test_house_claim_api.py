@@ -1,4 +1,4 @@
-"""API tests for the CG house creator's aspect/feature/styling surface (#2079)."""
+"""API tests for the CG house creator's nested claim surface (#2079, #3983 Plan B)."""
 
 from django.test import TestCase
 from rest_framework import status
@@ -6,11 +6,12 @@ from rest_framework.test import APIClient
 
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, OriginTemplateFactory
 from world.roster.constants import NOBLE_KIND_NAME
-from world.roster.factories import FamilyKindFactory
+from world.roster.factories import FamilyFactory, FamilyKindFactory
 from world.societies.factories import OrganizationFactory
-from world.societies.houses.constants import TitleTier
+from world.societies.houses.almanach import batch_unclaimed, name_rung, plant_rung
+from world.societies.houses.constants import ClaimKinRelation, TitleTier
 from world.societies.houses.models import (
     Domain,
     HouseAspectDefinition,
@@ -66,6 +67,22 @@ class HouseClaimApiTests(TestCase):
             is_claimable=True,
         )
         cls.draft = CharacterDraftFactory()
+
+        # A real seat chain for the nested kin/lands round-trip (#3983 Plan
+        # B): a duchy claim grants the duchy + its own county + its own seat
+        # barony (one chain, three titles), plus a loose barony batch-minted
+        # under the county — mirrors test_house_creator.py's journey fixture.
+        cls.duchy = plant_rung(realm=cls.realm, tier=TitleTier.DUCHY, name="Journey Duchy")
+        cls.county = Title.objects.get(tier=TitleTier.COUNTY, seat_domain=cls.duchy.seat_domain)
+        cls.seat_barony = Title.objects.get(
+            tier=TitleTier.BARONY, seat_domain=cls.duchy.seat_domain
+        )
+        name_rung(cls.county, "Journey County")
+        name_rung(cls.seat_barony, "Journey Barony")
+        cls.loose_barony = batch_unclaimed(parent_title=cls.county, tier=TitleTier.BARONY, count=1)[
+            0
+        ]
+        cls.solano_family = FamilyFactory(name="API Solano")
 
     def setUp(self):
         self.client = APIClient()
@@ -135,3 +152,79 @@ class HouseClaimApiTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_post_nested_claim_persists_kin_and_lands_and_get_echoes_them(self):
+        """#3983 Plan B: the founder's whole kin tree + per-rung land writing
+        round-trip through the nested submit body and the status GET."""
+        payload = self._payload(
+            title=self.duchy.pk,
+            house_name="Journeywood",
+            aspects=[{"definition": self.virtue.pk, "options": [self.fortitude.pk]}],
+            founder_relation=ClaimKinRelation.CHILD,
+            founder_is_heir=True,
+            kin=[
+                {"name": "Estuosa", "relation": ClaimKinRelation.HEAD},
+                {"name": "Fiamma", "relation": ClaimKinRelation.MOTHER, "is_deceased": True},
+                {
+                    "name": "Dario",
+                    "relation": ClaimKinRelation.SPOUSE,
+                    "born_into": self.solano_family.pk,
+                },
+                {"name": "", "relation": ClaimKinRelation.CHILD},
+                {"name": "Captain", "relation": ClaimKinRelation.POSITION, "is_household": True},
+            ],
+            lands=[
+                {"title": self.duchy.pk, "description": "the duchy"},
+                {"title": self.seat_barony.pk, "hall_name": "the Torre Accesa"},
+                {"title": self.loose_barony.pk, "land_name": "Brasa", "description": "named"},
+            ],
+        )
+        response = self.client.post(
+            f"/api/character-creation/drafts/{self.draft.pk}/house-claim/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(len(response.data["kin"]), 5)
+        self.assertEqual(len(response.data["lands"]), 3)
+        self.assertEqual(response.data["founder_relation"], ClaimKinRelation.CHILD)
+        self.assertTrue(response.data["founder_is_heir"])
+
+        get_response = self.client.get(
+            f"/api/character-creation/drafts/{self.draft.pk}/house-claim/"
+        )
+        self.assertEqual(get_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(get_response.data["kin"]), 5)
+        self.assertEqual(len(get_response.data["lands"]), 3)
+        land_by_title = {row["title_id"]: row for row in get_response.data["lands"]}
+        self.assertEqual(land_by_title[self.loose_barony.pk]["land_name"], "Brasa")
+        spouse = next(
+            row for row in get_response.data["kin"] if row["relation"] == ClaimKinRelation.SPOUSE
+        )
+        self.assertEqual(spouse["born_into_id"], self.solano_family.pk)
+
+    def test_post_land_outside_the_grant_is_refused(self):
+        elsewhere = Title.objects.create(
+            name="Barony Elsewhere",
+            tier=TitleTier.BARONY,
+            realm=self.realm,
+            is_claimable=False,
+        )
+        response = self.client.post(
+            f"/api/character-creation/drafts/{self.draft.pk}/house-claim/",
+            self._payload(lands=[{"title": elsewhere.pk, "description": "not mine"}]),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+
+    def test_post_above_the_upbringings_max_claim_tier_is_refused(self):
+        self.draft.selected_origin_template = OriginTemplateFactory(max_claim_tier=TitleTier.BARONY)
+        self.draft.save(update_fields=["selected_origin_template"])
+        response = self.client.post(
+            f"/api/character-creation/drafts/{self.draft.pk}/house-claim/",
+            self._payload(title=self.duchy.pk, house_name="Overreach"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)

@@ -1,8 +1,9 @@
-"""DRF viewsets for the Almanach de Catenys API (#3983): the staff-only
-house-builder reads — the realm ladder, a house's document, and the
-land-shape catalog. Every route here is gated ``IsAdminUser``; the
-``?for=founder`` ladder cut is exposed now but stays staff-only until Plan B
-opens it to house founders mid-draft.
+"""DRF viewsets for the Almanach de Catenys API (#3983): the house-builder
+reads — the realm ladder, the realm charter, a house's document, and the
+land-shape catalog. The realm list/ladder/charter and the land-shape catalog
+are open to any authenticated account (Task 3, Plan B) so a founder can read
+them mid-draft; the ``?for=staff`` ladder cut and the houses viewset (house
+list + document) stay ``IsAdminUser``.
 """
 
 from __future__ import annotations
@@ -12,17 +13,23 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from world.realms.models import Realm
 from world.roster.views.family_views import _viewer_entry
-from world.societies.houses.almanach_reads import document_for_house, ladder_for_realm
+from world.societies.houses.almanach_reads import (
+    charter_for_realm,
+    document_for_house,
+    ladder_for_realm,
+)
 from world.societies.houses.almanach_serializers import (
     AlmanachHouseSummarySerializer,
     AlmanachRealmSerializer,
     HouseDocumentSerializer,
     LadderPayloadSerializer,
     LandShapeSerializer,
+    RealmCharterSerializer,
 )
 from world.societies.houses.models import LandShape
 from world.societies.models import Organization
@@ -50,7 +57,7 @@ class AlmanachRealmViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = Realm.objects.all().order_by("name")
     serializer_class = AlmanachRealmSerializer
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = SocietiesPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["name"]
@@ -63,9 +70,9 @@ class AlmanachRealmViewSet(viewsets.ReadOnlyModelViewSet):
                 required=False,
                 enum=[_LADDER_CUT_STAFF, _LADDER_CUT_FOUNDER],
                 description=(
-                    "Which ladder cut to read: 'staff' (default) shows every rung; "
-                    "'founder' hides rungs sitting under an unpublished house. Both "
-                    "are staff-gated in this plan."
+                    "Which ladder cut to read: 'staff' (default) shows every rung and "
+                    "needs staff; 'founder' hides rungs sitting under an unpublished "
+                    "house and is open to any authenticated account."
                 ),
             )
         ],
@@ -79,8 +86,19 @@ class AlmanachRealmViewSet(viewsets.ReadOnlyModelViewSet):
         # queryset to attach to here (the action returns a computed payload,
         # not a filtered list).
         cut = request.query_params.get("for", _LADDER_CUT_STAFF)  # noqa: USE_FILTERSET
+        if cut != _LADDER_CUT_FOUNDER and not request.user.is_staff:
+            msg = "The full ladder is staff-only."
+            raise PermissionDenied(msg)
         payload = ladder_for_realm(realm, for_founder=cut == _LADDER_CUT_FOUNDER)
         return Response(LadderPayloadSerializer(payload).data)
+
+    @extend_schema(responses=RealmCharterSerializer)
+    @action(detail=True, methods=["get"], url_path="charter")
+    def charter(self, request, pk=None):
+        """GET /api/almanach/realms/{id}/charter/ — the founder ladder's defaults."""
+        realm = self.get_object()
+        payload = charter_for_realm(realm)
+        return Response(RealmCharterSerializer(payload).data)
 
 
 class AlmanachHouseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -115,7 +133,7 @@ class LandShapeViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = LandShape.objects.all()
     serializer_class = LandShapeSerializer
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = SocietiesPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["name"]

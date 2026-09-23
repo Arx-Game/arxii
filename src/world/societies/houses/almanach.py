@@ -528,7 +528,7 @@ def record_public_belief(kinsperson: Kinsperson, *, believed_deceased: bool) -> 
 
 
 @transaction.atomic
-def record_kin(  # noqa: C901, PLR0912, PLR0913 — one straight-line relation dispatch, keyword-only
+def record_kin(  # noqa: C901, PLR0912, PLR0913 — straight-line relation dispatch, keyword-only
     *,
     house: Organization,
     name: str,

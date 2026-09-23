@@ -245,6 +245,9 @@ def _validate_kin_and_lands(  # noqa: C901, PLR0913 — keyword-only; one arg pe
         msg = "more than one head-of-house row"
         raise HousesServiceError(msg, user_message="A house has only one head.")
     has_head = head_count == 1
+    if founder_relation == ClaimKinRelation.HEAD and has_head:
+        msg = "kin includes a head-of-house row when the founder is the head"
+        raise HousesServiceError(msg, user_message="The founder is the head of house.")
     if founder_relation in _FOUNDER_NEEDS_HEAD and not has_head:
         msg = f"founder_relation {founder_relation} needs a head-of-house row"
         raise HousesServiceError(msg, user_message="Write the head of house first.")
@@ -738,6 +741,8 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
     top.save(update_fields=["holder"])
 
     if claim.estate_name:
+        # Draft-realm first (the founder's own selected origin), sheet-realm
+        # only as a fallback when the draft never picked one.
         realm = claim.draft.selected_area.realm if claim.draft.selected_area_id else None
         realm = realm or sheet.origin_realm
         capital = Area.objects.filter(realm=realm, is_capital=True).first() if realm else None

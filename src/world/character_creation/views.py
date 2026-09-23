@@ -71,6 +71,7 @@ from world.character_creation.serializers import (
     DraftMarkingSerializer,
     GenderSerializer,
     HouseClaimStatusSerializer,
+    HouseClaimSubmitSerializer,
     OffersResponseSerializer,
     PathSerializer,
     PerspectiveEntrySerializer,
@@ -1090,17 +1091,12 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         payload = {"offers": offers_for(draft, chapter), "closed": closed_for(draft, chapter)}
         return Response(OffersResponseSerializer(payload).data)
 
-    @extend_schema(responses=HouseClaimStatusSerializer)
+    @extend_schema(request=HouseClaimSubmitSerializer, responses=HouseClaimStatusSerializer)
     @action(detail=True, methods=[HTTPMethod.GET, HTTPMethod.POST], url_path="house-claim")
     def house_claim(self, request: Request, pk: int | None = None) -> Response:
-        """GET the draft's house claim; POST to submit one (#1884 Phase D).
-
-        POST body: title (id), template (id), house_name, backstory,
-        principles (mercy/method/status/change/allegiance/power ints).
-        The automated thematic gates run here; staff review follows in admin.
-        """
+        """GET the draft's house claim; POST to submit one (#1884 Phase D, #3983 Plan B)."""
         from world.societies.houses.creator import submit_house_claim  # noqa: PLC0415
-        from world.societies.houses.models import HouseClaim, HouseTemplate, Title  # noqa: PLC0415
+        from world.societies.houses.models import HouseClaim  # noqa: PLC0415
         from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
         draft = self.get_object()
@@ -1110,45 +1106,10 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 return Response({"detail": "No house claim."}, status=status.HTTP_404_NOT_FOUND)
             return Response(HouseClaimStatusSerializer(claim).data)
 
-        title = Title.objects.filter(pk=request.data.get("title")).first()
-        template = HouseTemplate.objects.filter(pk=request.data.get("template")).first()
-        if title is None or template is None:
-            return Response(
-                {"detail": "Unknown title or template."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        principles = {
-            axis: int(request.data.get(axis, 0))
-            for axis in ("mercy", "method", "status", "change", "allegiance", "power")
-        }
-        raw_aspects = request.data.get("aspects", [])
-        aspect_picks: dict[int, list[int]] = {}
-        if isinstance(raw_aspects, list):
-            for entry in raw_aspects:
-                if not isinstance(entry, dict):
-                    continue
-                try:
-                    definition_id = int(entry.get("definition"))
-                    option_ids = [int(option) for option in entry.get("options", [])]
-                except (TypeError, ValueError):
-                    return Response(
-                        {"detail": "Malformed aspects payload."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                aspect_picks[definition_id] = option_ids
+        serializer = HouseClaimSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         try:
-            claim = submit_house_claim(
-                draft=draft,
-                title=title,
-                template=template,
-                house_name=str(request.data.get("house_name", "")),
-                backstory=str(request.data.get("backstory", "")),
-                principles=principles,
-                words=str(request.data.get("words", "")),
-                colors=str(request.data.get("colors", "")),
-                sigil_description=str(request.data.get("sigil_description", "")),
-                aspect_picks=aspect_picks,
-            )
+            claim = submit_house_claim(draft=draft, **serializer.to_service_kwargs())
         except HousesServiceError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(HouseClaimStatusSerializer(claim).data, status=status.HTTP_201_CREATED)
