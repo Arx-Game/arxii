@@ -135,7 +135,8 @@ export function PlantRungDialog({
           <div className="field">
             <span className="label">comes with</span>
             <div className="val">
-              1 barony, the seat <span className="chip undef">{STATES.undefined}</span>
+              1 barony, the seat <span className="chip undef">{STATES.undefined}</span> · hall{' '}
+              <span className="chip undef">{STATES.undefined}</span>
             </div>
           </div>
         )}

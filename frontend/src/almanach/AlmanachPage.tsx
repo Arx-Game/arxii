@@ -100,6 +100,14 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
   // record, so staff always have somewhere to nest a new county/barony
   // under. A row-specific plant/batch trigger is Task 9+ scope.
   const defaultParentRow = tree[0]?.row ?? null;
+  // Plate I's tier span reads "Grand Principality · Piropa" — the realm's
+  // own formal name plus whoever holds its crown, read off any row's own
+  // " (crown)"-suffixed `sworn_to` (`almanach_reads`'s only place that
+  // suffix appears) rather than a field the realm read doesn't carry.
+  const crownHolder = rows
+    .map((row) => row.sworn_to)
+    .find((swornTo) => swornTo.endsWith(' (crown)'))
+    ?.replace(/ \(crown\)$/, '');
 
   if (!payload) {
     return (
@@ -153,7 +161,11 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
         <main className="chapter">
           <h3>
             <RealmSwitcher realm={realm} realms={realms} realmId={realmId} />
-            {realm?.formal_name && <span className="tier">{realm.formal_name}</span>}
+            {(realm?.formal_name || crownHolder) && (
+              <span className="tier">
+                {[realm?.formal_name, crownHolder].filter(Boolean).join(' · ')}
+              </span>
+            )}
           </h3>
           <LevelBar
             rows={rows}

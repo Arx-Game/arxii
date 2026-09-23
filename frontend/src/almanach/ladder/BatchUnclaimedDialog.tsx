@@ -142,7 +142,8 @@ export function BatchUnclaimedDialog({
           <div className="field">
             <span className="label">each county</span>
             <div className="val">
-              seat barony <span className="chip undef">{STATES.undefined}</span> · demesne unplaced
+              seat barony <span className="chip undef">{STATES.undefined}</span> · hall{' '}
+              <span className="chip undef">{STATES.undefined}</span> · demesne unplaced
             </div>
           </div>
         )}
