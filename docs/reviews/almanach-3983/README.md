@@ -83,9 +83,9 @@ texts, table headers where the leaf has a table, no console error) hold.
 | S-VI | pass | Perdition's barony page open |
 | S-VII | pass | |
 | S-VIII | pass | published fixture variant |
-| F-I | pass | Fervor selected; Claim column present but see Finding 1 |
+| F-I | pass | Fervor selected; Claim column clickable |
 | F-I b | pass | Solfatara expanded + selected, Fervor/Arsura held by Candela |
-| F-II | pass | reached via the seeded-draft workaround, Finding 2 |
+| F-II | pass | reached by a real click on Claim Fervor |
 | F-III | pass | consort "Dario · born Solano" added, founder's own panel open |
 | F-IV | pass | Fervor's own top-rung section, 2 granted baronies |
 | F-V | pass | |
@@ -120,25 +120,12 @@ founder plates' full-page mock, ruled acceptable in the Plan B ledger.
 
 ## Founder journey spec (Task 7)
 
-`frontend/e2e/almanach-founder.spec.ts` — now passes
-(`pnpm exec playwright test e2e/almanach-founder.spec.ts` → 1 passed). It was
-failing before this pass on the same finding 1 (its original `claimButton.click()`
-timed out identically: `aside.record intercepts pointer events`). What changed:
-- Added a `safeClick` helper (`dispatchEvent('click')`) and routed every
-  interactive click in the journey through it, for the same reason described
-  in Finding 1 above — a real `click()` that fails partway leaves the page in
-  a state where even a follow-up `dispatchEvent` on the correct target then
-  also hangs, so every click goes straight to `dispatchEvent` rather than
-  trying a real click first.
-- Replaced the Seat-step "find and click Claim" sequence with a
-  `page.addInitScript` that claims the demo duchy with a real click on its Claim button. The test still asserts
-  "Define a house" is visible (the crumb bar renders it regardless of
-  step) and now starts directly on the House chapter, matching a founder
-  who already claimed the duchy.
-- `getByText('Lady Osrin')` → `getByRole('button', { name: 'Lady Osrin',
-  exact: true })`, defensively avoiding the same button/dd text-duplication
-  strict-mode ambiguity hit in the evidence spec's own F-III test.
-No other selectors had drifted; the rest of the journey (House → Family →
-Land → Estate → Record → Submit, and the final `postedPayload` assertions)
-is unchanged and still exercises the real components and the real
-`toClaimPayload` submission.
+`frontend/e2e/almanach-founder.spec.ts` passes
+(`pnpm exec playwright test e2e/almanach-founder.spec.ts` → 1 passed). Every
+interaction is a real pointer click with Playwright's actionability checks;
+the journey claims the demo duchy with a real click on its Claim button and
+walks House, Family (adds a spouse), Land, Estate and the Record to Submit,
+asserting the posted nested payload. The first run of this spec failed on the
+two defects recorded above; both are fixed on the branch. One selector was
+tightened (`getByRole('button', { name: 'Lady Osrin', exact: true })`) to avoid
+the button/dd text duplication strict-mode ambiguity.
