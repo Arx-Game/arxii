@@ -22,13 +22,22 @@ from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.models import Area
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.models import LocationOwnership
-from world.roster.models import Kinsperson
+from world.roster.constants import DefinitionTier, MembershipBasis
+from world.roster.models import Family, FamilyMembership, Kinsperson, UnionKind
+from world.roster.services.kinship import add_membership, record_parentage, record_union
 from world.scenes.constants import PersonaType
-from world.societies.houses.constants import TIER_TO_AREA_LEVEL, TITLE_TIER_RANK, TitleTier
+from world.societies.houses.constants import (
+    TIER_TO_AREA_LEVEL,
+    TITLE_TIER_RANK,
+    ClaimKinRelation,
+    TitleTier,
+)
 from world.societies.houses.models import Domain, FealtyEdge, LandShape, Title
 from world.societies.houses.services import (
     HousesServiceError,
+    acknowledge_into_family,
     liege_chain_of,
+    recognize_birth,
     swear_fealty,
     sync_house_channel,
 )
@@ -36,6 +45,8 @@ from world.societies.membership_services import active_membership_for_persona, j
 from world.societies.models import Organization, OrganizationRank, Vacancy
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.realms.models import Realm
 
 UNDEFINED_AREA_NAME = "Undefined"
@@ -76,6 +87,40 @@ def _require_chain_top(title: Title) -> list[Title]:
             msg, user_message="That title is part of a higher title's own chain."
         )
     return family
+
+
+def claim_grants(title: Title) -> list[Title]:
+    """Everything a claim on ``title`` seats the house on (#3983 Plan B): the
+    title's own seat chain, top first, plus every houseless barony lying
+    directly inside one of the chain's areas that is not itself a member of
+    another chain (a county's own seat barony stays with its county, never
+    listed twice).
+
+    ``_require_chain_top`` returns the family in whatever order the DB
+    handed it back (``Title.Meta.ordering`` sorts by tier NAME, so
+    alphabetically — not by rank), so this sorts top-first by
+    ``TITLE_TIER_RANK`` explicitly; callers rely on that order (a duchy
+    claim's grants list duchy, county, then barony, then any loose extras).
+    """
+    chain = sorted(_require_chain_top(title), key=lambda t: -TITLE_TIER_RANK[t.tier])
+    chain_pks = {t.pk for t in chain}
+    chain_area_pks = {_rung_area(t).pk for t in chain}
+    loose = (
+        Title.objects.filter(
+            tier=TitleTier.BARONY,
+            realm=title.realm,
+            house__isnull=True,
+            seat_domain__area__parent_id__in=chain_area_pks,
+        )
+        .exclude(pk__in=chain_pks)
+        .select_related("seat_domain__area")
+    )
+    extras = [
+        b
+        for b in loose
+        if _family_top(list(Title.objects.filter(seat_domain=b.seat_domain))).pk == b.pk
+    ]
+    return [*chain, *extras]
 
 
 def _slug_for(parent: Area | None, tier: str, name: str, *, exclude_pk: int | None = None) -> str:
@@ -480,3 +525,103 @@ def record_public_belief(kinsperson: Kinsperson, *, believed_deceased: bool) -> 
     kinsperson.believed_deceased = believed_deceased
     kinsperson.save(update_fields=["believed_deceased"])
     return kinsperson
+
+
+@transaction.atomic
+def record_kin(  # noqa: C901, PLR0912, PLR0913 — one straight-line relation dispatch, keyword-only
+    *,
+    house: Organization,
+    name: str,
+    relation: str,
+    gender: object | None = None,
+    age: int | None = None,
+    is_deceased: bool = False,
+    believed_deceased: bool = False,
+    parent: Kinsperson | None = None,
+    parents: Sequence[Kinsperson] = (),
+    child: Kinsperson | None = None,
+    spouse: Kinsperson | None = None,
+    marriage_kind: UnionKind | None = None,
+    born_into: Family | None = None,
+    basis: str = "",
+    is_household: bool = False,
+    tier: str = DefinitionTier.NAME_ONLY,
+    node: Kinsperson | None = None,
+) -> tuple[Kinsperson, Vacancy | None]:
+    """Author one node of a house's family tree (#3983 Plan B).
+
+    The shared kin-writing engine: moved verbatim off the staff
+    ``almanach_edit_kin`` action's own create branch and generalized so
+    founder finalize (``materialize_house_claim``) can place a founder-
+    written kin tree through the same seam, including placing the founder's
+    OWN already-existing node (pass it as ``node`` instead of a bare name).
+
+    A blank ``name`` on a freshly created node marks a future app-in slot —
+    shaped exactly like the nodes ``open_slots_for`` surfaces
+    (``is_appable=True``, no sheet): a nameless kin row isn't a dead end,
+    it's an invitation.
+
+    Edges (``parent``/``parents``/``child``/``spouse``) are wired
+    unconditionally whenever given, independent of ``relation``. Membership
+    is relation-driven: HEAD gets FOUNDING (or BORN when the family already
+    has a member other than this node) and SPOUSE gets MARRIED_IN, always;
+    CHILD with no explicit ``basis`` runs the same realm-recognition walk
+    the action always used (``recognize_birth`` falling back to
+    ``acknowledge_into_family``); any relation WITH an explicit ``basis``
+    (the materialize path, for MOTHER/FATHER/GRANDPARENT/SIBLING/CHILD rows
+    the founder wrote in directly) joins the house's family on that basis.
+    WARD/POSITION rows never get a family membership — household retainers
+    are staff/service-placed, not family (#3983 Decision 1) — so callers
+    placing one must leave ``basis`` empty.
+    """
+    if house.family_id is None:
+        msg = f"house {house.pk} has no family on record"
+        raise HousesServiceError(msg, user_message="That house has no family on record.")
+    if node is None:
+        node = Kinsperson.objects.create(
+            definition_tier=tier,
+            name=name,
+            gender=gender,
+            age=age,
+            is_deceased=is_deceased,
+            is_appable=not name,
+        )
+
+    for parent_node in (parent, *parents):
+        if parent_node is not None:
+            record_parentage(child=node, parent=parent_node)
+    if child is not None:
+        record_parentage(child=child, parent=node)
+    if spouse is not None:
+        record_union(kind=marriage_kind, members=[node, spouse])
+
+    if relation == ClaimKinRelation.HEAD:
+        has_members = (
+            FamilyMembership.objects.filter(family=house.family, ended_at__isnull=True)
+            .exclude(kinsperson=node)
+            .exists()
+        )
+        head_basis = MembershipBasis.BORN if has_members else MembershipBasis.FOUNDING
+        add_membership(kinsperson=node, family=house.family, basis=head_basis)
+    elif relation == ClaimKinRelation.SPOUSE:
+        add_membership(kinsperson=node, family=house.family, basis=MembershipBasis.MARRIED_IN)
+    elif relation == ClaimKinRelation.CHILD and not basis:
+        if recognize_birth(node) is None:
+            acknowledge_into_family(node, house.family)
+    elif basis:
+        add_membership(kinsperson=node, family=house.family, basis=basis)
+
+    if born_into is not None:
+        add_membership(
+            kinsperson=node, family=born_into, basis=MembershipBasis.BORN, is_primary=False
+        )
+
+    vacancy = None
+    if is_household:
+        position = dict(ClaimKinRelation.choices).get(relation) or "Ward"
+        vacancy = add_household_member(house=house, kinsperson=node, position=position)
+
+    if believed_deceased:
+        record_public_belief(node, believed_deceased=True)
+
+    return node, vacancy

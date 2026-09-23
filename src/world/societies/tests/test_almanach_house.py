@@ -9,22 +9,26 @@ from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.locations.models import LocationOwnership
 from world.roster.factories import FamilyFactory, KinspersonFactory
-from world.roster.models import FamilyMembership
+from world.roster.models import FamilyMembership, ParentageEdge
 from world.societies.constants import VACANCY_BASIS_RETAINER
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import (
     HOUSEHOLD_RANK_TITLE,
     add_household_member,
+    batch_unclaimed,
+    claim_grants,
     describe_demesne,
+    name_rung,
     plan_estate,
     plant_rung,
     publish_house,
+    record_kin,
     record_public_belief,
     set_house_state,
     unpublish_house,
 )
 from world.societies.houses.constants import HouseState, TitleTier
-from world.societies.houses.models import LandShape
+from world.societies.houses.models import LandShape, Title
 from world.societies.houses.services import HousesServiceError
 from world.societies.models import OrganizationMembership, Vacancy
 
@@ -149,3 +153,45 @@ class HouseServiceTests(TestCase):
         person.refresh_from_db()
         assert person.believed_deceased
         assert not person.is_deceased
+
+    def test_record_kin_mother_of_head_gets_a_parent_edge(self) -> None:
+        head, _ = record_kin(house=self.house, name="Estuosa", relation="head")
+        mother, _ = record_kin(
+            house=self.house, name="Fiamma", relation="mother", child=head, is_deceased=True
+        )
+        assert ParentageEdge.objects.filter(child=head, parent=mother).exists()
+
+
+class ClaimGrantsTests(TestCase):
+    """``claim_grants`` (#3983 Plan B): the claimed chain plus any loose
+    baronies it swallows, top first."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.realm = RealmFactory(name="Ignis")
+        cls.fervor = plant_rung(realm=cls.realm, tier=TitleTier.DUCHY, name="Fervor")
+        cls.arsura = Title.objects.get(tier=TitleTier.COUNTY, seat_domain=cls.fervor.seat_domain)
+        cls.ascua = Title.objects.get(tier=TitleTier.BARONY, seat_domain=cls.fervor.seat_domain)
+        name_rung(cls.arsura, "Arsura")
+        name_rung(cls.ascua, "Ascua")
+        cls.loose_barony = batch_unclaimed(parent_title=cls.arsura, tier=TitleTier.BARONY, count=1)[
+            0
+        ]
+        cls.solfatara = plant_rung(
+            realm=cls.realm, tier=TitleTier.COUNTY, name="Solfatara", parent_title=cls.fervor
+        )
+        cls.tizon = Title.objects.get(tier=TitleTier.BARONY, seat_domain=cls.solfatara.seat_domain)
+        name_rung(cls.tizon, "Tizon")
+
+    def test_claim_grants_is_the_chain_plus_loose_baronies(self) -> None:
+        grants = claim_grants(self.fervor)
+        assert [t.tier for t in grants] == [
+            TitleTier.DUCHY,
+            TitleTier.COUNTY,
+            TitleTier.BARONY,
+            TitleTier.BARONY,
+        ]
+        assert grants[:3] == [self.fervor, self.arsura, self.ascua]
+        assert grants[3].pk == self.loose_barony.pk
+        assert self.tizon not in grants
+        assert self.solfatara not in grants

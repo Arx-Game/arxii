@@ -549,30 +549,15 @@ class AlmanachEditKinAction(_AlmanachAction):
         from django.db import transaction  # noqa: PLC0415
 
         from world.character_sheets.models import Gender  # noqa: PLC0415
-        from world.roster.constants import DefinitionTier, MembershipBasis  # noqa: PLC0415
-        from world.roster.models import (  # noqa: PLC0415
-            Family,
-            FamilyMembership,
-            Kinsperson,
-            UnionKind,
-        )
-        from world.roster.services.kinship import (  # noqa: PLC0415
-            KinshipServiceError,
-            add_membership,
-            record_parentage,
-            record_union,
-        )
+        from world.roster.models import Family, Kinsperson, UnionKind  # noqa: PLC0415
+        from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
         from world.seeds.kinship import MARRIAGE_KIND_NAME  # noqa: PLC0415
         from world.societies.houses.almanach import (  # noqa: PLC0415
-            add_household_member,
+            record_kin,
             record_public_belief,
         )
         from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
-        from world.societies.houses.services import (  # noqa: PLC0415
-            HousesServiceError,
-            acknowledge_into_family,
-            recognize_birth,
-        )
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
         from world.societies.models import Organization  # noqa: PLC0415
 
         house = Organization.objects.filter(pk=kwargs.get("org_id")).first()
@@ -654,12 +639,11 @@ class AlmanachEditKinAction(_AlmanachAction):
 
         relation = (kwargs.get("relation") or "").strip()
 
-        # Resolve and validate EVERYTHING before the first write below (the
-        # atomic block that follows) — a bare ``return`` inside
-        # ``transaction.atomic()`` does not roll it back (only a propagating
-        # exception does), so any check found only mid-block would risk
-        # committing a partial write (e.g. an orphan Kinsperson) alongside a
-        # reported failure.
+        # Resolve and validate EVERYTHING before the ``record_kin`` call below
+        # — a bare ``return`` inside its own ``transaction.atomic()`` does
+        # not roll it back (only a propagating exception does), so any check
+        # found only mid-write would risk committing a partial write (e.g.
+        # an orphan Kinsperson) alongside a reported failure.
         parent = spouse = marriage_kind = born_into_family = None
         if relation == ClaimKinRelation.CHILD:
             parent_id = kwargs.get("parent_kinsperson_id")
@@ -682,47 +666,21 @@ class AlmanachEditKinAction(_AlmanachAction):
             if born_into_family is None:
                 return ActionResult(success=False, message="No such family.")
 
-        vacancy = None
         try:
-            with transaction.atomic():
-                node = Kinsperson.objects.create(
-                    definition_tier=DefinitionTier.NAME_ONLY,
-                    name=kin_name,
-                    gender=gender,
-                    age=age,
-                    is_deceased=is_deceased,
-                )
-
-                if relation == ClaimKinRelation.CHILD:
-                    record_parentage(child=node, parent=parent)
-                    if recognize_birth(node) is None:
-                        acknowledge_into_family(node, house.family)
-                elif relation == ClaimKinRelation.SPOUSE:
-                    record_union(kind=marriage_kind, members=[node, spouse])
-                    add_membership(
-                        kinsperson=node, family=house.family, basis=MembershipBasis.MARRIED_IN
-                    )
-                elif relation == ClaimKinRelation.HEAD:
-                    has_members = FamilyMembership.objects.filter(
-                        family=house.family, ended_at__isnull=True
-                    ).exists()
-                    basis = MembershipBasis.BORN if has_members else MembershipBasis.FOUNDING
-                    add_membership(kinsperson=node, family=house.family, basis=basis)
-
-                if born_into_family is not None:
-                    add_membership(
-                        kinsperson=node,
-                        family=born_into_family,
-                        basis=MembershipBasis.BORN,
-                        is_primary=False,
-                    )
-
-                if kwargs.get("is_household"):
-                    position = dict(ClaimKinRelation.choices).get(relation) or "Ward"
-                    vacancy = add_household_member(house=house, kinsperson=node, position=position)
-
-                if believed_deceased:
-                    record_public_belief(node, believed_deceased=True)
+            node, vacancy = record_kin(
+                house=house,
+                name=kin_name,
+                relation=relation,
+                gender=gender,
+                age=age,
+                is_deceased=is_deceased,
+                believed_deceased=believed_deceased,
+                parent=parent,
+                spouse=spouse,
+                marriage_kind=marriage_kind,
+                born_into=born_into_family,
+                is_household=bool(kwargs.get("is_household")),
+            )
         except (HousesServiceError, KinshipServiceError) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
