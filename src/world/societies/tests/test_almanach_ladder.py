@@ -109,6 +109,44 @@ class PlantRungTests(TestCase):
         assert FealtyEdge.objects.get(vassal=count_house).liege == duke_house
         assert FealtyEdge.objects.get(vassal=duke_house).liege == self.crown
 
+    def test_plant_rung_barony_inside_a_vassals_county_is_held_not_sworn(self) -> None:
+        ardor_house = OrganizationFactory(name="Ardor")
+        ardor_county = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.COUNTY,
+            name="Ardor",
+            parent_title=self.kingdom,
+            held_by=ardor_house,
+        )
+        assert FealtyEdge.objects.get(vassal=ardor_house).liege == self.crown
+        seawatch = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.BARONY,
+            name="Seawatch",
+            parent_title=ardor_county,
+            held_by=self.crown,
+        )
+        assert seawatch.house_id == self.crown.pk
+        assert not FealtyEdge.objects.filter(vassal=self.crown).exists()
+        assert FealtyEdge.objects.get(vassal=ardor_house).liege == self.crown
+
+    def test_assign_holder_barony_inside_a_vassals_county_is_held_not_sworn(self) -> None:
+        ardor_house = OrganizationFactory(name="Ardor")
+        ardor_county = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.COUNTY,
+            name="Ardor",
+            parent_title=self.kingdom,
+            held_by=ardor_house,
+        )
+        seawatch = plant_rung(
+            realm=self.realm, tier=TitleTier.BARONY, name="Seawatch", parent_title=ardor_county
+        )
+        seawatch = assign_holder(seawatch, self.crown)
+        assert seawatch.house_id == self.crown.pk
+        assert not FealtyEdge.objects.filter(vassal=self.crown).exists()
+        assert FealtyEdge.objects.get(vassal=ardor_house).liege == self.crown
+
     def test_assign_holder_refuses_an_internal_chain_member(self) -> None:
         fervor = plant_rung(
             realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom

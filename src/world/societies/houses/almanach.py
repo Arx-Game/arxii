@@ -26,7 +26,12 @@ from world.roster.models import Kinsperson
 from world.scenes.constants import PersonaType
 from world.societies.houses.constants import TIER_TO_AREA_LEVEL, TITLE_TIER_RANK, TitleTier
 from world.societies.houses.models import Domain, FealtyEdge, LandShape, Title
-from world.societies.houses.services import HousesServiceError, swear_fealty, sync_house_channel
+from world.societies.houses.services import (
+    HousesServiceError,
+    liege_chain_of,
+    swear_fealty,
+    sync_house_channel,
+)
 from world.societies.membership_services import active_membership_for_persona, join_organization
 from world.societies.models import Organization, OrganizationRank, Vacancy
 
@@ -174,7 +179,11 @@ def plant_rung(
     top = titles[0]
     if held_by is not None:
         liege = liege_for_title(top)
-        if liege is not None and liege.pk != held_by.pk:
+        if (
+            liege is not None
+            and liege.pk != held_by.pk
+            and _may_swear_to_containment_liege(held_by, liege)
+        ):
             swear_fealty(vassal=held_by, liege=liege)
     return top
 
@@ -233,6 +242,19 @@ def liege_for_title(title: Title) -> Organization | None:
     return None
 
 
+def _may_swear_to_containment_liege(holder: Organization, liege: Organization) -> bool:
+    """Whether ``holder`` should be sworn to a merely-containing ``liege``
+    (#3983 Decision 3, the Seawatch-inside-Ardor case): a house's own barony
+    sitting inside another house's county is HELD, not sworn, when the
+    holder already has a real fealty of its own, or when ``liege`` is
+    actually beneath ``holder`` in the tree (the crown's own barony inside
+    one of its vassal's counties must never make the crown that vassal's
+    vassal)."""
+    if FealtyEdge.objects.filter(vassal=holder).exists():
+        return False
+    return holder not in liege_chain_of(liege)
+
+
 def _descendant_areas(area: Area) -> list[Area]:
     found: list[Area] = []
     frontier = [area]
@@ -262,7 +284,7 @@ def assign_holder(title: Title, house: Organization) -> Title:
         domain.save(update_fields=["owner_org"])
     title.refresh_from_db()
     liege = liege_for_title(title)
-    if liege is not None and liege.pk != house.pk:
+    if liege is not None and liege.pk != house.pk and _may_swear_to_containment_liege(house, liege):
         swear_fealty(vassal=house, liege=liege)
     rehome_vassals(title)
     return title
