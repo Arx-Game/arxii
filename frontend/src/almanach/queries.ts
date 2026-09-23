@@ -11,6 +11,7 @@ import { useWorldBuilderActor } from '@/world-builder/useWorldBuilderActor';
 
 import {
   dispatchAlmanach,
+  fetchGenders,
   fetchHouseDocument,
   fetchHouses,
   fetchLadder,
@@ -27,8 +28,10 @@ export const almanachKeys = {
   ladder: (realmId: number, mode: LadderMode) =>
     [...almanachKeys.all, 'ladder', realmId, mode] as const,
   houses: (realmId: number) => [...almanachKeys.all, 'houses', realmId] as const,
+  allHouses: () => [...almanachKeys.all, 'houses', 'all'] as const,
   document: (houseId: number) => [...almanachKeys.all, 'document', houseId] as const,
   landShapes: () => [...almanachKeys.all, 'land-shapes'] as const,
+  genders: () => [...almanachKeys.all, 'genders'] as const,
 };
 
 export function useRealms() {
@@ -48,13 +51,40 @@ export function useLadder(realmId: number | null | undefined, mode: LadderMode) 
   });
 }
 
-/** The realm's houses (#3983 Task 8's "a house on record" select). */
+/** The realm's houses (#3983 Task 8's "a house on record" select). Disabled
+ * (no fetch) when `realmId` is null/undefined — `PlantRungDialog` relies on
+ * that to skip the request until its "held by a house" toggle is on. */
 export function useHouses(realmId: number | null | undefined) {
   return useQuery({
     queryKey: almanachKeys.houses(realmId ?? 0),
     queryFn: () => fetchHouses(realmId!),
     enabled: realmId != null,
     staleTime: 30_000,
+  });
+}
+
+/**
+ * Every house in the game, unscoped (#3983 Task 9): the House Document route
+ * carries no realm id (the document's `realm` section reports title/demesne
+ * facts, never a realm identity), so resolving a vassal's held-by name to a
+ * house link, and populating the "swear a house"/"born into" pickers, have
+ * nothing to scope a realm-filtered fetch to. Always enabled, unlike
+ * `useHouses` — there's no "not ready yet" state here, only "fetch everyone."
+ */
+export function useAllHouses() {
+  return useQuery({
+    queryKey: almanachKeys.allHouses(),
+    queryFn: () => fetchHouses(),
+    staleTime: 30_000,
+  });
+}
+
+/** The site-wide gender catalog (#3983 Task 9's kin editor). */
+export function useGenders() {
+  return useQuery({
+    queryKey: almanachKeys.genders(),
+    queryFn: fetchGenders,
+    staleTime: 300_000,
   });
 }
 

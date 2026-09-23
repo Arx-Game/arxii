@@ -136,10 +136,18 @@
   font-size: 0.8rem;
   color: hsl(var(--muted-foreground));
 }
-.almanach .contents a {
+.almanach .contents a,
+.almanach .contents button {
+  display: block;
+  width: 100%;
+  text-align: left;
   text-decoration: none;
 }
-.almanach .contents a:hover {
+.almanach .contents a:hover,
+.almanach .contents button:hover {
+  color: hsl(var(--primary));
+}
+.almanach .contents li.cur button {
   color: hsl(var(--primary));
 }
 
@@ -473,4 +481,373 @@
 .almanach .seg button[aria-pressed='true'] {
   background: hsl(var(--foreground));
   color: hsl(var(--background));
+}
+.almanach .seg button[disabled] {
+  color: hsl(var(--muted-foreground));
+  cursor: default;
+}
+.almanach .field .val.empty {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+/* ==========================================================================
+ * House Document (#3983 Task 9, plates S-III to S-VIII) — the rest of the
+ * plate's vocabulary, ported from `scratchpad/almanac/base.css` onto the
+ * same app HSL tokens the block above uses (accent -> --primary, hairlines
+ * -> --border/--muted-foreground, paper-2 -> --popover, shade -> --muted).
+ * `--award` (the plate's distinct "confirmed/success" green) has no app
+ * token of its own, so `.status.pub`/`.ok` reuse --primary, matching how
+ * `.chip.open`/`.chip.acc` already stand in for it above.
+ * ========================================================================== */
+
+.almanach .row3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0 1.5rem;
+}
+@media (max-width: 600px) {
+  .almanach .row3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.almanach .chapter h4.sec {
+  font-family: theme('fontFamily.display');
+  font-weight: 400;
+  font-size: 1.2rem;
+  letter-spacing: 0.03em;
+  margin: 1.8rem 0 0.2rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.almanach .prose {
+  border-left: 2px solid hsl(var(--primary) / 0.42);
+  padding: 0.3rem 0 0.3rem 1rem;
+  margin-block: 0.4rem 1.2rem;
+  white-space: pre-wrap;
+  max-width: 62ch;
+}
+.almanach .prose.empty {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+/* An editable prose field (house words/colors/sigil/description, barony and
+   estate description) — a real `<textarea class="prose">`, not the
+   read-only `.prose` div above, but styled to match it. */
+.almanach textarea.prose {
+  display: block;
+  width: 100%;
+  min-height: 4rem;
+  max-width: 62ch;
+  resize: vertical;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre-wrap;
+}
+.almanach textarea.prose:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.almanach .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0.6rem;
+}
+
+.almanach .entries {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.almanach .entries li {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr auto;
+  gap: 0.6rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  align-items: baseline;
+}
+.almanach .entries li .mark {
+  color: hsl(var(--primary));
+  font-size: 0.9rem;
+}
+.almanach .entries li .nm {
+  font-weight: 500;
+}
+.almanach .entries li .ds {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.92rem;
+}
+.almanach .entries li .rt {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+.almanach .entries li.on .nm {
+  color: hsl(var(--primary));
+}
+/* Unchosen Quiddity descriptions stay folded (plate III) — only the .on
+   (chosen) entry's .ds shows without a hover/click. */
+.almanach .entries.compact li:not(.on) .ds {
+  display: none;
+}
+
+/* --- the family tree --- */
+.almanach .tree {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+.almanach .tree > li {
+  border-top: 1px solid hsl(var(--border));
+  padding: 0.6rem 0;
+}
+.almanach .tree .who {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.3rem 1rem;
+  align-items: baseline;
+}
+.almanach .tree .who .nm {
+  font-weight: 500;
+}
+.almanach .tree .who .nm.dead {
+  color: hsl(var(--muted-foreground));
+}
+.almanach .tree .who .rel {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.88rem;
+}
+.almanach .tree .who .st {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+.almanach .tree .who .st.open {
+  color: hsl(var(--primary));
+}
+.almanach .tree .who .st.hid {
+  color: hsl(var(--primary));
+}
+.almanach .tree ul {
+  list-style: none;
+  margin: 0.3rem 0 0 1.4rem;
+  padding: 0;
+  border-left: 1px solid hsl(var(--border));
+}
+.almanach .tree ul li {
+  padding: 0.3rem 0 0.3rem 1rem;
+}
+.almanach .tree li.sel > .who {
+  background: hsl(var(--muted));
+  margin-left: -0.6rem;
+  padding-left: 0.6rem;
+}
+.almanach .tree .band {
+  margin-top: 0.6rem;
+}
+
+.almanach .add {
+  color: hsl(var(--primary));
+  font-size: 0.9rem;
+  background: none;
+}
+
+/* --- the selected person's panel, opened in place inside its <li> --- */
+.almanach .panel {
+  border: 1px solid hsl(var(--muted-foreground));
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  padding: 0.9rem 1.2rem 0.4rem;
+  margin: 0.6rem 0 0.3rem;
+}
+.almanach .panel .row3 .field {
+  margin-block: 0.5rem;
+}
+
+/* --- a barony's ancestry breadcrumb --- */
+.almanach .chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+  align-items: baseline;
+  font-size: 0.92rem;
+  margin: 0.2rem 0 1rem;
+}
+.almanach .chain span + span::before {
+  content: '\203A';
+  margin-right: 0.6rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .chain .tw {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  margin-right: 0.3rem;
+}
+.almanach .chain .cur {
+  color: hsl(var(--primary));
+}
+
+/* --- the Atlas pin, a placeholder image until BaronyPage links out instead --- */
+.almanach .pin {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  height: 11rem;
+  position: relative;
+  margin: 0.4rem 0 1rem;
+  max-width: 100%;
+}
+.almanach .pin .dot {
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
+}
+.almanach .pin .lbl {
+  position: absolute;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .pin .isle {
+  position: absolute;
+  border: 1px dashed hsl(var(--muted-foreground));
+  border-radius: 40% 55% 45% 50%;
+}
+
+/* --- a demesne's produces ledger --- */
+.almanach table.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0.3rem 0 0.8rem;
+  font-family: theme('fontFamily.body');
+}
+.almanach table.ledger th {
+  text-align: left;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
+}
+.almanach table.ledger td {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: top;
+}
+.almanach table.ledger td.n {
+  text-align: right;
+}
+
+/* --- the publish status chip (bar) and the chapters table's check mark --- */
+.almanach .status {
+  display: inline-block;
+  font-size: 0.8rem;
+  border: 1px solid hsl(var(--muted-foreground));
+  padding: 0.05rem 0.6rem;
+  color: hsl(var(--muted-foreground));
+  background: none;
+}
+.almanach .status.pub {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+.almanach .ok {
+  color: hsl(var(--primary));
+}
+
+/* --- a numeric range (ported for parity; no plate III-VIII field uses it yet) --- */
+.almanach .range {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+  margin: 0.3rem 0;
+}
+.almanach .range .track {
+  height: 2px;
+  background: hsl(var(--border));
+  position: relative;
+}
+.almanach .range .track .win {
+  position: absolute;
+  top: -3px;
+  height: 8px;
+  background: hsl(var(--primary) / 0.42);
+}
+.almanach .range .track .k {
+  position: absolute;
+  top: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  margin-left: -6px;
+}
+
+.almanach .faint {
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- the record rail's "doors" list (not ported by Task 8; every plate
+   III-VII record rail uses it) --- */
+.almanach .doors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.almanach .doors li {
+  border-bottom: 1px solid hsl(var(--border));
+}
+.almanach .doors li a,
+.almanach .doors li button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0;
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+.almanach .doors li small {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+}
+
+/* --- editable page-body fields (PersonPanel's age/gender, BaronyPage's hall)
+   — plain elements styled like the plate's own `.val`, never the shadcn
+   Input/Select look reserved for Dialog popups --- */
+.almanach .chapter input[type='number'],
+.almanach .chapter input[type='text'],
+.almanach .chapter select {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.2rem 0;
+}
+.almanach .chapter input:focus-visible,
+.almanach .chapter select:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
 }

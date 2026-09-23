@@ -1,0 +1,280 @@
+/**
+ * FamilyChapter (#3983 Task 9, plate S-IV "The Family") — the kinship tree
+ * plus the household band, with the selected person's `PersonPanel` opened
+ * INSIDE their own `<li>`.
+ *
+ * The tree is built from `parentage` (child under parent; a node with no
+ * incoming parentage edge is a root) and `unions`: a union member who never
+ * appears in `parentage` at all (never a parent, never a child) is an
+ * "outsider" spouse — married in, no blood tie — and renders as a sibling
+ * `<li>` inside their in-line partner's own children list, labeled
+ * "consort" (plate S-IV's Raffaele). A union between two blood members of
+ * the tree (a cousin marriage) is left in its natural tree position with no
+ * extra annotation — the plate draws only the outsider case, and this is
+ * the rarer one; `union.kind` would supply the relation word for it if a
+ * demo ever needs it.
+ *
+ * The plate's polished status words ("described"/"sheeted"/"played") don't
+ * map cleanly from `AlmanachFamilyNode.tier` (the raw `DefinitionTier`
+ * value, e.g. "pc"/"name_only") or any other wire field, so the status
+ * column shows "deceased" when true, else the raw tier string. Relation
+ * words ("head of house"/"child"/"grandchild") are similarly structural,
+ * not the plate's titled ranks ("Grand Princess"/"heir presumptive") — no
+ * title/rank field exists on the wire either.
+ *
+ * The plate's own `.panel` markup draws no Save button of its own (the
+ * chapter-level savebar sits outside the tree instead) — `PersonPanel`
+ * carries its own Save immediately under the fields it commits, since only
+ * one panel is ever open at a time; there's also no top-level prose field
+ * here for a chapter-wide "draft kept as you type" note to describe, so
+ * this chapter renders no outer savebar at all (unlike House/Lands/Estate).
+ */
+import { useState, type ReactNode } from 'react';
+
+import type { AlmanachFamily, AlmanachFamilyNode, AlmanachHouseholdMember } from '../types';
+import { PersonPanel, type PersonPanelSaveFields, type PersonPanelSubject } from './PersonPanel';
+import { AddKinDialog, type CreateKinFields } from './AddKinDialog';
+
+export interface FamilyChapterProps {
+  houseId: number;
+  houseName: string;
+  family: AlmanachFamily;
+  household: AlmanachHouseholdMember[];
+  onEdit: (fields: PersonPanelSaveFields) => void;
+  /** Optional — omitted in isolation (e.g. the unit test) disables the add doors. */
+  onCreate?: (fields: CreateKinFields) => void;
+}
+
+function statusText(node: AlmanachFamilyNode): string {
+  if (node.is_deceased) return 'deceased';
+  return node.tier;
+}
+
+function relationLabel(depth: number): string {
+  if (depth === 0) return 'head of house';
+  if (depth === 1) return 'child';
+  if (depth === 2) return 'grandchild';
+  return 'descendant';
+}
+
+interface TreeIndex {
+  childrenByParent: Map<number, number[]>;
+  roots: AlmanachFamilyNode[];
+  /** Every node id that appears anywhere in `parentage` (as a parent or a
+   * child) — a union member NOT in this set married in from outside. */
+  bloodIds: Set<number>;
+  /** `nodeId -> [outsider spouse node, ...]` from `unions`. */
+  outsiderSpousesOf: Map<number, AlmanachFamilyNode[]>;
+}
+
+function buildTreeIndex(family: AlmanachFamily): TreeIndex {
+  const nodeById = new Map(family.nodes.map((n) => [n.id, n]));
+  const childIds = new Set(family.parentage.map((e) => e.child_id));
+  const bloodIds = new Set<number>();
+  const childrenByParent = new Map<number, number[]>();
+  for (const edge of family.parentage) {
+    bloodIds.add(edge.parent_id);
+    bloodIds.add(edge.child_id);
+    const list = childrenByParent.get(edge.parent_id) ?? [];
+    list.push(edge.child_id);
+    childrenByParent.set(edge.parent_id, list);
+  }
+
+  const outsiderSpousesOf = new Map<number, AlmanachFamilyNode[]>();
+  const outsiderIds = new Set<number>();
+  for (const union of family.unions) {
+    const outsiders = union.member_ids.filter((id) => !bloodIds.has(id) && nodeById.has(id));
+    // The first member still in the blood line is who the outsider(s) render
+    // beside — a union with no in-line member at all (neither party blood-
+    // connected to this tree) has nowhere to attach and is dropped.
+    const attachTo = union.member_ids.find((id) => !outsiders.includes(id));
+    if (attachTo == null) continue;
+    for (const outsiderId of outsiders) {
+      const outsiderNode = nodeById.get(outsiderId);
+      if (!outsiderNode) continue;
+      const list = outsiderSpousesOf.get(attachTo) ?? [];
+      list.push(outsiderNode);
+      outsiderSpousesOf.set(attachTo, list);
+      outsiderIds.add(outsiderId);
+    }
+  }
+
+  const roots = family.nodes.filter((n) => !childIds.has(n.id) && !outsiderIds.has(n.id));
+  return { childrenByParent, roots, bloodIds, outsiderSpousesOf };
+}
+
+export function FamilyChapter({
+  houseId,
+  houseName,
+  family,
+  household,
+  onEdit,
+  onCreate,
+}: FamilyChapterProps) {
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [addOpen, setAddOpen] = useState<'kin' | 'household' | null>(null);
+  const index = buildTreeIndex(family);
+
+  const select = (id: number) => setSelectedId((current) => (current === id ? null : id));
+
+  const subjectForNode = (node: AlmanachFamilyNode, relation: string): PersonPanelSubject => ({
+    kinspersonId: node.id,
+    name: node.name,
+    tier: node.tier,
+    age: node.age,
+    gender: node.gender,
+    isDeceased: node.is_deceased,
+    believedDeceased: node.believed_deceased,
+    inTheHouseAs: relation,
+    bornInto: '',
+    description: node.description,
+  });
+
+  const subjectForHousehold = (row: AlmanachHouseholdMember): PersonPanelSubject => ({
+    kinspersonId: row.holder_id as number,
+    name: row.holder_name,
+    tier: '',
+    age: null,
+    gender: '',
+    isDeceased: row.is_deceased,
+    believedDeceased: row.believed_deceased,
+    inTheHouseAs: `household · ${row.position}`,
+    bornInto: '',
+    description: '',
+  });
+
+  const nodeById = new Map(family.nodes.map((n) => [n.id, n]));
+
+  /** `relationOverride` covers the outsider-spouse case ("consort") — every
+   * other caller lets `depth` supply the structural word. */
+  const renderNode = (
+    node: AlmanachFamilyNode,
+    depth: number,
+    relationOverride?: string
+  ): ReactNode => {
+    const relation = relationOverride ?? relationLabel(depth);
+    const selected = selectedId === node.id;
+    const outsiders = index.outsiderSpousesOf.get(node.id) ?? [];
+    const childIds = index.childrenByParent.get(node.id) ?? [];
+    const hasChildList = outsiders.length > 0 || childIds.length > 0;
+    return (
+      <li key={node.id} className={selected ? 'sel' : undefined}>
+        <div className="who">
+          <span className={node.is_deceased ? 'nm dead' : 'nm'}>
+            <button type="button" aria-expanded={selected} onClick={() => select(node.id)}>
+              {node.name}
+            </button>
+          </span>
+          <span className="rel">{relation}</span>
+          <span className={node.believed_deceased ? 'st hid' : 'st'}>{statusText(node)}</span>
+        </div>
+        {selected && <PersonPanel subject={subjectForNode(node, relation)} onSave={onEdit} />}
+        {hasChildList && (
+          <ul>
+            {outsiders.map((spouse) => renderNode(spouse, depth + 1, 'consort'))}
+            {childIds.map((childId) => {
+              const childNode = nodeById.get(childId);
+              return childNode ? renderNode(childNode, depth + 1) : null;
+            })}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
+  const openHousehold = household.filter((row) => row.is_open).length;
+  const hiddenTruths =
+    family.nodes.filter((n) => n.believed_deceased).length +
+    household.filter((row) => row.believed_deceased).length;
+
+  return (
+    <main className="chapter">
+      <h3>
+        The Family <span className="tier">{houseName}</span>
+      </h3>
+      <div className="row3">
+        <div className="field">
+          <span className="label">on record</span>
+          <div className="val">{family.nodes.length}</div>
+        </div>
+        <div className="field">
+          <span className="label">open positions</span>
+          <div className="val">{openHousehold}</div>
+        </div>
+        <div className="field">
+          <span className="label">hidden truths</span>
+          <div className="val">{hiddenTruths}</div>
+        </div>
+      </div>
+      <ul className="tree">
+        {index.roots.map((root) => renderNode(root, 0))}
+        <li>
+          <div className="who">
+            <button type="button" className="add" onClick={() => setAddOpen('kin')}>
+              ⊕ a child · a spouse
+            </button>
+          </div>
+        </li>
+        {household.length > 0 && (
+          <>
+            <li className="band">
+              <span className="label">household</span>
+            </li>
+            {household.map((row) =>
+              row.holder_id == null ? (
+                <li key={row.vacancy_id}>
+                  <div className="who">
+                    <span className="nm">{row.position}</span>
+                    <span className="rel">position</span>
+                    <span className="st open">open</span>
+                  </div>
+                </li>
+              ) : (
+                <li
+                  key={row.vacancy_id}
+                  className={selectedId === row.holder_id ? 'sel' : undefined}
+                >
+                  <div className="who">
+                    <span className={row.is_deceased ? 'nm dead' : 'nm'}>
+                      <button
+                        type="button"
+                        aria-expanded={selectedId === row.holder_id}
+                        onClick={() => select(row.holder_id as number)}
+                      >
+                        {row.holder_name}
+                      </button>
+                    </span>
+                    <span className="rel">{row.position}</span>
+                    <span className={row.believed_deceased ? 'st hid' : 'st'}>
+                      {row.is_deceased ? 'deceased' : 'household'}
+                    </span>
+                  </div>
+                  {selectedId === row.holder_id && (
+                    <PersonPanel subject={subjectForHousehold(row)} onSave={onEdit} />
+                  )}
+                </li>
+              )
+            )}
+          </>
+        )}
+        <li>
+          <div className="who">
+            <button type="button" className="add" onClick={() => setAddOpen('household')}>
+              ⊕ a person of the household · a position
+            </button>
+          </div>
+        </li>
+      </ul>
+      {onCreate && addOpen && (
+        <AddKinDialog
+          houseId={houseId}
+          nodes={family.nodes}
+          defaultHousehold={addOpen === 'household'}
+          open={addOpen != null}
+          onClose={() => setAddOpen(null)}
+          onConfirm={onCreate}
+        />
+      )}
+    </main>
+  );
+}

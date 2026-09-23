@@ -1,10 +1,10 @@
 /**
- * AlmanachPage (#3983 Task 8) — the Almanach de Catenys staff house-builder's
- * route element for all three `/staff/almanach*` routes (`App.tsx`). With no
- * `:realmId`/`:houseId` it redirects to the first realm (or shows a bare
- * realm list when there are none yet, #3983 Task 8 decision 4); `:houseId`
- * is Task 9's house document (kept as a thin stub here so the route isn't
- * broken while that task is out); `:realmId` renders the realm ladder —
+ * AlmanachPage (#3983 Tasks 8-9) — the Almanach de Catenys staff
+ * house-builder's route element for all three `/staff/almanach*` routes
+ * (`App.tsx`). With no `:realmId`/`:houseId` it redirects to the first realm
+ * (or shows a bare realm list when there are none yet, #3983 Task 8 decision
+ * 4); `:houseId` renders Task 9's `HouseDocument` (plates S-III to S-VIII);
+ * `:realmId` renders the realm ladder —
  * plates S-I/S-II's visual contract: the three-column `.almanac` grid
  * (contents rail | chapter | record rail), the realm name as a switcher
  * `<button>`, the `.lvl` level bar, the `.lad` disclosure table, and a save
@@ -26,6 +26,7 @@ import { LevelBar } from './ladder/LevelBar';
 import { LadderTable } from './ladder/LadderTable';
 import { PlantRungDialog } from './ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from './ladder/BatchUnclaimedDialog';
+import { HouseDocument } from './document/HouseDocument';
 import type { AlmanachRealm } from './types';
 import './almanach.css';
 
@@ -271,21 +272,12 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
   );
 }
 
-function HouseDocumentStub({ houseId }: { houseId: number }) {
-  // Task 9 replaces this branch with the full house document (plates III-VIII).
-  return (
-    <div className="almanach">
-      <div className="wrap p-6 text-sm text-muted-foreground">House {houseId}</div>
-    </div>
-  );
-}
-
 export function AlmanachPage() {
   const { realmId: realmIdParam, houseId } = useParams<{ realmId?: string; houseId?: string }>();
   const { data: realmsPayload } = useRealms();
 
   if (houseId) {
-    return <HouseDocumentStub houseId={Number(houseId)} />;
+    return <HouseDocument houseId={Number(houseId)} />;
   }
 
   if (!realmIdParam) {

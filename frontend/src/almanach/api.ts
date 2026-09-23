@@ -8,6 +8,7 @@
 import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
 import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
+import type { components } from '@/generated/api';
 
 import type {
   AlmanachActionKey,
@@ -18,6 +19,8 @@ import type {
   PaginatedAlmanachRealmList,
   PaginatedLandShapeList,
 } from './types';
+
+export type Gender = components['schemas']['Gender'];
 
 export type { DispatchResult };
 
@@ -40,7 +43,17 @@ export function fetchLadder(realmId: number, mode: LadderMode): Promise<LadderPa
   );
 }
 
-export function fetchHouses(realmId: number): Promise<PaginatedAlmanachHouseSummaryList> {
+/**
+ * `realmId` omitted lists every house in the game (`AlmanachHouseFilter.realm`
+ * is an optional `?realm=` filter, `almanach_views.py`) — #3983 Task 9 needs
+ * this for the House Document route, which carries no realm id of its own
+ * (the document's `realm` section reports title/demesne facts, never a realm
+ * identity): resolving a vassal's held-by name to a house link, and
+ * populating the "swear a house"/"born into" pickers, have nothing to scope
+ * a realm-filtered fetch to.
+ */
+export function fetchHouses(realmId?: number): Promise<PaginatedAlmanachHouseSummaryList> {
+  if (realmId == null) return getJson('/api/almanach/houses/', 'Failed to load houses.');
   const qs = new URLSearchParams({ realm: String(realmId) }).toString();
   return getJson(withQuery('/api/almanach/houses/', qs), 'Failed to load houses.');
 }
@@ -51,6 +64,19 @@ export function fetchHouseDocument(houseId: number): Promise<HouseDocument> {
 
 export function fetchLandShapes(): Promise<PaginatedLandShapeList> {
   return getJson('/api/almanach/land-shapes/', 'Failed to load land shapes.');
+}
+
+/**
+ * The site-wide gender catalog (#3983 Task 9) — `almanach_edit_kin`'s
+ * `gender_id` is a real FK (`Gender`, `character_sheets/models.py`), and the
+ * only list endpoint for it today lives under character-creation
+ * (`/api/character-creation/genders/`); it's a plain catalog read with no
+ * CG-flow coupling, so the Almanach reuses it rather than growing a second
+ * one. Not `PaginatedAlmanachHouseSummaryList`-style paginated — the
+ * operation returns a bare array.
+ */
+export function fetchGenders(): Promise<Gender[]> {
+  return getJson('/api/character-creation/genders/', 'Failed to load genders.');
 }
 
 /**

@@ -15,3 +15,22 @@ export const REVIEW_NOTE = 'Houses will be reviewed by staff before approval';
 export const DRAFT_NOTE = 'draft kept as you type';
 
 export const DISTRICT = 'district';
+
+/** House Document (#3983 Task 9) chrome copy — plates S-III to S-VIII. */
+
+/** `house.house_state`, as `HouseChapter`'s state toggle labels it. */
+export const HOUSE_STATES = {
+  standing: 'Standing',
+  in_exile: 'In exile',
+  extinct: 'Extinct',
+  gentry: 'Gentry',
+} as const;
+
+export const GENTRY_LUXEN_ONLY = 'Luxen only';
+
+export const PUBLISH_STATUS = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export const DASH = '—';
