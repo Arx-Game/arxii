@@ -6,8 +6,9 @@ from django.test import TestCase
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
-from world.roster.constants import NOBLE_KIND_NAME
+from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
 from world.roster.factories import FamilyFactory, FamilyKindFactory, KinspersonFactory
+from world.roster.services.kinship import add_membership
 from world.societies.factories import OrganizationFactory, VacancyFactory
 from world.societies.houses.almanach import (
     add_household_member,
@@ -180,6 +181,22 @@ class DocumentReadTests(TestCase):
         positions = {row["position"] for row in doc.household}
         assert "Marisol" in holder_names
         assert "Cousin's Claim" not in positions
+
+    def test_the_staff_document_carries_truth_and_public_belief(self) -> None:
+        """#3983 spec Testing (3), the staff side: the document is staff-only
+        and reads the family with the omniscient viewer, so a believed death
+        shows as a living person the world thinks is dead."""
+        realm = RealmFactory(name="Inferna")
+        family = FamilyFactory(name="House Brasa")
+        crown = OrganizationFactory(name="Brasa", family=family)
+        plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Inferna", held_by=crown)
+        heir = KinspersonFactory(name="Living Heir", believed_deceased=True)
+        add_membership(kinsperson=heir, family=family, basis=MembershipBasis.BORN)
+
+        doc = document_for_house(crown, viewer=None, staff=True)
+        node = next(n for n in doc.family["nodes"] if n["id"] == heir.pk)
+        assert node["is_deceased"] is False
+        assert node["believed_deceased"] is True
 
     def test_realm_demesne_and_vassals_reach_beyond_the_top_chain(self) -> None:
         realm = RealmFactory(name="Inferna")
