@@ -625,8 +625,8 @@ class AlmanachEditKinAction(_AlmanachAction):
                     position = dict(ClaimKinRelation.choices).get(relation) or "Ward"
                     vacancy = add_household_member(house=house, kinsperson=node, position=position)
 
-                if "believed_deceased" in kwargs:  # noqa: STRING_LITERAL
-                    record_public_belief(node, believed_deceased=bool(kwargs["believed_deceased"]))
+                if kwargs.get("believed_deceased"):
+                    record_public_belief(node, believed_deceased=True)
         except (HousesServiceError, KinshipServiceError) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
