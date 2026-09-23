@@ -32051,6 +32051,8 @@ export interface components {
     /** @description The house block of an org payload (#1884) — null for non-family orgs. */
     HouseDetail: {
       family_name: string;
+      house_state: string;
+      demesne: number;
       liege_name: string;
       vassal_names: string[];
       titles: components['schemas']['HouseTitle'][];
@@ -33222,6 +33224,8 @@ export interface components {
       claimable: boolean;
       seat_domain_id: number | null;
       comes_with: string;
+      chain_top_id: number;
+      claimant_name: string;
     };
     LandShape: {
       readonly id: number;

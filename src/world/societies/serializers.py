@@ -149,17 +149,12 @@ class VacancyOfferSerializer(serializers.Serializer):
 
 
 class HouseDetailSerializer(serializers.Serializer):
-    """The house block of an org payload (#1884) — null for non-family orgs.
-
-    ``house_state`` and ``demesne`` (#3983) are here so the org page reads a
-    house's standing and how much land it holds without a second call into
-    the Almanach: ``demesne`` is the Almanach document's own number
-    (``almanach_reads.demesne_count``), counted over the titles this payload
-    already has in hand.
-    """
+    """The house block of an org payload (#1884) — null for non-family orgs."""
 
     family_name = serializers.CharField()
     house_state = serializers.CharField()
+    # The Almanach document's own demesne number (``demesne_count``: baronies
+    # the house holds), so an org page needs no second reader for it (#3983).
     demesne = serializers.IntegerField()
     liege_name = serializers.CharField(allow_blank=True)
     vassal_names = serializers.ListField(child=serializers.CharField())

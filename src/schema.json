@@ -55852,6 +55852,10 @@ components:
       properties:
         family_name:
           type: string
+        house_state:
+          type: string
+        demesne:
+          type: integer
         liege_name:
           type: string
         vassal_names:
@@ -55888,9 +55892,11 @@ components:
             $ref: '#/components/schemas/VacancyOffer'
       required:
       - aspects
+      - demesne
       - domains
       - family_name
       - features
+      - house_state
       - liege_name
       - open_crises
       - stature
@@ -58208,8 +58214,14 @@ components:
           nullable: true
         comes_with:
           type: string
+        chain_top_id:
+          type: integer
+        claimant_name:
+          type: string
       required:
+      - chain_top_id
       - claimable
+      - claimant_name
       - comes_with
       - demesne
       - house_id
