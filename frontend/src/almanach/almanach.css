@@ -291,8 +291,44 @@
 .almanach .lad .held {
   color: hsl(var(--foreground));
 }
+.almanach .lad .rung-name:hover,
+.almanach .lad .rung-name:focus-visible {
+  text-decoration: underline;
+}
 .almanach .lad tr.sel td {
   background: hsl(var(--muted));
+}
+
+/* --- column-header glosses (plate S-I `.tip`/`.bub` — hover/focus, not help text) --- */
+
+.almanach .tip {
+  position: relative;
+  border-bottom: 1px dotted hsl(var(--muted-foreground));
+  text-align: left;
+}
+.almanach .tip .bub {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 1.6rem;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  padding: 0.4rem 0.7rem;
+  font-family: theme('fontFamily.body');
+  font-size: 0.85rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  width: max-content;
+  max-width: 20rem;
+  z-index: 2;
+}
+.almanach .tip:hover .bub,
+.almanach .tip:focus-visible .bub,
+.almanach .tip:focus-within .bub {
+  display: block;
 }
 
 /* --- chips --- */

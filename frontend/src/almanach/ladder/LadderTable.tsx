@@ -14,8 +14,14 @@
  * on a row's own disclosure button flips that default via `toggled`. `rows`
  * without children get a hidden spacer instead of a button (nothing to
  * disclose, matches `.tg.none` in the plate).
+ *
+ * A row's name is ALSO its own selection control (review fix round 1, #3983
+ * Task 8): a `<button>` distinct from the disclosure toggle, so clicking it
+ * calls `onSelectRow` and the caller can drive `selectedTitleId` (rendered
+ * as the plate's `tr.sel` highlight) — the savebar's plant/batch actions use
+ * whichever rung is selected as their `under` context.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 
 import { STATES } from '../copy';
 import type { LadderRow } from '../types';
@@ -27,6 +33,8 @@ export interface LadderTableProps {
   pressedTier?: string | null;
   /** A rung to mark with the plate's `.sel` highlight (e.g. a freshly planted rung). */
   selectedTitleId?: number | null;
+  /** Fires when a row's own name/title button is clicked (the plate's row-selection gesture). */
+  onSelectRow?: (row: LadderRow) => void;
 }
 
 function NumCell({ value }: { value: number }) {
@@ -53,9 +61,10 @@ interface NameCellProps {
   hasChildren: boolean;
   expanded: boolean;
   onToggle: () => void;
+  onSelect: () => void;
 }
 
-function NameCell({ row, hasChildren, expanded, onToggle }: NameCellProps) {
+function NameCell({ row, hasChildren, expanded, onToggle, onSelect }: NameCellProps) {
   const label = row.is_defined ? row.name : `undefined ${row.tier}`;
   return (
     <td>
@@ -75,7 +84,15 @@ function NameCell({ row, hasChildren, expanded, onToggle }: NameCellProps) {
         </span>
       )}
       <span className="tw">{row.tier}</span>
-      {row.is_defined ? row.name : <span className="chip undef">{STATES.undefined}</span>}
+      {row.is_defined ? (
+        <button type="button" className="rung-name" onClick={onSelect}>
+          {row.name}
+        </button>
+      ) : (
+        <button type="button" className="chip undef" onClick={onSelect}>
+          {STATES.undefined}
+        </button>
+      )}
       {row.tier === 'barony' && row.is_seat_of !== '' && (
         <span className="seat">seat of {row.is_seat_of}</span>
       )}
@@ -84,11 +101,13 @@ function NameCell({ row, hasChildren, expanded, onToggle }: NameCellProps) {
   );
 }
 
-export function LadderTable({ rows, pressedTier, selectedTitleId }: LadderTableProps) {
+export function LadderTable({ rows, pressedTier, selectedTitleId, onSelectRow }: LadderTableProps) {
   const tree = useMemo(() => buildLadderTree(rows), [rows]);
   const fallbackTier = useMemo(() => defaultPressedTier(rows), [rows]);
   const effectivePressedTier = pressedTier ?? fallbackTier;
   const [toggled, setToggled] = useState<Set<number>>(() => new Set());
+  const demesneGlossId = useId();
+  const vassalsGlossId = useId();
 
   // A fresh level-bar pick starts every rung back at its tier default — a
   // per-rung toggle from a previous pick shouldn't linger as a now-confusing
@@ -128,6 +147,7 @@ export function LadderTable({ rows, pressedTier, selectedTitleId }: LadderTableP
             hasChildren={hasChildren}
             expanded={expanded}
             onToggle={() => toggle(node.row.title_id)}
+            onSelect={() => onSelectRow?.(node.row)}
           />
           <HeldByCell row={node.row} />
           <SwornToCell row={node.row} />
@@ -151,10 +171,20 @@ export function LadderTable({ rows, pressedTier, selectedTitleId }: LadderTableP
             <th scope="col">held by</th>
             <th scope="col">sworn to</th>
             <th scope="col" className="n">
-              demesne
+              <button type="button" className="tip" aria-describedby={demesneGlossId}>
+                demesne
+                <span className="bub" id={demesneGlossId}>
+                  baronies the holder keeps personally, wherever they lie
+                </span>
+              </button>
             </th>
             <th scope="col" className="n">
-              vassals
+              <button type="button" className="tip" aria-describedby={vassalsGlossId}>
+                vassals
+                <span className="bub" id={vassalsGlossId}>
+                  houses and unclaimed seats sworn beneath
+                </span>
+              </button>
             </th>
           </tr>
         </thead>

@@ -10,11 +10,12 @@
  * `<button>`, the `.lvl` level bar, the `.lad` disclosure table, and a save
  * bar dispatching `almanach_plant_rung`/`almanach_batch_unclaimed`.
  *
- * The record rail only shows fields this page's own reads actually carry
- * (`AlmanachRealm.default_tithe_pct`) — the plate's charter `<dl>` (crown,
- * succession law, particle, quiddities) needs realm/house data no Task 7 API
- * exposes yet, so it stays for a future Charter page rather than being
- * invented here.
+ * The record rail's "on record" `<dl>` leads with `crown` (derived from a
+ * row's own " (crown)"-suffixed `sworn_to`, review fix round 1) plus
+ * `default tithe` (`AlmanachRealm.default_tithe_pct`) — the plate's other
+ * charter fields (succession law, particle, quiddities) need realm/house
+ * data no Task 7 API exposes yet, so they stay for a future Charter page
+ * rather than being invented here.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
@@ -96,10 +97,14 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
   const batchMutation = useAlmanachMutation('almanach_batch_unclaimed');
 
   const houses = housesPayload?.results ?? [];
-  // The general "plant/batch" savebar context — the shallowest rung on
-  // record, so staff always have somewhere to nest a new county/barony
-  // under. A row-specific plant/batch trigger is Task 9+ scope.
-  const defaultParentRow = tree[0]?.row ?? null;
+  // The savebar's plant/batch "under" context (review fix round 1, #3983
+  // Task 8): whichever rung the staffer selected by clicking its name in the
+  // ladder table, falling back to the shallowest root row when nothing is
+  // selected yet — so there's always somewhere to nest a new county/barony.
+  const selectedRow =
+    (selectedTitleId != null ? rows.find((row) => row.title_id === selectedTitleId) : undefined) ??
+    tree[0]?.row ??
+    null;
   // Plate I's tier span reads "Grand Principality · Piropa" — the realm's
   // own formal name plus whoever holds its crown, read off any row's own
   // " (crown)"-suffixed `sworn_to` (`almanach_reads`'s only place that
@@ -176,13 +181,14 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
           <LadderTable
             rows={rows}
             pressedTier={effectivePressedTier}
-            selectedTitleId={selectedTitleId}
+            selectedTitleId={selectedRow?.title_id ?? null}
+            onSelectRow={(row) => setSelectedTitleId(row.title_id)}
           />
           <div className="savebar">
             <button
               type="button"
               className="btn quiet"
-              disabled={!defaultParentRow}
+              disabled={!selectedRow}
               onClick={() => setPlantOpen(true)}
             >
               ⊕ plant a rung
@@ -190,7 +196,7 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
             <button
               type="button"
               className="btn ghost"
-              disabled={!defaultParentRow}
+              disabled={!selectedRow}
               onClick={() => setBatchOpen(true)}
             >
               batch unclaimed…
@@ -200,6 +206,8 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
         <aside className="record">
           <h4>on record</h4>
           <dl>
+            <dt>crown</dt>
+            <dd>{crownHolder ?? <abbr title="none">—</abbr>}</dd>
             <dt>default tithe</dt>
             <dd>
               {realm?.default_tithe_pct != null ? (
@@ -211,13 +219,13 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
           </dl>
         </aside>
       </div>
-      {defaultParentRow && (
+      {selectedRow && (
         <>
           <PlantRungDialog
             parent={{
-              title_id: defaultParentRow.title_id,
-              name: defaultParentRow.is_defined ? defaultParentRow.name : 'Undefined',
-              tier: defaultParentRow.tier,
+              title_id: selectedRow.title_id,
+              name: selectedRow.is_defined ? selectedRow.name : 'Undefined',
+              tier: selectedRow.tier,
             }}
             open={plantOpen}
             onClose={() => setPlantOpen(false)}
@@ -225,7 +233,7 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
             onConfirm={async (payload) => {
               const result = await plantMutation.mutateAsync({
                 realm_id: realmId,
-                parent_title_id: defaultParentRow.title_id,
+                parent_title_id: selectedRow.title_id,
                 tier: payload.tier,
                 name: payload.name,
                 ...(payload.held_by_org_id != null
@@ -240,15 +248,15 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
           />
           <BatchUnclaimedDialog
             parent={{
-              title_id: defaultParentRow.title_id,
-              name: defaultParentRow.is_defined ? defaultParentRow.name : 'Undefined',
-              tier: defaultParentRow.tier,
+              title_id: selectedRow.title_id,
+              name: selectedRow.is_defined ? selectedRow.name : 'Undefined',
+              tier: selectedRow.tier,
             }}
             open={batchOpen}
             onClose={() => setBatchOpen(false)}
             onConfirm={(payload) => {
               batchMutation.mutate({
-                parent_title_id: defaultParentRow.title_id,
+                parent_title_id: selectedRow.title_id,
                 tier: payload.tier,
                 count: payload.count,
                 ...(payload.baronies_per_county != null

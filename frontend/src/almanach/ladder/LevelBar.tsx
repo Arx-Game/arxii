@@ -4,9 +4,13 @@
  * unclaimed count via the folio `CountChip` (renders nothing at `count <=
  * 0` — the same rule the plate uses to show the realm's own crown tier with
  * no digit while a genuinely unclaimed tier gets one). The tier set is
- * `levelBarTiers(rows)` (`./tree.ts`): contiguous from one tier above the
- * shallowest row tier through the deepest, so a realm with no marches never
- * shows a March button.
+ * `levelBarTiers(rows)` (`./tree.ts`, review fix round 1): the distinct
+ * tiers actually present among the rows, with march folded into county — a
+ * realm with no march titles never shows a phantom March button, and one
+ * with march titles doesn't grow a second bucket next to County. The
+ * County button's count is therefore `unclaimed_by_tier.county +
+ * unclaimed_by_tier.march` combined, matching `displayTier`'s fold in
+ * `./tree.ts`.
  */
 import { CountChip } from '@/components/folio';
 
@@ -20,6 +24,11 @@ export interface LevelBarProps {
   onPressTier: (tier: string) => void;
 }
 
+function tierCount(unclaimedByTier: Record<string, number>, tier: string): number {
+  const base = unclaimedByTier[tier] ?? 0;
+  return tier === 'county' ? base + (unclaimedByTier.march ?? 0) : base;
+}
+
 export function LevelBar({ rows, unclaimedByTier, pressedTier, onPressTier }: LevelBarProps) {
   const tiers = levelBarTiers(rows);
   if (tiers.length === 0) return null;
@@ -27,7 +36,7 @@ export function LevelBar({ rows, unclaimedByTier, pressedTier, onPressTier }: Le
   return (
     <div className="lvl" role="group" aria-label="Level">
       {tiers.map((tier) => {
-        const count = unclaimedByTier[tier] ?? 0;
+        const count = tierCount(unclaimedByTier, tier);
         return (
           <button
             key={tier}

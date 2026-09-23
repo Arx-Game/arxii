@@ -13,11 +13,15 @@ export const TIER_ORDER = ['empire', 'kingdom', 'duchy', 'march', 'county', 'bar
 
 export type Tier = (typeof TIER_ORDER)[number];
 
-/** Mirrors `TitleTier`'s display labels. */
+/**
+ * Level-bar button labels (plate S-I `.lvl`): the duchy button reads
+ * "Ducal", not "Duchy" — every other tier matches `TitleTier`'s display
+ * label (`constants.py`) exactly.
+ */
 export const TIER_LABELS: Record<string, string> = {
   empire: 'Empire',
   kingdom: 'Kingdom',
-  duchy: 'Duchy',
+  duchy: 'Ducal',
   march: 'March',
   county: 'County',
   barony: 'Barony',
@@ -40,6 +44,16 @@ export function tierNoun(tier: string, count: number): string {
 
 function tierIndex(tier: string): number {
   return TIER_ORDER.indexOf(tier as Tier);
+}
+
+/**
+ * March and county share one rung (`almanach.TIER_TO_AREA_LEVEL`: MARCH is a
+ * county-tier holding) — a march row displays, counts and expands exactly
+ * like a county row (level-bar review ruling, #3983 Task 8 fix round 1: a
+ * realm with no march titles must never grow a phantom March button).
+ */
+function displayTier(tier: string): string {
+  return tier === 'march' ? 'county' : tier;
 }
 
 export interface LadderTreeNode {
@@ -82,40 +96,45 @@ export function buildLadderTree(rows: LadderRow[]): LadderTreeNode[] {
 }
 
 /**
- * The level bar's tier set (#3983 Task 8): contiguous from one tier above
- * the shallowest row tier (the realm's own held crown — it never appears as
- * a row itself) down through the deepest row tier present. Empty when there
- * are no rows.
+ * The level bar's tier set (#3983 Task 8 review fix round 1): the distinct
+ * tiers actually present among the rows (`displayTier`-mapped, so a march
+ * row contributes "county" rather than a separate "march" entry), in
+ * `TIER_ORDER`. No synthesized "one tier above" entry — a tier with no rows
+ * at all (e.g. the realm's own crown when it isn't itself a `Title` row)
+ * simply doesn't get a button. Empty when there are no rows.
  */
 export function levelBarTiers(rows: LadderRow[]): Tier[] {
-  const indices = rows.map((row) => tierIndex(row.tier)).filter((index) => index !== -1);
-  if (indices.length === 0) return [];
-  const minIndex = Math.min(...indices);
-  const maxIndex = Math.max(...indices);
-  const start = Math.max(0, minIndex - 1);
-  return TIER_ORDER.slice(start, maxIndex + 1);
+  const present = new Set<Tier>();
+  for (const row of rows) {
+    const index = tierIndex(displayTier(row.tier));
+    if (index !== -1) present.add(TIER_ORDER[index]);
+  }
+  return TIER_ORDER.filter((tier) => present.has(tier));
 }
 
 /**
  * The tier that opens by default (#3983 Task 8 decision 3): the shallowest
- * tier among the rows themselves — never the implicit crown tier above them,
- * since nothing would be visible yet if that were pressed.
+ * `displayTier`-mapped tier among the rows themselves.
  */
 export function defaultPressedTier(rows: LadderRow[]): Tier | null {
-  const indices = rows.map((row) => tierIndex(row.tier)).filter((index) => index !== -1);
+  const indices = rows
+    .map((row) => tierIndex(displayTier(row.tier)))
+    .filter((index) => index !== -1);
   if (indices.length === 0) return null;
   return TIER_ORDER[Math.min(...indices)];
 }
 
 /**
  * Whether a rung at `tier` defaults open under `pressedTier` (decision 3):
- * at or above the pressed tier expands, below it collapses. Unknown tiers
- * default open rather than hide data the level bar doesn't know about.
+ * at or above the pressed tier expands, below it collapses, both compared
+ * through `displayTier` so a march row expands exactly like a county row.
+ * Unknown tiers default open rather than hide data the level bar doesn't
+ * know about.
  */
 export function defaultExpanded(tier: string, pressedTier: string | null): boolean {
   if (pressedTier == null) return true;
-  const tierIdx = tierIndex(tier);
-  const pressedIdx = tierIndex(pressedTier);
+  const tierIdx = tierIndex(displayTier(tier));
+  const pressedIdx = tierIndex(displayTier(pressedTier));
   if (tierIdx === -1 || pressedIdx === -1) return true;
   return tierIdx <= pressedIdx;
 }
