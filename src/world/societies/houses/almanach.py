@@ -15,19 +15,24 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import slugify
 
-from world.areas.constants import GridOrigin
+from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.models import Area
+from world.locations.constants import HolderType, LocationParentType
+from world.locations.models import LocationOwnership
+from world.roster.models import Kinsperson
 from world.societies.houses.constants import TIER_TO_AREA_LEVEL, TITLE_TIER_RANK, TitleTier
-from world.societies.houses.models import Domain, FealtyEdge, Title
-from world.societies.houses.services import HousesServiceError, swear_fealty
-from world.societies.models import Organization
+from world.societies.houses.models import Domain, FealtyEdge, LandShape, Title
+from world.societies.houses.services import HousesServiceError, swear_fealty, sync_house_channel
+from world.societies.models import Organization, OrganizationRank, Vacancy
 
 if TYPE_CHECKING:
     from world.realms.models import Realm
 
 UNDEFINED_AREA_NAME = "Undefined"
+HOUSEHOLD_RANK_TITLE = "Household"
 
 # Which lower rungs come bundled under a top rung, from the top down to the
 # barony seat. MARCH is a county-tier holding (shares the county Atlas
@@ -298,3 +303,137 @@ def rehome_vassals(title: Title) -> int:
         swear_fealty(vassal=family_top.house, liege=holder)
         moved += 1
     return moved
+
+
+# ---------------------------------------------------------------------------
+# House record — state, publication, demesne, estate, household, belief
+# ---------------------------------------------------------------------------
+
+
+def set_house_state(house: Organization, state: str) -> Organization:
+    """Set a house's lifecycle standing (standing/in-exile/extinct/gentry)."""
+    house.house_state = state
+    house.save(update_fields=["house_state"])
+    return house
+
+
+def publish_house(house: Organization) -> Organization:
+    """Publish a house to the Almanach and sync its house channel's audience."""
+    house.published_at = timezone.now()
+    house.save(update_fields=["published_at"])
+    sync_house_channel(house)
+    return house
+
+
+def unpublish_house(house: Organization) -> Organization:
+    """Pull a published house back to draft."""
+    house.published_at = None
+    house.save(update_fields=["published_at"])
+    return house
+
+
+@transaction.atomic
+def describe_demesne(
+    *, domain: Domain, description: str, hall_name: str, land_shape_names: list[str]
+) -> Domain:
+    """Write a demesne's public description, its hall, and its land shapes.
+
+    The hall may never repeat the demesne's own name: a domain and its seat
+    are two distinct nouns (the land, and the building that sits on it), so
+    a matching name is refused as a naming mistake rather than accepted.
+    """
+    if hall_name and hall_name.strip().lower() == (domain.name or "").strip().lower():
+        msg = f"hall of domain {domain.pk} repeats the demesne's name"
+        raise HousesServiceError(msg, user_message="The hall needs a name of its own.")
+    domain.description = description
+    if hall_name:
+        if domain.hall is None:
+            hall = Area(
+                name=hall_name,
+                slug=_slug_for(domain.area, "hall", hall_name),
+                level=AreaLevel.BUILDING,
+                parent=domain.area,
+                realm=domain.area.realm,
+                origin=GridOrigin.AUTHORED,
+            )
+            hall.save()
+            domain.hall = hall
+        elif domain.hall.name != hall_name:
+            domain.hall.name = hall_name
+            domain.hall.save()
+    domain.save(update_fields=["description", "hall"])
+    domain.land_shapes.set(LandShape.objects.filter(name__in=land_shape_names))
+    return domain
+
+
+@transaction.atomic
+def plan_estate(
+    *,
+    house: Organization,
+    city_area: Area,
+    name: str,
+    description: str,
+    district: Area | None = None,
+) -> Area:
+    """Plant an estate Area under a city (or a named district within it) and
+    record the house's active ownership of it."""
+    parent = district if district is not None else city_area
+    estate = Area(
+        name=name,
+        slug=_slug_for(parent, "estate", name),
+        level=AreaLevel.BUILDING,
+        parent=parent,
+        realm=city_area.realm,
+        description=description,
+        origin=GridOrigin.AUTHORED,
+    )
+    estate.save()
+    LocationOwnership.objects.create(
+        parent_type=LocationParentType.AREA,
+        area=estate,
+        holder_type=HolderType.ORGANIZATION,
+        holder_organization=house,
+    )
+    return estate
+
+
+def _household_rank(house: Organization) -> OrganizationRank:
+    """The house's Household rank rung, minted one tier below its current
+    lowest rank the first time a household member needs it."""
+    rank = house.ranks.filter(name=HOUSEHOLD_RANK_TITLE).first()
+    if rank is None:
+        lowest = house.ranks.order_by("-tier").first()
+        rank = OrganizationRank.objects.create(
+            organization=house,
+            tier=(lowest.tier + 1) if lowest is not None else 5,
+            name=HOUSEHOLD_RANK_TITLE,
+        )
+    return rank
+
+
+def add_household_member(
+    *, house: Organization, kinsperson: Kinsperson, rank: OrganizationRank | None
+) -> Vacancy:
+    """Record a household member.
+
+    ``OrganizationMembership.persona`` is non-nullable, so an unsheeted
+    Kinsperson (no Persona yet) cannot hold one; the household relation is
+    instead a filled Vacancy pointed at the kinsperson (#3983) — present on
+    the house's household, off the succession line entirely.
+    """
+    effective_rank = rank if rank is not None else _household_rank(house)
+    return Vacancy.objects.create(
+        organization=house,
+        name=f"{effective_rank.name}: {kinsperson.name}",
+        kin_node=kinsperson,
+        rank=effective_rank,
+        count_remaining=0,
+    )
+
+
+def record_public_belief(kinsperson: Kinsperson, *, believed_deceased: bool) -> Kinsperson:
+    """Set what the public record believes about a kinsperson's death,
+    independent of ``is_deceased`` (the private truth)."""
+    kinsperson.believed_deceased = believed_deceased
+    kinsperson.save(update_fields=["believed_deceased"])
+    return kinsperson
