@@ -1147,7 +1147,6 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 words=str(request.data.get("words", "")),
                 colors=str(request.data.get("colors", "")),
                 sigil_description=str(request.data.get("sigil_description", "")),
-                lands_writeup=str(request.data.get("lands_writeup", "")),
                 aspect_picks=aspect_picks,
             )
         except HousesServiceError as exc:

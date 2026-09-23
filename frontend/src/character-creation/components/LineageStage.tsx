@@ -334,7 +334,6 @@ export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
   const [words, setWords] = useState('');
   const [colors, setColors] = useState('');
   const [sigil, setSigil] = useState('');
-  const [lands, setLands] = useState('');
   const [aspectPicks, setAspectPicks] = useState<Record<number, number[]>>({});
   const [principles, setPrinciples] = useState<Record<string, number>>(
     Object.fromEntries(PRINCIPLE_AXES.map((axis) => [axis, 0]))
@@ -463,13 +462,6 @@ export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
             value={sigil}
             onChange={(event) => setSigil(event.target.value)}
           />
-          {selectedTitle?.seat_domain_name ? (
-            <Textarea
-              placeholder={`The lands of ${selectedTitle.seat_domain_name}, described.`}
-              value={lands}
-              onChange={(event) => setLands(event.target.value)}
-            />
-          ) : null}
           <FamilyTemplateForm
             template={selectedTemplate}
             picks={aspectPicks}
@@ -500,7 +492,6 @@ export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
               !words ||
               !colors ||
               !sigil ||
-              (!!selectedTitle?.seat_domain_name && !lands) ||
               !selectedTemplate.aspect_definitions.every((definition) => {
                 const count = (aspectPicks[definition.id] ?? []).length;
                 return count >= (definition.min_picks ?? 1) && count <= (definition.max_picks ?? 1);
@@ -516,7 +507,6 @@ export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
                 words,
                 colors,
                 sigil_description: sigil,
-                lands_writeup: lands,
                 aspects: selectedTemplate.aspect_definitions.map((definition) => ({
                   definition: definition.id,
                   options: aspectPicks[definition.id] ?? [],

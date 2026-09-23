@@ -176,11 +176,15 @@ describes.
   (`HouseClaimAdmin` actions).
 - **Materialization at CG finalization** (`materialize_house_claim`, called
   from `_bind_house_claim` before the kinship bind): Family + org (+rank
-  ladder, principle overrides) + fealty to the template liege + title seated
-  on the founder (FOUNDING membership) + seat domain reassigned with the
-  holdings package + a `KinSlotPool` for future kin app-ins + the house
-  channel. Approval alone creates nothing — an abandoned application leaves
-  no ghost house.
+  ladder, principle overrides) + fealty to the template liege + the whole
+  claimed seat chain (plus any loose baronies it swallows, `claim_grants` —
+  #3983 Plan B, see "Founder claims" below) seated via `assign_holder` + the
+  founder-written kin tree placed relative to the head of house + the
+  founder's own node placed by `HouseClaim.founder_relation` + the holdings
+  package materialized on the seat domain + a `KinSlotPool` for future kin
+  app-ins + an optional estate (`plan_estate`, under the realm's capital
+  Area) + the house channel. Approval alone creates nothing — an abandoned
+  application leaves no ghost house.
 - **`build_family_org` is the shared builder (#3648).** `materialize_house_claim`
   no longer assembles Family + org + rank ladder + aspects + features + fealty
   itself; it calls `world.societies.houses.creator.build_family_org(template, name,
@@ -307,8 +311,9 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
   `HouseAspectOption` below.
 - **Shared stylings** — `Organization.words/colors/sigil_description`
   (org-level: gangs and guilds get them free), collected as required claim
-  inputs alongside `lands_writeup`, which materializes onto the seat
-  `Domain.description`.
+  inputs. Land writing is a separate, structured surface: see "Founder
+  claims" below (`HouseClaimLand`, #3983 Plan B — supersedes the old
+  free-text `HouseClaim.lands_writeup` field, dropped in migration 0157).
 - **Materialization** — claim picks become `OrganizationAspect` rows and
   template features stamp `OrganizationFeature` rows (both also directly
   authorable for staff-seeded houses); stylings copy onto the org.
@@ -516,6 +521,67 @@ actually holds it (schema only — no service resolves a claim yet). `Organizati
 (null = draft) is the Almanach's own visibility flag, set/cleared by `publish_house`/
 `unpublish_house` — see "Ladder rules" above for how a `for_founder` read hides unpublished rungs.
 
+### Founder claims: kin placement + claim grants (Plan B, #3983)
+
+A founder's claim writes more than a title now — a whole kin tree and land
+writeup, nested under the `HouseClaim` row (`world/societies/houses/types.py`
+carries the plain, model-free draft shapes a serializer builds):
+
+- **`ClaimKinDraft`** (`name`, `relation` — a `ClaimKinRelation`:
+  `head`/`mother`/`father`/`spouse`/`sibling`/`child`/`grandparent`/`ward`/
+  `position` — `gender_id`, `age`, `is_deceased`, `born_into_id`, `basis`,
+  `is_household`) and **`ClaimLandDraft`** (`title_id`, `land_name`,
+  `description`, `hall_name`, `land_shape_names`) are what `submit_house_claim`
+  takes and stores as `HouseClaimKin`/`HouseClaimLand` rows (`sort_order` on
+  the kin rows preserves authoring order; `HouseClaimLand` is one row per
+  claimed title, unique on `(claim, title)`).
+- **`claim_grants(title) -> list[Title]`** — everything a claim on `title`
+  seats the house on: the title's own seat chain (`_require_chain_top`,
+  sorted top-first by `TITLE_TIER_RANK` — the chain's own DB order is
+  alphabetical by tier name, not rank) plus every houseless barony lying
+  directly inside one of the chain's areas that isn't itself a member of
+  another chain (a county's own seat barony always stays with its county,
+  never double-listed). A duchy claim's grants read duchy, county, barony,
+  then any loose baronies the chain swallows.
+- **`submit_house_claim`'s kin/land gates** (`_validate_kin_and_lands`): at
+  most one HEAD row; every land row's `title_id` must be in the claim's own
+  `claim_grants`; an undefined title's (`title.name == ""`) land row needs a
+  `land_name`; a hall name may never repeat the land's own name
+  (case-insensitive — `describe_demesne` refuses it again at materialize
+  time as a backstop); `estate_name` requires the draft's starting realm to
+  already have an `Area.is_capital` row ("That realm has no capital yet.");
+  a GRANDPARENT row needs a MOTHER or FATHER row; `founder_relation`
+  CHILD/SIBLING/SPOUSE needs a HEAD row.
+- **`record_kin(*, house, name, relation, ..., node=None) -> tuple[Kinsperson, Vacancy | None]`**
+  (`almanach.py`) — the shared kin-writing engine both `AlmanachEditKinAction`
+  (below) and founder finalize place a node through. Creates a fresh
+  `Kinsperson` unless `node` is given (letting the founder's own already-
+  existing node be placed by whatever `founder_relation` names); a blank
+  `name` on a freshly created node marks a future app-in slot
+  (`is_appable=True`, no sheet — the exact shape `open_slots_for` surfaces).
+  Edges (`parent`/`parents`/`child`/`spouse`) wire unconditionally whenever
+  given; membership is relation-driven (HEAD gets FOUNDING/BORN, SPOUSE gets
+  MARRIED_IN, CHILD with no explicit `basis` runs the same
+  `recognize_birth`/`acknowledge_into_family` walk the action always used,
+  any relation WITH a `basis` joins on it directly) — WARD/POSITION rows
+  never get a family membership (household retainers are staff-placed, not
+  family).
+- **`materialize_house_claim` seats the whole grant**: `claim_grants(top)`
+  once, `assign_holder` on the chain top (which seats every chain member at
+  once) and on each loose-barony extra individually (`assign_holder` refuses
+  a title that isn't its own chain's top); land rows then `name_rung` an
+  undefined title and `describe_demesne` whichever rungs the founder wrote
+  land for. Kin place in order — head, then parents, then grandparents, then
+  spouse, then siblings, then children, then household — each via
+  `record_kin`; the founder's own node places last, by
+  `HouseClaim.founder_relation` (HEAD places the founder directly; anything
+  else places the already-written HEAD row first and the founder relative to
+  it). `HouseClaim.founder_is_heir` stays a claim fact only — `Title` has no
+  heir field of its own (`SuccessionLaw.chosen_heir` is a different, law-level
+  concept), so nothing writes it anywhere yet. An optional estate
+  (`plan_estate`) plants under the draft's (or the sheet's) starting realm's
+  capital `Area`.
+
 ### Actions (`actions/definitions/almanach.py`)
 
 Ten REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
@@ -529,7 +595,8 @@ replace), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneActi
 (`almanach_edit_kin`), `AlmanachPublishAction` (`almanach_publish`).
 
 `AlmanachEditKinAction` mints a new family-tree/household node on create (`kinsperson_id`
-absent), or edits an existing one (`kinsperson_id` given). An update touches ONLY a plain field
+absent, via `almanach.record_kin` — see "Founder claims" above, the same engine founder finalize
+uses), or edits an existing one (`kinsperson_id` given). An update touches ONLY a plain field
 (name/gender_id/age/is_deceased/believed_deceased) whose kwarg was actually passed — an absent
 kwarg leaves the value untouched, and a `gender_id` passed as falsy still clears the gender, since
 it's the kwarg's ABSENCE, not its value, that makes a field a no-op. An update refuses outright

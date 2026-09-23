@@ -80,7 +80,6 @@ class HouseClaimApiTests(TestCase):
             "words": "The Marches Hold",
             "colors": "grey and gold",
             "sigil_description": "A tower on a grey field.",
-            "lands_writeup": "Border keeps and toll roads.",
             "aspects": [{"definition": self.virtue.pk, "options": [self.fortitude.pk]}],
             "mercy": 0,
             "method": 0,

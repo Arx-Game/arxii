@@ -356,7 +356,8 @@ class Domain(SharedMemoryModel):
     name = models.CharField(max_length=120, blank=True)
     description = models.TextField(
         blank=True,
-        help_text="The lands, described — CG lands_writeup materializes here (#2079).",
+        help_text="The lands, described — a founder's HouseClaimLand row materializes here "
+        "(#2079, #3983 Plan B).",
     )
     owner_org = models.ForeignKey(
         _ORG_FK,
@@ -1240,10 +1241,6 @@ class HouseClaim(SharedMemoryModel):
     words = models.CharField(max_length=200, default="", help_text="House words / motto (#2079).")
     colors = models.CharField(max_length=200, default="", help_text="House colors, prose (#2079).")
     sigil_description = models.TextField(default="", help_text="The sigil, described (#2079).")
-    lands_writeup = models.TextField(
-        blank=True,
-        help_text="The seat domain's lands, described (required for landed titles, #2079).",
-    )
     estate_name = models.CharField(max_length=120, blank=True, default="")
     estate_description = models.TextField(blank=True, default="")
     estate_district = models.ForeignKey(

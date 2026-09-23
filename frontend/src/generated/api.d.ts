@@ -26383,6 +26383,17 @@ export interface components {
       readonly allows_name_family: boolean;
       /** @description Player has no family; the tarot surname ritual applies (#3617). */
       readonly allows_no_family: boolean;
+      /**
+       * @description Highest seat tier a founder raised here may define (#3983); blank = any.
+       *
+       *     * `empire` - Empire
+       *     * `kingdom` - Kingdom
+       *     * `duchy` - Duchy
+       *     * `march` - March
+       *     * `county` - County
+       *     * `barony` - Barony
+       */
+      readonly max_claim_tier: components['schemas']['MaxClaimTierEnum'];
       readonly claimable_kind_ids: number[];
       readonly family_templates: {
         [key: string]: unknown;
@@ -31835,8 +31846,6 @@ export interface components {
       colors?: string;
       /** @description The sigil, described (#2079). */
       sigil_description?: string;
-      /** @description The seat domain's lands, described (required for landed titles, #2079). */
-      lands_writeup?: string;
       readonly aspects: {
         [key: string]: unknown;
       }[];
@@ -33331,6 +33340,16 @@ export interface components {
      * @enum {string}
      */
     MaturityEnum: 'pitch' | 'outline' | 'plot';
+    /**
+     * @description * `empire` - Empire
+     *     * `kingdom` - Kingdom
+     *     * `duchy` - Duchy
+     *     * `march` - March
+     *     * `county` - County
+     *     * `barony` - Barony
+     * @enum {string}
+     */
+    MaxClaimTierEnum: 'empire' | 'kingdom' | 'duchy' | 'march' | 'county' | 'barony';
     /**
      * @description * `none` - None
      *     * `low` - Low

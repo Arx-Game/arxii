@@ -2139,7 +2139,6 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
             "words",
             "colors",
             "sigil_description",
-            "lands_writeup",
             "aspects",
         ]
 

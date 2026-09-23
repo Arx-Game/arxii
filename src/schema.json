@@ -43624,6 +43624,19 @@ components:
           type: boolean
           readOnly: true
           description: Player has no family; the tarot surname ritual applies (#3617).
+        max_claim_tier:
+          allOf:
+          - $ref: '#/components/schemas/MaxClaimTierEnum'
+          readOnly: true
+          description: |-
+            Highest seat tier a founder raised here may define (#3983); blank = any.
+
+            * `empire` - Empire
+            * `kingdom` - Kingdom
+            * `duchy` - Duchy
+            * `march` - March
+            * `county` - County
+            * `barony` - Barony
         claimable_kind_ids:
           type: array
           items:
@@ -43650,6 +43663,7 @@ components:
       - frame_narrative
       - id
       - is_active
+      - max_claim_tier
       - name
       - slots
       - sort_order
@@ -55423,10 +55437,6 @@ components:
         sigil_description:
           type: string
           description: The sigil, described (#2079).
-        lands_writeup:
-          type: string
-          description: 'The seat domain''s lands, described (required for landed titles,
-            #2079).'
         aspects:
           type: array
           items:
@@ -58495,6 +58505,22 @@ components:
         * `pitch` - Pitch
         * `outline` - Outline
         * `plot` - Plot
+    MaxClaimTierEnum:
+      enum:
+      - empire
+      - kingdom
+      - duchy
+      - march
+      - county
+      - barony
+      type: string
+      description: |-
+        * `empire` - Empire
+        * `kingdom` - Kingdom
+        * `duchy` - Duchy
+        * `march` - March
+        * `county` - County
+        * `barony` - Barony
     MaxRiskEnum:
       enum:
       - none

@@ -875,7 +875,6 @@ export interface HouseClaimPayload {
   words: string;
   colors: string;
   sigil_description: string;
-  lands_writeup: string;
   aspects: HouseAspectPick[];
   mercy: number;
   method: number;
