@@ -4,6 +4,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import CharacterDraftFactory
 from world.roster.constants import NOBLE_KIND_NAME
@@ -55,7 +56,7 @@ class HouseClaimApiTests(TestCase):
         )
         cls.template.features.add(cls.hearth)
         cls.seat = Domain.objects.create(
-            area=AreaFactory(), name="API Marches", owner_org=cls.crown
+            area=AreaFactory(level=AreaLevel.BARONY), name="API Marches", owner_org=cls.crown
         )
         cls.title = Title.objects.create(
             name="Barony of API",

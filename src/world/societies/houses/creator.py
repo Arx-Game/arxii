@@ -19,7 +19,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.roster.models import Family
-from world.societies.houses.constants import HouseClaimStatus
+from world.societies.houses.almanach import _require_chain_top, liege_for_title
+from world.societies.houses.constants import TITLE_TIER_RANK, HouseClaimStatus
 from world.societies.houses.models import (
     HouseClaim,
     HouseClaimAspect,
@@ -49,18 +50,64 @@ _CLAIM_FIELD = {axis: axis for axis in _PRINCIPLE_AXES} | {"status": "status_pri
 
 
 def claimable_titles(realm=None) -> list[Title]:
-    """Vacant set-aside titles open to CG house definition."""
+    """Vacant set-aside titles open to CG house definition.
+
+    Also excludes a title whose containment liege is unpublished (#3983), so
+    this legacy flat list agrees with the founder ladder's own gate in
+    ``_validate_claim``. A landless title (no ``seat_domain``) has no
+    containment liege to check.
+    """
     qs = Title.objects.filter(
         is_claimable=True, house__isnull=True, holder__isnull=True
     ).select_related("realm", "seat_domain")
     if realm is not None:
         qs = qs.filter(realm=realm)
-    return list(qs)
+    titles = []
+    for title in qs:
+        if title.seat_domain_id is not None:
+            liege = liege_for_title(title)
+            if liege is not None and liege.published_at is None:
+                continue
+        titles.append(title)
+    return titles
+
+
+def permitted_tier_rank(template: HouseTemplate | None) -> int:
+    """The highest ``TitleTier`` rank a founder raised on ``template`` may
+    define; 99 when unbounded (#3983)."""
+    if template is None or not template.max_claim_tier:
+        return 99
+    return TITLE_TIER_RANK[template.max_claim_tier]
 
 
 def templates_for_title(title: Title) -> list[HouseTemplate]:
-    """The realm's templates a claim on ``title`` may build from."""
-    return list(HouseTemplate.objects.filter(realm=title.realm))
+    """The realm's templates a claim on ``title`` may build from: the rows at
+    the title's tier, else the realm's tier-less fallback rows (#3983)."""
+    rows = list(HouseTemplate.objects.filter(realm=title.realm))
+    tiered = [t for t in rows if t.tier == title.tier]
+    return tiered or [t for t in rows if not t.tier]
+
+
+def _validate_seat_gates(*, title: Title, draft: CharacterDraft) -> None:
+    """Refuse a title that is only an internal member of its own chain, one
+    whose containment liege is unpublished, or one outranking the founder's
+    Upbringing (#3983). A landless title (no ``seat_domain``) has no chain or
+    containment liege to check."""
+    if title.seat_domain_id is not None:
+        try:
+            _require_chain_top(title)
+        except HousesServiceError:
+            msg = f"title {title.pk} is not a chain top"
+            raise HousesServiceError(
+                msg, user_message="That land comes with another seat."
+            ) from None
+        liege = liege_for_title(title)
+        if liege is not None and liege.published_at is None:
+            msg = f"liege {liege.pk} unpublished"
+            raise HousesServiceError(msg, user_message="That seat is not open yet.")
+    if TITLE_TIER_RANK[title.tier] > permitted_tier_rank(draft.selected_origin_template):
+        msg = f"tier {title.tier} above the upbringing"
+        raise HousesServiceError(msg, user_message="Your upbringing does not reach that seat.")
 
 
 def family_name_is_taken(name: str) -> bool:
@@ -93,6 +140,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     if not (title.is_claimable and title.house is None and title.holder is None):
         msg = f"title {title.pk} is not claimable"
         raise HousesServiceError(msg, user_message="That title is not open to definition.")
+    _validate_seat_gates(title=title, draft=draft)
     if template.realm_id != title.realm_id:
         msg = f"template {template.pk} realm mismatch for title {title.pk}"
         raise HousesServiceError(msg, user_message="That template belongs to another realm.")

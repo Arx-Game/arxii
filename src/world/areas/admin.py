@@ -13,8 +13,8 @@ from world.areas.positioning.models import (
 
 @admin.register(Area)
 class AreaAdmin(admin.ModelAdmin):
-    list_display = ["name", "level", "parent", "realm", "grid_x", "grid_y"]
-    list_filter = ["level", "realm"]
+    list_display = ["name", "level", "parent", "realm", "is_capital", "grid_x", "grid_y"]
+    list_filter = ["level", "realm", "is_capital"]
     search_fields = ["name"]
     autocomplete_fields = ["parent", "realm", "exile_destination"]
 

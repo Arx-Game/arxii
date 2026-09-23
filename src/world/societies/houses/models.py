@@ -1254,6 +1254,13 @@ class HouseClaim(SharedMemoryModel):
         related_name="+",
         help_text="Set by the reviewer; null = unplaced under the capital (#3983).",
     )
+    founder_relation = models.CharField(
+        max_length=30,
+        choices=ClaimKinRelation.choices,
+        default=ClaimKinRelation.HEAD,
+        help_text="Where the founder's own character sits relative to the head of house (#3983).",
+    )
+    founder_is_heir = models.BooleanField(default=False)
     mercy = models.SmallIntegerField(default=0)
     method = models.SmallIntegerField(default=0)
     status_principle = models.SmallIntegerField(default=0)

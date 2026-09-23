@@ -3,13 +3,13 @@
 from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
-from world.areas.factories import AreaFactory
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, OriginTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.constants import NOBLE_KIND_NAME
 from world.roster.factories import FamilyKindFactory
 from world.roster.models import Family, FamilyMembership, KinSlotPool, Kinsperson
 from world.societies.factories import OrganizationFactory
+from world.societies.houses.almanach import plant_rung, publish_house
 from world.societies.houses.constants import HouseClaimStatus, TitleTier
 from world.societies.houses.creator import (
     approve_house_claim,
@@ -17,9 +17,9 @@ from world.societies.houses.creator import (
     materialize_house_claim,
     reject_house_claim,
     submit_house_claim,
+    templates_for_title,
 )
 from world.societies.houses.models import (
-    Domain,
     FealtyEdge,
     HoldingKind,
     HouseTemplate,
@@ -53,15 +53,20 @@ class HouseCreatorTestData(TestCase):
             mercy_max=2,
         )
         cls.template.holdings.add(cls.farmland)
-        cls.seat = Domain.objects.create(area=AreaFactory(), name="Thornmere", owner_org=cls.crown)
-        cls.title = Title.objects.create(
-            name="Barony of Thornmere",
-            tier=TitleTier.BARONY,
-            realm=cls.realm,
-            seat_domain=cls.seat,
-            is_claimable=True,
+        # A real seat chain (#3983 Plan B): the crown holds a county, and an
+        # unclaimed barony sits beneath it. The founder gates (chain top,
+        # containment liege) need a real ancestor rung to walk to.
+        crown_county = plant_rung(
+            realm=cls.realm, tier=TitleTier.COUNTY, name="Thornshire", held_by=cls.crown
         )
+        publish_house(cls.crown)
+        cls.title = plant_rung(
+            realm=cls.realm, tier=TitleTier.BARONY, name="Thornmere", parent_title=crown_county
+        )
+        cls.seat = cls.title.seat_domain
         cls.draft = CharacterDraftFactory()
+        cls.draft.selected_origin_template = OriginTemplateFactory()
+        cls.draft.save(update_fields=["selected_origin_template"])
 
     def _submit(self, **overrides):
         kwargs = {
@@ -134,6 +139,45 @@ class GateTests(HouseCreatorTestData):
         )
         with self.assertRaises(HousesServiceError):
             self._submit(template=alien_template)
+
+    def test_claim_refuses_a_tier_above_the_upbringing(self):
+        county_title = Title.objects.create(
+            name="County of Farthing", tier=TitleTier.COUNTY, realm=self.realm, is_claimable=True
+        )
+        self.draft.selected_origin_template.max_claim_tier = TitleTier.BARONY
+        self.draft.selected_origin_template.save(update_fields=["max_claim_tier"])
+        with self.assertRaises(HousesServiceError):
+            submit_house_claim(
+                draft=self.draft,
+                title=county_title,
+                template=self.template,
+                house_name="Farthing",
+                backstory="x",
+            )
+
+    def test_claim_refuses_an_unpublished_liege(self):
+        self.crown.published_at = None
+        self.crown.save(update_fields=["published_at"])
+        with self.assertRaises(HousesServiceError):
+            self._submit()
+
+
+class TemplatesForTitleTests(HouseCreatorTestData):
+    """``templates_for_title`` prefers the title's own tier row over the
+    realm's tier-less fallback (#3983)."""
+
+    def test_templates_for_title_prefers_the_tier_row(self):
+        tiered = HouseTemplate.objects.create(
+            name="Baronies",
+            realm=self.realm,
+            tier=self.title.tier,
+            kind=self.template.kind,
+            org_type=self.template.org_type,
+            society=self.template.society,
+        )
+        self.assertEqual(templates_for_title(self.title), [tiered])
+        tiered.delete()
+        self.assertEqual(templates_for_title(self.title), [self.template])
 
 
 class ReviewTests(HouseCreatorTestData):
