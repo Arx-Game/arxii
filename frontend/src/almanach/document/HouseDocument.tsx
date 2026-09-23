@@ -24,8 +24,16 @@
  * carries or is a plate-labeled row with a stated dash — see each leaf's
  * own top comment for the specific field-level gaps (house "kind"/
  * nobility-tier, realm tier/treasury/pacts, family kind/influence/
- * recognition/kin-slots/linked-houses, barony unrest/defenses/garrison —
- * none of these has a field anywhere in `HouseDocument`).
+ * recognition/kin-slots, barony unrest/defenses/garrison — none of these
+ * has a field anywhere in `HouseDocument`). Every leaf's plate also gets its
+ * "doors" section now (review fix round 1, Finding I2): a door with a real
+ * destination is a working `Link`/button; one with none yet (the house on
+ * the roster, the public tree, the secret editor, the ladder with no realm
+ * id, Estate's Atlas link) renders as a labeled dash via `RecordRail`'s
+ * `doors` support for door entries with neither `to` nor `onClick`. Family
+ * additionally gets the plate's "linked houses" section (`extraSection`) —
+ * present on the page per the plate, its rows dashed for the same reason
+ * (no secondary-membership data on the wire).
  */
 import { useState, type ReactNode } from 'react';
 
@@ -40,7 +48,12 @@ import { LandsLeaf } from './LandsLeaf';
 import type { DescribeDemesneFields } from './BaronyPage';
 import { EstateLeaf, type PlanEstateFields } from './EstateLeaf';
 import { PublishBar } from './PublishBar';
-import { RecordRail, type RecordRailDoor, type RecordRailRow } from './RecordRail';
+import {
+  RecordRail,
+  type RecordRailDoor,
+  type RecordRailRow,
+  type RecordRailSection,
+} from './RecordRail';
 import '../almanach.css';
 
 type Leaf = 'house' | 'family' | 'realm' | 'lands' | 'estate' | 'publish';
@@ -84,6 +97,7 @@ export function HouseDocument({ houseId }: { houseId: number }) {
 
   let chapter: ReactNode = null;
   let recordRows: RecordRailRow[] = [];
+  let recordExtraSection: RecordRailSection | undefined;
   let recordDoors: RecordRailDoor[] = [];
 
   switch (leaf) {
@@ -99,6 +113,7 @@ export function HouseDocument({ houseId }: { houseId: number }) {
         { label: 'vassals', value: realm.vassals.length > 0 ? realm.vassals.length : <Dash /> },
         { label: 'stature', value: <Dash /> },
       ];
+      recordDoors = [{ label: 'the house on the roster', small: 'as players read it' }];
       break;
     case 'family':
       chapter = (
@@ -117,14 +132,25 @@ export function HouseDocument({ houseId }: { houseId: number }) {
         { label: 'recognition', value: <Dash /> },
         { label: 'kin slots', value: <Dash /> },
       ];
+      recordExtraSection = {
+        heading: 'linked houses',
+        rows: [{ label: 'none on record', value: <Dash /> }],
+      };
+      recordDoors = [
+        { label: 'the tree as players see it', small: 'public record only' },
+        { label: '✎ the secret', small: 'who knows, what reveals it' },
+      ];
       break;
     case 'realm':
-      chapter = <RealmLeaf houseId={houseId} realm={realm} onSwear={onSwear} />;
+      chapter = (
+        <RealmLeaf houseId={houseId} houseName={house.name} realm={realm} onSwear={onSwear} />
+      );
       recordRows = [
         { label: 'tier', value: <Dash /> },
         { label: 'treasury', value: <Dash /> },
         { label: 'pacts', value: <Dash /> },
       ];
+      recordDoors = [{ label: 'the ladder' }];
       break;
     case 'lands':
       chapter = <LandsLeaf houseName={house.name} lands={lands} onDescribe={onDescribeDemesne} />;
@@ -142,6 +168,7 @@ export function HouseDocument({ houseId }: { houseId: number }) {
     case 'estate':
       chapter = <EstateLeaf estate={estate} onPlan={onPlanEstate} />;
       recordRows = [{ label: 'kind', value: <Dash /> }];
+      recordDoors = [{ label: 'open on the Atlas' }];
       break;
     case 'publish':
       chapter = (
@@ -227,7 +254,9 @@ export function HouseDocument({ houseId }: { houseId: number }) {
           </div>
         </aside>
         {chapter}
-        {leaf !== 'publish' && <RecordRail rows={recordRows} doors={recordDoors} />}
+        {leaf !== 'publish' && (
+          <RecordRail rows={recordRows} extraSection={recordExtraSection} doors={recordDoors} />
+        )}
       </div>
     </div>
   );

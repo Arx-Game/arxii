@@ -9,6 +9,11 @@
  * rather than a tree node with `relation`/`is_household`/`born_into` fields
  * — those don't exist on the wire; a household row's own `position` is what
  * `PersonPanel`'s "in the house as" field reads (`household · <position>`).
+ *
+ * Marisol's `believed_deceased: true` mirrors plate S-IV's own example (she
+ * is publicly believed dead under her true name) and exercises the "hidden
+ * truth" status text (review fix round 1, Finding I1) — the plate's own
+ * wording for a row whose public record and truth diverge.
  */
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -46,7 +51,7 @@ const household: AlmanachHouseholdMember[] = [
     is_open: false,
     count_remaining: 0,
     is_deceased: false,
-    believed_deceased: false,
+    believed_deceased: true,
   },
 ];
 
@@ -60,6 +65,9 @@ test('selecting a person opens the panel in place with belief fields', async () 
       onEdit={() => {}}
     />
   );
+  // The row's own status pill reads "hidden truth" for a concealed row
+  // (plate S-IV), not the raw tier/household word, before any selection.
+  expect(screen.getByText('hidden truth')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /marisol/i }));
   expect(screen.getByLabelText('deceased')).toBeInTheDocument();
   expect(screen.getByText('household · ward')).toBeInTheDocument();

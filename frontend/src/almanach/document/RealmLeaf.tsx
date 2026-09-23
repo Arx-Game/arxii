@@ -5,9 +5,11 @@
  * `vassal_org_id` = the picked house, `liege_org_id` = this one).
  *
  * Every body field here is backend-derived and read-only (`_realm_payload`,
- * `almanach_reads.py`) — there's no realm-level prose or toggle to draft,
- * so unlike House/Lands/Estate this leaf carries no "draft kept as you
- * type" savebar; "swear a house" is the only write.
+ * `almanach_reads.py`) — there's no realm-level prose or toggle to draft.
+ * The savebar still carries `DRAFT_NOTE` (review fix round 1, Finding I3:
+ * every savebar gets it per the global constraint) but no Save button next
+ * to it — there is no staged field on this leaf for one to commit; "swear a
+ * house" dispatches on its own dialog's Confirm, independent of any Save.
  *
  * Two stated gaps, both from the House Document route carrying no realm id
  * (the document's `realm` section reports title/demesne facts, never a
@@ -41,6 +43,7 @@ import {
 } from '@/components/ui/select';
 
 import { useAllHouses } from '../queries';
+import { DRAFT_NOTE } from '../copy';
 import type { AlmanachDocumentRealm } from '../types';
 
 export interface SwearFields {
@@ -51,6 +54,7 @@ export interface SwearFields {
 
 export interface RealmLeafProps {
   houseId: number;
+  houseName: string;
   realm: AlmanachDocumentRealm;
   onSwear: (fields: SwearFields) => void;
 }
@@ -65,7 +69,7 @@ function HeldByCell({ heldBy, heldById }: { heldBy: string; heldById: number | u
   return <>{heldBy}</>;
 }
 
-export function RealmLeaf({ houseId, realm, onSwear }: RealmLeafProps) {
+export function RealmLeaf({ houseId, houseName, realm, onSwear }: RealmLeafProps) {
   const [swearOpen, setSwearOpen] = useState(false);
   const { data: housesPayload } = useAllHouses();
   const houses = useMemo(
@@ -99,7 +103,9 @@ export function RealmLeaf({ houseId, realm, onSwear }: RealmLeafProps) {
   return (
     <>
       <main className="chapter">
-        <h3>Realm</h3>
+        <h3>
+          Realm <span className="tier">{houseName}</span>
+        </h3>
         <div className="row3">
           <div className="field">
             <span className="label">sworn to</span>
@@ -164,6 +170,7 @@ export function RealmLeaf({ houseId, realm, onSwear }: RealmLeafProps) {
           </div>
         </div>
         <div className="savebar">
+          <span className="note">{DRAFT_NOTE}</span>
           <button type="button" className="btn quiet" onClick={openSwear}>
             swear a house
           </button>

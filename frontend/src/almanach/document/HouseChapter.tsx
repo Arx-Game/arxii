@@ -21,9 +21,17 @@
  *   name/codex id, never a `SuccessionLaw` catalog to pick a different one
  *   from — it renders as a read-only name + codex link, no editing control.
  *
- * Gentry is disabled unconditionally (`aria-disabled`, `title="Luxen only"`)
- * — the document carries no realm theme to gate it on, so there's no signal
- * this page could use to ever enable it.
+ * The Quiddity/feature inert doors are plain `disabled aria-disabled`
+ * buttons with no `title` (review fix round 1, Finding I4 — a native
+ * `title` tooltip is reserved for the `.tip`/`.bub` pattern on the
+ * particle/succession fields per the global constraints; `disabled` +
+ * `aria-disabled` alone already communicates "not available" without a
+ * second, unapproved hover-text channel).
+ *
+ * Gentry is the one exception, ordered explicitly: disabled unconditionally
+ * (`aria-disabled`, `title="Luxen only"`) — the document carries no realm
+ * theme to gate it on, so there's no signal this page could use to ever
+ * enable it, and a `title` here was ruled a keeper despite the constraint.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -186,11 +194,7 @@ export function HouseChapter({ house, onSave }: HouseChapterProps) {
                 <span className="ds">{aspect.description}</span>
               </span>
               <span className="rt">
-                <button
-                  type="button"
-                  disabled
-                  title="the aspect catalog isn't available to pick from yet"
-                >
+                <button type="button" disabled aria-disabled>
                   ⊕ change
                 </button>
               </span>
@@ -211,7 +215,7 @@ export function HouseChapter({ house, onSave }: HouseChapterProps) {
             className="chip acc"
             aria-label="Add a feature"
             disabled
-            title="the feature catalog isn't available to pick from yet"
+            aria-disabled
           >
             ⊕
           </button>

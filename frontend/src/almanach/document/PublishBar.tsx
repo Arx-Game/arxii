@@ -15,6 +15,7 @@
  * the plate's example-specific "the seat" wording — nothing in
  * `AlmanachEstateEntry` says whether an estate IS the house's seat.
  */
+import { PUBLISH_STATUS } from '../copy';
 import type {
   AlmanachDocumentLands,
   AlmanachEstateEntry,
@@ -134,7 +135,9 @@ export function PublishBar({ house, family, lands, estate, onPublish }: PublishB
       </div>
       <div className="savebar">
         <span className="note">
-          {published ? `published ${house.published_at?.slice(0, 10)}` : 'draft'}
+          {published
+            ? `${PUBLISH_STATUS.published} ${house.published_at?.slice(0, 10)}`
+            : PUBLISH_STATUS.draft}
         </span>
         {published ? (
           <>

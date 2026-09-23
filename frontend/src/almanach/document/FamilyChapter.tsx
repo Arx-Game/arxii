@@ -17,10 +17,17 @@
  * The plate's polished status words ("described"/"sheeted"/"played") don't
  * map cleanly from `AlmanachFamilyNode.tier` (the raw `DefinitionTier`
  * value, e.g. "pc"/"name_only") or any other wire field, so the status
- * column shows "deceased" when true, else the raw tier string. Relation
- * words ("head of house"/"child"/"grandchild") are similarly structural,
- * not the plate's titled ranks ("Grand Princess"/"heir presumptive") — no
- * title/rank field exists on the wire either.
+ * column shows "deceased" when true, else the raw tier string — UNLESS the
+ * row conceals something, in which case it reads "hidden truth" (plate
+ * S-IV's own Marisol row), matching the `st hid` class rather than leaving
+ * it text-blank (review fix round 1, Finding I1). A tree node conceals
+ * something when `believed_deceased` is true OR any `parentage` edge
+ * touching it (as parent or child) is `is_true: false` or `via_secret:
+ * true`; a household row (no parentage edges of its own) checks only
+ * `believed_deceased`. Relation words ("head of house"/"child"/
+ * "grandchild") are similarly structural, not the plate's titled ranks
+ * ("Grand Princess"/"heir presumptive") — no title/rank field exists on the
+ * wire either.
  *
  * The plate's own `.panel` markup draws no Save button of its own (the
  * chapter-level savebar sits outside the tree instead) — `PersonPanel`
@@ -45,9 +52,26 @@ export interface FamilyChapterProps {
   onCreate?: (fields: CreateKinFields) => void;
 }
 
-function statusText(node: AlmanachFamilyNode): string {
+const HIDDEN_TRUTH = 'hidden truth';
+
+/** Whether any `parentage` edge touching `nodeId` (as parent or child) is
+ * marked untrue or gated by a secret. */
+function hasParentageSecret(nodeId: number, parentage: AlmanachFamily['parentage']): boolean {
+  return parentage.some(
+    (edge) =>
+      (edge.child_id === nodeId || edge.parent_id === nodeId) && (!edge.is_true || edge.via_secret)
+  );
+}
+
+function nodeStatusText(node: AlmanachFamilyNode, family: AlmanachFamily): string {
+  if (node.believed_deceased || hasParentageSecret(node.id, family.parentage)) return HIDDEN_TRUTH;
   if (node.is_deceased) return 'deceased';
   return node.tier;
+}
+
+function householdStatusText(row: AlmanachHouseholdMember): string {
+  if (row.believed_deceased) return HIDDEN_TRUTH;
+  return row.is_deceased ? 'deceased' : 'household';
 }
 
 function relationLabel(depth: number): string {
@@ -157,6 +181,7 @@ export function FamilyChapter({
     const outsiders = index.outsiderSpousesOf.get(node.id) ?? [];
     const childIds = index.childrenByParent.get(node.id) ?? [];
     const hasChildList = outsiders.length > 0 || childIds.length > 0;
+    const hidden = node.believed_deceased || hasParentageSecret(node.id, family.parentage);
     return (
       <li key={node.id} className={selected ? 'sel' : undefined}>
         <div className="who">
@@ -166,7 +191,7 @@ export function FamilyChapter({
             </button>
           </span>
           <span className="rel">{relation}</span>
-          <span className={node.believed_deceased ? 'st hid' : 'st'}>{statusText(node)}</span>
+          <span className={hidden ? 'st hid' : 'st'}>{nodeStatusText(node, family)}</span>
         </div>
         {selected && <PersonPanel subject={subjectForNode(node, relation)} onSave={onEdit} />}
         {hasChildList && (
@@ -246,7 +271,7 @@ export function FamilyChapter({
                     </span>
                     <span className="rel">{row.position}</span>
                     <span className={row.believed_deceased ? 'st hid' : 'st'}>
-                      {row.is_deceased ? 'deceased' : 'household'}
+                      {householdStatusText(row)}
                     </span>
                   </div>
                   {selectedId === row.holder_id && (

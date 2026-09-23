@@ -21,9 +21,12 @@
  *   the ledger renders its headers with an honest "no holdings on record"
  *   body rather than misattributing the house-wide list to this one barony.
  *   "⊕ a holding" is the fourth pre-approved omission (holding kinds aren't
- *   on the wire either) — rendered as an inert door.
+ *   on the wire either) — rendered as a plain `disabled aria-disabled` inert
+ *   door with no `title` (review fix round 1, Finding I4 — `title` tooltips
+ *   stay reserved for the `.tip`/`.bub` pattern on particle/succession).
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { useDraft } from '@/world-builder/document/useDraft';
 
@@ -137,7 +140,7 @@ export function BaronyPage({ barony, onSave }: BaronyPageProps) {
       <div className="field">
         <span className="label">on the Atlas</span>
         <div className="val">
-          <a href="/staff/world-builder">open on the Atlas</a>
+          <Link to="/staff/world-builder">open on the Atlas</Link>
         </div>
       </div>
       <div className="field">
@@ -163,12 +166,7 @@ export function BaronyPage({ barony, onSave }: BaronyPageProps) {
             </tbody>
           </table>
         </div>
-        <button
-          type="button"
-          className="add"
-          disabled
-          title="holding kinds aren't available to pick from yet"
-        >
+        <button type="button" className="add" disabled aria-disabled>
           ⊕ a holding
         </button>
       </div>

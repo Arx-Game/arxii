@@ -414,6 +414,12 @@
   color: hsl(var(--foreground));
   border-color: hsl(var(--muted-foreground));
 }
+/* PersonPanel's inline per-person Save (review fix round 1, Finding M1 —
+   was emitted with no matching rule). */
+.almanach .btn.sm {
+  font-size: 0.85rem;
+  padding: 0.05rem 0.6rem;
+}
 
 /* --- record rail --- */
 
@@ -825,6 +831,13 @@
   padding: 0.5rem 0;
   color: hsl(var(--primary));
   text-decoration: none;
+}
+/* A door with no destination yet (review fix round 1, Finding I2) — the
+   label still shows, but muted and non-interactive, dash-suffixed instead
+   of colored like a working `a`/`button` door. */
+.almanach .doors li span.faint {
+  display: block;
+  padding: 0.5rem 0;
 }
 .almanach .doors li small {
   display: block;
