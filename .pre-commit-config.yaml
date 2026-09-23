@@ -372,6 +372,13 @@ repos:
         language: system
         pass_filenames: true
         files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        # One eslint process for the whole staged list. Without this pre-commit
+        # splits the list into batches of max(4, n/cpu_count) files and runs one
+        # eslint per batch at once; each peaks near 275 MB, so a merge from main
+        # staging 64 frontend files on a 16-CPU/4 GiB devcontainer spawned 16 of
+        # them and the OOM killer took the whole session, four times on
+        # 2026-09-23. Same fix as `typescript` below (#3707).
+        require_serial: true
       - id: typescript
         name: TypeScript Check
         entry: bash
@@ -404,3 +411,5 @@ repos:
         language: system
         pass_filenames: true
         files: ^frontend/
+        # Same batching hazard as eslint above: one node process per commit.
+        require_serial: true
