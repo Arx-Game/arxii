@@ -101,6 +101,15 @@
 .almanach .record {
   min-width: 0;
 }
+/* Character creation's own chapter layout (`.interview .chapter`, cg.css) is a
+   two-column grid; inside the interview the Almanach's `main.chapter` matches
+   that selector too. Reset it so the founder's chapter is a plain column. */
+.interview .almanach .chapter {
+  display: block;
+  grid-template-columns: none;
+  gap: 0;
+}
+
 /* The Almanach also mounts inside character creation's reading column (the
    founder's "Define a house"), where three railed columns do not fit: size the
    spread by its own container, not the viewport. Below 64rem the contents rail
