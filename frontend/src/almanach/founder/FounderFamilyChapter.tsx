@@ -25,24 +25,16 @@ import type { CreateKinFields } from '../document/AddKinDialog';
 import { FamilyChapter } from '../document/FamilyChapter';
 import { DRAFT_NOTE } from '../copy';
 import { useAllHouses } from '../queries';
-import type { ClaimKinRelation } from '@/character-creation/types';
 import type { HouseTemplateOption } from '@/character-creation/api';
 
-import { founderFamilyShape, FOUNDER_KIN_RELATIONS, FOUNDER_NODE_ID } from './familyShape';
+import {
+  founderFamilyShape,
+  FOUNDER_KIN_RELATIONS,
+  FOUNDER_NODE_ID,
+  RELATION_WORDS,
+} from './familyShape';
 import { FounderPersonPanel } from './FounderPersonPanel';
 import type { FounderDraft, UseFounderDraftResult } from './founderDraft';
-
-const RELATION_WORDS: Record<ClaimKinRelation, string> = {
-  head: 'head of house',
-  mother: 'mother',
-  father: 'father',
-  spouse: 'consort',
-  sibling: 'sibling',
-  child: 'child',
-  grandparent: 'grandparent',
-  ward: 'ward',
-  position: 'position',
-};
 
 function Dash() {
   return <abbr title="none">—</abbr>;

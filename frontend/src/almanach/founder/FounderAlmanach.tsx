@@ -1,22 +1,27 @@
 /**
- * FounderAlmanach (#3983 Plan B Task 4) — the founder's own Almanach de
+ * FounderAlmanach (#3983 Plan B Task 4-6) — the founder's own Almanach de
  * Catenys, mounted inside character creation's Lineage stage
  * (`FamilyPathSection`) in place of the old `HouseFoundingPanel` (#1884
- * Phase D). Shares the staff Almanach's `.almanach` chassis (plates F-I
- * onward mirror plates S-I/S-II's three-column grid) but every read here is
- * founder-scoped (`useLadder(realmId, 'founder')`, the realms/charter/
- * land-shapes routes Plan B Task 3 opens to any authenticated player) and
- * every write stays in the browser (`useFounderDraft`) until the review
- * step (Task 6) files the nested claim (Task 3's `POST .../house-claim/`).
+ * Phase D, retired outright by Task 6). Shares the staff Almanach's
+ * `.almanach` chassis (plates F-I onward mirror plates S-I/S-II's
+ * three-column grid) but every read here is founder-scoped
+ * (`useLadder(realmId, 'founder')`, the realms/charter/land-shapes routes
+ * Plan B Task 3 opens to any authenticated player) and every write stays in
+ * the browser (`useFounderDraft`) until the Record step files the nested
+ * claim (Task 3's `POST .../house-claim/`).
  *
- * Tasks 5-6 build the House/Family/Land/Estate chapters and the submitted-
- * claim view on top of this shell; until then, a step past the Seat shows a
- * plain placeholder next to `RecordSoFar`, and a filed claim shows a
- * minimal status line rather than the full submitted-claim plate.
+ * `SeatPicker`, the `document/FamilyChapter` `FounderFamilyChapter` mounts,
+ * and every Task 6 chapter (`FounderLandsLeaf`/`FounderEstateLeaf`/
+ * `FounderRecord`) each render their own `<main className="chapter">` —
+ * `FounderHouseChapter` set that precedent (Task 5); this shell's own
+ * `<main>` wrapper is used ONLY for `SeatPicker` (which does not self-wrap)
+ * and the "resolving the template" fallback, never doubled up around a
+ * chapter that already provides one.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useClaimableTitles, useHouseClaim } from '@/character-creation/queries';
+import type { HouseClaimStatus, HouseTemplateOption } from '@/character-creation/api';
 import type { CharacterDraft } from '@/character-creation/types';
 
 import '../almanach.css';
@@ -26,18 +31,37 @@ import { useCharter, useLadder, useRealms } from '../queries';
 import type { LadderRow } from '../types';
 
 import { useFounderDraft } from './founderDraft';
+import { FounderEstateLeaf } from './FounderEstateLeaf';
+import { FounderFamilyChapter } from './FounderFamilyChapter';
+import { FounderHouseChapter } from './FounderHouseChapter';
+import { FounderLandsLeaf } from './FounderLandsLeaf';
+import { FounderRecord } from './FounderRecord';
 import { RecordSoFar } from './RecordSoFar';
 import { SeatPicker } from './SeatPicker';
-import { FOUNDER_CONTENTS, permittedRank, type FounderStep } from './steps';
+import { SubmittedPlate } from './SubmittedPlate';
+import {
+  FOUNDER_CONTENTS,
+  landBaseLine,
+  landFactsOf,
+  permittedRank,
+  type FounderStep,
+} from './steps';
 
-const STEP_LABELS: Record<FounderStep, string> = {
-  seat: 'The Seat',
-  house: 'The House',
-  family: 'The Family',
-  land: 'The Land',
-  estate: 'The Estate',
-  record: 'The Record',
-};
+/** No name field reaches these founder components yet (`CharacterDraft`
+ * carries none) — every chapter that needs the founder's own display name
+ * uses this same literal, matching `FounderHouseChapter`'s own disclosed
+ * gap (see its doc comment and the Task 5 report). */
+const YOU_NAME = 'Given name';
+
+const STEP_ORDER: FounderStep[] = ['seat', 'house', 'family', 'land', 'estate', 'record'];
+
+/** Whether `step` is at or past `target` in the founder's fixed chapter
+ * order — the record rail's own step-gated rows (quiddity/you/the land/the
+ * estate only appear once their chapter is reached, plates F-II/F-III's
+ * `.todo` rows becoming real entries chapter by chapter). */
+function atOrPast(step: FounderStep, target: FounderStep): boolean {
+  return STEP_ORDER.indexOf(step) >= STEP_ORDER.indexOf(target);
+}
 
 /** "N ducal/county/barony seats unclaimed" (plates F-I/F-I b's `vassals` dd)
  * — `unclaimed_by_tier[tier]`, folding march into county like `LevelBar`. */
@@ -83,6 +107,31 @@ function childSeatsUnclaimed(rows: LadderRow[], parentTitleId: number): string {
   const tier = children[0]?.tier ?? '';
   const label = (TIER_LABELS[tier] ?? tier).toLowerCase();
   return `${unclaimed} ${label} seats unclaimed`;
+}
+
+/** "the estate" record line (`<name> · <capital>`), or `''` before the
+ * founder has named an estate — no capital name known yet reads as the
+ * bare estate name rather than a trailing " · ". */
+function estateLineOf(estateName: string, capitalName: string | undefined): string {
+  if (estateName === '') return '';
+  if (capitalName) return `${estateName} · ${capitalName}`;
+  return estateName;
+}
+
+/** The picked template's first aspect definition's chosen option name(s)
+ * (plate F-II's "quiddity" row, plate F-VI's `.row3` "quiddity" field) —
+ * `''` before a template/pick exist. */
+function quiddityNameOf(
+  template: HouseTemplateOption | undefined,
+  picks: Record<number, number[]>
+): string {
+  const quiddity = template?.aspect_definitions[0];
+  if (!quiddity) return '';
+  const pickedIds = picks[quiddity.id] ?? [];
+  return quiddity.options
+    .filter((option) => pickedIds.includes(option.id))
+    .map((option) => option.name)
+    .join(' · ');
 }
 
 /**
@@ -186,18 +235,50 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
   const { data: realmsPayload } = useRealms();
   const realms = realmsPayload?.results ?? [];
   const { data: titles = [] } = useClaimableTitles();
-  const { draft: fd, set } = useFounderDraft(draft.id);
+  const {
+    draft: fd,
+    set,
+    addKin,
+    updateKin,
+    removeKin,
+    setLand,
+    reset,
+  } = useFounderDraft(draft.id);
 
   const effectiveRealmId = fd.realm_id ?? draft.selected_area?.realm_id ?? realms[0]?.id ?? null;
   const [step, setStep] = useState<FounderStep>(fd.title_id != null ? 'house' : 'seat');
+  const [justSubmitted, setJustSubmitted] = useState<HouseClaimStatus | null>(null);
 
   const { data: ladderPayload } = useLadder(effectiveRealmId, 'founder');
   const rows = ladderPayload?.rows ?? [];
   const unclaimedByTier = ladderPayload?.unclaimed_by_tier ?? {};
+  const { data: charter } = useCharter(effectiveRealmId);
 
   const rank = permittedRank(draft.selected_origin_template?.max_claim_tier);
   const seatRow =
     fd.title_id != null ? rows.find((row) => row.title_id === fd.title_id) : undefined;
+
+  const title = titles.find((t) => t.id === fd.title_id);
+  const template = title?.templates.find((t) => t.id === fd.template_id);
+  const quiddityName = quiddityNameOf(template, fd.aspect_picks);
+  const features = (template?.features ?? []).map((feature) => ({
+    name: feature.name,
+    // `HouseFeature` (`src/generated/api.d.ts`) carries no codex link field
+    // — every entry is real (the name is authored content), just never
+    // linked, the same honest-gap call `BaronyPage`'s own produces ledger
+    // makes rather than fabricating an id.
+    codexEntryId: null,
+  }));
+  const produces = template?.holdings.map((holding) => holding.name) ?? [];
+
+  const landFacts = fd.title_id != null ? landFactsOf(rows, fd.title_id) : null;
+  const landLineShort = landFacts ? landBaseLine(landFacts, fd.lands) : '';
+  const landLineFull = landFacts
+    ? `${landLineShort} · ${
+        (fd.lands[landFacts.topRow.title_id]?.land_shape_names ?? []).join(', ') || 'Undefined'
+      } · ${produces.join(', ') || 'Undefined'}`
+    : '';
+  const estateLine = estateLineOf(fd.estate_name, charter?.capital_name);
 
   // The Seat step's own row selection (fix round 1, Finding 2): defaults to
   // the shallowest root row (matches plate F-I's own `.sel` on Fervor, and
@@ -218,8 +299,8 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
   };
 
   const handleClaim = (row: LadderRow) => {
-    const title = titles.find((t) => t.id === row.title_id);
-    const templateId = title?.templates[0]?.id ?? null;
+    const claimedTitle = titles.find((t) => t.id === row.title_id);
+    const templateId = claimedTitle?.templates[0]?.id ?? null;
     set('title_id', row.title_id);
     set('realm_id', effectiveRealmId);
     set('template_id', templateId);
@@ -227,29 +308,141 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
     setStep('house');
   };
 
-  if (claim) {
-    // Task B6 replaces this with the full submitted-claim plate.
+  const submittedClaim = claim ?? justSubmitted;
+  if (submittedClaim) {
     return (
       <div className="almanach">
-        <div className="bar">
-          <span className="crumb">
-            {FOUNDER_CRUMB.map((crumb) => (
-              <span key={crumb}>{crumb}</span>
-            ))}
-          </span>
-          <span className="right">
-            <span className="mode">founder</span>
-          </span>
-        </div>
-        <p className="meta">
-          House {claim.house_name}: {claim.title_name} ({claim.status})
-        </p>
+        <SubmittedPlate
+          houseName={submittedClaim.house_name}
+          status={submittedClaim.status ?? 'pending'}
+          reviewNote={submittedClaim.review_note}
+        />
       </div>
     );
   }
 
   if (effectiveRealmId == null) {
     return <div className="almanach" />;
+  }
+
+  let chapter: ReactNode;
+  if (step === 'seat') {
+    chapter = (
+      <main className="chapter">
+        <SeatPicker
+          realmId={effectiveRealmId}
+          permittedRank={rank}
+          selectedTitleId={selectedRow?.title_id ?? null}
+          onSelectRow={handleSelectRow}
+          onSelectRealm={handleSelectRealm}
+          onClaim={handleClaim}
+        />
+      </main>
+    );
+  } else if (!template) {
+    // The claimed title/template are still resolving (`useClaimableTitles`
+    // hasn't returned yet, or the claim was made before it loaded) — every
+    // chapter past the Seat requires a real template, so this is a brief
+    // loading gap, never a stuck state once the query settles.
+    chapter = (
+      <main className="chapter">
+        <p className="meta">Loading…</p>
+      </main>
+    );
+  } else if (step === 'house') {
+    chapter = (
+      <FounderHouseChapter
+        draft={fd}
+        set={set}
+        template={template}
+        seatName={seatRow?.name ?? ''}
+        seatTier={seatRow?.tier ?? ''}
+        realmId={effectiveRealmId}
+        youName={YOU_NAME}
+        onNext={() => setStep('family')}
+      />
+    );
+  } else if (step === 'family') {
+    chapter = (
+      <FounderFamilyChapter
+        draft={fd}
+        set={set}
+        addKin={addKin}
+        updateKin={updateKin}
+        removeKin={removeKin}
+        template={template}
+        youName={YOU_NAME}
+        onNext={() => setStep('land')}
+      />
+    );
+  } else if (step === 'land') {
+    chapter = (
+      <FounderLandsLeaf
+        draft={fd}
+        setLand={setLand}
+        rows={rows}
+        produces={produces}
+        onNext={() => setStep('estate')}
+      />
+    );
+  } else if (step === 'estate') {
+    chapter = (
+      <FounderEstateLeaf
+        draft={fd}
+        set={set}
+        realmId={effectiveRealmId}
+        onNext={() => setStep('record')}
+      />
+    );
+  } else {
+    chapter = (
+      <FounderRecord
+        draft={fd}
+        characterDraftId={draft.id}
+        template={template}
+        quiddityName={quiddityName}
+        seatName={seatRow?.name ?? ''}
+        seatTier={seatRow?.tier ?? ''}
+        swornTo={seatRow?.sworn_to ?? ''}
+        landLine={landLineFull}
+        estateLine={estateLine}
+        realmId={effectiveRealmId}
+        youName={YOU_NAME}
+        reset={reset}
+        onBack={() => setStep('estate')}
+        onSubmitted={(result) => setJustSubmitted(result)}
+      />
+    );
+  }
+
+  // The Seat step keeps its own liege/realm rail; the Record step drops the
+  // third column entirely (plate F-VI's own 2-column `.almanac` grid,
+  // reflected in the `gridTemplateColumns` override above); every other
+  // step shows the running `RecordSoFar` summary.
+  let aside: ReactNode = null;
+  if (step === 'seat') {
+    aside = (
+      <LiegeRealmAside
+        realmId={effectiveRealmId}
+        rows={rows}
+        unclaimedByTier={unclaimedByTier}
+        selectedRow={selectedRow}
+      />
+    );
+  } else if (step !== 'record') {
+    aside = (
+      <RecordSoFar
+        draft={fd}
+        seatName={seatRow?.name ?? ''}
+        swornTo={seatRow?.sworn_to ?? ''}
+        step={step}
+        quiddityName={quiddityName !== '' ? quiddityName : undefined}
+        features={features.length > 0 ? features : undefined}
+        youName={atOrPast(step, 'family') ? YOU_NAME : undefined}
+        landText={atOrPast(step, 'land') ? landLineShort : undefined}
+        estateText={atOrPast(step, 'estate') ? estateLine : undefined}
+      />
+    );
   }
 
   return (
@@ -264,7 +457,10 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
           <span className="mode">founder</span>
         </span>
       </div>
-      <div className="almanac">
+      <div
+        className="almanac"
+        style={step === 'record' ? { gridTemplateColumns: '13rem minmax(0,1fr)' } : undefined}
+      >
         <aside className="contents">
           {FOUNDER_CONTENTS.map((group, index) => (
             // "Holdings" repeats as a group label (two distinct `.mv` blocks per
@@ -290,37 +486,8 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
             </div>
           ))}
         </aside>
-        <main className="chapter">
-          {step === 'seat' ? (
-            <SeatPicker
-              realmId={effectiveRealmId}
-              permittedRank={rank}
-              selectedTitleId={selectedRow?.title_id ?? null}
-              onSelectRow={handleSelectRow}
-              onSelectRealm={handleSelectRealm}
-              onClaim={handleClaim}
-            />
-          ) : (
-            <>
-              <h3>{STEP_LABELS[step]}</h3>
-              <p className="meta">Coming soon.</p>
-            </>
-          )}
-        </main>
-        {step === 'seat' ? (
-          <LiegeRealmAside
-            realmId={effectiveRealmId}
-            rows={rows}
-            unclaimedByTier={unclaimedByTier}
-            selectedRow={selectedRow}
-          />
-        ) : (
-          <RecordSoFar
-            draft={fd}
-            seatName={seatRow?.name ?? ''}
-            swornTo={seatRow?.sworn_to ?? ''}
-          />
-        )}
+        {chapter}
+        {aside}
       </div>
     </div>
   );

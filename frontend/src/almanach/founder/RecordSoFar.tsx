@@ -47,6 +47,17 @@ export interface RecordSoFarProps {
   /** The chassis's current chapter — decides the house/quiddity row split
    * (see the module doc comment). Omitted keeps the two-row House-step form. */
   step?: FounderStep;
+  /** The plate's own "the land" line (`steps.ts`'s `landBaseLine`,
+   * `<top> · <n> baronies · seat <name>, <hall>`) — omitted before the Land
+   * chapter is reached, matching plates F-II/F-III's own `.todo` "the land"
+   * row (#3983 Plan B Task 6). When provided (even `''`), it replaces the
+   * placeholder "N holdings" count below outright — the caller decides when
+   * the real line is known. */
+  landText?: string;
+  /** The plate's own "the estate" line (`<name> · <capital>`) — omitted
+   * before the Estate chapter is reached, matching plates F-II through F-IV's
+   * own `.todo` "the estate" row (#3983 Plan B Task 6). */
+  estateText?: string;
 }
 
 export function RecordSoFar({
@@ -57,6 +68,8 @@ export function RecordSoFar({
   features,
   youName,
   step,
+  landText,
+  estateText,
 }: RecordSoFarProps) {
   const entries: { q: string; text: string }[] = [];
   const todos: string[] = [];
@@ -108,17 +121,23 @@ export function RecordSoFar({
     entries.push({ q: 'you', text: `${youName} · ${draft.founder_is_heir ? 'heir' : 'younger'}` });
   }
 
-  const landCount = Object.keys(draft.lands).length;
-  if (landCount > 0) {
-    entries.push({
-      q: 'the land',
-      text: `${landCount} ${landCount === 1 ? 'holding' : 'holdings'}`,
-    });
+  if (landText != null) {
+    entries.push({ q: 'the land', text: landText });
   } else {
-    todos.push('the land');
+    const landCount = Object.keys(draft.lands).length;
+    if (landCount > 0) {
+      entries.push({
+        q: 'the land',
+        text: `${landCount} ${landCount === 1 ? 'holding' : 'holdings'}`,
+      });
+    } else {
+      todos.push('the land');
+    }
   }
 
-  if (draft.estate_name !== '') {
+  if (estateText != null) {
+    entries.push({ q: 'the estate', text: estateText });
+  } else if (draft.estate_name !== '') {
     entries.push({ q: 'the estate', text: draft.estate_name });
   } else {
     todos.push('the estate');

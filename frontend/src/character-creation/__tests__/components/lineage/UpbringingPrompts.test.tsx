@@ -47,6 +47,7 @@ const template: OriginTemplate = {
   allows_no_family: true,
   claimable_kind_ids: [],
   family_templates: [],
+  max_claim_tier: '',
   slots: [
     {
       id: 500,

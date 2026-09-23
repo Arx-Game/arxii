@@ -52,6 +52,26 @@ export const FOUNDER_KIN_RELATIONS: KinRelation[] = [
   'position',
 ];
 
+/** Head-relative relation words (plate F-III's tree rows, plate F-VI's "the
+ * family" line — `FounderFamilyChapter`'s `relationOverrides` and
+ * `FounderRecord`'s own family line both read this same map, so neither
+ * ever drifts from the other). `KinRelation` and `ClaimKinRelation`
+ * (`@/character-creation/types`) are the identical nine-member union under
+ * two names — this file already imports the former for
+ * `FOUNDER_KIN_RELATIONS`, so it keys off that rather than adding a second
+ * import of the same shape. */
+export const RELATION_WORDS: Record<KinRelation, string> = {
+  head: 'head of house',
+  mother: 'mother',
+  father: 'father',
+  spouse: 'consort',
+  sibling: 'sibling',
+  child: 'child',
+  grandparent: 'grandparent',
+  ward: 'ward',
+  position: 'position',
+};
+
 /** The head-of-house tree node's synthetic id, when a separate head kin row
  * is on record (absent — `null` — when `founder_relation === 'head'`). */
 export const HEAD_NODE_ID = -1;

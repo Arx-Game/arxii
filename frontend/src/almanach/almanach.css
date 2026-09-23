@@ -933,3 +933,40 @@
   outline: 2px solid hsl(var(--primary));
   outline-offset: 2px;
 }
+
+/* --- the Record plate's full-bleed "Submitted" moment (#3983 Plan B Task 6,
+   plate F-VI's `.night`, `SubmittedPlate.tsx`) — literal fixed-dark colors,
+   NOT the app's HSL realm tokens this file otherwise uses throughout: the
+   plate's own `base.css` never redefines `--night`/`--night-text`/
+   `--night-soft` under its dark-mode block either, so this moment stays the
+   same dark regardless of the viewer's light/dark preference. Matches the
+   same "constant night literals in both themes" call
+   `character-creation/folio/NightPlate.tsx` already makes for the CG
+   stage's own arrival/submission moments. */
+.almanach .night {
+  background: #0e1116;
+  color: #e8e2d4;
+  padding: 3rem 1.6rem;
+  text-align: center;
+}
+.almanach .night h3 {
+  font-family: theme('fontFamily.display');
+  font-weight: 400;
+  font-variant: small-caps;
+  font-size: 1.6rem;
+  margin: 0 0 0.6rem;
+  color: #e8e2d4;
+}
+.almanach .night p {
+  margin: 0.3rem auto;
+  max-width: 48ch;
+  color: #b9b2a2;
+}
+.almanach .night .st {
+  display: inline-block;
+  margin-top: 1rem;
+  border: 1px solid #b9b2a2;
+  padding: 0.1rem 0.8rem;
+  font-size: 0.85rem;
+  color: #e8e2d4;
+}

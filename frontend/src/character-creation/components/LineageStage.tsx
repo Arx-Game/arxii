@@ -26,30 +26,22 @@ import { useEffect, useState } from 'react';
 import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   useCGExplanations,
-  useClaimableTitles,
   useFamilies,
   useFamilySlots,
   useGenders,
-  useHouseClaim,
   useNamingRitualConfig,
   useOriginTemplates,
   useSpecies,
   useTarotCards,
   useUpdateDraft,
 } from '../queries';
-import { submitHouseClaim, type ClaimableTitle, type HouseClaimPayload } from '../api';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
 import { ChapterLeaf } from '../folio';
 import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
 import { UpbringingPicker } from './lineage/UpbringingPicker';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
-import { FamilyTemplateForm } from './lineage/FamilyTemplateForm';
 import { LineageRecord } from './lineage/LineageRecord';
 
 interface LineageStageProps {
@@ -313,217 +305,6 @@ export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
           </Select>
         </div>
       </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// HouseFoundingPanel — define the house behind a set-aside title (#1884 Phase D)
-// =============================================================================
-
-const PRINCIPLE_AXES = ['mercy', 'method', 'status', 'change', 'allegiance', 'power'] as const;
-
-export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
-  const queryClient = useQueryClient();
-  const { data: titles = [] } = useClaimableTitles();
-  const { data: claim } = useHouseClaim(draft.id);
-  const [titleId, setTitleId] = useState<number | null>(null);
-  const [templateId, setTemplateId] = useState<number | null>(null);
-  const [houseName, setHouseName] = useState('');
-  const [backstory, setBackstory] = useState('');
-  const [words, setWords] = useState('');
-  const [colors, setColors] = useState('');
-  const [sigil, setSigil] = useState('');
-  const [aspectPicks, setAspectPicks] = useState<Record<number, number[]>>({});
-  const [principles, setPrinciples] = useState<Record<string, number>>(
-    Object.fromEntries(PRINCIPLE_AXES.map((axis) => [axis, 0]))
-  );
-
-  const toggleAspectOption = (definitionId: number, optionId: number, maxPicks: number) => {
-    setAspectPicks((prev) => {
-      const current = prev[definitionId] ?? [];
-      if (current.includes(optionId)) {
-        return { ...prev, [definitionId]: current.filter((id) => id !== optionId) };
-      }
-      if (maxPicks === 1) {
-        return { ...prev, [definitionId]: [optionId] };
-      }
-      if (current.length >= maxPicks) {
-        return prev;
-      }
-      return { ...prev, [definitionId]: [...current, optionId] };
-    });
-  };
-
-  const submit = useMutation({
-    mutationFn: (payload: HouseClaimPayload) => submitHouseClaim(draft.id, payload),
-    onSuccess: () => {
-      toast.success('House claim filed: staff will review it with your application.');
-      void queryClient.invalidateQueries({
-        queryKey: ['character-creation', 'house-claim', draft.id],
-      });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  if (claim) {
-    return (
-      <div className="space-y-1 rounded-md border p-3">
-        <Label className="text-sm font-medium text-muted-foreground">Your House Claim</Label>
-        <p className="text-sm">
-          House {claim.house_name}: {claim.title_name}{' '}
-          <Badge variant={claim.status === 'rejected' ? 'destructive' : 'secondary'}>
-            {claim.status}
-          </Badge>
-        </p>
-        {claim.review_note && <p className="text-xs text-muted-foreground">{claim.review_note}</p>}
-      </div>
-    );
-  }
-  if (titles.length === 0) {
-    return null;
-  }
-
-  const selectedTitle: ClaimableTitle | undefined = titles.find((t) => t.id === titleId);
-  const templates = selectedTitle?.templates ?? [];
-  const selectedTemplate = templates.find((t) => t.id === templateId);
-
-  return (
-    <div className="space-y-3 rounded-md border p-3">
-      <div>
-        <Label className="text-sm font-medium text-muted-foreground">Define a House</Label>
-        <p className="text-xs text-muted-foreground">
-          Enter play as the representative of a house that has always held one of these set-aside
-          titles. Your backstory must match; staff reviews the claim with your application.
-        </p>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Select
-          value={titleId ? String(titleId) : ''}
-          onValueChange={(value) => {
-            setTitleId(Number(value));
-            setTemplateId(null);
-          }}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Choose a vacant title" />
-          </SelectTrigger>
-          <SelectContent>
-            {titles.map((title) => (
-              <SelectItem key={title.id} value={String(title.id)}>
-                {title.name} ({title.realm_name})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={templateId ? String(templateId) : ''}
-          onValueChange={(value) => setTemplateId(Number(value))}
-          disabled={!selectedTitle}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Charter template" />
-          </SelectTrigger>
-          <SelectContent>
-            {templates.map((template) => (
-              <SelectItem key={template.id} value={String(template.id)}>
-                {template.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {selectedTemplate && (
-        <>
-          <Input
-            placeholder="House name (family surname)"
-            value={houseName}
-            onChange={(event) => setHouseName(event.target.value)}
-          />
-          <Textarea
-            placeholder="The house as it has always been: its lands, its temper, its debts."
-            value={backstory}
-            onChange={(event) => setBackstory(event.target.value)}
-          />
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input
-              placeholder='House words ("The Debt Is Kept")'
-              value={words}
-              onChange={(event) => setWords(event.target.value)}
-            />
-            <Input
-              placeholder="House colors (oxblood and slate)"
-              value={colors}
-              onChange={(event) => setColors(event.target.value)}
-            />
-          </div>
-          <Textarea
-            placeholder="The sigil, described."
-            value={sigil}
-            onChange={(event) => setSigil(event.target.value)}
-          />
-          <FamilyTemplateForm
-            template={selectedTemplate}
-            picks={aspectPicks}
-            onToggle={toggleAspectOption}
-            featuresHeading="A house of this charter"
-          />
-          <div className="grid grid-cols-3 gap-2">
-            {PRINCIPLE_AXES.map((axis) => (
-              <div key={axis}>
-                <Label className="text-xs capitalize text-muted-foreground">{axis}</Label>
-                <Input
-                  type="number"
-                  min={-5}
-                  max={5}
-                  value={principles[axis]}
-                  onChange={(event) =>
-                    setPrinciples((prev) => ({ ...prev, [axis]: Number(event.target.value) }))
-                  }
-                />
-              </div>
-            ))}
-          </div>
-          <Button
-            size="sm"
-            disabled={
-              !houseName ||
-              !backstory ||
-              !words ||
-              !colors ||
-              !sigil ||
-              !selectedTemplate.aspect_definitions.every((definition) => {
-                const count = (aspectPicks[definition.id] ?? []).length;
-                return count >= (definition.min_picks ?? 1) && count <= (definition.max_picks ?? 1);
-              }) ||
-              submit.isPending
-            }
-            onClick={() =>
-              submit.mutate({
-                title: titleId!,
-                template: templateId!,
-                house_name: houseName,
-                backstory,
-                words,
-                colors,
-                sigil_description: sigil,
-                aspects: selectedTemplate.aspect_definitions.map((definition) => ({
-                  definition: definition.id,
-                  options: aspectPicks[definition.id] ?? [],
-                })),
-                mercy: principles.mercy,
-                method: principles.method,
-                status: principles.status,
-                change: principles.change,
-                allegiance: principles.allegiance,
-                power: principles.power,
-              })
-            }
-          >
-            File the Claim
-          </Button>
-        </>
-      )}
     </div>
   );
 }

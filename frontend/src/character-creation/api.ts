@@ -911,17 +911,16 @@ export interface HouseClaimPayload {
   /**
    * The founder's own relation to the house's head, the household, and the
    * lands/estate the claim carries (#3983 Plan B Task 3's nested payload).
-   * Optional rather than required: `LineageStage.tsx`'s now-unmounted
-   * `HouseFoundingPanel` (retired outright by Plan B Task 6) still builds
-   * the pre-Plan-B, flatter literal and is outside this task's file scope —
-   * every real Plan B caller (`founder/founderDraft.ts`'s `toClaimPayload`)
-   * always sets all five.
+   * Required: `LineageStage.tsx`'s old `HouseFoundingPanel` (the only
+   * caller that ever posted a claim without these five) was retired
+   * outright by Plan B Task 6 — every remaining caller
+   * (`founder/founderDraft.ts`'s `toClaimPayload`) always sets all five.
    */
-  founder_relation?: ClaimKinRelation;
-  founder_is_heir?: boolean;
-  kin?: ClaimKinDraft[];
-  lands?: ClaimLandDraft[];
-  estate?: { name: string; description: string };
+  founder_relation: ClaimKinRelation;
+  founder_is_heir: boolean;
+  kin: ClaimKinDraft[];
+  lands: ClaimLandDraft[];
+  estate: { name: string; description: string };
 }
 
 export async function getClaimableTitles(): Promise<ClaimableTitle[]> {

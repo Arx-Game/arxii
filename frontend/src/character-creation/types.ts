@@ -1160,13 +1160,13 @@ export interface OriginTemplate {
   slots: OriginTemplateSlot[];
   /**
    * The highest House tier this Upbringing may found (#3983 Plan B), a
-   * `TitleTier` value (e.g. `'duchy'`) or `''` for no ceiling. Optional so
-   * fixtures/tests built before Task 3 wires the field up still typecheck
-   * (`UpbringingPrompts.test.tsx`'s literal is outside this task's file
-   * scope — see Task 4's report); every real reader treats a missing value
-   * the same as `''` (`steps.ts`'s `permittedRank`).
+   * `TitleTier` value (e.g. `'duchy'`) or `''` for no ceiling. Required as
+   * of Plan B Task 6 (the backend field itself is non-optional,
+   * `src/generated/api.d.ts`'s `OriginTemplate.max_claim_tier`) —
+   * `permittedRank` (`steps.ts`) still treats a blank string the same as
+   * "no ceiling."
    */
-  max_claim_tier?: string;
+  max_claim_tier: string;
 }
 
 /** The family paths this Upbringing allows, in claim/name/none order. */
