@@ -709,6 +709,10 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
                 "family_templates__aspect_definitions__options",  # noqa: PREFETCH_STRING
                 "family_templates__features",  # noqa: PREFETCH_STRING
                 "family_templates__served_house_choices",  # noqa: PREFETCH_STRING
+                # The founder's template option (#3983) also renders what the
+                # seat produces and its succession law; one query each, not per row.
+                "family_templates__holdings",  # noqa: PREFETCH_STRING
+                "family_templates__default_succession_law",  # noqa: PREFETCH_STRING
                 Prefetch(
                     "slots",
                     queryset=OriginTemplateSlot.objects.order_by("sort_order", "id"),
