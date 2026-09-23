@@ -170,9 +170,10 @@ describe('GMSlot', () => {
     mockMineData = approvedMineData;
     renderWithProviders(<GMSlot gmEntry={gmEntry} isDocked={false} onSelect={vi.fn()} />);
 
+    // The /characters/:id route takes the RosterEntry id, never character_id.
     expect(screen.getByRole('link', { name: /sheet/i })).toHaveAttribute(
       'href',
-      `/characters/${gmEntry.character_id}`
+      `/characters/${gmEntry.id}`
     );
   });
 
