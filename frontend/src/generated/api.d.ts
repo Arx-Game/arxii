@@ -465,6 +465,154 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/houses/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve houses (orgs with a family), plus each house's full
+     *     Almanach document (``/document/``).
+     */
+    get: operations['almanach_houses_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/houses/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve houses (orgs with a family), plus each house's full
+     *     Almanach document (``/document/``).
+     */
+    get: operations['almanach_houses_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/houses/{id}/document/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/houses/{id}/document/ */
+    get: operations['almanach_houses_document_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/land-shapes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The authored land-shape catalog (coast, reefs, hills, volcanic, ...). */
+    get: operations['almanach_land_shapes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/land-shapes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The authored land-shape catalog (coast, reefs, hills, volcanic, ...). */
+    get: operations['almanach_land_shapes_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/realms/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve realms for the Almanach's realm picker, plus each
+     *     realm's feudal ladder (``/ladder/``).
+     */
+    get: operations['almanach_realms_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/realms/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve realms for the Almanach's realm picker, plus each
+     *     realm's feudal ladder (``/ladder/``).
+     */
+    get: operations['almanach_realms_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/realms/{id}/ladder/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/realms/{id}/ladder/?for=staff|founder */
+    get: operations['almanach_realms_ladder_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/areas/': {
     parameters: {
       query?: never;
@@ -24708,6 +24856,87 @@ export interface components {
       /** Format: date-time */
       readonly recorded_at: string;
     };
+    AlmanachHouseAspect: {
+      definition: string;
+      option: string;
+      description: string;
+    };
+    /**
+     * @description The document's ``house`` section (mirrors ``_house_payload``) — the
+     *     only section given its own nested serializer, per the #3983 Task 5
+     *     decision, so the schema documents its keys instead of a bare dict.
+     */
+    AlmanachHouseDocumentHouse: {
+      id: number;
+      name: string;
+      description: string;
+      words: string;
+      colors: string;
+      sigil_description: string;
+      house_state: string;
+      /** Format: date-time */
+      published_at: string | null;
+      particle_example: string;
+      default_succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
+      aspects: components['schemas']['AlmanachHouseAspect'][];
+      features: components['schemas']['AlmanachHouseFeature'][];
+      offices: components['schemas']['AlmanachHouseOffice'][];
+    };
+    AlmanachHouseFeature: {
+      name: string;
+      slug: string;
+      description: string;
+    };
+    AlmanachHouseOffice: {
+      slug: string;
+      title: string;
+      holder_name: string;
+    };
+    /** @description A house row in the Almanach's house list/detail (not the document). */
+    AlmanachHouseSummary: {
+      readonly id: number;
+      /** @description The organization's name */
+      name: string;
+      /**
+       * @description Standing, in exile, extinct, or gentry (Luxen) (#3983).
+       *
+       *     * `standing` - Standing
+       *     * `in_exile` - In exile
+       *     * `extinct` - Extinct
+       *     * `gentry` - Gentry
+       */
+      house_state?: components['schemas']['HouseStateEnum'];
+      /**
+       * Format: date-time
+       * @description When the Almanach published this house; null = draft (#3983).
+       */
+      published_at?: string | null;
+    };
+    /**
+     * @description A realm as the Almanach's realm picker lists it, plus its unclaimed
+     *     counts. Computing a full ladder per row is one extra Title+Area query
+     *     pair per realm — acceptable at realm scale (six realms today; #3983
+     *     Task 5 decision) but not something to do per-row on a large list.
+     */
+    AlmanachRealm: {
+      readonly id: number;
+      name: string;
+      /** @description The long name the realm page shows under the title (#3725), e.g. 'The Umbral Empire'. Blank shows nothing. */
+      formal_name?: string;
+      /** @description Percent of income a new vassal owes its liege by default (#3983). */
+      default_tithe_pct?: number;
+      readonly unclaimed_by_tier: {
+        [key: string]: number;
+      };
+    };
+    /**
+     * @description ``house.default_succession_law`` on the document (mirrors
+     *     ``almanach_reads._house_payload``'s ``law_payload``).
+     */
+    AlmanachSuccessionLaw: {
+      name: string;
+      codex_entry_id: number | null;
+    };
     /** @description Write serializer for resolving a PendingAlteration. */
     AlterationResolutionRequest: {
       library_template_id?: number | null;
@@ -24830,7 +25059,7 @@ export interface components {
     AreaList: {
       readonly id: number;
       readonly name: string;
-      readonly level: components['schemas']['LevelC97Enum'];
+      readonly level: components['schemas']['Level4f2Enum'];
       readonly level_display: string;
       readonly children_count: number;
       /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
@@ -27274,7 +27503,7 @@ export interface components {
     /** @description A vacant set-aside title open to CG house definition (#1884 Phase D). */
     ClaimableTitle: {
       readonly id: number;
-      name: string;
+      name?: string;
       tier: components['schemas']['TierE4cEnum'];
       readonly realm_name: string;
       /** @default  */
@@ -31645,8 +31874,34 @@ export interface components {
       stature: components['schemas']['HouseStature'] | null;
       vacancies: components['schemas']['VacancyOffer'][];
     };
+    /**
+     * @description The Almanach house document (mirrors ``almanach_reads.HouseDocument``).
+     *
+     *     ``family``/``household``/``realm``/``lands``/``estate`` are already
+     *     plain dicts/lists of dicts in the read layer, so they ride
+     *     ``DictField``/``ListField(child=DictField())`` rather than re-declaring
+     *     every key here.
+     */
+    HouseDocument: {
+      house: components['schemas']['AlmanachHouseDocumentHouse'];
+      family: {
+        [key: string]: unknown;
+      };
+      household: {
+        [key: string]: unknown;
+      }[];
+      realm: {
+        [key: string]: unknown;
+      };
+      lands: {
+        [key: string]: unknown;
+      };
+      estate: {
+        [key: string]: unknown;
+      }[];
+    };
     HouseDomain: {
-      name: string;
+      name?: string;
       population?: number;
       /** @description 0-100 PLACEHOLDER. */
       prosperity?: number;
@@ -31669,6 +31924,14 @@ export interface components {
       slug: string;
       description: string;
     };
+    /**
+     * @description * `standing` - Standing
+     *     * `in_exile` - In exile
+     *     * `extinct` - Extinct
+     *     * `gentry` - Gentry
+     * @enum {string}
+     */
+    HouseStateEnum: 'standing' | 'in_exile' | 'extinct' | 'gentry';
     /**
      * @description The house's stature panel (#3091): qualitative headline, numbers below.
      *
@@ -31717,7 +31980,7 @@ export interface components {
     };
     HouseTitle: {
       readonly id: number;
-      name: string;
+      name?: string;
       tier: components['schemas']['TierE4cEnum'];
       readonly holder_name: string;
       /** @description Vacant slot set aside for the Phase D house creator. */
@@ -32740,6 +33003,42 @@ export interface components {
       | 'cousin'
       | 'past-incarnation'
       | 'later-incarnation';
+    /** @description A realm's whole ladder (mirrors ``almanach_reads.LadderPayload``). */
+    LadderPayload: {
+      rows: components['schemas']['LadderRow'][];
+      readonly unclaimed_by_tier: {
+        [key: string]: number;
+      };
+    };
+    /** @description One rung of the realm ladder (mirrors ``almanach_reads.LadderRow``). */
+    LadderRow: {
+      title_id: number;
+      /**
+       * @description The dataclass keeps the raw (possibly empty) name; the API
+       *     renders an undefined rung's name as "Undefined" for display.
+       */
+      readonly name: string;
+      is_defined: boolean;
+      tier: string;
+      level: number;
+      parent_title_id: number | null;
+      house_id: number | null;
+      house_name: string;
+      state: string;
+      is_seat_of: string;
+      sworn_to: string;
+      demesne: number;
+      vassals: number;
+      claimable: boolean;
+      seat_domain_id: number | null;
+      comes_with: string;
+    };
+    LandShape: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      sort_order?: number;
+    };
     LedgerRow: {
       id: number;
       amount: number;
@@ -32788,14 +33087,18 @@ export interface components {
      *     * `20` - Neighborhood
      *     * `30` - Ward
      *     * `40` - City
+     *     * `46` - Barony
      *     * `50` - Region
+     *     * `53` - County
+     *     * `56` - Duchy
      *     * `60` - Kingdom
+     *     * `65` - Empire
      *     * `70` - Continent
      *     * `80` - World
      *     * `90` - Plane
      * @enum {integer}
      */
-    LevelC97Enum: 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90;
+    Level4f2Enum: 10 | 20 | 30 | 40 | 46 | 50 | 53 | 56 | 60 | 65 | 70 | 80 | 90;
     /**
      * @description * `starting` - Starting GM
      *     * `junior` - Junior GM
@@ -35736,6 +36039,36 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AggregateBeatContribution'][];
     };
+    PaginatedAlmanachHouseSummaryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachHouseSummary'][];
+    };
+    PaginatedAlmanachRealmList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachRealm'][];
+    };
     PaginatedAlternateSelfList: {
       /** @example 123 */
       count: number;
@@ -36924,6 +37257,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['LabStationDetails'][];
+    };
+    PaginatedLandShapeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['LandShape'][];
     };
     PaginatedLegendEventSummaryList: {
       /** @example 123 */
@@ -47852,7 +48200,7 @@ export interface components {
       readonly name: string;
       /** @description Permanent stable identifier for authored (exported) areas (#2448). Required when origin=AUTHORED; NULL for runtime areas. */
       readonly slug: string | null;
-      readonly level: components['schemas']['LevelC97Enum'];
+      readonly level: components['schemas']['Level4f2Enum'];
       readonly level_display: string;
       /**
        * @description Who authored this area — only AUTHORED areas export (#2448).
@@ -48887,6 +49235,188 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  almanach_houses_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        realm?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachHouseSummaryList'];
+        };
+      };
+    };
+  };
+  almanach_houses_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachHouseSummary'];
+        };
+      };
+    };
+  };
+  almanach_houses_document_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HouseDocument'];
+        };
+      };
+    };
+  };
+  almanach_land_shapes_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedLandShapeList'];
+        };
+      };
+    };
+  };
+  almanach_land_shapes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this land shape. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LandShape'];
+        };
+      };
+    };
+  };
+  almanach_realms_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachRealmList'];
+        };
+      };
+    };
+  };
+  almanach_realms_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Realm. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachRealm'];
+        };
+      };
+    };
+  };
+  almanach_realms_ladder_retrieve: {
+    parameters: {
+      query?: {
+        /** @description Which ladder cut to read: 'staff' (default) shows every rung; 'founder' hides rungs sitting under an unpublished house. Both are staff-gated in this plan. */
+        for?: 'founder' | 'staff';
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Realm. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LadderPayload'];
+        };
       };
     };
   };

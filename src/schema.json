@@ -719,6 +719,214 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/almanach/houses/:
+    get:
+      operationId: almanach_houses_list
+      description: |-
+        List/retrieve houses (orgs with a family), plus each house's full
+        Almanach document (``/document/``).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: realm
+        schema:
+          type: number
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachHouseSummaryList'
+          description: ''
+  /api/almanach/houses/{id}/:
+    get:
+      operationId: almanach_houses_retrieve
+      description: |-
+        List/retrieve houses (orgs with a family), plus each house's full
+        Almanach document (``/document/``).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachHouseSummary'
+          description: ''
+  /api/almanach/houses/{id}/document/:
+    get:
+      operationId: almanach_houses_document_retrieve
+      description: GET /api/almanach/houses/{id}/document/
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseDocument'
+          description: ''
+  /api/almanach/land-shapes/:
+    get:
+      operationId: almanach_land_shapes_list
+      description: The authored land-shape catalog (coast, reefs, hills, volcanic,
+        ...).
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLandShapeList'
+          description: ''
+  /api/almanach/land-shapes/{id}/:
+    get:
+      operationId: almanach_land_shapes_retrieve
+      description: The authored land-shape catalog (coast, reefs, hills, volcanic,
+        ...).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this land shape.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandShape'
+          description: ''
+  /api/almanach/realms/:
+    get:
+      operationId: almanach_realms_list
+      description: |-
+        List/retrieve realms for the Almanach's realm picker, plus each
+        realm's feudal ladder (``/ladder/``).
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachRealmList'
+          description: ''
+  /api/almanach/realms/{id}/:
+    get:
+      operationId: almanach_realms_retrieve
+      description: |-
+        List/retrieve realms for the Almanach's realm picker, plus each
+        realm's feudal ladder (``/ladder/``).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Realm.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachRealm'
+          description: ''
+  /api/almanach/realms/{id}/ladder/:
+    get:
+      operationId: almanach_realms_ladder_retrieve
+      description: GET /api/almanach/realms/{id}/ladder/?for=staff|founder
+      parameters:
+      - in: query
+        name: for
+        schema:
+          type: string
+          enum:
+          - founder
+          - staff
+        description: 'Which ladder cut to read: ''staff'' (default) shows every rung;
+          ''founder'' hides rungs sitting under an unpublished house. Both are staff-gated
+          in this plan.'
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Realm.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LadderPayload'
+          description: ''
   /api/areas/:
     get:
       operationId: areas_list
@@ -40334,6 +40542,178 @@ components:
       - recorded_at
       - roster_entry
       - source_note
+    AlmanachHouseAspect:
+      type: object
+      properties:
+        definition:
+          type: string
+        option:
+          type: string
+        description:
+          type: string
+      required:
+      - definition
+      - description
+      - option
+    AlmanachHouseDocumentHouse:
+      type: object
+      description: |-
+        The document's ``house`` section (mirrors ``_house_payload``) — the
+        only section given its own nested serializer, per the #3983 Task 5
+        decision, so the schema documents its keys instead of a bare dict.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        words:
+          type: string
+        colors:
+          type: string
+        sigil_description:
+          type: string
+        house_state:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        particle_example:
+          type: string
+        default_succession_law:
+          allOf:
+          - $ref: '#/components/schemas/AlmanachSuccessionLaw'
+          nullable: true
+        aspects:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachHouseAspect'
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachHouseFeature'
+        offices:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachHouseOffice'
+      required:
+      - aspects
+      - colors
+      - default_succession_law
+      - description
+      - features
+      - house_state
+      - id
+      - name
+      - offices
+      - particle_example
+      - published_at
+      - sigil_description
+      - words
+    AlmanachHouseFeature:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - name
+      - slug
+    AlmanachHouseOffice:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        holder_name:
+          type: string
+      required:
+      - holder_name
+      - slug
+      - title
+    AlmanachHouseSummary:
+      type: object
+      description: A house row in the Almanach's house list/detail (not the document).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: The organization's name
+          maxLength: 100
+        house_state:
+          allOf:
+          - $ref: '#/components/schemas/HouseStateEnum'
+          description: |-
+            Standing, in exile, extinct, or gentry (Luxen) (#3983).
+
+            * `standing` - Standing
+            * `in_exile` - In exile
+            * `extinct` - Extinct
+            * `gentry` - Gentry
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the Almanach published this house; null = draft (#3983).
+      required:
+      - id
+      - name
+    AlmanachRealm:
+      type: object
+      description: |-
+        A realm as the Almanach's realm picker lists it, plus its unclaimed
+        counts. Computing a full ladder per row is one extra Title+Area query
+        pair per realm — acceptable at realm scale (six realms today; #3983
+        Task 5 decision) but not something to do per-row on a large list.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        formal_name:
+          type: string
+          description: The long name the realm page shows under the title (#3725),
+            e.g. 'The Umbral Empire'. Blank shows nothing.
+          maxLength: 150
+        default_tithe_pct:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Percent of income a new vassal owes its liege by default (#3983).
+        unclaimed_by_tier:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+      required:
+      - id
+      - name
+      - unclaimed_by_tier
+    AlmanachSuccessionLaw:
+      type: object
+      description: |-
+        ``house.default_succession_law`` on the document (mirrors
+        ``almanach_reads._house_payload``'s ``law_payload``).
+      properties:
+        name:
+          type: string
+        codex_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - codex_entry_id
+      - name
     AlterationResolutionRequest:
       type: object
       description: Write serializer for resolving a PendingAlteration.
@@ -40576,7 +40956,7 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/LevelC97Enum'
+          - $ref: '#/components/schemas/Level4f2Enum'
           readOnly: true
         level_display:
           type: string
@@ -45869,7 +46249,6 @@ components:
           readOnly: true
       required:
       - id
-      - name
       - realm_name
       - seat_domain_name
       - templates
@@ -55171,6 +55550,44 @@ components:
       - titles
       - vacancies
       - vassal_names
+    HouseDocument:
+      type: object
+      description: |-
+        The Almanach house document (mirrors ``almanach_reads.HouseDocument``).
+
+        ``family``/``household``/``realm``/``lands``/``estate`` are already
+        plain dicts/lists of dicts in the read layer, so they ride
+        ``DictField``/``ListField(child=DictField())`` rather than re-declaring
+        every key here.
+      properties:
+        house:
+          $ref: '#/components/schemas/AlmanachHouseDocumentHouse'
+        family:
+          type: object
+          additionalProperties: {}
+        household:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        realm:
+          type: object
+          additionalProperties: {}
+        lands:
+          type: object
+          additionalProperties: {}
+        estate:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - estate
+      - family
+      - house
+      - household
+      - lands
+      - realm
     HouseDomain:
       type: object
       properties:
@@ -55198,7 +55615,6 @@ components:
           readOnly: true
       required:
       - holding_names
-      - name
     HouseFeature:
       type: object
       description: A cultural fact houses of a template carry (#2079).
@@ -55236,6 +55652,18 @@ components:
       - description
       - name
       - slug
+    HouseStateEnum:
+      enum:
+      - standing
+      - in_exile
+      - extinct
+      - gentry
+      type: string
+      description: |-
+        * `standing` - Standing
+        * `in_exile` - In exile
+        * `extinct` - Extinct
+        * `gentry` - Gentry
     HouseStature:
       type: object
       description: |-
@@ -55392,7 +55820,6 @@ components:
       required:
       - holder_name
       - id
-      - name
       - tier
     HumiliationMark:
       type: object
@@ -57359,6 +57786,100 @@ components:
         * `cousin` - Cousin
         * `past-incarnation` - Past Incarnation
         * `later-incarnation` - Later Incarnation
+    LadderPayload:
+      type: object
+      description: A realm's whole ladder (mirrors ``almanach_reads.LadderPayload``).
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LadderRow'
+        unclaimed_by_tier:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+      required:
+      - rows
+      - unclaimed_by_tier
+    LadderRow:
+      type: object
+      description: One rung of the realm ladder (mirrors ``almanach_reads.LadderRow``).
+      properties:
+        title_id:
+          type: integer
+        name:
+          type: string
+          description: |-
+            The dataclass keeps the raw (possibly empty) name; the API
+            renders an undefined rung's name as "Undefined" for display.
+          readOnly: true
+        is_defined:
+          type: boolean
+        tier:
+          type: string
+        level:
+          type: integer
+        parent_title_id:
+          type: integer
+          nullable: true
+        house_id:
+          type: integer
+          nullable: true
+        house_name:
+          type: string
+        state:
+          type: string
+        is_seat_of:
+          type: string
+        sworn_to:
+          type: string
+        demesne:
+          type: integer
+        vassals:
+          type: integer
+        claimable:
+          type: boolean
+        seat_domain_id:
+          type: integer
+          nullable: true
+        comes_with:
+          type: string
+      required:
+      - claimable
+      - comes_with
+      - demesne
+      - house_id
+      - house_name
+      - is_defined
+      - is_seat_of
+      - level
+      - name
+      - parent_title_id
+      - seat_domain_id
+      - state
+      - sworn_to
+      - tier
+      - title_id
+      - vassals
+    LandShape:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+        sort_order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - id
+      - name
     LedgerRow:
       type: object
       properties:
@@ -57456,14 +57977,18 @@ components:
       - id
       - journal
       - value_added
-    LevelC97Enum:
+    Level4f2Enum:
       enum:
       - 10
       - 20
       - 30
       - 40
+      - 46
       - 50
+      - 53
+      - 56
       - 60
+      - 65
       - 70
       - 80
       - 90
@@ -57473,8 +57998,12 @@ components:
         * `20` - Neighborhood
         * `30` - Ward
         * `40` - City
+        * `46` - Barony
         * `50` - Region
+        * `53` - County
+        * `56` - Duchy
         * `60` - Kingdom
+        * `65` - Empire
         * `70` - Continent
         * `80` - World
         * `90` - Plane
@@ -63132,6 +63661,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AggregateBeatContribution'
+    PaginatedAlmanachHouseSummaryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachHouseSummary'
+    PaginatedAlmanachRealmList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachRealm'
     PaginatedAlternateSelfList:
       type: object
       required:
@@ -64999,6 +65574,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LabStationDetails'
+    PaginatedLandShapeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandShape'
     PaginatedLegendEventSummaryList:
       type: object
       required:
@@ -85615,7 +86213,7 @@ components:
           pattern: ^[-a-zA-Z0-9_]+$
         level:
           allOf:
-          - $ref: '#/components/schemas/LevelC97Enum'
+          - $ref: '#/components/schemas/Level4f2Enum'
           readOnly: true
         level_display:
           type: string
