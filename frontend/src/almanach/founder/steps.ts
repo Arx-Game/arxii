@@ -38,19 +38,43 @@ export function withinClaimGate(row: LadderRow, permitted: number): boolean {
   return (TIER_RANK[row.tier] ?? 0) <= permitted;
 }
 
-/** One entry in the Founder Almanach's contents rail (plates F-I onward
- * `.contents`) — `group` is the rail's `.mv .label`, `step` the chapter it
- * opens, `label` the `<li>` text. */
+/** One chapter entry inside a Founder Almanach contents-rail group
+ * (`FounderContentsGroup.entries`) — `step` the chapter it opens, `label`
+ * the `<li>` text. */
 export interface FounderContentsEntry {
-  group: string;
   step: FounderStep;
   label: string;
 }
 
-export const FOUNDER_CONTENTS: FounderContentsEntry[] = [
-  { group: 'Holdings', step: 'seat', label: 'The Seat' },
-  { group: 'House', step: 'house', label: 'The House' },
-  { group: 'House', step: 'family', label: 'The Family' },
-  { group: 'Holdings', step: 'land', label: 'The Land' },
-  { group: 'Holdings', step: 'estate', label: 'The Estate' },
+/**
+ * One `.mv` block of the Founder Almanach's contents rail (plates F-I
+ * onward `.contents`) — `label` is the block's own `.mv .label` heading.
+ * The plate carries THREE `.mv` blocks, not two: "Holdings" appears twice,
+ * split by the "House" block between them (Holdings›Seat, then
+ * House›House,Family, then Holdings›Land,Estate) — fix round 1, Finding 1:
+ * grouping by label collapsed the two Holdings runs into one and reordered
+ * Land/Estate ahead of House/Family. A literal list of groups, one per
+ * plate `.mv`, makes that bug structurally impossible to reintroduce.
+ */
+export interface FounderContentsGroup {
+  label: string;
+  entries: FounderContentsEntry[];
+}
+
+export const FOUNDER_CONTENTS: FounderContentsGroup[] = [
+  { label: 'Holdings', entries: [{ step: 'seat', label: 'The Seat' }] },
+  {
+    label: 'House',
+    entries: [
+      { step: 'house', label: 'The House' },
+      { step: 'family', label: 'The Family' },
+    ],
+  },
+  {
+    label: 'Holdings',
+    entries: [
+      { step: 'land', label: 'The Land' },
+      { step: 'estate', label: 'The Estate' },
+    ],
+  },
 ];

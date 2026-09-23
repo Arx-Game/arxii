@@ -177,6 +177,13 @@
   font-size: 0.6em;
   color: hsl(var(--muted-foreground));
 }
+/* The Founder Almanach's tier-switch control (#3983 Plan B Task 4, plate
+   F-I's "Duchies" button) shares `.lnk`'s underline/font but drops the
+   dropdown arrow the realm switcher keeps — matches the plate's own
+   `.chapter h3 button.lnk.plain::after{content:none}` rule. */
+.almanach .chapter h3 button.lnk.plain::after {
+  content: none;
+}
 .almanach .switcher {
   position: relative;
   display: inline-block;

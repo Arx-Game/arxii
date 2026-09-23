@@ -86,6 +86,8 @@ test('gates the Claim column by the permitted tier and marks held/comes-with row
     <SeatPicker
       realmId={1}
       permittedRank={TIER_RANK.county}
+      selectedTitleId={null}
+      onSelectRow={vi.fn()}
       onSelectRealm={vi.fn()}
       onClaim={vi.fn()}
     />
@@ -113,6 +115,8 @@ test('a duke can claim Fervor', async () => {
     <SeatPicker
       realmId={1}
       permittedRank={TIER_RANK.duchy}
+      selectedTitleId={null}
+      onSelectRow={vi.fn()}
       onSelectRealm={vi.fn()}
       onClaim={onClaim}
     />
@@ -125,4 +129,28 @@ test('a duke can claim Fervor', async () => {
   expect(onClaim.mock.calls[0][0]).toEqual(
     expect.objectContaining({ title_id: 1, name: 'Fervor' })
   );
+});
+
+test('selecting a row by name calls onSelectRow and the row carries .sel', () => {
+  const onSelectRow = vi.fn();
+  renderWithProviders(
+    <SeatPicker
+      realmId={1}
+      permittedRank={TIER_RANK.duchy}
+      selectedTitleId={3}
+      onSelectRow={onSelectRow}
+      onSelectRealm={vi.fn()}
+      onClaim={vi.fn()}
+    />
+  );
+
+  // Caldera (title_id 3) is the controlled selection — its row carries `.sel`.
+  const caldera = screen.getByRole('button', { name: /select caldera/i }).closest('tr');
+  expect(caldera?.className).toContain('sel');
+
+  // Clicking Fervor's own name button reports the row up to the caller —
+  // `SeatPicker` doesn't own selection state itself (fix round 1, Finding 2).
+  const fervor = screen.getByRole('button', { name: /select fervor/i });
+  fervor.click();
+  expect(onSelectRow).toHaveBeenCalledWith(expect.objectContaining({ title_id: 1 }));
 });

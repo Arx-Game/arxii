@@ -20,7 +20,7 @@ import { useClaimableTitles, useHouseClaim } from '@/character-creation/queries'
 import type { CharacterDraft } from '@/character-creation/types';
 
 import '../almanach.css';
-import { FOUNDER_CRUMB } from '../copy';
+import { FOUNDER_CRUMB, STATES } from '../copy';
 import { defaultPressedTier, TIER_LABELS } from '../ladder/tree';
 import { useCharter, useLadder, useRealms } from '../queries';
 import type { LadderRow } from '../types';
@@ -48,38 +48,97 @@ function seatsUnclaimed(unclaimedByTier: Record<string, number>, tier: string): 
   return `${count} ${label} seats unclaimed`;
 }
 
-/**
- * The Seat step's right rail (plate F-I/F-I b, before `RecordSoFar` takes
- * over from plate F-II on): the liege house's crown/vassal standing (from
- * the ladder rows themselves) and the realm's charter. Simplified from the
- * plate — see Task 4's report for the fields the ladder/charter reads don't
- * carry (a liege house's own Quiddity, named peer vassals) and are left out
- * rather than invented.
- */
-function LiegeRealmAside({
-  realmId,
-  rows,
-  unclaimedByTier,
-}: {
-  realmId: number;
-  rows: LadderRow[];
-  unclaimedByTier: Record<string, number>;
-}) {
-  const { data: realmsPayload } = useRealms();
-  const realm = realmsPayload?.results.find((r) => r.id === realmId);
-  const { data: charter } = useCharter(realmId);
-  const tier = defaultPressedTier(rows);
-
-  const liegeName =
+/** The realm's crown-holding house name, crown-suffix stripped — mirrors
+ * `AlmanachPage.tsx`'s own `crownHolder` convention (a root row's
+ * `sworn_to` ends " (crown)" when it's sworn straight to the realm's own
+ * crown house). Falls back to any root row's raw `sworn_to` when no row
+ * carries that suffix. */
+function crownName(rows: LadderRow[]): string {
+  return (
     rows
       .map((row) => row.sworn_to)
       .find((swornTo) => swornTo.endsWith(' (crown)'))
       ?.replace(/ \(crown\)$/, '') ??
     rows.find((row) => row.parent_title_id == null)?.sworn_to ??
-    '';
+    ''
+  );
+}
+
+/** Every rung `houseName` holds, by name, joined "Fervor · Arsura" (plate
+ * F-I b's `holds` dd) — every row whose own `house_name` matches. */
+function holdingsOf(rows: LadderRow[], houseName: string): string {
+  return rows
+    .filter((row) => row.house_name === houseName)
+    .map((row) => row.name)
+    .join(' · ');
+}
+
+/** "N county seats unclaimed" among `parentTitleId`'s own direct children
+ * (plate F-I b's immediate-liege `vassals` dd) — unlike `seatsUnclaimed`
+ * (a realm-wide `unclaimed_by_tier` count), this counts straight off the
+ * live `rows`, scoped to one rung's own children. */
+function childSeatsUnclaimed(rows: LadderRow[], parentTitleId: number): string {
+  const children = rows.filter((row) => row.parent_title_id === parentTitleId);
+  const unclaimed = children.filter((row) => row.state === STATES.unclaimed).length;
+  const tier = children[0]?.tier ?? '';
+  const label = (TIER_LABELS[tier] ?? tier).toLowerCase();
+  return `${unclaimed} ${label} seats unclaimed`;
+}
+
+/**
+ * The Seat step's right rail (plate F-I/F-I b, before `RecordSoFar` takes
+ * over from plate F-II on): the selected rung's immediate liege (when its
+ * parent title is already held — plate F-I b's "House Candela" group) plus
+ * the realm's crown house (plate F-I's only group, or F-I b's second one),
+ * and the realm's charter. Simplified from the plate — see Task 4's report
+ * for the fields the ladder/charter reads don't carry (a house's own
+ * Quiddity, named peer vassals) and are left out rather than invented.
+ */
+function LiegeRealmAside({
+  realmId,
+  rows,
+  unclaimedByTier,
+  selectedRow,
+}: {
+  realmId: number;
+  rows: LadderRow[];
+  unclaimedByTier: Record<string, number>;
+  selectedRow: LadderRow | null;
+}) {
+  const { data: realmsPayload } = useRealms();
+  const realm = realmsPayload?.results.find((r) => r.id === realmId);
+  const { data: charter } = useCharter(realmId);
+  const tier = defaultPressedTier(rows);
+  const liegeName = crownName(rows);
+
+  // The selected rung's own liege, when it's a claimed rung's own vassal
+  // (its parent title is held by a house) — plate F-I b: selecting
+  // Solfatara (sworn to Fervor, now held by Candela) shows "House Candela"
+  // ahead of the realm-crown group. A root row (no parent) or a still-
+  // unclaimed parent has no immediate liege of its own to show, matching
+  // plate F-I's single-group shape.
+  const parentRow =
+    selectedRow?.parent_title_id != null
+      ? rows.find((row) => row.title_id === selectedRow.parent_title_id)
+      : undefined;
+  const immediateLiege =
+    parentRow && parentRow.state !== STATES.unclaimed && parentRow.house_name !== ''
+      ? parentRow
+      : undefined;
 
   return (
     <aside className="record">
+      {immediateLiege && (
+        <>
+          <h4>House {immediateLiege.house_name}</h4>
+          <dl>
+            <dt>holds</dt>
+            <dd>{holdingsOf(rows, immediateLiege.house_name)}</dd>
+            <dt>vassals</dt>
+            <dd>{childSeatsUnclaimed(rows, immediateLiege.title_id)}</dd>
+          </dl>
+        </>
+      )}
       {liegeName !== '' && (
         <>
           <h4>House {liegeName}</h4>
@@ -140,8 +199,22 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
   const seatRow =
     fd.title_id != null ? rows.find((row) => row.title_id === fd.title_id) : undefined;
 
+  // The Seat step's own row selection (fix round 1, Finding 2): defaults to
+  // the shallowest root row (matches plate F-I's own `.sel` on Fervor, and
+  // `AlmanachPage.tsx`'s `RealmLadderPage` fallback convention) until the
+  // founder picks or claims a different rung.
+  const [selectedTitleId, setSelectedTitleId] = useState<number | null>(null);
+  const selectedRow =
+    (selectedTitleId != null ? rows.find((row) => row.title_id === selectedTitleId) : undefined) ??
+    rows.find((row) => row.parent_title_id == null) ??
+    null;
+
   const handleSelectRealm = (id: number) => {
     set('realm_id', id);
+  };
+
+  const handleSelectRow = (row: LadderRow) => {
+    setSelectedTitleId(row.title_id);
   };
 
   const handleClaim = (row: LadderRow) => {
@@ -150,6 +223,7 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
     set('title_id', row.title_id);
     set('realm_id', effectiveRealmId);
     set('template_id', templateId);
+    setSelectedTitleId(row.title_id);
     setStep('house');
   };
 
@@ -192,11 +266,13 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
       </div>
       <div className="almanac">
         <aside className="contents">
-          {['Holdings', 'House'].map((group) => (
-            <div className="mv" key={group}>
-              <span className="label">{group}</span>
+          {FOUNDER_CONTENTS.map((group, index) => (
+            // "Holdings" repeats as a group label (two distinct `.mv` blocks per
+            // the plate); index disambiguates the key since the list is static.
+            <div className="mv" key={`${group.label}-${index}`}>
+              <span className="label">{group.label}</span>
               <ol>
-                {FOUNDER_CONTENTS.filter((entry) => entry.group === group).map((entry) => {
+                {group.entries.map((entry) => {
                   const reachable = entry.step === 'seat' || fd.title_id != null;
                   let className: string | undefined;
                   if (entry.step === step) {
@@ -219,6 +295,8 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
             <SeatPicker
               realmId={effectiveRealmId}
               permittedRank={rank}
+              selectedTitleId={selectedRow?.title_id ?? null}
+              onSelectRow={handleSelectRow}
               onSelectRealm={handleSelectRealm}
               onClaim={handleClaim}
             />
@@ -234,6 +312,7 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
             realmId={effectiveRealmId}
             rows={rows}
             unclaimedByTier={unclaimedByTier}
+            selectedRow={selectedRow}
           />
         ) : (
           <RecordSoFar

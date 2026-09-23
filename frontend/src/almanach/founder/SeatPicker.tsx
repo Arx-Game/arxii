@@ -30,6 +30,10 @@ export interface SeatPickerProps {
   realmId: number;
   /** The founder's Claim ceiling as a `TIER_RANK` number (`permittedRank`, `./steps`). */
   permittedRank: number;
+  /** The row carrying the plate's `.sel` highlight — owned by the caller
+   * (`FounderAlmanach`) so the right rail can react to the same pick. */
+  selectedTitleId: number | null;
+  onSelectRow: (row: LadderRow) => void;
   onSelectRealm: (realmId: number) => void;
   onClaim: (row: LadderRow) => void;
 }
@@ -68,7 +72,14 @@ function trailingCell(
   return null;
 }
 
-export function SeatPicker({ realmId, permittedRank, onSelectRealm, onClaim }: SeatPickerProps) {
+export function SeatPicker({
+  realmId,
+  permittedRank,
+  selectedTitleId,
+  onSelectRow,
+  onSelectRealm,
+  onClaim,
+}: SeatPickerProps) {
   const { data: realmsPayload } = useRealms();
   const realms = realmsPayload?.results ?? [];
   const realm = realms.find((r) => r.id === realmId);
@@ -172,6 +183,8 @@ export function SeatPicker({ realmId, permittedRank, onSelectRealm, onClaim }: S
       <LadderTable
         rows={rows}
         pressedTier={effectivePressedTier}
+        selectedTitleId={selectedTitleId}
+        onSelectRow={onSelectRow}
         trailingCell={(row) => trailingCell(row, permittedRank, onClaim)}
       />
       <div className="savebar">
