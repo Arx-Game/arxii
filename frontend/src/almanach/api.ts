@@ -18,6 +18,7 @@ import type {
   PaginatedAlmanachHouseSummaryList,
   PaginatedAlmanachRealmList,
   PaginatedLandShapeList,
+  RealmCharter,
 } from './types';
 
 export type Gender = components['schemas']['Gender'];
@@ -64,6 +65,17 @@ export function fetchHouseDocument(houseId: number): Promise<HouseDocument> {
 
 export function fetchLandShapes(): Promise<PaginatedLandShapeList> {
   return getJson('/api/almanach/land-shapes/', 'Failed to load land shapes.');
+}
+
+/**
+ * A realm's charter (#3983 Plan B Task 3): the tier-less template's default
+ * succession law, the realm's blank-floor nobiliary particle, its House
+ * chapter's Quiddity prompt, and its capital's name. Opened to any
+ * authenticated player (Task 3), unlike the staff-only reads above — the
+ * Founder Almanach's Seat/House chapters call it directly.
+ */
+export function fetchCharter(realmId: number): Promise<RealmCharter> {
+  return getJson(`/api/almanach/realms/${realmId}/charter/`, 'Failed to load the realm charter.');
 }
 
 /**

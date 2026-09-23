@@ -441,6 +441,39 @@
 .almanach .record dd {
   margin: 0;
 }
+/* The founder Almanach's "record, so far" rail (#3983 Plan B Task 4, plates
+   F-II onward `.sofar`) — a running quote of the founder's own choices, a
+   `.todo` entry for anything not reached yet. */
+.almanach .record .sofar {
+  list-style: none;
+  margin: 0 0 1.3rem;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.almanach .record .sofar li {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.almanach .record .sofar li .q {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+}
+.almanach .record .sofar li.todo {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+/* Screen-reader-only text (#3983 Plan B Task 4) — the ladder table's "claim"
+   column header when `LadderTable` carries a `trailingCell`. */
+.almanach .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 /* --- dialog interiors (Plant a rung / Batch unclaimed) --- */
 

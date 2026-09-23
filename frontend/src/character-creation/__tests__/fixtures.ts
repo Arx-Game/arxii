@@ -178,6 +178,7 @@ export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCo
 
 export const mockUpbringingNamed: OriginTemplate = {
   id: 101,
+  max_claim_tier: '',
   name: 'Caretaker family',
   frame_narrative: 'You were raised by a family who took you in and gave you their name.',
   is_active: true,
@@ -213,6 +214,7 @@ export const mockUpbringingNamed: OriginTemplate = {
 
 export const mockUpbringingClaim: OriginTemplate = {
   id: 102,
+  max_claim_tier: '',
   name: 'Ward of the House',
   frame_narrative: 'You grew up a ward of a noble house, claimed as one of its own.',
   is_active: true,
@@ -267,6 +269,7 @@ export const mockUpbringingClaim: OriginTemplate = {
 
 export const mockUpbringingUnknown: OriginTemplate = {
   id: 103,
+  max_claim_tier: '',
   name: 'Unknown Origins',
   frame_narrative: 'Your true family origins are shrouded in mystery.',
   is_active: true,
@@ -283,6 +286,7 @@ export const mockUpbringingUnknown: OriginTemplate = {
 /** Allows both claim and name paths, with one shared prompt and one claim-only prompt. */
 export const mockUpbringingMultiPath: OriginTemplate = {
   id: 104,
+  max_claim_tier: '',
   name: 'Open Upbringing',
   frame_narrative: 'Your family origins are yours to define.',
   is_active: true,
@@ -343,6 +347,7 @@ export const mockUpbringingMultiPath: OriginTemplate = {
  */
 export const mockUpbringingConnections: OriginTemplate = {
   id: 105,
+  max_claim_tier: '',
   name: 'Kept by a House',
   frame_narrative: 'A Humble house took you in and put you to work.',
   is_active: true,
@@ -476,6 +481,7 @@ export const mockUpbringingConnections: OriginTemplate = {
  */
 export const mockUpbringingOwnFamilyGroup: OriginTemplate = {
   id: 106,
+  max_claim_tier: '',
   name: 'Born to the House',
   frame_narrative: 'You grew up under your family roof.',
   is_active: true,
@@ -520,6 +526,8 @@ export const mockFamilyTemplate: FamilyTemplate = {
   kind: 2,
   name_pattern: '',
   org_type: 1,
+  holdings: [],
+  default_succession_law: null,
   aspect_definitions: [
     {
       id: 601,

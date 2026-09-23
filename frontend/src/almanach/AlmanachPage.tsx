@@ -30,7 +30,15 @@ import { HouseDocument } from './document/HouseDocument';
 import type { AlmanachRealm } from './types';
 import './almanach.css';
 
-function RealmSwitcher({
+/**
+ * Exported for the Founder Almanach's own Seat picker (#3983 Plan B Task 4),
+ * which mirrors this exact `.switcher`/`.switcher-list` markup for its
+ * "Change realm" control but drives a local draft field instead of this
+ * component's own `navigate()` (that would route a founder out of character
+ * creation into `/staff/almanach/...`, a route CG players can't reach) — see
+ * Task 4's report for the full rationale.
+ */
+export function RealmSwitcher({
   realm,
   realms,
   realmId,

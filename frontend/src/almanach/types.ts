@@ -35,6 +35,23 @@ export type AlmanachHouseFeature = components['schemas']['AlmanachHouseFeature']
 export type AlmanachHouseOffice = components['schemas']['AlmanachHouseOffice'];
 
 /**
+ * `GET /api/almanach/realms/{id}/charter/` (#3983 Plan B Task 3) — the
+ * realm-level facts the founder Almanach's Seat/House chapters gloss (the
+ * duchy's succession law, its founder-particle pair, the House chapter's
+ * Quiddity prompt, and the realm's capital for the Estate step). Hand-typed
+ * rather than a generated alias: Task 3 is landing the endpoint and schema
+ * regen concurrently with this task, so `components['schemas']` doesn't
+ * carry it yet. `succession_law` reuses the already-generated
+ * `AlmanachSuccessionLaw` shape (`{name, codex_entry_id}`), just nullable.
+ */
+export interface RealmCharter {
+  succession_law: AlmanachSuccessionLaw | null;
+  particle: { born: string; taken_in: string };
+  quiddity_prompt: string;
+  capital_name: string;
+}
+
+/**
  * `document.family`'s node shape (`_family_payload`, `almanach_reads.py`):
  * a viewer-gated `family_tree_for` node (mirrors `KinspersonNode`,
  * `@/kinship/types`) with `believed_deceased` folded on — the one field the

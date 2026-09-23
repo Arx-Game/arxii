@@ -18,6 +18,7 @@ import type {
   CGTechniqueOption,
   CharacterDraft,
   CharacterDraftUpdate,
+  ClaimKinRelation,
   DraftApplication,
   DraftApplicationDetail,
   EffectType,
@@ -867,6 +868,31 @@ export interface HouseAspectPick {
   options: number[];
 }
 
+/** One founder-written kin row on the nested claim payload (#3983 Plan B
+ * Task 3's `ClaimKinDraftSerializer`). `gender`/`born_into` are FK ids. */
+export interface ClaimKinDraft {
+  name: string;
+  relation: ClaimKinRelation;
+  gender: number | null;
+  age: number | null;
+  is_deceased: boolean;
+  born_into: number | null;
+  basis: string;
+  is_household: boolean;
+}
+
+/** One founder-written land holding row on the nested claim payload (#3983
+ * Plan B Task 3's `ClaimLandDraftSerializer`). `title` is the held title's
+ * id (the claimed seat itself, or a county/barony beneath it); `land_shapes`
+ * are shape names, not ids (`ClaimLandDraftSerializer`'s `ListField`). */
+export interface ClaimLandDraft {
+  title: number;
+  land_name: string;
+  description: string;
+  hall_name: string;
+  land_shapes: string[];
+}
+
 export interface HouseClaimPayload {
   title: number;
   template: number;
@@ -882,6 +908,20 @@ export interface HouseClaimPayload {
   change: number;
   allegiance: number;
   power: number;
+  /**
+   * The founder's own relation to the house's head, the household, and the
+   * lands/estate the claim carries (#3983 Plan B Task 3's nested payload).
+   * Optional rather than required: `LineageStage.tsx`'s now-unmounted
+   * `HouseFoundingPanel` (retired outright by Plan B Task 6) still builds
+   * the pre-Plan-B, flatter literal and is outside this task's file scope —
+   * every real Plan B caller (`founder/founderDraft.ts`'s `toClaimPayload`)
+   * always sets all five.
+   */
+  founder_relation?: ClaimKinRelation;
+  founder_is_heir?: boolean;
+  kin?: ClaimKinDraft[];
+  lands?: ClaimLandDraft[];
+  estate?: { name: string; description: string };
 }
 
 export async function getClaimableTitles(): Promise<ClaimableTitle[]> {

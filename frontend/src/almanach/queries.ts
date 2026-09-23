@@ -11,6 +11,7 @@ import { useWorldBuilderActor } from '@/world-builder/useWorldBuilderActor';
 
 import {
   dispatchAlmanach,
+  fetchCharter,
   fetchGenders,
   fetchHouseDocument,
   fetchHouses,
@@ -32,6 +33,7 @@ export const almanachKeys = {
   document: (houseId: number) => [...almanachKeys.all, 'document', houseId] as const,
   landShapes: () => [...almanachKeys.all, 'land-shapes'] as const,
   genders: () => [...almanachKeys.all, 'genders'] as const,
+  charter: (realmId: number) => [...almanachKeys.all, 'charter', realmId] as const,
 };
 
 export function useRealms() {
@@ -101,6 +103,17 @@ export function useLandShapes() {
   return useQuery({
     queryKey: almanachKeys.landShapes(),
     queryFn: fetchLandShapes,
+    staleTime: 60_000,
+  });
+}
+
+/** A realm's charter (#3983 Plan B Task 4) — the Founder Almanach's Seat
+ * liege/realm rail and House chapter's Quiddity prompt. */
+export function useCharter(realmId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.charter(realmId ?? 0),
+    queryFn: () => fetchCharter(realmId!),
+    enabled: realmId != null,
     staleTime: 60_000,
   });
 }

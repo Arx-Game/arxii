@@ -20,6 +20,12 @@
  * calls `onSelectRow` and the caller can drive `selectedTitleId` (rendered
  * as the plate's `tr.sel` highlight) — the savebar's plant/batch actions use
  * whichever rung is selected as their `under` context.
+ *
+ * `trailingCell` (#3983 Plan B Task 4) lets a caller append one more column
+ * without forking the table — the Founder Almanach's Seat picker (plates
+ * F-I/F-I b) uses it for the per-row Claim button/`held`/`—` cell. Omitted,
+ * the table renders exactly as it did before (Plan A's own tests rely on
+ * this staying the default).
  */
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 
@@ -35,6 +41,8 @@ export interface LadderTableProps {
   selectedTitleId?: number | null;
   /** Fires when a row's own name/title button is clicked (the plate's row-selection gesture). */
   onSelectRow?: (row: LadderRow) => void;
+  /** An extra trailing column per row, rendered after `vassals` — see above. */
+  trailingCell?: (row: LadderRow) => ReactNode;
 }
 
 function NumCell({ value }: { value: number }) {
@@ -111,7 +119,13 @@ function NameCell({ row, hasChildren, expanded, onToggle, onSelect }: NameCellPr
   );
 }
 
-export function LadderTable({ rows, pressedTier, selectedTitleId, onSelectRow }: LadderTableProps) {
+export function LadderTable({
+  rows,
+  pressedTier,
+  selectedTitleId,
+  onSelectRow,
+  trailingCell,
+}: LadderTableProps) {
   const tree = useMemo(() => buildLadderTree(rows), [rows]);
   const fallbackTier = useMemo(() => defaultPressedTier(rows), [rows]);
   const effectivePressedTier = pressedTier ?? fallbackTier;
@@ -163,6 +177,7 @@ export function LadderTable({ rows, pressedTier, selectedTitleId, onSelectRow }:
           <SwornToCell row={node.row} />
           <NumCell value={node.row.demesne} />
           <NumCell value={node.row.vassals} />
+          {trailingCell && <td>{trailingCell(node.row)}</td>}
         </tr>
       );
       if (hasChildren && expanded) {
@@ -196,6 +211,11 @@ export function LadderTable({ rows, pressedTier, selectedTitleId, onSelectRow }:
                 </span>
               </button>
             </th>
+            {trailingCell && (
+              <th scope="col">
+                <span className="sr">claim</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>{renderNodes(tree)}</tbody>

@@ -16,6 +16,12 @@ export const DRAFT_NOTE = 'draft kept as you type';
 
 export const DISTRICT = 'district';
 
+/** Founder Almanach (#3983 Plan B) — the CG-mounted `.bar` crumb (plates
+ * F-I onward) and the Seat's Claim button label. */
+export const FOUNDER_CRUMB = ['Character creation', 'Lineage', 'Define a house'];
+
+export const CLAIM = 'Claim';
+
 /** House Document (#3983 Task 9) chrome copy — plates S-III to S-VIII. */
 
 /** `house.house_state`, as `HouseChapter`'s state toggle labels it. */
