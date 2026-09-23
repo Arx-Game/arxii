@@ -28,9 +28,11 @@
  * has a field anywhere in `HouseDocument`). Every leaf's plate also gets its
  * "doors" section now (review fix round 1, Finding I2): a door with a real
  * destination is a working `Link`/button; one with none yet (the house on
- * the roster, the public tree, the secret editor, the ladder with no realm
- * id, Estate's Atlas link) renders as a labeled dash via `RecordRail`'s
- * `doors` support for door entries with neither `to` nor `onClick`. Family
+ * the roster, the public tree, the secret editor, Estate's Atlas link)
+ * renders as a labeled dash via `RecordRail`'s `doors` support for door
+ * entries with neither `to` nor `onClick` — "the ladder" now links to
+ * `realm.realm_id`'s own ladder page (final review deferred item 3) and
+ * only dashes when a house's realm carries no id. Family
  * additionally gets the plate's "linked houses" section (`extraSection`) —
  * present on the page per the plate, its rows dashed for the same reason
  * (no secondary-membership data on the wire).
@@ -102,7 +104,7 @@ export function HouseDocument({ houseId }: { houseId: number }) {
 
   switch (leaf) {
     case 'house':
-      chapter = <HouseChapter house={house} onSave={onSaveHouse} />;
+      chapter = <HouseChapter house={house} realmTheme={realm.realm_theme} onSave={onSaveHouse} />;
       recordRows = [
         { label: 'crown', value: realm.sworn_to !== '' ? realm.sworn_to : <Dash /> },
         { label: 'holds', value: realm.holds !== '' ? realm.holds : <Dash /> },
@@ -150,7 +152,11 @@ export function HouseDocument({ houseId }: { houseId: number }) {
         { label: 'treasury', value: <Dash /> },
         { label: 'pacts', value: <Dash /> },
       ];
-      recordDoors = [{ label: 'the ladder' }];
+      recordDoors = [
+        realm.realm_id != null
+          ? { label: 'the ladder', to: `/staff/almanach/realms/${realm.realm_id}` }
+          : { label: 'the ladder' },
+      ];
       break;
     case 'lands':
       chapter = <LandsLeaf houseName={house.name} lands={lands} onDescribe={onDescribeDemesne} />;

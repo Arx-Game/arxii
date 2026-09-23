@@ -17,8 +17,9 @@ export type PaginatedAlmanachRealmList = components['schemas']['PaginatedAlmanac
 export type LadderRow = components['schemas']['LadderRow'];
 export type LadderPayload = components['schemas']['LadderPayload'];
 
-/** `?for=` cut of the realm ladder (`AlmanachRealmViewSet.ladder`) — both
- * cuts stay staff-only until Plan B opens `founder` to house founders. */
+/** `?for=` cut of the realm ladder (`AlmanachRealmViewSet.ladder`) — `staff`
+ * stays `IsAdminUser`; `founder` is opened to any authenticated player
+ * (Plan B Task 3) so `SeatPicker`/`FounderAlmanach` can read it directly. */
 export type LadderMode = 'staff' | 'founder';
 
 export type AlmanachHouseSummary = components['schemas']['AlmanachHouseSummary'];
@@ -103,13 +104,20 @@ export interface AlmanachRealmRowSummary {
 }
 
 /** `document.realm` — the house's own standing in its realm's ladder
- * (`_realm_payload`, `almanach_reads.py`). */
+ * (`_realm_payload`, `almanach_reads.py`). `realm_id`/`default_tithe_pct`/
+ * `realm_theme` (final review I11, deferred item 3) let the House Document
+ * link back to the realm's own ladder page, prefill the swear dialog's
+ * tithe, and gate the Gentry toggle — `realm_id` is `null` when the house's
+ * title carries no realm (an orphaned/legacy house). */
 export interface AlmanachDocumentRealm {
   sworn_to: string;
   obligation_pct: number | null;
   holds: string;
   demesne: AlmanachRealmRowSummary[];
   vassals: AlmanachRealmRowSummary[];
+  realm_id: number | null;
+  default_tithe_pct: number;
+  realm_theme: string;
 }
 
 /** One `document.lands.baronies` entry (`_lands_payload`, `almanach_reads.py`). */

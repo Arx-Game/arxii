@@ -28,10 +28,12 @@
  * `aria-disabled` alone already communicates "not available" without a
  * second, unapproved hover-text channel).
  *
- * Gentry is the one exception, ordered explicitly: disabled unconditionally
- * (`aria-disabled`, `title="Luxen only"`) — the document carries no realm
- * theme to gate it on, so there's no signal this page could use to ever
- * enable it, and a `title` here was ruled a keeper despite the constraint.
+ * Gentry is the one exception, ordered explicitly: it toggles like every
+ * other `state` choice when `realmTheme === 'luxen'` (`_realm_payload`'s new
+ * `realm_theme`, final review I11 — Spec Decision 12 requires Gentry
+ * reachable in Luxen), and stays disabled (`aria-disabled`,
+ * `title="Luxen only"`) for every other theme — a `title` here was ruled a
+ * keeper despite the constraint.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -52,6 +54,9 @@ export interface EditHouseFields {
 
 export interface HouseChapterProps {
   house: AlmanachHouseDocumentHouse;
+  /** `document.realm.realm_theme` (`_realm_payload`) — gates the Gentry
+   * toggle: enabled only in a `'luxen'` realm, disabled everywhere else. */
+  realmTheme: string;
   onSave: (fields: EditHouseFields) => void;
 }
 
@@ -61,7 +66,7 @@ const STATE_CHOICES: { value: string; label: string }[] = [
   { value: 'extinct', label: HOUSE_STATES.extinct },
 ];
 
-export function HouseChapter({ house, onSave }: HouseChapterProps) {
+export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   const [houseState, setHouseState] = useState(house.house_state);
   const words = useDraft(house.id, 'house-words', house.words);
   const colors = useDraft(house.id, 'house-colors', house.colors);
@@ -101,15 +106,25 @@ export function HouseChapter({ house, onSave }: HouseChapterProps) {
                 {choice.label}
               </button>
             ))}
-            <button
-              type="button"
-              aria-pressed={false}
-              disabled
-              aria-disabled
-              title={GENTRY_LUXEN_ONLY}
-            >
-              {HOUSE_STATES.gentry}
-            </button>
+            {realmTheme === 'luxen' ? (
+              <button
+                type="button"
+                aria-pressed={houseState === 'gentry'}
+                onClick={() => setHouseState('gentry')}
+              >
+                {HOUSE_STATES.gentry}
+              </button>
+            ) : (
+              <button
+                type="button"
+                aria-pressed={false}
+                disabled
+                aria-disabled
+                title={GENTRY_LUXEN_ONLY}
+              >
+                {HOUSE_STATES.gentry}
+              </button>
+            )}
           </div>
         </div>
         <div className="field">

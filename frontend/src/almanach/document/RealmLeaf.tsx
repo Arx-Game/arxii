@@ -11,21 +11,19 @@
  * to it — there is no staged field on this leaf for one to commit; "swear a
  * house" dispatches on its own dialog's Confirm, independent of any Save.
  *
- * Two stated gaps, both from the House Document route carrying no realm id
- * (the document's `realm` section reports title/demesne facts, never a
- * realm identity):
- * - the vassals table's `.tw` tier word (plate: "county"/"duchy" before the
- *   name) has no field on `AlmanachRealmRowSummary` to read — the row
- *   carries `title_id`/`name`/`held_by`/`demesne`/`vassals`, no `tier`.
- * - the "swear a house" tithe percent has nothing to prefill from
- *   (`AlmanachRealm.default_tithe_pct` needs a specific realm, and this
- *   route has no realm id to look one up by) and the "the ladder" record
- *   door (back to `/staff/almanach/realms/:id`) has nowhere to point —
- *   both are left out rather than guessed.
+ * One stated gap remains: the vassals table's `.tw` tier word (plate:
+ * "county"/"duchy" before the name) has no field on `AlmanachRealmRowSummary`
+ * to read — the row carries `title_id`/`name`/`held_by`/`demesne`/`vassals`,
+ * no `tier`. The other two gaps this leaf used to carry are closed now that
+ * `document.realm` carries `realm_id`/`default_tithe_pct` (final review I11
+ * / deferred item 3): the "swear a house" dialog prefills its tithe percent
+ * from `realm.default_tithe_pct`, and `HouseDocument`'s "the ladder" record
+ * door links to `/staff/almanach/realms/:id` off `realm.realm_id`.
  *
- * The vassals table's house links, and the swear dialog's house picker, use
- * `useAllHouses()` (unscoped — see `queries.ts`) for the same reason: no
- * realm id to scope a realm-filtered fetch to.
+ * The vassals table's house links, and the swear dialog's house picker, still
+ * use `useAllHouses()` (unscoped — see `queries.ts`): the vassals table's own
+ * rows carry names, not house ids, so the house link has to resolve by name
+ * against the full house list regardless of realm scoping.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -86,7 +84,7 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear }: RealmLeafProps
 
   const openSwear = () => {
     setVassalHouseId('');
-    setTithePct('');
+    setTithePct(realm.default_tithe_pct != null ? String(realm.default_tithe_pct) : '');
     setSwearOpen(true);
   };
 
