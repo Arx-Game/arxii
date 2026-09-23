@@ -898,7 +898,8 @@ paths:
   /api/almanach/realms/{id}/charter/:
     get:
       operationId: almanach_realms_charter_retrieve
-      description: GET /api/almanach/realms/{id}/charter/: the founder ladder's defaults.
+      description: 'GET /api/almanach/realms/{id}/charter/: the founder ladder''s
+        defaults.'
       parameters:
       - in: path
         name: id
@@ -56150,6 +56151,9 @@ components:
           - $ref: '#/components/schemas/SuccessionLawOption'
           nullable: true
           readOnly: true
+        starting_kin_slots:
+          type: integer
+          readOnly: true
       required:
       - aspect_definitions
       - default_succession_law
@@ -56158,6 +56162,7 @@ components:
       - id
       - kind
       - name
+      - starting_kin_slots
     HouseTitle:
       type: object
       properties:

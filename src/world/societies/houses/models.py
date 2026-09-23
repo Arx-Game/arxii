@@ -340,8 +340,18 @@ class LandShape(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
 
 class Domain(SharedMemoryModel):
-    """An org-owned landholding decorating an Area (seeds use ``AreaLevel.REGION``;
-    no DOMAIN level exists) (#1884, #930 ruling).
+    """A landholding decorating an Area (seeds use ``AreaLevel.REGION``; a ladder
+    rung's own chain uses its tier-appropriate level via ``TIER_TO_AREA_LEVEL``,
+    #3983; no literal DOMAIN level exists) (#1884, #930 ruling).
+
+    ``owner_org`` is nullable — an unclaimed rung's Domain (``plant_rung`` with
+    ``held_by=None``) has no owner until a house claims it, and a legacy
+    landless-seed Domain can carry an ``owner_org`` with no ``Title.house`` set
+    to match (the two are independent FKs; ``assign_holder`` keeps them in sync
+    going forward). ``hall`` (a BUILDING-level Area, the seat's own keep — never
+    named after the demesne itself) and ``land_shapes`` (the authored
+    Coast/Reefs/Hills/... catalog) are both optional flavor a founder or staff
+    member writes via ``describe_demesne``.
 
     Abstract for now — civ stats + holdings feeding the org books; visitable
     room grids are a flagged later phase. Stats are PLACEHOLDER magnitudes.

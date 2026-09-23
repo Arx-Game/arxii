@@ -2048,6 +2048,7 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
     features = HouseFeatureSerializer(many=True, read_only=True)
     holdings = HoldingKindOptionSerializer(many=True, read_only=True)
     default_succession_law = serializers.SerializerMethodField()
+    starting_kin_slots = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = HouseTemplate
@@ -2073,6 +2074,7 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
             "features",
             "holdings",
             "default_succession_law",
+            "starting_kin_slots",
         ]
 
     @extend_schema_field(SuccessionLawOptionSerializer(allow_null=True))

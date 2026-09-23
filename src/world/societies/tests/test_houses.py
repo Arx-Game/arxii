@@ -698,7 +698,13 @@ class HousesSeedTests(TestCase):
     """
 
     def test_seed_idempotent_and_walkable(self):
-        from world.seeds.houses import CROWN_ORG_NAME, HOUSE_ORG_NAME, seed_houses_demo
+        from world.seeds.houses import (
+            CROWN_ORG_NAME,
+            DOMAIN_NAME,
+            DUCAL_TITLE_NAME,
+            HOUSE_ORG_NAME,
+            seed_houses_demo,
+        )
         from world.societies.models import Organization
 
         seed_houses_demo()
@@ -706,10 +712,13 @@ class HousesSeedTests(TestCase):
         house = Organization.objects.get(name=HOUSE_ORG_NAME)
         self.assertIsNotNone(house.family)
         self.assertEqual(house.fealty.liege.name, CROWN_ORG_NAME)
-        title = house.titles.get()
+        # `house.titles`/`house.domains` also carry the demo founder ladder's
+        # own Kingdom-tier anchor + its bundled seat chain (#3983 Plan B Task
+        # 7, `_seed_demo_founder_ladder`) — scope to the original ducal title
+        # and domain by name rather than asserting a bare total count.
+        title = house.titles.get(name=DUCAL_TITLE_NAME)
         self.assertIsNotNone(title.holder)
-        self.assertEqual(house.domains.count(), 1)
-        domain = house.domains.get()
+        domain = house.domains.get(name=DOMAIN_NAME)
         # Farmland plus the Quarry and Lumber camp material holdings (#696 gap 8).
         self.assertEqual(domain.holdings.count(), 3)
         holding = domain.holdings.get(kind__name="Farmland PLACEHOLDER")

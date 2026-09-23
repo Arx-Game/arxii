@@ -32166,6 +32166,7 @@ export interface components {
       readonly features: components['schemas']['HouseFeature'][];
       readonly holdings: components['schemas']['HoldingKindOption'][];
       readonly default_succession_law: components['schemas']['SuccessionLawOption'] | null;
+      readonly starting_kin_slots: number;
     };
     HouseTitle: {
       readonly id: number;
