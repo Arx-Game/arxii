@@ -322,13 +322,30 @@
   letter-spacing: normal;
   white-space: normal;
   width: max-content;
-  max-width: 20rem;
-  z-index: 2;
+  /* Never wider than the viewport (review fix round 2) — a full 20rem bubble
+     on a narrow phone would itself force new overflow next to the fix below. */
+  max-width: min(20rem, 90vw);
+  z-index: 5;
 }
 .almanach .tip:hover .bub,
 .almanach .tip:focus-visible .bub,
 .almanach .tip:focus-within .bub {
   display: block;
+}
+/*
+ * The demesne/vassals `.tip` buttons sit at the RIGHT edge of a
+ * right-aligned (`.n`) header cell — the last one (`vassals`) at the
+ * table's own right edge. `.bub`'s default `left:0` anchors the bubble's
+ * LEFT edge there and grows rightward, so it ran off the table (and got
+ * clipped: `.scroll`'s `overflow-x:auto` forces `overflow-y` to compute as
+ * `auto` too per the CSS Overflow spec, so anything overflowing `.scroll`'s
+ * box on EITHER axis clips, review fix round 2). Anchoring the bubble's
+ * RIGHT edge to the tip button's right edge instead makes it grow leftward,
+ * back over the table it's already inside.
+ */
+.almanach .lad th.n .tip .bub {
+  left: auto;
+  right: 0;
 }
 
 /* --- chips --- */

@@ -87,7 +87,7 @@ test("selecting a rung sets the plant dialog's under field to that rung, not the
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
   // Selecting Fervor's own name/title button changes that default.
-  await userEvent.click(screen.getByRole('button', { name: 'Fervor' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Select Fervor' }));
   await userEvent.click(screen.getByRole('button', { name: /plant a rung/i }));
 
   const dialog = screen.getByRole('dialog');

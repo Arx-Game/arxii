@@ -85,11 +85,21 @@ function NameCell({ row, hasChildren, expanded, onToggle, onSelect }: NameCellPr
       )}
       <span className="tw">{row.tier}</span>
       {row.is_defined ? (
-        <button type="button" className="rung-name" onClick={onSelect}>
+        <button
+          type="button"
+          className="rung-name"
+          aria-label={`Select ${label}`}
+          onClick={onSelect}
+        >
           {row.name}
         </button>
       ) : (
-        <button type="button" className="chip undef" onClick={onSelect}>
+        <button
+          type="button"
+          className="chip undef"
+          aria-label={`Select ${label}`}
+          onClick={onSelect}
+        >
           {STATES.undefined}
         </button>
       )}
