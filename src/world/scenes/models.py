@@ -385,6 +385,10 @@ class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
         help_text="The character sheet this persona belongs to.",
     )
     name = models.CharField(max_length=255, help_text="Display name for this persona")
+    believed_deceased = models.BooleanField(
+        default=False,
+        help_text="The world believes this face dead; the character may live (#3983).",
+    )
     colored_name = models.CharField(
         max_length=255,
         blank=True,

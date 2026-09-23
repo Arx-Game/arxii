@@ -16,9 +16,11 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.currency.constants import IncomeStreamKind
 from world.items.constants import MaterialSourceKind
+from world.roster.constants import MembershipBasis
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
     DOMAIN_PROSPERITY_BASELINE,
+    ClaimKinRelation,
     CrisisAudience,
     CrisisIntelSource,
     CrisisOrigin,
@@ -146,6 +148,14 @@ class FealtyEdge(SharedMemoryModel):
         help_text="The house fealty is sworn to.",
     )
     sworn_at = models.DateTimeField(auto_now_add=True)
+    obligation = models.OneToOneField(
+        "arxii.OrgObligation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fealty_edge",
+        help_text="The tithe minted at swearing (#3983).",
+    )
 
     class Meta:
         ordering = ["liege", "vassal"]
@@ -217,7 +227,7 @@ class Title(SharedMemoryModel):
     house-creator's app-in targets (Phase D).
     """
 
-    name = models.CharField(max_length=120, unique=True)
+    name = models.CharField(max_length=120, blank=True)
     tier = models.CharField(max_length=20, choices=TitleTier.choices)
     realm = models.ForeignKey(
         _REALM_FK,
@@ -231,6 +241,14 @@ class Title(SharedMemoryModel):
         blank=True,
         related_name="titles",
         help_text="The house currently holding this title.",
+    )
+    claimant_org = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_titles",
+        help_text="A house that claims this title while another holds it (#3983).",
     )
     holder = models.ForeignKey(
         _KINSPERSON_FK,
@@ -282,6 +300,32 @@ class Title(SharedMemoryModel):
 
     class Meta:
         ordering = ["realm", "tier", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(name__gt=""),
+                name="houses_title_name_unique_when_named",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class LandShape(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """An authored shape of a demesne's ground: coast, reefs, hills, volcanic (#3983)."""
+
+    name = models.CharField(max_length=60, unique=True)
+    description = models.TextField(blank=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["sort_order", "name"]
 
     def __str__(self) -> str:
         return self.name
@@ -301,7 +345,7 @@ class Domain(SharedMemoryModel):
         related_name="domain_profile",
         primary_key=True,
     )
-    name = models.CharField(max_length=120, unique=True)
+    name = models.CharField(max_length=120, blank=True)
     description = models.TextField(
         blank=True,
         help_text="The lands, described — CG lands_writeup materializes here (#2079).",
@@ -309,6 +353,23 @@ class Domain(SharedMemoryModel):
     owner_org = models.ForeignKey(
         _ORG_FK,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="domains",
+    )
+    hall = models.ForeignKey(
+        "arxii.Area",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hall_of",
+        help_text=(
+            "The BUILDING-level area that is this seat's hall; never the demesne's name (#3983)."
+        ),
+    )
+    land_shapes = models.ManyToManyField(
+        LandShape,
+        blank=True,
         related_name="domains",
     )
     population = models.PositiveIntegerField(default=1000)
@@ -318,6 +379,13 @@ class Domain(SharedMemoryModel):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(name__gt=""),
+                name="houses_domain_name_unique_when_named",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -996,6 +1064,13 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="house_templates",
     )
+    tier = models.CharField(
+        max_length=20,
+        choices=TitleTier.choices,
+        blank=True,
+        default="",
+        help_text="The seat tier this template builds (#3983); blank = the realm's fallback.",
+    )
     kind = models.ForeignKey(
         "arxii.FamilyKind",
         on_delete=models.PROTECT,
@@ -1090,6 +1165,13 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name = "Family Template"
         verbose_name_plural = "Family Templates"
         ordering = ["realm", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["realm", "tier"],
+                condition=models.Q(tier__gt=""),
+                name="houses_template_one_per_realm_tier",
+            ),
+        ]
 
     def clean(self) -> None:
         """Refuse a ``name_pattern`` that does not even compile (#3648 review).
@@ -1153,6 +1235,16 @@ class HouseClaim(SharedMemoryModel):
     lands_writeup = models.TextField(
         blank=True,
         help_text="The seat domain's lands, described (required for landed titles, #2079).",
+    )
+    estate_name = models.CharField(max_length=120, blank=True, default="")
+    estate_description = models.TextField(blank=True, default="")
+    estate_district = models.ForeignKey(
+        "arxii.Area",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Set by the reviewer; null = unplaced under the capital (#3983).",
     )
     mercy = models.SmallIntegerField(default=0)
     method = models.SmallIntegerField(default=0)
@@ -1312,6 +1404,58 @@ class HouseClaimAspect(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"claim {self.claim_id}: {self.option}"
+
+
+class HouseClaimKin(SharedMemoryModel):
+    """One person the founder wrote into the house before finalize (#3983).
+
+    Draft-scoped like the claim: an abandoned application leaves no Kinsperson.
+    """
+
+    claim = models.ForeignKey(HouseClaim, on_delete=models.CASCADE, related_name="kin")
+    name = models.CharField(max_length=100, blank=True, default="")
+    relation = models.CharField(max_length=30, choices=ClaimKinRelation.choices)
+    gender = models.ForeignKey(
+        "arxii.Gender", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    age = models.PositiveIntegerField(null=True, blank=True)
+    is_deceased = models.BooleanField(default=False)
+    born_into = models.ForeignKey(
+        "arxii.Family", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    basis = models.CharField(
+        max_length=20, choices=MembershipBasis.choices, default=MembershipBasis.BORN
+    )
+    is_household = models.BooleanField(default=False)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["claim", "sort_order", "pk"]
+
+    def __str__(self) -> str:
+        return f"claim {self.claim_id}: {self.name or self.get_relation_display()}"
+
+
+class HouseClaimLand(SharedMemoryModel):
+    """The founder's writing for one rung of the claimed seat chain (#3983)."""
+
+    claim = models.ForeignKey(HouseClaim, on_delete=models.CASCADE, related_name="lands")
+    title = models.ForeignKey(Title, on_delete=models.CASCADE, related_name="+")
+    land_name = models.CharField(max_length=120, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    hall_name = models.CharField(max_length=120, blank=True, default="")
+    land_shapes = models.ManyToManyField(LandShape, blank=True, related_name="+")
+
+    class Meta:
+        ordering = ["claim", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["claim", "title"], name="houses_claimland_one_per_title"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"claim {self.claim_id}: {self.title_id}"
 
 
 class OrganizationAspect(SharedMemoryModel):

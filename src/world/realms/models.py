@@ -33,6 +33,10 @@ class Realm(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=RealmTheme.DEFAULT,
         help_text="Visual theme applied in the frontend when this realm is active.",
     )
+    default_tithe_pct = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Percent of income a new vassal owes its liege by default (#3983).",
+    )
 
     objects = NaturalKeyManager()
 
