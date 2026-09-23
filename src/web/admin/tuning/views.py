@@ -514,54 +514,37 @@ def _cache_technique_panel(
     cache.set(_technique_last_key(), cache_key, _TECHNIQUE_CACHE_TIMEOUT)
 
 
-@superuser_required
-def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
-    """Techniques combat-power panel: league table of every technique's DE (#3279 Task 3).
-
-    GET renders the form (seeded with `TechniqueAnalyticsParams` defaults) plus the
-    most recently cached result, if any - tracked via the fixed
-    `_technique_last_key()` pointer, mirroring the simulation panel. POST validates
-    and clamps inputs through `TechniqueAnalyticsForm`, builds the panel
-    synchronously, and caches it under both the exact-param key and the last-key
-    pointer (24h timeout).
-
-    The header league-table links re-render via a plain `hx-get` carrying only
-    `?sort=<key>` - evaluating the whole catalog is too slow to redo on every sort
-    click, so a GET whose resolved `sort` differs from the cached panel's own
-    rebuilds via `technique_analytics.build_technique_panel` (which reuses its own
-    independently-cached corpus, see that module) rather than re-running the
-    evaluator end to end.
-
-    Calls `technique_analytics.build_technique_panel` via the module object (never
-    a bare `from ... import`) so tests can patch it at its origin and still
-    intercept this call - same discipline as `tuning_simulation_fragment`.
-
-    Three POST intents share this one endpoint (#3716): `INTENT_EVALUATE` (the
-    default) evaluates the catalog form; `INTENT_REFRESH` does the same but first
-    drops the cached corpus so the run is not served stale; `INTENT_KIT` prices one
-    starting-kit combination via `StartingKitForm` instead, leaving the catalog
-    panel untouched (the cached one is passed through so the page still shows it).
-    A GET carrying `?scan=<filter>` renders the pool-scan fragment instead of this
-    panel; a plain GET carrying `?kit_path=&kit_gift=` prefills the kit form (the
-    pool scan's own "Price kit" link into this panel).
-    """
+def _technique_pool_scan_response(request: HttpRequest) -> HttpResponse | None:
+    """Render the optional pool-scan fragment, if requested."""
     scan_value = request.GET.get("scan")
-    if request.method == "GET" and scan_value is not None:
-        scan_filter = technique_analytics.resolve_pool_scan_filter(scan_value)
-        rows = technique_analytics.build_pool_scan()
-        context = {
+    if request.method != "GET" or scan_value is None:
+        return None
+    scan_filter = technique_analytics.resolve_pool_scan_filter(scan_value)
+    rows = technique_analytics.build_pool_scan()
+    return render(
+        request,
+        "admin/tuning/_techniques_pool_scan.html",
+        {
             "scan_rows": technique_analytics.filter_pool_scan(rows, scan_filter),
             "scan_counts": technique_analytics.count_pool_scan(rows),
             "scan_filter": scan_filter,
-        }
-        return render(request, "admin/tuning/_techniques_pool_scan.html", context)
+        },
+    )
 
-    panel: technique_analytics.TechniquePanelData | None = None
-    kit_report: technique_analytics.StartingKitReport | None = None
-    last_key = cache.get(_technique_last_key())
-    cached_panel = cache.get(last_key) if last_key else None
+
+def _technique_forms_and_panel(
+    request: HttpRequest,
+    cached_panel: technique_analytics.TechniquePanelData | None,
+) -> tuple[
+    forms.Form,
+    forms.Form,
+    technique_analytics.TechniquePanelData | None,
+    technique_analytics.StartingKitReport | None,
+]:
+    """Resolve forms, panel, and optional kit report for the fragment."""
+    panel = None
+    kit_report = None
     intent = request.POST.get("intent", INTENT_EVALUATE)
-
     if request.method == "POST" and intent == INTENT_KIT:
         form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
         kit_form = StartingKitForm(request.POST)
@@ -571,51 +554,69 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
                 kit_form.to_params(),
                 anchor_params=cached_panel.params if cached_panel is not None else None,
             )
-    elif request.method == "POST":
+        return form, kit_form, panel, kit_report
+    if request.method == "POST":
         form = TechniqueAnalyticsForm(request.POST)
         kit_form = StartingKitForm()
         if form.is_valid():
             params = technique_analytics.TechniqueAnalyticsParams(
-                level=form.cleaned_data["level"],
-                thread_level=form.cleaned_data["thread_level"],
-                roller_points=form.cleaned_data["roller_points"],
-                target_difficulty=form.cleaned_data["target_difficulty"],
-                roll_modifier=form.cleaned_data["roll_modifier"],
-                sort=form.cleaned_data["sort"],
+                **{
+                    field: form.cleaned_data[field]
+                    for field in (
+                        "level",
+                        "thread_level",
+                        "roller_points",
+                        "target_difficulty",
+                        "roll_modifier",
+                        "sort",
+                    )
+                }
             )
             if intent == INTENT_REFRESH:
                 technique_analytics.clear_corpus_cache(params)
                 cache.delete(_technique_cache_key(params))
             panel = technique_analytics.build_technique_panel(params)
             _cache_technique_panel(params, panel)
-    else:
-        form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
-        kit_form = StartingKitForm(
-            initial={
-                "path": request.GET.get("kit_path"),
-                "gift": request.GET.get("kit_gift"),
-            }
+        return form, kit_form, panel, kit_report
+    form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
+    kit_form = StartingKitForm(
+        initial={"path": request.GET.get("kit_path"), "gift": request.GET.get("kit_gift")}
+    )
+    if cached_panel is not None:
+        requested_sort = technique_analytics.resolve_sort_key(
+            request.GET.get("sort", cached_panel.params.sort)
         )
-        if cached_panel is not None:
-            requested_sort = technique_analytics.resolve_sort_key(
-                request.GET.get("sort", cached_panel.params.sort)
-            )
-            if requested_sort != cached_panel.params.sort:
-                params = replace(cached_panel.params, sort=requested_sort)
-                panel = technique_analytics.build_technique_panel(params)
-                _cache_technique_panel(params, panel)
-            else:
-                panel = cached_panel
+        if requested_sort != cached_panel.params.sort:
+            params = replace(cached_panel.params, sort=requested_sort)
+            panel = technique_analytics.build_technique_panel(params)
+            _cache_technique_panel(params, panel)
+        else:
+            panel = cached_panel
+    return form, kit_form, panel, kit_report
 
-    context = {
-        "form": form,
-        "panel": panel,
-        "kit_form": kit_form,
-        "kit_report": kit_report,
-        "kit_option_summary": _kit_option_summary(kit_report.rows) if kit_report else "",
-        "flag_not_castable": technique_analytics.FLAG_NOT_CASTABLE_STANDALONE,
-    }
-    return render(request, "admin/tuning/_techniques_panel.html", context)
+
+@superuser_required
+@superuser_required
+def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
+    """Render the techniques tuning fragment and its optional kit report."""
+    scan_response = _technique_pool_scan_response(request)
+    if scan_response is not None:
+        return scan_response
+    last_key = cache.get(_technique_last_key())
+    cached_panel = cache.get(last_key) if last_key else None
+    form, kit_form, panel, kit_report = _technique_forms_and_panel(request, cached_panel)
+    return render(
+        request,
+        "admin/tuning/_techniques_panel.html",
+        {
+            "form": form,
+            "panel": panel,
+            "kit_form": kit_form,
+            "kit_report": kit_report,
+            "kit_option_summary": _kit_option_summary(kit_report.rows) if kit_report else "",
+            "flag_not_castable": technique_analytics.FLAG_NOT_CASTABLE_STANDALONE,
+        },
+    )
 
 
 # 24h - mirrors `_TECHNIQUE_CACHE_TIMEOUT`.

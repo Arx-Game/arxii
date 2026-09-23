@@ -10,6 +10,7 @@ in the future when the frontend needs it.
 from __future__ import annotations
 
 import calendar
+import contextlib
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -1514,45 +1515,43 @@ _LOOKS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
+def _look_entries_for_tenure(
+    tenure, *, current_id: int | None, privileged: bool
+) -> list[LookEntry]:
+    """Build visible look entries for one tenure."""
+    entries: list[LookEntry] = []
+    for link in tenure.media.all():
+        is_current = link.pk == current_id
+        if (
+            not privileged
+            and not is_current
+            and (link.gallery is None or not link.gallery.is_public)
+        ):
+            continue
+        entries.append(
+            LookEntry(
+                tenure_media_id=link.pk,
+                url=link.media.cloudinary_url,
+                title=link.media.title,
+                look=link.look.name if link.look is not None else "",
+                is_current=is_current,
+            )
+        )
+    return entries
+
+
 def _build_looks(sheet: CharacterSheet, *, privileged: bool) -> list[LookEntry]:
-    """Build the looks strip: the character's images, tagged with the mood each shows.
-
-    Visibility. The owner and staff get every image on the character's tenures. Every
-    other viewer gets only what is already public of them: images in a gallery marked
-    ``is_public``, plus the profile picture itself (which the roster has always shown
-    to everyone). A private gallery shared with named tenures via
-    ``TenureGallery.allowed_viewers`` is honoured on the gallery pages and deliberately
-    NOT here — the plate is the character's public face, so this strip under-shows for
-    an allow-listed viewer rather than risking a private image on a page anyone can open.
-
-    Ordering puts the worn look first so the strip reads as "this one, and the others",
-    then follows the gallery's own ``sort_order``. An untagged image carries an empty
-    ``look`` and still renders — an artist's sheet is worth having before anyone has
-    tagged a mood, and render-or-vanish means the strip is simply absent when the
-    character has no images at all.
-    """
+    """Build the looks strip, retaining only images visible to the viewer."""
     roster_entry = sheet.roster_entry
     if roster_entry is None:
         return []
-    current_id = roster_entry.profile_picture_id
-
-    entries: list[LookEntry] = []
-    for tenure in roster_entry.tenures.all():
-        for link in tenure.media.all():
-            is_current = link.pk == current_id
-            if not privileged and not is_current:
-                gallery = link.gallery
-                if gallery is None or not gallery.is_public:
-                    continue
-            entries.append(
-                LookEntry(
-                    tenure_media_id=link.pk,
-                    url=link.media.cloudinary_url,
-                    title=link.media.title,
-                    look=link.look.name if link.look is not None else "",
-                    is_current=is_current,
-                )
-            )
+    entries = [
+        entry
+        for tenure in roster_entry.tenures.all()
+        for entry in _look_entries_for_tenure(
+            tenure, current_id=roster_entry.profile_picture_id, privileged=privileged
+        )
+    ]
     entries.sort(key=lambda row: not row["is_current"])
     return entries
 
@@ -1641,42 +1640,50 @@ def _build_domains(sheet: CharacterSheet, *, privileged: bool) -> list[OrgDomain
     ]
 
 
+def _keyring_persona_ids(sheet: CharacterSheet) -> list[int]:
+    """Return persona ids from the serializer's prefetched or regular relation."""
+    try:
+        personas = sheet.cached_personas
+    except AttributeError:
+        personas = sheet.personas.all()
+    return [persona.pk for persona in personas]
+
+
+def _keyring_entry(grant) -> KeyringEntry | None:
+    """Convert a location grant into a keyring row."""
+    if grant.room_profile is not None:
+        place = grant.room_profile.objectdb.db_key
+        where = grant.room_profile.area.name if grant.room_profile.area else ""
+    elif grant.area is not None:
+        place, where = grant.area.name, ""
+    else:
+        return None
+    granted_by = ""
+    if grant.granted_by is not None:
+        with contextlib.suppress(AttributeError):
+            granted_by = grant.granted_by.name
+    return KeyringEntry(
+        id=grant.pk,
+        place=place,
+        where=where,
+        rung=LocationRole(grant.kind).label,
+        through=grant.tenant_organization.name if grant.tenant_organization else "",
+        granted_by=granted_by,
+    )
+
+
 def _build_keyring(sheet: CharacterSheet, *, privileged: bool) -> list[KeyringEntry]:
-    """Estate's Keyring: every place this character may walk into, and on whose say-so.
-
-    The discovery half of #3902, and the reason the issue exists. A friend gives this
-    character a key to their house; nothing on the sheet could say the house exists,
-    so the next player of that character never learns it. A family keep reached
-    through an organization has the same problem and the same answer, so both are rows
-    here, differing only in who holds the grant.
-
-    Owner and staff only, because the whole Estate section is. Render-or-vanish is the
-    frontend's job: an empty list draws no block at all, never a line saying so.
-
-    ONE query, for the same reason ``_build_domains`` is one (#3901): a top-level
-    ``personas__tenancies`` prefetch cannot reuse the ``cached_personas`` Prefetch, so
-    Django re-fetches every persona to redescend. Organization-held grants are folded
-    into the same filter rather than fetched separately -- the cost of the keyring is
-    the org-id lookup plus this, whatever the character holds.
-    """
+    """Build the Estate keyring for a privileged viewer."""
     if not privileged:
         return []
-
-    persona_ids = [
-        persona.pk
-        for persona in (
-            sheet.cached_personas if hasattr(sheet, "cached_personas") else sheet.personas.all()
-        )
-    ]
+    persona_ids = _keyring_persona_ids(sheet)
     if not persona_ids:
         return []
-
     org_ids = set(
         OrganizationMembership.objects.filter(
             persona_id__in=persona_ids, left_at__isnull=True, exiled_at__isnull=True
         ).values_list("organization_id", flat=True)
     )
-
     now = timezone.now()
     grants = (
         LocationTenancy.objects.filter(
@@ -1693,33 +1700,7 @@ def _build_keyring(sheet: CharacterSheet, *, privileged: bool) -> list[KeyringEn
         )
         .order_by("room_profile__objectdb__db_key", "area__name")
     )
-
-    entries: list[KeyringEntry] = []
-    for grant in grants:
-        if grant.room_profile is not None:
-            place = grant.room_profile.objectdb.db_key
-            where = grant.room_profile.area.name if grant.room_profile.area else ""
-        elif grant.area is not None:
-            # An area-level grant covers every room inside it, so the area IS the place.
-            place = grant.area.name
-            where = ""
-        else:
-            continue
-        entries.append(
-            KeyringEntry(
-                id=grant.pk,
-                place=place,
-                where=where,
-                rung=LocationRole(grant.kind).label,
-                through=grant.tenant_organization.name if grant.tenant_organization else "",
-                granted_by=(
-                    grant.granted_by.name
-                    if grant.granted_by is not None and hasattr(grant.granted_by, "name")
-                    else ""
-                ),
-            )
-        )
-    return entries
+    return [entry for grant in grants if (entry := _keyring_entry(grant)) is not None]
 
 
 _MENTORS_SELECT_RELATED: tuple[str, ...] = ()

@@ -10,6 +10,10 @@ from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
 from flows.types import RealmInfo, SerializedObjectState
 
+_CHARACTERS_KIND = "characters"
+_EXITS_KIND = "exits"
+
+
 if TYPE_CHECKING:
     from world.instances.models import InstancedRoom
 
@@ -304,6 +308,43 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             result[character_sheet_id] = place_id
         return result
 
+    def _serialize_content_state(  # noqa: PLR0913
+        self,
+        obj: BaseState,
+        caller: BaseState,
+        *,
+        board_target_ids: frozenset[int],
+        place_by_character_id: dict[int, int],
+        entered_sheet_ids: set[int] | None,
+        instance_by_room_id: dict[int, InstancedRoom],
+    ) -> tuple[str, SerializedObjectState] | None:
+        """Serialize one visible room object and classify its collection."""
+        from world.conditions.services import can_perceive  # noqa: PLC0415
+
+        if obj is caller:
+            return None
+        is_character = self._is_character(obj)
+        if is_character and not can_perceive(caller.obj, obj.obj):
+            return None
+        if isinstance(obj, ExitState) and self._exit_hidden_from_looker(
+            obj, caller, instance_by_room_id
+        ):
+            return None
+        serialized = ObjectStateSerializer(
+            obj,
+            context={
+                "looker": caller,
+                "board_target_ids": board_target_ids,
+                "place_by_character_id": place_by_character_id,
+                "entered_sheet_ids": entered_sheet_ids,
+                "is_character": is_character,
+            },
+        ).data
+        kind = (
+            "exits" if isinstance(obj, ExitState) else "characters" if is_character else "objects"
+        )
+        return kind, serialized
+
     def _serialize_contents(
         self,
         room: BaseState,
@@ -314,82 +355,51 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         list[SerializedObjectState],
         int | None,
     ]:
-        from world.conditions.services import can_perceive  # noqa: PLC0415
         from world.missions.constants import GiverKind  # noqa: PLC0415
         from world.missions.models import MissionGiver  # noqa: PLC0415
 
-        characters = []
-        objects = []
-        exits = []
-
+        characters: list[SerializedObjectState] = []
+        objects: list[SerializedObjectState] = []
+        exits: list[SerializedObjectState] = []
         content_states = list(room.contents)
-        # #3044 — one batched query for the whole room rather than a
-        # MissionGiver lookup per object (no-queries-in-loops).
         content_ids = [state.obj.pk for state in content_states]
         board_target_ids = frozenset(
             MissionGiver.objects.filter(
-                giver_kind=GiverKind.BOARD,
-                is_active=True,
-                target_id__in=content_ids,
+                giver_kind=GiverKind.BOARD, is_active=True, target_id__in=content_ids
             ).values_list("target_id", flat=True)
         )
-        # #3810: one batched query for every character's Place assignment,
-        # including the caller's own (excluded from `characters` below, but
-        # still needed for `to_representation`'s top-level `viewer_place_id`).
         character_ids_for_places = [
             state.obj.pk for state in content_states if self._is_character(state)
         ]
         if self._is_character(caller) and caller.obj.pk not in character_ids_for_places:
             character_ids_for_places.append(caller.obj.pk)
         place_by_character_id = self._batched_place_ids(room, character_ids_for_places)
-        # #3867: who has entered the room's live scene, one query for the whole room.
         active_scene = self._get_active_scene(room)
         entered_sheet_ids: set[int] | None = None
         if active_scene is not None:
             from world.scenes.participation import entered_sheet_ids as _entered  # noqa: PLC0415
 
             entered_sheet_ids = _entered(active_scene)
-
-        # #696 gap 7: one InstancedRoom lookup for every exit's destination, so
-        # the entrance gate below never queries per exit (no-queries-in-loops).
         instance_by_room_id = self._batched_instances(content_states)
-
         for obj in content_states:
-            if obj is caller:
-                continue
-
-            is_character = self._is_character(obj)
-            if is_character and not can_perceive(caller.obj, obj.obj):
-                # #1225: a concealed-and-undetected character is imperceptible to
-                # this caller — omit entirely rather than merely masking the name.
-                continue
-
-            if isinstance(obj, ExitState) and self._exit_hidden_from_looker(
-                obj, caller, instance_by_room_id
-            ):
-                continue
-
-            obj_serializer = ObjectStateSerializer(
+            result = self._serialize_content_state(
                 obj,
-                context={
-                    "looker": caller,
-                    "board_target_ids": board_target_ids,
-                    "place_by_character_id": place_by_character_id,
-                    "entered_sheet_ids": entered_sheet_ids,
-                    "is_character": is_character,
-                },
+                caller,
+                board_target_ids=board_target_ids,
+                place_by_character_id=place_by_character_id,
+                entered_sheet_ids=entered_sheet_ids,
+                instance_by_room_id=instance_by_room_id,
             )
-            serialized = obj_serializer.data
-
-            if isinstance(obj, ExitState):
-                exits.append(serialized)
-            elif is_character:
+            if result is None:
+                continue
+            kind, serialized = result
+            if kind == _CHARACTERS_KIND:
                 characters.append(serialized)
+            elif kind == _EXITS_KIND:
+                exits.append(serialized)
             else:
                 objects.append(serialized)
-
-        viewer_place_id = place_by_character_id.get(caller.obj.pk)
-        return characters, objects, exits, viewer_place_id
+        return characters, objects, exits, place_by_character_id.get(caller.obj.pk)
 
     def _get_active_scene(self, room: BaseState):
         try:

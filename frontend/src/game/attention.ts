@@ -185,6 +185,32 @@ export function characterAttention(
  * viewer's own rows), applied per row rather than per thread so the count can
  * be split by kind. Dismissed rows never count.
  */
+function chipOwners(chips: readonly FeedChip[]): Map<FeedKind, FeedChip> {
+  const owners = new Map<FeedKind, FeedChip>();
+  for (const chip of chips) {
+    if (!chip.on || !chip.wake) continue;
+    for (const kind of chip.kinds) owners.set(kind, chip);
+  }
+  return owners;
+}
+
+function isUnreadChipInteraction(
+  interaction: ReturnType<typeof wsPayloadToInteraction>,
+  session: Session,
+  personaId: number | null,
+  dismissed: ReadonlySet<string> | undefined,
+  owners: Map<FeedKind, FeedChip>
+): FeedChip | null {
+  if (dismissed?.has(feedItemKey('interaction', interaction.id))) return null;
+  if (personaId != null && interaction.persona.id === personaId) return null;
+  const chip = owners.get(classifyInteraction(interaction.mode));
+  if (!chip) return null;
+  const threshold = session.threadLastSeen[getThreadKey(interaction)] ?? session.sceneBaselineId;
+  if (threshold === undefined || threshold === null || Number(interaction.id) <= threshold)
+    return null;
+  return chip;
+}
+
 export function chipUnread(
   session: Session,
   personaId: number | null,
@@ -192,22 +218,12 @@ export function chipUnread(
   dismissed?: ReadonlySet<string>
 ): Record<string, number> {
   const counts: Record<string, number> = {};
-  const owners = new Map<FeedKind, FeedChip>();
-  for (const chip of chips) {
-    if (chip.on && chip.wake) for (const kind of chip.kinds) owners.set(kind, chip);
-  }
+  const owners = chipOwners(chips);
   if (owners.size === 0) return counts;
   for (const payload of session.sceneInteractions) {
     const interaction = wsPayloadToInteraction(payload);
-    if (dismissed?.has(feedItemKey('interaction', interaction.id))) continue;
-    if (personaId != null && interaction.persona.id === personaId) continue;
-    const chip = owners.get(classifyInteraction(interaction.mode));
-    if (!chip) continue;
-    const key = getThreadKey(interaction);
-    const threshold = session.threadLastSeen[key] ?? session.sceneBaselineId;
-    if (threshold === undefined || threshold === null) continue;
-    if (Number(interaction.id) <= threshold) continue;
-    counts[chip.id] = (counts[chip.id] ?? 0) + 1;
+    const chip = isUnreadChipInteraction(interaction, session, personaId, dismissed, owners);
+    if (chip) counts[chip.id] = (counts[chip.id] ?? 0) + 1;
   }
   return counts;
 }

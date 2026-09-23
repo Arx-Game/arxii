@@ -34,8 +34,51 @@ from world.magic.services.resonance_environment import (
 from world.roster.models import RosterEntry
 
 logger = logging.getLogger(__name__)
+_DREAMSPACE_UNAVAILABLE = "dreamspace_unavailable"
+_STATE_UNAVAILABLE = "state_unavailable"
 # Process epoch distinguishes revision counters after a server restart.
 ROOM_STATE_EPOCH = uuid.uuid4().hex
+
+
+def _session_is_bound(character: "Character", session) -> bool:
+    """Return whether a session still targets this character."""
+    return session.puppet is character and session in character.sessions.all()
+
+
+def _room_state_payload(character: "Character", room, build_payload) -> dict:
+    """Resolve viewer-relative state and build its payload."""
+    from world.dreams.services import dreamspace_for
+    from world.vitals.services import perceives_dreamside
+
+    try:
+        sheet = character.sheet_data
+    except ObjectDoesNotExist:
+        sheet = None
+    if perceives_dreamside(sheet):
+        room = dreamspace_for(sheet)
+        if room is None:
+            raise LookupError(_DREAMSPACE_UNAVAILABLE)
+    try:
+        return build_payload(character.scene_state, room.scene_state)
+    except (AttributeError, TypeError, ValueError, ObjectDoesNotExist) as exc:
+        raise LookupError(_STATE_UNAVAILABLE) from exc
+
+
+def _room_result_ids(payload: dict) -> tuple[str | None, int | None, int | None]:
+    """Extract stable room and scene identifiers from a room-state payload."""
+    room_payload = payload["room"]
+    room_dbref = room_payload.get("dbref") if isinstance(room_payload, dict) else None
+    room_id = None
+    if isinstance(room_dbref, str) and room_dbref.startswith("#"):
+        with contextlib.suppress(ValueError):
+            room_id = int(room_dbref[1:])
+    scene = payload.get("scene")
+    scene_id = scene.get("id") if isinstance(scene, dict) else None
+    return (
+        room_dbref if isinstance(room_dbref, str) else None,
+        room_id,
+        scene_id if isinstance(scene_id, int) else None,
+    )
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -622,59 +665,26 @@ class Character(ObjectParent, DefaultCharacter):
         kwargs["move_type"] = TextFrameType.ARRIVE.value
         super().announce_move_to(source_location, msg=msg, mapping=mapping, **kwargs)
 
-    def send_room_state(  # noqa: C901
+    def send_room_state(
         self,
         session=None,
         room_state=None,
         resync_request_id=None,
     ) -> RoomStateSendResult:
-        """Send current room state and return the queued snapshot metadata.
-
-        Args:
-            session: Optional exact session to target. ``None`` fans out to all
-                sessions on this character for ordinary broadcasts.
-            room_state: Optional pre-resolved room state used by flow helpers.
-            resync_request_id: Optional validated client request id to correlate.
-
-        Returns:
-            Metadata describing the queued snapshot, or a stable failure code.
-
-        The targeted path is synchronous. It captures and rechecks the exact
-        session-to-character binding before queueing, so a rebound session never
-        receives a stale viewer-relative payload. Dreamside viewers fail closed
-        when their viewer-relative dreamspace cannot be resolved.
-        """
-        if session is not None and (
-            session.puppet is not self or session not in self.sessions.all()
-        ):
+        """Send current room state and return the queued snapshot metadata."""
+        if session is not None and not _session_is_bound(self, session):
             return RoomStateSendResult(sent=False, code="session_rebound")
         if not self.has_account:
             return RoomStateSendResult(sent=False, code="not_authenticated")
         if self.location is None:
             return RoomStateSendResult(sent=False, code="no_location")
-
         room = room_state.obj if room_state is not None else self.location
-        from world.dreams.services import dreamspace_for
-        from world.vitals.services import perceives_dreamside
-
         try:
-            sheet = self.sheet_data
-        except ObjectDoesNotExist:
-            sheet = None
-        if perceives_dreamside(sheet):
-            dream_room = dreamspace_for(sheet)
-            if dream_room is None:
-                return RoomStateSendResult(sent=False, code="dreamspace_unavailable")
-            room = dream_room
-        try:
-            caller_state = self.scene_state
-            resolved_room_state = room.scene_state
-            payload = build_room_state_payload(caller_state, resolved_room_state)
-        except (AttributeError, TypeError, ValueError, ObjectDoesNotExist):
-            return RoomStateSendResult(sent=False, code="state_unavailable")
+            payload = _room_state_payload(self, room, build_room_state_payload)
+        except LookupError as exc:
+            return RoomStateSendResult(sent=False, code=str(exc))
         if not payload.get("room"):
             return RoomStateSendResult(sent=False, code="state_unavailable")
-
         state_sequence = (self.ndb.room_state_sequence or 0) + 1
         self.ndb.room_state_sequence = state_sequence
         state_epoch = ROOM_STATE_EPOCH
@@ -682,29 +692,15 @@ class Character(ObjectParent, DefaultCharacter):
         payload["state_sequence"] = state_sequence
         if resync_request_id is not None:
             payload["resync_request_id"] = resync_request_id
-
-        # Recheck immediately before queueing. No await or deferred callback may
-        # occur between this check and the targeted send.
-        if session is not None and (
-            session.puppet is not self or session not in self.sessions.all()
-        ):
+        if session is not None and not _session_is_bound(self, session):
             return RoomStateSendResult(sent=False, code="session_rebound")
         self.msg(room_state=((), payload), session=session)
-        room_payload = payload["room"]
-        room_dbref = room_payload.get("dbref") if isinstance(room_payload, dict) else None
-        room_id = None
-        if isinstance(room_dbref, str) and room_dbref.startswith("#"):
-            try:
-                room_id = int(room_dbref[1:])
-            except ValueError:
-                room_id = None
-        scene = payload.get("scene")
-        scene_id = scene.get("id") if isinstance(scene, dict) else None
+        room_dbref, room_id, scene_id = _room_result_ids(payload)
         return RoomStateSendResult(
             sent=True,
-            room_dbref=room_dbref if isinstance(room_dbref, str) else None,
+            room_dbref=room_dbref,
             room_id=room_id,
-            scene_id=scene_id if isinstance(scene_id, int) else None,
+            scene_id=scene_id,
             state_epoch=state_epoch,
             state_sequence=state_sequence,
         )
