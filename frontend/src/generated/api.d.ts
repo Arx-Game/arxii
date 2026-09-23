@@ -596,6 +596,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/realms/{id}/charter/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/realms/{id}/charter/ — the founder ladder's defaults. */
+    get: operations['almanach_realms_charter_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/realms/{id}/ladder/': {
     parameters: {
       query?: never;
@@ -2934,22 +2951,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description GET the draft's house claim; POST to submit one (#1884 Phase D).
-     *
-     *     POST body: title (id), template (id), house_name, backstory,
-     *     principles (mercy/method/status/change/allegiance/power ints).
-     *     The automated thematic gates run here; staff review follows in admin.
-     */
+    /** @description GET the draft's house claim; POST to submit one (#1884 Phase D, #3983 Plan B). */
     get: operations['character_creation_drafts_house_claim_retrieve'];
     put?: never;
-    /**
-     * @description GET the draft's house claim; POST to submit one (#1884 Phase D).
-     *
-     *     POST body: title (id), template (id), house_name, backstory,
-     *     principles (mercy/method/status/change/allegiance/power ints).
-     *     The automated thematic gates run here; staff review follows in admin.
-     */
+    /** @description GET the draft's house claim; POST to submit one (#1884 Phase D, #3983 Plan B). */
     post: operations['character_creation_drafts_house_claim_create'];
     delete?: never;
     options?: never;
@@ -25251,6 +25256,16 @@ export interface components {
       | 'CHOOSING'
       | 'REFLECTION';
     /**
+     * @description * `born` - Born Into
+     *     * `married_in` - Married In
+     *     * `adopted` - Adopted
+     *     * `legitimized` - Legitimized
+     *     * `granted` - Granted
+     *     * `founding` - Founding Member
+     * @enum {string}
+     */
+    BasisEnum: 'born' | 'married_in' | 'adopted' | 'legitimized' | 'granted' | 'founding';
+    /**
      * @description * `standing` - Standing (unit or banner — can rise again)
      *     * `campaign` - Campaign (one-time event — dissolves when done)
      * @enum {string}
@@ -27520,6 +27535,51 @@ export interface components {
     CheckTypeMinimal: {
       readonly id: number;
       readonly name: string;
+    };
+    /** @description One aspect definition's picked option(s), as the claim body sends them. */
+    ClaimAspectPickRequest: {
+      definition: number;
+      options?: number[];
+    };
+    /** @description The founder's optional estate pitch (#3983 Plan B). */
+    ClaimEstateRequest: {
+      /** @default  */
+      name: string;
+      /** @default  */
+      description: string;
+    };
+    /**
+     * @description One founder-written kin row (#3983 Plan B); converted to a
+     *     ``ClaimKinDraft`` by ``HouseClaimSubmitSerializer.validate()``.
+     */
+    ClaimKinDraftRequest: {
+      /** @default  */
+      name: string;
+      relation: components['schemas']['RelationEnum'];
+      gender?: number | null;
+      age?: number | null;
+      /** @default false */
+      is_deceased: boolean;
+      born_into?: number | null;
+      /** @default  */
+      basis: components['schemas']['BasisEnum'] | components['schemas']['BlankEnum'];
+      /** @default false */
+      is_household: boolean;
+    };
+    /**
+     * @description One founder-written land row for a rung of the claimed chain (#3983
+     *     Plan B); converted to a ``ClaimLandDraft`` by
+     *     ``HouseClaimSubmitSerializer.validate()``.
+     */
+    ClaimLandDraftRequest: {
+      title: number;
+      /** @default  */
+      land_name: string;
+      /** @default  */
+      description: string;
+      /** @default  */
+      hall_name: string;
+      land_shapes?: string[];
     };
     /** @description A vacant set-aside title open to CG house definition (#1884 Phase D). */
     ClaimableTitle: {
@@ -30846,6 +30906,28 @@ export interface components {
       breached?: boolean;
       readonly defending_side_id: number;
     };
+    /**
+     * @description * `head` - Head of house
+     *     * `mother` - Mother
+     *     * `father` - Father
+     *     * `spouse` - Spouse
+     *     * `sibling` - Sibling
+     *     * `child` - Child
+     *     * `grandparent` - Grandparent
+     *     * `ward` - Ward
+     *     * `position` - Household position
+     * @enum {string}
+     */
+    FounderRelationEnum:
+      | 'head'
+      | 'mother'
+      | 'father'
+      | 'spouse'
+      | 'sibling'
+      | 'child'
+      | 'grandparent'
+      | 'ward'
+      | 'position';
     /** @description A friend row — the friended character's name + which of your characters friended. */
     Friendship: {
       readonly id: number;
@@ -31803,6 +31885,14 @@ export interface components {
       interaction_id: number;
       reaction_count: number;
     };
+    /**
+     * @description A holding kind a template plants on the seat domain at finalization
+     *     (#3983 Plan B) — lets the founder Lands leaf show what a rung produces.
+     */
+    HoldingKindOption: {
+      readonly id: number;
+      name: string;
+    };
     /** @description A required catalog choice on a template, with its active options (#2079). */
     HouseAspectDefinition: {
       readonly id: number;
@@ -31832,7 +31922,27 @@ export interface components {
       description?: string;
       readonly codex_entry_id: number | null;
     };
-    /** @description The draft's house claim, as CG shows it (#1884 Phase D, #2079). */
+    /** @description One founder-written kin row, as CG echoes it back (#3983 Plan B). */
+    HouseClaimKin: {
+      name?: string;
+      relation: components['schemas']['RelationEnum'];
+      readonly gender_id: number | null;
+      age?: number | null;
+      is_deceased?: boolean;
+      readonly born_into_id: number | null;
+      basis?: components['schemas']['BasisEnum'];
+      is_household?: boolean;
+      sort_order?: number;
+    };
+    /** @description One founder-written land row, as CG echoes it back (#3983 Plan B). */
+    HouseClaimLand: {
+      readonly title_id: number;
+      land_name?: string;
+      description?: string;
+      hall_name?: string;
+      readonly land_shapes: string[];
+    };
+    /** @description The draft's house claim, as CG shows it (#1884 Phase D, #2079, #3983 Plan B). */
     HouseClaimStatus: {
       readonly id: number;
       /** @description The family name (org renders "House <name>" for nobles). */
@@ -31849,6 +31959,26 @@ export interface components {
       readonly aspects: {
         [key: string]: unknown;
       }[];
+      readonly kin: components['schemas']['HouseClaimKin'][];
+      readonly lands: components['schemas']['HouseClaimLand'][];
+      estate_name?: string;
+      estate_description?: string;
+      readonly estate_district_id: number | null;
+      /**
+       * @description Where the founder's own character sits relative to the head of house (#3983).
+       *
+       *     * `head` - Head of house
+       *     * `mother` - Mother
+       *     * `father` - Father
+       *     * `spouse` - Spouse
+       *     * `sibling` - Sibling
+       *     * `child` - Child
+       *     * `grandparent` - Grandparent
+       *     * `ward` - Ward
+       *     * `position` - Household position
+       */
+      founder_relation?: components['schemas']['FounderRelationEnum'];
+      founder_is_heir?: boolean;
     };
     /**
      * @description * `pending` - Pending Review
@@ -31857,6 +31987,44 @@ export interface components {
      * @enum {string}
      */
     HouseClaimStatusStatusEnum: 'pending' | 'approved' | 'rejected';
+    /**
+     * @description The nested house-claim submit body (#3983 Plan B, Task 3): validates
+     *     shape and pk references only — the automated thematic gates run inside
+     *     ``submit_house_claim`` itself, dispatched by the view
+     *     (``to_service_kwargs()``).
+     */
+    HouseClaimSubmitRequest: {
+      title: number;
+      template: number;
+      house_name: string;
+      backstory: string;
+      /** @default  */
+      words: string;
+      /** @default  */
+      colors: string;
+      /** @default  */
+      sigil_description: string;
+      aspects?: components['schemas']['ClaimAspectPickRequest'][];
+      /** @default 0 */
+      mercy: number;
+      /** @default 0 */
+      method: number;
+      /** @default 0 */
+      status: number;
+      /** @default 0 */
+      change: number;
+      /** @default 0 */
+      allegiance: number;
+      /** @default 0 */
+      power: number;
+      /** @default head */
+      founder_relation: components['schemas']['FounderRelationEnum'];
+      /** @default false */
+      founder_is_heir: boolean;
+      kin?: components['schemas']['ClaimKinDraftRequest'][];
+      lands?: components['schemas']['ClaimLandDraftRequest'][];
+      estate?: components['schemas']['ClaimEstateRequest'] | null;
+    };
     /** @description An open DomainCrisis on the house block (#2238). */
     HouseCrisis: {
       id: number;
@@ -31996,6 +32164,8 @@ export interface components {
       power_max?: number;
       readonly aspect_definitions: components['schemas']['HouseAspectDefinition'][];
       readonly features: components['schemas']['HouseFeature'][];
+      readonly holdings: components['schemas']['HoldingKindOption'][];
+      readonly default_succession_law: components['schemas']['SuccessionLawOption'] | null;
     };
     HouseTitle: {
       readonly id: number;
@@ -42651,6 +42821,23 @@ export interface components {
       renown: components['schemas']['RankingRow'][];
       legend: components['schemas']['RankingRow'][];
     };
+    /**
+     * @description The realm's charter defaults for the founder ladder (mirrors
+     *     ``almanach_reads.RealmCharter``, #3983 Plan B Task 3); ``succession_law``
+     *     reuses ``AlmanachSuccessionLawSerializer``'s ``{name, codex_entry_id}``
+     *     shape, the same one the house document already renders.
+     */
+    RealmCharter: {
+      succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
+      particle: components['schemas']['RealmCharterParticle'];
+      quiddity_prompt: string;
+      capital_name: string;
+    };
+    /** @description Mirrors ``almanach_reads.charter_for_realm``'s ``particle`` dict. */
+    RealmCharterParticle: {
+      born: string;
+      taken_in: string;
+    };
     /** @description One card on the Realms hub: name, formal name, first motto, and the route key. */
     RealmDetail: {
       readonly id: number;
@@ -42790,6 +42977,28 @@ export interface components {
      * @enum {string}
      */
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
+    /**
+     * @description * `head` - Head of house
+     *     * `mother` - Mother
+     *     * `father` - Father
+     *     * `spouse` - Spouse
+     *     * `sibling` - Sibling
+     *     * `child` - Child
+     *     * `grandparent` - Grandparent
+     *     * `ward` - Ward
+     *     * `position` - Household position
+     * @enum {string}
+     */
+    RelationEnum:
+      | 'head'
+      | 'mother'
+      | 'father'
+      | 'spouse'
+      | 'sibling'
+      | 'child'
+      | 'grandparent'
+      | 'ward'
+      | 'position';
     /** @description Serializer for relationship capstone events. */
     RelationshipCapstone: {
       readonly id: number;
@@ -45417,6 +45626,7 @@ export interface components {
       readonly realm_theme: string;
       readonly realm_slug: string | null;
       readonly realm_name: string | null;
+      readonly realm_id: number | null;
     };
     /**
      * @description Serializer for starting areas.
@@ -46022,6 +46232,12 @@ export interface components {
       | 'campaign_track'
       | 'asset'
       | 'custom';
+    /** @description Mirrors ``almanach_reads``'s ``default_succession_law`` payload shape. */
+    SuccessionLawOption: {
+      id: number;
+      name: string;
+      codex_entry_id: number | null;
+    };
     /**
      * @description * `swords` - Swords
      *     * `cups` - Cups
@@ -49424,10 +49640,32 @@ export interface operations {
       };
     };
   };
+  almanach_realms_charter_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Realm. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RealmCharter'];
+        };
+      };
+    };
+  };
   almanach_realms_ladder_retrieve: {
     parameters: {
       query?: {
-        /** @description Which ladder cut to read: 'staff' (default) shows every rung; 'founder' hides rungs sitting under an unpublished house. Both are staff-gated in this plan. */
+        /** @description Which ladder cut to read: 'staff' (default) shows every rung and needs staff; 'founder' hides rungs sitting under an unpublished house and is open to any authenticated account. */
         for?: 'founder' | 'staff';
       };
       header?: never;
@@ -52417,9 +52655,9 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
-        'application/json': components['schemas']['CharacterDraftRequest'];
+        'application/json': components['schemas']['HouseClaimSubmitRequest'];
       };
     };
     responses: {

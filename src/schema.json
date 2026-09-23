@@ -895,6 +895,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/AlmanachRealm'
           description: ''
+  /api/almanach/realms/{id}/charter/:
+    get:
+      operationId: almanach_realms_charter_retrieve
+      description: GET /api/almanach/realms/{id}/charter/ — the founder ladder's defaults.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Realm.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealmCharter'
+          description: ''
   /api/almanach/realms/{id}/ladder/:
     get:
       operationId: almanach_realms_ladder_retrieve
@@ -907,9 +929,9 @@ paths:
           enum:
           - founder
           - staff
-        description: 'Which ladder cut to read: ''staff'' (default) shows every rung;
-          ''founder'' hides rungs sitting under an unpublished house. Both are staff-gated
-          in this plan.'
+        description: 'Which ladder cut to read: ''staff'' (default) shows every rung
+          and needs staff; ''founder'' hides rungs sitting under an unpublished house
+          and is open to any authenticated account.'
       - in: path
         name: id
         schema:
@@ -4522,12 +4544,8 @@ paths:
   /api/character-creation/drafts/{id}/house-claim/:
     get:
       operationId: character_creation_drafts_house_claim_retrieve
-      description: |-
-        GET the draft's house claim; POST to submit one (#1884 Phase D).
-
-        POST body: title (id), template (id), house_name, backstory,
-        principles (mercy/method/status/change/allegiance/power ints).
-        The automated thematic gates run here; staff review follows in admin.
+      description: 'GET the draft''s house claim; POST to submit one (#1884 Phase
+        D, #3983 Plan B).'
       parameters:
       - in: path
         name: id
@@ -4547,12 +4565,8 @@ paths:
           description: ''
     post:
       operationId: character_creation_drafts_house_claim_create
-      description: |-
-        GET the draft's house claim; POST to submit one (#1884 Phase D).
-
-        POST body: title (id), template (id), house_name, backstory,
-        principles (mercy/method/status/change/allegiance/power ints).
-        The automated thematic gates run here; staff review follows in admin.
+      description: 'GET the draft''s house claim; POST to submit one (#1884 Phase
+        D, #3983 Plan B).'
       parameters:
       - in: path
         name: id
@@ -4565,7 +4579,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CharacterDraftRequest'
+              $ref: '#/components/schemas/HouseClaimSubmitRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -41349,6 +41364,22 @@ components:
         * `TRIGGER` - Trigger
         * `CHOOSING` - The Choosing
         * `REFLECTION` - The Reflection
+    BasisEnum:
+      enum:
+      - born
+      - married_in
+      - adopted
+      - legitimized
+      - granted
+      - founding
+      type: string
+      description: |-
+        * `born` - Born Into
+        * `married_in` - Married In
+        * `adopted` - Adopted
+        * `legitimized` - Legitimized
+        * `granted` - Granted
+        * `founding` - Founding Member
     BattleBindingEnum:
       enum:
       - standing
@@ -46249,6 +46280,88 @@ components:
       required:
       - id
       - name
+    ClaimAspectPickRequest:
+      type: object
+      description: One aspect definition's picked option(s), as the claim body sends
+        them.
+      properties:
+        definition:
+          type: integer
+        options:
+          type: array
+          items:
+            type: integer
+      required:
+      - definition
+    ClaimEstateRequest:
+      type: object
+      description: The founder's optional estate pitch (#3983 Plan B).
+      properties:
+        name:
+          type: string
+          default: ''
+        description:
+          type: string
+          default: ''
+    ClaimKinDraftRequest:
+      type: object
+      description: |-
+        One founder-written kin row (#3983 Plan B); converted to a
+        ``ClaimKinDraft`` by ``HouseClaimSubmitSerializer.validate()``.
+      properties:
+        name:
+          type: string
+          default: ''
+        relation:
+          $ref: '#/components/schemas/RelationEnum'
+        gender:
+          type: integer
+          nullable: true
+        age:
+          type: integer
+          minimum: 0
+          nullable: true
+        is_deceased:
+          type: boolean
+          default: false
+        born_into:
+          type: integer
+          nullable: true
+        basis:
+          default: ''
+          oneOf:
+          - $ref: '#/components/schemas/BasisEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        is_household:
+          type: boolean
+          default: false
+      required:
+      - relation
+    ClaimLandDraftRequest:
+      type: object
+      description: |-
+        One founder-written land row for a rung of the claimed chain (#3983
+        Plan B); converted to a ``ClaimLandDraft`` by
+        ``HouseClaimSubmitSerializer.validate()``.
+      properties:
+        title:
+          type: integer
+        land_name:
+          type: string
+          default: ''
+        description:
+          type: string
+          default: ''
+        hall_name:
+          type: string
+          default: ''
+        land_shapes:
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+      - title
     ClaimableTitle:
       type: object
       description: A vacant set-aside title open to CG house definition (#1884 Phase
@@ -53268,6 +53381,28 @@ components:
       required:
       - defending_side_id
       - id
+    FounderRelationEnum:
+      enum:
+      - head
+      - mother
+      - father
+      - spouse
+      - sibling
+      - child
+      - grandparent
+      - ward
+      - position
+      type: string
+      description: |-
+        * `head` - Head of house
+        * `mother` - Mother
+        * `father` - Father
+        * `spouse` - Spouse
+        * `sibling` - Sibling
+        * `child` - Child
+        * `grandparent` - Grandparent
+        * `ward` - Ward
+        * `position` - Household position
     Friendship:
       type: object
       description: A friend row — the friended character's name + which of your characters
@@ -55337,6 +55472,21 @@ components:
       required:
       - interaction_id
       - reaction_count
+    HoldingKindOption:
+      type: object
+      description: |-
+        A holding kind a template plants on the seat domain at finalization
+        (#3983 Plan B) — lets the founder Lands leaf show what a rung produces.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 80
+      required:
+      - id
+      - name
     HouseAspectDefinition:
       type: object
       description: A required catalog choice on a template, with its active options
@@ -55408,9 +55558,70 @@ components:
       - codex_entry_id
       - id
       - name
+    HouseClaimKin:
+      type: object
+      description: One founder-written kin row, as CG echoes it back (#3983 Plan B).
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        relation:
+          $ref: '#/components/schemas/RelationEnum'
+        gender_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        age:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        is_deceased:
+          type: boolean
+        born_into_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        basis:
+          $ref: '#/components/schemas/BasisEnum'
+        is_household:
+          type: boolean
+        sort_order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - born_into_id
+      - gender_id
+      - relation
+    HouseClaimLand:
+      type: object
+      description: One founder-written land row, as CG echoes it back (#3983 Plan
+        B).
+      properties:
+        title_id:
+          type: integer
+          readOnly: true
+        land_name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        hall_name:
+          type: string
+          maxLength: 120
+        land_shapes:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - land_shapes
+      - title_id
     HouseClaimStatus:
       type: object
-      description: 'The draft''s house claim, as CG shows it (#1884 Phase D, #2079).'
+      description: 'The draft''s house claim, as CG shows it (#1884 Phase D, #2079,
+        #3983 Plan B).'
       properties:
         id:
           type: integer
@@ -55443,10 +55654,49 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        kin:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseClaimKin'
+          readOnly: true
+        lands:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseClaimLand'
+          readOnly: true
+        estate_name:
+          type: string
+          maxLength: 120
+        estate_description:
+          type: string
+        estate_district_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        founder_relation:
+          allOf:
+          - $ref: '#/components/schemas/FounderRelationEnum'
+          description: |-
+            Where the founder's own character sits relative to the head of house (#3983).
+
+            * `head` - Head of house
+            * `mother` - Mother
+            * `father` - Father
+            * `spouse` - Spouse
+            * `sibling` - Sibling
+            * `child` - Child
+            * `grandparent` - Grandparent
+            * `ward` - Ward
+            * `position` - Household position
+        founder_is_heir:
+          type: boolean
       required:
       - aspects
+      - estate_district_id
       - house_name
       - id
+      - kin
+      - lands
       - title_name
     HouseClaimStatusStatusEnum:
       enum:
@@ -55458,6 +55708,79 @@ components:
         * `pending` - Pending Review
         * `approved` - Approved
         * `rejected` - Rejected
+    HouseClaimSubmitRequest:
+      type: object
+      description: |-
+        The nested house-claim submit body (#3983 Plan B, Task 3): validates
+        shape and pk references only — the automated thematic gates run inside
+        ``submit_house_claim`` itself, dispatched by the view
+        (``to_service_kwargs()``).
+      properties:
+        title:
+          type: integer
+        template:
+          type: integer
+        house_name:
+          type: string
+          minLength: 1
+        backstory:
+          type: string
+          minLength: 1
+        words:
+          type: string
+          default: ''
+        colors:
+          type: string
+          default: ''
+        sigil_description:
+          type: string
+          default: ''
+        aspects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimAspectPickRequest'
+        mercy:
+          type: integer
+          default: 0
+        method:
+          type: integer
+          default: 0
+        status:
+          type: integer
+          default: 0
+        change:
+          type: integer
+          default: 0
+        allegiance:
+          type: integer
+          default: 0
+        power:
+          type: integer
+          default: 0
+        founder_relation:
+          allOf:
+          - $ref: '#/components/schemas/FounderRelationEnum'
+          default: head
+        founder_is_heir:
+          type: boolean
+          default: false
+        kin:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimKinDraftRequest'
+        lands:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimLandDraftRequest'
+        estate:
+          allOf:
+          - $ref: '#/components/schemas/ClaimEstateRequest'
+          nullable: true
+      required:
+      - backstory
+      - house_name
+      - template
+      - title
     HouseCrisis:
       type: object
       description: An open DomainCrisis on the house block (#2238).
@@ -55817,9 +56140,21 @@ components:
           items:
             $ref: '#/components/schemas/HouseFeature'
           readOnly: true
+        holdings:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingKindOption'
+          readOnly: true
+        default_succession_law:
+          allOf:
+          - $ref: '#/components/schemas/SuccessionLawOption'
+          nullable: true
+          readOnly: true
       required:
       - aspect_definitions
+      - default_succession_law
       - features
+      - holdings
       - id
       - kind
       - name
@@ -74891,6 +75226,40 @@ components:
       required:
       - legend
       - renown
+    RealmCharter:
+      type: object
+      description: |-
+        The realm's charter defaults for the founder ladder (mirrors
+        ``almanach_reads.RealmCharter``, #3983 Plan B Task 3); ``succession_law``
+        reuses ``AlmanachSuccessionLawSerializer``'s ``{name, codex_entry_id}``
+        shape, the same one the house document already renders.
+      properties:
+        succession_law:
+          allOf:
+          - $ref: '#/components/schemas/AlmanachSuccessionLaw'
+          nullable: true
+        particle:
+          $ref: '#/components/schemas/RealmCharterParticle'
+        quiddity_prompt:
+          type: string
+        capital_name:
+          type: string
+      required:
+      - capital_name
+      - particle
+      - quiddity_prompt
+      - succession_law
+    RealmCharterParticle:
+      type: object
+      description: Mirrors ``almanach_reads.charter_for_realm``'s ``particle`` dict.
+      properties:
+        born:
+          type: string
+        taken_in:
+          type: string
+      required:
+      - born
+      - taken_in
     RealmDetail:
       type: object
       description: 'One card on the Realms hub: name, formal name, first motto, and
@@ -75213,6 +75582,28 @@ components:
         * `story_resolved` - Story resolved
         * `chapter_reached` - Chapter reached or passed
         * `episode_reached` - Episode reached or passed
+    RelationEnum:
+      enum:
+      - head
+      - mother
+      - father
+      - spouse
+      - sibling
+      - child
+      - grandparent
+      - ward
+      - position
+      type: string
+      description: |-
+        * `head` - Head of house
+        * `mother` - Mother
+        * `father` - Father
+        * `spouse` - Spouse
+        * `sibling` - Sibling
+        * `child` - Child
+        * `grandparent` - Grandparent
+        * `ward` - Ward
+        * `position` - Household position
     RelationshipCapstone:
       type: object
       description: Serializer for relationship capstone events.
@@ -80697,11 +81088,16 @@ components:
           type: string
           readOnly: true
           nullable: true
+        realm_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - crest_image
       - description
       - id
       - name
+      - realm_id
       - realm_name
       - realm_slug
       - realm_theme
@@ -81943,6 +82339,22 @@ components:
         * `campaign_track` - Campaign track
         * `asset` - Asset
         * `custom` - Custom (trust-gated)
+    SuccessionLawOption:
+      type: object
+      description: Mirrors ``almanach_reads``'s ``default_succession_law`` payload
+        shape.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        codex_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - codex_entry_id
+      - id
+      - name
     SuitEnum:
       enum:
       - swords
