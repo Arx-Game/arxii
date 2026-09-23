@@ -379,7 +379,21 @@ def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     Pending or rejected claims materialize nothing — the character enters
     play houseless (the claim dies with the draft). Best-effort like the
     kinship bind: a refusal must not strand finalization.
+
+    Every refusal class materialize can raise is caught, not just the
+    house services' own: an ``IntegrityError`` from a colliding land name
+    and a ``KinshipServiceError`` from the kin tree would otherwise escape
+    ``finalize_character``'s transaction and hand the founder a 500 at the
+    very last step of character creation (#3983). And because the claim's
+    savepoint rolls back while ``sheet`` keeps its in-memory writes —
+    ``CharacterSheet`` is identity-mapped, and ``materialize_house_claim``
+    stamps ``sheet.family`` before the failing row — the family FK is put
+    back by hand here; otherwise the next ``save()`` on that shared instance
+    would persist a Family that no longer exists.
     """
+    from django.db import IntegrityError  # noqa: PLC0415
+
+    from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
     from world.societies.houses.constants import HouseClaimStatus  # noqa: PLC0415
     from world.societies.houses.creator import materialize_house_claim  # noqa: PLC0415
     from world.societies.houses.models import HouseClaim  # noqa: PLC0415
@@ -396,9 +410,11 @@ def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             claim.status,
         )
         return
+    previous_family = sheet.family
     try:
         materialize_house_claim(claim, sheet=sheet)
-    except HousesServiceError:
+    except (HousesServiceError, KinshipServiceError, IntegrityError):
+        sheet.family = previous_family
         logger.exception(
             "House claim %s materialization failed for draft %s; continuing houseless.",
             claim.pk,

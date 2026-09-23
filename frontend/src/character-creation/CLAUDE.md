@@ -33,9 +33,12 @@ character-creation/
     ├── OriginStage.tsx      # Stage 1: Area selection
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
     ├── LineageStage.tsx     # Stage 3: Upbringing + family selection (#3617); keeps
-    │                        #   InventedParentsCard, HouseFoundingPanel,
-    │                        #   FamilyNamePreview, KinSlotPicker, TarotNamingRitual,
-    │                        #   TarotCardItem, FamilyCard (exported for lineage/)
+    │                        #   InventedParentsCard, FamilyNamePreview, KinSlotPicker,
+    │                        #   TarotNamingRitual, TarotCardItem, FamilyCard (exported
+    │                        #   for lineage/). HouseFoundingPanel retired (#3983 Plan B
+    │                        #   Task 6) — claim-path house founding is
+    │                        #   `almanach/founder/FounderAlmanach.tsx`, mounted from
+    │                        #   `FamilyPathSection.tsx`.
     ├── PathStage.tsx        # Stage 5: Path selection
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
@@ -114,9 +117,11 @@ character-creation/
         │                         #   (claim path's kin Vacancies), ServicePanel (any
         │                         #   path's retainer Vacancies), InheritedFactsPanel
         │                         #   (claim path)
-        ├── FamilyTemplateForm.tsx # Shared aspect-pick + features form for a Family
-        │                         #   Template, used by both HouseFoundingPanel (noble
-        │                         #   title claim) and the name path (#3648)
+        ├── FamilyTemplateForm.tsx # Aspect-pick + features form for a Family Template,
+        │                         #   used by the name path (#3648); the claim path's
+        │                         #   own charter form is
+        │                         #   `almanach/founder/FounderHouseChapter.tsx` (#3983
+        │                         #   Plan B)
         ├── VacancyPicker.tsx     # Renders reachable Vacancies (description, importance,
         │                         #   presumed importance, price, remaining) for pick
         ├── ServicePanel.tsx      # Retainer Vacancies reachable from this Upbringing,

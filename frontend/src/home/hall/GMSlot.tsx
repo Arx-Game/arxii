@@ -131,8 +131,9 @@ export function GMSlot({ gmEntry, isDocked, onSelect }: GMSlotProps) {
           activePersonaId={gmEntry.active_persona_id}
           className="mt-2 justify-center"
         />
+        {/* The /characters/:id route takes the RosterEntry id, not character_id. */}
         <Link
-          to={`/characters/${gmEntry.character_id}`}
+          to={`/characters/${gmEntry.id}`}
           className="mt-2 block text-center font-body text-xs text-muted-foreground underline"
         >
           Sheet

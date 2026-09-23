@@ -53,6 +53,12 @@ ALLOWED_MIGRATIONS: set[str] = {
     # (the one field with no signal before this backfill runs). No authored
     # content is invented: every DistinctionOffer row it get_or_creates mirrors
     # a pairing that already existed in a different shape.
+    "world/migrations/0156_lands_writeup_to_claim_lands.py",
+    # #3983 Plan B: ADR-0237 mandatory restructure backfill, carries each
+    # HouseClaim's free-text lands_writeup into a HouseClaimLand row on the
+    # claim's own title before 0157 drops the column. No authored content is
+    # invented: every HouseClaimLand row it get_or_creates mirrors a writeup
+    # that already existed on the claim, in a different shape.
 }
 
 # Patterns that suggest seed data in migrations

@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0151_partition_metadata_orm_state"),
+        ("arxii", "0157_remove_houseclaim_lands_writeup"),
         ("arxii", "0155_bond_pull_tuning_help_text"),
     ]
 

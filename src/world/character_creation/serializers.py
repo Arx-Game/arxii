@@ -54,16 +54,22 @@ from world.game_clock.services import get_ic_now
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.mechanics.constants import GOAL_CATEGORY_NAME
+from world.roster.constants import MembershipBasis
 from world.roster.models import Family, KinSlotPool, Kinsperson
 from world.roster.serializers import FamilySerializer, KinSlotPoolSerializer, KinSlotSerializer
+from world.societies.houses.constants import ClaimKinRelation
 from world.societies.houses.models import (
+    HoldingKind,
     HouseAspectDefinition,
     HouseAspectOption,
     HouseClaim,
+    HouseClaimKin,
+    HouseClaimLand,
     HouseFeature,
     HouseTemplate,
     Title,
 )
+from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft
 from world.societies.models import Organization, Vacancy
 from world.species.models import Language, Species
 from world.worship.models import WorshippedBeing
@@ -192,6 +198,8 @@ class StartingAreaSerializer(serializers.ModelSerializer):
     realm_name = serializers.CharField(
         source="realm.name", read_only=True, allow_null=True, default=None
     )
+    # The founder ladder defaults to the starting realm (#3983 Plan B).
+    realm_id = serializers.IntegerField(read_only=True, allow_null=True)
     crest_image = serializers.SerializerMethodField()
 
     class Meta:
@@ -204,6 +212,7 @@ class StartingAreaSerializer(serializers.ModelSerializer):
             "realm_theme",
             "realm_slug",
             "realm_name",
+            "realm_id",
         ]
 
     def get_crest_image(self, obj: StartingArea) -> str | None:
@@ -845,6 +854,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             "allows_claim_family",
             "allows_name_family",
             "allows_no_family",
+            "max_claim_tier",
             "claimable_kind_ids",
             "family_templates",
             "slots",
@@ -2014,11 +2024,31 @@ class HouseFeatureSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "slug", "description"]
 
 
+class HoldingKindOptionSerializer(serializers.ModelSerializer):
+    """A holding kind a template plants on the seat domain at finalization
+    (#3983 Plan B) — lets the founder Lands leaf show what a rung produces."""
+
+    class Meta:
+        model = HoldingKind
+        fields = ["id", "name"]
+
+
+class SuccessionLawOptionSerializer(serializers.Serializer):
+    """Mirrors ``almanach_reads``'s ``default_succession_law`` payload shape."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    codex_entry_id = serializers.IntegerField(allow_null=True)
+
+
 class HouseTemplateOptionSerializer(serializers.ModelSerializer):
     """A realm template a CG house claim may build from."""
 
     aspect_definitions = HouseAspectDefinitionSerializer(many=True, read_only=True)
     features = HouseFeatureSerializer(many=True, read_only=True)
+    holdings = HoldingKindOptionSerializer(many=True, read_only=True)
+    default_succession_law = serializers.SerializerMethodField()
+    starting_kin_slots = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = HouseTemplate
@@ -2042,7 +2072,17 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
             "power_max",
             "aspect_definitions",
             "features",
+            "holdings",
+            "default_succession_law",
+            "starting_kin_slots",
         ]
+
+    @extend_schema_field(SuccessionLawOptionSerializer(allow_null=True))
+    def get_default_succession_law(self, obj: HouseTemplate) -> dict | None:
+        law = obj.default_succession_law
+        if law is None:
+            return None
+        return {"id": law.pk, "name": law.name, "codex_entry_id": law.codex_entry_id}
 
 
 class FamilyTemplateSerializer(HouseTemplateOptionSerializer):
@@ -2103,6 +2143,148 @@ class CGVacancySerializer(serializers.ModelSerializer):
         }
 
 
+# The submit body's principle-axis field names (#3983 Plan B); "status" here
+# is the principle axis, never the claim's lifecycle status field — the two
+# only collide on this literal, never on a model column
+# (``submit_house_claim``'s ``_CLAIM_FIELD`` maps this "status" key onto
+# ``HouseClaim.status_principle``).
+_CLAIM_PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "power")
+
+
+class ClaimAspectPickSerializer(serializers.Serializer):
+    """One aspect definition's picked option(s), as the claim body sends them."""
+
+    definition = serializers.PrimaryKeyRelatedField(queryset=HouseAspectDefinition.objects.all())
+    options = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=HouseAspectOption.objects.all()),
+        required=False,
+        default=list,
+    )
+
+
+class ClaimKinDraftSerializer(serializers.Serializer):
+    """One founder-written kin row (#3983 Plan B); converted to a
+    ``ClaimKinDraft`` by ``HouseClaimSubmitSerializer.validate()``."""
+
+    name = serializers.CharField(required=False, allow_blank=True, default="")
+    relation = serializers.ChoiceField(choices=ClaimKinRelation.choices)
+    gender = serializers.PrimaryKeyRelatedField(
+        queryset=Gender.objects.all(), required=False, allow_null=True, default=None
+    )
+    age = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=0)
+    is_deceased = serializers.BooleanField(required=False, default=False)
+    born_into = serializers.PrimaryKeyRelatedField(
+        queryset=Family.objects.all(), required=False, allow_null=True, default=None
+    )
+    basis = serializers.ChoiceField(
+        choices=MembershipBasis.choices, required=False, allow_blank=True, default=""
+    )
+    is_household = serializers.BooleanField(required=False, default=False)
+
+
+class ClaimLandDraftSerializer(serializers.Serializer):
+    """One founder-written land row for a rung of the claimed chain (#3983
+    Plan B); converted to a ``ClaimLandDraft`` by
+    ``HouseClaimSubmitSerializer.validate()``."""
+
+    title = serializers.PrimaryKeyRelatedField(queryset=Title.objects.all())
+    land_name = serializers.CharField(required=False, allow_blank=True, default="")
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+    hall_name = serializers.CharField(required=False, allow_blank=True, default="")
+    land_shapes = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+
+
+class ClaimEstateSerializer(serializers.Serializer):
+    """The founder's optional estate pitch (#3983 Plan B)."""
+
+    name = serializers.CharField(required=False, allow_blank=True, default="")
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class HouseClaimSubmitSerializer(serializers.Serializer):
+    """The nested house-claim submit body (#3983 Plan B, Task 3): validates
+    shape and pk references only — the automated thematic gates run inside
+    ``submit_house_claim`` itself, dispatched by the view
+    (``to_service_kwargs()``)."""
+
+    title = serializers.PrimaryKeyRelatedField(queryset=Title.objects.all())
+    template = serializers.PrimaryKeyRelatedField(queryset=HouseTemplate.objects.all())
+    house_name = serializers.CharField()
+    backstory = serializers.CharField()
+    words = serializers.CharField(required=False, allow_blank=True, default="")
+    colors = serializers.CharField(required=False, allow_blank=True, default="")
+    sigil_description = serializers.CharField(required=False, allow_blank=True, default="")
+    aspects = ClaimAspectPickSerializer(many=True, required=False, default=list)
+    mercy = serializers.IntegerField(required=False, default=0)
+    method = serializers.IntegerField(required=False, default=0)
+    status = serializers.IntegerField(required=False, default=0)
+    change = serializers.IntegerField(required=False, default=0)
+    allegiance = serializers.IntegerField(required=False, default=0)
+    power = serializers.IntegerField(required=False, default=0)
+    founder_relation = serializers.ChoiceField(
+        choices=ClaimKinRelation.choices, required=False, default=ClaimKinRelation.HEAD
+    )
+    founder_is_heir = serializers.BooleanField(required=False, default=False)
+    kin = ClaimKinDraftSerializer(many=True, required=False, default=list)
+    lands = ClaimLandDraftSerializer(many=True, required=False, default=list)
+    estate = ClaimEstateSerializer(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs: dict) -> dict:
+        """Convert the nested kin/land rows to dataclasses; no service calls
+        here (the automated gates run in the view's ``submit_house_claim``
+        call, not in validation)."""
+        attrs["kin"] = [
+            ClaimKinDraft(
+                name=row["name"],
+                relation=row["relation"],
+                gender_id=row["gender"].pk if row.get("gender") else None,
+                age=row.get("age"),
+                is_deceased=row.get("is_deceased", False),
+                born_into_id=row["born_into"].pk if row.get("born_into") else None,
+                basis=row.get("basis", ""),
+                is_household=row.get("is_household", False),
+            )
+            for row in attrs.get("kin", [])
+        ]
+        attrs["lands"] = [
+            ClaimLandDraft(
+                title_id=row["title"].pk,
+                land_name=row.get("land_name", ""),
+                description=row.get("description", ""),
+                hall_name=row.get("hall_name", ""),
+                land_shape_names=tuple(row.get("land_shapes", [])),
+            )
+            for row in attrs.get("lands", [])
+        ]
+        return attrs
+
+    def to_service_kwargs(self) -> dict:
+        """The kwargs ``submit_house_claim`` takes, built from validated data."""
+        data = self.validated_data
+        principles = {axis: data[axis] for axis in _CLAIM_PRINCIPLE_AXES}
+        aspect_picks: dict[int, list[int]] = {}
+        for pick in data.get("aspects", []):
+            aspect_picks[pick["definition"].pk] = [option.pk for option in pick.get("options", [])]
+        estate = data.get("estate") or {}
+        return {
+            "title": data["title"],
+            "template": data["template"],
+            "house_name": data["house_name"],
+            "backstory": data["backstory"],
+            "principles": principles,
+            "words": data.get("words", ""),
+            "colors": data.get("colors", ""),
+            "sigil_description": data.get("sigil_description", ""),
+            "aspect_picks": aspect_picks,
+            "kin": data.get("kin", []),
+            "lands": data.get("lands", []),
+            "estate_name": estate.get("name", ""),
+            "estate_description": estate.get("description", ""),
+            "founder_relation": data.get("founder_relation", ClaimKinRelation.HEAD),
+            "founder_is_heir": data.get("founder_is_heir", False),
+        }
+
+
 class ClaimableTitleSerializer(serializers.ModelSerializer):
     """A vacant set-aside title open to CG house definition (#1884 Phase D)."""
 
@@ -2121,11 +2303,50 @@ class ClaimableTitleSerializer(serializers.ModelSerializer):
         return HouseTemplateOptionSerializer(templates_for_title(obj), many=True).data
 
 
+class HouseClaimKinSerializer(serializers.ModelSerializer):
+    """One founder-written kin row, as CG echoes it back (#3983 Plan B)."""
+
+    gender_id = serializers.IntegerField(read_only=True, allow_null=True)
+    born_into_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = HouseClaimKin
+        fields = [
+            "name",
+            "relation",
+            "gender_id",
+            "age",
+            "is_deceased",
+            "born_into_id",
+            "basis",
+            "is_household",
+            "sort_order",
+        ]
+
+
+class HouseClaimLandSerializer(serializers.ModelSerializer):
+    """One founder-written land row, as CG echoes it back (#3983 Plan B)."""
+
+    title_id = serializers.IntegerField(read_only=True)
+    land_shapes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HouseClaimLand
+        fields = ["title_id", "land_name", "description", "hall_name", "land_shapes"]
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_land_shapes(self, obj: HouseClaimLand) -> list[str]:
+        return [shape.name for shape in obj.land_shapes.all()]
+
+
 class HouseClaimStatusSerializer(serializers.ModelSerializer):
-    """The draft's house claim, as CG shows it (#1884 Phase D, #2079)."""
+    """The draft's house claim, as CG shows it (#1884 Phase D, #2079, #3983 Plan B)."""
 
     title_name = serializers.CharField(source="title.name", read_only=True)
     aspects = serializers.SerializerMethodField()
+    kin = HouseClaimKinSerializer(many=True, read_only=True)
+    lands = HouseClaimLandSerializer(many=True, read_only=True)
+    estate_district_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = HouseClaim
@@ -2138,8 +2359,14 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
             "words",
             "colors",
             "sigil_description",
-            "lands_writeup",
             "aspects",
+            "kin",
+            "lands",
+            "estate_name",
+            "estate_description",
+            "estate_district_id",
+            "founder_relation",
+            "founder_is_heir",
         ]
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))

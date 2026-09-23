@@ -18,6 +18,7 @@ from world.societies.houses.models import (
     HouseFeature,
 )
 from world.societies.houses.services import HousesServiceError
+from world.societies.houses.types import ClaimLandDraft
 from world.societies.tests.test_house_creator import HouseCreatorTestData
 
 
@@ -153,7 +154,12 @@ class AspectTestData(HouseCreatorTestData):
             "words": "The Fens Endure",
             "colors": "russet and bog-iron grey",
             "sigil_description": "A heron statant on a black chief.",
-            "lands_writeup": "Fen villages and eel weirs along the marches.",
+            "lands": [
+                ClaimLandDraft(
+                    title_id=self.title.pk,
+                    description="Fen villages and eel weirs along the marches.",
+                )
+            ],
             "aspect_picks": {
                 self.virtue.pk: [self.fortitude.pk],
                 self.traditions.pk: [self.trad_a.pk, self.trad_b.pk],
@@ -172,7 +178,7 @@ class CreatorAspectGateTests(AspectTestData):
         self.assertEqual(claim.words, "The Fens Endure")
         self.assertEqual(claim.colors, "russet and bog-iron grey")
         self.assertIn("heron", claim.sigil_description)
-        self.assertIn("eel weirs", claim.lands_writeup)
+        self.assertIn("eel weirs", claim.lands.get(title=self.title).description)
 
     def test_missing_definition_picks_refused(self):
         with self.assertRaises(HousesServiceError):
@@ -230,10 +236,6 @@ class CreatorAspectGateTests(AspectTestData):
         with self.assertRaises(HousesServiceError):
             self._submit_full(words="   ")
 
-    def test_blank_lands_refused_for_landed_title(self):
-        with self.assertRaises(HousesServiceError):
-            self._submit_full(lands_writeup="")
-
 
 class MaterializationAspectTests(AspectTestData):
     """Approved claims write stylings, facets, features, and lands onto the world."""
@@ -275,7 +277,12 @@ class DisplaySurfaceTests(AspectTestData):
             words="The Fens Endure",
             colors="russet and bog-iron grey",
             sigil_description="A heron statant on a black chief.",
-            lands_writeup="Fen villages and eel weirs along the marches.",
+            lands=[
+                ClaimLandDraft(
+                    title_id=cls.title.pk,
+                    description="Fen villages and eel weirs along the marches.",
+                )
+            ],
             aspect_picks={
                 cls.virtue.pk: [cls.fortitude.pk],
                 cls.traditions.pk: [cls.trad_a.pk, cls.trad_b.pk],
@@ -297,6 +304,11 @@ class DisplaySurfaceTests(AspectTestData):
         self.assertIn(("House Virtue", "Fortitude"), picked)
         self.assertEqual(len(house["aspects"]), 3)
         self.assertEqual(house["features"][0]["slug"], "hearth-right")
+        # #3983: standing and land are on the house block itself, so an org
+        # page never needs a second call into the Almanach for them. The
+        # count is the document's own demesne rule (baronies held).
+        self.assertEqual(house["house_state"], self.org.house_state)
+        self.assertEqual(house["demesne"], 1)
 
     def test_sheet_house_section_lists_identity(self):
         from types import SimpleNamespace

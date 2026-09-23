@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { FounderAlmanach } from '@/almanach/founder/FounderAlmanach';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -30,7 +31,6 @@ import type {
 import {
   FamilyCard,
   FamilyNamePreview,
-  HouseFoundingPanel,
   InventedParentsCard,
   KinSlotPicker,
   TarotNamingRitual,
@@ -327,7 +327,7 @@ function ClaimedFamilyPath({
         <ClaimVacancies draft={draft} organizationFamilyId={draft.family.id} copy={copy} />
       )}
 
-      {showHouseFounding && <HouseFoundingPanel draft={draft} />}
+      {showHouseFounding && <FounderAlmanach draft={draft} />}
     </div>
   );
 }

@@ -313,6 +313,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "societies.housetemplate",
         "societies.houseaspectdefinition",
         "societies.houseaspectoption",
+        "societies.landshape",
         # species
         "species.language",
         "species.species",

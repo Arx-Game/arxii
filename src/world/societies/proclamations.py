@@ -232,8 +232,10 @@ def edict_weekly_tick() -> int:
         "kind", "domain__owner_org"
     )
     for edict in edicts:
-        kind = edict.kind
         domain = edict.domain
+        if domain.owner_org_id is None:
+            continue
+        kind = edict.kind
         if kind.weekly_unrest_delta:
             domain.unrest = max(0, min(100, domain.unrest + kind.weekly_unrest_delta))
             domain.save(update_fields=["unrest"])

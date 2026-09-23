@@ -12,6 +12,7 @@ from world.scenes.models import Persona
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+from world.societies.houses.almanach_reads import demesne_count
 from world.societies.houses.models import Domain, Title
 from world.societies.models import (
     LegendEntry,
@@ -151,6 +152,10 @@ class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
     family_name = serializers.CharField()
+    house_state = serializers.CharField()
+    # The Almanach document's own demesne number (``demesne_count``: baronies
+    # the house holds), so an org page needs no second reader for it (#3983).
+    demesne = serializers.IntegerField()
     liege_name = serializers.CharField(allow_blank=True)
     vassal_names = serializers.ListField(child=serializers.CharField())
     titles = HouseTitleSerializer(many=True)
@@ -226,6 +231,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
         titles = sorted(obj.titles.all(), key=lambda t: (t.tier, t.name))
         payload = {
             "family_name": obj.family.name,
+            "house_state": obj.house_state,
+            "demesne": demesne_count(titles),
             "liege_name": liege_edge.liege.name if liege_edge is not None else "",
             "vassal_names": [edge.vassal.name for edge in obj.vassal_edges.all()],
             "titles": titles,

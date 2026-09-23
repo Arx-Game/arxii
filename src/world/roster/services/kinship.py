@@ -772,14 +772,27 @@ class FamilyTreePayload:
     unions: list[dict] = field(default_factory=list)
 
 
-def _node_dict(person: Kinsperson) -> dict:
-    """One Kinsperson as a payload node dict — the single node-shape definition."""
-    return {
+def _node_dict(person: Kinsperson, viewer: object) -> dict:
+    """One Kinsperson as a payload node dict — the single node-shape definition.
+
+    ``is_deceased`` is the value the VIEWER is entitled to, not the
+    mechanical truth (#3983): a house can put it about that an heir died,
+    and until the viewer knows better the public tree has to read the way
+    the world reads. So for an ordinary viewer a believed death IS death
+    here, and ``believed_deceased`` is not on the node at all — shipping
+    the flag beside the truth would hand any client the very fact it hides.
+    ``OMNISCIENT`` (staff) gets both raw: the truth in ``is_deceased`` and
+    the public belief alongside it.
+    """
+    omniscient = viewer is OMNISCIENT
+    node = {
         "id": person.pk,
         "name": person.display_name,
         "tier": person.definition_tier,
         "family_id": person.family_id,
-        "is_deceased": person.is_deceased,
+        "is_deceased": (
+            person.is_deceased if omniscient else (person.is_deceased or person.believed_deceased)
+        ),
         "is_appable": person.is_appable and person.sheet_id is None,
         # CharacterSheet pk when this node is sheet-bound, else null (#3003
         # Task 8) — a distinct id space from ``person.pk`` above; the web
@@ -790,6 +803,9 @@ def _node_dict(person: Kinsperson) -> dict:
         "age": person.age,
         "description": person.description,
     }
+    if omniscient:
+        node["believed_deceased"] = person.believed_deceased
+    return node
 
 
 def _edge_dict(edge: ParentageEdge) -> dict:
@@ -869,7 +885,7 @@ def family_tree_for(family: Family, viewer: object) -> FamilyTreePayload:
             people.setdefault(partner.pk, partner)
 
     payload = FamilyTreePayload(family=family)
-    payload.nodes = [_node_dict(p) for p in people.values()]
+    payload.nodes = [_node_dict(p, viewer) for p in people.values()]
     _populate_edges_and_unions(payload, people, viewer)
     return payload
 
@@ -903,7 +919,7 @@ def kin_tree_for_sheet(sheet: CharacterSheet, viewer: object) -> FamilyTreePaylo
         people.setdefault(step.pk, step)
 
     payload = FamilyTreePayload(family=None)
-    payload.nodes = [_node_dict(p) for p in people.values()]
+    payload.nodes = [_node_dict(p, viewer) for p in people.values()]
     _populate_edges_and_unions(payload, people, viewer)
     return payload
 

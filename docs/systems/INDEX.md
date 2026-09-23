@@ -1127,8 +1127,10 @@ symmetric.
   ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,
   materialized view), `AreaElevationRequirement` (authored config: `to_level` unique
   `AreaLevel`, `min_held_buildings`, `min_order_stat`, `cost_coppers`, #696 gap 3)
-- **Enums:** `AreaLevel` (low to high: Building, Neighborhood, Ward, City, Region,
-  Kingdom, Continent, World, Plane); `GridOrigin` (both `world.areas.constants` —
+- **Enums:** `AreaLevel` (low to high: Building, Neighborhood, Ward, City, Barony, Region,
+  County, Duchy, Kingdom, Empire, Continent, World, Plane — Barony/County/Duchy/Empire
+  are the #3983 feudal rungs, sitting between City and Continent so a duchy can contain
+  a county on the map; ADR-0309); `GridOrigin` (both `world.areas.constants` —
   AUTHORED/STORY/PLAYER, #2436/#2448): who authored a grid
   element. Only `origin=AUTHORED` areas/rooms (with their identity key set) export to
   the lore repo via `grid_export.export_grid_bundles()`; `STORY` (GM-built) and
@@ -1497,11 +1499,19 @@ Social structures, organizations, reputation, and legend tracking.
   (`organization`, `name`, `description`, `importance`/`presumed_importance`,
   `cg_point_cost`/`cost_per_influence` priced via `cost_for(influence)`, `rank`,
   `kin_pool`/`kin_node` (at most one; sets `basis` to `kin`, else `retainer`),
+  `holder_kinsperson` (#3983 — the NPC filling a retainer opening; distinct from
+  `kin_node`, which marks a *kin* vacancy on the family's claim path — a Household
+  member is a retainer with a holder, never a kin vacancy),
   `count_remaining` (blank = standing, always open), `allowed_upbringings`,
   `is_active`). `NaturalKeyMixin` + `CreditedContent` (visible
   in the Authoring Workbench) but not in `CONTENT_MODELS`: it belongs to one
   installation's family, not the corpus. `OrganizationMembership.vacancy` FK records
-  which Vacancy a membership was taken through.
+  which Vacancy a membership was taken through. `houses.almanach.add_household_member`
+  (#3983) is the service seam that mints/updates a FILLED retainer Vacancy for a house's
+  household, and `open_household_position` the one that posts an EMPTY one; both refuse when the
+  house has no `family` on record. Vacancy is unique on `(organization, name)`, so each row is
+  KEYED by its holder (`Ward: <name>`) or by the job (`Master-at-arms`), never by the relation;
+  `household_position_label` turns that key back into the label the household read shows.
 - **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`,
   open (unless `require_open=False`, used by CG draft validation re-checking an
   already-selected Vacancy), realm-matched, Upbringing-gated CG offer;
@@ -1600,7 +1610,7 @@ Social structures, organizations, reputation, and legend tracking.
 Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
-- **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
+- **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
   `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes
@@ -1626,8 +1636,42 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **House Stature (#3091, ADR-0209/0210):** perceived-vs-true deterrence for landed orgs. Models: `StatureBand` (authored percentile tiers; `threat_multiplier` scales ambient predation; headline templates), `HouseStature` (components renown/military/economic/allied, `crisis_penalty`, true/perceived totals, band + trend, `prestige_rank`, stored realm rank), `StatureShift` (why-it-moved ledger → tidings), `PrestigeRankBand` (rank-relative benefits → prosperity drift), `OrgPrestigeRank` (unlanded orgs). Services in `stature_services.py`: `recompute_stature` (renown channels: members, head's COURT covenant, kin via `Kinsperson.gifted_rating`, union partners — marriage both-ways full, consorts half/senior-only/landed-title-gated/capped, paramours zero), `converge_perceived`, `apply_death_shock` (vitals seam), `apply_pact_shift`, `crisis_stature_shift` (covert threats hit perceived only after surfacing), `apply_whisper`, `assign_bands`/`assign_realm_ranks`/`recompute_org_prestige_ranks`, `apply_prestige_prosperity_drift` (zero-open-threats gate; ~3x income ceiling via prosperity clamp), `weekly_stature_tick` (rollover processor before crisis generation), `gifted_power_rating` (first live `MOST_POWERFUL_GIFTED` rater), `award_marriage_tier_prestige`. Six-step `TitleTier` (empire/kingdom/duchy/march/county/barony). Surfaces: org API `house.stature` panel, `domain stature` telnet, `FeedItemKind.STATURE` tidings, spy `_stature_lines` + `whisper_stature_delta` payout. Seeds: cluster `stature` (bands, rank bands, consort/paramour `UnionKind` rows — Luxen's non-recognition = no row)
 - **Predator ecology (#3093, ADR-0211):** named NPC antagonists in `world/predators/` (thin dedicated models, never Organizations): `PredatorKind` (authored vocabulary), `PredatorBand` (strength/loot/prey/home region + `MenaceStage` ladder: rumors → lawlessness → robbery → raids → terror, ~10 weekly crons rumor→raid, advancing only while unanswered), `MenaceEvent` (tidings source), `AfflictionSign` (the dread week before an outbreak). Services: `weekly_menace_tick` (spawn/stalk/pressure/escalate; prey = weakest-perceived landed org honoring consort regional peace), `strike_band`/`sabotage_band` (counterplay: burn, knockdown, dormancy, disband; wired into `resolve_crisis` for attributed raids), `weekly_affliction_tick` (SIGNS → deterrence-blind outbreak → capped one-hop spread; `DomainCrisisType.ignores_stature`/`affliction_spreads`, `DomainCrisis.aggressor_band`/`spread_count`, `CrisisOrigin.PREDATOR`/`AFFLICTION`). Espionage: `TaskTargetKind.PREDATOR` + `scout_predator`/`sabotage_predator` payouts. `FeedItemKind.MENACE` tidings. Grand displays: `apply_grand_display` (event PROVISION quality → bounded upward perceived-stature bluff, seamed at `complete_event`). **Defenses resist predation (#696 gap 5):** LAWLESSNESS's unrest tick and ROBBERY's skim percentage are each reduced by `houses.services.effective_defenses(domain) // PLACEHOLDER_DEFENSE_STEP`, floored at 0; `_ensure_raid_crisis` targets the prey's lowest-`effective_defenses` domain, not its lowest-prosperity one. Seeds: cluster `predators`. Details: [predators.md](predators.md)
 - **Org pacts & marriage-in-play (#2999, ADR-0212):** `PactKind` lever catalog + `OrgPact` (propose/ratify by leadership; income tithe mints `OrgObligation`; BETRAYAL is a stamped world event with a permanent prestige cost, auto-flagged when offensive spy tasks hit a pact partner), `Betrothal`/`BetrothalTerm` (25% stature preview; breaking costs standing), `solemnize_wedding` via the WEDDING `CeremonyTypeKey` (union + marriage pact + tier prestige in one rite — first in-play `record_union` caller; #2358 adds officiant-driven dual consent at ceremony start and `initiate_divorce` — unilateral, `Union.ended_at` + `PactDissolutionReason.DIVORCE`, both spouses' prestige hit, initiator steeper). Stature's allied slot reads ratified OrgPacts at their authored share. **Match dossier**: `dossier_services.build_dossier` + `GET .../organizations/{id}/dossier/` + `/orgs/:id/dossier` — any authenticated player; covert crises enriched only via the viewer org's `CrisisIntel`. Telnet `CmdPact`. Seeds: cluster `pacts`. Union membership reads the m2m through table (idmapper corrupts `prefetch_related` grouping — `_union_membership`)
-- **Seeds:** cluster `houses` (rides `kinship`)
-- **Integrates with:** roster kinship (recognition/succession read parentage; RESIDENCY writes `FamilyMembership`), currency (`OrgIncomeStream` holdings, `OrgObligation` subsidies, treasury dowries), projects (`DOMAIN_IMPROVEMENT`), areas (Domain decorates an Area), tidings (house feed), secrets (breach scandal channel)
+- **Almanach de Catenys (#3983, ADR-0309–0313, ADR-0316):** staff feudal-ladder builder + house record.
+  `world.societies.houses.almanach`: `plant_rung`/`batch_unclaimed`/`name_rung` (Title+Area+Domain
+  seat chains down to a barony seat; new `AreaLevel` rungs BARONY(46)/COUNTY(53)/DUCHY(56)/
+  EMPIRE(65) between CITY and CONTINENT, mapped via `TIER_TO_AREA_LEVEL`), `liege_for_title`/
+  `assign_holder`/`rehome_vassals` (liege by containment, walked over plain `Area.parent` — no
+  matview dependency, so it works on the SQLite test tier too), `set_house_state`/`publish_house`/
+  `unpublish_house` (`Organization.house_state`/`published_at`), `describe_demesne` (`Domain.hall`,
+  `LandShape` tags), `plan_estate`, `add_household_member` (a filled `Vacancy` at the org's
+  `Household` rank, titled after its holder, never `kin_node`/`kin_pool`),
+  `open_household_position` (the counterpart: an OPEN post titled by the job, no `Kinsperson` at
+  all), `record_public_belief` (`Kinsperson.believed_deceased`, independent of `is_deceased`, and
+  read viewer-gated — a believed death reads as death to everyone but `OMNISCIENT`). Reads (`almanach_reads.py`): `ladder_for_realm`/
+  `document_for_house`, one in-memory `Title`/`Area` graph pass. Ten REGISTRY actions
+  (`actions/definitions/almanach.py`, `almanach_*` keys, staff-only), including
+  `AlmanachEditKinAction` (create, or a present-only-field update that refuses a foreign-family
+  `kinsperson_id` or a relation kwarg riding alongside one). API `/api/almanach/`
+  (`almanach_views.py`/`almanach_urls.py`) + React console `frontend/src/almanach/` — permissioned
+  per endpoint, not blanket staff-only: `AlmanachHouseViewSet` stays `IsAdminUser`, but
+  `AlmanachRealmViewSet` (realms/`/charter/`/`/ladder/?for=founder`) and `LandShapeViewSet` are
+  `IsAuthenticated` (Plan B Task 3 opened the founder-facing reads). `LandShape`: authored
+  land-shape catalog, `CONTENT_MODELS`. `Title.claimant_org`: contested-title schema, no
+  resolution service yet.
+- **Founder mode (#3983 Plan B, ADR-0314/ADR-0315):** the CG-facing claim journey — the whole
+  draft lives client-side (ADR-0314) until one submit, `POST
+  /api/character-creation/drafts/{id}/house-claim/` (`HouseClaimSubmitSerializer`), nested
+  `HouseClaimKin`/`HouseClaimLand` rows and all. `claim_grants(title)` is what a claim actually
+  seats the house on: the seat chain plus the loose baronies inside it, never a vassal's own held
+  seat (ADR-0315). `record_kin` is the shared kin-writing engine both the founder finalize path and
+  staff's `AlmanachEditKinAction` place nodes through. See [houses.md](houses.md)'s "Founder mode"
+  section for the gates, the payload shape, the rows finalize writes, and the admin review inlines.
+- **Seeds:** cluster `houses` (rides `kinship`); `seed_land_shapes()` (#3983, `authored_or_sample`
+  style) seeds the `LandShape` catalog independent of the demo realm's own existence. The founder
+  demo ladder (#3983 Plan B Task 7): an unclaimed duchy chain + a loose barony + a sibling county
+  under a Kingdom-tier rung the demo house holds, plus the realm's `is_capital` city — so
+  `?for=founder` lists a claimable duchy under a published liege out of the box.
+- **Integrates with:** roster kinship (recognition/succession read parentage; RESIDENCY writes `FamilyMembership`), currency (`OrgIncomeStream` holdings, `OrgObligation` subsidies, treasury dowries), projects (`DOMAIN_IMPROVEMENT`), areas (Domain decorates an Area; the Almanach's rungs are Area levels, #3983), tidings (house feed), secrets (breach scandal channel)
 - **Source:** `src/world/societies/houses/`
 - **Details:** [houses.md](houses.md)
 
@@ -2653,7 +2697,9 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 - **Models:** `Family` (`kind` FK `FamilyKind`, `influence`, #3617),
   `FamilyKind` (authored rows: Commoner, Noble, Crime, or any kind staff add;
   `styles_as_house`), `Kinsperson` (5 definition tiers; heredity stubs
-  `species`/`power_band`, #2815), `FamilyMembership`, `UnionKind`/`Union`,
+  `species`/`power_band`, #2815; `believed_deceased` — the public record's
+  belief about a death, independent of `is_deceased` the private truth,
+  #3983), `FamilyMembership`, `UnionKind`/`Union`,
   `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
   Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent
   colors), `Soul`/`SoulIncarnation`, `KinSlotPool`; `Secret.subject_aware` delta
@@ -2663,7 +2709,12 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   (`record_parentage`/`record_union`/`record_incarnation`, memberships,
   `mint_from_pool`/`claim_appable_node`/`define_deferred`); `OMNISCIENT` sentinel.
   `world.roster.services.heredity` (#2815) — Parent Dominance:
-  `derive_lines_for_child`/`derivable_species`/`inherited_options`
+  `derive_lines_for_child`/`derivable_species`/`inherited_options`.
+  `world.societies.houses.almanach.record_public_belief` (#3983) is the one
+  writer of `believed_deceased` — a house's staff/service-placed retainer
+  **household** (never a `FamilyMembership`) is a societies-side concept
+  built alongside it; see `docs/systems/houses.md`'s Almanach de Catenys
+  section.
 - **Surfaces:** `families/` (+`has_open_positions`/`area_id` filters) +
   `families/:id/tree/` + `families/:id/slots/` REST — the same `FamilyViewSet`
   is also mounted at `/api/character-creation/families/` for CG; (#3003)

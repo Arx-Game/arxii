@@ -97,6 +97,11 @@ const AtlasPage = lazy(() =>
     default: m.AtlasPage,
   }))
 );
+const AlmanachPage = lazy(() =>
+  import('@/almanach/AlmanachPage').then((m) => ({
+    default: m.AlmanachPage,
+  }))
+);
 const FlowsBuilderPage = lazy(() =>
   import('@/flows-builder/pages/FlowsBuilderPage').then((m) => ({
     default: m.FlowsBuilderPage,
@@ -665,6 +670,36 @@ function App() {
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                   <AtlasPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/almanach"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <AlmanachPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/almanach/realms/:realmId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <AlmanachPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/almanach/houses/:houseId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <AlmanachPage />
                 </Suspense>
               </StaffRoute>
             }

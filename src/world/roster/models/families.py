@@ -209,6 +209,10 @@ class Kinsperson(SharedMemoryModel):
         ),
     )
     is_deceased = models.BooleanField(default=False)
+    believed_deceased = models.BooleanField(
+        default=False,
+        help_text="What the public record says; is_deceased is the truth (#3983).",
+    )
     gifted_rating = models.PositiveSmallIntegerField(
         default=0,
         help_text=(

@@ -125,6 +125,39 @@ _Avoid_: territory (literal), zone control, gang influence (until the territory 
 An `Organization` rooted in a kinship `Family` (`Organization.family`, #1884, ADR-0098) — noble, merchant, or crime; the type is the family's, the machinery is one. Never a standalone model.
 _Avoid_: House model, family org (ambiguous), dynasty (that's the soul-chain concept).
 
+**House State** (`Organization.house_state`, #3983):
+A house's own lifecycle standing (`HouseState`: `standing`/`in_exile`/`extinct`/`gentry`), set by
+`set_house_state` — a fact recorded once on the house itself, never inferred from whether its
+individual members are personally exiled (`OrganizationMembership.exiled_at`; ADR-0313).
+_Avoid_: status (too generic — collides with unrelated status fields elsewhere); standing (bare) as
+a loose synonym for reputation/stature — that word is already spoken for (see **Stature** above:
+"Named 'Stature' precisely because 'standing' is Reputation's avoid-word"). `HouseState.STANDING`
+is a different thing again — the literal enum label for a house's ordinary, non-exiled default
+state; don't conflate the three.
+
+**Household** (#3983):
+A house's own retainer band — staff/service-placed, never appable — recorded as `Vacancy`
+rows at the org's `Household` `OrganizationRank` (minted lazily by `add_household_member`, one
+tier below the org's current lowest rank, the first time a household member needs it). A row is
+either a **household member** (a person the house has: filled, titled after its holder, written by
+`add_household_member`) or an **open position** (a post the house has yet to fill: no holder,
+`count_remaining=1`, titled by the job, written by `open_household_position`). A row's `name` is
+its KEY — unique per organization, so a ward's carries the ward (`Ward: Marisol`) — while
+`household_position_label` gives what the row is CALLED (a ward is plainly a "Ward"; a titled place
+is called its title). The two never collapse into one another — an open post mints no `Kinsperson`, because a job is not a person, and
+`record_kin` refuses a `position` relation outright to keep that honest. Carries no
+`kin_node`/`kin_pool` link and mints no `FamilyMembership`: household stands apart from FAMILY
+(`world.roster`'s kinship graph) entirely — a ward or guard belongs to the house's service, not
+its bloodline or name (ADR-0311).
+_Avoid_: family (that's the kinship-graph concept — `world.roster.AGENT_GLOSSARY.md`); retainer
+roster (no separate model exists — a household member IS a `Vacancy` row); household as a loose
+synonym for Upbringing (a stale sense from CG vocabulary predating #3983 — see roster glossary's
+Upbringing entry); "Ward" as a place — `world.areas.AGENT_GLOSSARY.md`'s Ward entry is a
+DIFFERENT concept (`AreaLevel.WARD`, a city subdivision the founder UI calls "district") that
+happens to share this word; a house's Ward is a household position, never a location; a phantom
+person named after a post (a `Kinsperson` called "Master-at-arms") — that is an **open position**,
+a `Vacancy` with nobody in it.
+
 **Recognition (birth)**:
 A realm's law deciding whether a newborn belongs to a parent's house — `HouseRecognitionRule` rows applied to public-record parentage edges by `recognize_birth`. The mother's-option case is an explicit human call (`acknowledge_into_family`), never auto-resolved.
 _Avoid_: legitimacy check (wedlock is one input, not the concept), auto-enrollment.
@@ -132,6 +165,15 @@ _Avoid_: legitimacy check (wedlock is one input, not the concept), auto-enrollme
 **Succession Law**:
 Candidate derivation + ordering for a title (`SuccessionLaw`): house default on the org, per-title override (Imperial Tanistry). Runs on the omniscient public record; an empty candidate list is a succession crisis — story fuel, deliberately unresolved.
 _Avoid_: heir formula, inheritance rule (that's estates/wills, #1985).
+
+**Contested Title** (`Title.claimant_org`, #3983):
+A `Title` a second house has staked a claim on while another house currently holds it —
+`Title.house` stays the incumbent; `claimant_org` records the contender, without touching who
+actually holds the title (ADR-0313). Schema only so far: no service function presses or
+resolves a claim yet — pressing a claim into an actual holder change is a later loop.
+_Avoid_: claimable title (that's `Title.is_claimable`, the unrelated unclaimed/Phase-D app-in
+concept — a contested title already has a holder); succession crisis (that's `SuccessionLaw`'s
+empty-candidate-list case, a different mechanism).
 
 **Fealty**:
 The org→org vassal→liege edge (`FealtyEdge`, one liege per vassal, cycle-refused) forming the realm tree. Cascades the house channel audience downward.
@@ -142,8 +184,54 @@ The alliance bound to a `Union` (`MarriagePact`, senior/junior house) that dies 
 _Avoid_: alliance object, treaty, marriage contract (contracts are a different system).
 
 **Domain**:
-An org-owned decoration on an `Area` (seeds use `AreaLevel.REGION`; no DOMAIN level exists), PLACEHOLDER civ stats (population/prosperity/unrest/defenses) plus `DomainHolding` rows that each materialize an `OrgIncomeStream`. Abstract by design; visitable grids are a later phase.
-_Avoid_: province model, land parcel, estate (that's buildings/dwellings).
+An org-owned decoration on an `Area` at any level (the #1884 demo seed uses `AreaLevel.REGION`; a ladder rung's own chain uses its tier-appropriate `BARONY`/`COUNTY`/`DUCHY`/... level via `TIER_TO_AREA_LEVEL`, #3983; no literal DOMAIN level exists), PLACEHOLDER civ stats (population/prosperity/unrest/defenses) plus `DomainHolding` rows that each materialize an `OrgIncomeStream`, a `hall` FK (see **Hall** below), and a `land_shapes` M2M (see **Land Shape** below). Abstract by design; visitable grids are a later phase.
+_Avoid_: province model, land parcel, estate (that's buildings/dwellings); demesne (bare — that's the ladder's aggregate COUNT of held baronies, not this one row, see **Demesne** below).
+
+**Almanach de Catenys** (#3983):
+The staff feudal-ladder builder + house record: plant/name/batch rungs, edit a house's charter, swear fealty, describe a demesne, add holdings, plan an estate, author kin/household, and publish/unpublish — ten `almanach_*` REGISTRY actions (`actions/definitions/almanach.py`) over the write layer (`world.societies.houses.almanach`) and two shared reads (`almanach_reads.ladder_for_realm`/`document_for_house`), reachable through the staff-only `/api/almanach/` API and the React console at `frontend/src/almanach/`. See `docs/systems/houses.md`'s Almanach de Catenys section.
+_Avoid_: house builder (too generic — the CG house creator, Phase D above, is a separate flow); the ladder (that's the shape a rung forms, see **Rung** below — this is the whole tool built on it).
+
+**Rung** (#3983):
+See `world.areas.AGENT_GLOSSARY.md`'s Rung entry, the canonical definition — a rung is
+fundamentally an `Area`/`AreaLevel` concept. In short: one BARONY-through-EMPIRE step of the
+feudal ladder, `plant_rung`'s unit of work (its own `Area`, `Domain`, and `Title`, sharing a seat
+chain down to the barony at the bottom).
+
+**Seat** (#3983):
+A title's own barony-level `Domain` (`Title.seat_domain`) — the one concrete parcel of land it is
+anchored to, always at the bottom of its own seat chain regardless of the title's own tier (ADR-
+0310: a kingdom's seat is still a barony, never a kingdom-sized `Area`). Distinct from **Hall**
+(the building standing on the seat) and from **Demesne** (how much OTHER land, beyond the seat
+itself, a house holds).
+_Avoid_: capital (implies a city, not a landed parcel); the title's own Area (a mid-chain title's
+own rung `Area` is found by walking UP from the shared seat — the seat itself is always the barony
+at the chain's bottom, never the title's own tier's Area).
+
+**Hall** (`Domain.hall`, #3983):
+A title's own seat building — a `BUILDING`-level `Area` distinct from the demesne `Domain` it
+sits on, set by `describe_demesne`. Never the same name as the demesne itself: naming a hall after
+its own demesne is refused outright — "the Duchy of Veyrane" is the land, "Veyrane Hall" is the
+keep on it (ADR-0310). **Not** `world.roster.AGENT_GLOSSARY.md`'s "the Hall" (the unrelated
+PLACEHOLDER-named logged-in home landing surface) — the two share an English word and nothing
+else; never conflate them in copy or code comments.
+_Avoid_: keep, castle, manor (no canon architectural noun is ruled beyond "hall"); "the Hall" (see
+roster glossary — a different concept entirely).
+
+**Land Shape** (`LandShape`, #3983):
+The authored catalog of what a demesne's ground looks like (Coast, Reefs, Hills, Volcanic, Marsh,
+Forest) — `NaturalKeyMixin` + `CreditedContent`, in `CONTENT_MODELS`, M2M on `Domain.land_shapes`,
+picked via `describe_demesne`'s `land_shape_names`.
+_Avoid_: terrain type, biome (no mechanical weight — flavor only, unlike e.g. domain crisis types).
+
+**Demesne** (#3983):
+How much land a house directly holds and rules in person — on a ladder row, the COUNT of
+BARONY-tier titles a house holds anywhere in its own `Area` subtree, not only the baronies on its
+own top chain (a barony seated inside a vassal's own county still counts, Decision 3). An
+unclaimed chain-top row's demesne is 1 exactly when its own seat barony is itself still unclaimed.
+_Avoid_: domain (bare) — that's the model row itself (`houses.models.Domain`), singular; demesne is
+the ladder's aggregate count, not a row; territory (too broad — demesne is specifically directly-
+held land, never a vassal house's own land, which the ladder counts separately as its vassal
+count, not as demesne).
 
 **Garrison Post** (`DomainGarrisonPost`, #696 gap 5):
 One `MilitaryUnit` posted to garrison a `Domain` (one post per unit, a `OneToOneField`). `effective_defenses(domain)` reads `Domain.defenses` plus `garrison_term(domain)`, a seam that returns 0 until the military side computes a real bonus off a domain's posts. `assign_garrison`/`relieve_garrison` gate on `can_administer_domain` and require the unit's `owner_org` to match the domain's.
@@ -161,6 +249,53 @@ _Avoid_: org informs, house inbox, notifications (it is not push).
 The CG-only application defining the house behind a set-aside claimable `Title` (#1884 Phase D) — the character enters play as a representative of a house that has always existed. Automated thematic gates at submission, staff review in admin, materialization at CG finalization only. Founding a new house *in play* is a different, future loop.
 Materialization shares `world.societies.houses.creator.build_family_org` with the plain (name-path) family builder (#3648): the title path calls it, then additionally seats the title, reassigns the seat domain and holdings, and syncs the house channel.
 _Avoid_: house founding (in-play), ennoblement (future loop), house application (ambiguous with roster apps).
+
+**Claim Grants** (`claim_grants`, #3983 Plan B, ADR-0315):
+Everything a claim on a `Title` seats the house on: the title's own seat chain, top first
+(`_require_chain_top`), plus every houseless BARONY lying directly inside one of the chain's own
+Areas that isn't itself a member of another chain (a county's own seat barony always stays with
+its county, never double-listed). `submit_house_claim`'s land-row gate checks every `ClaimLandDraft`
+against this list; `materialize_house_claim` seats the whole thing (`assign_holder` on the chain
+top, then again per loose-barony extra).
+_Avoid_: the chain (that's `_require_chain_top`'s own narrower list — grants is chain PLUS the
+loose extras it swallows); everything beneath (rejected, ADR-0315 — that would swallow a vassal's
+own held seat, not just houseless spares).
+
+**Founder Place** (`HouseClaim.founder_relation`/`founder_is_heir`, #3983 Plan B):
+Where the CG founder's own already-existing kinsperson node lands in the house's newly-written kin
+tree — a `ClaimKinRelation` (HEAD/MOTHER/FATHER/SPOUSE/SIBLING/CHILD/GRANDPARENT/WARD/POSITION),
+defaulting to HEAD. `materialize_house_claim` places the founder's node LAST, through the same
+`record_kin` engine every founder-written kin row goes through, passing the founder's own node
+(`node=founder`) instead of minting a fresh one. `founder_is_heir` is a claim fact only — `Title`
+carries no heir field of its own (`SuccessionLaw.chosen_heir` is a different, law-level concept),
+so nothing writes it anywhere.
+_Avoid_: role (too generic); relation (bare — that's `ClaimKinRelation`, the choice set itself,
+not this specific "where the founder goes" field).
+
+**Capital** (`Area.is_capital`, #3983 Plan B):
+The realm's one designated CITY-level `Area` (`areas_one_capital_per_realm`, one per realm). The
+gate a founder's estate pitch needs (`_validate_kin_and_lands` refuses `estate_name` with "That
+realm has no capital yet" when absent) and where `plan_estate` plants the estate `Area`
+(`charter_for_realm`'s `capital_name` echoes it to the founder before they write anything).
+Distinct from **Seat** above — see that entry's own `_Avoid_` line, which already calls out
+"capital" as the wrong word for a title's own barony-level demesne; a realm has exactly one
+capital, but every landed title has its own seat.
+_Avoid_: seat (see **Seat** above — a title's own demesne, never the realm's one capital city);
+capital city (redundant — `is_capital` is always a CITY-level Area by the founder Estate leaf's
+own gate, never enforced as a DB constraint on level).
+
+**Claim Tier** (`OriginTemplate.max_claim_tier`, #3983 Plan B):
+The highest `TitleTier` a CG founder raised on a given `character_creation.OriginTemplate`
+(Upbringing) may define a house on — blank means unbounded. `world.societies.houses.creator
+.permitted_tier_rank(template)` converts it to a `TITLE_TIER_RANK` integer ceiling (99 when
+unbounded); `_validate_seat_gates` refuses a title outranking it server-side ("Your upbringing
+does not reach that seat"), and the founder Seat picker (`SeatPicker.tsx`'s `permittedRank`) reads
+the same ceiling to grey out a row before the founder ever tries. This field lives on the Upbringing
+itself (`character_creation`), not on a `Title` or `HouseTemplate` — a realm's own charter says
+what a house of a given seat looks like; the founder's Upbringing says how high they may reach.
+_Avoid_: max tier (too generic — this is specifically the Upbringing's own ceiling, not a realm or
+template property); rank (bare — that's `TITLE_TIER_RANK`'s own integer scale, the thing this
+converts to, not the field itself).
 
 **Vacancy**:
 See `world.roster.AGENT_GLOSSARY.md`'s Vacancy entry (#3648), the canonical

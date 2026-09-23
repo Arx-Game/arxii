@@ -43,6 +43,7 @@ from world.societies.constants import (
     RenownRisk,
     StandingDirection,
 )
+from world.societies.houses.constants import HouseState
 from world.societies.renown_config import RenownAwardConfig
 from world.societies.types import ReputationTier
 
@@ -312,6 +313,17 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
             "FealtyEdge (political fealty between houses). Parent leadership and "
             "the parent's spymaster office get read access to covert children."
         ),
+    )
+    house_state = models.CharField(
+        max_length=20,
+        choices=HouseState.choices,
+        default=HouseState.STANDING,
+        help_text="Standing, in exile, extinct, or gentry (Luxen) (#3983).",
+    )
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the Almanach published this house; null = draft (#3983).",
     )
     tradition = models.ForeignKey(
         "arxii.Tradition",
@@ -931,6 +943,17 @@ class Vacancy(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="vacancies",
         help_text="Kin vacancy backed by one appable person.",
+    )
+    holder_kinsperson = models.ForeignKey(
+        "arxii.Kinsperson",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="held_positions",
+        help_text=(
+            "The NPC who fills this position; a household member is a filled "
+            "retainer Vacancy (#3983)."
+        ),
     )
     count_remaining = models.PositiveSmallIntegerField(
         null=True,

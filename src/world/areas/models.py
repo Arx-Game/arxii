@@ -131,6 +131,9 @@ class Area(NaturalKeyMixin, SharedMemoryModel):
         related_name="+",
         help_text="Room the banished are ejected to (outside the walls). Unset = no physical move.",
     )
+    is_capital = models.BooleanField(
+        default=False, help_text="The realm's capital city, one per realm (#3983)."
+    )
 
     objects = NaturalKeyManager()
 
@@ -140,6 +143,13 @@ class Area(NaturalKeyMixin, SharedMemoryModel):
     class Meta:
         verbose_name = "Area"
         verbose_name_plural = "Areas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["realm"],
+                condition=models.Q(is_capital=True),
+                name="areas_one_capital_per_realm",
+            )
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.get_level_display()})"

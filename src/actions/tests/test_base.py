@@ -688,6 +688,17 @@ class ActionRegistryTests(TestCase):
             "staff_remove_clue_trigger",
             "staff_place_portal_anchor",
             "staff_remove_portal_anchor",
+            # #3983 — Almanach de Catenys: staff house builder.
+            "almanach_plant_rung",
+            "almanach_batch_unclaimed",
+            "almanach_name_rung",
+            "almanach_edit_house",
+            "almanach_swear",
+            "almanach_describe_demesne",
+            "almanach_add_holding",
+            "almanach_plan_estate",
+            "almanach_edit_kin",
+            "almanach_publish",
             # #2450 — GM story builder.
             "create_story_area",
             "edit_story_area",
