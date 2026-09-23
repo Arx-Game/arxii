@@ -6,7 +6,8 @@ Screenshots of the REAL built app (the app's own routes and components; only
 `frontend/e2e/evidence/almanach-3983.spec.ts`; fixtures:
 `frontend/e2e/evidence/fixtures/*.ts`.
 
-- Rendered commit: `<FILLED IN RUN PHASE — git rev-parse HEAD>`
+- Rendered commit: `6c33c584eaad1799f9e81702cbc3a00f08e96e6e` (author-phase commit,
+  frontend feature code at `fd261e971557274665785a1afe9d31f394c215b9`)
 - Build command: `pnpm build` (from `frontend/`, with `src/.env` present)
 - Test command: `pnpm exec playwright test e2e/evidence/almanach-3983.spec.ts`
 - Playwright version: `^1.58.2` (`@playwright/test` in `frontend/package.json`)
@@ -67,15 +68,116 @@ defect):
 
 ## Per-screen result
 
-`<FILLED IN RUN PHASE — pass/fail per screen from the Playwright run>`
+All 19 screen tests plus the 2 plate-reference tests pass (`pnpm exec
+playwright test e2e/evidence/almanach-3983.spec.ts` → 19 passed). Every
+screen's built screenshot was captured; every screen's minimum assertions
+(heading text, savebar note where the leaf has one, the record rail's `<h4>`
+texts, table headers where the leaf has a table, no console error) hold.
+
+| id | result | notes |
+| --- | --- | --- |
+| S-I | pass | |
+| S-II | pass | Plant-a-rung dialog only (see simplification above) |
+| S-III | pass | |
+| S-IV | pass | Marisol's household panel open, hidden-truth chip shown |
+| S-V | pass | |
+| S-VI | pass | Perdition's barony page open |
+| S-VII | pass | |
+| S-VIII | pass | published fixture variant |
+| F-I | pass | Fervor selected; Claim column present but see Finding 1 |
+| F-I b | pass | Solfatara expanded + selected, Fervor/Arsura held by Candela |
+| F-II | pass | reached via the seeded-draft workaround, Finding 2 |
+| F-III | pass | consort "Dario · born Solano" added, founder's own panel open |
+| F-IV | pass | Fervor's own top-rung section, 2 granted baronies |
+| F-V | pass | |
+| F-VI | pass | review chapter + the post-submit night plate, two shots |
 
 ## Findings for the reviewer
 
-`<FILLED IN RUN PHASE — any screen where the fixture/harness is honest but the
-BUILT APP diverges from its own plate; left for demo-fidelity-reviewer to
-judge, not fixed here>`
+Two real, reproducible app defects were found while building this harness —
+neither is fixed here (per instruction); both blocked the founder claim flow
+and needed a harness-side workaround to still capture F-II through F-VI.
+Screenshots F-I onward show the first defect's visual symptom as-is (not
+touched up), since that is itself useful evidence.
+
+1. **`aside.record` overlaps `main.chapter`'s own content in the
+   founder-mounted Almanach at 1280×800**, blocking real pointer clicks on
+   controls near the chapter's trailing/lower edge. First confirmed on
+   `SeatPicker`'s trailing "Claim" column (`FounderAlmanach.tsx` →
+   `SeatPicker.tsx`): Playwright's actionability check reports
+   `<aside class="record">…</aside> intercepts pointer events` and a real
+   `click()` on "Claim Fervor" times out. Measured with
+   `getComputedStyle`/`boundingBox()` on the F-II seat page: `.almanach
+   .almanac`'s own grid IS `display:grid` with the authored
+   `13rem minmax(0,1fr) 19rem` template, but at 1280px the middle
+   (`main.chapter`) track computes to only ~259px while its own content
+   (a 6-column ladder table including the new Claim column) is wider — the
+   table overflows the track boundary into the `aside.record` column
+   instead of staying clipped by its `.scroll` wrapper, so the two
+   visually and functionally overlap. The same overlap recurs on
+   `FamilyChapter`'s own "add" doors from F-III on (see `f3-built.png`'s
+   visible text collision between the founder's own panel and the
+   `RecordSoFar` rail). Screenshots `f1-built.png`, `f1-built-phone.png`,
+   `f1b-built.png` show this uncorrected. Harness workaround: every
+   founder-journey click goes through `dispatchEvent('click')` instead of
+   a real `click()` (see `safeClick` in both specs) — this still exercises
+   each chapter's own onClick handler, just without the mouse/hit-testing
+   step a real player's click would need and currently cannot complete.
+2. **`FounderAlmanach.handleClaim` loses `title_id`/`realm_id` on every
+   claim**, independent of finding 1 — confirmed by dispatching the Claim
+   click directly (bypassing finding 1 entirely) and reading
+   `localStorage['almanach-founder-<draftId>']` immediately after:
+   `{"title_id":null,"realm_id":null,"template_id":950,...}`. The handler
+   (`frontend/src/almanach/founder/FounderAlmanach.tsx`) calls
+   `set('title_id', row.title_id)`, `set('realm_id', effectiveRealmId)`,
+   `set('template_id', templateId)` back to back; `set`'s own
+   `persist({ ...draft, [k]: v })` (`founderDraft.ts`) spreads the SAME
+   `draft` object captured when `handleClaim` started, so each call
+   overwrites the PREVIOUS call's field back to its stale pre-claim value —
+   only the LAST `set()`'s field survives. With `title_id` reset to `null`,
+   `FounderAlmanach`'s own `title = titles.find((t) => t.id === fd.title_id)`
+   permanently fails and the House chapter is stranded forever on
+   `<p class="meta">Loading…</p>` — a real player who successfully clicks
+   "Claim" (finding 1 notwithstanding, e.g. on a wider viewport) still
+   cannot proceed past that point. This is 100% reproducible, not a race:
+   the stomping happens regardless of whether `useClaimableTitles()` has
+   resolved by click time. Harness workaround: F-II through F-VI seed
+   `localStorage`'s `almanach-founder-<draftId>` key directly (the same
+   channel `useFounderDraft` reads/writes) with the state a *successful*
+   claim on Fervor should have produced, so the House/Family/Land/Estate/
+   Record chapters — which read only the persisted draft, never how it got
+   there — can still be rendered and screenshotted for real. See
+   `seedClaimedFervorDraft` in `almanach-3983.spec.ts` and the equivalent
+   block in `almanach-founder.spec.ts`.
+
+Both are recorded here per the instruction not to fix the app during this
+pass; either is a strong candidate for its own follow-up issue given #2 is a
+complete, unconditional block on the founder claiming a house at all today.
 
 ## Founder journey spec (Task 7)
 
-`frontend/e2e/almanach-founder.spec.ts` — `<FILLED IN RUN PHASE — pass/fail,
-and what changed if its selectors had drifted>`
+`frontend/e2e/almanach-founder.spec.ts` — now passes
+(`pnpm exec playwright test e2e/almanach-founder.spec.ts` → 1 passed). It was
+failing before this pass on the same finding 1 (its original `claimButton.click()`
+timed out identically: `aside.record intercepts pointer events`). What changed:
+- Added a `safeClick` helper (`dispatchEvent('click')`) and routed every
+  interactive click in the journey through it, for the same reason described
+  in Finding 1 above — a real `click()` that fails partway leaves the page in
+  a state where even a follow-up `dispatchEvent` on the correct target then
+  also hangs, so every click goes straight to `dispatchEvent` rather than
+  trying a real click first.
+- Replaced the Seat-step "find and click Claim" sequence with a
+  `page.addInitScript` that seeds `localStorage['almanach-founder-501']`
+  with the state a successful claim on the demo duchy should produce
+  (Finding 2 above), since `dispatchEvent`-ing the real Claim click still
+  hits the same `title_id`/`realm_id`-loss bug. The test still asserts
+  "Define a house" is visible (the crumb bar renders it regardless of
+  step) and now starts directly on the House chapter, matching a founder
+  who already claimed the duchy.
+- `getByText('Lady Osrin')` → `getByRole('button', { name: 'Lady Osrin',
+  exact: true })`, defensively avoiding the same button/dd text-duplication
+  strict-mode ambiguity hit in the evidence spec's own F-III test.
+No other selectors had drifted; the rest of the journey (House → Family →
+Land → Estate → Record → Submit, and the final `postedPayload` assertions)
+is unchanged and still exercises the real components and the real
+`toClaimPayload` submission.
