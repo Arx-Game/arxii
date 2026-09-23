@@ -23,7 +23,9 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
-- [societies](src/world/societies/AGENT_GLOSSARY.md)
+- [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys
+  feudal-ladder builder terms (#3983): Almanach de Catenys, Rung (stub, canonical in areas),
+  Seat, Hall, Land Shape, Demesne, House State, Household, Contested Title
 - [realms](src/world/realms/AGENT_GLOSSARY.md)
 - [relationships](src/world/relationships/AGENT_GLOSSARY.md)
 - [secrets](src/world/secrets/AGENT_GLOSSARY.md)
@@ -39,9 +41,9 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - also holds the CG Lineage-step
   terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
   Kind, Influence, plus (#3648) Family Template, Vacancy, Importance / Presumed importance,
-  Served house, (#3660) Connection, Anchor, Stance, Follow-up, Question kind, and (#3675)
+  Served house, (#3660) Connection, Anchor, Stance, Follow-up, Question kind, (#3675)
   Offer, Opener, Arrives as, Chapter, Tradition state, Standard lines, Schooling line,
-  Closed by route. Character Creation has no glossary file of its own.
+  Closed by route, and (#3983) Believed Dead. Character Creation has no glossary file of its own.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
@@ -55,7 +57,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
 - [items](src/world/items/AGENT_GLOSSARY.md)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
-- [areas](src/world/areas/AGENT_GLOSSARY.md)
+- [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
+  feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to
 - [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [locations](src/world/locations/AGENT_GLOSSARY.md)

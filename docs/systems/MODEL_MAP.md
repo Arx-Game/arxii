@@ -463,6 +463,7 @@
   - turf <- societies.NeighborhoodTurf
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
+  - hall_of <- societies.Domain
   - income_streams <- currency.OrgIncomeStream
   - build_grants <- gm.AreaBuildGrant
   - story_ownership <- gm.StoryArea
@@ -2165,6 +2166,7 @@
   - distinction_grants <- codex.DistinctionCodexGrant
   - tradition_grants <- codex.TraditionCodexGrant
   - organization_grants <- codex.OrganizationCodexGrant
+  - succession_laws <- societies.SuccessionLaw
   - house_aspect_options <- societies.HouseAspectOption
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
@@ -3508,6 +3510,7 @@
   - from_organization -> societies.Organization [FK]
   - to_organization -> societies.Organization [FK]
 **Pointed to by:**
+  - fealty_edge <- societies.FealtyEdge
   - pact_commitment <- societies.PactCommitment
   - pact <- societies.OrgPact
 
@@ -8038,6 +8041,7 @@
   - kin_slot_pools <- roster.KinSlotPool
   - drafts <- character_creation.CharacterDraft
   - vacancies <- societies.Vacancy
+  - held_positions <- societies.Vacancy
   - titles_held <- societies.Title
   - pact_commitments <- societies.PactCommitment
   - betrothals_as_a <- societies.Betrothal
@@ -8267,7 +8271,7 @@
   - interaction_targets <- scenes.InteractionTargetPersona
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
-  - pose_submission <- scenes.PoseSubmission
+  - pose_submissions <- scenes.PoseSubmission
   - power_ledger_entries <- scenes.InteractionPowerLedgerEntry
   - action_request_result <- scenes.SceneActionRequest
   - action_request_action <- scenes.SceneActionRequest
@@ -8504,7 +8508,7 @@
 ### PoseSubmission
 **Foreign Keys:**
   - persona -> scenes.Persona [FK]
-  - interaction -> scenes.Interaction [FK] (nullable)
+  - interaction -> scenes.Interaction [FK]
 
 ### PrecaptureConsentRequest
 **Foreign Keys:**
@@ -8967,7 +8971,9 @@
 ### Domain
 **Foreign Keys:**
   - area -> areas.Area [OneToOne]
-  - owner_org -> societies.Organization [FK]
+  - owner_org -> societies.Organization [FK] (nullable)
+  - hall -> areas.Area [FK] (nullable)
+  - land_shapes -> societies.LandShape [M2M]
 **Pointed to by:**
   - food_stockpile <- agriculture.FoodStockpile
   - food_transfers_out <- agriculture.FoodTransfer
@@ -9042,6 +9048,7 @@
 **Foreign Keys:**
   - vassal -> societies.Organization [OneToOne]
   - liege -> societies.Organization [FK]
+  - obligation -> currency.OrgObligation [OneToOne] (nullable)
 
 ### GangTurfDetails
 **Foreign Keys:**
@@ -9093,15 +9100,30 @@
   - draft -> character_creation.CharacterDraft [OneToOne]
   - title -> societies.Title [FK]
   - template -> societies.HouseTemplate [FK]
+  - estate_district -> areas.Area [FK] (nullable)
   - reviewed_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
   - aspects <- societies.HouseClaimAspect
+  - kin <- societies.HouseClaimKin
+  - lands <- societies.HouseClaimLand
 
 ### HouseClaimAspect
 **Foreign Keys:**
   - claim -> societies.HouseClaim [FK]
   - definition -> societies.HouseAspectDefinition [FK]
   - option -> societies.HouseAspectOption [FK]
+
+### HouseClaimKin
+**Foreign Keys:**
+  - claim -> societies.HouseClaim [FK]
+  - gender -> character_sheets.Gender [FK] (nullable)
+  - born_into -> roster.Family [FK] (nullable)
+
+### HouseClaimLand
+**Foreign Keys:**
+  - claim -> societies.HouseClaim [FK]
+  - title -> societies.Title [FK]
+  - land_shapes -> societies.LandShape [M2M]
 
 ### HouseFeature
 **Foreign Keys:**
@@ -9138,6 +9160,13 @@
 **Pointed to by:**
   - upbringings <- character_creation.OriginTemplate
   - claims <- societies.HouseClaim
+
+### LandShape
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - domains <- societies.Domain
 
 ### LegendContribution
 **Foreign Keys:**
@@ -9315,6 +9344,7 @@
   - fealty <- societies.FealtyEdge
   - vassal_edges <- societies.FealtyEdge
   - titles <- societies.Title
+  - claimed_titles <- societies.Title
   - domains <- societies.Domain
   - org_crises <- societies.DomainCrisis
   - crisis_intel <- societies.CrisisIntel
@@ -9566,6 +9596,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - chosen_heir -> roster.Kinsperson [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - houses_defaulting <- societies.Organization
   - titles <- societies.Title
@@ -9575,6 +9606,7 @@
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
   - house -> societies.Organization [FK] (nullable)
+  - claimant_org -> societies.Organization [FK] (nullable)
   - holder -> roster.Kinsperson [FK] (nullable)
   - seat_domain -> societies.Domain [FK] (nullable)
   - succession_law -> societies.SuccessionLaw [FK] (nullable)
@@ -9591,6 +9623,7 @@
   - rank -> societies.OrganizationRank [FK] (nullable)
   - kin_pool -> roster.KinSlotPool [FK] (nullable)
   - kin_node -> roster.Kinsperson [FK] (nullable)
+  - holder_kinsperson -> roster.Kinsperson [FK] (nullable)
   - allowed_upbringings -> character_creation.OriginTemplate [M2M]
 **Pointed to by:**
   - drafts <- character_creation.CharacterDraft

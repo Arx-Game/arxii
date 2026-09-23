@@ -52,6 +52,16 @@ Truth trio on edges/unions/incarnations: `is_public_record`, `is_true`,
 staff-only. `Secret.subject_aware=False` (new field) keeps subject-unaware
 truths off the owner's own shelf (`secrets_owned_by` filters).
 
+**`believed_deceased`** (`Kinsperson.believed_deceased`, #3983) is the same
+public-record-vs-truth principle applied to one person-level fact — a death —
+rather than an edge/union/incarnation, so it rides its own boolean instead of
+the `is_public_record`/`is_true` pair: `is_deceased` is the private truth,
+`believed_deceased` is what the world believes, independently settable. Set
+only by `world.societies.houses.almanach.record_public_belief`; renders as
+"hidden truth" on the Almanach's family tree wherever it (or a touching
+parentage secret) makes a row's public face diverge from what actually
+happened. See ADR-0312.
+
 ## Heredity service (`world.roster.services.heredity`, #2815)
 
 Parent Dominance: species inheritance is magical and maternal by default.
@@ -138,6 +148,13 @@ a 3-generation tree, 2 appable slots, 1 pool, a public-false/hidden-true
 parentage pair, and a 2-life soul chain.
 
 ## Consumers / futures
+
+**The Almanach's household band is NOT a kinship concept (#3983).** A house's staff/service-
+placed retainers (Ward, Household guard, ...) are a societies-side `Vacancy` band at the org's own
+`Household` `OrganizationRank` — no `FamilyMembership`, no `kin_node`/`kin_pool` link, no presence
+on this app's models at all. Only `believed_deceased` (above) is a real `Kinsperson` field the
+Almanach writes; see `docs/systems/houses.md`'s Almanach de Catenys section for the household
+mechanism itself.
 
 #1884 houses: recognition rules + succession law query these facts
 (parentage kinds, `born_within_union`, memberships). #1985 estates. Dream

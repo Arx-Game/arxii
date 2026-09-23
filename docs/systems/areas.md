@@ -1,6 +1,7 @@
 # Areas System
 
-Spatial hierarchy for organizing rooms into buildings, neighborhoods, wards, cities, regions, kingdoms, continents, worlds, and planes.
+Spatial hierarchy for organizing rooms into buildings, neighborhoods, wards, cities, baronies,
+regions, counties, duchies, kingdoms, empires, continents, worlds, and planes.
 
 **Source:** `src/world/areas/`
 
@@ -10,9 +11,38 @@ Spatial hierarchy for organizing rooms into buildings, neighborhoods, wards, cit
 
 ```python
 from world.areas.constants import AreaLevel
-# BUILDING(10), NEIGHBORHOOD(20), WARD(30), CITY(40), REGION(50),
-# KINGDOM(60), CONTINENT(70), WORLD(80), PLANE(90)
+# BUILDING(10), NEIGHBORHOOD(20), WARD(30), CITY(40), BARONY(46), REGION(50),
+# COUNTY(53), DUCHY(56), KINGDOM(60), EMPIRE(65), CONTINENT(70), WORLD(80),
+# PLANE(90)
 ```
+
+### Feudal rungs (#3983)
+
+`BARONY`/`COUNTY`/`DUCHY`/`EMPIRE` were added between `CITY` and `CONTINENT` so a duchy can
+contain a county, a county a barony, on the same `Area.parent` map/tree the rest of the Atlas
+ladder already walks — no parallel hierarchy. `KINGDOM` (pre-existing) sits between `COUNTY` and
+`EMPIRE`. The Almanach de Catenys's `TitleTier` (`world.societies.houses.constants`:
+empire/kingdom/duchy/march/county/barony, #3091's six-step noun ladder) maps onto these levels via
+`TIER_TO_AREA_LEVEL` — `MARCH` is a county-tier holding and shares `AreaLevel.COUNTY` rather than
+getting a rung of its own:
+
+```python
+TIER_TO_AREA_LEVEL: dict[str, int] = {
+    TitleTier.EMPIRE: AreaLevel.EMPIRE,
+    TitleTier.KINGDOM: AreaLevel.KINGDOM,
+    TitleTier.DUCHY: AreaLevel.DUCHY,
+    TitleTier.MARCH: AreaLevel.COUNTY,
+    TitleTier.COUNTY: AreaLevel.COUNTY,
+    TitleTier.BARONY: AreaLevel.BARONY,
+}
+```
+
+`world.societies.houses.almanach.plant_rung` is what actually mints a rung: it plants one `Area`
+per tier down to the barony seat (`_CHAIN_BELOW`), a `Domain` per chain `Area` (1:1 with `Area`),
+and a `Title` per chain tier, all sharing one seat `Domain` — so every title, however high, always
+has a concrete barony-level seat underneath it and the liege walk never runs out of ancestors to
+climb. See `docs/systems/houses.md`'s Almanach de Catenys section for the full ladder rules
+(liege-by-containment, re-homing, demesne/vassal counts) and ADR-0309.
 
 ---
 

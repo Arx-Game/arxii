@@ -39,9 +39,17 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   empire/kingdom/duchy/march/county/barony — #3091's six-step ladder), realm,
   house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots),
   authorable holder styles (`holder_style_male/female/neutral`, #3261).
-- **`Domain`** - decorates an `Area` (seeds use `AreaLevel.REGION`; no DOMAIN
-  level exists) (OneToOne PK): owner org + PLACEHOLDER civ stats
+- **`Domain`** - decorates an `Area` at any level (the #1884 demo seed uses
+  `AreaLevel.REGION`; a ladder rung's own chain uses the tier-appropriate
+  `BARONY`/`COUNTY`/`DUCHY`/... level via `TIER_TO_AREA_LEVEL`, #3983; no
+  literal DOMAIN level exists) (OneToOne PK): owner org, `hall` (the seat's
+  own BUILDING-level Area — never a repeat of the demesne's own name,
+  #3983), `land_shapes` M2M (`LandShape`, below), + PLACEHOLDER civ stats
   (population/prosperity/unrest/defenses). Abstract, no room grids yet.
+- **`LandShape`** (#3983) — authored catalog of a demesne's ground (Coast,
+  Reefs, Hills, Volcanic, Marsh, Forest). `NaturalKeyMixin` (`name`) +
+  `CreditedContent`, registered in `CONTENT_MODELS`; see the Almanach de
+  Catenys section below.
 - **`DomainGarrisonPost`** (#696 gap 5) - one `MilitaryUnit` posted to garrison a
   domain (`OneToOneField` on `unit`: a unit garrisons at most one domain at a
   time). `houses.services.effective_defenses(domain)` reads `Domain.defenses`
@@ -403,3 +411,150 @@ telnet `pact divorce <union-id>`.
 `CeremonyTypeKey.CORONATION` solemnizes an ALREADY-HELD `Title` — no
 title-passing mechanics; see `docs/systems/worship.md`'s Ceremony section
 for the model/service detail (`Coronation`, `Ceremony.title`).
+
+## Almanach de Catenys (#3983)
+
+The staff feudal-ladder builder + house record: **rungs** (`plant_rung` and friends,
+`world/societies/houses/almanach.py`) — real `Area`/`Domain`/`Title` steps of the ladder, with new
+`BARONY`/`COUNTY`/`DUCHY`/`EMPIRE` `AreaLevel`s sitting between `CITY` and `CONTINENT` on the
+existing Atlas tree (ADR-0309) — two shared **reads** (`almanach_reads.py`), ten **REGISTRY
+actions** (`actions/definitions/almanach.py`), and a staff-only **API**
+(`almanach_serializers.py`/`almanach_views.py`/`almanach_urls.py`) under `/api/almanach/`. The
+React staff console lives at `frontend/src/almanach/` and dispatches every write through the same
+actions telnet would.
+
+### Rungs
+
+- **`plant_rung(*, realm, tier, name, parent_title=None, held_by=None) -> Title`** — plants one
+  rung's whole seat chain in one call: an `Area` per tier down to the barony at the bottom
+  (`_CHAIN_BELOW`), a `Domain` per chain `Area` (`Domain` is 1:1 with `Area`), and a `Title` per
+  chain tier, all sharing one seat `Domain` — so a duchy's title always has a concrete barony
+  underneath it, never a dangling seat. Unclaimed rungs (`held_by=None`) are left
+  `is_claimable=True`. When `held_by` is given, the top title is sworn to its nearest containment
+  liege unless it already has fealty of its own, or the liege sits beneath it in the tree (Decision
+  3, the "Seawatch inside Ardor" case: a house's own barony sitting inside another house's county is
+  HELD, not sworn).
+- **`batch_unclaimed(*, parent_title, tier, count, baronies_per_county=0) -> list[Title]`** —
+  plants `count` unclaimed rungs under `parent_title`; for a COUNTY/MARCH batch, also plants
+  `baronies_per_county` extra unclaimed baronies alongside each county's own seat barony.
+- **`name_rung(title, name) -> Title`** — names/renames a rung's `Title`, its own `Area`
+  (regenerating the slug), and that `Area`'s `Domain`, together.
+- **`liege_for_title(title) -> Organization | None`** — the holder of the nearest HELD ancestor,
+  walking `Area.parent` up from `title`'s own rung. Refuses a title that is only an internal member
+  of its own chain (a duchy's own unnamed county/barony) — a liege walk must start from a chain's
+  TOP title, or it immediately finds its own higher rungs (same owner) and treats the title as its
+  own liege.
+- **`assign_holder(title, house) -> Title`** — seats `house` on the whole chain, swears it to its
+  own nearest liege, and calls `rehome_vassals`.
+- **`rehome_vassals(title) -> int`** — re-swears every held chain beneath `title` whose nearest
+  held ancestor is now `title`'s holder onto it. Returns the count moved.
+
+### House record
+
+- **`set_house_state(house, state)`** — the house's `HouseState` lifecycle standing.
+- **`publish_house(house)` / `unpublish_house(house)`** — the Almanach's own visibility flag
+  (`Organization.published_at`, null = draft); publishing also syncs the house channel's audience.
+- **`describe_demesne(*, domain, description, hall_name, land_shape_names)`** — writes a demesne's
+  public description, its hall (a BUILDING-level `Area` under the domain's own `Area` — refused if
+  its name repeats the demesne's own name; a domain and its seat hall are two distinct nouns, the
+  land and the building on it, ADR-0310), and its `LandShape` tags.
+- **`plan_estate(*, house, city_area, name, description, district=None)`** — plants an estate
+  `Area` under a city (or a named district within it) and records the house's active
+  `LocationOwnership`.
+- **`add_household_member(*, house, kinsperson, rank=None, position="Ward")`** — records a
+  household member as a filled retainer `Vacancy` at the house's `Household` rank (minted lazily,
+  one tier below the org's current lowest rank, the first time a household member needs it). Never
+  a `kin_node`/`kin_pool` Vacancy — that link is what marks an appable kin slot a founder can claim
+  at CG, and a household member is staff/service-placed, never appable (ADR-0311). A sheeted
+  kinsperson with a primary persona additionally gets a real `OrganizationMembership` at the
+  Household rank.
+- **`record_public_belief(kinsperson, *, believed_deceased)`** — sets what the public record
+  believes about a kinsperson's death, independent of `Kinsperson.is_deceased` (the private truth,
+  ADR-0312); see `docs/systems/kinship.md`.
+
+### Reads
+
+- **`ladder_for_realm(realm, *, for_founder=False) -> LadderPayload`** — one `LadderRow` per
+  `Title` in the realm (state, seat, demesne, vassals, sworn-to, per-tier unclaimed counts).
+  `for_founder=True` hides any rung whose own house, or any held house above it, isn't published
+  yet — an unclaimed rung stays visible as long as nothing unpublished sits above it.
+- **`document_for_house(house, *, viewer, staff) -> HouseDocument`** — the whole Almanach house
+  page in one read: `house` (the charter block), `family` (viewer-gated kinship tree, same
+  visibility contract as every other kinship read), `household` (retainer Vacancies at the
+  Household rank), `realm` (the house's own sworn-to/demesne/vassals standing), `lands` (held
+  baronies + what they produce), `estate` (owned buildings sitting under a city).
+
+Both reads share one in-memory pass over the realm's `Title`/`Area` graph (`_realm_graph`,
+`_build_rows`) rather than per-row queries — the area-closure materialized view is Postgres-only
+and unavailable on the SQLite test tier.
+
+### Ladder rules
+
+- **State**: `Held` when a rung has a house, else `Unclaimed`. `is_defined` (has a name) and
+  holding are independent axes — an undefined rung can still be `Held`.
+- **Seat / demesne**: every rung's title carries a seat chain down to the barony at its bottom
+  (`plant_rung`); "demesne" counts BARONY-tier titles a house holds anywhere in its own Area
+  subtree — a barony seated inside a vassal's own county is still the house's own land (Decision
+  3), not only the baronies on its own top chain.
+- **Vassals**: direct child rungs that don't sit on the row's own chain; an unclaimed row counts
+  child rows, a held row counts the distinct houses among held children (one house holding two
+  direct child chains counts once).
+- **Liege by containment**: a chain-top row's "sworn to" walks `parent_title_id` up to the nearest
+  HELD ancestor and reports that house's name; when the row itself is held, a `(crown)` suffix
+  marks a liege that holds the realm's highest present tier.
+- **Re-homing**: `assign_holder`/`rehome_vassals` re-swear any held chain beneath a newly-seated
+  title whose nearest held ancestor is now that title's holder — containment, not standing fealty,
+  decides who is whose vassal until someone swears otherwise.
+
+### House state / published lifecycle
+
+`Organization.house_state` (`HouseState`: `standing`/`in_exile`/`extinct`/`gentry`) is the house's
+lifecycle standing, set by `set_house_state` — recorded once on the house itself, never inferred
+from individual members' `OrganizationMembership.exiled_at` rows (ADR-0313). `Title.claimant_org`
+lets a second house stake a claim on a title another house currently holds without touching who
+actually holds it (schema only — no service resolves a claim yet). `Organization.published_at`
+(null = draft) is the Almanach's own visibility flag, set/cleared by `publish_house`/
+`unpublish_house` — see "Ladder rules" above for how a `for_founder` read hides unpublished rungs.
+
+### Actions (`actions/definitions/almanach.py`)
+
+Ten REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+`StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
+`AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
+(`almanach_name_rung`), `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
+state, succession law default, and a wholesale `OrganizationAspect`/`OrganizationFeature`
+replace), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
+(`almanach_describe_demesne`), `AlmanachAddHoldingAction` (`almanach_add_holding`),
+`AlmanachPlanEstateAction` (`almanach_plan_estate`), `AlmanachEditKinAction`
+(`almanach_edit_kin`), `AlmanachPublishAction` (`almanach_publish`).
+
+`AlmanachEditKinAction` mints a new family-tree/household node on create (`kinsperson_id`
+absent), or edits an existing one (`kinsperson_id` given). An update touches ONLY a plain field
+(name/gender_id/age/is_deceased/believed_deceased) whose kwarg was actually passed — an absent
+kwarg leaves the value untouched, and a `gender_id` passed as falsy still clears the gender, since
+it's the kwarg's ABSENCE, not its value, that makes a field a no-op. An update refuses outright
+when `kinsperson_id`'s `family_id` isn't the house's own family, or when any relation-only kwarg
+(`relation`/`parent_kinsperson_id`/`spouse_kinsperson_id`/`born_into_family_id`) rides along with
+`kinsperson_id` — relation, marriage, membership and household side effects run exactly once, at
+creation, and never re-fire on a later edit.
+
+### API (`almanach_views.py`, `almanach_urls.py`)
+
+Staff-only (`IsAdminUser`) DRF viewsets under `/api/almanach/`:
+
+- `GET /api/almanach/realms/` and `GET /api/almanach/realms/{id}/ladder/?for=staff|founder`
+  (`AlmanachRealmViewSet`) — both ladder cuts stay staff-only for now; `founder` is exposed
+  already but reserved for a future founder-facing surface.
+- `GET /api/almanach/houses/` (`?realm=<id>` filters through the family's own `origin_realm` — an
+  `Organization` has no realm column of its own) and `GET /api/almanach/houses/{id}/document/`
+  (`AlmanachHouseViewSet`).
+- `GET /api/almanach/land-shapes/` (`LandShapeViewSet`, below).
+
+### Land shapes
+
+`LandShape` (`models.py`) is the authored catalog of what a demesne's ground looks like — Coast,
+Reefs, Hills, Volcanic, Marsh, Forest. It carries `NaturalKeyMixin` (`name`) + `CreditedContent`
+and is registered in `CONTENT_MODELS`, the same shape as `HoldingKind` above; it M2Ms onto
+`Domain.land_shapes` and is picked via `describe_demesne`'s `land_shape_names`. Seeded
+`authored_or_sample` style by `world.seeds.houses.seed_land_shapes()` (cluster `houses`),
+independent of the demo realm's own existence.
