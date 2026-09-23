@@ -40,7 +40,7 @@ from world.societies.models import Organization
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
-    from world.character_creation.models import CharacterDraft
+    from world.character_creation.models import CharacterDraft, OriginTemplate
     from world.character_sheets.models import CharacterSheet
 
 _PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "power")
@@ -72,7 +72,7 @@ def claimable_titles(realm=None) -> list[Title]:
     return titles
 
 
-def permitted_tier_rank(template: HouseTemplate | None) -> int:
+def permitted_tier_rank(template: OriginTemplate | None) -> int:
     """The highest ``TitleTier`` rank a founder raised on ``template`` may
     define; 99 when unbounded (#3983)."""
     if template is None or not template.max_claim_tier:
