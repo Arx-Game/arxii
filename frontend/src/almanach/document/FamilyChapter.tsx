@@ -151,47 +151,91 @@ function relationLabel(depth: number): string {
 interface TreeIndex {
   childrenByParent: Map<number, number[]>;
   roots: AlmanachFamilyNode[];
-  /** Every node id that appears anywhere in `parentage` (as a parent or a
-   * child) — a union member NOT in this set married in from outside. */
-  bloodIds: Set<number>;
   /** `nodeId -> [outsider spouse node, ...]` from `unions`. */
   outsiderSpousesOf: Map<number, AlmanachFamilyNode[]>;
 }
 
+/**
+ * `roots`/`outsiderSpousesOf` (#3983 Plan B Task 5 fix round 1, Finding
+ * I1) — a node's "outsider spouse" status is decided by whether it has an
+ * INCOMING parentage edge (`childIds`), not by the old `bloodIds` (anyone
+ * EVER a `parent_id` OR `child_id`). The old criterion meant a union member
+ * who parents a shared child but is never anyone's own recorded child (the
+ * founder's own head+spouse+child scenario — `founder/familyShape.ts`'s
+ * `case 'child'` gives the founder a parentage edge to BOTH the head and
+ * the head's spouse) got wrongly counted as "blood" purely for being a
+ * parent, which excluded it from outsider-spouse nesting and left it as a
+ * spurious second root instead. `family.nodes` order is root-line,
+ * depth-first-stable order: the first union member (in that order) reaches
+ * `roots`/`claimed` and becomes the anchor; every later member sharing a
+ * union with an already-claimed id nests beside that partner instead of
+ * ever being considered for root status itself — this also covers the
+ * original "married in with zero parentage edges at all" case, since
+ * having no incoming edge is a superset that includes it. A union whose
+ * members ALL lack an incoming edge (e.g. a founder who IS the head, with
+ * no recorded parents of her own, plus her equally parent-less spouse) has
+ * nobody naturally "in line" to anchor on — the first member encountered
+ * (`family.nodes` order) becomes the root and the rest nest beside them,
+ * rather than dropping the union as the old code did (leaving nobody
+ * placed at all).
+ *
+ * `renderNode` (below) separately dedupes a node reachable via more than
+ * one `childrenByParent` entry (the same founder/head+spouse scenario
+ * above also gives the shared child TWO parent edges) — that's the other
+ * half of I1: even with the spouse correctly nested rather than rooted,
+ * the child would still render once under each parent's own subtree
+ * without a shared `renderedIds` guard across the whole tree walk.
+ */
 function buildTreeIndex(family: AlmanachFamily): TreeIndex {
   const nodeById = new Map(family.nodes.map((n) => [n.id, n]));
   const childIds = new Set(family.parentage.map((e) => e.child_id));
-  const bloodIds = new Set<number>();
   const childrenByParent = new Map<number, number[]>();
   for (const edge of family.parentage) {
-    bloodIds.add(edge.parent_id);
-    bloodIds.add(edge.child_id);
     const list = childrenByParent.get(edge.parent_id) ?? [];
     list.push(edge.child_id);
     childrenByParent.set(edge.parent_id, list);
   }
 
-  const outsiderSpousesOf = new Map<number, AlmanachFamilyNode[]>();
-  const outsiderIds = new Set<number>();
+  const partnersOf = new Map<number, number[]>();
   for (const union of family.unions) {
-    const outsiders = union.member_ids.filter((id) => !bloodIds.has(id) && nodeById.has(id));
-    // The first member still in the blood line is who the outsider(s) render
-    // beside — a union with no in-line member at all (neither party blood-
-    // connected to this tree) has nowhere to attach and is dropped.
-    const attachTo = union.member_ids.find((id) => !outsiders.includes(id));
-    if (attachTo == null) continue;
-    for (const outsiderId of outsiders) {
-      const outsiderNode = nodeById.get(outsiderId);
-      if (!outsiderNode) continue;
-      const list = outsiderSpousesOf.get(attachTo) ?? [];
-      list.push(outsiderNode);
-      outsiderSpousesOf.set(attachTo, list);
-      outsiderIds.add(outsiderId);
+    const members = union.member_ids.filter((id) => nodeById.has(id));
+    for (const memberId of members) {
+      const others = members.filter((id) => id !== memberId);
+      const list = partnersOf.get(memberId) ?? [];
+      list.push(...others);
+      partnersOf.set(memberId, list);
     }
   }
 
-  const roots = family.nodes.filter((n) => !childIds.has(n.id) && !outsiderIds.has(n.id));
-  return { childrenByParent, roots, bloodIds, outsiderSpousesOf };
+  const roots: AlmanachFamilyNode[] = [];
+  const outsiderSpousesOf = new Map<number, AlmanachFamilyNode[]>();
+  const claimed = new Set<number>();
+  // "Already placed" — will render somewhere in the tree without this
+  // loop's help — means EITHER it has its own incoming parentage edge
+  // (renders naturally as someone's child, via `childrenByParent`) OR this
+  // same loop already claimed it (a root, or nested beside an earlier
+  // partner). A node with an incoming edge is never itself added to
+  // `claimed` (it's skipped outright below), so both checks are needed —
+  // `childIds` alone would miss a root that claimed a partner earlier in
+  // this same pass, and `claimed` alone would miss a partner who has an
+  // incoming edge and so never entered this loop's `roots`/outsider logic
+  // at all.
+  for (const node of family.nodes) {
+    if (childIds.has(node.id) || claimed.has(node.id)) continue;
+    const claimedPartnerId = (partnersOf.get(node.id) ?? []).find(
+      (id) => childIds.has(id) || claimed.has(id)
+    );
+    if (claimedPartnerId != null) {
+      const list = outsiderSpousesOf.get(claimedPartnerId) ?? [];
+      list.push(node);
+      outsiderSpousesOf.set(claimedPartnerId, list);
+    } else {
+      roots.push(node);
+    }
+    claimed.add(node.id);
+  }
+
+  return { childrenByParent, roots, outsiderSpousesOf };
 }
 
 export function FamilyChapter({
@@ -244,6 +288,15 @@ export function FamilyChapter({
 
   const nodeById = new Map(family.nodes.map((n) => [n.id, n]));
 
+  // A node reachable through more than one `childrenByParent` entry (the
+  // founder's own head+spouse+child scenario gives a child two parent
+  // edges — #3983 Plan B Task 5 fix round 1, Finding I1) renders exactly
+  // once, at the first encounter in this root-line depth-first walk — every
+  // later attempt (from the second parent) is a no-op. One `Set` shared
+  // across the whole walk, not per-call: `renderNode` recurses into both
+  // `outsiders` and `childIds`, and either path can reach the same id.
+  const renderedIds = new Set<number>();
+
   /** `relationOverride` covers the outsider-spouse case ("consort") — every
    * other caller lets `depth` supply the structural word. */
   const renderNode = (
@@ -251,6 +304,8 @@ export function FamilyChapter({
     depth: number,
     relationOverride?: string
   ): ReactNode => {
+    if (renderedIds.has(node.id)) return null;
+    renderedIds.add(node.id);
     const relation = relationOverrides?.[node.id] ?? relationOverride ?? relationLabel(depth);
     const selected = selectedId === node.id;
     const outsiders = index.outsiderSpousesOf.get(node.id) ?? [];

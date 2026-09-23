@@ -5,7 +5,9 @@
  * render; the rendered chapter shows the founder's own row as "your
  * character" and a deceased kin's row as "deceased".
  */
-import { screen } from '@testing-library/react';
+import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
 import type { HouseTemplateOption } from '@/character-creation/api';
@@ -22,6 +24,50 @@ import type { FounderDraft, FounderKin } from '../founder/founderDraft';
 vi.mock('../queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../queries')>();
   return { ...actual, useAllHouses: vi.fn(() => ({ data: { results: [] } })) };
+});
+
+// Swap Radix `Select` for a native `<select>` (mirrors `FamilyChapter.test.
+// tsx`'s own established mock) so the relation picker's actual OPTIONS can
+// be inspected with `queryByRole('option', ...)` — `getByRole('combobox')`
+// alone can't tell "head of house" was dropped from the list.
+vi.mock('@/components/ui/select', () => {
+  function SelectTrigger({ children }: { children?: ReactNode }) {
+    return <>{children}</>;
+  }
+  function Select({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value?: string;
+    onValueChange?: (next: string) => void;
+    children?: ReactNode;
+  }) {
+    let id: string | undefined;
+    let options: ReactNode = null;
+    Children.forEach(children, (child) => {
+      if (!isValidElement(child)) return;
+      if (child.type === SelectTrigger) {
+        id = (child as ReactElement<{ id?: string }>).props.id;
+      } else {
+        options = child;
+      }
+    });
+    return (
+      <select id={id} value={value} onChange={(event) => onValueChange?.(event.target.value)}>
+        {options}
+      </select>
+    );
+  }
+  return {
+    Select,
+    SelectTrigger,
+    SelectValue: () => null,
+    SelectContent: ({ children }: { children?: ReactNode }) => <>{children}</>,
+    SelectItem: ({ value, children }: { value: string; children?: ReactNode }) => (
+      <option value={value}>{children}</option>
+    ),
+  };
 });
 
 function kin(
@@ -65,20 +111,8 @@ const headMotherSpouse = () => [
   kin({ key: 'spouse', name: 'Dario', relation: 'spouse' }),
 ];
 
-/**
- * `FamilyChapter`'s `buildTreeIndex` roots ANY node with an outgoing
- * parentage edge and no incoming one — so giving the founder a parentage
- * edge to BOTH the head and the head's spouse (the plate's own worked
- * example) makes the spouse a second root (its own parentage edge takes it
- * out of the union's "outsider" detection, `bloodIds` already has it) and
- * renders the founder twice, once under each root. That's a real
- * consequence of `founderFamilyShape`'s two-parent edge for a `child`
- * relation colliding with a present spouse — flagged in the task report,
- * not something to paper over here — so the rendering assertions below use
- * a head+mother fixture (no spouse) that doesn't hit it, while the edges
- * test above still exercises the full head+mother+spouse scenario the spec
- * requires at the shape level.
- */
+/** A fixture with no spouse, for tests that don't need the full
+ * head+mother+spouse scenario (the "family you may define" count). */
 const headMotherOnly = () => [
   kin({ key: 'head', name: 'Estuosa', relation: 'head' }),
   kin({ key: 'mother', name: 'Fiamma', relation: 'mother', is_deceased: true }),
@@ -125,9 +159,9 @@ test('the shape for head + mother + spouse + founder(child) yields the expected 
 });
 
 test('the rendered tree shows "your character" on the founder row and the mother\'s "deceased" status', () => {
-  renderWithProviders(
+  const { container } = renderWithProviders(
     <FounderFamilyChapter
-      draft={baseDraft(headMotherOnly())}
+      draft={baseDraft(headMotherSpouse())}
       set={vi.fn()}
       addKin={vi.fn()}
       updateKin={vi.fn()}
@@ -143,6 +177,20 @@ test('the rendered tree shows "your character" on the founder row and the mother
   // The founder plate's own relation vocabulary, not `FamilyChapter`'s
   // structural depth-based words.
   expect(screen.getByText('head of house')).toBeInTheDocument();
+  // I3 — the founder's own `.rel` carries her relation word too, not just
+  // her place in the line.
+  expect(screen.getByText('child · heir')).toBeInTheDocument();
+
+  // I1 (fix round 1) — head + spouse (union) + founder(child, edges to
+  // both) renders the founder exactly once, and the spouse nests beside
+  // the head as a consort rather than becoming a spurious second root:
+  // Fiamma (the head's own mother) is the tree's only root, Estuosa nests
+  // as her child, and Dario is never a second top-level entry.
+  expect(screen.getAllByText('Marisol')).toHaveLength(1);
+  const topLevelNames = Array.from(container.querySelectorAll('.tree > li > .who .nm')).map(
+    (el) => el.textContent
+  );
+  expect(topLevelNames).toEqual(['Fiamma']);
 });
 
 test('the founder relation dialog never offers grandparent', () => {
@@ -182,4 +230,52 @@ test('the "family you may define" row falls back to the named kin count', () => 
   expect(defineField).toHaveTextContent('2');
   const onRecordField = screen.getByText('on record').closest('.field');
   expect(onRecordField).toHaveTextContent('3');
+});
+
+// C1 (fix round 1) — "at most one head": the option drops out of the
+// dialog's own relation `<select>` the moment a second one would orphan the
+// founder's own placement, whether she occupies the head slot herself or a
+// separate head kin row is already on record.
+test('the relation dialog hides "head of house" once the founder occupies the head', async () => {
+  renderWithProviders(
+    <FounderFamilyChapter
+      draft={{ ...baseDraft([]), founder_relation: 'head' }}
+      set={vi.fn()}
+      addKin={vi.fn()}
+      updateKin={vi.fn()}
+      removeKin={vi.fn()}
+      template={{ id: 3 } as HouseTemplateOption}
+      youName="Marisol"
+      onNext={vi.fn()}
+    />
+  );
+
+  await userEvent.click(screen.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  const relationSelect = screen.getByLabelText('relation');
+  expect(
+    within(relationSelect).queryByRole('option', { name: 'head of house' })
+  ).not.toBeInTheDocument();
+  expect(within(relationSelect).getByRole('option', { name: 'mother' })).toBeInTheDocument();
+});
+
+test('the relation dialog hides "head of house" once a head kin row already exists', async () => {
+  renderWithProviders(
+    <FounderFamilyChapter
+      draft={baseDraft(headMotherOnly())}
+      set={vi.fn()}
+      addKin={vi.fn()}
+      updateKin={vi.fn()}
+      removeKin={vi.fn()}
+      template={{ id: 3 } as HouseTemplateOption}
+      youName="Marisol"
+      onNext={vi.fn()}
+    />
+  );
+
+  await userEvent.click(screen.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  const relationSelect = screen.getByLabelText('relation');
+  expect(
+    within(relationSelect).queryByRole('option', { name: 'head of house' })
+  ).not.toBeInTheDocument();
+  expect(within(relationSelect).getByRole('option', { name: 'sibling' })).toBeInTheDocument();
 });

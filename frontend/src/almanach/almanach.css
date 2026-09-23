@@ -570,6 +570,17 @@
   flex-wrap: wrap;
 }
 
+/* The founder House chapter's own Quiddity prompt (#3983 Plan B Task 5 fix
+   round 1, Finding I2, plate F-II's `.sub` line, `founder.html:75`) — the
+   template's authored `aspect_definitions[0].prompt`, not chrome, so it gets
+   its own italic/muted treatment rather than default paragraph styling. */
+.almanach .chapter .sub {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+  margin: 0 0 1.2rem;
+  font-size: 0.95rem;
+}
+
 .almanach .prose {
   border-left: 2px solid hsl(var(--primary) / 0.42);
   padding: 0.3rem 0 0.3rem 1rem;

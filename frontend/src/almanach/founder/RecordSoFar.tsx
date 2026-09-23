@@ -12,15 +12,21 @@
  * the House/Family chapters are reached, `FounderHouseChapter`/
  * `FounderFamilyChapter`'s own callers (Task 6's wiring) pass them, adding
  * plate F-II's "quiddity" row + "features" `<dl>` and plate F-III's "you"
- * row + "linked houses" `<dl>`. `quiddityName`/`features` stay two separate
- * `sofar` rows ("house" and "quiddity") rather than plate F-III's own
- * combined "Candela · the Veiled" wording — one row per named thing is
- * simpler and holds across every step, not just the one the plate happened
- * to draw that way; see the task report.
+ * row + "linked houses" `<dl>`.
+ *
+ * `step` (fix round 1, Finding M1) — the shell (`FounderAlmanach.tsx`)
+ * always knows which chapter is current, so it's the one place that can
+ * tell "house" and "quiddity" apart: on the House step itself (plate F-II)
+ * they're two separate rows (the quiddity is a live, still-changeable pick
+ * sitting right there in the same chapter); from the Family step on (plate
+ * F-III onward, where the House chapter itself is out of view) they read as
+ * one settled fact, "Candela · the Veiled". Omitting `step` (or passing
+ * `'house'`/`'seat'`) keeps the two-row form.
  */
 import { Fragment } from 'react';
 
 import type { FounderDraft } from './founderDraft';
+import type { FounderStep } from './steps';
 
 export interface RecordSoFarProps {
   draft: FounderDraft;
@@ -38,6 +44,9 @@ export interface RecordSoFarProps {
    * Family chapter is reached. See `FounderHouseChapter`'s own doc comment
    * on why this is always the literal `'Given name'` today. */
   youName?: string;
+  /** The chassis's current chapter — decides the house/quiddity row split
+   * (see the module doc comment). Omitted keeps the two-row House-step form. */
+  step?: FounderStep;
 }
 
 export function RecordSoFar({
@@ -47,6 +56,7 @@ export function RecordSoFar({
   quiddityName,
   features,
   youName,
+  step,
 }: RecordSoFarProps) {
   const entries: { q: string; text: string }[] = [];
   const todos: string[] = [];
@@ -60,13 +70,23 @@ export function RecordSoFar({
     todos.push('the seat');
   }
 
+  // Plate F-II (the House step itself) keeps "house"/"quiddity" as two
+  // rows; plate F-III on combines them into one settled "Candela · the
+  // Veiled" line (see the module doc comment).
+  const combineHouseAndQuiddity = step != null && step !== 'seat' && step !== 'house';
   if (draft.house_name !== '') {
-    entries.push({ q: 'house', text: draft.house_name });
+    entries.push({
+      q: 'house',
+      text:
+        combineHouseAndQuiddity && quiddityName != null
+          ? `${draft.house_name} · ${quiddityName}`
+          : draft.house_name,
+    });
   } else {
     todos.push('the house');
   }
 
-  if (quiddityName != null) {
+  if (quiddityName != null && !combineHouseAndQuiddity) {
     entries.push({ q: 'quiddity', text: quiddityName });
   }
 

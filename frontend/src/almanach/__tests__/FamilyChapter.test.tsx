@@ -165,3 +165,77 @@ test('the "born into" pick renders and its value reaches the create payload', as
   await userEvent.click(screen.getByRole('button', { name: 'Add' }));
   expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ born_into_family_id: 4 }));
 });
+
+// #3983 Plan B Task 5 fix round 1, Finding I1 (this component's own bug,
+// exposed first by the founder Almanach's `familyShape.ts`, which gives a
+// `child`-relation kin parentage edges to BOTH the head and the head's own
+// spouse — biologically ordinary, but it used to make the spouse a second
+// "blood" node purely for parenting someone, which disqualified them from
+// nesting as an outsider consort and left them a spurious second root; the
+// shared child then rendered once under each root).
+test('a child with parentage edges to both a head and their spouse renders once, and the spouse nests beside the head rather than rooting separately', async () => {
+  const headSpouseChild: AlmanachFamily = {
+    nodes: [
+      {
+        id: 1,
+        name: 'Ilsabet',
+        tier: 'standing',
+        family_id: 1,
+        is_deceased: false,
+        is_appable: false,
+        sheet_id: null,
+        gender: 'Woman',
+        age: 44,
+        description: '',
+        believed_deceased: false,
+      },
+      {
+        id: 2,
+        name: 'Raffaele',
+        tier: 'standing',
+        family_id: 1,
+        is_deceased: false,
+        is_appable: false,
+        sheet_id: null,
+        gender: 'Man',
+        age: 46,
+        description: '',
+        believed_deceased: false,
+      },
+      {
+        id: 3,
+        name: 'Nerio',
+        tier: 'name_only',
+        family_id: 1,
+        is_deceased: false,
+        is_appable: false,
+        sheet_id: null,
+        gender: 'Man',
+        age: 17,
+        description: '',
+        believed_deceased: false,
+      },
+    ],
+    parentage: [
+      { child_id: 3, parent_id: 1, kind: 'biological', is_true: true, via_secret: false },
+      { child_id: 3, parent_id: 2, kind: 'biological', is_true: true, via_secret: false },
+    ],
+    unions: [{ id: 2, kind: 'marriage', member_ids: [1, 2], ended: false }],
+  };
+
+  const { container } = renderWithProviders(
+    <FamilyChapter
+      houseId={9}
+      houseName="Piropa"
+      family={headSpouseChild}
+      household={[]}
+      onEdit={() => {}}
+    />
+  );
+
+  expect(screen.getAllByText('Nerio')).toHaveLength(1);
+  const topLevelNames = Array.from(container.querySelectorAll('.tree > li > .who .nm')).map(
+    (el) => el.textContent
+  );
+  expect(topLevelNames).toEqual(['Ilsabet']);
+});

@@ -14,8 +14,14 @@
  * MOTHER/FATHER is on record (MOTHER preferred). The founder herself is
  * placed the identical way, via `draft.founder_relation` — including
  * `'head'`, which means the founder IS the head (no separate head kin row
- * exists then; see `founderDraft.ts`'s ruling that the "head" relation
- * option is hidden once `founder_relation === 'head'`).
+ * exists then). "At most one head" is enforced by the caller, not this
+ * module: `FounderFamilyChapter.tsx` computes the `relations` list
+ * `AddKinDialog` offers per render, dropping `'head'` once
+ * `draft.founder_relation === 'head'` or `draft.kin` already carries a
+ * `head` row (#3983 Plan B Task 5 fix round 1, Finding C1) — this function
+ * has no opinion on it and will happily build a (malformed) shape from a
+ * draft that violates the rule, same as it does for any other caller
+ * mistake.
  *
  * Ids are synthetic and negative so they never collide with a real
  * `Kinsperson` pk once the claim is actually filed (Task 6): the head

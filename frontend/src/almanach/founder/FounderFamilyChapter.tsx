@@ -13,7 +13,11 @@
  * `AddKinDialog`'s relation picker is narrowed to the head-relative set the
  * founder dialog actually offers (never `grandparent` — the backend cannot
  * tell which side of the family an unattached grandparent belongs to; see
- * `familyShape.ts`'s own docstring and #3983 Plan B's ruling).
+ * `familyShape.ts`'s own docstring and #3983 Plan B's ruling), and further
+ * recomputed every render (`offeredRelations`, below) to drop `'head'` once
+ * one already exists on the draft — "at most one head" (#3983 Plan B fix
+ * round 1, Finding C1). `AddKinDialog` only ever filters the static list a
+ * caller hands it; it has no draft state of its own to make that call.
  */
 import { useMemo } from 'react';
 
@@ -68,8 +72,34 @@ export function FounderFamilyChapter({
   const { data: houses } = useAllHouses();
   const shape = useMemo(() => founderFamilyShape(draft, youName), [draft, youName]);
 
+  // "At most one head" (#3983 Plan B's ruling, fix round 1 Finding C1) —
+  // `AddKinDialog` narrows its own picker to whatever `relations` it's
+  // given (`document/AddKinDialog.tsx`'s static `.filter`), so the caller
+  // (here) has to recompute the offered set every render from live draft
+  // state: `'head'` drops out once the founder already occupies it herself
+  // or a separate head kin row already exists — either way a second head
+  // would orphan the founder's own placement (`founderFamilyShape` has no
+  // edges to give her when `effectiveHeadId` can't be determined).
+  const hasHeadRow = draft.kin.some((kin) => kin.relation === 'head');
+  const offeredRelations =
+    hasHeadRow || draft.founder_relation === 'head'
+      ? FOUNDER_KIN_RELATIONS.filter((relation) => relation !== 'head')
+      : FOUNDER_KIN_RELATIONS;
+
+  // The plate's own founder row reads "daughter · heir" (relation word +
+  // place in the line, `founder.html` line ~404); `RELATION_WORDS` has no
+  // gendered variant to draw "daughter"/"son" from (no gender field reaches
+  // these components — see the task report's disclosed omission on
+  // `FounderPersonPanel`'s "child of X" chips), so this reads "child ·
+  // heir" for the common case. A founder who IS the head
+  // (`founder_relation === 'head'`) has no "place in the line" relative to
+  // herself, so that one case reads the bare relation word alone.
+  const founderRelationWord = RELATION_WORDS[draft.founder_relation];
   const relationOverrides: Record<number, string> = {
-    [FOUNDER_NODE_ID]: draft.founder_is_heir ? 'heir' : 'younger',
+    [FOUNDER_NODE_ID]:
+      draft.founder_relation === 'head'
+        ? founderRelationWord
+        : `${founderRelationWord} · ${draft.founder_is_heir ? 'heir' : 'younger'}`,
   };
   for (const [idText, key] of Object.entries(shape.keyByNodeId)) {
     const kin = draft.kin.find((row) => row.key === key);
@@ -159,7 +189,7 @@ export function FounderFamilyChapter({
       )}
       addLabel="⊕ a sibling · a spouse"
       householdAddLabel="⊕ a ward · a captain of the guard · a position"
-      relations={FOUNDER_KIN_RELATIONS}
+      relations={offeredRelations}
       row3={row3}
       relationOverrides={relationOverrides}
       statusOverrides={statusOverrides}
