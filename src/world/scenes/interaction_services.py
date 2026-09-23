@@ -288,6 +288,68 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
         interaction.cached_target_personas = [*existing, *personas]
 
 
+def _effective_interaction_receivers(
+    *, persona: Persona, place: Place | None, receivers: list[Persona] | None
+) -> list[Persona] | None:
+    """Resolve explicit or place-presence receivers."""
+    if receivers is not None or place is None:
+        return receivers
+    return list(Persona.objects.filter(place_presences__place=place).exclude(pk=persona.pk))
+
+
+def _validate_interaction_targets(  # noqa: PLR0913
+    *,
+    persona: Persona,
+    target_personas: list[Persona],
+    scene: Scene | None,
+    place: Place | None,
+    receivers: list[Persona] | None,
+    mode: str,
+    visibility: str,
+) -> None:
+    """Ensure every target can receive the interaction, then persist targets."""
+    place_presence_ids = None
+    if place is not None:
+        place_presence_ids = frozenset(
+            PlacePresence.objects.filter(
+                place_id=place.pk, persona_id__in=[target.pk for target in target_personas]
+            ).values_list("persona_id", flat=True)
+        )
+    writer_location = persona.character_sheet.character.location
+    unreachable = [
+        target
+        for target in target_personas
+        if not persona_can_receive(
+            target,
+            scene=scene,
+            place=place,
+            receivers=receivers,
+            mode=mode,
+            visibility=visibility,
+            location=writer_location,
+            place_presence_persona_ids=place_presence_ids,
+        )
+    ]
+    if not unreachable:
+        return
+    threshold = (
+        [
+            target
+            for target in unreachable
+            if scene.has_character_present({target.character_sheet_id})
+        ]
+        if scene is not None and place is None and receivers is None
+        else []
+    )
+    if threshold and len(threshold) == len(unreachable):
+        raise UnreachableError(
+            unreachable, _THRESHOLD_HINT, message=_describe_threshold_targets(unreachable)
+        )
+    raise UnreachableError(
+        unreachable, _TARGET_UNREACHABLE_HINT, message=_describe_unreachable_targets(unreachable)
+    )
+
+
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
     *,
     persona: Persona,
@@ -371,14 +433,9 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         _break_lie_low_for_interaction(persona, scene)
 
         # Determine receiver list.
-        effective_receivers = receivers
-        if effective_receivers is None and place is not None:
-            # Auto-populate from PlacePresence, excluding the writer.
-            effective_receivers = list(
-                Persona.objects.filter(
-                    place_presences__place=place,
-                ).exclude(pk=persona.pk)
-            )
+        effective_receivers = _effective_interaction_receivers(
+            persona=persona, place=place, receivers=receivers
+        )
 
         if effective_receivers:
             # Pin each receiver's account too (#1219), batched to one query.
@@ -397,65 +454,15 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             interaction.cached_receivers = [*interaction.cached_receivers, *created_receivers]
 
         if target_personas:
-            # #3787 Task 4 - the live defect: target_personas appeared nowhere in
-            # visible_to, so a Place-scoped pose (which auto-populates receivers
-            # from PlacePresence above, making this a DIRECTED row) could name a
-            # persona sitting at a different table -- the row was written and
-            # never delivered. Validate with the shared `persona_can_receive`
-            # predicate (Task 3) before writing anything, for every shape --
-            # no shape-based exemption here (fix round 1 finding): the room-heard
-            # branch answers correctly on its own now, given the writer's own
-            # `location` as a fallback for when there is no `Scene` to anchor it.
-            #
-            # Batch the Place-presence lookup once for every target instead of
-            # letting `persona_can_receive` issue one `PlacePresence` query per
-            # call (fix round 1 finding 2, "no queries in loop").
-            place_presence_ids = None
-            if place is not None:
-                place_presence_ids = frozenset(
-                    PlacePresence.objects.filter(
-                        place_id=place.pk,
-                        persona_id__in=[p.pk for p in target_personas],
-                    ).values_list("persona_id", flat=True)
-                )
-            writer_location = persona.character_sheet.character.location
-            unreachable = [
-                target
-                for target in target_personas
-                if not persona_can_receive(
-                    target,
-                    scene=scene,
-                    place=place,
-                    receivers=effective_receivers,
-                    mode=mode,
-                    visibility=visibility,
-                    location=writer_location,
-                    place_presence_persona_ids=place_presence_ids,
-                )
-            ]
-            if unreachable:
-                # A target in the room but not yet in the scene is at the threshold
-                # (#3867); the refusal says so rather than "across the room".
-                threshold = (
-                    [
-                        target
-                        for target in unreachable
-                        if scene.has_character_present({target.character_sheet_id})
-                    ]
-                    if scene is not None and place is None and effective_receivers is None
-                    else []
-                )
-                if threshold and len(threshold) == len(unreachable):
-                    raise UnreachableError(
-                        unreachable,
-                        _THRESHOLD_HINT,
-                        message=_describe_threshold_targets(unreachable),
-                    )
-                raise UnreachableError(
-                    unreachable,
-                    _TARGET_UNREACHABLE_HINT,
-                    message=_describe_unreachable_targets(unreachable),
-                )
+            _validate_interaction_targets(
+                persona=persona,
+                target_personas=target_personas,
+                scene=scene,
+                place=place,
+                receivers=effective_receivers,
+                mode=mode,
+                visibility=visibility,
+            )
             write_target_personas(interaction, target_personas)
 
         if reply_to is not None:

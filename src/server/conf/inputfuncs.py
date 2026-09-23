@@ -139,6 +139,8 @@ _RESYNC_RATE_LIMIT_SECONDS = 5.0
 _RESYNC_REPLAY_TTL_SECONDS = 300.0
 _RESYNC_REPLAY_MAX_ENTRIES = 32
 _RESYNC_RATE_LIMITED_CODE = "rate_limited"
+_RESYNC_DUPLICATE_CODE = "duplicate_request"
+_RESYNC_HANDLED_CODE = "handled"
 
 
 def _canonical_resync_request_id(value: object) -> str | None:
@@ -166,12 +168,35 @@ def _send_resync_error(
     session.msg(state_resync_error=((), payload))
 
 
-def request_room_state(session, *args, **kwargs):  # noqa: C901, PLR0912
-    """Request a full viewer-bound room-state snapshot on this websocket.
+def _request_room_state_replay(session, request_id: str, now: float) -> str | None:
+    """Reserve a resync request, returning an error code when rejected."""
+    try:
+        replay_cache = session.ndb.room_state_resync_replay
+    except AttributeError:
+        replay_cache = {}
+        session.ndb.room_state_resync_replay = replay_cache
+    for key, seen_at in list(replay_cache.items()):
+        if now - seen_at >= _RESYNC_REPLAY_TTL_SECONDS:
+            del replay_cache[key]
+    if request_id in replay_cache:
+        return _RESYNC_DUPLICATE_CODE
+    try:
+        last_accepted = session.ndb.room_state_resync_last_accepted
+    except AttributeError:
+        last_accepted = None
+    if last_accepted is not None and now - last_accepted < _RESYNC_RATE_LIMIT_SECONDS:
+        retry_after_ms = int((_RESYNC_RATE_LIMIT_SECONDS - (now - last_accepted)) * 1000)
+        _send_resync_error(session, request_id, _RESYNC_RATE_LIMITED_CODE, retry_after_ms)
+        return _RESYNC_HANDLED_CODE
+    replay_cache[request_id] = now
+    while len(replay_cache) > _RESYNC_REPLAY_MAX_ENTRIES:
+        del replay_cache[min(replay_cache, key=replay_cache.get)]
+    session.ndb.room_state_resync_last_accepted = now
+    return None
 
-    The Evennia portal passes the third frame element as direct keyword
-    arguments. Only the canonical ``client_request_id`` field is accepted.
-    """
+
+def request_room_state(session, *args, **kwargs):  # noqa: C901
+    """Request a full viewer-bound room-state snapshot on this websocket."""
     if args or set(kwargs) != {"client_request_id"}:
         _send_resync_error(session, None, "invalid_request")
         return
@@ -179,7 +204,6 @@ def request_room_state(session, *args, **kwargs):  # noqa: C901, PLR0912
     if request_id is None:
         _send_resync_error(session, None, "invalid_request")
         return
-
     actor = session.puppet
     if actor is None:
         _send_resync_error(session, request_id, "not_puppeted")
@@ -190,38 +214,12 @@ def request_room_state(session, *args, **kwargs):  # noqa: C901, PLR0912
     if actor.location is None:
         _send_resync_error(session, request_id, "no_location")
         return
-
-    now = time.monotonic()
-    try:
-        replay_cache = session.ndb.room_state_resync_replay
-    except AttributeError:
-        replay_cache = {}
-        session.ndb.room_state_resync_replay = replay_cache
-    expired = [
-        key for key, seen_at in replay_cache.items() if now - seen_at >= _RESYNC_REPLAY_TTL_SECONDS
-    ]
-    for key in expired:
-        del replay_cache[key]
-    if request_id in replay_cache:
-        _send_resync_error(session, request_id, "duplicate_request")
+    replay_result = _request_room_state_replay(session, request_id, time.monotonic())
+    if replay_result == _RESYNC_DUPLICATE_CODE:
+        _send_resync_error(session, request_id, replay_result)
         return
-    try:
-        last_accepted = session.ndb.room_state_resync_last_accepted
-    except AttributeError:
-        last_accepted = None
-    if last_accepted is not None and now - last_accepted < _RESYNC_RATE_LIMIT_SECONDS:
-        retry_after_ms = int((_RESYNC_RATE_LIMIT_SECONDS - (now - last_accepted)) * 1000)
-        _send_resync_error(session, request_id, "rate_limited", retry_after_ms)
+    if replay_result == _RESYNC_HANDLED_CODE:
         return
-
-    # Reserve atomically before expensive serialization. Even a failed send
-    # consumes this reservation, preventing concurrent bypasses.
-    replay_cache[request_id] = now
-    while len(replay_cache) > _RESYNC_REPLAY_MAX_ENTRIES:
-        oldest = min(replay_cache, key=replay_cache.get)
-        del replay_cache[oldest]
-    session.ndb.room_state_resync_last_accepted = now
-
     try:
         result = actor.send_room_state(session=session, resync_request_id=request_id)
     except (AttributeError, TypeError, ValueError, ObjectDoesNotExist):
