@@ -460,10 +460,9 @@ def _particle_example(house: Organization) -> str:
 
 def _house_payload(house: Organization) -> dict:
     law = house.default_succession_law
-    # SuccessionLaw carries no codex_entry FK today (unlike HouseAspectOption,
-    # #2868's shape) — name-only until one is authored; a future field would
-    # add a "codex_entry_id" key here, not replace this dict's shape.
-    law_payload = {"name": law.name} if law is not None else None
+    law_payload = (
+        {"name": law.name, "codex_entry_id": law.codex_entry_id} if law is not None else None
+    )
     return {
         "id": house.pk,
         "name": house.name,

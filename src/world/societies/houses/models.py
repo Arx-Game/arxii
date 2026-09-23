@@ -206,6 +206,14 @@ class SuccessionLaw(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="+",
         help_text="CHOSEN_HEIR derivation: the named heir.",
     )
+    codex_entry = models.ForeignKey(
+        "arxii.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="succession_laws",
+        help_text="Lore entry this law is bound to, if any.",
+    )
 
     objects = NaturalKeyManager()
 
