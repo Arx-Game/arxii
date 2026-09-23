@@ -11,13 +11,14 @@
  * `DialogFooter`/`DialogTitle`, Cancel outlined + a primary submit).
  *
  * The plate's "born into" field (a secondary, non-primary family
- * membership, `born_into_family_id`) is deliberately NOT built here: that
- * kwarg takes a `Family` pk, and the only house picker this app exposes
- * (`AlmanachHouseSummary`, `useAllHouses`) carries the house's own
- * `Organization` id, never its `family_id` — sending the org id as a family
- * id would silently target the wrong row (or refuse with "no such family").
- * A stated omission, not a guess; closing it needs `AlmanachHouseSummary`
- * to carry `family_id` first.
+ * membership, `born_into_family_id`) picks from `useAllHouses()`
+ * (`AlmanachHouseSummary`, which now carries `family_id` — #3983 Task 10
+ * fold-in) narrowed to rows with a non-null `family_id`: that kwarg takes a
+ * `Family` pk, never an `Organization` id, so a house with no family on
+ * record (`family_id === null`) can't be picked here. The blank option
+ * (no `born_into_family_id` sent) means "just this house" — the kin's
+ * primary membership already comes from `relation`, so leaving this blank
+ * is the ordinary case.
  */
 import { useEffect, useState } from 'react';
 
@@ -33,7 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-import { useGenders } from '../queries';
+import { useAllHouses, useGenders } from '../queries';
 import type { AlmanachFamilyNode } from '../types';
 
 export type KinRelation =
@@ -69,6 +70,7 @@ export interface CreateKinFields {
   age?: number;
   is_deceased?: boolean;
   is_household?: boolean;
+  born_into_family_id?: number;
 }
 
 export interface AddKinDialogProps {
@@ -90,12 +92,17 @@ export function AddKinDialog({
   onConfirm,
 }: AddKinDialogProps) {
   const { data: genders } = useGenders();
+  const { data: houses } = useAllHouses();
+  const bornIntoOptions = (houses?.results ?? []).filter(
+    (house): house is typeof house & { family_id: number } => house.family_id != null
+  );
   const [name, setName] = useState('');
   const [relation, setRelation] = useState<KinRelation>(defaultHousehold ? 'ward' : 'child');
   const [parentId, setParentId] = useState('');
   const [spouseId, setSpouseId] = useState('');
   const [genderId, setGenderId] = useState('');
   const [age, setAge] = useState('');
+  const [bornIntoFamilyId, setBornIntoFamilyId] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -105,6 +112,7 @@ export function AddKinDialog({
     setSpouseId('');
     setGenderId('');
     setAge('');
+    setBornIntoFamilyId('');
   }, [open, defaultHousehold]);
 
   const trimmedName = name.trim();
@@ -123,6 +131,7 @@ export function AddKinDialog({
       ...(needsSpouse && spouseId !== '' ? { spouse_kinsperson_id: Number(spouseId) } : {}),
       ...(genderId !== '' ? { gender_id: Number(genderId) } : {}),
       ...(age.trim() !== '' ? { age: Number(age) } : {}),
+      ...(bornIntoFamilyId !== '' ? { born_into_family_id: Number(bornIntoFamilyId) } : {}),
       ...(defaultHousehold ? { is_household: true } : {}),
     });
     onClose();
@@ -224,6 +233,21 @@ export function AddKinDialog({
               onChange={(event) => setAge(event.target.value)}
             />
           </div>
+        </div>
+        <div className="field">
+          <Label htmlFor="add-kin-born-into">born into</Label>
+          <Select value={bornIntoFamilyId} onValueChange={setBornIntoFamilyId}>
+            <SelectTrigger id="add-kin-born-into">
+              <SelectValue placeholder="the house itself" />
+            </SelectTrigger>
+            <SelectContent>
+              {bornIntoOptions.map((house) => (
+                <SelectItem key={house.id} value={String(house.family_id)}>
+                  {house.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>

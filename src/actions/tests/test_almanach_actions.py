@@ -26,6 +26,7 @@ from actions.definitions.almanach import (
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
+from world.character_sheets.factories import GenderFactory
 from world.roster.factories import FamilyFactory, KinspersonFactory, UnionKindFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import plant_rung
@@ -347,3 +348,52 @@ class AlmanachActionTests(TestCase):
         vacancy = Vacancy.objects.get(pk=result.data["vacancy_id"])
         assert vacancy.name == "Ward"
         assert vacancy.holder_kinsperson_id == result.data["kinsperson_id"]
+
+    def test_edit_kin_update_only_age_leaves_other_fields_untouched(self) -> None:
+        """#3983 Task 10 fold-in: a plain field changes ONLY when its kwarg
+        was actually passed — an update sending only ``age`` must not blank
+        the name, clear the gender, or reset ``is_deceased``."""
+        gender = GenderFactory()
+        kin = KinspersonFactory(
+            family=self.family, name="Elder Fen", gender=gender, is_deceased=True
+        )
+        result = AlmanachEditKinAction().run(
+            self.staff, org_id=self.crown.pk, kinsperson_id=kin.pk, age=42
+        )
+        assert result.success, result.message
+
+        kin.refresh_from_db()
+        assert kin.age == 42
+        assert kin.name == "Elder Fen"
+        assert kin.gender_id == gender.pk
+        assert kin.is_deceased is True
+
+    def test_edit_kin_update_believed_deceased_false_clears_it(self) -> None:
+        """#3983 Task 10 fold-in: an explicit ``believed_deceased=False`` is
+        honored (not just a truthy value) since the update path checks for
+        the kwarg's presence, not its truthiness."""
+        kin = KinspersonFactory(family=self.family, name="Elder Fen", believed_deceased=True)
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            kinsperson_id=kin.pk,
+            believed_deceased=False,
+        )
+        assert result.success, result.message
+
+        kin.refresh_from_db()
+        assert kin.believed_deceased is False
+
+    def test_edit_kin_update_refuses_foreign_kinsperson(self) -> None:
+        """#3983 Task 10 fold-in: a kinsperson whose ``family_id`` isn't this
+        house's own family is refused, never silently edited."""
+        other_family = FamilyFactory(name="House Outsider")
+        stranger = KinspersonFactory(family=other_family, name="Stranger")
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            kinsperson_id=stranger.pk,
+            age=10,
+        )
+        assert not result.success
+        assert result.message

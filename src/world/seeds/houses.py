@@ -3,21 +3,23 @@
 PLACEHOLDER content. Idempotent get-or-create keyed on names. Rides the
 kinship cluster's House Veyrane: gives it an Organization, a nobiliary
 particle, realm recognition rules, a succession law, a liege (the seed
-crown), a ducal title seated on a domain, and one working holding feeding
-the org books — enough to walk the house page, sheet/house, succession
-derivation, and the feed on a dev DB.
+crown), a ducal title seated on a domain, one working holding feeding the
+org books, and a ``published_at`` (via ``almanach.publish_house``) so the
+demo house is Almanach-visible out of the box — enough to walk the house
+page, sheet/house, succession derivation, and the feed on a dev DB.
 
-``SuccessionLaw``, ``HoldingKind``, ``HouseTemplate`` and ``HouseFeature`` are
-authored content (#2875, see ``docs/systems/houses.md``): this module looks
-them up via ``authored_or_sample`` rather than inventing them with
-``get_or_create``, so a real content universe's rows win and nothing here
-lands in the export. The Crown organization and its Society are plain
-seeder-owned config (neither is in ``CONTENT_MODELS``), but content-repo
-``HouseTemplate``/``SuccessionLaw`` rows can FK them by name, so their
-creation moved to ``world.seeds.config_prerequisites._house_charter_anchors``
-via ``_ensure_house_charter_anchors`` below, which runs before the content
-load. ``seed_houses_demo`` calls the same helper again once "Arx" is
-available, the self-healing pattern ADR-0171 describes.
+``SuccessionLaw``, ``HoldingKind``, ``HouseTemplate``, ``HouseFeature`` and
+``LandShape`` are authored content (#2875/#3983, see
+``docs/systems/houses.md``): this module looks them up via
+``authored_or_sample`` rather than inventing them with ``get_or_create``, so a
+real content universe's rows win and nothing here lands in the export. The
+Crown organization and its Society are plain seeder-owned config (neither is
+in ``CONTENT_MODELS``), but content-repo ``HouseTemplate``/``SuccessionLaw``
+rows can FK them by name, so their creation moved to
+``world.seeds.config_prerequisites._house_charter_anchors`` via
+``_ensure_house_charter_anchors`` below, which runs before the content load.
+``seed_houses_demo`` calls the same helper again once "Arx" is available, the
+self-healing pattern ADR-0171 describes.
 """
 
 from __future__ import annotations
@@ -61,6 +63,34 @@ def seed_nobiliary_particles() -> None:
                 tier_floor=tier_floor,
                 defaults={"particle": born, "taken_in_particle": taken_in},
             )
+
+
+# Authored land-shape catalog (#3983): what a demesne's ground looks like,
+# picked in ``describe_demesne``'s ``land_shape_names`` list. Content-owned
+# (``societies.landshape`` is in ``CONTENT_MODELS``), so this seeds it the
+# same ``authored_or_sample`` way the charter models above are seeded rather
+# than a plain ``get_or_create`` (#2698: a seeder never invents content).
+LAND_SHAPES: tuple[tuple[str, str], ...] = (
+    ("Coast", "PLACEHOLDER: cliffs and harbor towns facing open water."),
+    ("Reefs", "PLACEHOLDER: shoals and barrier reefs working the shallows offshore."),
+    ("Hills", "PLACEHOLDER: rolling upland pasture and terraced slopes."),
+    ("Volcanic", "PLACEHOLDER: ash-fed soil under an active or dormant cone."),
+    ("Marsh", "PLACEHOLDER: wetland fen, difficult to ford."),
+    ("Forest", "PLACEHOLDER: dense timberland, close-canopied."),
+)
+
+
+def seed_land_shapes() -> None:
+    """Look up (or, under ``SEED_SAMPLE_CONTENT``, invent) the authored
+    ``LandShape`` catalog. Independent of any realm — a plain content lookup,
+    not gated on "Arx" existing — so it seeds even when the rest of
+    ``seed_houses_demo`` returns early for lack of an authored realm.
+    """
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.societies.houses.models import LandShape  # noqa: PLC0415
+
+    for order, (name, description) in enumerate(LAND_SHAPES):
+        authored_or_sample(LandShape, {"description": description, "sort_order": order}, name=name)
 
 
 CROWN_ORG_NAME = "The Crown of Arx PLACEHOLDER"
@@ -147,6 +177,7 @@ def seed_houses_demo() -> None:
     from world.roster.models import Family  # noqa: PLC0415
     from world.seeds.kinship import DUCAL_HOUSE_NAME, seed_kinship_demo  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.societies.houses.almanach import publish_house  # noqa: PLC0415
     from world.societies.houses.constants import (  # noqa: PLC0415
         RecognitionRuleKind,
         SuccessionDerivation,
@@ -169,6 +200,7 @@ def seed_houses_demo() -> None:
 
     seed_kinship_demo()
     seed_nobiliary_particles()
+    seed_land_shapes()
     family = Family.objects.get(name=DUCAL_HOUSE_NAME)
 
     realm = authored_or_sample(
@@ -204,6 +236,7 @@ def seed_houses_demo() -> None:
     )
     if not created:
         return
+    publish_house(house)
 
     if settings.SEED_SAMPLE_CONTENT and house.family_id is not None:
         Vacancy.objects.get_or_create(

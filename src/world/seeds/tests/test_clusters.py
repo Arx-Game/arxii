@@ -187,6 +187,25 @@ class TestClusterRegistry(TestCase):
             1,
         )
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_houses_cluster_seeds_the_land_shape_catalog(self) -> None:
+        # #3983 Task 10: LandShape is authored content (societies.landshape,
+        # CONTENT_MODELS) that describe_demesne's land_shape_names picks
+        # from; seed_land_shapes (world.seeds.houses) authored_or_sample's
+        # the six-row catalog independent of the demo realm's existence.
+        from world.societies.houses.models import LandShape
+
+        CLUSTER_SEEDERS["houses"]()
+        self.assertTrue(LandShape.objects.filter(name="Coast").exists())
+        for name in ("Reefs", "Hills", "Volcanic", "Marsh", "Forest"):
+            self.assertTrue(
+                LandShape.objects.filter(name=name).exists(), f"expected seeded LandShape {name!r}"
+            )
+
+        # Idempotent on re-run: no duplicate rows.
+        CLUSTER_SEEDERS["houses"]()
+        self.assertEqual(LandShape.objects.filter(name="Coast").count(), 1)
+
     def test_seeded_models_are_model_classes(self) -> None:
         models = seeded_models()
         self.assertTrue(models)

@@ -94,6 +94,16 @@ class AlmanachApiTests(TestCase):
         assert res.status_code == 200
         assert all(h["id"] != self.crown.pk for h in res.data["results"])
 
+    def test_houses_list_carries_family_id(self) -> None:
+        """#3983 Task 10 fold-in: the house summary needs the raw
+        ``Organization.family_id`` for AddKinDialog's "born into" pick
+        (a ``Family`` pk, never this row's own ``Organization`` id)."""
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        res = client.get(f"/api/almanach/houses/{self.crown.pk}/")
+        assert res.status_code == 200
+        assert res.data["family_id"] == self.crown.family_id
+
     def test_players_are_refused(self) -> None:
         client = APIClient()
         client.force_authenticate(self.player)

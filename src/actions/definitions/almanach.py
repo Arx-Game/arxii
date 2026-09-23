@@ -521,14 +521,19 @@ class AlmanachEditKinAction(_AlmanachAction):
     ``is_household`` (household retainer instead of family — no family
     membership is written for these, #3983 Decision 1).
 
-    **Update** (``kinsperson_id`` given) changes ONLY the plain fields above
-    (name/gender/age/is_deceased/believed_deceased) — relation, marriage,
-    membership and household side effects run exactly once, at creation, and
-    never re-fire on a later edit (#3983 review fix 1: a second edit used to
-    re-mint a ``ParentageEdge``/``Union``, or downgrade a ``head``'s FOUNDING
+    **Update** (``kinsperson_id`` given) changes ONLY a plain field
+    (name/gender_id/age/is_deceased/believed_deceased) whose kwarg was
+    actually passed — an absent kwarg leaves the existing value untouched,
+    and a ``gender_id`` passed as falsy (e.g. ``None``) still clears the
+    gender: it's the kwarg's ABSENCE, not its value, that makes a field a
+    no-op (#3983 Task 10 fold-in). Relation, marriage, membership and
+    household side effects run exactly once, at creation, and never re-fire
+    on a later edit (#3983 review fix 1: a second edit used to re-mint a
+    ``ParentageEdge``/``Union``, or downgrade a ``head``'s FOUNDING
     membership to BORN). Passing any of ``relation``/``parent_kinsperson_id``/
     ``spouse_kinsperson_id``/``born_into_family_id`` alongside ``kinsperson_id``
-    is refused.
+    is refused, and so is a ``kinsperson_id`` whose ``family_id`` isn't this
+    house's own family (#3983 Task 10 fold-in).
     """
 
     key: str = "almanach_edit_kin"
@@ -576,6 +581,61 @@ class AlmanachEditKinAction(_AlmanachAction):
         if house.family_id is None:
             return ActionResult(success=False, message="That house has no family on record.")
 
+        kinsperson_id = kwargs.get("kinsperson_id")
+        if kinsperson_id:
+            if any(kwargs.get(field) for field in _KIN_RELATION_ONLY_KWARGS):
+                return ActionResult(success=False, message=_KIN_UPDATE_ONLY_MESSAGE)
+            node = Kinsperson.objects.filter(pk=kinsperson_id).first()
+            if node is None:
+                return ActionResult(success=False, message="No such kinsperson.")
+            if node.family_id != house.family_id:
+                return ActionResult(
+                    success=False, message="That kinsperson isn't part of this house's family."
+                )
+            # Resolve and validate EVERYTHING before the first write below —
+            # each plain field changes ONLY when its kwarg was actually
+            # passed (an absent kwarg is a no-op; a falsy ``gender_id`` that
+            # WAS passed still clears the gender, #3983 Task 10 fold-in).
+            new_gender = node.gender
+            if "gender_id" in kwargs:  # noqa: STRING_LITERAL
+                new_gender_id = kwargs["gender_id"]
+                new_gender = None
+                if new_gender_id:
+                    new_gender = Gender.objects.filter(pk=new_gender_id).first()
+                    if new_gender is None:
+                        return ActionResult(success=False, message="No such gender.")
+            new_age = node.age
+            if "age" in kwargs:  # noqa: STRING_LITERAL
+                new_age = kwargs["age"]
+                if new_age is not None:
+                    try:
+                        new_age = int(new_age)
+                    except (TypeError, ValueError):
+                        return ActionResult(success=False, message="Age must be a number.")
+            update_fields: list[str] = []
+            with transaction.atomic():
+                if "name" in kwargs:  # noqa: STRING_LITERAL
+                    node.name = (kwargs.get("name") or "").strip()
+                    update_fields.append("name")
+                if "gender_id" in kwargs:  # noqa: STRING_LITERAL
+                    node.gender = new_gender
+                    update_fields.append("gender")
+                if "age" in kwargs:  # noqa: STRING_LITERAL
+                    node.age = new_age
+                    update_fields.append("age")
+                if "is_deceased" in kwargs:  # noqa: STRING_LITERAL
+                    node.is_deceased = bool(kwargs["is_deceased"])
+                    update_fields.append("is_deceased")
+                if update_fields:
+                    node.save(update_fields=update_fields)
+                if "believed_deceased" in kwargs:  # noqa: STRING_LITERAL
+                    record_public_belief(node, believed_deceased=bool(kwargs["believed_deceased"]))
+            return ActionResult(
+                success=True,
+                message=f"{node.name or 'The kinsperson'} updated.",
+                data={"kinsperson_id": node.pk, "org_id": house.pk},
+            )
+
         kin_name = (kwargs.get("name") or "").strip()
         gender_id = kwargs.get("gender_id")
         gender = None
@@ -591,27 +651,6 @@ class AlmanachEditKinAction(_AlmanachAction):
                 return ActionResult(success=False, message="Age must be a number.")
         is_deceased = bool(kwargs.get("is_deceased"))
         believed_deceased = bool(kwargs.get("believed_deceased"))
-
-        kinsperson_id = kwargs.get("kinsperson_id")
-        if kinsperson_id:
-            if any(kwargs.get(field) for field in _KIN_RELATION_ONLY_KWARGS):
-                return ActionResult(success=False, message=_KIN_UPDATE_ONLY_MESSAGE)
-            node = Kinsperson.objects.filter(pk=kinsperson_id).first()
-            if node is None:
-                return ActionResult(success=False, message="No such kinsperson.")
-            with transaction.atomic():
-                node.name = kin_name
-                node.gender = gender
-                node.age = age
-                node.is_deceased = is_deceased
-                node.save(update_fields=["name", "gender", "age", "is_deceased"])
-                if believed_deceased:
-                    record_public_belief(node, believed_deceased=True)
-            return ActionResult(
-                success=True,
-                message=f"{node.name or 'The kinsperson'} updated.",
-                data={"kinsperson_id": node.pk, "org_id": house.pk},
-            )
 
         relation = (kwargs.get("relation") or "").strip()
 

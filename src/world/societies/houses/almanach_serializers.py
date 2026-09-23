@@ -79,11 +79,21 @@ class AlmanachRealmSerializer(serializers.ModelSerializer):
 
 
 class AlmanachHouseSummarySerializer(serializers.ModelSerializer):
-    """A house row in the Almanach's house list/detail (not the document)."""
+    """A house row in the Almanach's house list/detail (not the document).
+
+    ``family_id`` (nullable, read-only — the raw FK column,
+    ``Organization.family_id``, needs no join) is what a "born into" picker
+    needs for ``almanach_edit_kin``'s ``born_into_family_id`` kwarg — that
+    kwarg takes a ``Family`` pk, never this row's own ``Organization`` id,
+    and this is the only house-summary surface the Almanach exposes for a
+    house pick (#3983 Task 10 fold-in).
+    """
+
+    family_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Organization
-        fields = ["id", "name", "house_state", "published_at"]
+        fields = ["id", "name", "house_state", "published_at", "family_id"]
 
 
 class AlmanachSuccessionLawSerializer(serializers.Serializer):

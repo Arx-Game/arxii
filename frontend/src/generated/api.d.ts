@@ -24892,7 +24892,16 @@ export interface components {
       title: string;
       holder_name: string;
     };
-    /** @description A house row in the Almanach's house list/detail (not the document). */
+    /**
+     * @description A house row in the Almanach's house list/detail (not the document).
+     *
+     *     ``family_id`` (nullable, read-only — the raw FK column,
+     *     ``Organization.family_id``, needs no join) is what a "born into" picker
+     *     needs for ``almanach_edit_kin``'s ``born_into_family_id`` kwarg — that
+     *     kwarg takes a ``Family`` pk, never this row's own ``Organization`` id,
+     *     and this is the only house-summary surface the Almanach exposes for a
+     *     house pick (#3983 Task 10 fold-in).
+     */
     AlmanachHouseSummary: {
       readonly id: number;
       /** @description The organization's name */
@@ -24911,6 +24920,7 @@ export interface components {
        * @description When the Almanach published this house; null = draft (#3983).
        */
       published_at?: string | null;
+      readonly family_id: number | null;
     };
     /**
      * @description A realm as the Almanach's realm picker lists it, plus its unclaimed
