@@ -7,8 +7,9 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
 from world.locations.models import LocationOwnership
-from world.roster.factories import KinspersonFactory
+from world.roster.factories import FamilyFactory, KinspersonFactory
 from world.roster.models import FamilyMembership
+from world.societies.constants import VACANCY_BASIS_RETAINER
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import (
     HOUSEHOLD_RANK_TITLE,
@@ -31,7 +32,7 @@ class HouseServiceTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.realm = RealmFactory(name="Inferna")
-        cls.house = OrganizationFactory(name="Piropa")
+        cls.house = OrganizationFactory(name="Piropa", family=FamilyFactory(name="House Piropa"))
         cls.kingdom = plant_rung(
             realm=cls.realm, tier=TitleTier.KINGDOM, name="Inferna", held_by=cls.house
         )
@@ -87,16 +88,32 @@ class HouseServiceTests(TestCase):
         unplaced = plan_estate(house=self.house, city_area=city, name="Casa Two", description="")
         assert unplaced.parent == city
 
-    def test_household_member_has_no_family_membership(self) -> None:
+    def test_household_member_is_a_retainer_vacancy(self) -> None:
         ward = KinspersonFactory(name="Marisol")
-        vacancy = add_household_member(house=self.house, kinsperson=ward, rank=None)
+        vacancy = add_household_member(house=self.house, kinsperson=ward)
         assert isinstance(vacancy, Vacancy)
-        assert vacancy.kin_node_id == ward.pk
+        assert vacancy.kin_node is None
+        assert vacancy.kin_pool is None
+        assert vacancy.basis == VACANCY_BASIS_RETAINER
+        assert vacancy.holder_kinsperson_id == ward.pk
         assert vacancy.organization_id == self.house.pk
         assert vacancy.rank is not None
         assert vacancy.rank.name == HOUSEHOLD_RANK_TITLE
         assert vacancy.count_remaining == 0
         assert not FamilyMembership.objects.filter(kinsperson=ward).exists()
+
+    def test_household_member_needs_a_family_on_the_house(self) -> None:
+        landless = OrganizationFactory(name="Landless Outfit")
+        ward = KinspersonFactory(name="Orphan")
+        with self.assertRaises(HousesServiceError):
+            add_household_member(house=landless, kinsperson=ward)
+
+    def test_household_member_same_position_updates_not_duplicates(self) -> None:
+        ward = KinspersonFactory(name="Second Call")
+        first = add_household_member(house=self.house, kinsperson=ward, position="Steward")
+        second = add_household_member(house=self.house, kinsperson=ward, position="Steward")
+        assert first.pk == second.pk
+        assert Vacancy.objects.filter(organization=self.house, name="Steward").count() == 1
 
     def test_public_belief_is_separate_from_truth(self) -> None:
         person = KinspersonFactory(name="Anastasia")

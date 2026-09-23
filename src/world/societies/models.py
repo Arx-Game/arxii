@@ -944,6 +944,17 @@ class Vacancy(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="vacancies",
         help_text="Kin vacancy backed by one appable person.",
     )
+    holder_kinsperson = models.ForeignKey(
+        "arxii.Kinsperson",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="held_positions",
+        help_text=(
+            "The NPC who fills this position; a household member is a filled "
+            "retainer Vacancy (#3983)."
+        ),
+    )
     count_remaining = models.PositiveSmallIntegerField(
         null=True,
         blank=True,

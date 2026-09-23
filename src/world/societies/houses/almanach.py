@@ -23,9 +23,11 @@ from world.areas.models import Area
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.models import LocationOwnership
 from world.roster.models import Kinsperson
+from world.scenes.constants import PersonaType
 from world.societies.houses.constants import TIER_TO_AREA_LEVEL, TITLE_TIER_RANK, TitleTier
 from world.societies.houses.models import Domain, FealtyEdge, LandShape, Title
 from world.societies.houses.services import HousesServiceError, swear_fealty, sync_house_channel
+from world.societies.membership_services import active_membership_for_persona, join_organization
 from world.societies.models import Organization, OrganizationRank, Vacancy
 
 if TYPE_CHECKING:
@@ -411,24 +413,43 @@ def _household_rank(house: Organization) -> OrganizationRank:
     return rank
 
 
+@transaction.atomic
 def add_household_member(
-    *, house: Organization, kinsperson: Kinsperson, rank: OrganizationRank | None
+    *,
+    house: Organization,
+    kinsperson: Kinsperson,
+    rank: OrganizationRank | None = None,
+    position: str = "Ward",
 ) -> Vacancy:
-    """Record a household member.
+    """Record a household member as a filled retainer Vacancy (#3983).
 
-    ``OrganizationMembership.persona`` is non-nullable, so an unsheeted
-    Kinsperson (no Persona yet) cannot hold one; the household relation is
-    instead a filled Vacancy pointed at the kinsperson (#3983) — present on
-    the house's household, off the succession line entirely.
+    Never ``kin_node``/``kin_pool``: those mark a KIN vacancy (Recipe 11,
+    ``docs/systems/family-authoring-recipes.md``) that puts the holder on the
+    family's claim path — a household member is staff/service-placed, not
+    appable. A sheeted kinsperson with a primary persona additionally gets a
+    real ``OrganizationMembership`` at the Household rank, so a sheeted
+    household member is a genuine member, not just a filled slot.
     """
+    if house.family_id is None:
+        msg = f"house {house.pk} has no family on record"
+        raise HousesServiceError(msg, user_message="That house has no family on record.")
     effective_rank = rank if rank is not None else _household_rank(house)
-    return Vacancy.objects.create(
+    vacancy, _created = Vacancy.objects.update_or_create(
         organization=house,
-        name=f"{effective_rank.name}: {kinsperson.name}",
-        kin_node=kinsperson,
-        rank=effective_rank,
-        count_remaining=0,
+        name=position,
+        defaults={
+            "rank": effective_rank,
+            "holder_kinsperson": kinsperson,
+            "count_remaining": 0,
+            "is_active": True,
+        },
     )
+    persona = None
+    if kinsperson.sheet_id is not None:
+        persona = kinsperson.sheet.personas.filter(persona_type=PersonaType.PRIMARY).first()
+    if persona is not None and active_membership_for_persona(house, persona) is None:
+        join_organization(house, persona, rank=effective_rank, vacancy=vacancy)
+    return vacancy
 
 
 def record_public_belief(kinsperson: Kinsperson, *, believed_deceased: bool) -> Kinsperson:
