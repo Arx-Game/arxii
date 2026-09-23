@@ -1,0 +1,423 @@
+/**
+ * Almanach de Catenys (#3983 Task 8) — the staff house-builder's own
+ * stylesheet, scoped under `.almanach` and porting the visual-contract
+ * plate's `scratchpad/almanac/base.css` rules onto the app's HSL realm
+ * tokens rather than the plate's own hex literals: accent
+ * `hsl(var(--primary))`, hairlines `hsl(var(--border))`, ink
+ * `hsl(var(--foreground))`, muted `hsl(var(--muted-foreground))`, paper
+ * `hsl(var(--background))`. Cinzel via Tailwind's `font-display` family,
+ * EB Garamond via `font-body`.
+ *
+ * Deliberately does NOT reuse `character-creation/cg.css`'s `.interview`
+ * classes (`Entry`/`Field`/`RecordRail`) — those are wizard-shaped (a
+ * chosen state, doors) where this page's fields only ever describe or pick
+ * a plain value. `character_sheets/sheet.css:1-16` records the same call
+ * for the Reference Sheet. `DialogContent` also carries this `.almanach`
+ * class directly (`PlantRungDialog`, `BatchUnclaimedDialog`) since Radix
+ * portals dialog content to `document.body`, outside this page's own root.
+ */
+
+.almanach {
+  font-family: theme('fontFamily.body');
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}
+
+.almanach h1,
+.almanach h2,
+.almanach h3,
+.almanach h4 {
+  font-family: theme('fontFamily.display');
+  font-weight: 400;
+}
+
+.almanach button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.almanach a {
+  color: inherit;
+}
+
+.almanach a:focus-visible,
+.almanach button:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.almanach .meta {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- header bar (breadcrumb + mode) --- */
+
+.almanach .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 0.55rem 1.4rem;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .bar .crumb span + span::before {
+  content: '\203A';
+  margin: 0 0.5rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .bar .right {
+  margin-left: auto;
+  display: flex;
+  gap: 1rem;
+}
+
+/* --- the three-column grid --- */
+
+.almanach .almanac {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr) 19rem;
+  gap: 2.2rem;
+  padding: 1.8rem 1.6rem 2rem;
+}
+@media (max-width: 900px) {
+  .almanach .almanac {
+    grid-template-columns: 1fr;
+  }
+  .almanach .contents {
+    border-right: 0;
+    border-bottom: 1px solid hsl(var(--border));
+    padding-bottom: 1rem;
+  }
+}
+
+.almanach .contents {
+  border-right: 1px solid hsl(var(--border));
+  padding-right: 1rem;
+  font-size: 0.95rem;
+}
+.almanach .contents .mv {
+  margin-bottom: 1.2rem;
+}
+.almanach .contents .mv > .label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .contents ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.almanach .contents li {
+  padding: 0.22rem 0 0.22rem 0.7rem;
+  border-left: 2px solid transparent;
+  color: hsl(var(--foreground));
+}
+.almanach .contents li.cur {
+  border-left-color: hsl(var(--primary));
+  font-weight: 500;
+}
+.almanach .contents li.ro {
+  color: hsl(var(--muted-foreground));
+}
+.almanach .contents li small {
+  display: block;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .contents a {
+  text-decoration: none;
+}
+.almanach .contents a:hover {
+  color: hsl(var(--primary));
+}
+
+/* --- the chapter heading + realm switcher --- */
+
+.almanach .chapter h3 {
+  font-size: 1.5rem;
+  letter-spacing: 0.03em;
+  margin: 0 0 0.6rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.almanach .chapter h3 .tier {
+  font-family: theme('fontFamily.body');
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .chapter h3 button.lnk {
+  font: inherit;
+  border-bottom: 1px dotted hsl(var(--muted-foreground));
+}
+.almanach .chapter h3 button.lnk::after {
+  content: ' \25BE';
+  font-size: 0.6em;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .switcher {
+  position: relative;
+  display: inline-block;
+}
+.almanach .switcher-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin: 0.3rem 0 0;
+  padding: 0.3rem 0;
+  min-width: 12rem;
+  list-style: none;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 12px 28px -18px rgb(0 0 0 / 0.45);
+}
+.almanach .switcher-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
+}
+.almanach .switcher-list button:hover {
+  background: hsl(var(--muted));
+}
+.almanach .switcher-list li[aria-selected='true'] button {
+  color: hsl(var(--primary));
+}
+
+/* --- the level bar --- */
+
+.almanach .lvl {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid hsl(var(--muted-foreground));
+  margin: 0.2rem 0 1rem;
+}
+.almanach .lvl button {
+  padding: 0.2rem 0.8rem;
+  border-right: 1px solid hsl(var(--muted-foreground));
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.almanach .lvl button:last-child {
+  border-right: 0;
+}
+.almanach .lvl button[aria-pressed='true'] {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+/* --- the ladder table --- */
+
+.almanach .scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.almanach .lad {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  font-family: theme('fontFamily.body');
+}
+.almanach .lad th {
+  text-align: left;
+  padding: 0.3rem 0.4rem 0.3rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
+}
+.almanach .lad td {
+  padding: 0.38rem 0.4rem 0.38rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: baseline;
+}
+.almanach .lad td.n,
+.almanach .lad th.n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.almanach .lad .d1 td:first-child {
+  padding-left: 1.4rem;
+}
+.almanach .lad .d2 td:first-child {
+  padding-left: 2.8rem;
+}
+.almanach .lad .d3 td:first-child {
+  padding-left: 4.2rem;
+}
+.almanach .lad .tg {
+  display: inline-block;
+  width: 1.1rem;
+  color: hsl(var(--muted-foreground));
+  text-align: left;
+}
+.almanach .lad .tg.none {
+  visibility: hidden;
+}
+.almanach .lad .tw {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  margin-right: 0.4rem;
+}
+.almanach .lad .seat,
+.almanach .lad td .meta {
+  margin-left: 0.5rem;
+  white-space: nowrap;
+}
+.almanach .lad .held {
+  color: hsl(var(--foreground));
+}
+.almanach .lad tr.sel td {
+  background: hsl(var(--muted));
+}
+
+/* --- chips --- */
+
+.almanach .chip {
+  display: inline-block;
+  font-size: 0.8rem;
+  border: 1px solid hsl(var(--muted-foreground));
+  padding: 0.02rem 0.5rem;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+}
+.almanach .chip.open,
+.almanach .chip.acc {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+.almanach .chip.undef {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+  font-style: italic;
+}
+
+/* --- save bar + buttons --- */
+
+.almanach .savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  border-top: 1px solid hsl(var(--border));
+  padding-top: 0.9rem;
+  margin-top: 1.6rem;
+}
+.almanach .savebar .note {
+  margin-right: auto;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .btn {
+  font-size: 0.9rem;
+  padding: 0.3rem 1rem;
+  border: 1px solid hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.almanach .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.almanach .btn.quiet {
+  background: transparent;
+  color: hsl(var(--primary));
+}
+.almanach .btn.ghost {
+  background: transparent;
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--muted-foreground));
+}
+
+/* --- record rail --- */
+
+.almanach .record h4 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+.almanach .record dl {
+  margin: 0 0 1.3rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.93rem;
+}
+.almanach .record dt {
+  color: hsl(var(--muted-foreground));
+}
+.almanach .record dd {
+  margin: 0;
+}
+
+/* --- dialog interiors (Plant a rung / Batch unclaimed) --- */
+
+.almanach .field {
+  margin-block: 0.6rem;
+}
+.almanach .field > .label,
+.almanach .field label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .field .val {
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.2rem 0;
+  min-height: 1.6rem;
+}
+.almanach .row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.5rem;
+}
+@media (max-width: 480px) {
+  .almanach .row2 {
+    grid-template-columns: 1fr;
+  }
+}
+.almanach .seg {
+  display: inline-flex;
+  border: 1px solid hsl(var(--muted-foreground));
+}
+.almanach .seg button {
+  padding: 0.15rem 0.7rem;
+  font-size: 0.85rem;
+  border-right: 1px solid hsl(var(--muted-foreground));
+}
+.almanach .seg button:last-child {
+  border-right: 0;
+}
+.almanach .seg button[aria-pressed='true'] {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
