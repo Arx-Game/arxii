@@ -6,7 +6,6 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   ALL_HOUSES,
   CHARTER,
-  FERVOR,
   GENDERS,
   LAND_SHAPES,
   PIROPA_HOUSE_ID,
@@ -15,7 +14,7 @@ import {
   buildLadderRows,
   buildPiropaDocument,
 } from './fixtures/inferna';
-import { CLAIMABLE_TITLES, DRAFT_ID, FERVOR_TEMPLATE_ID, buildDraft } from './fixtures/founder';
+import { CLAIMABLE_TITLES, DRAFT_ID, buildDraft } from './fixtures/founder';
 
 /**
  * Review evidence for the Almanach de Catenys (#3983): renders every
@@ -94,26 +93,16 @@ async function assertSavebarNote(page: Page, note: string): Promise<void> {
 }
 
 /**
- * App finding (see README "Findings for the reviewer"): the founder-
- * mounted Almanach's `.almanac` grid column carrying `main.chapter`
- * measures narrower than its content at 1280px, so `aside.record` (or one
- * of its `<li>`s) sits on top of controls near the chapter's own trailing
- * edge — confirmed on `SeatPicker`'s Claim column (F-I/F-II) and
- * `FamilyChapter`'s "add" doors (F-III onward). A normal `click()` still
- * works wherever nothing overlaps; only where it doesn't does this fall
- * back to `dispatchEvent('click')` (fires the DOM click directly on the
- * target, no coordinate hit-testing) so the founder journey's own
- * interactions can still be exercised and the screens past the overlap
- * captured, per instruction: don't fix the app, record and continue.
+ * Every interaction in the founder journey is a real pointer click with
+ * Playwright's actionability checks. The first evidence run found two app
+ * defects here (the spread overflowing into the record rail, and a claim that
+ * lost its title and realm); both were fixed in 0b43bf647, and this harness
+ * no longer works around either.
  */
 async function safeClick(locator: Locator): Promise<void> {
-  // A real `click()` attempt that fails partway (mousedown lands on the
-  // overlapping `aside.record`, per the finding above) leaves the page in
-  // a state where even a follow-up `dispatchEvent('click')` on the correct
-  // target then hangs too — confirmed empirically. Going straight to
-  // `dispatchEvent` (fires the DOM click directly on the target, no mouse
-  // simulation, no actionability wait) avoids that poisoning outright.
-  await locator.dispatchEvent('click');
+  // A real pointer click with Playwright's actionability checks: the spread
+  // now sizes to its container (0b43bf647), so nothing overlaps a control.
+  await locator.click();
 }
 
 const STAFF_CHARACTER = {
@@ -461,60 +450,12 @@ async function gotoDefineHouse(page: Page): Promise<void> {
   await expect(page.getByText('Define a house')).toBeVisible();
 }
 
-/**
- * App finding (see README "Findings for the reviewer"): `FounderAlmanach`'s
- * `handleClaim` (`src/almanach/founder/FounderAlmanach.tsx`) calls
- * `set('title_id', …)`, `set('realm_id', …)`, `set('template_id', …)` back
- * to back — each `set` call's own `persist({ ...draft, [k]: v })`
- * (`founderDraft.ts`) spreads the SAME stale `draft` object captured when
- * `handleClaim` started, so only the LAST call's field survives; a real
- * click on "Claim Fervor" leaves `title_id`/`realm_id` reset to `null` in
- * `localStorage`, and `FounderAlmanach`'s own `template` lookup
- * (`titles.find((t) => t.id === fd.title_id)`) then permanently fails,
- * stranding the House chapter on `<p class="meta">Loading…</p>` forever —
- * confirmed by reading `localStorage['almanach-founder-900']` right after a
- * real click: `{"title_id":null,"realm_id":null,"template_id":950,...}`.
- * This is independent of, and in addition to, the S-II/F-I finding that
- * `aside.record` also overlaps the Claim button's own click target at
- * 1280px — even a click that lands cleanly still corrupts the draft.
- *
- * Neither is a harness problem, and the harness doesn't fix either: this
- * seeds the SAME `localStorage` key `handleClaim` writes to with the state
- * a *successful* claim should produce, so the House/Family/Land/Estate/
- * Record chapters — which read only the persisted draft, never how it got
- * there — can still be rendered for real and screenshotted. This is the
- * app's own declared persistence channel (`useFounderDraft`), the same
- * kind of input the route fixtures already provide; no component or route
- * behavior is touched.
- */
-async function seedClaimedFervorDraft(page: Page): Promise<void> {
-  const seeded = {
-    realm_id: REALM_ID,
-    title_id: FERVOR,
-    template_id: FERVOR_TEMPLATE_ID,
-    house_name: '',
-    words: '',
-    colors: '',
-    sigil_description: '',
-    backstory: '',
-    aspect_picks: {},
-    principles: {},
-    founder_relation: 'head',
-    founder_is_heir: true,
-    kin: [],
-    lands: {},
-    estate_name: '',
-    estate_description: '',
-  };
-  await page.addInitScript(({ key, value }) => window.localStorage.setItem(key, value), {
-    key: `almanach-founder-${DRAFT_ID}`,
-    value: JSON.stringify(seeded),
-  });
-}
-
 async function claimFervor(page: Page): Promise<void> {
-  await seedClaimedFervorDraft(page);
+  // The real gesture: open Define a house and click Claim on the duchy; the
+  // House chapter must follow (0b43bf647 made the claim persist all three
+  // fields together).
   await gotoDefineHouse(page);
+  await page.getByRole('button', { name: 'Claim Fervor' }).click();
   await expect(page.locator('#founder-house-name')).toBeVisible();
 }
 

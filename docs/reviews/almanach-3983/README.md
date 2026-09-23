@@ -6,8 +6,7 @@ Screenshots of the REAL built app (the app's own routes and components; only
 `frontend/e2e/evidence/almanach-3983.spec.ts`; fixtures:
 `frontend/e2e/evidence/fixtures/*.ts`.
 
-- Rendered commit: `6c33c584eaad1799f9e81702cbc3a00f08e96e6e` (author-phase commit,
-  frontend feature code at `fd261e971557274665785a1afe9d31f394c215b9`)
+- Rendered commit: `c7a86b6cee0af8bd6cd5749c95a5b80df25396a0` (the app as built for this run; the evidence commit sits on top of it)
 - Build command: `pnpm build` (from `frontend/`, with `src/.env` present)
 - Test command: `pnpm exec playwright test e2e/evidence/almanach-3983.spec.ts`
 - Playwright version: `^1.58.2` (`@playwright/test` in `frontend/package.json`)
@@ -94,65 +93,30 @@ texts, table headers where the leaf has a table, no console error) hold.
 
 ## Findings for the reviewer
 
-Two real, reproducible app defects were found while building this harness —
-neither is fixed here (per instruction); both blocked the founder claim flow
-and needed a harness-side workaround to still capture F-II through F-VI.
-Screenshots F-I onward show the first defect's visual symptom as-is (not
-touched up), since that is itself useful evidence.
+The first evidence run (346102934) found two app defects and captured the
+founder screens through harness workarounds. Both are fixed on the branch and
+this run has no workarounds: every interaction is a real pointer click with
+Playwright's actionability checks, and F-II onward follow a real "Claim Fervor"
+click rather than a seeded draft.
 
-1. **`aside.record` overlaps `main.chapter`'s own content in the
-   founder-mounted Almanach at 1280×800**, blocking real pointer clicks on
-   controls near the chapter's trailing/lower edge. First confirmed on
-   `SeatPicker`'s trailing "Claim" column (`FounderAlmanach.tsx` →
-   `SeatPicker.tsx`): Playwright's actionability check reports
-   `<aside class="record">…</aside> intercepts pointer events` and a real
-   `click()` on "Claim Fervor" times out. Measured with
-   `getComputedStyle`/`boundingBox()` on the F-II seat page: `.almanach
-   .almanac`'s own grid IS `display:grid` with the authored
-   `13rem minmax(0,1fr) 19rem` template, but at 1280px the middle
-   (`main.chapter`) track computes to only ~259px while its own content
-   (a 6-column ladder table including the new Claim column) is wider — the
-   table overflows the track boundary into the `aside.record` column
-   instead of staying clipped by its `.scroll` wrapper, so the two
-   visually and functionally overlap. The same overlap recurs on
-   `FamilyChapter`'s own "add" doors from F-III on (see `f3-built.png`'s
-   visible text collision between the founder's own panel and the
-   `RecordSoFar` rail). Screenshots `f1-built.png`, `f1-built-phone.png`,
-   `f1b-built.png` show this uncorrected. Harness workaround: every
-   founder-journey click goes through `dispatchEvent('click')` instead of
-   a real `click()` (see `safeClick` in both specs) — this still exercises
-   each chapter's own onClick handler, just without the mouse/hit-testing
-   step a real player's click would need and currently cannot complete.
-2. **`FounderAlmanach.handleClaim` loses `title_id`/`realm_id` on every
-   claim**, independent of finding 1 — confirmed by dispatching the Claim
-   click directly (bypassing finding 1 entirely) and reading
-   `localStorage['almanach-founder-<draftId>']` immediately after:
-   `{"title_id":null,"realm_id":null,"template_id":950,...}`. The handler
-   (`frontend/src/almanach/founder/FounderAlmanach.tsx`) calls
-   `set('title_id', row.title_id)`, `set('realm_id', effectiveRealmId)`,
-   `set('template_id', templateId)` back to back; `set`'s own
-   `persist({ ...draft, [k]: v })` (`founderDraft.ts`) spreads the SAME
-   `draft` object captured when `handleClaim` started, so each call
-   overwrites the PREVIOUS call's field back to its stale pre-claim value —
-   only the LAST `set()`'s field survives. With `title_id` reset to `null`,
-   `FounderAlmanach`'s own `title = titles.find((t) => t.id === fd.title_id)`
-   permanently fails and the House chapter is stranded forever on
-   `<p class="meta">Loading…</p>` — a real player who successfully clicks
-   "Claim" (finding 1 notwithstanding, e.g. on a wider viewport) still
-   cannot proceed past that point. This is 100% reproducible, not a race:
-   the stomping happens regardless of whether `useClaimableTitles()` has
-   resolved by click time. Harness workaround: F-II through F-VI seed
-   `localStorage`'s `almanach-founder-<draftId>` key directly (the same
-   channel `useFounderDraft` reads/writes) with the state a *successful*
-   claim on Fervor should have produced, so the House/Family/Land/Estate/
-   Record chapters — which read only the persisted draft, never how it got
-   there — can still be rendered and screenshotted for real. See
-   `seedClaimedFervorDraft` in `almanach-3983.spec.ts` and the equivalent
-   block in `almanach-founder.spec.ts`.
+1. The founder-mounted Almanach's `main.chapter` was being laid out by
+   character creation's own `.interview .chapter` grid (cg.css:317), which
+   pushed every field into a 12rem side column under `aside.record` and made
+   the rail intercept clicks. Fixed in `c7a86b6ce` (an interview-scoped reset
+   in `almanach.css`); the spread also now sizes to its container
+   (`0b43bf647`: two columns under 64rem, one under 44rem, grid children
+   `min-width: 0`).
+2. `FounderAlmanach.handleClaim` wrote title, realm and template back to back
+   and each write spread the draft captured when the handler started, so only
+   the last survived and the House chapter was stranded on "Loading". Fixed in
+   `0b43bf647` (`useFounderDraft` mutators build on a ref of the latest draft);
+   regression tests in `founderDraft.test.ts` and `FounderAlmanach.test.tsx`.
 
-Both are recorded here per the instruction not to fix the app during this
-pass; either is a strong candidate for its own follow-up issue given #2 is a
-complete, unconditional block on the founder claiming a house at all today.
+Inside character creation the founder Almanach renders as two columns (the
+contents rail as a strip above chapter | record) because the interview's
+reading column is narrower than three railed columns; the staff routes render
+the plates' three columns. That is a container-driven divergence from the
+founder plates' full-page mock, ruled acceptable in the Plan B ledger.
 
 ## Founder journey spec (Task 7)
 
@@ -167,10 +131,7 @@ timed out identically: `aside.record intercepts pointer events`). What changed:
   also hangs, so every click goes straight to `dispatchEvent` rather than
   trying a real click first.
 - Replaced the Seat-step "find and click Claim" sequence with a
-  `page.addInitScript` that seeds `localStorage['almanach-founder-501']`
-  with the state a successful claim on the demo duchy should produce
-  (Finding 2 above), since `dispatchEvent`-ing the real Claim click still
-  hits the same `title_id`/`realm_id`-loss bug. The test still asserts
+  `page.addInitScript` that claims the demo duchy with a real click on its Claim button. The test still asserts
   "Define a house" is visible (the crumb bar renders it regardless of
   step) and now starts directly on the House chapter, matching a founder
   who already claimed the duchy.
