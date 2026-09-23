@@ -118,3 +118,28 @@ specifically a feudal-ladder step with a `Title` on it, not every `AreaLevel`
 value has one); elevation (see above — that's the unrelated, generic
 one-step-up act on any area, gated by `AreaElevationRequirement`, nothing to
 do with titles or fealty)
+
+**Ward** (`AreaLevel.WARD` = 30, #3983 Plan B Task 7):
+A city subdivision, one step below `CITY`(40) and above `NEIGHBORHOOD`(20) —
+`AreaLevel.WARD`'s own verbose label is literally "Ward". Founder- and
+staff-facing copy never says "ward" for this level: the Founder Almanach's
+Estate leaf and `almanach_reads._estate_payload` both call it a **district**
+(`DISTRICT` in `frontend/src/almanach/copy.ts`, `HouseClaim.estate_district`).
+That renaming exists BECAUSE the bare word "Ward" already means something else
+entirely one glossary over — see `world.societies.AGENT_GLOSSARY.md`'s
+Household entry: a house's retainer position (`ClaimKinRelation.WARD`,
+ADR-0311). The two share nothing but an English word (one is a place, the
+other a person's role in a household); never conflate "the city's Ward" with
+"a house's Ward."
+_Avoid_: ward (bare, in copy — "district" is the established copy word for
+this level); sub-city, district (as the level's own technical name — it stays
+`AreaLevel.WARD` in code; "district" is copy only)
+
+**Capital** (`Area.is_capital`, #3983 Plan B Task 7):
+See `world.societies.AGENT_GLOSSARY.md`'s Capital entry, the canonical
+definition — a founder-mode concept (the estate gate, `plan_estate`'s anchor)
+even though the field itself lives on `Area`. In short: the realm's one
+designated CITY-level `Area` (`areas_one_capital_per_realm` constraint, one
+per realm).
+_Avoid_: see that entry's own `_Avoid_` line — "capital" is never the right
+word for a title's own barony-level **Seat**.

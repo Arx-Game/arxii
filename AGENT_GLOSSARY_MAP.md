@@ -25,7 +25,11 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
 - [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys
   feudal-ladder builder terms (#3983): Almanach de Catenys, Rung (stub, canonical in areas),
-  Seat, Hall, Land Shape, Demesne, House State, Household, Contested Title
+  Seat, Hall, Land Shape, Demesne, House State, Household, Contested Title, and (#3983 Plan B
+  Task 7) Claim Grants, Founder Place, Capital (canonical; areas holds a stub), Claim Tier
+  (though `OriginTemplate.max_claim_tier` itself is a `character_creation` field —
+  `character_creation` has no `AGENT_GLOSSARY.md` of its own yet, see houses.md's Founder mode
+  section)
 - [realms](src/world/realms/AGENT_GLOSSARY.md)
 - [relationships](src/world/relationships/AGENT_GLOSSARY.md)
 - [secrets](src/world/secrets/AGENT_GLOSSARY.md)
@@ -58,7 +62,9 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [items](src/world/items/AGENT_GLOSSARY.md)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
-  feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to
+  feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,
+  plus Ward (#3983 Plan B, `AreaLevel.WARD` vs. the unrelated household Ward position) and a
+  Capital stub pointing to societies' canonical entry
 - [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [locations](src/world/locations/AGENT_GLOSSARY.md)

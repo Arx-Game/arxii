@@ -1637,12 +1637,26 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   `document_for_house`, one in-memory `Title`/`Area` graph pass. Ten REGISTRY actions
   (`actions/definitions/almanach.py`, `almanach_*` keys, staff-only), including
   `AlmanachEditKinAction` (create, or a present-only-field update that refuses a foreign-family
-  `kinsperson_id` or a relation kwarg riding alongside one). Staff-only API `/api/almanach/`
-  (`almanach_views.py`/`almanach_urls.py`) + React console `frontend/src/almanach/`. `LandShape`:
-  authored land-shape catalog, `CONTENT_MODELS`. `Title.claimant_org`: contested-title schema,
-  no resolution service yet.
+  `kinsperson_id` or a relation kwarg riding alongside one). API `/api/almanach/`
+  (`almanach_views.py`/`almanach_urls.py`) + React console `frontend/src/almanach/` — permissioned
+  per endpoint, not blanket staff-only: `AlmanachHouseViewSet` stays `IsAdminUser`, but
+  `AlmanachRealmViewSet` (realms/`/charter/`/`/ladder/?for=founder`) and `LandShapeViewSet` are
+  `IsAuthenticated` (Plan B Task 3 opened the founder-facing reads). `LandShape`: authored
+  land-shape catalog, `CONTENT_MODELS`. `Title.claimant_org`: contested-title schema, no
+  resolution service yet.
+- **Founder mode (#3983 Plan B, ADR-0314/ADR-0315):** the CG-facing claim journey — the whole
+  draft lives client-side (ADR-0314) until one submit, `POST
+  /api/character-creation/drafts/{id}/house-claim/` (`HouseClaimSubmitSerializer`), nested
+  `HouseClaimKin`/`HouseClaimLand` rows and all. `claim_grants(title)` is what a claim actually
+  seats the house on: the seat chain plus the loose baronies inside it, never a vassal's own held
+  seat (ADR-0315). `record_kin` is the shared kin-writing engine both the founder finalize path and
+  staff's `AlmanachEditKinAction` place nodes through. See [houses.md](houses.md)'s "Founder mode"
+  section for the gates, the payload shape, the rows finalize writes, and the admin review inlines.
 - **Seeds:** cluster `houses` (rides `kinship`); `seed_land_shapes()` (#3983, `authored_or_sample`
-  style) seeds the `LandShape` catalog independent of the demo realm's own existence
+  style) seeds the `LandShape` catalog independent of the demo realm's own existence. The founder
+  demo ladder (#3983 Plan B Task 7): an unclaimed duchy chain + a loose barony + a sibling county
+  under a Kingdom-tier rung the demo house holds, plus the realm's `is_capital` city — so
+  `?for=founder` lists a claimable duchy under a published liege out of the box.
 - **Integrates with:** roster kinship (recognition/succession read parentage; RESIDENCY writes `FamilyMembership`), currency (`OrgIncomeStream` holdings, `OrgObligation` subsidies, treasury dowries), projects (`DOMAIN_IMPROVEMENT`), areas (Domain decorates an Area; the Almanach's rungs are Area levels, #3983), tidings (house feed), secrets (breach scandal channel)
 - **Source:** `src/world/societies/houses/`
 - **Details:** [houses.md](houses.md)

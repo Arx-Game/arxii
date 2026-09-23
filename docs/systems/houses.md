@@ -132,7 +132,17 @@ MOST_POWERFUL_GIFTED plug. `HousesServiceError.user_message` on refusals.
   peer: org, recognition rules, succession law, crown fealty, ducal title,
   domain + farmland holding; plus `seed_nobiliary_particles()` upserting the
   canon particle table onto every authored realm by theme (#3261 — Arx
-  deliberately gets none).
+  deliberately gets none). **Founder demo ladder** (#3983 Plan B Task 7,
+  `_seed_demo_founder_ladder`): a Kingdom-tier rung the demo house holds
+  (`plant_rung(tier=KINGDOM, held_by=house)` — the pre-existing ducal title
+  above predates `plant_rung` and has no Area chain of its own to hang a
+  vassal duchy off), then one unclaimed duchy chain under it, one undefined
+  loose barony inside the duchy's own county (`batch_unclaimed`), and one
+  unclaimed county with its own seat barony sitting directly under the duchy
+  — so `GET .../ladder/?for=founder` lists a claimable duchy under a
+  published liege (see ADR-0315 for what `claim_grants` on it swallows).
+  `_ensure_demo_capital` marks (or plants) a CITY-level `Area` as the realm's
+  `is_capital` row, since the founder Estate leaf gates on one existing.
 - **Persona/web (#3261):** `PersonaSerializer.display_name` renders the
   particled name at the persona's preferred degree (non-primary faces stay
   bare — a mask never leaks the née segment); `POST
@@ -582,6 +592,89 @@ carries the plain, model-free draft shapes a serializer builds):
   (`plan_estate`) plants under the draft's (or the sheet's) starting realm's
   capital `Area`.
 
+### Founder mode (#3983 Plan B Task 7)
+
+The CG-facing surface built on top of "Founder claims" above: a founder picks a seat off the
+realm's own feudal ladder, writes the house's charter/kin/lands/estate in the browser, and submits
+once. Nothing server-side exists before that submit — see ADR-0314 (the browser-draft rule): the
+whole journey lives in `localStorage` (`frontend/src/almanach/founder/founderDraft.ts`), and a
+founder who abandons the Lineage stage leaves no `HouseClaim` row behind, only the `CharacterDraft`
+itself.
+
+- **Reads, and their permissions** — every founder read sits under `/api/almanach/` or
+  `/api/character-creation/`, gated per endpoint (not a blanket staff-only surface — see the API
+  section below for the full split): `AlmanachRealmViewSet` (`/api/almanach/realms/`,
+  `/ladder/?for=founder`, `/charter/`) is open to any authenticated account, same for
+  `LandShapeViewSet` (`/api/almanach/land-shapes/`); `AlmanachHouseViewSet`
+  (`/api/almanach/houses/`, `/document/`) stays `IsAdminUser`. Character-creation's own
+  `ClaimableTitleViewSet` (`GET /api/character-creation/house-titles/`) lists every
+  `is_claimable=True, house__isnull=True, holder__isnull=True` title with its `templates_for_title`
+  options — a flat catalog, independent of the ladder's own liege/publication gate.
+- **The charter** (`charter_for_realm(realm) -> RealmCharter`, `almanach_reads.py`) — the founder's
+  defaults BEFORE any claim exists, read straight off the realm's tier-less fallback
+  `HouseTemplate` (or its first by name): `succession_law` (`{name, codex_entry_id}`),
+  `particle` (the realm's blank-floor Noble particle, `{born, taken_in}`), `quiddity_prompt` (the
+  template's first aspect definition's prompt), and `capital_name` (`Area.objects.filter(realm=
+  realm, is_capital=True).first()`, `""` when the realm has none yet — the founder Estate leaf
+  reads this to show where an estate will sit before the founder writes anything).
+- **The nested submit payload** — `POST /api/character-creation/drafts/{id}/house-claim/`
+  (`HouseClaimSubmitSerializer`), one call carrying the whole claim:
+
+  ```json
+  {
+    "title": 42,
+    "template": 7,
+    "house_name": "House Ashgrave",
+    "backstory": "...",
+    "words": "...",
+    "colors": "...",
+    "sigil_description": "...",
+    "aspects": [{"definition": 3, "options": [11]}],
+    "mercy": 2, "method": 0, "status": -1, "change": 0, "allegiance": 1, "power": 0,
+    "founder_relation": "head",
+    "founder_is_heir": false,
+    "kin": [
+      {"name": "Lady Osrin", "relation": "spouse", "gender": 2, "age": 34,
+       "is_deceased": false, "born_into": null, "basis": "", "is_household": false}
+    ],
+    "lands": [
+      {"title": 42, "land_name": "Ashgrave", "description": "...",
+       "hall_name": "Ashgrave Keep", "land_shapes": ["Hills", "Forest"]}
+    ],
+    "estate": {"name": "Ashgrave House", "description": "..."}
+  }
+  ```
+
+  `HouseClaimSubmitSerializer.validate()` converts `kin`/`lands` straight to
+  `ClaimKinDraft`/`ClaimLandDraft` (no service call — the automated gates run inside
+  `submit_house_claim` itself, dispatched by the view); `GET` on the same URL returns the draft's
+  existing claim (404 when none) via `HouseClaimStatusSerializer`, the same shape the draft's
+  Lineage stage re-reads on reload.
+- **The rows `materialize_house_claim` writes**, at CG finalization (approved claims only):
+
+  | Row | What |
+  |-----|------|
+  | `Family` + `Organization` (+ rank ladder + fealty) | via `build_family_org`, same seam the name-path family builder uses |
+  | `Organization.words`/`colors`/`sigil_description`/`*_override` | the six stylings/principles |
+  | `CharacterSheet.family` | the founder's own sheet joins the new family |
+  | `Title.house`/`is_claimable` on the whole `claim_grants(title)` list | `assign_holder` on the chain top, again per loose-barony extra |
+  | `Area.name`/`Domain.name` on an undefined land row | `name_rung` |
+  | `Domain.description`/`hall`/`land_shapes` | `describe_demesne`, only where the founder wrote something |
+  | `HoldingKind` rows on the seat `Domain` | `add_holding` per `template.holdings` |
+  | `Kinsperson`/`FamilyMembership`/parentage/union edges | `record_kin`, head first, then parents, grandparents, spouse, siblings, children, household — then the founder's own node, by `founder_relation` |
+  | `Title.holder` | the placed head-of-house node |
+  | `Area` (+ `LocationOwnership`) for an optional estate | `plan_estate`, under the draft's (or sheet's) realm capital |
+  | House channel audience | `sync_house_channel` |
+- **Admin review** (`HouseClaimAdmin`, `world/societies/admin.py`) — `HouseClaimAspectInline`/
+  `HouseClaimKinInline`/`HouseClaimLandInline` render the founder's whole write-up read-only on the
+  review queue (`can_delete=False`, no add permission); `approve_claims`/`reject_claims` actions run
+  `approve_house_claim`/`reject_house_claim`. Approval is the human greenlight only — materialization
+  still waits for CG finalization, so approving a claim never creates rows by itself.
+- **`lands_writeup` carried forward** (migrations 0155-0157) — the pre-Plan-B `HouseClaim
+  .lands_writeup` free-text field is gone; its data moved to a `HouseClaimLand` row on the claim's
+  own title (`description=lands_writeup`, a `RunPython` data migration, ADR-0237 restructure) before
+  the column itself was dropped in a separate schema-only migration, per the schema/data split.
+
 ### Actions (`actions/definitions/almanach.py`)
 
 Ten REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
@@ -607,15 +700,23 @@ creation, and never re-fire on a later edit.
 
 ### API (`almanach_views.py`, `almanach_urls.py`)
 
-Staff-only (`IsAdminUser`) DRF viewsets under `/api/almanach/`:
+DRF viewsets under `/api/almanach/`, permissioned per endpoint rather than a blanket staff-only
+surface — Plan B Task 3 opened the reads a founder mid-draft needs (fixed here per "Docs Are
+Directives": this section previously read staff-only across the board):
 
-- `GET /api/almanach/realms/` and `GET /api/almanach/realms/{id}/ladder/?for=staff|founder`
-  (`AlmanachRealmViewSet`) — both ladder cuts stay staff-only for now; `founder` is exposed
-  already but reserved for a future founder-facing surface.
-- `GET /api/almanach/houses/` (`?realm=<id>` filters through the family's own `origin_realm` — an
-  `Organization` has no realm column of its own) and `GET /api/almanach/houses/{id}/document/`
-  (`AlmanachHouseViewSet`).
-- `GET /api/almanach/land-shapes/` (`LandShapeViewSet`, below).
+- `AlmanachRealmViewSet` — `IsAuthenticated` (any logged-in account): `GET /api/almanach/realms/`,
+  `GET /api/almanach/realms/{id}/charter/` (`charter_for_realm`, above). Its `/ladder/` action adds
+  one further check of its own: `GET .../ladder/?for=founder` stays open to any authenticated
+  account (hides rungs under an unpublished house, see "Ladder rules" above), but
+  `?for=staff` (the default) 403s for a non-staff account.
+- `AlmanachHouseViewSet` — `IsAuthenticated, IsAdminUser` (staff-only): `GET
+  /api/almanach/houses/` (`?realm=<id>` filters through the family's own `origin_realm` — an
+  `Organization` has no realm column of its own) and `GET /api/almanach/houses/{id}/document/`.
+- `LandShapeViewSet` — `IsAuthenticated`: `GET /api/almanach/land-shapes/`.
+
+Founder-facing house-claim endpoints live under `/api/character-creation/` instead (see "Founder
+mode" above): `GET`/`POST /api/character-creation/drafts/{id}/house-claim/` and `GET
+/api/character-creation/house-titles/` (`ClaimableTitleViewSet`).
 
 ### Land shapes
 

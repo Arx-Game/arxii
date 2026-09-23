@@ -587,7 +587,19 @@ house from `family_template.served_house_choices`.
 
 **Claim path:** claiming a staff family with an open kin Vacancy requires taking one
 (`_get_vacancy_errors`); the Service panel (a retainer Vacancy) is available on any
-resolved path except when a kin Vacancy is already chosen.
+resolved path except when a kin Vacancy is already chosen. **Define a house** (#3983
+Plan B) is folded into this same path rather than a fourth one: when the Upbringing's
+family template has no `claimable_kind_ids` at all, or at least one open house family
+exists to claim, and the draft has no `family` yet, `FamilyPathSection.tsx` mounts
+`almanach/founder/FounderAlmanach.tsx` inline alongside the ordinary family-claim list
+(`showHouseFounding`) — no separate "define a house" toggle, the panel is simply there
+whenever founding is eligible. `HouseFoundingPanel` (the pre-Plan-B, title-only version)
+is retired; the whole founder journey (pick a seat off the realm ladder, write the
+house's charter/kin/lands/estate, submit) is documented in
+[houses.md](houses.md)'s "Founder mode" section. The Upbringing's own
+`max_claim_tier` (`OriginTemplate`, `houses.creator.permitted_tier_rank`) caps how
+high a seat this Upbringing may reach — see that doc and the societies glossary's
+Claim Tier entry.
 
 **Vacancies:** `GET /api/character-creation/vacancies/?draft=<id>[&organization=<id>]`
 returns the open, reachable, per-draft-priced `Vacancy` rows (bare list) via
