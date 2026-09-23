@@ -1,14 +1,18 @@
 """Tests for the Almanach de Catenys API (#3983 Task 5): the staff-only
 realm ladder, house document, and land-shape reads."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import RealmFactory
 from world.roster.factories import FamilyFactory
+from world.roster.services.kinship import OMNISCIENT
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import plant_rung, publish_house
+from world.societies.houses.almanach_reads import document_for_house
 from world.societies.houses.constants import SuccessionDerivation, TitleTier
 from world.societies.houses.models import SuccessionLaw
 
@@ -51,6 +55,21 @@ class AlmanachApiTests(TestCase):
         law_payload = res.data["house"]["default_succession_law"]
         assert law_payload["name"] == self.law.name
         assert law_payload["codex_entry_id"] is None
+
+    def test_staff_document_read_passes_the_omniscient_viewer(self) -> None:
+        # Review finding (#3983 Task 5): the document action must resolve the
+        # kinship-read viewer the same way roster's own views do — staff ->
+        # OMNISCIENT — not a CharacterSheet. Wrap the real function so the
+        # request still round-trips normally; just record the call's viewer.
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        with patch(
+            "world.societies.houses.almanach_views.document_for_house",
+            wraps=document_for_house,
+        ) as mock_document_for_house:
+            res = client.get(f"/api/almanach/houses/{self.crown.pk}/document/")
+        assert res.status_code == 200
+        assert mock_document_for_house.call_args.kwargs["viewer"] is OMNISCIENT
 
     def test_ladder_founder_cut_is_also_staff_gated(self) -> None:
         client = APIClient()

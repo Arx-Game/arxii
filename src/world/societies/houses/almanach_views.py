@@ -15,6 +15,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from world.realms.models import Realm
+from world.roster.views.family_views import _viewer_entry
 from world.societies.houses.almanach_reads import document_for_house, ladder_for_realm
 from world.societies.houses.almanach_serializers import (
     AlmanachHouseSummarySerializer,
@@ -41,23 +42,6 @@ class AlmanachHouseFilter(django_filters.FilterSet):
     class Meta:
         model = Organization
         fields = ["realm"]
-
-
-def _viewer_for_request(request) -> object:
-    """The account's active character sheet, or None (#3983 Task 5 spec).
-
-    ``document_for_house`` only actually reads this for a non-staff caller
-    (``staff=True`` reads the family tree with the omniscient viewer
-    unconditionally) — every route in this module is ``IsAdminUser``-gated,
-    so ``staff`` is always True today and this value is inert until Plan B
-    opens a document read to a non-staff founder.
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-
-    entry = RosterEntry.objects.for_account(request.user).first()
-    if entry is None:
-        return None
-    return entry.character_sheet
 
 
 class AlmanachRealmViewSet(viewsets.ReadOnlyModelViewSet):
@@ -115,7 +99,13 @@ class AlmanachHouseViewSet(viewsets.ReadOnlyModelViewSet):
     def document(self, request, pk=None):
         """GET /api/almanach/houses/{id}/document/"""
         house = self.get_object()
-        viewer = _viewer_for_request(request)
+        # Reuses roster's own kinship-viewer resolution (staff -> OMNISCIENT,
+        # else the account's RosterEntry, or None mid-CG) rather than a
+        # second copy — the almanach document folds in a family_tree_for()
+        # read, and that call's visibility contract is exactly this one
+        # (world/roster/services/kinship.py's _viewer_knows isinstance-checks
+        # for RosterEntry/OMNISCIENT, never a CharacterSheet).
+        viewer = _viewer_entry(request)
         payload = document_for_house(house, viewer=viewer, staff=request.user.is_staff)
         return Response(HouseDocumentSerializer(payload).data)
 
