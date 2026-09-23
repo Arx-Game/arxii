@@ -6,7 +6,7 @@ Screenshots of the REAL built app (the app's own routes and components; only
 `frontend/e2e/evidence/almanach-3983.spec.ts`; fixtures:
 `frontend/e2e/evidence/fixtures/*.ts`.
 
-- Rendered commit: `c7a86b6cee0af8bd6cd5749c95a5b80df25396a0` (the app as built for this run; the evidence commit sits on top of it)
+- Rendered commit: `2a9d6b596ced951c5aefe12832c6a7438ef87c3c` (the app as built for this run; the evidence commit sits on top of it)
 - Build command: `pnpm build` (from `frontend/`, with `src/.env` present)
 - Test command: `pnpm exec playwright test e2e/evidence/almanach-3983.spec.ts`
 - Playwright version: `^1.58.2` (`@playwright/test` in `frontend/package.json`)
