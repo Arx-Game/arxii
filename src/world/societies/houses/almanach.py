@@ -46,10 +46,35 @@ def _area_name(name: str) -> str:
     return name or UNDEFINED_AREA_NAME
 
 
-def _slug_for(parent: Area | None, tier: str, name: str) -> str:
+def _family_top(members: list[Title]) -> Title:
+    """The highest-ranked title among titles sharing one seat: its own
+    family's top rung, the one originally passed to ``plant_rung``."""
+    return max(members, key=lambda t: TITLE_TIER_RANK[t.tier])
+
+
+def _require_chain_top(title: Title) -> list[Title]:
+    """Refuse a title that is only an internal member of its own chain — its
+    own higher rungs share its own owner, so a liege walk starting from it
+    would immediately find "itself" as its nearest held ancestor. Returns
+    the full family (all titles sharing ``title``'s seat) for reuse."""
+    family = list(Title.objects.filter(seat_domain_id=title.seat_domain_id))
+    if _family_top(family).pk != title.pk:
+        msg = f"title {title.pk} is not its chain's top title"
+        raise HousesServiceError(
+            msg, user_message="That title is part of a higher title's own chain."
+        )
+    return family
+
+
+def _slug_for(parent: Area | None, tier: str, name: str, *, exclude_pk: int | None = None) -> str:
     """A stable slug: the plain name when one is given, else a
     parent-prefixed, always-numbered placeholder (an "Undefined" rung has no
-    name to slugify, and several of them can share a parent)."""
+    name to slugify, and several of them can share a parent).
+
+    ``exclude_pk`` skips the row being renamed itself, so an idempotent
+    rename (submitting the same name again) doesn't collide with its own
+    still-persisted old slug and bump to ``<slug>-2``.
+    """
     if name:
         candidate, n = slugify(name), 1
     else:
@@ -57,7 +82,10 @@ def _slug_for(parent: Area | None, tier: str, name: str) -> str:
         base = f"{prefix}-{tier}"
         n = 1
         candidate = f"{base}-{n}"
-    while Area.objects.filter(slug=candidate).exists():
+    conflicts = Area.objects.all()
+    if exclude_pk is not None:
+        conflicts = conflicts.exclude(pk=exclude_pk)
+    while conflicts.filter(slug=candidate).exists():
         n += 1
         candidate = f"{slugify(name)}-{n}" if name else f"{base}-{n}"
     return candidate
@@ -171,7 +199,7 @@ def name_rung(title: Title, name: str) -> Title:
     title.name = name
     title.save(update_fields=["name"])
     area.name = _area_name(name)
-    area.slug = _slug_for(area.parent, title.tier, name)
+    area.slug = _slug_for(area.parent, title.tier, name, exclude_pk=area.pk)
     area.save()
     domain = Domain.objects.filter(area=area).first()
     if domain is not None:
@@ -182,8 +210,9 @@ def name_rung(title: Title, name: str) -> Title:
 
 def liege_for_title(title: Title) -> Organization | None:
     """The holder of the nearest held ancestor rung, walking ``Area.parent``
-    upward from ``title``'s own rung. ``title`` must be a chain's top title
-    (see ``_rung_area``)."""
+    upward from ``title``'s own rung. Raises when ``title`` is only an
+    internal member of its own chain (see ``_require_chain_top``)."""
+    _require_chain_top(title)
     area = _rung_area(title).parent
     while area is not None:
         domain = (
@@ -211,8 +240,10 @@ def _descendant_areas(area: Area) -> list[Area]:
 def assign_holder(title: Title, house: Organization) -> Title:
     """Seat ``house`` on ``title``'s whole chain, swear it to its own
     nearest liege, and re-home any vassal beneath it that now owes fealty to
-    ``house`` instead of whoever it answered to before."""
-    family = list(Title.objects.filter(seat_domain_id=title.seat_domain_id))
+    ``house`` instead of whoever it answered to before. Raises when ``title``
+    is only an internal member of its own chain (see ``_require_chain_top``).
+    """
+    family = _require_chain_top(title)
     family_areas = [_rung_area(t) for t in family]
     for member in family:
         member.house = house
@@ -257,7 +288,7 @@ def rehome_vassals(title: Title) -> int:
         )
         if not family:
             continue
-        family_top = max(family, key=lambda t: TITLE_TIER_RANK[t.tier])
+        family_top = _family_top(family)
         new_liege = liege_for_title(family_top)
         if new_liege is None or new_liege.pk != holder.pk:
             continue

@@ -67,6 +67,16 @@ class PlantRungTests(TestCase):
         assert duchy_area.name == "Fervor"
         assert duchy_area.slug == "fervor"
 
+    def test_name_rung_twice_does_not_bump_its_own_slug(self) -> None:
+        fervor = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="", parent_title=self.kingdom
+        )
+        duchy_area = fervor.seat_domain.area.parent.parent
+        name_rung(fervor, "Fervor")
+        name_rung(fervor, "Fervor")
+        duchy_area.refresh_from_db()
+        assert duchy_area.slug == "fervor"
+
     def test_batch_mints_counties_each_with_a_seat_barony(self) -> None:
         fervor = plant_rung(
             realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom
@@ -98,6 +108,15 @@ class PlantRungTests(TestCase):
         assign_holder(fervor, duke_house)
         assert FealtyEdge.objects.get(vassal=count_house).liege == duke_house
         assert FealtyEdge.objects.get(vassal=duke_house).liege == self.crown
+
+    def test_assign_holder_refuses_an_internal_chain_member(self) -> None:
+        fervor = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom
+        )
+        county = Title.objects.get(tier=TitleTier.COUNTY, seat_domain=fervor.seat_domain)
+        house = OrganizationFactory(name="Tizon")
+        with self.assertRaises(HousesServiceError):
+            assign_holder(county, house)
 
     def test_swear_fealty_mints_the_realm_default_tithe(self) -> None:
         vassal = OrganizationFactory(name="Caldera")
