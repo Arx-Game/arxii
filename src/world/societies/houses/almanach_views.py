@@ -95,7 +95,7 @@ class AlmanachRealmViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(responses=RealmCharterSerializer)
     @action(detail=True, methods=["get"], url_path="charter")
     def charter(self, request, pk=None):
-        """GET /api/almanach/realms/{id}/charter/ — the founder ladder's defaults."""
+        """GET /api/almanach/realms/{id}/charter/: the founder ladder's defaults."""
         realm = self.get_object()
         payload = charter_for_realm(realm)
         return Response(RealmCharterSerializer(payload).data)

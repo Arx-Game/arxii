@@ -603,7 +603,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description GET /api/almanach/realms/{id}/charter/ — the founder ladder's defaults. */
+    /** @description GET /api/almanach/realms/{id}/charter/: the founder ladder's defaults. */
     get: operations['almanach_realms_charter_retrieve'];
     put?: never;
     post?: never;

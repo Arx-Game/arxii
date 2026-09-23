@@ -898,7 +898,7 @@ paths:
   /api/almanach/realms/{id}/charter/:
     get:
       operationId: almanach_realms_charter_retrieve
-      description: GET /api/almanach/realms/{id}/charter/ — the founder ladder's defaults.
+      description: GET /api/almanach/realms/{id}/charter/: the founder ladder's defaults.
       parameters:
       - in: path
         name: id
