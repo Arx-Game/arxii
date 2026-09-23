@@ -486,16 +486,19 @@ actions telnet would.
 - **`plan_estate(*, house, city_area, name, description, district=None)`** — plants an estate
   `Area` under a city (or a named district within it) and records the house's active
   `LocationOwnership`.
-- **`add_household_member(*, house, kinsperson, rank=None, position="Ward")`** — records a
-  household member as a filled retainer `Vacancy` titled after the member (`record_kin` names a
-  ward's row `Ward: <name>`, since `Vacancy` is unique on `(organization, name)` and a shared
-  "Ward" title made a second ward take the first's row) at the house's `Household` rank (minted
+- **`add_household_member(*, house, kinsperson, rank=None, position="")`** — records a
+  household member as a filled retainer `Vacancy` at the house's `Household` rank (minted
   lazily,
   one tier below the org's current lowest rank, the first time a household member needs it). Never
   a `kin_node`/`kin_pool` Vacancy — that link is what marks an appable kin slot a founder can claim
   at CG, and a household member is staff/service-placed, never appable (ADR-0311). A sheeted
   kinsperson with a primary persona additionally gets a real `OrganizationMembership` at the
-  Household rank.
+  Household rank. `position` titles a named place (a Steward); left blank it falls back to the
+  member's own ward key, `Ward: <name>` — `Vacancy` is unique on `(organization, name)`, so a
+  shared "Ward" title made a second ward take the first's row. That name is the row's KEY, not its
+  label: `household_position_label(vacancy_name)` is what the household read calls it (a ward row
+  is plainly "Ward"; anything else is called exactly what it is titled), so the document reads
+  "Marisol · Ward", never "Marisol · Ward: Marisol".
 - **`open_household_position(*, house, position) -> Vacancy`** — posts an OPEN household position:
   a titled post with nobody in it yet ("Master-at-arms · position · open"), a retainer `Vacancy` at
   the same `Household` rank with `count_remaining=1` and no holder. No `Kinsperson` is minted — a

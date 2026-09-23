@@ -18,6 +18,7 @@ from world.societies.houses.almanach import (
     batch_unclaimed,
     claim_grants,
     describe_demesne,
+    household_position_label,
     name_rung,
     open_household_position,
     plan_estate,
@@ -156,6 +157,20 @@ class HouseServiceTests(TestCase):
         # Re-posting the same title re-opens the same row, never a duplicate.
         again = open_household_position(house=self.house, position="Master-at-arms")
         assert again.pk == vacancy.pk
+
+    def test_the_helper_keys_a_ward_row_by_its_member_on_its_own(self) -> None:
+        """#3983 review N2: the default has to be safe for ANY caller, not
+        just ``record_kin`` — two wards through the bare helper used to
+        share one "Ward" row."""
+        first = KinspersonFactory(name="Marisol")
+        second = KinspersonFactory(name="Corvin")
+        a = add_household_member(house=self.house, kinsperson=first)
+        b = add_household_member(house=self.house, kinsperson=second)
+        assert a.pk != b.pk
+        assert a.name == "Ward: Marisol"
+        assert b.name == "Ward: Corvin"
+        assert household_position_label(a.name) == "Ward"
+        assert household_position_label("Master-at-arms") == "Master-at-arms"
 
     def test_an_untitled_position_is_refused(self) -> None:
         with self.assertRaises(HousesServiceError):

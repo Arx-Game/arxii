@@ -1501,7 +1501,8 @@ Social structures, organizations, reputation, and legend tracking.
   (#3983) is the service seam that mints/updates a FILLED retainer Vacancy for a house's
   household, and `open_household_position` the one that posts an EMPTY one; both refuse when the
   house has no `family` on record. Vacancy is unique on `(organization, name)`, so each row is
-  titled by its holder (`Ward: <name>`) or by the job (`Master-at-arms`), never by the relation.
+  KEYED by its holder (`Ward: <name>`) or by the job (`Master-at-arms`), never by the relation;
+  `household_position_label` turns that key back into the label the household read shows.
 - **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`,
   open (unless `require_open=False`, used by CG draft validation re-checking an
   already-selected Vacancy), realm-matched, Upbringing-gated CG offer;

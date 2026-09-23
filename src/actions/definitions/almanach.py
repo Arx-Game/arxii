@@ -694,10 +694,14 @@ class AlmanachEditKinAction(_AlmanachAction):
 
         is_household = bool(kwargs.get("is_household"))
         if is_household and not kin_name:
-            # A household row titles its own Vacancy, and Vacancy is unique
-            # on (organization, name): an unnamed one would take another
-            # ward's row (#3983 review I2).
-            return ActionResult(success=False, message="Name the ward.")
+            # A household row keys its own Vacancy, and Vacancy is unique on
+            # (organization, name): an unnamed one would take another ward's
+            # row (#3983 review I2). Named by the relation the caller sent,
+            # so the sentence says which row it means — a POSITION never
+            # reaches here (it returned above with
+            # ``open_household_position``'s own "Name the position.").
+            label = dict(ClaimKinRelation.choices).get(relation, "household row").lower()
+            return ActionResult(success=False, message=f"Name the {label}.")
 
         parent = spouse = marriage_kind = born_into_family = None
         child = None

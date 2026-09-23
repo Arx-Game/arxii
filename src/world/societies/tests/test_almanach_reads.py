@@ -15,6 +15,7 @@ from world.societies.houses.almanach import (
     assign_holder,
     batch_unclaimed,
     name_rung,
+    open_household_position,
     plant_rung,
     publish_house,
 )
@@ -31,6 +32,7 @@ from world.societies.houses.models import (
     SuccessionLaw,
     Title,
 )
+from world.societies.models import Vacancy
 
 
 class LadderReadTests(TestCase):
@@ -176,11 +178,24 @@ class DocumentReadTests(TestCase):
         VacancyFactory(
             organization=crown, name="Cousin's Claim", rank=ward_vacancy.rank, kin_node=kin
         )
+        steward = KinspersonFactory(name="Corvin")
+        add_household_member(house=crown, kinsperson=steward, position="Steward")
+        open_household_position(house=crown, position="Master-at-arms")
+
         doc = document_for_house(crown, viewer=None, staff=True)
-        holder_names = {row["holder_name"] for row in doc.household}
+        rows = {row["holder_name"]: row for row in doc.household}
         positions = {row["position"] for row in doc.household}
-        assert "Marisol" in holder_names
         assert "Cousin's Claim" not in positions
+        # A ward's Vacancy is KEYED "Ward: Marisol" so a second ward gets a
+        # row of its own; the household reads it as plainly "Ward", never
+        # "Marisol · Ward: Marisol" (#3983 review N1).
+        assert rows["Marisol"]["position"] == "Ward"
+        assert Vacancy.objects.get(pk=ward_vacancy.pk).name == "Ward: Marisol"
+        # A titled place, filled or open, is called exactly what it is titled.
+        assert rows["Corvin"]["position"] == "Steward"
+        post = next(row for row in doc.household if row["holder_id"] is None)
+        assert post["position"] == "Master-at-arms"
+        assert post["is_open"]
 
     def test_the_staff_document_carries_truth_and_public_belief(self) -> None:
         """#3983 spec Testing (3), the staff side: the document is staff-only

@@ -506,15 +506,32 @@ def plan_estate(
 
 
 _VACANCY_NAME_MAX = 120
+WARD_POSITION_LABEL = "Ward"
+_WARD_TITLE_PREFIX = f"{WARD_POSITION_LABEL}: "
 
 
 def _ward_title(node: Kinsperson) -> str:
-    """The Vacancy name a ward's own household row wears: "Ward: <name>",
+    """The Vacancy name a ward's own household row is KEYED by: "Ward: <name>",
     or plain "Ward" for a ward still to be named. ``Vacancy`` is unique on
-    (organization, name), so the name has to carry the person."""
+    (organization, name), so the key has to carry the person — what the row is
+    CALLED is ``household_position_label``'s answer, not this."""
     name = node.display_name
-    title = f"Ward: {name}" if name else "Ward"
+    title = f"{_WARD_TITLE_PREFIX}{name}" if name else WARD_POSITION_LABEL
     return title[:_VACANCY_NAME_MAX]
+
+
+def household_position_label(vacancy_name: str) -> str:
+    """What a household row is CALLED, given the name its Vacancy is keyed by.
+
+    A ward's key carries the ward's own name only to keep the row unique
+    (``_ward_title``); reading it back verbatim would make the household read
+    "Marisol · Ward: Marisol", the holder's name twice. So a ward row is
+    simply a "Ward", and every other row — an open post, or a titled place
+    staff filled — is called exactly what it is titled.
+    """
+    if vacancy_name == WARD_POSITION_LABEL or vacancy_name.startswith(_WARD_TITLE_PREFIX):
+        return WARD_POSITION_LABEL
+    return vacancy_name
 
 
 def _household_rank(house: Organization) -> OrganizationRank:
@@ -537,7 +554,7 @@ def add_household_member(
     house: Organization,
     kinsperson: Kinsperson,
     rank: OrganizationRank | None = None,
-    position: str = "Ward",
+    position: str = "",
 ) -> Vacancy:
     """Record a household member as a filled retainer Vacancy (#3983).
 
@@ -547,6 +564,12 @@ def add_household_member(
     appable. A sheeted kinsperson with a primary persona additionally gets a
     real ``OrganizationMembership`` at the Household rank, so a sheeted
     household member is a genuine member, not just a filled slot.
+
+    ``position`` titles a named place (a Steward, a Master-at-arms staff are
+    filling); left blank it falls back to the member's own ward title, which
+    is what keeps a second ward from taking the first's row — ``Vacancy`` is
+    unique on (organization, name), so a shared default would collide for
+    any caller, not just ``record_kin``.
     """
     if house.family_id is None:
         msg = f"house {house.pk} has no family on record"
@@ -554,7 +577,7 @@ def add_household_member(
     effective_rank = rank if rank is not None else _household_rank(house)
     vacancy, _created = Vacancy.objects.update_or_create(
         organization=house,
-        name=position,
+        name=position or _ward_title(kinsperson),
         defaults={
             "rank": effective_rank,
             "holder_kinsperson": kinsperson,
@@ -704,12 +727,13 @@ def record_kin(  # noqa: C901, PLR0912, PLR0913 — straight-line relation dispa
 
     vacancy = None
     if is_household:
-        # One household row per person, named after the person: ``Vacancy``
+        # One household row per person, keyed by the person: ``Vacancy``
         # is unique on (organization, name), so naming every ward "Ward"
-        # made the second ward overwrite the first's holder. A POSITION is
-        # not a person at all and never comes through here (the guard at the
-        # top of this function) — it is ``open_household_position``'s row.
-        vacancy = add_household_member(house=house, kinsperson=node, position=_ward_title(node))
+        # made the second ward overwrite the first's holder (the key is
+        # ``add_household_member``'s own default now). A POSITION is not a
+        # person at all and never comes through here (the guard at the top
+        # of this function) — it is ``open_household_position``'s row.
+        vacancy = add_household_member(house=house, kinsperson=node)
 
     if believed_deceased:
         record_public_belief(node, believed_deceased=True)

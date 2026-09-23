@@ -449,7 +449,16 @@ class AlmanachActionTests(TestCase):
             self.staff, org_id=self.crown.pk, name="  ", relation="position"
         )
         assert not result.success
-        assert result.message
+        assert result.message == "Name the position."
+
+    def test_edit_kin_unnamed_ward_says_ward(self) -> None:
+        """#3983 review N3: the refusal names the row it means — a position's
+        own refusal (above) says "position", a ward's says "ward"."""
+        result = AlmanachEditKinAction().run(
+            self.staff, org_id=self.crown.pk, name="", relation="ward", is_household=True
+        )
+        assert not result.success
+        assert result.message == "Name the ward."
 
     def test_edit_kin_mother_is_anchored_to_a_relative(self) -> None:
         """#3983 review I3: every relation is written relative to somebody.

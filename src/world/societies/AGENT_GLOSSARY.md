@@ -141,8 +141,10 @@ rows at the org's `Household` `OrganizationRank` (minted lazily by `add_househol
 tier below the org's current lowest rank, the first time a household member needs it). A row is
 either a **household member** (a person the house has: filled, titled after its holder, written by
 `add_household_member`) or an **open position** (a post the house has yet to fill: no holder,
-`count_remaining=1`, titled by the job, written by `open_household_position`). The two never
-collapse into one another — an open post mints no `Kinsperson`, because a job is not a person, and
+`count_remaining=1`, titled by the job, written by `open_household_position`). A row's `name` is
+its KEY — unique per organization, so a ward's carries the ward (`Ward: Marisol`) — while
+`household_position_label` gives what the row is CALLED (a ward is plainly a "Ward"; a titled place
+is called its title). The two never collapse into one another — an open post mints no `Kinsperson`, because a job is not a person, and
 `record_kin` refuses a `position` relation outright to keep that honest. Carries no
 `kin_node`/`kin_pool` link and mints no `FamilyMembership`: household stands apart from FAMILY
 (`world.roster`'s kinship graph) entirely — a ward or guard belongs to the house's service, not

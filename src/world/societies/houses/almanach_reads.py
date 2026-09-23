@@ -74,7 +74,9 @@ of ANY title the house holds — not only its own top chain — excluding
 children that are themselves on one of the house's own chains.
 ``household`` is filtered to retainer Vacancy rows (no ``kin_node``/
 ``kin_pool`` link — those mark an appable kin slot, never a household
-position) at the Household rank. ``staff=True`` reads the family tree with
+position) at the Household rank; each row's ``position`` is its display label
+(``household_position_label``), not the unique name the Vacancy is keyed by.
+``staff=True`` reads the family tree with
 the omniscient viewer (mechanical truth); otherwise the caller's own
 ``viewer`` gates what's visible, exactly like every other kinship read.
 """
@@ -93,7 +95,12 @@ from world.locations.models import LocationOwnership
 from world.roster.constants import NOBLE_KIND_NAME
 from world.roster.models import Kinsperson
 from world.roster.services.kinship import OMNISCIENT, family_tree_for
-from world.societies.houses.almanach import HOUSEHOLD_RANK_TITLE, UNDEFINED_AREA_NAME, _family_top
+from world.societies.houses.almanach import (
+    HOUSEHOLD_RANK_TITLE,
+    UNDEFINED_AREA_NAME,
+    _family_top,
+    household_position_label,
+)
 from world.societies.houses.constants import TIER_TO_AREA_LEVEL, TITLE_TIER_RANK, TitleTier
 from world.societies.houses.models import (
     Domain,
@@ -588,7 +595,10 @@ def _household_payload(house: Organization) -> list[dict]:
         out.append(
             {
                 "vacancy_id": v.pk,
-                "position": v.name,
+                # The row's display label, not the key it is stored under: a
+                # ward's Vacancy is named after the ward to stay unique, and
+                # echoing that back read "Marisol · Ward: Marisol" (#3983).
+                "position": household_position_label(v.name),
                 "holder_id": holder.pk if holder is not None else None,
                 "holder_name": holder.display_name if holder is not None else "",
                 "is_open": v.is_open,
