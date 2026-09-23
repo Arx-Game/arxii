@@ -25,6 +25,8 @@ const rows = [
     claimable: true,
     seat_domain_id: null,
     comes_with: '',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 2,
@@ -43,6 +45,8 @@ const rows = [
     claimable: false,
     seat_domain_id: null,
     comes_with: 'Fervor',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 3,
@@ -61,8 +65,63 @@ const rows = [
     claimable: false,
     seat_domain_id: null,
     comes_with: '',
+    chain_top_id: 3,
+    claimant_name: '',
   },
 ] satisfies LadderRow[];
+
+// An undefined chain top (final review I5): `comes_with` reports "" for
+// EVERY row here, including the internal seat county — only `chain_top_id`
+// tells the county apart from a second, separate claimable rung. Regression
+// coverage for the bug where the county's own Claim button leaked through
+// because the old `comes_with !== ''` dash gate never fired on a blank name.
+const undefinedTopRows = [
+  {
+    title_id: 10,
+    name: '',
+    is_defined: false,
+    tier: 'duchy',
+    level: 56,
+    parent_title_id: null,
+    house_id: null,
+    house_name: '',
+    state: 'Unclaimed',
+    is_seat_of: '',
+    sworn_to: 'Piropa (crown)',
+    demesne: 1,
+    vassals: 1,
+    claimable: true,
+    seat_domain_id: null,
+    comes_with: '',
+    chain_top_id: 10,
+    claimant_name: '',
+  },
+  {
+    title_id: 11,
+    name: '',
+    is_defined: false,
+    tier: 'county',
+    level: 53,
+    parent_title_id: 10,
+    house_id: null,
+    house_name: '',
+    state: 'Unclaimed',
+    is_seat_of: '',
+    sworn_to: '',
+    demesne: 0,
+    vassals: 0,
+    claimable: true,
+    seat_domain_id: null,
+    comes_with: '',
+    chain_top_id: 10,
+    claimant_name: '',
+  },
+] satisfies LadderRow[];
+
+// A mutable indirection so `useLadder`'s mocked rows can swap to
+// `undefinedTopRows` for the one regression test below without a second
+// mock factory (the factory closes over `ladderRows`, read at call time).
+let ladderRows: LadderRow[] = rows;
 
 vi.mock('../queries', () => ({
   useRealms: () => ({
@@ -78,7 +137,7 @@ vi.mock('../queries', () => ({
       ],
     },
   }),
-  useLadder: () => ({ data: { rows, unclaimed_by_tier: { duchy: 2, county: 1 } } }),
+  useLadder: () => ({ data: { rows: ladderRows, unclaimed_by_tier: { duchy: 2, county: 1 } } }),
 }));
 
 test('gates the Claim column by the permitted tier and marks held/comes-with rows', () => {
@@ -153,4 +212,39 @@ test('selecting a row by name calls onSelectRow and the row carries .sel', () =>
   const fervor = screen.getByRole('button', { name: /select fervor/i });
   fervor.click();
   expect(onSelectRow).toHaveBeenCalledWith(expect.objectContaining({ title_id: 1 }));
+});
+
+test('an undefined chain top never leaks a Claim button onto its own internal county (I5)', () => {
+  ladderRows = undefinedTopRows;
+  try {
+    renderWithProviders(
+      <SeatPicker
+        realmId={1}
+        permittedRank={TIER_RANK.duchy}
+        selectedTitleId={null}
+        onSelectRow={vi.fn()}
+        onSelectRealm={vi.fn()}
+        onClaim={vi.fn()}
+      />
+    );
+
+    // The undefined duchy is itself a chain top (`chain_top_id === title_id`)
+    // and gets the Claim button — exactly one, never a second leaked onto
+    // its own internal county.
+    expect(screen.getAllByRole('button', { name: 'Claim' })).toHaveLength(1);
+
+    // Its internal seat county (`chain_top_id: 10 !== title_id: 11`) gets the
+    // dash, even though `comes_with` is blank too and `claimable`/`state`
+    // alone would otherwise have let the old gate show a second button.
+    const countyRow = screen
+      .getByRole('button', { name: 'Select undefined county' })
+      .closest('tr') as HTMLElement;
+    expect(within(countyRow).queryByRole('button', { name: /claim/i })).not.toBeInTheDocument();
+    // The trailing (Claim) cell specifically — the row's other dashes
+    // (sworn to/demesne/vassals) would read this way regardless of I5.
+    const trailingCell = countyRow.querySelector('td:last-child') as HTMLElement;
+    expect(within(trailingCell).getByText('—')).toBeInTheDocument();
+  } finally {
+    ladderRows = rows;
+  }
 });

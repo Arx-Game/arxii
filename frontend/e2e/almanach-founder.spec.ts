@@ -56,6 +56,8 @@ const LADDER_ROWS = [
     claimable: false,
     seat_domain_id: 1000,
     comes_with: '',
+    chain_top_id: OVERLORDSHIP_ID,
+    claimant_name: '',
   },
   {
     title_id: DUCHY_ID,
@@ -74,6 +76,8 @@ const LADDER_ROWS = [
     claimable: true,
     seat_domain_id: 1001,
     comes_with: '',
+    chain_top_id: DUCHY_ID,
+    claimant_name: '',
   },
   {
     title_id: DUCHY_COUNTY_ID,
@@ -92,6 +96,8 @@ const LADDER_ROWS = [
     claimable: true,
     seat_domain_id: 1001,
     comes_with: DUCHY_NAME,
+    chain_top_id: DUCHY_ID,
+    claimant_name: '',
   },
   {
     title_id: DUCHY_BARONY_ID,
@@ -110,6 +116,8 @@ const LADDER_ROWS = [
     claimable: true,
     seat_domain_id: 1001,
     comes_with: DUCHY_NAME,
+    chain_top_id: DUCHY_ID,
+    claimant_name: '',
   },
   {
     title_id: LOOSE_BARONY_ID,
@@ -128,6 +136,8 @@ const LADDER_ROWS = [
     claimable: true,
     seat_domain_id: 1002,
     comes_with: '',
+    chain_top_id: LOOSE_BARONY_ID,
+    claimant_name: '',
   },
   {
     title_id: SECOND_COUNTY_ID,
@@ -146,6 +156,8 @@ const LADDER_ROWS = [
     claimable: true,
     seat_domain_id: 1003,
     comes_with: '',
+    chain_top_id: SECOND_COUNTY_ID,
+    claimant_name: '',
   },
   {
     title_id: SECOND_COUNTY_BARONY_ID,
@@ -164,6 +176,8 @@ const LADDER_ROWS = [
     claimable: true,
     seat_domain_id: 1003,
     comes_with: COUNTY_NAME,
+    chain_top_id: SECOND_COUNTY_ID,
+    claimant_name: '',
   },
 ];
 

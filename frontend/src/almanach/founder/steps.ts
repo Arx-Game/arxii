@@ -91,35 +91,23 @@ export const FOUNDER_CONTENTS: FounderContentsGroup[] = [
  * physical seat — a duchy's own county and barony ride the same seat as the
  * duchy itself, `almanach.py`'s module docstring: "a count-or-higher rung
  * comes with the seat chain down to the barony that is its demesne").
- * `LadderRow` carries `seat_domain_id` too, but a non-top chain member's
- * `comes_with` is ALREADY that grouping resolved to a name (`almanach_reads
- * .py`: "a non-top row always reports its chain top's name via both
- * `comes_with` and `sworn_to`") — walking `parent_title_id` down from the
- * claimed row through rows whose `comes_with` names it reaches every
- * internal chain member without a second `seat_domain_id` pass.
+ * `LadderRow` carries that grouping pre-resolved as `chain_top_id` (the seat
+ * family's top title_id; equal to a row's own `title_id` for a chain top
+ * itself) — filtering on it is a straight membership test, and unlike
+ * `comes_with` (a name, blank for an undefined chain top, final review I5)
+ * it never goes blank.
  *
  * Extras are the backend's `loose` query: a houseless barony whose nearest
  * rung ancestor is one of the chain rows and which is not itself another
- * rung's own chain member (`comes_with === ''` — a barony that "comes with"
- * some OTHER county is that county's own seat, excluded the same way the
- * backend excludes it via `_family_top(...) == b.pk`).
+ * rung's own chain member (`chain_top_id === title_id` — a barony that is
+ * part of some OTHER county's chain is that county's own seat, excluded the
+ * same way the backend excludes it via `_family_top(...) == b.pk`).
  */
 export function grantsOf(rows: LadderRow[], titleId: number): LadderRow[] {
   const claimedRow = rows.find((row) => row.title_id === titleId);
   if (!claimedRow) return [];
 
-  const chain: LadderRow[] = [claimedRow];
-  const frontier: number[] = [claimedRow.title_id];
-  while (frontier.length > 0) {
-    const parentId = frontier.pop() as number;
-    for (const row of rows) {
-      if (row.parent_title_id === parentId && row.comes_with === claimedRow.name) {
-        chain.push(row);
-        frontier.push(row.title_id);
-      }
-    }
-  }
-
+  const chain = rows.filter((row) => row.chain_top_id === titleId);
   const chainIds = new Set(chain.map((row) => row.title_id));
   const extras = rows.filter(
     (row) =>
@@ -127,7 +115,7 @@ export function grantsOf(rows: LadderRow[], titleId: number): LadderRow[] {
       !chainIds.has(row.title_id) &&
       row.parent_title_id != null &&
       chainIds.has(row.parent_title_id) &&
-      row.comes_with === '' &&
+      row.chain_top_id === row.title_id &&
       row.state === STATES.unclaimed
   );
 

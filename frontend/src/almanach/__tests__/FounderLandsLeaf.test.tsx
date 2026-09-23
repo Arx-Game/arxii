@@ -39,6 +39,8 @@ const rows = [
     claimable: false,
     seat_domain_id: 10,
     comes_with: '',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 2,
@@ -57,6 +59,8 @@ const rows = [
     claimable: false,
     seat_domain_id: 10,
     comes_with: 'Fervor',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 3,
@@ -75,6 +79,8 @@ const rows = [
     claimable: false,
     seat_domain_id: 10,
     comes_with: 'Fervor',
+    chain_top_id: 1,
+    claimant_name: '',
   },
   {
     title_id: 4,
@@ -93,6 +99,8 @@ const rows = [
     claimable: true,
     seat_domain_id: 11,
     comes_with: '',
+    chain_top_id: 4,
+    claimant_name: '',
   },
   {
     title_id: 5,
@@ -111,6 +119,8 @@ const rows = [
     claimable: true,
     seat_domain_id: 12,
     comes_with: '',
+    chain_top_id: 5,
+    claimant_name: '',
   },
   {
     title_id: 6,
@@ -129,6 +139,8 @@ const rows = [
     claimable: false,
     seat_domain_id: 12,
     comes_with: 'Solfatara',
+    chain_top_id: 5,
+    claimant_name: '',
   },
 ] satisfies LadderRow[];
 

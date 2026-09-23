@@ -8,6 +8,12 @@
  * marker, and a chain member (`comes_with !== ''`) gets a `comes with
  * <parent>` meta note — all per the plate's visual contract.
  *
+ * A row whose title is held but under active contest (`claimant_name !==
+ * ''`, `Title.claimant_org` — final review deferred item 2, ADR-0313) gets
+ * the plate's `cl` row class and its `sworn to` cell reads "claimed by
+ * <name>" instead of the normal sworn-to chain; the write path (staking a
+ * claim) stays deferred to the hidden-heir work, this is read-only.
+ *
  * Expansion is client-side only (#3983 Task 8 decision 3): a row's default
  * open/closed state comes from comparing its own tier to `pressedTier` (the
  * level bar's current pick — `defaultExpanded`, `./tree.ts`); a manual click
@@ -50,6 +56,9 @@ function NumCell({ value }: { value: number }) {
 }
 
 function SwornToCell({ row }: { row: LadderRow }) {
+  if (row.claimant_name !== '') {
+    return <td>claimed by {row.claimant_name}</td>;
+  }
   return <td>{row.sworn_to !== '' ? row.sworn_to : <abbr title="none">—</abbr>}</td>;
 }
 
@@ -164,8 +173,11 @@ export function LadderTable({
       const expanded = isExpanded(node);
       const depthClass = `d${Math.min(node.depth + 1, 3)}`;
       const selected = selectedTitleId != null && node.row.title_id === selectedTitleId;
+      const rowClass = [depthClass, selected && 'sel', node.row.claimant_name !== '' && 'cl']
+        .filter(Boolean)
+        .join(' ');
       out.push(
-        <tr key={node.row.title_id} className={selected ? `${depthClass} sel` : depthClass}>
+        <tr key={node.row.title_id} className={rowClass}>
           <NameCell
             row={node.row}
             hasChildren={hasChildren}

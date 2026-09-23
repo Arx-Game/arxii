@@ -55,7 +55,13 @@ function trailingCell(
   onClaim: (row: LadderRow) => void
 ): ReactNode {
   const rank = TIER_RANK[row.tier] ?? 0;
-  if (row.claimable && row.state === STATES.unclaimed && rank <= permitted) {
+  // A row internal to another rung's chain (`chain_top_id !== title_id`)
+  // never gets its own Claim button, whether or not it is itself named yet
+  // — `comes_with` alone can't gate this: it reports "" for an undefined
+  // chain top, which used to let the top's own internal county/barony rows
+  // fall through to the Claim branch (#3983 final review I5).
+  const isChainTop = row.chain_top_id === row.title_id;
+  if (isChainTop && row.claimable && row.state === STATES.unclaimed && rank <= permitted) {
     const label = row.is_defined ? `${CLAIM} ${row.name}` : CLAIM;
     return (
       <button type="button" className="btn quiet sm" onClick={() => onClaim(row)}>
@@ -63,7 +69,7 @@ function trailingCell(
       </button>
     );
   }
-  if (row.comes_with !== '') {
+  if (!isChainTop) {
     return <abbr title="none">—</abbr>;
   }
   if (row.state !== STATES.unclaimed) {

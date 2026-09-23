@@ -58,6 +58,8 @@ describe('useLadder', () => {
           claimable: true,
           seat_domain_id: null,
           comes_with: '',
+          chain_top_id: 1,
+          claimant_name: '',
         },
       ],
       unclaimed_by_tier: { duchy: 1, county: 2, barony: 4 },
