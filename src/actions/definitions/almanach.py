@@ -1,0 +1,667 @@
+"""Staff Almanach de Catenys actions (#3983): the feudal ladder + house record.
+
+Ten REGISTRY actions, all ``category="almanach"``, ``target_type=SELF``, gated
+by ``StaffOnlyPrerequisite`` — the shared ``action.run()`` seam a future web
+staff console and telnet alike will dispatch through, mirroring the shape of
+the world-builder canvas (``world_builder.py``). Each is a thin wrapper over
+``world.societies.houses.almanach`` (rungs, house record, demesne, estate,
+household, public belief), ``world.societies.houses.services`` (fealty,
+holdings), and — for ``almanach_edit_kin`` — the kinship writers in
+``world.roster.services.kinship``. Every refusal is a plain
+``ActionResult(success=False, message=...)`` sourced from a service's
+``HousesServiceError``/``KinshipServiceError`` ``user_message`` or a locally
+composed sentence, never ``str(exc)``. Every success carries the
+created/touched rows' ids in ``data`` so a caller can chain a follow-up call
+(e.g. name a freshly planted rung) without a refetch.
+
+``almanach_edit_kin`` deliberately does NOT preset the freshly created
+``Kinsperson.family`` to the house's family at creation time, even though its
+kwargs mirror ``HouseClaimKin`` field-for-field: ``Kinsperson.family`` is
+documented as a denorm "maintained by the membership services"
+(``world/roster/models/families.py``), and ``acknowledge_into_family`` (the
+``recognize_birth`` fallback for the ``child`` relation) refuses outright
+when the child already carries the target family — presetting it would make
+every child-relation call whose realm has no matching
+``HouseRecognitionRule`` refuse itself. The relation-specific service calls
+(``record_parentage`` + ``recognize_birth``/``acknowledge_into_family`` for
+``child``; ``record_union`` + ``add_membership`` for ``spouse``;
+``add_membership`` directly for ``head``) are the sole writers of ``family``,
+exactly as they already are for every other caller of those services.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from actions.base import Action
+from actions.constants import ActionCategory
+from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
+from actions.types import ActionResult, TargetType
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from actions.types import ActionContext
+
+_NO_SUCH_HOUSE = "No such house."
+
+
+@dataclass
+class _AlmanachAction(Action):
+    """Shared shape for the staff Almanach de Catenys verbs (#3983)."""
+
+    category: str = "almanach"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [StaffOnlyPrerequisite()]
+
+
+@dataclass
+class AlmanachPlantRungAction(_AlmanachAction):
+    """Plant a rung (and its seat chain) under an optional parent title.
+
+    Kwargs: ``realm_id``, ``tier``, ``name`` (blank plants an unnamed rung),
+    optional ``parent_title_id``, optional ``held_by_org_id``.
+    """
+
+    key: str = "almanach_plant_rung"
+    name: str = "Plant Rung"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.realms.models import Realm  # noqa: PLC0415
+        from world.societies.houses.almanach import plant_rung  # noqa: PLC0415
+        from world.societies.houses.constants import TitleTier  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        realm = Realm.objects.filter(pk=kwargs.get("realm_id")).first()
+        if realm is None:
+            return ActionResult(success=False, message="No such realm.")
+        tier = (kwargs.get("tier") or "").strip()
+        if tier not in TitleTier.values:
+            options = ", ".join(TitleTier.values)
+            return ActionResult(success=False, message=f"No '{tier}' tier. Options: {options}.")
+        parent_title_id = kwargs.get("parent_title_id")
+        parent_title = None
+        if parent_title_id:
+            parent_title = Title.objects.filter(pk=parent_title_id).first()
+            if parent_title is None:
+                return ActionResult(success=False, message="No such parent title.")
+        held_by_org_id = kwargs.get("held_by_org_id")
+        held_by = None
+        if held_by_org_id:
+            held_by = Organization.objects.filter(pk=held_by_org_id).first()
+            if held_by is None:
+                return ActionResult(success=False, message=_NO_SUCH_HOUSE)
+        rung_name = (kwargs.get("name") or "").strip()
+        title = plant_rung(
+            realm=realm, tier=tier, name=rung_name, parent_title=parent_title, held_by=held_by
+        )
+        return ActionResult(
+            success=True,
+            message=f"{title.name or 'An unnamed rung'} planted (title #{title.pk}).",
+            data={"title_id": title.pk},
+        )
+
+
+@dataclass
+class AlmanachBatchUnclaimedAction(_AlmanachAction):
+    """Plant a batch of unclaimed rungs under a parent title.
+
+    Kwargs: ``parent_title_id``, ``tier``, ``count``, optional
+    ``baronies_per_county``.
+    """
+
+    key: str = "almanach_batch_unclaimed"
+    name: str = "Batch Plant Unclaimed Rungs"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import batch_unclaimed  # noqa: PLC0415
+        from world.societies.houses.constants import TitleTier  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+
+        parent_title = Title.objects.filter(pk=kwargs.get("parent_title_id")).first()
+        if parent_title is None:
+            return ActionResult(success=False, message="No such parent title.")
+        tier = (kwargs.get("tier") or "").strip()
+        if tier not in TitleTier.values:
+            options = ", ".join(TitleTier.values)
+            return ActionResult(success=False, message=f"No '{tier}' tier. Options: {options}.")
+        try:
+            count = int(kwargs["count"])
+        except (KeyError, TypeError, ValueError):
+            return ActionResult(success=False, message="Pick a count.")
+        if count < 1:
+            return ActionResult(success=False, message="Pick a count.")
+        try:
+            baronies_per_county = int(kwargs.get("baronies_per_county") or 0)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Baronies per county must be a number.")
+        titles = batch_unclaimed(
+            parent_title=parent_title,
+            tier=tier,
+            count=count,
+            baronies_per_county=baronies_per_county,
+        )
+        return ActionResult(
+            success=True,
+            message=f"{len(titles)} unclaimed rung(s) planted.",
+            data={"title_ids": [t.pk for t in titles]},
+        )
+
+
+@dataclass
+class AlmanachNameRungAction(_AlmanachAction):
+    """Name (or rename) a rung. Kwargs: ``title_id``, ``name``."""
+
+    key: str = "almanach_name_rung"
+    name: str = "Name Rung"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import name_rung  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        if title is None:
+            return ActionResult(success=False, message="No such title.")
+        rung_name = (kwargs.get("name") or "").strip()
+        if not rung_name:
+            return ActionResult(success=False, message="Name the rung.")
+        title = name_rung(title, rung_name)
+        return ActionResult(
+            success=True,
+            message=f"{title.name} named.",
+            data={"title_id": title.pk},
+        )
+
+
+@dataclass
+class AlmanachEditHouseAction(_AlmanachAction):
+    """Edit a house's charter record and identity facets.
+
+    Kwargs: ``org_id``, optional ``name``/``words``/``colors``/
+    ``sigil_description``/``description`` (absent leaves untouched),
+    optional ``house_state``, optional ``default_succession_law_id`` (falsy
+    clears it), and optional ``aspect_option_ids``/``feature_ids`` lists —
+    each, when present (even ``[]``), REPLACES the house's
+    ``OrganizationAspect``/``OrganizationFeature`` rows wholesale (#3983
+    Decision 4).
+    """
+
+    key: str = "almanach_edit_house"
+    name: str = "Edit House"
+    icon: str = "shield"
+
+    def execute(  # noqa: C901, PLR0912 — one straight-line field-by-field editor
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.societies.houses.constants import HouseState  # noqa: PLC0415
+        from world.societies.houses.models import (  # noqa: PLC0415
+            HouseAspectOption,
+            HouseFeature,
+            OrganizationAspect,
+            OrganizationFeature,
+            SuccessionLaw,
+        )
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        org = Organization.objects.filter(pk=kwargs.get("org_id")).first()
+        if org is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOUSE)
+
+        # Resolve and validate EVERYTHING before the first write below — a
+        # bare ``return`` inside ``transaction.atomic()`` does not roll it
+        # back (only a propagating exception does), so a validation failure
+        # discovered after a write would silently commit a partial edit.
+        update_fields = []
+        for field in ("name", "words", "colors", "sigil_description", "description"):
+            if kwargs.get(field) is not None:
+                setattr(org, field, kwargs[field])
+                update_fields.append(field)
+        house_state = kwargs.get("house_state")
+        if house_state is not None:
+            if house_state not in HouseState.values:
+                options = ", ".join(HouseState.values)
+                return ActionResult(
+                    success=False, message=f"No '{house_state}' house state. Options: {options}."
+                )
+            org.house_state = house_state
+            update_fields.append("house_state")
+        if "default_succession_law_id" in kwargs:  # noqa: STRING_LITERAL
+            law_id = kwargs["default_succession_law_id"]
+            law = None
+            if law_id:
+                law = SuccessionLaw.objects.filter(pk=law_id).first()
+                if law is None:
+                    return ActionResult(success=False, message="No such succession law.")
+            org.default_succession_law = law
+            update_fields.append("default_succession_law")
+
+        aspect_options = None
+        aspect_option_ids = kwargs.get("aspect_option_ids")
+        if aspect_option_ids is not None:
+            aspect_options = list(HouseAspectOption.objects.filter(pk__in=aspect_option_ids))
+            if len(aspect_options) != len(set(aspect_option_ids)):
+                return ActionResult(
+                    success=False, message="One of those house aspects doesn't exist."
+                )
+
+        features = None
+        feature_ids = kwargs.get("feature_ids")
+        if feature_ids is not None:
+            features = list(HouseFeature.objects.filter(pk__in=feature_ids))
+            if len(features) != len(set(feature_ids)):
+                return ActionResult(
+                    success=False, message="One of those house features doesn't exist."
+                )
+
+        with transaction.atomic():
+            if update_fields:
+                org.save(update_fields=update_fields)
+            if aspect_options is not None:
+                OrganizationAspect.objects.filter(organization=org).delete()
+                OrganizationAspect.objects.bulk_create(
+                    OrganizationAspect(
+                        organization=org, definition_id=opt.definition_id, option=opt
+                    )
+                    for opt in aspect_options
+                )
+            if features is not None:
+                OrganizationFeature.objects.filter(organization=org).delete()
+                OrganizationFeature.objects.bulk_create(
+                    OrganizationFeature(organization=org, feature=feature) for feature in features
+                )
+        return ActionResult(success=True, message=f"{org.name} updated.", data={"org_id": org.pk})
+
+
+@dataclass
+class AlmanachSwearAction(_AlmanachAction):
+    """Bind a house's fealty to a liege by staff fiat.
+
+    Kwargs: ``vassal_org_id``, ``liege_org_id``, optional ``tithe_pct``
+    (omitted uses the realm default, #3983 Decision 2).
+    """
+
+    key: str = "almanach_swear"
+    name: str = "Swear Fealty"
+    icon: str = "shield"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.services import (  # noqa: PLC0415
+            HousesServiceError,
+            swear_fealty,
+        )
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        vassal = Organization.objects.filter(pk=kwargs.get("vassal_org_id")).first()
+        if vassal is None:
+            return ActionResult(success=False, message="No such vassal house.")
+        liege = Organization.objects.filter(pk=kwargs.get("liege_org_id")).first()
+        if liege is None:
+            return ActionResult(success=False, message="No such liege house.")
+        tithe_pct = kwargs.get("tithe_pct")
+        if tithe_pct is not None:
+            try:
+                tithe_pct = int(tithe_pct)
+            except (TypeError, ValueError):
+                return ActionResult(success=False, message="Tithe must be a whole percent.")
+        try:
+            swear_fealty(vassal=vassal, liege=liege, tithe_pct=tithe_pct)
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{vassal.name} swears fealty to {liege.name}.",
+            data={"vassal_org_id": vassal.pk, "liege_org_id": liege.pk},
+        )
+
+
+@dataclass
+class AlmanachDescribeDemesneAction(_AlmanachAction):
+    """Write a demesne's public description, hall, and land shapes.
+
+    Kwargs: ``domain_id``, ``description``, ``hall_name``,
+    ``land_shape_names`` (list of names).
+    """
+
+    key: str = "almanach_describe_demesne"
+    name: str = "Describe Demesne"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import describe_demesne  # noqa: PLC0415
+        from world.societies.houses.models import Domain  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        domain = Domain.objects.filter(pk=kwargs.get("domain_id")).first()
+        if domain is None:
+            return ActionResult(success=False, message="No such demesne.")
+        land_shape_names = list(kwargs.get("land_shape_names") or [])
+        try:
+            domain = describe_demesne(
+                domain=domain,
+                description=kwargs.get("description") or "",
+                hall_name=(kwargs.get("hall_name") or "").strip(),
+                land_shape_names=land_shape_names,
+            )
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{domain.name or 'The demesne'} described.",
+            data={"domain_id": domain.pk},
+        )
+
+
+@dataclass
+class AlmanachAddHoldingAction(_AlmanachAction):
+    """Attach a working holding to a demesne.
+
+    Kwargs: ``domain_id``, ``holding_kind_id``, optional ``name``.
+    """
+
+    key: str = "almanach_add_holding"
+    name: str = "Add Holding"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.models import Domain, HoldingKind  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError, add_holding  # noqa: PLC0415
+
+        domain = Domain.objects.filter(pk=kwargs.get("domain_id")).first()
+        if domain is None:
+            return ActionResult(success=False, message="No such demesne.")
+        kind = HoldingKind.objects.filter(pk=kwargs.get("holding_kind_id")).first()
+        if kind is None:
+            return ActionResult(success=False, message="No such holding kind.")
+        try:
+            holding = add_holding(domain=domain, kind=kind, name=(kwargs.get("name") or "").strip())
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{holding.name} added to {domain.name or 'the demesne'}.",
+            data={"domain_id": domain.pk, "holding_id": holding.pk},
+        )
+
+
+@dataclass
+class AlmanachPlanEstateAction(_AlmanachAction):
+    """Plant a house's estate Area under a city (or a named district).
+
+    Kwargs: ``org_id``, ``city_area_id``, ``name``, ``description``,
+    optional ``district_area_id``.
+    """
+
+    key: str = "almanach_plan_estate"
+    name: str = "Plan Estate"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.models import Area  # noqa: PLC0415
+        from world.societies.houses.almanach import plan_estate  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        house = Organization.objects.filter(pk=kwargs.get("org_id")).first()
+        if house is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOUSE)
+        city_area = Area.objects.filter(pk=kwargs.get("city_area_id")).first()
+        if city_area is None:
+            return ActionResult(success=False, message="No such city.")
+        district_area_id = kwargs.get("district_area_id")
+        district = None
+        if district_area_id:
+            district = Area.objects.filter(pk=district_area_id).first()
+            if district is None:
+                return ActionResult(success=False, message="No such district.")
+        estate_name = (kwargs.get("name") or "").strip()
+        if not estate_name:
+            return ActionResult(success=False, message="Name the estate.")
+        estate = plan_estate(
+            house=house,
+            city_area=city_area,
+            name=estate_name,
+            description=kwargs.get("description") or "",
+            district=district,
+        )
+        return ActionResult(
+            success=True,
+            message=f"{estate.name} planned for {house.name}.",
+            data={"area_id": estate.pk, "org_id": house.pk},
+        )
+
+
+@dataclass
+class AlmanachEditKinAction(_AlmanachAction):
+    """Author (or update) one node of a house's family tree.
+
+    Kwargs: ``org_id``, optional ``kinsperson_id`` (update instead of
+    create), ``name``, ``relation``, optional ``parent_kinsperson_id``
+    (``relation="child"``), optional ``spouse_kinsperson_id``
+    (``relation="spouse"``), optional ``gender_id``, optional ``age``,
+    ``is_deceased``, ``believed_deceased``, optional ``born_into_family_id``
+    (a secondary, non-primary membership regardless of ``relation``),
+    optional ``basis`` (the membership basis for ``born_into_family_id``,
+    default BORN), ``is_household`` (household retainer instead of family —
+    no family membership is written for these, #3983 Decision 1).
+    """
+
+    key: str = "almanach_edit_kin"
+    name: str = "Edit Kin"
+    icon: str = "family"
+
+    def execute(  # noqa: C901, PLR0912, PLR0915 — one straight-line relation dispatch
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.roster.constants import DefinitionTier, MembershipBasis  # noqa: PLC0415
+        from world.roster.models import (  # noqa: PLC0415
+            Family,
+            FamilyMembership,
+            Kinsperson,
+            UnionKind,
+        )
+        from world.roster.services.kinship import (  # noqa: PLC0415
+            KinshipServiceError,
+            add_membership,
+            record_parentage,
+            record_union,
+        )
+        from world.seeds.kinship import MARRIAGE_KIND_NAME  # noqa: PLC0415
+        from world.societies.houses.almanach import (  # noqa: PLC0415
+            add_household_member,
+            record_public_belief,
+        )
+        from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
+        from world.societies.houses.services import (  # noqa: PLC0415
+            HousesServiceError,
+            acknowledge_into_family,
+            recognize_birth,
+        )
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        house = Organization.objects.filter(pk=kwargs.get("org_id")).first()
+        if house is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOUSE)
+        if house.family_id is None:
+            return ActionResult(success=False, message="That house has no family on record.")
+
+        kin_name = (kwargs.get("name") or "").strip()
+        relation = (kwargs.get("relation") or "").strip()
+        gender_id = kwargs.get("gender_id")
+        age = kwargs.get("age")
+        if age is not None:
+            try:
+                age = int(age)
+            except (TypeError, ValueError):
+                return ActionResult(success=False, message="Age must be a number.")
+        is_deceased = bool(kwargs.get("is_deceased"))
+
+        # Resolve and validate EVERYTHING before the first write below (the
+        # atomic block that follows) — a bare ``return`` inside
+        # ``transaction.atomic()`` does not roll it back (only a propagating
+        # exception does), so any check found only mid-block would risk
+        # committing a partial write (e.g. an orphan Kinsperson) alongside a
+        # reported failure.
+        parent = spouse = marriage_kind = born_into_family = None
+        if relation == ClaimKinRelation.CHILD:
+            parent_id = kwargs.get("parent_kinsperson_id")
+            parent = Kinsperson.objects.filter(pk=parent_id).first() if parent_id else None
+            if parent is None:
+                return ActionResult(success=False, message="Pick the child's parent.")
+        elif relation == ClaimKinRelation.SPOUSE:
+            spouse_id = kwargs.get("spouse_kinsperson_id")
+            spouse = Kinsperson.objects.filter(pk=spouse_id).first() if spouse_id else None
+            if spouse is None:
+                return ActionResult(success=False, message="Pick the spouse.")
+            marriage_kind = UnionKind.objects.filter(name=MARRIAGE_KIND_NAME).first()
+            if marriage_kind is None:
+                return ActionResult(
+                    success=False, message="Marriage is not configured for this realm."
+                )
+        born_into_family_id = kwargs.get("born_into_family_id")
+        if born_into_family_id:
+            born_into_family = Family.objects.filter(pk=born_into_family_id).first()
+            if born_into_family is None:
+                return ActionResult(success=False, message="No such family.")
+        node = None
+        kinsperson_id = kwargs.get("kinsperson_id")
+        if kinsperson_id:
+            node = Kinsperson.objects.filter(pk=kinsperson_id).first()
+            if node is None:
+                return ActionResult(success=False, message="No such kinsperson.")
+
+        vacancy = None
+        try:
+            with transaction.atomic():
+                if node is not None:
+                    node.name = kin_name
+                    node.gender_id = gender_id
+                    node.age = age
+                    node.is_deceased = is_deceased
+                    node.save(update_fields=["name", "gender", "age", "is_deceased"])
+                else:
+                    node = Kinsperson.objects.create(
+                        definition_tier=DefinitionTier.NAME_ONLY,
+                        name=kin_name,
+                        gender_id=gender_id,
+                        age=age,
+                        is_deceased=is_deceased,
+                    )
+
+                if relation == ClaimKinRelation.CHILD:
+                    record_parentage(child=node, parent=parent)
+                    if recognize_birth(node) is None:
+                        acknowledge_into_family(node, house.family)
+                elif relation == ClaimKinRelation.SPOUSE:
+                    record_union(kind=marriage_kind, members=[node, spouse])
+                    add_membership(
+                        kinsperson=node, family=house.family, basis=MembershipBasis.MARRIED_IN
+                    )
+                elif relation == ClaimKinRelation.HEAD:
+                    has_members = FamilyMembership.objects.filter(
+                        family=house.family, ended_at__isnull=True
+                    ).exists()
+                    basis = MembershipBasis.BORN if has_members else MembershipBasis.FOUNDING
+                    add_membership(kinsperson=node, family=house.family, basis=basis)
+
+                if born_into_family is not None:
+                    basis = kwargs.get("basis") or MembershipBasis.BORN
+                    add_membership(
+                        kinsperson=node, family=born_into_family, basis=basis, is_primary=False
+                    )
+
+                if kwargs.get("is_household"):
+                    position = dict(ClaimKinRelation.choices).get(relation) or "Ward"
+                    vacancy = add_household_member(house=house, kinsperson=node, position=position)
+
+                if "believed_deceased" in kwargs:  # noqa: STRING_LITERAL
+                    record_public_belief(node, believed_deceased=bool(kwargs["believed_deceased"]))
+        except (HousesServiceError, KinshipServiceError) as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        data: dict[str, Any] = {"kinsperson_id": node.pk, "org_id": house.pk}
+        if vacancy is not None:
+            data["vacancy_id"] = vacancy.pk
+        return ActionResult(
+            success=True, message=f"{node.name or 'The kinsperson'} recorded.", data=data
+        )
+
+
+@dataclass
+class AlmanachPublishAction(_AlmanachAction):
+    """Publish (or unpublish) a house to the Almanach. Kwargs: ``org_id``, ``publish``."""
+
+    key: str = "almanach_publish"
+    name: str = "Publish House"
+    icon: str = "shield"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import publish_house, unpublish_house  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        org = Organization.objects.filter(pk=kwargs.get("org_id")).first()
+        if org is None:
+            return ActionResult(success=False, message=_NO_SUCH_HOUSE)
+        if kwargs.get("publish"):
+            org = publish_house(org)
+            message = f"{org.name} published to the Almanach."
+        else:
+            org = unpublish_house(org)
+            message = f"{org.name} pulled back to draft."
+        return ActionResult(success=True, message=message, data={"org_id": org.pk})
