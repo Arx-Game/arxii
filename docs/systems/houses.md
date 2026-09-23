@@ -116,7 +116,10 @@ MOST_POWERFUL_GIFTED plug. `HousesServiceError.user_message` on refusals.
 ## Surfaces
 
 - **REST:** `OrganizationSerializer.house` block (family, liege, vassals,
-  titles, domains; null for non-family orgs) +
+  titles, domains, `house_state` and `demesne` — the count of baronies the
+  house holds, the Almanach document's own rule via
+  `almanach_reads.demesne_count` over the titles the payload already has, so
+  an org page needs no second reader; null for non-family orgs) +
   `/api/societies/organizations/{id}/feed/` (house feed).
 - **House feed:** `world/tidings/services.house_feed_for(org)` — member deeds +
   revealed scandals, query-and-merge, no feed model (replaces Arx 1 informs).
@@ -186,7 +189,10 @@ describes.
   (`HouseClaimAdmin` actions).
 - **Materialization at CG finalization** (`materialize_house_claim`, called
   from `_bind_house_claim` before the kinship bind): Family + org (+rank
-  ladder, principle overrides) + fealty to the template liege + the whole
+  ladder, principle overrides) + fealty to the **containment liege** (the
+  holder of the nearest HELD rung above the claimed title, `liege_for_title`;
+  `HouseTemplate.liege` is the fallback only when no ancestor is held or the
+  title is landless — the Liege rule, #3983) + the whole
   claimed seat chain (plus any loose baronies it swallows, `claim_grants` —
   #3983 Plan B, see "Founder claims" below) seated via `assign_holder` + the
   founder-written kin tree placed relative to the head of house + the
@@ -462,7 +468,11 @@ actions telnet would.
 - **`assign_holder(title, house) -> Title`** — seats `house` on the whole chain, swears it to its
   own nearest liege, and calls `rehome_vassals`.
 - **`rehome_vassals(title) -> int`** — re-swears every held chain beneath `title` whose nearest
-  held ancestor is now `title`'s holder onto it. Returns the count moved.
+  held ancestor is now `title`'s holder onto it, and only then: interposition is the only case
+  that moves an oath (`_may_rehome_to`). A house `title`'s holder itself answers to — the crown's
+  own loose barony lying inside one of its vassals' counties — and a house whose real fealty is
+  elsewhere entirely both stay HELD, not sworn; the first would invert the tree and the second's
+  primary `FealtyEdge` (and its tithe) is not this rung's to delete. Returns the count moved.
 
 ### House record
 
@@ -477,12 +487,21 @@ actions telnet would.
   `Area` under a city (or a named district within it) and records the house's active
   `LocationOwnership`.
 - **`add_household_member(*, house, kinsperson, rank=None, position="Ward")`** — records a
-  household member as a filled retainer `Vacancy` at the house's `Household` rank (minted lazily,
+  household member as a filled retainer `Vacancy` titled after the member (`record_kin` names a
+  ward's row `Ward: <name>`, since `Vacancy` is unique on `(organization, name)` and a shared
+  "Ward" title made a second ward take the first's row) at the house's `Household` rank (minted
+  lazily,
   one tier below the org's current lowest rank, the first time a household member needs it). Never
   a `kin_node`/`kin_pool` Vacancy — that link is what marks an appable kin slot a founder can claim
   at CG, and a household member is staff/service-placed, never appable (ADR-0311). A sheeted
   kinsperson with a primary persona additionally gets a real `OrganizationMembership` at the
   Household rank.
+- **`open_household_position(*, house, position) -> Vacancy`** — posts an OPEN household position:
+  a titled post with nobody in it yet ("Master-at-arms · position · open"), a retainer `Vacancy` at
+  the same `Household` rank with `count_remaining=1` and no holder. No `Kinsperson` is minted — a
+  post is not a person, and `record_kin` refuses a `position` relation outright for that reason.
+  `Vacancy` is unique on `(organization, name)`, so re-posting the same title re-opens the same row
+  and an existing holder on it is left alone (filling a post is `add_household_member`'s job).
 - **`record_public_belief(kinsperson, *, believed_deceased)`** — sets what the public record
   believes about a kinsperson's death, independent of `Kinsperson.is_deceased` (the private truth,
   ADR-0312); see `docs/systems/kinship.md`.
@@ -491,13 +510,21 @@ actions telnet would.
 
 - **`ladder_for_realm(realm, *, for_founder=False) -> LadderPayload`** — one `LadderRow` per
   `Title` in the realm (state, seat, demesne, vassals, sworn-to, per-tier unclaimed counts).
+  `chain_top_id` is the title_id of the chain top a row belongs to (itself, for a top): that is
+  what a client keys chain membership on, because `comes_with` carries the top's NAME and is
+  therefore `""` for an undefined top — exactly the rows a founder claiming an undefined slot most
+  needs grouped. `claimant_name` is `Title.claimant_org`'s name (`""` when nothing contests it).
   `for_founder=True` hides any rung whose own house, or any held house above it, isn't published
   yet — an unclaimed rung stays visible as long as nothing unpublished sits above it.
 - **`document_for_house(house, *, viewer, staff) -> HouseDocument`** — the whole Almanach house
   page in one read: `house` (the charter block), `family` (viewer-gated kinship tree, same
   visibility contract as every other kinship read), `household` (retainer Vacancies at the
-  Household rank), `realm` (the house's own sworn-to/demesne/vassals standing), `lands` (held
-  baronies + what they produce), `estate` (owned buildings sitting under a city).
+  Household rank), `realm` (the house's own sworn-to/demesne/vassals standing, plus `realm_id`,
+  `default_tithe_pct` and `realm_theme` off `realm_for_house` — the theme is what gates Gentry as a
+  standing a Luxen house may take), `lands` (held baronies + what they produce), `estate` (owned
+  buildings sitting under a city). `staff=True` reads the family with the omniscient viewer, so a
+  believed death shows as a living person the world thinks is dead; every other viewer reads the
+  belief as the truth (see `docs/systems/kinship.md`).
 
 Both reads share one in-memory pass over the realm's `Title`/`Area` graph (`_realm_graph`,
 `_build_rows`) rather than per-row queries — the area-closure materialized view is Postgres-only
@@ -561,7 +588,13 @@ carries the plain, model-free draft shapes a serializer builds):
   time as a backstop); `estate_name` requires the draft's starting realm to
   already have an `Area.is_capital` row ("That realm has no capital yet.");
   a GRANDPARENT row needs a MOTHER or FATHER row; `founder_relation`
-  CHILD/SIBLING/SPOUSE needs a HEAD row.
+  CHILD/SIBLING/SPOUSE needs a HEAD row, and POSITION is refused outright (a
+  post is not a person); a WARD or POSITION row needs a name, since it titles
+  its own `Vacancy`; and a `land_name` already borne by any `Title` or
+  `Domain` — or used twice in one claim — is refused (`land_name_is_taken`).
+  Both names carry a partial unique, and `name_rung` writes them at finalize,
+  so without this gate the collision surfaced as an `IntegrityError` at the
+  last step of character creation.
 - **`record_kin(*, house, name, relation, ..., node=None) -> tuple[Kinsperson, Vacancy | None]`**
   (`almanach.py`) — the shared kin-writing engine both `AlmanachEditKinAction`
   (below) and founder finalize place a node through. Creates a fresh
@@ -573,20 +606,24 @@ carries the plain, model-free draft shapes a serializer builds):
   given; membership is relation-driven (HEAD gets FOUNDING/BORN, SPOUSE gets
   MARRIED_IN, CHILD with no explicit `basis` runs the same
   `recognize_birth`/`acknowledge_into_family` walk the action always used,
-  any relation WITH a `basis` joins on it directly) — WARD/POSITION rows
-  never get a family membership (household retainers are staff-placed, not
-  family).
+  any relation WITH a `basis` joins on it directly) — WARD rows never get a
+  family membership (household retainers are staff-placed, not family), and a
+  POSITION relation is refused outright: an open post is a bare `Vacancy`
+  (`open_household_position`), never a person.
 - **`materialize_house_claim` seats the whole grant**: `claim_grants(top)`
   once, `assign_holder` on the chain top (which seats every chain member at
   once) and on each loose-barony extra individually (`assign_holder` refuses
   a title that isn't its own chain's top); land rows then `name_rung` an
   undefined title and `describe_demesne` whichever rungs the founder wrote
   land for. Kin place in order — head, then parents, then grandparents, then
-  spouse, then siblings, then children, then household — each via
-  `record_kin`; the founder's own node places last, by
+  spouse, then siblings, then children, then wards — each via `record_kin`,
+  while each POSITION row becomes an open post
+  (`open_household_position`); the founder's own node places last, by
   `HouseClaim.founder_relation` (HEAD places the founder directly; anything
   else places the already-written HEAD row first and the founder relative to
-  it). `HouseClaim.founder_is_heir` stays a claim fact only — `Title` has no
+  it, always on `MembershipBasis.BORN` for a CHILD/SIBLING/parent placement —
+  a legitimized basis would style the founder's own name with the taken-in
+  particle). `HouseClaim.founder_is_heir` stays a claim fact only — `Title` has no
   heir field of its own (`SuccessionLaw.chosen_heir` is a different, law-level
   concept), so nothing writes it anywhere yet. An optional estate
   (`plan_estate`) plants under the draft's (or the sheet's) starting realm's
@@ -609,7 +646,9 @@ itself.
   (`/api/almanach/houses/`, `/document/`) stays `IsAdminUser`. Character-creation's own
   `ClaimableTitleViewSet` (`GET /api/character-creation/house-titles/`) lists every
   `is_claimable=True, house__isnull=True, holder__isnull=True` title with its `templates_for_title`
-  options — a flat catalog, independent of the ladder's own liege/publication gate.
+  options, minus the two the ladder also hides: a title whose containment liege is unpublished, and
+  a title that is only an internal member of its own chain (`_validate_seat_gates` would refuse
+  either on submit, so neither is a real target here).
 - **The charter** (`charter_for_realm(realm) -> RealmCharter`, `almanach_reads.py`) — the founder's
   defaults BEFORE any claim exists, read straight off the realm's tier-less fallback
   `HouseTemplate` (or its first by name): `succession_law` (`{name, codex_entry_id}`),
@@ -694,9 +733,20 @@ uses), or edits an existing one (`kinsperson_id` given). An update touches ONLY 
 kwarg leaves the value untouched, and a `gender_id` passed as falsy still clears the gender, since
 it's the kwarg's ABSENCE, not its value, that makes a field a no-op. An update refuses outright
 when `kinsperson_id`'s `family_id` isn't the house's own family, or when any relation-only kwarg
-(`relation`/`parent_kinsperson_id`/`spouse_kinsperson_id`/`born_into_family_id`) rides along with
-`kinsperson_id` — relation, marriage, membership and household side effects run exactly once, at
-creation, and never re-fire on a later edit.
+(`relation`/`parent_kinsperson_id`/`spouse_kinsperson_id`/`relative_kinsperson_id`/
+`born_into_family_id`) rides along with `kinsperson_id` — relation, marriage, membership and
+household side effects run exactly once, at creation, and never re-fire on a later edit.
+
+On create, **every relation is anchored to somebody**: `child` takes
+`parent_kinsperson_id`, `spouse` takes `spouse_kinsperson_id`, and
+`mother`/`father`/`sibling`/`grandparent` take `relative_kinsperson_id` — the person the new node
+is written relative to (a parent of that relative; for `sibling`, a node sharing that relative's
+own parents; for `grandparent`, a parent of a relative who must itself be somebody's parent). All
+four join the family on `MembershipBasis.BORN`. Unanchored, those four wrote no edge and no
+membership at all, so `family_tree_for` never listed the node and nothing could select it again.
+`relation="position"` is not a person: it posts an open household `Vacancy` titled by `name`
+(`open_household_position`) and returns only its `vacancy_id`; a `ward` needs a name of its own,
+since it titles its own row.
 
 ### API (`almanach_views.py`, `almanach_urls.py`)
 

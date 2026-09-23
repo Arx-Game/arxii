@@ -62,6 +62,15 @@ only by `world.societies.houses.almanach.record_public_belief`; renders as
 parentage secret) makes a row's public face diverge from what actually
 happened. See ADR-0312.
 
+**Reading it is viewer-gated like every other kinship fact** (`_node_dict`,
+#3983): an ordinary viewer's tree node reports
+`is_deceased = is_deceased or believed_deceased` and carries no
+`believed_deceased` key at all — shipping the flag beside the truth would
+hand any client the very fact it hides — while the `OMNISCIENT` sentinel
+(staff, the Almanach's staff-only house document) gets both raw. A house that
+puts it about that its heir died is therefore not contradicted by its own
+public tree.
+
 ## Heredity service (`world.roster.services.heredity`, #2815)
 
 Parent Dominance: species inheritance is magical and maternal by default.

@@ -136,9 +136,14 @@ is a different thing again — the literal enum label for a house's ordinary, no
 state; don't conflate the three.
 
 **Household** (#3983):
-A house's own retainer band — staff/service-placed, never appable — recorded as filled `Vacancy`
+A house's own retainer band — staff/service-placed, never appable — recorded as `Vacancy`
 rows at the org's `Household` `OrganizationRank` (minted lazily by `add_household_member`, one
-tier below the org's current lowest rank, the first time a household member needs it). Carries no
+tier below the org's current lowest rank, the first time a household member needs it). A row is
+either a **household member** (a person the house has: filled, titled after its holder, written by
+`add_household_member`) or an **open position** (a post the house has yet to fill: no holder,
+`count_remaining=1`, titled by the job, written by `open_household_position`). The two never
+collapse into one another — an open post mints no `Kinsperson`, because a job is not a person, and
+`record_kin` refuses a `position` relation outright to keep that honest. Carries no
 `kin_node`/`kin_pool` link and mints no `FamilyMembership`: household stands apart from FAMILY
 (`world.roster`'s kinship graph) entirely — a ward or guard belongs to the house's service, not
 its bloodline or name (ADR-0311).
@@ -147,7 +152,9 @@ roster (no separate model exists — a household member IS a `Vacancy` row); hou
 synonym for Upbringing (a stale sense from CG vocabulary predating #3983 — see roster glossary's
 Upbringing entry); "Ward" as a place — `world.areas.AGENT_GLOSSARY.md`'s Ward entry is a
 DIFFERENT concept (`AreaLevel.WARD`, a city subdivision the founder UI calls "district") that
-happens to share this word; a house's Ward is a household position, never a location.
+happens to share this word; a house's Ward is a household position, never a location; a phantom
+person named after a post (a `Kinsperson` called "Master-at-arms") — that is an **open position**,
+a `Vacancy` with nobody in it.
 
 **Recognition (birth)**:
 A realm's law deciding whether a newborn belongs to a parent's house — `HouseRecognitionRule` rows applied to public-record parentage edges by `recognize_birth`. The mother's-option case is an explicit human call (`acknowledge_into_family`), never auto-resolved.

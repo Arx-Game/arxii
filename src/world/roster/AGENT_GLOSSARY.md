@@ -63,7 +63,13 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   only by `world.societies.houses.almanach.record_public_belief`. Renders as
   "hidden truth" on the Almanach's family tree wherever it (or a touching
   parentage secret) makes a row's public face diverge from what actually
-  happened. _Avoid:_ is_deceased (that's the truth, not the belief); folding
+  happened. Reading it is viewer-gated like every other kinship fact
+  (`_node_dict`): an ordinary viewer's tree node reports
+  `is_deceased = is_deceased or believed_deceased` and carries no
+  `believed_deceased` key at all, while `OMNISCIENT` gets both raw.
+  _Avoid:_ is_deceased (that's the truth, not the belief); shipping the flag
+  beside the truth to a player-facing reader (that hands the client the fact
+  it hides); folding
   it into `is_public_record`/`is_true` (those apply to edges/unions/
   incarnations, not a bare person fact).
 - **Subject-unaware secret** — `Secret.subject_aware=False`: a truth about
