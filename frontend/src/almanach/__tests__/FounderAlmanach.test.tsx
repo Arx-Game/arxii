@@ -249,3 +249,40 @@ test(`a stored template_id: null falls back to the title's first template instea
     mockTitles = [];
   }
 });
+
+test('claiming a rung persists the title, the realm and the template together', async () => {
+  mockTitles = [
+    {
+      id: 2,
+      name: 'Solfatara',
+      tier: 'county',
+      realm_name: 'Inferna',
+      seat_domain_name: '',
+      templates: [
+        {
+          id: 950,
+          name: 'Ducal Charter',
+          kind: 1,
+          aspect_definitions: [],
+          features: [],
+          holdings: [],
+          default_succession_law: null,
+          starting_kin_slots: 3,
+        },
+      ],
+    },
+  ];
+  const draft = createMockDraft({ id: 505 });
+  window.localStorage.removeItem('almanach-founder-505');
+  renderWithProviders(<FounderAlmanach draft={draft} />);
+  const claim = await screen.findByRole('button', { name: /Claim Solfatara/ });
+  await userEvent.click(claim);
+  const stored = JSON.parse(window.localStorage.getItem('almanach-founder-505') ?? '{}') as {
+    title_id: number | null;
+    realm_id: number | null;
+    template_id: number | null;
+  };
+  expect(stored.title_id).toBe(2);
+  expect(stored.realm_id).not.toBeNull();
+  expect(stored.template_id).toBe(950);
+});

@@ -93,6 +93,37 @@
   gap: 2.2rem;
   padding: 1.8rem 1.6rem 2rem;
 }
+/* Grid items default to min-width:auto, so a wide ladder table would push the
+   chapter's column into the record rail instead of scrolling inside `.scroll`;
+   the three columns must be allowed to shrink to their tracks. */
+.almanach .contents,
+.almanach .chapter,
+.almanach .record {
+  min-width: 0;
+}
+/* The Almanach also mounts inside character creation's reading column (the
+   founder's "Define a house"), where three railed columns do not fit: size the
+   spread by its own container, not the viewport. Below 64rem the contents rail
+   becomes a strip above a two-column chapter | record; below 44rem one column. */
+.almanach {
+  container-type: inline-size;
+}
+@container (max-width: 64rem) {
+  .almanach .almanac {
+    grid-template-columns: minmax(0, 1fr) 17rem;
+  }
+  .almanach .contents {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+  }
+}
+@container (max-width: 44rem) {
+  .almanach .almanac {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 900px) {
   .almanach .almanac {
     grid-template-columns: 1fr;

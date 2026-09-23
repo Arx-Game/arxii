@@ -9,7 +9,7 @@
  * disabled storage degrade to "nothing remembered," never a crash — the
  * page must still render.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { HouseClaimPayload, HouseTemplateOption } from '@/character-creation/api';
 import type { ClaimKinRelation } from '@/character-creation/types';
@@ -128,50 +128,63 @@ export interface UseFounderDraftResult {
  * (Task 6) submits it. */
 export function useFounderDraft(draftId: number): UseFounderDraftResult {
   const [draft, setDraftState] = useState<FounderDraft>(() => readFounderDraft(draftId));
+  // The latest draft, independent of React's render cycle: two mutators
+  // called back to back in one handler (a claim writes title, realm and
+  // template together) must each build on the other's result, not on the
+  // `draft` value captured when the handler started.
+  const latest = useRef<FounderDraft>(draft);
 
   useEffect(() => {
-    setDraftState(readFounderDraft(draftId));
+    const fresh = readFounderDraft(draftId);
+    latest.current = fresh;
+    setDraftState(fresh);
     // Only re-sync when the draft identity changes.
   }, [draftId]);
 
-  const persist = (next: FounderDraft) => {
+  const persist = (build: (current: FounderDraft) => FounderDraft) => {
+    const next = build(latest.current);
+    latest.current = next;
     setDraftState(next);
     writeFounderDraft(draftId, next);
   };
 
   const set = <K extends keyof FounderDraft>(k: K, v: FounderDraft[K]) => {
-    persist({ ...draft, [k]: v });
+    persist((current) => ({ ...current, [k]: v }));
   };
 
   const addKin = (k: Omit<FounderKin, 'key'>) => {
-    persist({ ...draft, kin: [...draft.kin, { ...k, key: nextKinKey() }] });
+    persist((current) => ({ ...current, kin: [...current.kin, { ...k, key: nextKinKey() }] }));
   };
 
   const updateKin = (key: string, patch: Partial<FounderKin>) => {
-    persist({
-      ...draft,
-      kin: draft.kin.map((kin) => (kin.key === key ? { ...kin, ...patch } : kin)),
-    });
+    persist((current) => ({
+      ...current,
+      kin: current.kin.map((kin) => (kin.key === key ? { ...kin, ...patch } : kin)),
+    }));
   };
 
   const removeKin = (key: string) => {
-    persist({ ...draft, kin: draft.kin.filter((kin) => kin.key !== key) });
+    persist((current) => ({ ...current, kin: current.kin.filter((kin) => kin.key !== key) }));
   };
 
   const setLand = (titleId: number, patch: Partial<FounderLand>) => {
-    const existing: FounderLand = draft.lands[titleId] ?? {
-      title_id: titleId,
-      land_name: '',
-      description: '',
-      hall_name: '',
-      land_shape_names: [],
-    };
-    persist({ ...draft, lands: { ...draft.lands, [titleId]: { ...existing, ...patch } } });
+    persist((current) => {
+      const existing: FounderLand = current.lands[titleId] ?? {
+        title_id: titleId,
+        land_name: '',
+        description: '',
+        hall_name: '',
+        land_shape_names: [],
+      };
+      return { ...current, lands: { ...current.lands, [titleId]: { ...existing, ...patch } } };
+    });
   };
 
   const reset = () => {
     removeFounderDraft(draftId);
-    setDraftState(emptyDraft());
+    const empty = emptyDraft();
+    latest.current = empty;
+    setDraftState(empty);
   };
 
   return { draft, set, addKin, updateKin, removeKin, setLand, reset };

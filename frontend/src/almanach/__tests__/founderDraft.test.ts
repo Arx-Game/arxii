@@ -146,3 +146,22 @@ test('useFounderDraft starts empty and renders even when localStorage throws', (
 
   vi.restoreAllMocks();
 });
+
+describe('useFounderDraft composes writes made in one handler', () => {
+  it('keeps every field when set is called three times back to back', () => {
+    localStorage.clear();
+    const { result } = renderHook(() => useFounderDraft(77));
+    act(() => {
+      result.current.set('title_id', 12);
+      result.current.set('realm_id', 3);
+      result.current.set('template_id', 950);
+    });
+    expect(result.current.draft.title_id).toBe(12);
+    expect(result.current.draft.realm_id).toBe(3);
+    expect(result.current.draft.template_id).toBe(950);
+    const stored = JSON.parse(localStorage.getItem('almanach-founder-77') ?? '{}') as FounderDraft;
+    expect(stored.title_id).toBe(12);
+    expect(stored.realm_id).toBe(3);
+    expect(stored.template_id).toBe(950);
+  });
+});
