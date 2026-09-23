@@ -14,6 +14,8 @@ interface ActionAttachmentProps {
   onAttach: (action: ActionAttachmentInfo) => void;
   onDetach: () => void;
   targetName?: string;
+  /** Correlation id for the send that owns this attachment. */
+  actionRequestId?: string | null;
 }
 
 export function ActionAttachment({
@@ -22,6 +24,7 @@ export function ActionAttachment({
   onAttach,
   onDetach,
   targetName,
+  actionRequestId = null,
 }: ActionAttachmentProps) {
   const [open, setOpen] = useState(false);
 
@@ -61,9 +64,14 @@ export function ActionAttachment({
   }, [attachmentIdentity]);
   const handleActionResult = useCallback(
     (payload: ActionResultPayload) => {
-      if (attachmentIdentity && payload.success) setAcknowledged(true);
+      if (
+        attachmentIdentity &&
+        payload.success &&
+        (actionRequestId == null || payload.client_request_id === actionRequestId)
+      )
+        setAcknowledged(true);
     },
-    [attachmentIdentity]
+    [attachmentIdentity, actionRequestId]
   );
   useActionResult(handleActionResult);
 

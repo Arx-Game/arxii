@@ -30,6 +30,7 @@ import { FeedChipStrip } from './FeedChipStrip';
 import { FeedBlockControlsContext, type FeedBlockControls } from '../feedBlockControls';
 import { AttentionBadge } from '@/game/components/AttentionBadge';
 import { loadConversationAnchor, usePlayPreferences } from '../playPreferences';
+import { getNarrativeBody } from '../narrativeRetention';
 
 /** The active scene's live feed, composed once by `GamePage` (#2156). */
 export interface GameWindowSceneFeed {
@@ -37,6 +38,7 @@ export interface GameWindowSceneFeed {
   interactions: Interaction[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
+  retention?: { retained: number; evicted: number; warning: boolean; gap: boolean };
 }
 
 interface GameWindowProps {
@@ -74,7 +76,7 @@ interface GameWindowProps {
   actionAttachment?: ActionAttachmentInfo | null;
   onActionAttach?: (action: ActionAttachmentInfo) => void;
   onActionDetach?: () => void;
-  onSubmitAction?: (action: ActionAttachmentInfo) => void;
+  onSubmitAction?: (action: ActionAttachmentInfo, clientRequestId?: string) => void;
   pendingActionIds?: number[];
   detachedActionIds?: number[];
   onPoseSubmitted?: () => void;
@@ -316,6 +318,7 @@ function CharacterTabs({
 
 type GameWindowFeedProps = Pick<
   GameWindowProps,
+  | 'accountId'
   | 'sceneFeed'
   | 'conversationTabs'
   | 'reference'
@@ -350,6 +353,7 @@ type GameWindowFeedProps = Pick<
 };
 
 function GameWindowFeed({
+  accountId,
   sceneFeed,
   conversationTabs,
   reference,
@@ -458,28 +462,31 @@ function GameWindowFeed({
               </div>
             )}
             {!referenceLoading && !referenceUnavailable && !referenceRetryable && (
-              <ThreadedNarrativeReader
-                key={sceneFeed.sceneId}
-                sceneId={sceneFeed.sceneId}
-                conversationKey={sceneFeed.sceneId}
-                conversationRef={reference ? reference.key : `scene:${sceneFeed.sceneId}`}
-                interactions={sceneFeed.interactions}
-                hasNextPage={sceneFeed.hasNextPage}
-                fetchNextPage={sceneFeed.fetchNextPage}
-                onAvatarClick={onAvatarClick}
-                onAddTarget={onAddTarget}
-                onAttachAction={onAttachAction}
-                onReply={onReply}
-                readOnly={Boolean(reference)}
-                persistAnchor={activeConvKey === 'room'}
-                targetPoseId={targetPoseId}
-                isAtPlace={isAtPlace}
-                currentPlaceId={currentPlaceId}
-                currentPlaceName={currentPlaceName}
-                // A reference view reads history; the live column's notes are
-                // this session's own and do not belong in it (#3856).
-                notes={reference ? undefined : (notes ?? session.notes)}
-              />
+              <section aria-label="Roleplay" data-testid="authoritative-rp-block">
+                <ThreadedNarrativeReader
+                  key={sceneFeed.sceneId}
+                  sceneId={sceneFeed.sceneId}
+                  accountId={accountId}
+                  conversationKey={sceneFeed.sceneId}
+                  conversationRef={reference ? reference.key : `scene:${sceneFeed.sceneId}`}
+                  interactions={sceneFeed.interactions}
+                  hasNextPage={sceneFeed.hasNextPage}
+                  fetchNextPage={sceneFeed.fetchNextPage}
+                  onAvatarClick={onAvatarClick}
+                  onAddTarget={onAddTarget}
+                  onAttachAction={onAttachAction}
+                  onReply={onReply}
+                  readOnly={Boolean(reference)}
+                  persistAnchor={activeConvKey === 'room'}
+                  targetPoseId={targetPoseId}
+                  isAtPlace={isAtPlace}
+                  currentPlaceId={currentPlaceId}
+                  currentPlaceName={currentPlaceName}
+                  // A reference view reads history; the live column's notes are
+                  // this session's own and do not belong in it (#3856).
+                  notes={reference ? undefined : (notes ?? session.notes)}
+                />
+              </section>
             )}
           </div>
         </>
@@ -567,7 +574,7 @@ export function GameWindow({
   // Threads and Chronological keep their OWN anchor slot (#3759 review
   // finding I5) -- this bypass must check whichever mode is CURRENTLY
   // active, not a single shared `anchor` field that no longer exists.
-  const { preferences } = usePlayPreferences();
+  const { preferences } = usePlayPreferences(accountId);
   const activeModeAnchor = preferences.readerMode === 'chronological' ? 'chronological' : 'threads';
   // The chips (#3856) live in the per-account preferences, the store
   // DisplaySettings writes; the readerMode read above predates that and keeps
@@ -597,7 +604,12 @@ export function GameWindow({
   }, [sceneFeed, reference, chipState, dismissedKeys]);
   const visibleAmbient = useMemo(() => {
     const items = ambientInteractions ?? activeSessionForFeed?.ambientInteractions ?? [];
-    return visibleInteractions(items, chipState, dismissedKeys);
+    const hydrated = items.map((item) => ({
+      ...item,
+      content: item.content || getNarrativeBody(item)?.content || '',
+      line: item.line || getNarrativeBody(item)?.line,
+    }));
+    return visibleInteractions(hydrated, chipState, dismissedKeys);
   }, [ambientInteractions, activeSessionForFeed?.ambientInteractions, chipState, dismissedKeys]);
   const visibleNoteList = useMemo(() => {
     const items = notes ?? activeSessionForFeed?.notes ?? [];
@@ -648,7 +660,7 @@ export function GameWindow({
       activeConvKey === 'room' &&
       saved === undefined &&
       sceneFeed &&
-      loadConversationAnchor(sceneFeed.sceneId)?.anchors?.[activeModeAnchor]
+      loadConversationAnchor(sceneFeed.sceneId, accountId)?.anchors?.[activeModeAnchor]
     ) {
       pinnedRef.current = false;
     } else if (saved !== undefined) {
@@ -795,6 +807,7 @@ export function GameWindow({
           attentionOptionsFor={attentionOptionsFor}
         />
         <GameWindowFeed
+          accountId={accountId}
           sceneFeed={visibleSceneFeed}
           chipStrip={
             !reference && (

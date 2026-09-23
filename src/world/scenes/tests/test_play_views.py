@@ -138,8 +138,9 @@ class PlayReaderContractTests(APITestCase):
         self.assertIsNotNone(data["after"])
 
         def _decode(token: str) -> list:
-            padded = token + "=" * (-len(token) % 4)
-            return json.loads(base64.urlsafe_b64decode(padded).decode())
+            from django.core import signing
+
+            return signing.loads(token, salt="narrative-play-cursor-v2")["key"]
 
         # Window is rows[5:56] (start = max(0, 30-25) = 5, end = 30+26 = 56,
         # of 60 rows): `before` must decode to row 5's boundary, `after` to
@@ -254,7 +255,9 @@ class PlayReadViewTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["marked"], 1)
         self.assertTrue(
-            InteractionReadReceipt.objects.filter(account=account, interaction=interaction).exists()
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=interaction.pk
+            ).exists()
         )
 
     def test_rejects_more_than_100_poses(self) -> None:
@@ -308,7 +311,9 @@ class PlayReadViewTests(APITestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.json()["marked"], 0)
         self.assertEqual(
-            InteractionReadReceipt.objects.filter(account=account, interaction=interaction).count(),
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=interaction.pk
+            ).count(),
             1,
         )
 
@@ -339,7 +344,7 @@ class PlayReadViewMarkConversationReadTests(APITestCase):
         for interaction in interactions:
             self.assertTrue(
                 InteractionReadReceipt.objects.filter(
-                    account=account, interaction=interaction
+                    account=account, interaction_id=interaction.pk
                 ).exists()
             )
 
@@ -366,10 +371,14 @@ class PlayReadViewMarkConversationReadTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["marked"], 1)
         self.assertTrue(
-            InteractionReadReceipt.objects.filter(account=account, interaction=visible).exists()
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=visible.pk
+            ).exists()
         )
         self.assertFalse(
-            InteractionReadReceipt.objects.filter(account=account, interaction=hidden).exists()
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=hidden.pk
+            ).exists()
         )
 
     def test_timestamp_after_before_is_not_marked(self) -> None:

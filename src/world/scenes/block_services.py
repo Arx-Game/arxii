@@ -285,6 +285,30 @@ def _persona_player(persona: Persona) -> PlayerData | None:
     return _sheet_player(persona.character_sheet)
 
 
+def _block_matches_target(
+    block: Block,
+    *,
+    target: Persona,
+    initiator: Persona,
+    target_player_id: int,
+    initiator_player_id: int,
+) -> bool:
+    """Return whether a block candidate excludes the target persona."""
+    if block.blocked_player_id == target_player_id:
+        blocked_face_id, blocker_face_id = target.pk, initiator.pk
+    elif block.owner_id == target_player_id and block.blocked_player_id == initiator_player_id:
+        blocked_face_id, blocker_face_id = initiator.pk, target.pk
+    else:
+        return False
+    if block.blocked_persona_id is not None and block.blocked_persona_id != blocked_face_id:
+        return False
+    return not (
+        not block.account_level
+        and block.blocker_persona_id is not None
+        and block.blocker_persona_id != blocker_face_id
+    )
+
+
 def _block_excluded_target_ids(
     *,
     initiator_persona: Persona,
@@ -300,34 +324,23 @@ def _block_excluded_target_ids(
             | Q(blocked_player_id=initiator_player_id, owner_id__in=target_player_ids)
         )
     )
-    excluded: set[int] = set()
-    for target in targets:
-        target_player_id = player_ids_by_sheet.get(target.character_sheet_id)
-        if target_player_id is None:
-            continue
-        for block in candidates:
-            if block.blocked_player_id == target_player_id:
-                blocked_face_id = target.pk
-                blocker_face_id = initiator_persona.pk
-            elif (
-                block.owner_id == target_player_id
-                and block.blocked_player_id == initiator_player_id
-            ):
-                blocked_face_id = initiator_persona.pk
-                blocker_face_id = target.pk
-            else:
-                continue
-            if block.blocked_persona_id is not None and block.blocked_persona_id != blocked_face_id:
-                continue
-            if (
-                not block.account_level
-                and block.blocker_persona_id is not None
-                and block.blocker_persona_id != blocker_face_id
-            ):
-                continue
-            excluded.add(target.pk)
-            break
-    return excluded
+    return {
+        target.pk
+        for target in targets
+        if (
+            (target_player_id := player_ids_by_sheet.get(target.character_sheet_id)) is not None
+            and any(
+                _block_matches_target(
+                    block,
+                    target=target,
+                    initiator=initiator_persona,
+                    target_player_id=target_player_id,
+                    initiator_player_id=initiator_player_id,
+                )
+                for block in candidates
+            )
+        )
+    }
 
 
 def _mute_excluded_target_ids(

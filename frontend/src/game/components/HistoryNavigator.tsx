@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, History, CalendarDays } from 'lucide-react';
-import { fetchPlayConversations, fetchPlaySearch } from '../playQueries';
+import { fetchPlayConversations, fetchPlaySearch, PlayFetchError } from '../playQueries';
 import { ConversationThreadList } from './ConversationThreadList';
 import type { ThreadSummary } from '../playTypes';
 
@@ -44,6 +44,7 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
   const [kind, setKind] = useState<'all' | 'room' | 'whisper'>('all');
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [conversationsCursor, setConversationsCursor] = useState<string | undefined>(undefined);
+  const [searchCursor, setSearchCursor] = useState<string | undefined>(undefined);
   // At most one conversation's threads are open at a time: the three sidebar
   // modes share one scroll container, and several expanded lists at once turn
   // the History pane into a wall of nested lists (#3772).
@@ -55,24 +56,34 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
     return d.toISOString().slice(0, 10);
   }, []);
   const conversations = useQuery({
-    queryKey: ['play-conversations', from, to, showAllHistory, conversationsCursor],
+    queryKey: ['play-conversations', from, to, kind, showAllHistory, conversationsCursor],
     queryFn: () =>
       fetchPlayConversations({
         from: from || (showAllHistory ? undefined : ninetyDaysAgo),
         to: to || undefined,
+        all: showAllHistory,
+        ...(kind === 'all' ? {} : { kind }),
         after: conversationsCursor,
       }),
     staleTime: 30_000,
   });
   const search = useQuery({
-    queryKey: ['play-search', submitted, from, to, kind],
+    queryKey: ['play-search', submitted, from, to, kind, searchCursor],
     queryFn: () =>
-      fetchPlaySearch(
-        submitted,
-        from || ninetyDaysAgo,
-        to || undefined,
-        kind === 'all' ? undefined : kind
-      ),
+      searchCursor
+        ? fetchPlaySearch(
+            submitted,
+            from || ninetyDaysAgo,
+            to || undefined,
+            kind === 'all' ? undefined : kind,
+            { after: searchCursor }
+          )
+        : fetchPlaySearch(
+            submitted,
+            from || ninetyDaysAgo,
+            to || undefined,
+            kind === 'all' ? undefined : kind
+          ),
     enabled: submitted.length >= 2,
     staleTime: 30_000,
   });
@@ -91,6 +102,7 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitted(query.trim());
+          setSearchCursor(undefined);
         }}
       >
         <label className="sr-only" htmlFor="history-search">
@@ -153,6 +165,13 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
           </select>
         </label>
       </form>
+      {search.isError && (
+        <p className="text-sm text-muted-foreground">
+          {search.error instanceof PlayFetchError && search.error.retry
+            ? 'This search page is stale. Reload history and try again.'
+            : 'Search is unavailable right now.'}
+        </p>
+      )}
       {search.isLoading && <p className="text-sm text-muted-foreground">Searching…</p>}
       {submitted.length >= 2 && !search.isLoading && search.data?.results.length === 0 && (
         <p className="text-sm text-muted-foreground">No accessible matches.</p>
@@ -176,6 +195,15 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
           <span className="mt-1 block text-xs text-muted-foreground">{result.excerpt}</span>
         </button>
       ))}
+      {search.data?.after && (
+        <button
+          type="button"
+          className="block w-full rounded border p-2 text-center text-sm hover:bg-accent"
+          onClick={() => setSearchCursor(search.data?.after ?? undefined)}
+        >
+          Next search page
+        </button>
+      )}
       <div className="border-t pt-3">
         <button
           type="button"
@@ -190,6 +218,13 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
         <h3 className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
           <CalendarDays className="h-3 w-3" /> Recent conversations
         </h3>
+        {conversations.isError && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {conversations.error instanceof PlayFetchError && conversations.error.retry
+              ? 'This history page is stale. Reload and try again.'
+              : 'History is unavailable right now.'}
+          </p>
+        )}
         {conversations.isLoading && (
           <p className="mt-2 text-sm text-muted-foreground">Loading history…</p>
         )}

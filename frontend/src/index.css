@@ -434,7 +434,15 @@
   padding-right: env(safe-area-inset-right);
   padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
 }
+.play-sidebar-resize {
+  display: none;
+}
 @media (min-width: 960px) {
+  .play-sidebar-resize {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .play-workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr) var(--play-sidebar-width);

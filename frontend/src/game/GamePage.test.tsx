@@ -1697,10 +1697,15 @@ describe('GamePage', () => {
       // Pre-seed localStorage for the fixture character+scene BEFORE the
       // scene/session exists in Redux — the hydration effect reads this on
       // first render once `active`+`sceneId` are both set.
-      saveThreadTabs(ACTIVE_NAME, '100', {
-        openThreadTabs: ['whisper:9'],
-        activeThreadTab: 'whisper:9',
-      });
+      saveThreadTabs(
+        ACTIVE_NAME,
+        '100',
+        {
+          openThreadTabs: ['whisper:9'],
+          activeThreadTab: 'whisper:9',
+        },
+        1
+      );
 
       seedActiveSceneWithPose();
 
@@ -1726,10 +1731,15 @@ describe('GamePage', () => {
       // on STORAGE, not just the DOM: the DOM self-heals on the corrective
       // re-render, but a durable empty write underneath would go unnoticed.
       store.dispatch(setAccount(mockAccount));
-      saveThreadTabs(ACTIVE_NAME, '100', {
-        openThreadTabs: ['whisper:9'],
-        activeThreadTab: 'whisper:9',
-      });
+      saveThreadTabs(
+        ACTIVE_NAME,
+        '100',
+        {
+          openThreadTabs: ['whisper:9'],
+          activeThreadTab: 'whisper:9',
+        },
+        1
+      );
 
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
@@ -1737,8 +1747,8 @@ describe('GamePage', () => {
       const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
       await within(tablist).findByText('Whisper');
 
-      expect(localStorage.getItem(`arx:threadTabs:${ACTIVE_NAME}:100`)).not.toBeNull();
-      expect(loadThreadTabs(ACTIVE_NAME, '100')).toEqual({
+      expect(localStorage.getItem(`arx:threadTabs:v2:account:1:${ACTIVE_NAME}:100`)).not.toBeNull();
+      expect(loadThreadTabs(ACTIVE_NAME, '100', 1)).toEqual({
         openThreadTabs: ['whisper:9'],
         activeThreadTab: 'whisper:9',
       });
@@ -1751,10 +1761,15 @@ describe('GamePage', () => {
       // for A a second time with no self-heal render to fall back on if
       // anything raced. Assert A's storage survives the round trip untouched.
       store.dispatch(setAccount(mockAccount));
-      saveThreadTabs(ACTIVE_NAME, '100', {
-        openThreadTabs: ['whisper:9'],
-        activeThreadTab: 'whisper:9',
-      });
+      saveThreadTabs(
+        ACTIVE_NAME,
+        '100',
+        {
+          openThreadTabs: ['whisper:9'],
+          activeThreadTab: 'whisper:9',
+        },
+        1
+      );
 
       seedActiveSceneWithPose();
       store.dispatch(startSession(SECOND_NAME));
@@ -1783,7 +1798,7 @@ describe('GamePage', () => {
       store.dispatch(setActiveSession(ACTIVE_NAME));
 
       await waitFor(() => {
-        expect(loadThreadTabs(ACTIVE_NAME, '100')).toEqual({
+        expect(loadThreadTabs(ACTIVE_NAME, '100', 1)).toEqual({
           openThreadTabs: ['whisper:9'],
           activeThreadTab: 'whisper:9',
         });
@@ -2078,10 +2093,14 @@ describe('GamePage', () => {
       // render -- this is what makes GameWindow.tsx's bypass condition
       // (`activeConvKey === 'room' && no per-tab entry yet && an anchor
       // exists`) true on this FIRST room visit.
-      saveConversationAnchor('100', {
-        anchors: { threads: { poseId: '1', threadId: null, offsetPx: 0 }, chronological: null },
-        expanded: [],
-      });
+      saveConversationAnchor(
+        '100',
+        {
+          anchors: { threads: { poseId: '1', threadId: null, offsetPx: 0 }, chronological: null },
+          expanded: [],
+        },
+        1
+      );
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);

@@ -31,8 +31,11 @@ export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
   feedAll: true,
 };
 
-const STORAGE_KEY = 'arx:play-preferences:v2';
-const LEGACY_STORAGE_KEY = 'arx:play-preferences:v1';
+const STORAGE_PREFIX = 'arx:play-preferences:v2:account:';
+
+function reportStorageFailure(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('arx-play-storage-warning'));
+}
 
 function clamp(value: unknown, minimum: number, maximum: number, fallback: number): number {
   const number = Number(value);
@@ -40,14 +43,16 @@ function clamp(value: unknown, minimum: number, maximum: number, fallback: numbe
 }
 
 export function playPreferencesKey(accountId?: number | null): string {
-  return accountId == null ? STORAGE_KEY : `${STORAGE_KEY}:account:${accountId}`;
+  return `${STORAGE_PREFIX}${accountId == null ? 'anonymous' : accountId}`;
 }
 
 export function loadPlayPreferences(accountId?: number | null): PlayPreferences {
   try {
     const stored =
-      window.localStorage.getItem(playPreferencesKey(accountId)) ??
-      window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      // Unscoped legacy values are intentionally ignored. There is no legacy
+      // account data to migrate, and adopting it could leak one account's
+      // reader preferences into another account.
+      window.localStorage.getItem(playPreferencesKey(accountId));
     const value = stored ? (JSON.parse(stored) as Partial<PlayPreferences>) : null;
     if (!value) return DEFAULT_PLAY_PREFERENCES;
     const normalized: PlayPreferences = {
@@ -66,6 +71,7 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
     }
     return normalized;
   } catch {
+    reportStorageFailure();
     return DEFAULT_PLAY_PREFERENCES;
   }
 }
@@ -79,6 +85,7 @@ export function savePlayPreferences(
     return true;
   } catch {
     // Storage can be disabled; callers continue with in-memory preferences.
+    reportStorageFailure();
     return false;
   }
 }
@@ -211,7 +218,7 @@ export interface ConversationAnchorState {
   expanded: string[];
 }
 
-const ANCHOR_STORAGE_KEY = 'arx:play-anchors:v1';
+const ANCHOR_STORAGE_PREFIX = 'arx:play-anchors:v2:account:';
 const MAX_STORED_CONVERSATIONS = 100;
 
 interface AnchorStore {
@@ -219,9 +226,13 @@ interface AnchorStore {
   entries: Record<string, ConversationAnchorState>;
 }
 
-function loadAnchorStore(): AnchorStore {
+function anchorStorageKey(accountId?: number | null): string {
+  return `${ANCHOR_STORAGE_PREFIX}${accountId == null ? 'anonymous' : accountId}`;
+}
+
+function loadAnchorStore(accountId?: number | null): AnchorStore {
   try {
-    const raw = window.localStorage.getItem(ANCHOR_STORAGE_KEY);
+    const raw = window.localStorage.getItem(anchorStorageKey(accountId));
     if (!raw) return { order: [], entries: {} };
     const parsed = JSON.parse(raw) as AnchorStore;
     if (!Array.isArray(parsed.order) || !parsed.entries || typeof parsed.entries !== 'object') {
@@ -233,23 +244,28 @@ function loadAnchorStore(): AnchorStore {
   }
 }
 
-function saveAnchorStore(store: AnchorStore): void {
+function saveAnchorStore(store: AnchorStore, accountId?: number | null): void {
   try {
-    window.localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify(store));
+    window.localStorage.setItem(anchorStorageKey(accountId), JSON.stringify(store));
   } catch {
+    reportStorageFailure();
     /* tab-only fallback */
   }
 }
 
-export function loadConversationAnchor(conversationKey: string): ConversationAnchorState | null {
-  return loadAnchorStore().entries[conversationKey] ?? null;
+export function loadConversationAnchor(
+  conversationKey: string,
+  accountId?: number | null
+): ConversationAnchorState | null {
+  return loadAnchorStore(accountId).entries[conversationKey] ?? null;
 }
 
 export function saveConversationAnchor(
   conversationKey: string,
-  state: ConversationAnchorState
+  state: ConversationAnchorState,
+  accountId?: number | null
 ): void {
-  const store = loadAnchorStore();
+  const store = loadAnchorStore(accountId);
   store.order = store.order.filter((key) => key !== conversationKey);
   store.order.push(conversationKey);
   store.entries[conversationKey] = state;
@@ -257,5 +273,5 @@ export function saveConversationAnchor(
     const oldest = store.order.shift();
     if (oldest !== undefined) delete store.entries[oldest];
   }
-  saveAnchorStore(store);
+  saveAnchorStore(store, accountId);
 }

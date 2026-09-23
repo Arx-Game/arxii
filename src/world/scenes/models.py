@@ -31,6 +31,7 @@ from world.scenes.constants import (
     SummaryAction,
     SummaryStatus,
 )
+from world.scenes.fields import CompositeForeignKey
 from world.scenes.managers import InteractionManager, SceneManager
 from world.scenes.round_models import AbstractRound
 from world.societies.constants import FameTier
@@ -1331,19 +1332,19 @@ class InteractionReaction(RelatedCacheClearingMixin, SharedMemoryModel):
 class InteractionReadReceipt(SharedMemoryModel):
     """Private, cross-device record that an account has read a pose.
 
-    Mirrors `InteractionReaction`'s partition-bridge shape exactly: a real
-    `ForeignKey(Interaction, db_constraint=False, ...)` plus a denormalized
-    `timestamp`, required because `Interaction`'s actual database PK is the
-    composite `(id, timestamp)` of its monthly-partitioned table. Never
-    serialized to any viewer other than the reading account (#3759 Decision 7).
+    The partitioned Interaction table has the candidate key `(id, timestamp)`.
+    Django does not support a ForeignKey to that composite key, so this model
+    stores the two columns explicitly. Database integrity is enforced by the
+    PostgreSQL composite FK migration; never serialize this row to any viewer
+    other than the reading account (#3759 Decision 7).
     """
 
-    interaction = models.ForeignKey(
+    interaction_id = models.BigIntegerField(help_text="The pose marked read")
+    interaction = CompositeForeignKey(
         Interaction,
-        on_delete=models.CASCADE,
+        from_fields=("interaction_id", "timestamp"),
+        to_fields=("id", "timestamp"),
         related_name="read_receipts",
-        db_constraint=False,
-        help_text="The pose marked read",
     )
     timestamp = models.DateTimeField(
         help_text="Denormalized from interaction — required for composite FK "
@@ -1359,10 +1360,20 @@ class InteractionReadReceipt(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["interaction", "timestamp", "account"],
+                fields=["interaction_id", "timestamp", "account"],
                 name="unique_read_receipt_per_account",
             ),
         ]
+
+    def resolve_interaction(self) -> Interaction | None:
+        """Resolve the referenced interaction by its complete partition key."""
+        try:
+            interaction = Interaction.objects.get(id=self.interaction_id, timestamp=self.timestamp)
+        except Interaction.DoesNotExist:
+            return None
+        # Evennia's identity map is keyed by scalar id. Refuse a cached row
+        # from another timestamp rather than silently misresolving a pair.
+        return interaction if interaction.timestamp == self.timestamp else None
 
     def __str__(self) -> str:
         return f"{self.account} read interaction {self.interaction_id}"
@@ -1496,8 +1507,12 @@ class InteractionAction(RelatedCacheClearingMixin, SharedMemoryModel):
 class PoseSubmission(SharedMemoryModel):
     """Idempotency ledger: (persona, client_request_id) -> the Interaction it produced.
 
-    Written only on acceptance, inside the same transaction as the Interaction
-    it points to (see `idempotent_record_interaction` in interaction_services.py).
+    The interaction reference carries its denormalized timestamp because the
+    partitioned Interaction table is identified by ``(id, timestamp)``. Both
+    reference columns are null for an accepted ephemeral pose, which has no
+    durable Interaction row. Written only on acceptance, inside the same
+    transaction as the Interaction it points to (see
+    `idempotent_record_interaction` in interaction_services.py).
     Rejections are never recorded here - they are re-validated fresh on every
     attempt. Pruned after 24h by scenes.tasks.pose_submission_cleanup_task; this
     table's steady-state size tracks recent web-submission volume only, never
@@ -1512,13 +1527,24 @@ class PoseSubmission(SharedMemoryModel):
     client_request_id = models.UUIDField(
         help_text="Client-minted id, reused verbatim on retry of the same attempt.",
     )
-    interaction = models.ForeignKey(
-        INTERACTION_MODEL,
-        on_delete=models.CASCADE,
-        related_name="pose_submission",
+    interaction_id = models.BigIntegerField(
         null=True,
-        db_constraint=False,
-        help_text="The Interaction this submission produced.",
+        blank=True,
+        help_text="The Interaction id this submission produced.",
+    )
+    interaction = CompositeForeignKey(
+        Interaction,
+        from_fields=("interaction_id", "timestamp"),
+        to_fields=("id", "timestamp"),
+        related_name="pose_submissions",
+    )
+    timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Denormalized from interaction; required with interaction for the "
+            "partitioned table composite reference. Both are null for ephemeral submissions."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -1528,10 +1554,30 @@ class PoseSubmission(SharedMemoryModel):
                 fields=["persona", "client_request_id"],
                 name="unique_submission_per_persona",
             ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(interaction_id__isnull=True, timestamp__isnull=True)
+                    | models.Q(interaction_id__isnull=False, timestamp__isnull=False)
+                ),
+                name="pose_submission_interaction_timestamp_pair",
+            ),
         ]
         indexes = [
             models.Index(fields=["created_at"]),
+            models.Index(fields=["interaction_id", "timestamp"], name="posesub_interaction_ts_idx"),
         ]
+
+    def resolve_interaction(self) -> Interaction | None:
+        """Resolve the durable interaction by its complete partition key."""
+        if self.interaction_id is None or self.timestamp is None:
+            return None
+        try:
+            interaction = Interaction.objects.get(id=self.interaction_id, timestamp=self.timestamp)
+        except Interaction.DoesNotExist:
+            return None
+        # Evennia's identity map is keyed by scalar id. Refuse a cached row
+        # from another timestamp rather than silently misresolving a pair.
+        return interaction if interaction.timestamp == self.timestamp else None
 
     def __str__(self) -> str:
         return f"PoseSubmission({self.persona_id}, {self.client_request_id})"

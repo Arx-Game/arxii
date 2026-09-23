@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -61,6 +61,8 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+_STRAIN_INTEGER_ERROR = "Strain commitment must be an integer."
+_STRAIN_NEGATIVE_ERROR = "Strain commitment cannot be negative."
 
 
 def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
@@ -997,7 +999,264 @@ def _charge_cast_pull(
     return pull_flat_bonus, effective_power, pull_result.resolved_effects
 
 
-def use_technique(  # noqa: C901, PLR0912, PLR0913, PLR0915 — orchestrator; multiple small responsibilities
+@dataclass
+class _CastPreparation:
+    """Values produced between the pre-cast gate and anima deduction."""
+
+    effective_targets: list
+    caster_room: object
+    room_profile: RoomProfile | None
+    environment_effect: object
+    effective_ledger: PowerLedger
+    effective_power: int
+    pull_flat_bonus: int
+    pull_resolved_effects: list[ResolvedPullEffect]
+    strain_power_bonus: int = 0
+
+
+def _validate_strain_commitment(strain_commitment: int) -> None:
+    """Validate the public strain commitment argument."""
+    if isinstance(strain_commitment, bool) or not isinstance(strain_commitment, int):
+        raise ValueError(_STRAIN_INTEGER_ERROR)
+    if strain_commitment < 0:
+        raise ValueError(_STRAIN_NEGATIVE_ERROR)
+
+
+def _calculate_technique_cost(  # noqa: PLR0913
+    *,
+    character,
+    technique,
+    control_penalty: int,
+    strain_commitment: int,
+    lethal: bool,
+    apply_variant: bool,
+    preferred_resonance,
+):
+    """Calculate runtime stats, anima cost, and effective strain."""
+    stats = get_runtime_technique_stats(
+        technique, character, apply_variant=apply_variant, preferred_resonance=preferred_resonance
+    )
+    if control_penalty:
+        stats = replace(stats, control=max(stats.control - control_penalty, 0))
+    anima = CharacterAnima.objects.filter(character_id=character.pk).first()
+    anima_current = anima.current if anima is not None else 0
+    runtime_cost = calculate_effective_anima_cost(
+        base_cost=technique.anima_cost,
+        runtime_intensity=stats.intensity,
+        runtime_control=stats.control,
+        current_anima=anima_current,
+        strain_commitment=0,
+        lethal=True,
+    )
+    base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
+    if control_penalty:
+        base_stats = replace(base_stats, control=max(base_stats.control - control_penalty, 0))
+    base_cost = calculate_effective_anima_cost(
+        base_cost=technique.anima_cost,
+        runtime_intensity=base_stats.intensity,
+        runtime_control=base_stats.control,
+        current_anima=anima_current,
+        strain_commitment=0,
+        lethal=True,
+    )
+    requested_cost = min(runtime_cost.effective_cost, base_cost.effective_cost) + strain_commitment
+    actual_cost = min(requested_cost, anima_current) if not lethal else requested_cost
+    cost = AnimaCostResult(
+        base_cost=technique.anima_cost,
+        effective_cost=actual_cost,
+        control_delta=runtime_cost.control_delta,
+        current_anima=anima_current,
+        deficit=max(actual_cost - anima_current, 0),
+    )
+    effective_strain = min(strain_commitment, actual_cost) if not lethal else strain_commitment
+    return stats, anima, cost, effective_strain
+
+
+def _strain_power_bonus(effective_strain: int, strain_config, strain_power_enabled: bool) -> int:
+    """Convert effective strain to power using the authored curve."""
+    if effective_strain <= 0:
+        return 0
+    if strain_config is None:
+        from world.combat.models import StrainConfig  # noqa: PLC0415
+
+        try:
+            strain_config = StrainConfig.objects.cached_singleton()
+        except StrainConfig.DoesNotExist:
+            strain_config = None
+        if strain_config is None:
+            strain_config = StrainConfig(
+                conversion_base=10, diminishing_step=5, diminishing_floor=1
+            )
+    if not strain_power_enabled:
+        return 0
+    return strain_to_intensity(strain_commitment=effective_strain, config=strain_config)
+
+
+def _prepare_technique_cast(  # noqa: PLR0913
+    *,
+    character,
+    technique,
+    targets,
+    stats,
+    applicable_threads,
+    power_intensity_bonus,
+    strain_power_bonus,
+    situation_ctx,
+    target_sheet,
+    cast_pull,
+    pull_target,
+) -> _CastPreparation | None:
+    """Run the pre-cast event and prepare power and pull effects."""
+    effective_targets = targets or []
+    caster_room = character.location
+    room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
+    seed_ledger = _derive_power(
+        channeled_intensity=stats.intensity + max(power_intensity_bonus, 0) + strain_power_bonus,
+        technique=technique,
+        character=character,
+        applicable_threads=applicable_threads,
+        environment=environment_effect,
+        situation_ctx=situation_ctx,
+        target_sheet=target_sheet,
+    )
+    pre_payload = TechniquePreCastPayload(
+        caster=character,
+        technique=technique,
+        targets=effective_targets,
+        intensity=stats.intensity,
+        power=seed_ledger.total,
+        ledger=seed_ledger,
+    )
+    if caster_room is not None:
+        stack = emit_event(EventName.TECHNIQUE_PRE_CAST, pre_payload, location=caster_room)
+        if stack.was_cancelled():
+            return None
+    effective_ledger = _reconcile_precast_ledger(pre_payload)
+    effective_power = effective_ledger.total
+    pull_flat_bonus = 0
+    pull_resolved_effects: list[ResolvedPullEffect] = []
+    if cast_pull is not None:
+        pull_flat_bonus, effective_power, pull_resolved_effects = _charge_cast_pull(
+            character=character,
+            technique=technique,
+            cast_pull=cast_pull,
+            effective_power=effective_power,
+            target=pull_target or (targets[0] if targets else None),
+        )
+    return _CastPreparation(
+        effective_targets,
+        caster_room,
+        room_profile,
+        environment_effect,
+        effective_ledger,
+        effective_power,
+        pull_flat_bonus,
+        pull_resolved_effects,
+        strain_power_bonus=0,
+    )
+
+
+def _complete_technique_cast(  # noqa: PLR0913
+    *,
+    character,
+    technique,
+    resolve_fn,
+    check_result,
+    cost,
+    lethal,
+    anima,
+    stats,
+    preparation,
+    soulfray_warning,
+    declared_strain,
+    effective_strain,
+) -> TechniqueUseResult:
+    """Deduct anima, resolve the cast, and emit all post-cast effects."""
+    deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
+    resolution_result = resolve_fn(
+        power=preparation.effective_power,
+        ledger=preparation.effective_ledger,
+        extra_modifiers=preparation.pull_flat_bonus,
+    )
+    effective_check_result = _resolve_check_result(check_result, resolution_result)
+    from world.magic.models import SoulfrayConfig  # noqa: PLC0415
+
+    soulfray_result = accumulate_soulfray(
+        character=character,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=effective_check_result,
+        lethal=lethal,
+    )
+    mishap = _resolve_control_mishap(
+        character=character, stats=stats, check_result=effective_check_result
+    )
+    sheet = _get_character_sheet(character)
+    _apply_technique_fatigue_step(
+        sheet=sheet,
+        character=character,
+        technique=technique,
+        cost=cost,
+        strain_commitment=effective_strain,
+    )
+    _apply_assume_alternate_self_effects(
+        sheet=sheet,
+        resolved_effects=preparation.pull_resolved_effects,
+        check_result=effective_check_result,
+    )
+    resonance_involvements = _build_resonance_involvements(
+        technique=technique, character=character, runtime_intensity=stats.intensity
+    )
+    technique_result = TechniqueUseResult(
+        anima_cost=cost,
+        soulfray_warning=soulfray_warning,
+        confirmed=True,
+        resolution_result=resolution_result,
+        soulfray_result=soulfray_result,
+        mishap=mishap,
+        technique=technique,
+        was_deficit=cost.deficit > 0,
+        was_mishap=mishap is not None,
+        was_audere=_character_is_in_audere(character),
+        resonance_involvements=resonance_involvements,
+        declared_strain_commitment=declared_strain,
+        effective_strain_commitment=effective_strain,
+        strain_power_bonus=preparation.strain_power_bonus,
+    )
+    from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
+
+    maybe_create_audere_offer(character, stats.intensity, sheet=sheet)
+    from world.magic.audere_majora import maybe_create_audere_majora_offer  # noqa: PLC0415
+
+    maybe_create_audere_majora_offer(character, stats.intensity, sheet=sheet)
+    _accrue_cast_corruption(sheet=sheet, technique_result=technique_result)
+    _react_resonance_environment(
+        sheet=sheet,
+        room_profile=preparation.room_profile,
+        environment_effect=preparation.environment_effect,
+        technique=technique,
+        technique_result=technique_result,
+    )
+    _emit_cast_events(
+        character=character,
+        technique=technique,
+        caster_room=preparation.caster_room,
+        effective_targets=preparation.effective_targets,
+        intensity=stats.intensity,
+        effective_power=preparation.effective_power,
+        effective_ledger=preparation.effective_ledger,
+        resolution_result=resolution_result,
+    )
+    if sheet is not None:
+        from world.missions.constants import ExternalAct  # noqa: PLC0415
+        from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+
+        notify_external_act(sheet, ExternalAct.TECHNIQUE_CAST)
+    return technique_result
+
+
+def use_technique(  # noqa: PLR0913
     *,
     character: ObjectDB,
     technique: Technique,
@@ -1019,337 +1278,64 @@ def use_technique(  # noqa: C901, PLR0912, PLR0913, PLR0915 — orchestrator; mu
     strain_config: object | None = None,
     strain_power_enabled: bool = True,
 ) -> TechniqueUseResult:
-    """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
-
-    ``strain_commitment`` is extra anima committed beyond the technique's normal
-    effective cost (e.g. for Clash contributions). It defaults to ``0`` so every
-    existing caller is unaffected. The strain adds on top of the floored
-    effective cost via ``calculate_effective_anima_cost``.
-
-    ``power_intensity_bonus`` is extra intensity folded into power derivation only
-    (not anima cost); used by clash strain→power to let strain commitment raise the
-    cast's effective power without changing the anima the caster pays. Defaults to
-    ``0`` so every existing caller is unaffected. Negative values are clamped to 0.
-
-    ``lethal`` defaults to ``True`` so every existing caller keeps the live magical
-    fatigue path. In a NON-LETHAL encounter (``lethal=False``) the cast cannot push
-    fatigue into dangerous territory: anima cost is clamped to available anima (no
-    overburn / life-force draw), accrued Soulfray severity is bounded below the first
-    death-risk stage, and the Soulfray stage consequence pool never rolls a
-    ``character_loss`` consequence.
-
-    ``control_penalty`` is subtracted from the runtime control stat immediately after
-    ``get_runtime_technique_stats`` computes it, floored at 0. The lowered control
-    flows into both ``calculate_effective_anima_cost`` (raises effective cost) and
-    ``_resolve_control_mishap`` (increases mishap likelihood). Defaults to ``0`` so
-    all existing callers are unaffected.
-
-    ``situation_ctx`` (#2536) is the live resolution context forwarded unchanged
-    to ``_derive_power`` for the situational-perk TERM-stage provider — a
-    ``CombatRoundContext`` from the combat cast path, ``None`` otherwise.
-    Defaults to ``None`` so every existing caller is unaffected.
-
-    ``target_sheet`` (#2536, Task 4 review fix) is the cast's primary
-    target's ``CharacterSheet``, forwarded unchanged to ``_derive_power`` for
-    the same situational-perk TERM-stage provider — lets target-keyed
-    situations (``TARGET_DISTRACTED``, ...) fire for ``POWER_BONUS``.
-    Defaults to ``None`` so every existing caller is unaffected; decoupled
-    from ``targets``/``pull_target`` on purpose, same rationale as
-    ``pull_target`` above (different downstream consumers, different shapes).
-
-    ``strain_config`` optionally supplies the authored curve for callers such as
-    clash. Ordinary casts use the shared ``StrainConfig`` singleton. Strain is
-    converted into power exactly once at this seam. ``strain_power_enabled`` is
-    false only for scene-action enhancement paths whose resolver does not consume
-    technique power.
-
-    ``pull_target`` is the live cast target forwarded to ``_charge_cast_pull`` (which
-    threads it onto ``PullActionContext.target`` for ``court_regard_modulation``,
-    #1831). It is decoupled from ``targets`` on purpose: ``targets`` also drives
-    TECHNIQUE_AFFECTED reactive events below, and non-combat casts must not start
-    firing those just to activate pull modulation. When omitted, falls back to
-    ``targets[0]`` (Task 5 behavior) so existing callers/tests are unaffected.
-
-    Emits reactive events:
-    - TECHNIQUE_PRE_CAST (cancellable) — before anima deduction
-    - TECHNIQUE_CAST (post-resolve, frozen)
-    - TECHNIQUE_AFFECTED per target when *targets* is provided
-    """
-    from world.magic.models import SoulfrayConfig  # noqa: PLC0415
-
-    if isinstance(strain_commitment, bool) or not isinstance(strain_commitment, int):
-        msg = "Strain commitment must be an integer."
-        raise ValueError(msg)
-    if strain_commitment < 0:
-        msg = "Strain commitment cannot be negative."
-        raise ValueError(msg)
-
-    # Step 1: Calculate runtime stats
-    stats = get_runtime_technique_stats(
-        technique,
-        character,
+    """Orchestrate technique use from cost validation through post-cast events."""
+    _validate_strain_commitment(strain_commitment)
+    stats, anima, cost, effective_strain = _calculate_technique_cost(
+        character=character,
+        technique=technique,
+        control_penalty=control_penalty,
+        strain_commitment=strain_commitment,
+        lethal=lethal,
         apply_variant=apply_variant,
         preferred_resonance=preferred_resonance,
     )
-    if control_penalty:
-        stats = replace(stats, control=max(stats.control - control_penalty, 0))
-
-    # Step 2: Calculate the final no-strain cost, then add the declared push.
-    # Keeping the push outside the variant/base-form reconciliation makes C0 the
-    # same value shown in the preview and ensures strain is charged once.
-    anima = CharacterAnima.objects.filter(character_id=character.pk).first()
-    anima_current = anima.current if anima is not None else 0
-    runtime_cost = calculate_effective_anima_cost(
-        base_cost=technique.anima_cost,
-        runtime_intensity=stats.intensity,
-        runtime_control=stats.control,
-        current_anima=anima_current,
-        strain_commitment=0,
-        lethal=True,
-    )
-
-    # #1581 strict bonus: a variant must never cost more anima than its base form.
-    base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
-    if control_penalty:
-        base_stats = replace(base_stats, control=max(base_stats.control - control_penalty, 0))
-    base_cost = calculate_effective_anima_cost(
-        base_cost=technique.anima_cost,
-        runtime_intensity=base_stats.intensity,
-        runtime_control=base_stats.control,
-        current_anima=anima_current,
-        strain_commitment=0,
-        lethal=True,
-    )
-    no_strain_cost = min(runtime_cost.effective_cost, base_cost.effective_cost)
-    declared_strain = strain_commitment
-    requested_cost = no_strain_cost + declared_strain
-    actual_cost = min(requested_cost, anima_current) if not lethal else requested_cost
-    cost = AnimaCostResult(
-        base_cost=technique.anima_cost,
-        effective_cost=actual_cost,
-        control_delta=runtime_cost.control_delta,
-        current_anima=anima_current,
-        deficit=max(actual_cost - anima_current, 0),
-    )
-
-    # A non-lethal cast pays only what remains in the pool. This effective
-    # commitment is used consistently by power conversion, fatigue, deduction,
-    # and audit metadata; lethal casts intentionally preserve the declaration
-    # so focused clash overburn remains visible.
-    effective_strain = min(declared_strain, actual_cost) if not lethal else declared_strain
-
-    # Resolve the curve at the shared seam. Clash callers pass their authored
-    # config override, while ordinary casts use the singleton. Zero strain keeps
-    # the legacy path query-free and has no conversion work to perform.
-    strain_power_bonus = 0
-    if effective_strain > 0:
-        if strain_config is None:
-            from world.combat.models import StrainConfig  # noqa: PLC0415
-
-            try:
-                strain_config = StrainConfig.objects.cached_singleton()
-            except StrainConfig.DoesNotExist:
-                strain_config = None
-            if strain_config is None:
-                strain_config = StrainConfig(
-                    conversion_base=10, diminishing_step=5, diminishing_floor=1
-                )
-        if strain_power_enabled:
-            strain_power_bonus = strain_to_intensity(
-                strain_commitment=effective_strain, config=strain_config
-            )
-
-    # Step 3: Safety checkpoint (Soulfray stage-driven)
+    strain_power_bonus = _strain_power_bonus(effective_strain, strain_config, strain_power_enabled)
     soulfray_warning = get_soulfray_warning(character)
-
     if soulfray_warning and not confirm_soulfray_risk:
         return TechniqueUseResult(
             anima_cost=cost,
             soulfray_warning=soulfray_warning,
             confirmed=False,
             technique=technique,
-            declared_strain_commitment=declared_strain,
+            declared_strain_commitment=strain_commitment,
             effective_strain_commitment=effective_strain,
             strain_power_bonus=strain_power_bonus,
         )
-
-    # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
-    effective_targets = targets or []
-    caster_room = character.location
-
-    # Evaluate the resonance-environment primitive ONCE per cast, before power
-    # derivation. The result feeds the ENVIRONMENT power-shift stage here AND is
-    # reused at Step 10 (backfire + defilement) — evaluate-once (#639/#722).
-    room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
-
-    seed_ledger = _derive_power(
-        channeled_intensity=(stats.intensity + max(power_intensity_bonus, 0) + strain_power_bonus),
-        technique=technique,
+    preparation = _prepare_technique_cast(
         character=character,
+        technique=technique,
+        targets=targets,
+        stats=stats,
         applicable_threads=applicable_threads,
-        environment=environment_effect,
+        power_intensity_bonus=power_intensity_bonus,
+        strain_power_bonus=strain_power_bonus,
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
+        cast_pull=cast_pull,
+        pull_target=pull_target,
     )
-    pre_payload = TechniquePreCastPayload(
-        caster=character,
-        technique=technique,
-        targets=effective_targets,
-        intensity=stats.intensity,
-        power=seed_ledger.total,
-        ledger=seed_ledger,
-    )
-    if caster_room is not None:
-        stack = emit_event(
-            EventName.TECHNIQUE_PRE_CAST,
-            pre_payload,
-            location=caster_room,
-        )
-        if stack.was_cancelled():
-            return TechniqueUseResult(
-                anima_cost=cost,
-                confirmed=False,
-                technique=technique,
-                declared_strain_commitment=declared_strain,
-                effective_strain_commitment=effective_strain,
-                strain_power_bonus=strain_power_bonus,
-            )
-
-    # Read back power after any pre-cast MODIFY_PAYLOAD hooks (mutable payload) and
-    # reconcile the ledger so its total matches; ledger is the source of truth.
-    effective_ledger = _reconcile_precast_ledger(pre_payload)
-    effective_power = effective_ledger.total
-
-    # Step 3c (#768, #1455): charge a declared cast pull. Placed after the soulfray
-    # checkpoint AND the pre-cast cancellation gate (so an aborted cast never charges)
-    # and before anima deduction. INTENSITY_BUMP effects are added to effective_power
-    # here so resolution sees the boosted value. An inert pull (all effects inactive)
-    # raises InvalidImbueAmount here — the caller surfaces it as a cast failure.
-    # Combat pulls are committed separately.
-    pull_flat_bonus = 0
-    pull_resolved_effects: list[ResolvedPullEffect] = []
-    if cast_pull is not None:
-        pull_flat_bonus, effective_power, pull_resolved_effects = _charge_cast_pull(
-            character=character,
+    if preparation is None:
+        return TechniqueUseResult(
+            anima_cost=cost,
+            confirmed=False,
             technique=technique,
-            cast_pull=cast_pull,
-            effective_power=effective_power,
-            target=pull_target or (targets[0] if targets else None),
+            declared_strain_commitment=strain_commitment,
+            effective_strain_commitment=effective_strain,
+            strain_power_bonus=strain_power_bonus,
         )
-
-    # Step 4: Deduct anima
-    deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
-
-    # Steps 5 + 6: Resolution — pull_flat_bonus (from FLAT_BONUS pull effects) is
-    # threaded to the resolve_fn so the cast's check gains the bonus as extra_modifiers.
-    resolution_result = resolve_fn(
-        power=effective_power, ledger=effective_ledger, extra_modifiers=pull_flat_bonus
-    )
-
-    # Extract check_result from resolution if not provided explicitly
-    effective_check_result = _resolve_check_result(check_result, resolution_result)
-
-    # Step 7: Soulfray accumulation and stage consequences
-    soulfray_result = accumulate_soulfray(
-        character=character,
-        anima=anima,
-        deficit=deficit,
-        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
-        check_result=effective_check_result,
-        lethal=lethal,
-    )
-
-    # Step 8: Mishap rider
-    mishap = _resolve_control_mishap(
-        character=character,
-        stats=stats,
-        check_result=effective_check_result,
-    )
-
-    # Step 8b: Technique fatigue — accrues to the matching action-category pool.
-    # sheet is also used in Steps 9 and 10; NPCs without a CharacterSheet skip those paths.
-    sheet = _get_character_sheet(character)
-    _apply_technique_fatigue_step(
-        sheet=sheet,
+    preparation.strain_power_bonus = strain_power_bonus
+    # Resolution may supply an explicit check result; retain it over extraction.
+    return _complete_technique_cast(
         character=character,
         technique=technique,
+        resolve_fn=resolve_fn,
+        check_result=check_result,
         cost=cost,
-        strain_commitment=effective_strain,
-    )
-
-    # Step 8c/9: apply ASSUME_ALTERNATE_SELF pull effects post-resolution.
-    _apply_assume_alternate_self_effects(
-        sheet=sheet,
-        resolved_effects=pull_resolved_effects,
-        check_result=effective_check_result,
-    )
-
-    resonance_involvements = _build_resonance_involvements(
-        technique=technique,
-        character=character,
-        runtime_intensity=stats.intensity,
-    )
-
-    technique_result = TechniqueUseResult(
-        anima_cost=cost,
+        lethal=lethal,
+        anima=anima,
+        stats=stats,
+        preparation=preparation,
         soulfray_warning=soulfray_warning,
-        confirmed=True,
-        resolution_result=resolution_result,
-        soulfray_result=soulfray_result,
-        mishap=mishap,
-        technique=technique,
-        was_deficit=cost.deficit > 0,
-        was_mishap=mishap is not None,
-        was_audere=_character_is_in_audere(character),
-        resonance_involvements=resonance_involvements,
-        declared_strain_commitment=declared_strain,
-        effective_strain_commitment=effective_strain,
-        strain_power_bonus=strain_power_bonus,
+        declared_strain=strain_commitment,
+        effective_strain=effective_strain,
     )
-
-    # Step 8c (#873): surface the Audere gate the moment it opens. Runs after
-    # Step 7 so a Soulfray stage advance caused by THIS cast counts toward the
-    # gate. NPCs without sheets and ineligible characters are no-ops inside.
-    from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
-
-    maybe_create_audere_offer(character, stats.intensity, sheet=sheet)
-
-    from world.magic.audere_majora import maybe_create_audere_majora_offer  # noqa: PLC0415
-
-    maybe_create_audere_majora_offer(character, stats.intensity, sheet=sheet)
-
-    # Step 9: Per-cast corruption accrual (Magic Scope #7)
-    _accrue_cast_corruption(sheet=sheet, technique_result=technique_result)
-
-    # Step 10: Universal resonance-environment reaction (core magic-physics; no flow/trigger)
-    _react_resonance_environment(
-        sheet=sheet,
-        room_profile=room_profile,
-        environment_effect=environment_effect,
-        technique=technique,
-        technique_result=technique_result,
-    )
-
-    # --- TECHNIQUE_CAST + TECHNIQUE_AFFECTED events (post-resolve, frozen) ---
-    _emit_cast_events(
-        character=character,
-        technique=technique,
-        caster_room=caster_room,
-        effective_targets=effective_targets,
-        intensity=stats.intensity,
-        effective_power=effective_power,
-        effective_ledger=effective_ledger,
-        resolution_result=resolution_result,
-    )
-
-    # #1035 external-act beat: cheap-guarded, failure-isolated via notify_external_act
-    # (ADR-0112) — a single indexed EXISTS check before any savepoint, so the combat
-    # cast path pays exactly one query per declaration when no tutorial mission is
-    # waiting. NPCs without a CharacterSheet have nothing to satisfy.
-    if sheet is not None:
-        from world.missions.constants import ExternalAct  # noqa: PLC0415
-        from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
-
-        notify_external_act(sheet, ExternalAct.TECHNIQUE_CAST)
-
-    return technique_result

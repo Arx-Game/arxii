@@ -78,7 +78,7 @@ class AccountAttentionTests(TestCase):
             mode=InteractionMode.WHISPER,
         )
         InteractionReceiver.objects.create(
-            interaction=whisper,
+            interaction_id=whisper.pk,
             timestamp=whisper.timestamp,
             persona=self.persona_one,
         )
@@ -114,7 +114,7 @@ class AccountAttentionTests(TestCase):
             mode=InteractionMode.WHISPER,
         )
         InteractionReceiver.objects.create(
-            interaction=whisper,
+            interaction_id=whisper.pk,
             timestamp=whisper.timestamp,
             persona=self.persona_two,
         )
@@ -131,12 +131,12 @@ class AccountAttentionTests(TestCase):
             mode=InteractionMode.WHISPER,
         )
         InteractionReceiver.objects.create(
-            interaction=whisper,
+            interaction_id=whisper.pk,
             timestamp=whisper.timestamp,
             persona=self.persona_one,
         )
         InteractionReadReceipt.objects.create(
-            interaction=whisper,
+            interaction_id=whisper.pk,
             timestamp=whisper.timestamp,
             account=self.account,
         )

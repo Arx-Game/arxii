@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { fetchScene, SceneDetail } from '../queries';
 import { createActionRequest, fetchPlaces } from '../actionQueries';
+import { AttachedActionSubmissionGuard } from '../actionSubmissionGuard';
+import { useDetachedActionIds } from '../useDetachedActionIds';
 import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
@@ -211,19 +213,8 @@ export function SceneDetailPage() {
   const viewerEntryId = activeEntry?.id ?? null;
 
   // Track IDs the user has detached from the auto-attach chip strip.
-  const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
-
-  const handleDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
-  }, []);
-
-  const handleUndoDetach = useCallback((actionId: number) => {
-    setDetachedActionIds((prev) => prev.filter((id) => id !== actionId));
-  }, []);
-
-  const handlePoseSubmitted = useCallback(() => {
-    setDetachedActionIds([]);
-  }, []);
+  const { detachedActionIds, handleDetach, handleUndoDetach, handlePoseSubmitted } =
+    useDetachedActionIds();
 
   // Pending unlinked actions for the chip strip.
   const { data: pendingActions } = usePendingUnlinkedActions(id, personaId);
@@ -232,7 +223,7 @@ export function SceneDetailPage() {
   const [composerMode, setComposerMode] = useState<ComposerMode>({
     command: 'pose',
     targets: [],
-    label: `Pose \u2192 Room`,
+    label: `Pose → Room`,
   });
 
   const [targetToAppend, setPendingTarget] = useState<string | null>(null);
@@ -240,26 +231,33 @@ export function SceneDetailPage() {
   const queryClient = useQueryClient();
 
   const submitAction = useMutation({
-    mutationFn: (action: ActionAttachmentInfo) =>
+    mutationFn: ({ action }: { action: ActionAttachmentInfo; clientRequestId: string }) =>
       createActionRequest(id, {
         action_key: action.actionKey,
         target_persona_id: action.targetPersonaId,
         technique_id: action.techniqueId,
       }),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
+      attachedActionGuard.current.succeed(variables.clientRequestId);
       setActionAttachment(null);
       // 2026-07 audit: 'scene-messages' matched no query — the feed key is 'scene-interactions'.
       queryClient.invalidateQueries({ queryKey: ['scene-interactions', id] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', id] });
     },
-    onError: () => {
+    onError: (_error, variables) => {
+      attachedActionGuard.current.fail(variables.clientRequestId);
       // Keep the attachment so user can retry
     },
   });
 
+  const attachedActionGuard = useRef(new AttachedActionSubmissionGuard());
+
   const handleSubmitAction = useCallback(
-    (action: ActionAttachmentInfo) => {
-      submitAction.mutate(action);
+    (action: ActionAttachmentInfo, clientRequestId?: string) => {
+      const correlationId =
+        clientRequestId ?? `${action.actionKey}:${action.targetPersonaId ?? ''}`;
+      if (!attachedActionGuard.current.start(correlationId)) return;
+      submitAction.mutate({ action, clientRequestId: correlationId });
     },
     [submitAction]
   );

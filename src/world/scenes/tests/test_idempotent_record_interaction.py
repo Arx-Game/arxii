@@ -23,10 +23,9 @@ class IdempotentRecordInteractionTests(TestCase):
         self.assertFalse(result.replayed)
         self.assertFalse(result.conflict)
         self.assertIsNotNone(result.interaction)
-        self.assertEqual(
-            PoseSubmission.objects.get(persona=persona, client_request_id=request_id).interaction,
-            result.interaction,
-        )
+        submission = PoseSubmission.objects.get(persona=persona, client_request_id=request_id)
+        self.assertEqual(submission.resolve_interaction(), result.interaction)
+        self.assertEqual(submission.timestamp, result.interaction.timestamp)
 
     def test_retry_with_same_payload_replays_without_creating_a_second_interaction(self):
         persona = PersonaFactory()
@@ -91,7 +90,9 @@ class IdempotentRecordInteractionTests(TestCase):
         self.assertFalse(first.replayed)
         self.assertFalse(first.conflict)
         self.assertEqual(
-            PoseSubmission.objects.get(persona=persona, client_request_id=request_id).interaction,
+            PoseSubmission.objects.get(
+                persona=persona, client_request_id=request_id
+            ).resolve_interaction(),
             None,
         )
 
