@@ -41,6 +41,7 @@ import { SeatPicker } from './SeatPicker';
 import { SubmittedPlate } from './SubmittedPlate';
 import {
   FOUNDER_CONTENTS,
+  grantsOf,
   landBaseLine,
   landFactsOf,
   permittedRank,
@@ -248,6 +249,11 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
   const effectiveRealmId = fd.realm_id ?? draft.selected_area?.realm_id ?? realms[0]?.id ?? null;
   const [step, setStep] = useState<FounderStep>(fd.title_id != null ? 'house' : 'seat');
   const [justSubmitted, setJustSubmitted] = useState<HouseClaimStatus | null>(null);
+  // Which barony's own page `FounderLandsLeaf` has disclosed — lifted up
+  // here (rather than kept as that leaf's own internal state) so the
+  // contents rail's nested chain sub-list (below) can open one from
+  // outside the leaf, not just from the leaf's own table-row toggle.
+  const [openBaronyId, setOpenBaronyId] = useState<number | null>(null);
 
   const { data: ladderPayload } = useLadder(effectiveRealmId, 'founder');
   const rows = ladderPayload?.rows ?? [];
@@ -279,6 +285,18 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
       } · ${produces.join(', ') || 'Undefined'}`
     : '';
   const estateLine = estateLineOf(fd.estate_name, charter?.capital_name);
+
+  // The contents rail's "The Land" entry nests the claimed chain plus its
+  // loose extras (plate F-IV's own `.contents` sub-list, `founder.html:f4`)
+  // — `grantsOf` already returns chain-first-then-extras, the exact order
+  // the plate shows. Empty (and so hidden) until a seat is picked.
+  const landGrants = fd.title_id != null ? grantsOf(rows, fd.title_id) : [];
+  const landOpenTargetId = openBaronyId ?? fd.title_id;
+
+  const handleOpenLandRung = (row: LadderRow) => {
+    setStep('land');
+    setOpenBaronyId(row.tier === 'barony' ? row.title_id : null);
+  };
 
   // The Seat step's own row selection (fix round 1, Finding 2): defaults to
   // the shallowest root row (matches plate F-I's own `.sel` on Fervor, and
@@ -382,6 +400,8 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
         setLand={setLand}
         rows={rows}
         produces={produces}
+        openTitleId={openBaronyId}
+        onOpenTitleId={setOpenBaronyId}
         onNext={() => setStep('estate')}
       />
     );
@@ -479,6 +499,24 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
                   return (
                     <li key={entry.step} className={className}>
                       {entry.label}
+                      {entry.step === 'land' && landGrants.length > 0 && (
+                        <ol>
+                          {landGrants.map((row) => {
+                            const isCur = step === 'land' && row.title_id === landOpenTargetId;
+                            return (
+                              <li key={row.title_id} className={isCur ? 'cur' : undefined}>
+                                <button type="button" onClick={() => handleOpenLandRung(row)}>
+                                  {row.is_defined ? (
+                                    row.name
+                                  ) : (
+                                    <span className="chip undef">Undefined</span>
+                                  )}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      )}
                     </li>
                   );
                 })}

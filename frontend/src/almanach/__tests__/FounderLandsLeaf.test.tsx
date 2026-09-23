@@ -183,8 +183,18 @@ function Harness({
     });
   };
 
+  const [openTitleId, setOpenTitleId] = useState<number | null>(null);
+
   return (
-    <FounderLandsLeaf draft={draft} setLand={setLand} rows={rows} produces={[]} onNext={() => {}} />
+    <FounderLandsLeaf
+      draft={draft}
+      setLand={setLand}
+      rows={rows}
+      produces={[]}
+      openTitleId={openTitleId}
+      onOpenTitleId={setOpenTitleId}
+      onNext={() => {}}
+    />
   );
 }
 

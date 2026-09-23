@@ -15,14 +15,12 @@
  * leaks into `setLand`.
  *
  * The plate's contents-rail "The Land" entry carries a nested `<ol>`
- * sub-list (Fervor/Arsura/Ascua/Undefined, `founder.html:f4`) live-breadcrumbing
- * the claimed chain while this chapter is open — omitted: the brief's own
- * Interfaces/Produces description covers only this leaf's own three
- * sections (row3/table/top-rung), never the contents rail, and
- * `FounderAlmanach.test.tsx`'s own contents-rail test asserts the "Land"
- * group's `<li>` list is exactly `['The Land', 'The Estate']` with no
- * nested content — adding it would need a second, deliberately-scoped
- * change to that shared rail this task's file list doesn't reach.
+ * sub-list (Fervor/Arsura/Ascua/Undefined, `founder.html:f4`) — built in
+ * `FounderAlmanach.tsx` (#3983 Plan B Task 6 fix round 1), not here: it
+ * reuses the same `grantsOf` rows and needs `step`/navigation state this
+ * leaf doesn't own. `openTitleId`/`onOpenTitleId` below are controlled by
+ * that same parent so a rail click can open a barony's page from outside
+ * this leaf's own table.
  *
  * The plate's own "on the Atlas" field is a decorative isle/pin diagram
  * (`.pin` with `.isle`/`.dot`/`.lbl` divs, hand-placed percentages) with no
@@ -30,7 +28,7 @@
  * ruling, this renders as a labeled dash ("set on review") rather than
  * fabricating a placement.
  */
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import { DRAFT_NOTE, STATES } from '../copy';
 import { tierNoun } from '../ladder/tree';
@@ -72,6 +70,12 @@ export interface FounderLandsLeafProps {
   setLand: UseFounderDraftResult['setLand'];
   rows: LadderRow[];
   produces: string[];
+  /** Which barony's own page is disclosed beneath the table — controlled by
+   * the parent (#3983 Plan B Task 6 fix round 1) so a click on the contents
+   * rail's nested chain sub-list can open a barony's page from outside this
+   * leaf, not just from the table's own row toggle. */
+  openTitleId: number | null;
+  onOpenTitleId: (titleId: number | null) => void;
   onNext: () => void;
 }
 
@@ -80,11 +84,12 @@ export function FounderLandsLeaf({
   setLand,
   rows,
   produces,
+  openTitleId,
+  onOpenTitleId,
   onNext,
 }: FounderLandsLeafProps) {
   const { data: landShapesPayload } = useLandShapes();
   const landShapes = landShapesPayload?.results ?? [];
-  const [openTitleId, setOpenTitleId] = useState<number | null>(null);
 
   if (draft.title_id == null) return null;
   const facts = landFactsOf(rows, draft.title_id);
@@ -182,7 +187,7 @@ export function FounderLandsLeaf({
                       className="tg"
                       aria-expanded={expanded}
                       aria-label={`${expanded ? 'Collapse' : 'Expand'} ${rowLabel}`}
-                      onClick={() => setOpenTitleId(expanded ? null : row.title_id)}
+                      onClick={() => onOpenTitleId(expanded ? null : row.title_id)}
                     >
                       {expanded ? '▾' : '▸'}
                     </button>
