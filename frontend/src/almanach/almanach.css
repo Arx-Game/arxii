@@ -1,0 +1,1005 @@
+/**
+ * Almanach de Catenys (#3983 Task 8) — the staff house-builder's own
+ * stylesheet, scoped under `.almanach` and porting the visual-contract
+ * plate's `scratchpad/almanac/base.css` rules onto the app's HSL realm
+ * tokens rather than the plate's own hex literals: accent
+ * `hsl(var(--primary))`, hairlines `hsl(var(--border))`, ink
+ * `hsl(var(--foreground))`, muted `hsl(var(--muted-foreground))`, paper
+ * `hsl(var(--background))`. Cinzel via Tailwind's `font-display` family,
+ * EB Garamond via `font-body`.
+ *
+ * Deliberately does NOT reuse `character-creation/cg.css`'s `.interview`
+ * classes (`Entry`/`Field`/`RecordRail`) — those are wizard-shaped (a
+ * chosen state, doors) where this page's fields only ever describe or pick
+ * a plain value. `character_sheets/sheet.css:1-16` records the same call
+ * for the Reference Sheet. `DialogContent` also carries this `.almanach`
+ * class directly (`PlantRungDialog`, `BatchUnclaimedDialog`) since Radix
+ * portals dialog content to `document.body`, outside this page's own root.
+ */
+
+.almanach {
+  font-family: theme('fontFamily.body');
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}
+
+.almanach h1,
+.almanach h2,
+.almanach h3,
+.almanach h4 {
+  font-family: theme('fontFamily.display');
+  font-weight: 400;
+}
+
+.almanach button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.almanach a {
+  color: inherit;
+}
+
+.almanach a:focus-visible,
+.almanach button:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.almanach .meta {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- header bar (breadcrumb + mode) --- */
+
+.almanach .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 0.55rem 1.4rem;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .bar .crumb span + span::before {
+  content: '\203A';
+  margin: 0 0.5rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .bar .right {
+  margin-left: auto;
+  display: flex;
+  gap: 1rem;
+}
+/* Matches the plate's `.bar .mode{color:var(--ink-mute)}` explicitly (final
+   review M6) — `.bar` already sets this color and `.mode` inherits it, but
+   an explicit rule keeps the chip's color from silently drifting if `.bar`'s
+   own color rule ever changes for an unrelated reason. */
+.almanach .bar .mode {
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- the three-column grid --- */
+
+.almanach .almanac {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr) 19rem;
+  gap: 2.2rem;
+  padding: 1.8rem 1.6rem 2rem;
+}
+/* Tailwind's `contents` utility (display: contents) matches the rail's class
+   and would dissolve it into the grid, letting its groups take the tracks. */
+.almanach .contents {
+  display: block;
+}
+/* Grid items default to min-width:auto, so a wide ladder table would push the
+   chapter's column into the record rail instead of scrolling inside `.scroll`;
+   the three columns must be allowed to shrink to their tracks. */
+.almanach .contents,
+.almanach .chapter,
+.almanach .record {
+  min-width: 0;
+}
+/* Character creation's own chapter layout (`.interview .chapter`, cg.css) is a
+   two-column grid; inside the interview the Almanach's `main.chapter` matches
+   that selector too. Reset it so the founder's chapter is a plain column. */
+.interview .almanach .chapter {
+  display: block;
+  grid-template-columns: none;
+  gap: 0;
+}
+
+/* The Almanach also mounts inside character creation's reading column (the
+   founder's "Define a house"), where three railed columns do not fit: size the
+   spread by its own container, not the viewport. Below 64rem the contents rail
+   becomes a strip above a two-column chapter | record; below 44rem one column. */
+.almanach {
+  container-type: inline-size;
+}
+@container (max-width: 64rem) {
+  .almanach .almanac {
+    grid-template-columns: minmax(0, 1fr) 17rem;
+  }
+  .almanach .contents {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+  }
+}
+@container (max-width: 44rem) {
+  .almanach .almanac {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 900px) {
+  .almanach .almanac {
+    grid-template-columns: 1fr;
+  }
+  .almanach .contents {
+    border-right: 0;
+    border-bottom: 1px solid hsl(var(--border));
+    padding-bottom: 1rem;
+  }
+}
+
+.almanach .contents {
+  border-right: 1px solid hsl(var(--border));
+  padding-right: 1rem;
+  font-size: 0.95rem;
+}
+.almanach .contents .mv {
+  margin-bottom: 1.2rem;
+}
+.almanach .contents .mv > .label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .contents ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.almanach .contents li {
+  padding: 0.22rem 0 0.22rem 0.7rem;
+  border-left: 2px solid transparent;
+  color: hsl(var(--foreground));
+}
+.almanach .contents li.cur {
+  border-left-color: hsl(var(--primary));
+  font-weight: 500;
+}
+.almanach .contents li.ro {
+  color: hsl(var(--muted-foreground));
+}
+.almanach .contents li small {
+  display: block;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+/* The Founder Almanach's "The Land" entry nests the claimed chain (#3983
+   Plan B Task 6 fix round 1, plate F-IV's own `.contents li ol`). */
+.almanach .contents li ol {
+  margin-top: 0.15rem;
+}
+.almanach .contents li ol li {
+  padding: 0.1rem 0 0.1rem 0.8rem;
+  font-size: 0.88rem;
+}
+.almanach .contents a,
+.almanach .contents button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+}
+.almanach .contents a:hover,
+.almanach .contents button:hover {
+  color: hsl(var(--primary));
+}
+.almanach .contents li.cur button {
+  color: hsl(var(--primary));
+}
+
+/* --- the chapter heading + realm switcher --- */
+
+.almanach .chapter h3 {
+  font-size: 1.5rem;
+  letter-spacing: 0.03em;
+  margin: 0 0 0.6rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.almanach .chapter h3 .tier {
+  font-family: theme('fontFamily.body');
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .chapter h3 button.lnk {
+  font: inherit;
+  border-bottom: 1px dotted hsl(var(--muted-foreground));
+}
+.almanach .chapter h3 button.lnk::after {
+  content: ' \25BE';
+  font-size: 0.6em;
+  color: hsl(var(--muted-foreground));
+}
+/* The Founder Almanach's tier-switch control (#3983 Plan B Task 4, plate
+   F-I's "Duchies" button) shares `.lnk`'s underline/font but drops the
+   dropdown arrow the realm switcher keeps — matches the plate's own
+   `.chapter h3 button.lnk.plain::after{content:none}` rule. */
+.almanach .chapter h3 button.lnk.plain::after {
+  content: none;
+}
+.almanach .switcher {
+  position: relative;
+  display: inline-block;
+}
+.almanach .switcher-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin: 0.3rem 0 0;
+  padding: 0.3rem 0;
+  min-width: 12rem;
+  list-style: none;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 12px 28px -18px rgb(0 0 0 / 0.45);
+}
+.almanach .switcher-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
+}
+.almanach .switcher-list button:hover {
+  background: hsl(var(--muted));
+}
+.almanach .switcher-list li[aria-selected='true'] button {
+  color: hsl(var(--primary));
+}
+
+/* --- the level bar --- */
+
+.almanach .lvl {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid hsl(var(--muted-foreground));
+  margin: 0.2rem 0 1rem;
+}
+.almanach .lvl button {
+  padding: 0.2rem 0.8rem;
+  border-right: 1px solid hsl(var(--muted-foreground));
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.almanach .lvl button:last-child {
+  border-right: 0;
+}
+.almanach .lvl button[aria-pressed='true'] {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+/* --- the ladder table --- */
+
+.almanach .scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.almanach .lad {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  font-family: theme('fontFamily.body');
+}
+.almanach .lad th {
+  text-align: left;
+  padding: 0.3rem 0.4rem 0.3rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
+}
+.almanach .lad td {
+  padding: 0.38rem 0.4rem 0.38rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: baseline;
+}
+.almanach .lad td.n,
+.almanach .lad th.n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.almanach .lad .d1 td:first-child {
+  padding-left: 1.4rem;
+}
+.almanach .lad .d2 td:first-child {
+  padding-left: 2.8rem;
+}
+.almanach .lad .d3 td:first-child {
+  padding-left: 4.2rem;
+}
+.almanach .lad .tg {
+  display: inline-block;
+  width: 1.1rem;
+  color: hsl(var(--muted-foreground));
+  text-align: left;
+}
+.almanach .lad .tg.none {
+  visibility: hidden;
+}
+.almanach .lad .tw {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  margin-right: 0.4rem;
+}
+.almanach .lad .seat,
+.almanach .lad td .meta {
+  margin-left: 0.5rem;
+  white-space: nowrap;
+}
+.almanach .lad .held {
+  color: hsl(var(--foreground));
+}
+.almanach .lad .rung-name:hover,
+.almanach .lad .rung-name:focus-visible {
+  text-decoration: underline;
+}
+.almanach .lad tr.sel td {
+  background: hsl(var(--muted));
+}
+/* A contested title (`claimant_name !== ''`, final review deferred item 2)
+   — the plate's `.cl` row, `.lad .cl td{color:var(--claimed)}`. `--claimed`
+   is the plate's own alias for the same value as `--ink-mute` in both
+   themes (base.css's token block), which this app already renders as
+   `hsl(var(--muted-foreground))` everywhere else (`.meta`, `.tip`, `.bar
+   .mode`) — so this rule reuses that token rather than inventing a new one. */
+.almanach .lad .cl td {
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- column-header glosses (plate S-I `.tip`/`.bub` — hover/focus, not help text) --- */
+
+.almanach .tip {
+  position: relative;
+  border-bottom: 1px dotted hsl(var(--muted-foreground));
+  text-align: left;
+}
+.almanach .tip .bub {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 1.6rem;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  padding: 0.4rem 0.7rem;
+  font-family: theme('fontFamily.body');
+  font-size: 0.85rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  width: max-content;
+  /* Never wider than the viewport (review fix round 2) — a full 20rem bubble
+     on a narrow phone would itself force new overflow next to the fix below. */
+  max-width: min(20rem, 90vw);
+  z-index: 5;
+}
+.almanach .tip:hover .bub,
+.almanach .tip:focus-visible .bub,
+.almanach .tip:focus-within .bub {
+  display: block;
+}
+/*
+ * The demesne/vassals `.tip` buttons sit at the RIGHT edge of a
+ * right-aligned (`.n`) header cell — the last one (`vassals`) at the
+ * table's own right edge. `.bub`'s default `left:0` anchors the bubble's
+ * LEFT edge there and grows rightward, so it ran off the table (and got
+ * clipped: `.scroll`'s `overflow-x:auto` forces `overflow-y` to compute as
+ * `auto` too per the CSS Overflow spec, so anything overflowing `.scroll`'s
+ * box on EITHER axis clips, review fix round 2). Anchoring the bubble's
+ * RIGHT edge to the tip button's right edge instead makes it grow leftward,
+ * back over the table it's already inside.
+ */
+.almanach .lad th.n .tip .bub {
+  left: auto;
+  right: 0;
+}
+
+/* --- chips --- */
+
+.almanach .chip {
+  display: inline-block;
+  font-size: 0.8rem;
+  border: 1px solid hsl(var(--muted-foreground));
+  padding: 0.02rem 0.5rem;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+}
+.almanach .chip.open,
+.almanach .chip.acc {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+.almanach .chip.undef {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+  font-style: italic;
+}
+
+/* --- save bar + buttons --- */
+
+.almanach .savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  border-top: 1px solid hsl(var(--border));
+  padding-top: 0.9rem;
+  margin-top: 1.6rem;
+}
+.almanach .savebar .note {
+  margin-right: auto;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .btn {
+  font-size: 0.9rem;
+  padding: 0.3rem 1rem;
+  border: 1px solid hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.almanach .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.almanach .btn.quiet {
+  background: transparent;
+  color: hsl(var(--primary));
+}
+.almanach .btn.ghost {
+  background: transparent;
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--muted-foreground));
+}
+/* PersonPanel's inline per-person Save (review fix round 1, Finding M1 —
+   was emitted with no matching rule). */
+.almanach .btn.sm {
+  font-size: 0.85rem;
+  padding: 0.05rem 0.6rem;
+}
+
+/* --- record rail --- */
+
+.almanach .record h4 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+.almanach .record dl {
+  margin: 0 0 1.3rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.93rem;
+}
+.almanach .record dt {
+  color: hsl(var(--muted-foreground));
+}
+.almanach .record dd {
+  margin: 0;
+}
+/* The founder Almanach's "record, so far" rail (#3983 Plan B Task 4, plates
+   F-II onward `.sofar`) — a running quote of the founder's own choices, a
+   `.todo` entry for anything not reached yet. */
+.almanach .record .sofar {
+  list-style: none;
+  margin: 0 0 1.3rem;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.almanach .record .sofar li {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.almanach .record .sofar li .q {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+}
+.almanach .record .sofar li.todo {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+/* Screen-reader-only text (#3983 Plan B Task 4) — the ladder table's "claim"
+   column header when `LadderTable` carries a `trailingCell`. */
+.almanach .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- dialog interiors (Plant a rung / Batch unclaimed) --- */
+
+.almanach .field {
+  margin-block: 0.6rem;
+}
+.almanach .field > .label,
+.almanach .field label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .field .val {
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.2rem 0;
+  min-height: 1.6rem;
+}
+.almanach .row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.5rem;
+}
+@media (max-width: 480px) {
+  .almanach .row2 {
+    grid-template-columns: 1fr;
+  }
+}
+.almanach .seg {
+  display: inline-flex;
+  border: 1px solid hsl(var(--muted-foreground));
+}
+.almanach .seg button {
+  padding: 0.15rem 0.7rem;
+  font-size: 0.85rem;
+  border-right: 1px solid hsl(var(--muted-foreground));
+}
+.almanach .seg button:last-child {
+  border-right: 0;
+}
+.almanach .seg button[aria-pressed='true'] {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+.almanach .seg button[disabled] {
+  color: hsl(var(--muted-foreground));
+  cursor: default;
+}
+.almanach .field .val.empty {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+/* ==========================================================================
+ * House Document (#3983 Task 9, plates S-III to S-VIII) — the rest of the
+ * plate's vocabulary, ported from `scratchpad/almanac/base.css` onto the
+ * same app HSL tokens the block above uses (accent -> --primary, hairlines
+ * -> --border/--muted-foreground, paper-2 -> --popover, shade -> --muted).
+ * `--award` (the plate's distinct "confirmed/success" green) has no app
+ * token of its own, so `.status.pub`/`.ok` reuse --primary, matching how
+ * `.chip.open`/`.chip.acc` already stand in for it above.
+ * ========================================================================== */
+
+.almanach .row3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0 1.5rem;
+}
+@media (max-width: 600px) {
+  .almanach .row3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.almanach .chapter h4.sec {
+  font-family: theme('fontFamily.display');
+  font-weight: 400;
+  font-size: 1.2rem;
+  letter-spacing: 0.03em;
+  margin: 1.8rem 0 0.2rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* The founder House chapter's own Quiddity prompt (#3983 Plan B Task 5 fix
+   round 1, Finding I2, plate F-II's `.sub` line, `founder.html:75`) — the
+   template's authored `aspect_definitions[0].prompt`, not chrome, so it gets
+   its own italic/muted treatment rather than default paragraph styling. */
+.almanach .chapter .sub {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+  margin: 0 0 1.2rem;
+  font-size: 0.95rem;
+}
+
+.almanach .prose {
+  border-left: 2px solid hsl(var(--primary) / 0.42);
+  padding: 0.3rem 0 0.3rem 1rem;
+  margin-block: 0.4rem 1.2rem;
+  white-space: pre-wrap;
+  max-width: 62ch;
+}
+.almanach .prose.empty {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+/* An editable prose field (house words/colors/sigil/description, barony and
+   estate description) — a real `<textarea class="prose">`, not the
+   read-only `.prose` div above, but styled to match it. */
+.almanach textarea.prose {
+  display: block;
+  width: 100%;
+  min-height: 4rem;
+  max-width: 62ch;
+  resize: vertical;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre-wrap;
+}
+.almanach textarea.prose:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.almanach .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0.6rem;
+}
+
+.almanach .entries {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.almanach .entries li {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr auto;
+  gap: 0.6rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  align-items: baseline;
+}
+.almanach .entries li .mark {
+  color: hsl(var(--primary));
+  font-size: 0.9rem;
+}
+.almanach .entries li .nm {
+  font-weight: 500;
+}
+.almanach .entries li .ds {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.92rem;
+}
+.almanach .entries li .rt {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+.almanach .entries li.on .nm {
+  color: hsl(var(--primary));
+}
+/* Unchosen Quiddity descriptions stay folded (plate III) — only the .on
+   (chosen) entry's .ds shows without a hover/click. */
+.almanach .entries.compact li:not(.on) .ds {
+  display: none;
+}
+
+/* --- the family tree --- */
+.almanach .tree {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+.almanach .tree > li {
+  border-top: 1px solid hsl(var(--border));
+  padding: 0.6rem 0;
+}
+.almanach .tree .who {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.3rem 1rem;
+  align-items: baseline;
+}
+.almanach .tree .who .nm {
+  font-weight: 500;
+}
+.almanach .tree .who .nm.dead {
+  color: hsl(var(--muted-foreground));
+}
+.almanach .tree .who .rel {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.88rem;
+}
+.almanach .tree .who .st {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+.almanach .tree .who .st.open {
+  color: hsl(var(--primary));
+}
+.almanach .tree .who .st.hid,
+.almanach .tree .who .st.you {
+  color: hsl(var(--primary));
+}
+.almanach .tree ul {
+  list-style: none;
+  margin: 0.3rem 0 0 1.4rem;
+  padding: 0;
+  border-left: 1px solid hsl(var(--border));
+}
+.almanach .tree ul li {
+  padding: 0.3rem 0 0.3rem 1rem;
+}
+.almanach .tree li.sel > .who {
+  background: hsl(var(--muted));
+  margin-left: -0.6rem;
+  padding-left: 0.6rem;
+}
+.almanach .tree .band {
+  margin-top: 0.6rem;
+}
+
+.almanach .add {
+  color: hsl(var(--primary));
+  font-size: 0.9rem;
+  background: none;
+}
+
+/* --- the selected person's panel, opened in place inside its <li> --- */
+.almanach .panel {
+  border: 1px solid hsl(var(--muted-foreground));
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  padding: 0.9rem 1.2rem 0.4rem;
+  margin: 0.6rem 0 0.3rem;
+}
+.almanach .panel .row3 .field {
+  margin-block: 0.5rem;
+}
+
+/* --- a barony's ancestry breadcrumb --- */
+.almanach .chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+  align-items: baseline;
+  font-size: 0.92rem;
+  margin: 0.2rem 0 1rem;
+}
+.almanach .chain span + span::before {
+  content: '\203A';
+  margin-right: 0.6rem;
+  color: hsl(var(--muted-foreground));
+}
+.almanach .chain .tw {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  margin-right: 0.3rem;
+}
+.almanach .chain .cur {
+  color: hsl(var(--primary));
+}
+
+/* --- a demesne's produces ledger --- */
+.almanach table.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0.3rem 0 0.8rem;
+  font-family: theme('fontFamily.body');
+}
+.almanach table.ledger th {
+  text-align: left;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
+}
+.almanach table.ledger td {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: top;
+}
+.almanach table.ledger td.n {
+  text-align: right;
+}
+
+/* --- the publish status chip (bar) and the chapters table's check mark --- */
+.almanach .status {
+  display: inline-block;
+  font-size: 0.8rem;
+  border: 1px solid hsl(var(--muted-foreground));
+  padding: 0.05rem 0.6rem;
+  color: hsl(var(--muted-foreground));
+  background: none;
+}
+.almanach .status.pub {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+.almanach .ok {
+  color: hsl(var(--primary));
+}
+
+/* --- a numeric range (ported for parity; no plate III-VIII field uses it yet) --- */
+.almanach .range {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+  margin: 0.3rem 0;
+}
+.almanach .range .track {
+  height: 2px;
+  background: hsl(var(--border));
+  position: relative;
+}
+.almanach .range .track .win {
+  position: absolute;
+  top: -3px;
+  height: 8px;
+  background: hsl(var(--primary) / 0.42);
+}
+/* The founder House chapter's own principle sliders (#3983 Plan B Task 5,
+   plate F-II) — a real `<input type="range">` sits over `.win`'s decorative
+   window so the founder can drag a value the template's own min/max
+   constrains; the browser's default thumb stands in for the plate's static
+   `.k` dot (a styling pass, not a mechanics gap — see the task report). */
+.almanach .range .track input[type='range'] {
+  position: absolute;
+  inset: -9px 0 auto 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+.almanach .range .track input[type='range']:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.almanach .faint {
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- the record rail's "doors" list (not ported by Task 8; every plate
+   III-VII record rail uses it) --- */
+.almanach .doors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.almanach .doors li {
+  border-bottom: 1px solid hsl(var(--border));
+}
+.almanach .doors li a,
+.almanach .doors li button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0;
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+/* A door with no destination yet (review fix round 1, Finding I2) — the
+   label still shows, but muted and non-interactive, dash-suffixed instead
+   of colored like a working `a`/`button` door. */
+.almanach .doors li span.faint {
+  display: block;
+  padding: 0.5rem 0;
+}
+.almanach .doors li small {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+}
+
+/* --- editable page-body fields (PersonPanel's age/gender, BaronyPage's hall)
+   — plain elements styled like the plate's own `.val`, never the shadcn
+   Input/Select look reserved for Dialog popups --- */
+.almanach .chapter input[type='number'],
+.almanach .chapter input[type='text'],
+.almanach .chapter select {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.2rem 0;
+}
+.almanach .chapter input:focus-visible,
+.almanach .chapter select:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* --- the Record plate's full-bleed "Submitted" moment (#3983 Plan B Task 6,
+   plate F-VI's `.night`, `SubmittedPlate.tsx`) — literal fixed-dark colors,
+   NOT the app's HSL realm tokens this file otherwise uses throughout: the
+   plate's own `base.css` never redefines `--night`/`--night-text`/
+   `--night-soft` under its dark-mode block either, so this moment stays the
+   same dark regardless of the viewer's light/dark preference. Matches the
+   same "constant night literals in both themes" call
+   `character-creation/folio/NightPlate.tsx` already makes for the CG
+   stage's own arrival/submission moments. */
+.almanach .night {
+  background: #0e1116;
+  color: #e8e2d4;
+  padding: 3rem 1.6rem;
+  text-align: center;
+}
+.almanach .night h3 {
+  font-family: theme('fontFamily.display');
+  font-weight: 400;
+  font-variant: small-caps;
+  font-size: 1.6rem;
+  margin: 0 0 0.6rem;
+  color: #e8e2d4;
+}
+.almanach .night p {
+  margin: 0.3rem auto;
+  max-width: 48ch;
+  color: #b9b2a2;
+}
+.almanach .night .st {
+  display: inline-block;
+  margin-top: 1rem;
+  border: 1px solid #b9b2a2;
+  padding: 0.1rem 0.8rem;
+  font-size: 0.85rem;
+  color: #e8e2d4;
+}

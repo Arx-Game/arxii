@@ -370,6 +370,53 @@ class SeedTests(TestCase):
         assert any(not e["is_true"] for e in omniscient_payload.parentage)
 
 
+class BelievedDeathTests(TestCase):
+    """#3983 spec Testing (3): a believed death is what the world sees, and
+    the world never sees past it. ``believed_deceased`` is the public value;
+    ``is_deceased`` is the truth, and only staff read it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.family = FamilyFactory(name="Brasa", kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
+        cls.heir = _person("Living Heir")
+        # The house puts it about that the heir died; the heir is alive.
+        # ``record_public_belief`` is the house-side writer for this
+        # (#3983); the field itself is the roster's.
+        cls.heir.believed_deceased = True
+        cls.heir.save(update_fields=["believed_deceased"])
+        kinship.add_membership(kinsperson=cls.heir, family=cls.family, basis=MembershipBasis.BORN)
+
+    def test_the_public_tree_reads_a_believed_death_as_death(self) -> None:
+        _node, entry, _sheet = _pc_with_entry("Bystander")
+        node = next(
+            n for n in kinship.family_tree_for(self.family, entry).nodes if n["id"] == self.heir.pk
+        )
+        assert node["is_deceased"] is True, "the heir is alive; the world believes otherwise"
+        assert "believed_deceased" not in node, "the flag itself would give the hiding away"
+
+    def test_staff_read_the_truth_and_the_belief_side_by_side(self) -> None:
+        node = next(
+            n
+            for n in kinship.family_tree_for(self.family, OMNISCIENT).nodes
+            if n["id"] == self.heir.pk
+        )
+        assert node["is_deceased"] is False
+        assert node["believed_deceased"] is True
+
+    def test_a_real_death_reads_as_death_to_everyone(self) -> None:
+        dead = _person("Truly Dead", is_deceased=True)
+        kinship.add_membership(kinsperson=dead, family=self.family, basis=MembershipBasis.BORN)
+        _node, entry, _sheet = _pc_with_entry("Mourner")
+        public = next(
+            n for n in kinship.family_tree_for(self.family, entry).nodes if n["id"] == dead.pk
+        )
+        staff = next(
+            n for n in kinship.family_tree_for(self.family, OMNISCIENT).nodes if n["id"] == dead.pk
+        )
+        assert public["is_deceased"] is True
+        assert staff["is_deceased"] is True
+
+
 class RosterEntryFactoryCheck(TestCase):
     def test_pc_with_entry_helper(self) -> None:
         node, entry, sheet = _pc_with_entry("Selfcheck")

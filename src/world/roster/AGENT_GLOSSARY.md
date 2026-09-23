@@ -55,6 +55,23 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   wrongly believes; the hidden-true fact behind it anchors a
   `secrets.Secret` (who-knows rides secrets machinery). Hidden with no
   secret = staff-only. _Avoid:_ per-viewer belief tables.
+- **Believed Dead** (`Kinsperson.believed_deceased`, #3983) — the same
+  public-record-vs-truth principle above, applied to one person-level fact
+  (a death) rather than an edge/union/incarnation, so it rides its own
+  boolean instead of the `is_public_record`/`is_true` pair: `is_deceased` is
+  the private truth, `believed_deceased` is what the world believes, set
+  only by `world.societies.houses.almanach.record_public_belief`. Renders as
+  "hidden truth" on the Almanach's family tree wherever it (or a touching
+  parentage secret) makes a row's public face diverge from what actually
+  happened. Reading it is viewer-gated like every other kinship fact
+  (`_node_dict`): an ordinary viewer's tree node reports
+  `is_deceased = is_deceased or believed_deceased` and carries no
+  `believed_deceased` key at all, while `OMNISCIENT` gets both raw.
+  _Avoid:_ is_deceased (that's the truth, not the belief); shipping the flag
+  beside the truth to a player-facing reader (that hands the client the fact
+  it hides); folding
+  it into `is_public_record`/`is_true` (those apply to edges/unions/
+  incarnations, not a bare person fact).
 - **Subject-unaware secret** — `Secret.subject_aware=False`: a truth about
   a character that even they don't start knowing (Misbegotten parentage);
   off their own-secrets shelf until granted.
@@ -98,7 +115,10 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   in the Lineage stage within a Beginning: a CG point cost and which Family
   Paths it allows. The code keeps the `OriginTemplate*`
   class names (Decision 4 on #3617); "Upbringing" is the player- and
-  staff-facing word. _Avoid:_ origin option, household.
+  staff-facing word. _Avoid:_ origin option; household (that word is now
+  spoken for — the Almanach's own term, #3983, for a house's retainer band;
+  see `world.societies.AGENT_GLOSSARY.md`'s Household entry — never loose CG
+  vocabulary for Upbringing either).
 - **Family Path** (#3617, #3648): `FamilyPath`, the shape an Upbringing gives a
   character's family record: claimed (a staff-authored family of an offered
   Family Kind, entered through a Vacancy when one is offered), named (a new
@@ -277,9 +297,13 @@ cards, per-character tidings `CountChip`s, `PersonaTiles`, select-on-click,
 "Clear Active Character"), "Your Attention" (OOC mail + per-character pending
 groups), and "The World" (clock, upcoming occasions, the Crier tidings skim).
 Naming is deliberately unfinished — Apostate's to finalize; don't treat "the
-Hall" as a canon term to build further copy/UI around until ratified.
+Hall" as a canon term to build further copy/UI around until ratified. Not
+`world.societies.AGENT_GLOSSARY.md`'s "Hall" (`Domain.hall`, #3983 — a
+title's seat building) — the two share an English word and nothing else;
+never conflate them in copy or code comments.
 _Avoid_: treating the name as final; "home page" (loses the in-fiction voice
-the rest of the frontend maintains).
+the rest of the frontend maintains); conflating with the Almanach's
+`Domain.hall` (see societies glossary — an unrelated concept).
 
 **Connection** (#3660):
 The tie a "pick a group" Upbringing prompt records: which real

@@ -2,6 +2,8 @@
 
 from django.db import models
 
+from world.areas.constants import AreaLevel
+
 # --- Domain economics (#2238) — PLACEHOLDER magnitudes ---
 # Prosperity at which a domain's holdings yield their base gross (a neutral 1.0x).
 # Above it holdings over-yield; below they under-yield; at 0 prosperity, no income.
@@ -99,6 +101,41 @@ class TitleTier(models.TextChoices):
     MARCH = "march", "March"
     COUNTY = "county", "County"
     BARONY = "barony", "Barony"
+
+
+class HouseState(models.TextChoices):
+    """Lifecycle standing of a house org (#3983)."""
+
+    STANDING = "standing", "Standing"
+    IN_EXILE = "in_exile", "In exile"
+    EXTINCT = "extinct", "Extinct"
+    GENTRY = "gentry", "Gentry"
+
+
+# Which Atlas rung a title's demesne sits on (#3983). MARCH is a county-tier
+# holding, so it shares the county rung.
+TIER_TO_AREA_LEVEL: dict[str, int] = {
+    TitleTier.EMPIRE: AreaLevel.EMPIRE,
+    TitleTier.KINGDOM: AreaLevel.KINGDOM,
+    TitleTier.DUCHY: AreaLevel.DUCHY,
+    TitleTier.MARCH: AreaLevel.COUNTY,
+    TitleTier.COUNTY: AreaLevel.COUNTY,
+    TitleTier.BARONY: AreaLevel.BARONY,
+}
+
+
+class ClaimKinRelation(models.TextChoices):
+    """A founder-written kin's relation to the head of the claimed house (#3983)."""
+
+    HEAD = "head", "Head of house"
+    MOTHER = "mother", "Mother"
+    FATHER = "father", "Father"
+    SPOUSE = "spouse", "Spouse"
+    SIBLING = "sibling", "Sibling"
+    CHILD = "child", "Child"
+    GRANDPARENT = "grandparent", "Grandparent"
+    WARD = "ward", "Ward"
+    POSITION = "position", "Household position"
 
 
 # Mechanical ordering of TitleTier for band resolution (#3261): a particle row

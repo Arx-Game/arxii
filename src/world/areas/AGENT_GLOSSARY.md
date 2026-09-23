@@ -85,13 +85,61 @@ words never substitute for each other.
 _Avoid_: build (see above), structure (as a synonym)
 
 **Elevation** (#696 gap 3):
-The earned, player-declared act of raising an `Area`'s `level` one rung (e.g.
+The earned, player-declared act of raising an `Area`'s `level` one step (e.g.
 NEIGHBORHOOD to WARD), gated by `AreaElevationRequirement` thresholds (held
 BUILDING-level descendants + the area's ORDER stat) and a coin cost -
 `world.areas.elevation_services.declare_elevation()`, dispatched via
 `DeclareElevationAction` (registry key `declare_elevation`). Distinct from the
 staff/GM-warrant-gated `EditAreaAction` level edit, which can still set
-`area.level` directly and is not subject to these thresholds.
+`area.level` directly and is not subject to these thresholds. This "one
+`AreaLevel` step" sense is generic — not the feudal **Rung** below, a
+specific, named unit of the Almanach's ladder.
 _Avoid_: promote/promotion (already means origin promotion - PLAYER/STORY to
 AUTHORED - see **Promote** above; the two concepts never overlap), level-up,
-upgrade, tier-up
+upgrade, tier-up, rung (bare, unqualified — see **Rung** below for the
+specific feudal-ladder sense; "elevation" already owns the generic
+one-`AreaLevel`-step meaning)
+
+**Rung** (#3983):
+One BARONY-through-EMPIRE step of the Almanach de Catenys's feudal ladder — a
+`Title`'s own tier, backed by a concrete `Area` in the ordinary
+`Area.parent`/`level` tree (`BARONY`(46)/`COUNTY`(53)/`DUCHY`(56)/`KINGDOM`(60)/
+`EMPIRE`(65), all between `CITY` and `CONTINENT`, ADR-0309). `plant_rung`
+(`world.societies.houses.almanach`) is a rung's unit of work: it mints one
+`Area` per tier down to the barony at the bottom of the chain
+(`TIER_TO_AREA_LEVEL` maps a `TitleTier` to its `AreaLevel`; `MARCH` shares
+`COUNTY`'s level rather than getting a rung of its own), a `Domain` per chain
+`Area`, and a `Title` per chain tier, all sharing one seat `Domain`. See
+`docs/systems/houses.md`'s Almanach de Catenys section and
+`world.societies.AGENT_GLOSSARY.md` for the ladder vocabulary built on this
+(Seat, Hall, Demesne).
+_Avoid_: level (bare — that's the raw `AreaLevel` enum value; a rung is
+specifically a feudal-ladder step with a `Title` on it, not every `AreaLevel`
+value has one); elevation (see above — that's the unrelated, generic
+one-step-up act on any area, gated by `AreaElevationRequirement`, nothing to
+do with titles or fealty)
+
+**Ward** (`AreaLevel.WARD` = 30, #3983 Plan B Task 7):
+A city subdivision, one step below `CITY`(40) and above `NEIGHBORHOOD`(20) —
+`AreaLevel.WARD`'s own verbose label is literally "Ward". Founder- and
+staff-facing copy never says "ward" for this level: the Founder Almanach's
+Estate leaf and `almanach_reads._estate_payload` both call it a **district**
+(`DISTRICT` in `frontend/src/almanach/copy.ts`, `HouseClaim.estate_district`).
+That renaming exists BECAUSE the bare word "Ward" already means something else
+entirely one glossary over — see `world.societies.AGENT_GLOSSARY.md`'s
+Household entry: a house's retainer position (`ClaimKinRelation.WARD`,
+ADR-0311). The two share nothing but an English word (one is a place, the
+other a person's role in a household); never conflate "the city's Ward" with
+"a house's Ward."
+_Avoid_: ward (bare, in copy — "district" is the established copy word for
+this level); sub-city, district (as the level's own technical name — it stays
+`AreaLevel.WARD` in code; "district" is copy only)
+
+**Capital** (`Area.is_capital`, #3983 Plan B Task 7):
+See `world.societies.AGENT_GLOSSARY.md`'s Capital entry, the canonical
+definition — a founder-mode concept (the estate gate, `plan_estate`'s anchor)
+even though the field itself lives on `Area`. In short: the realm's one
+designated CITY-level `Area` (`areas_one_capital_per_realm` constraint, one
+per realm).
+_Avoid_: see that entry's own `_Avoid_` line — "capital" is never the right
+word for a title's own barony-level **Seat**.

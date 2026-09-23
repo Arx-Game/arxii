@@ -25,6 +25,14 @@ export interface StartingArea {
   /** The realm page's route key and name (#3725); null when the area has no realm. */
   realm_slug: string | null;
   realm_name: string | null;
+  /**
+   * The Almanach realm id the area's ladder lives under (#3983 Plan B),
+   * once Task 3 adds it to the API — optional so a draft fetched before
+   * that lands still typechecks. The Founder Almanach's realm switcher
+   * falls back to the first realm `useRealms()` returns when this is
+   * absent, per Task 4's controller-verified decision.
+   */
+  realm_id?: number | null;
 }
 
 /** The world fact behind a heritage's CG age ceiling (#3663). */
@@ -1033,6 +1041,22 @@ export interface OriginTemplateSlotChoice {
 /** The family path a slot prompt is scoped to, or 'any' for every path. */
 export type FamilyPath = 'claimed' | 'named' | 'none';
 
+/**
+ * A founder-written kin's relation to the head of the claimed house (#3983
+ * Plan B; mirrors `world.societies.houses.constants.ClaimKinRelation`).
+ * The founder dialog (Plan B Task 5) offers every value but `grandparent`.
+ */
+export type ClaimKinRelation =
+  | 'head'
+  | 'mother'
+  | 'father'
+  | 'spouse'
+  | 'sibling'
+  | 'child'
+  | 'grandparent'
+  | 'ward'
+  | 'position';
+
 /** What kind of thing an Upbringing prompt asks for (#3660). */
 export type QuestionKind = 'text' | 'pick' | 'group' | 'person';
 
@@ -1134,6 +1158,15 @@ export interface OriginTemplate {
   /** Family Templates offered on the name path (#3648; replaces named_family_kind). */
   family_templates: FamilyTemplate[];
   slots: OriginTemplateSlot[];
+  /**
+   * The highest House tier this Upbringing may found (#3983 Plan B), a
+   * `TitleTier` value (e.g. `'duchy'`) or `''` for no ceiling. Required as
+   * of Plan B Task 6 (the backend field itself is non-optional,
+   * `src/generated/api.d.ts`'s `OriginTemplate.max_claim_tier`) —
+   * `permittedRank` (`steps.ts`) still treats a blank string the same as
+   * "no ceiling."
+   */
+  max_claim_tier: string;
 }
 
 /** The family paths this Upbringing allows, in claim/name/none order. */

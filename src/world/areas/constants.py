@@ -34,12 +34,19 @@ DIRECTIONS: dict[str, Direction] = {
 
 
 class AreaLevel(models.IntegerChoices):
+    """Feudal rungs BARONY/COUNTY/DUCHY/EMPIRE (#3983) sit between CITY and
+    CONTINENT so a duchy can contain a county on the map."""
+
     BUILDING = 10, "Building"
     NEIGHBORHOOD = 20, "Neighborhood"
     WARD = 30, "Ward"
     CITY = 40, "City"
+    BARONY = 46, "Barony"
     REGION = 50, "Region"
+    COUNTY = 53, "County"
+    DUCHY = 56, "Duchy"
     KINGDOM = 60, "Kingdom"
+    EMPIRE = 65, "Empire"
     CONTINENT = 70, "Continent"
     WORLD = 80, "World"
     PLANE = 90, "Plane"

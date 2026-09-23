@@ -583,8 +583,41 @@ def pass_title(title: Title, *, to_holder: Kinsperson) -> Title:
 # ---------------------------------------------------------------------------
 
 
-def swear_fealty(*, vassal: Organization, liege: Organization) -> FealtyEdge:
-    """Bind ``vassal`` under ``liege``, refusing cycles (the tree stays a tree)."""
+def _mint_obligation(
+    *, payer: Organization, payee: Organization, name: str, percent: int
+) -> OrgObligation:
+    from world.currency.models import OrgObligation  # noqa: PLC0415
+
+    return OrgObligation.objects.create(
+        from_organization=payer,
+        to_organization=payee,
+        name=name,
+        percent=percent,
+    )
+
+
+def _realm_default_tithe(liege: Organization) -> int:
+    realm = realm_for_house(liege)
+    return realm.default_tithe_pct if realm is not None else 0
+
+
+def _mint_tithe(*, payer: Organization, payee: Organization, percent: int) -> OrgObligation:
+    return _mint_obligation(
+        payer=payer,
+        payee=payee,
+        name=f"Fealty tithe: {payer.name} to {payee.name}",
+        percent=percent,
+    )
+
+
+def swear_fealty(
+    *, vassal: Organization, liege: Organization, tithe_pct: int | None = None
+) -> FealtyEdge:
+    """Bind ``vassal`` under ``liege``, refusing cycles (the tree stays a tree).
+
+    Mints an ``OrgObligation`` tithe when ``tithe_pct`` (or the liege's realm
+    default) is above zero (#3983).
+    """
     if vassal.pk == liege.pk:
         msg = "an org cannot swear fealty to itself"
         raise HousesServiceError(msg, user_message="A house cannot swear fealty to itself.")
@@ -599,8 +632,15 @@ def swear_fealty(*, vassal: Organization, liege: Organization) -> FealtyEdge:
         probe = edge.liege if edge is not None else None
     existing = FealtyEdge.objects.filter(vassal=vassal).first()
     if existing is not None:
+        if existing.obligation_id is not None:
+            existing.obligation.delete()
         existing.delete()
-    return FealtyEdge.objects.create(vassal=vassal, liege=liege)
+    edge = FealtyEdge.objects.create(vassal=vassal, liege=liege)
+    pct = tithe_pct if tithe_pct is not None else _realm_default_tithe(liege)
+    if pct > 0:
+        edge.obligation = _mint_tithe(payer=vassal, payee=liege, percent=pct)
+        edge.save(update_fields=["obligation"])
+    return edge
 
 
 def vassals_of(liege: Organization, *, recursive: bool = False) -> list[Organization]:
@@ -674,11 +714,9 @@ def _execute_dowry(spec: CommitmentSpec, payer: Organization, payee: Organizatio
 def _execute_subsidy(
     spec: CommitmentSpec, payer: Organization, payee: Organization
 ) -> OrgObligation:
-    from world.currency.models import OrgObligation  # noqa: PLC0415
-
-    return OrgObligation.objects.create(
-        from_organization=payer,
-        to_organization=payee,
+    return _mint_obligation(
+        payer=payer,
+        payee=payee,
         name=f"Marriage subsidy: {payer.name} to {payee.name}",
         percent=spec.percent,
     )
@@ -919,6 +957,11 @@ def add_holding(*, domain: Domain, kind: HoldingKind, name: str = "") -> DomainH
     """
     from world.currency.models import OrgIncomeStream  # noqa: PLC0415
 
+    if domain.owner_org_id is None:
+        msg = f"domain {domain.pk} has no holder"
+        raise HousesServiceError(
+            msg, user_message="An unclaimed demesne cannot hold a holding yet."
+        )
     stream_name = name or f"{domain.name}: {kind.name}"
     stream = OrgIncomeStream.objects.create(
         organization=domain.owner_org,

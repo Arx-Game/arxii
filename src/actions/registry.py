@@ -9,6 +9,18 @@ from actions.definitions.accusations import (
     SmearAction,
     mint_accusation,
 )
+from actions.definitions.almanach import (
+    AlmanachAddHoldingAction,
+    AlmanachBatchUnclaimedAction,
+    AlmanachDescribeDemesneAction,
+    AlmanachEditHouseAction,
+    AlmanachEditKinAction,
+    AlmanachNameRungAction,
+    AlmanachPlanEstateAction,
+    AlmanachPlantRungAction,
+    AlmanachPublishAction,
+    AlmanachSwearAction,
+)
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.appetites import DrainAction, FeedAction
 from actions.definitions.areas import DeclareElevationAction
@@ -1169,6 +1181,19 @@ _ALL_ACTIONS: list[Action] = [
     StaffRemoveClueTriggerAction(),
     StaffPlacePortalAnchorAction(),
     StaffRemovePortalAnchorAction(),
+    # #3983 Almanach de Catenys: staff house builder — plant/name/batch rungs,
+    # edit the house record, swear fealty, describe demesnes, add holdings,
+    # plan estates, author kin, publish/unpublish.
+    AlmanachPlantRungAction(),
+    AlmanachBatchUnclaimedAction(),
+    AlmanachNameRungAction(),
+    AlmanachEditHouseAction(),
+    AlmanachSwearAction(),
+    AlmanachDescribeDemesneAction(),
+    AlmanachAddHoldingAction(),
+    AlmanachPlanEstateAction(),
+    AlmanachEditKinAction(),
+    AlmanachPublishAction(),
     # #2450 — GM story builder: create/edit/remove story areas + dig/edit story rooms.
     CreateStoryAreaAction(),
     EditStoryAreaAction(),

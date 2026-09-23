@@ -3,21 +3,23 @@
 PLACEHOLDER content. Idempotent get-or-create keyed on names. Rides the
 kinship cluster's House Veyrane: gives it an Organization, a nobiliary
 particle, realm recognition rules, a succession law, a liege (the seed
-crown), a ducal title seated on a domain, and one working holding feeding
-the org books — enough to walk the house page, sheet/house, succession
-derivation, and the feed on a dev DB.
+crown), a ducal title seated on a domain, one working holding feeding the
+org books, and a ``published_at`` (via ``almanach.publish_house``) so the
+demo house is Almanach-visible out of the box — enough to walk the house
+page, sheet/house, succession derivation, and the feed on a dev DB.
 
-``SuccessionLaw``, ``HoldingKind``, ``HouseTemplate`` and ``HouseFeature`` are
-authored content (#2875, see ``docs/systems/houses.md``): this module looks
-them up via ``authored_or_sample`` rather than inventing them with
-``get_or_create``, so a real content universe's rows win and nothing here
-lands in the export. The Crown organization and its Society are plain
-seeder-owned config (neither is in ``CONTENT_MODELS``), but content-repo
-``HouseTemplate``/``SuccessionLaw`` rows can FK them by name, so their
-creation moved to ``world.seeds.config_prerequisites._house_charter_anchors``
-via ``_ensure_house_charter_anchors`` below, which runs before the content
-load. ``seed_houses_demo`` calls the same helper again once "Arx" is
-available, the self-healing pattern ADR-0171 describes.
+``SuccessionLaw``, ``HoldingKind``, ``HouseTemplate``, ``HouseFeature`` and
+``LandShape`` are authored content (#2875/#3983, see
+``docs/systems/houses.md``): this module looks them up via
+``authored_or_sample`` rather than inventing them with ``get_or_create``, so a
+real content universe's rows win and nothing here lands in the export. The
+Crown organization and its Society are plain seeder-owned config (neither is
+in ``CONTENT_MODELS``), but content-repo ``HouseTemplate``/``SuccessionLaw``
+rows can FK them by name, so their creation moved to
+``world.seeds.config_prerequisites._house_charter_anchors`` via
+``_ensure_house_charter_anchors`` below, which runs before the content load.
+``seed_houses_demo`` calls the same helper again once "Arx" is available, the
+self-healing pattern ADR-0171 describes.
 """
 
 from __future__ import annotations
@@ -63,6 +65,34 @@ def seed_nobiliary_particles() -> None:
             )
 
 
+# Authored land-shape catalog (#3983): what a demesne's ground looks like,
+# picked in ``describe_demesne``'s ``land_shape_names`` list. Content-owned
+# (``societies.landshape`` is in ``CONTENT_MODELS``), so this seeds it the
+# same ``authored_or_sample`` way the charter models above are seeded rather
+# than a plain ``get_or_create`` (#2698: a seeder never invents content).
+LAND_SHAPES: tuple[tuple[str, str], ...] = (
+    ("Coast", "PLACEHOLDER: cliffs and harbor towns facing open water."),
+    ("Reefs", "PLACEHOLDER: shoals and barrier reefs working the shallows offshore."),
+    ("Hills", "PLACEHOLDER: rolling upland pasture and terraced slopes."),
+    ("Volcanic", "PLACEHOLDER: ash-fed soil under an active or dormant cone."),
+    ("Marsh", "PLACEHOLDER: wetland fen, difficult to ford."),
+    ("Forest", "PLACEHOLDER: dense timberland, close-canopied."),
+)
+
+
+def seed_land_shapes() -> None:
+    """Look up (or, under ``SEED_SAMPLE_CONTENT``, invent) the authored
+    ``LandShape`` catalog. Independent of any realm — a plain content lookup,
+    not gated on "Arx" existing — so it seeds even when the rest of
+    ``seed_houses_demo`` returns early for lack of an authored realm.
+    """
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.societies.houses.models import LandShape  # noqa: PLC0415
+
+    for order, (name, description) in enumerate(LAND_SHAPES):
+        authored_or_sample(LandShape, {"description": description, "sort_order": order}, name=name)
+
+
 CROWN_ORG_NAME = "The Crown of Arx PLACEHOLDER"
 SOCIETY_NAME = "PLACEHOLDER Peerage of Arx"
 HOUSE_ORG_NAME = "House Veyrane PLACEHOLDER"
@@ -71,6 +101,19 @@ DOMAIN_NAME = "Veyrane Vale PLACEHOLDER"
 CLAIMABLE_TITLE_NAME = "Barony of Thornmere PLACEHOLDER"
 CLAIMABLE_DOMAIN_NAME = "Thornmere Marches PLACEHOLDER"
 TEMPLATE_NAME = "Arx Barony Charter PLACEHOLDER"
+
+# Founder demo ladder (#3983 Plan B Task 7): an unclaimed duchy chain a
+# founder can claim at CG (plus a loose barony inside its own county and a
+# sibling county with its own seat), sitting under a Kingdom-tier rung the
+# demo house holds — the demo house is the LIEGE here, never the holder of
+# the new chain, so the founder ladder lists the duchy claimable under a
+# published liege. `OVERLORDSHIP_TITLE_NAME` is the demo house's own
+# realm-level rung; the pre-existing `DUCAL_TITLE_NAME` above predates
+# `plant_rung` and has no Area chain of its own to hang a vassal duchy off.
+OVERLORDSHIP_TITLE_NAME = "Veyrane Overlordship PLACEHOLDER"
+DEMO_DUCHY_NAME = "Duchy of Ashgrave PLACEHOLDER"
+DEMO_COUNTY_NAME = "County of Millhaven PLACEHOLDER"
+CAPITAL_CITY_NAME = "Arx City PLACEHOLDER"
 
 
 def _ensure_house_charter_anchors(
@@ -147,6 +190,7 @@ def seed_houses_demo() -> None:
     from world.roster.models import Family  # noqa: PLC0415
     from world.seeds.kinship import DUCAL_HOUSE_NAME, seed_kinship_demo  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.societies.houses.almanach import publish_house  # noqa: PLC0415
     from world.societies.houses.constants import (  # noqa: PLC0415
         RecognitionRuleKind,
         SuccessionDerivation,
@@ -169,6 +213,7 @@ def seed_houses_demo() -> None:
 
     seed_kinship_demo()
     seed_nobiliary_particles()
+    seed_land_shapes()
     family = Family.objects.get(name=DUCAL_HOUSE_NAME)
 
     realm = authored_or_sample(
@@ -202,6 +247,15 @@ def seed_houses_demo() -> None:
             "default_succession_law": law,
         },
     )
+    # Called on every run, not just the first: an existing demo house from an
+    # older seed run that predates this call would otherwise stay draft
+    # forever (#3983 Plan B Task 7 fold-in). The founder ladder and the demo
+    # capital are here for the same reason (#3983 review M3) — both are
+    # idempotent by name, and a dev database seeded before this branch would
+    # otherwise never get either of them.
+    publish_house(house)
+    _seed_demo_founder_ladder(realm=realm, house=house)
+    _ensure_demo_capital(realm)
     if not created:
         return
 
@@ -253,6 +307,64 @@ def seed_houses_demo() -> None:
             "seat_domain": domain,
         },
     )
+
+
+def _seed_demo_founder_ladder(*, realm, house) -> None:
+    """Plant the founder demo ladder (#3983 Plan B Task 7, idempotent by name).
+
+    One unclaimed duchy chain (duchy, county, seat barony) a founder can
+    claim at CG, plus one undefined loose barony inside the duchy's own
+    county (`claim_grants` swallows it into a duchy claim, ADR-0315) and one
+    unclaimed county with its own seat barony sitting directly under the
+    duchy (independently claimable, NOT swallowed by a duchy claim). The
+    whole chain plants under `OVERLORDSHIP_TITLE_NAME`, a Kingdom-tier rung
+    the demo house holds, so `liege_for_title` walks straight up to the
+    house and the founder ladder shows the duchy claimable under a
+    published liege.
+    """
+    from world.societies.houses.almanach import batch_unclaimed, plant_rung  # noqa: PLC0415
+    from world.societies.houses.constants import TitleTier  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
+
+    overlordship = Title.objects.filter(name=OVERLORDSHIP_TITLE_NAME).first()
+    if overlordship is None:
+        overlordship = plant_rung(
+            realm=realm, tier=TitleTier.KINGDOM, name=OVERLORDSHIP_TITLE_NAME, held_by=house
+        )
+    if Title.objects.filter(name=DEMO_DUCHY_NAME).exists():
+        return
+    duchy = plant_rung(
+        realm=realm, tier=TitleTier.DUCHY, name=DEMO_DUCHY_NAME, parent_title=overlordship
+    )
+    duchy_county = Title.objects.get(tier=TitleTier.COUNTY, seat_domain=duchy.seat_domain)
+    batch_unclaimed(parent_title=duchy_county, tier=TitleTier.BARONY, count=1)
+    plant_rung(realm=realm, tier=TitleTier.COUNTY, name=DEMO_COUNTY_NAME, parent_title=duchy)
+
+
+def _ensure_demo_capital(realm) -> None:
+    """Mark a CITY-level `Area` of `realm` its capital, planting one when
+    none exists (#3983 Plan B Task 7). `charter_for_realm`'s `capital_name`,
+    the founder Estate leaf's gate (`_validate_kin_and_lands`), and
+    `materialize_house_claim`'s `plan_estate` call all read `Area.is_capital`.
+    """
+    from django.utils.text import slugify  # noqa: PLC0415
+
+    from world.areas.constants import AreaLevel, GridOrigin  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+
+    if Area.objects.filter(realm=realm, is_capital=True).exists():
+        return
+    city = Area.objects.filter(realm=realm, level=AreaLevel.CITY).first()
+    if city is None:
+        city = Area.objects.create(
+            name=CAPITAL_CITY_NAME,
+            slug=slugify(CAPITAL_CITY_NAME),
+            level=AreaLevel.CITY,
+            realm=realm,
+            origin=GridOrigin.AUTHORED,
+        )
+    city.is_capital = True
+    city.save(update_fields=["is_capital"])
 
 
 def _seed_material_holdings(*, domain, HoldingKind, source_model) -> None:  # noqa: N803

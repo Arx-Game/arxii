@@ -991,6 +991,8 @@ from world.societies.houses.models import (  # noqa: E402
     HouseAspectOption,
     HouseClaim,
     HouseClaimAspect,
+    HouseClaimKin,
+    HouseClaimLand,
     HouseFeature,
     HouseRecognitionRule,
     HouseTemplate,
@@ -1185,6 +1187,40 @@ class HouseClaimAspectInline(admin.TabularInline):
         return False
 
 
+class HouseClaimKinInline(admin.TabularInline):
+    """#3983 Plan B — the founder-written kin tree, read-only for the review queue."""
+
+    model = HouseClaimKin
+    extra = 0
+    readonly_fields = (
+        "name",
+        "relation",
+        "gender",
+        "age",
+        "is_deceased",
+        "born_into",
+        "basis",
+        "is_household",
+        "sort_order",
+    )
+    can_delete = False
+
+    def has_add_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
+class HouseClaimLandInline(admin.TabularInline):
+    """#3983 Plan B — the founder's per-rung land writing, read-only for the review queue."""
+
+    model = HouseClaimLand
+    extra = 0
+    readonly_fields = ("title", "land_name", "description", "hall_name", "land_shapes")
+    can_delete = False
+
+    def has_add_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
 @admin.register(HouseClaim)
 class HouseClaimAdmin(admin.ModelAdmin):
     """#1884 Phase D — approve/reject CG house claims (v1 review surface).
@@ -1193,15 +1229,40 @@ class HouseClaimAdmin(admin.ModelAdmin):
     finalization, so approving here never creates rows by itself.
     """
 
-    autocomplete_fields = ["reviewed_by"]
+    autocomplete_fields = ["reviewed_by", "estate_district"]
 
     list_display = ("house_name", "title", "template", "status", "created_at", "reviewed_by")
     list_select_related = ("title", "template", "reviewed_by")
     list_filter = ("status",)
     search_fields = ("house_name", "backstory")
     readonly_fields = ("draft", "reviewed_by", "reviewed_at")
+    fields = (
+        "draft",
+        "title",
+        "template",
+        "house_name",
+        "backstory",
+        "words",
+        "colors",
+        "sigil_description",
+        "founder_relation",
+        "founder_is_heir",
+        "mercy",
+        "method",
+        "status_principle",
+        "change",
+        "allegiance",
+        "power",
+        "estate_name",
+        "estate_description",
+        "estate_district",
+        "status",
+        "reviewed_by",
+        "reviewed_at",
+        "review_note",
+    )
     actions = ("approve_claims", "reject_claims")
-    inlines = (HouseClaimAspectInline,)
+    inlines = (HouseClaimAspectInline, HouseClaimKinInline, HouseClaimLandInline)
 
     @admin.action(description="Approve selected claims")
     def approve_claims(self, request, queryset):

@@ -65,6 +65,7 @@ from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
 from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_POINT_COST
 from world.societies.constants import EnemyReach
+from world.societies.houses.constants import TitleTier
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -715,6 +716,13 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
     )
     allows_no_family = models.BooleanField(
         default=False, help_text="Player has no family; the tarot surname ritual applies (#3617)."
+    )
+    max_claim_tier = models.CharField(
+        max_length=20,
+        choices=TitleTier.choices,
+        blank=True,
+        default="",
+        help_text="Highest seat tier a founder raised here may define (#3983); blank = any.",
     )
     claimable_kinds = models.ManyToManyField(
         "arxii.FamilyKind",

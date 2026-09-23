@@ -187,6 +187,89 @@ class TestClusterRegistry(TestCase):
             1,
         )
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_houses_cluster_seeds_the_land_shape_catalog(self) -> None:
+        # #3983 Task 10: LandShape is authored content (societies.landshape,
+        # CONTENT_MODELS) that describe_demesne's land_shape_names picks
+        # from; seed_land_shapes (world.seeds.houses) authored_or_sample's
+        # the six-row catalog independent of the demo realm's existence.
+        from world.societies.houses.models import LandShape
+
+        CLUSTER_SEEDERS["houses"]()
+        self.assertTrue(LandShape.objects.filter(name="Coast").exists())
+        for name in ("Reefs", "Hills", "Volcanic", "Marsh", "Forest"):
+            self.assertTrue(
+                LandShape.objects.filter(name=name).exists(), f"expected seeded LandShape {name!r}"
+            )
+
+        # Idempotent on re-run: no duplicate rows.
+        CLUSTER_SEEDERS["houses"]()
+        self.assertEqual(LandShape.objects.filter(name="Coast").count(), 1)
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_houses_cluster_seeds_the_demo_founder_ladder(self) -> None:
+        """#3983 Plan B Task 7: seed_houses_demo plants an unclaimed demo
+        ladder (a duchy chain, a loose barony inside its own county, and a
+        sibling county with its own seat) under a Kingdom-tier rung the demo
+        house holds, so the founder ladder lists the duchy as claimable
+        under a published liege (the demo house) — plus the realm's capital
+        city, read by charter_for_realm/materialize_house_claim's estate gate.
+        """
+        from world.areas.constants import AreaLevel
+        from world.areas.models import Area
+        from world.realms.models import Realm
+        from world.seeds.houses import (
+            CLAIMABLE_TITLE_NAME,
+            DEMO_DUCHY_NAME,
+            HOUSE_ORG_NAME,
+        )
+        from world.societies.houses.almanach import claim_grants, liege_for_title
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.creator import claimable_titles
+        from world.societies.houses.models import Title
+        from world.societies.models import Organization
+
+        CLUSTER_SEEDERS["houses"]()
+
+        realm = Realm.objects.get(name="Arx")
+        house = Organization.objects.get(name=HOUSE_ORG_NAME)
+        self.assertIsNotNone(house.published_at)
+        duchy = Title.objects.get(name=DEMO_DUCHY_NAME)
+        self.assertTrue(duchy.is_claimable)
+        self.assertIsNone(duchy.house_id)
+
+        # 1 duchy, 2 counties, 3 baronies — everything unclaimed in the new
+        # ladder, scoped away from the pre-existing lone claimable barony
+        # (Barony of Thornmere) that isn't part of this chain.
+        thornmere = Title.objects.get(name=CLAIMABLE_TITLE_NAME)
+        unclaimed = Title.objects.filter(
+            realm=realm, is_claimable=True, house__isnull=True
+        ).exclude(pk=thornmere.pk)
+        self.assertEqual(unclaimed.filter(tier=TitleTier.DUCHY).count(), 1)
+        self.assertEqual(unclaimed.filter(tier=TitleTier.COUNTY).count(), 2)
+        self.assertEqual(unclaimed.filter(tier=TitleTier.BARONY).count(), 3)
+
+        # Claimable under a published liege: the demo house itself.
+        self.assertIn(duchy, claimable_titles(realm))
+        self.assertEqual(liege_for_title(duchy), house)
+
+        # claim_grants swallows the chain plus the one loose barony (4
+        # titles), never the sibling county (ADR-0315).
+        grants = claim_grants(duchy)
+        self.assertEqual(len(grants), 4)
+        self.assertEqual(
+            {t.tier for t in grants}, {TitleTier.DUCHY, TitleTier.COUNTY, TitleTier.BARONY}
+        )
+
+        capital = Area.objects.filter(realm=realm, is_capital=True).first()
+        self.assertIsNotNone(capital)
+        self.assertEqual(capital.level, AreaLevel.CITY)
+
+        # Idempotent on re-run: no duplicate ladder rows.
+        CLUSTER_SEEDERS["houses"]()
+        self.assertEqual(Title.objects.filter(name=DEMO_DUCHY_NAME).count(), 1)
+        self.assertEqual(Area.objects.filter(realm=realm, is_capital=True).count(), 1)
+
     def test_seeded_models_are_model_classes(self) -> None:
         models = seeded_models()
         self.assertTrue(models)

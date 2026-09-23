@@ -1633,7 +1633,7 @@ def _build_domains(sheet: CharacterSheet, *, privileged: bool) -> list[OrgDomain
         OrgDomainEntry(
             id=domain.pk,
             name=domain.name,
-            organization=domain.owner_org.name,
+            organization=domain.owner_org.name if domain.owner_org_id else "",
             where=domain.area.name,
         )
         for domain in domains
