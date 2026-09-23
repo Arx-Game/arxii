@@ -528,6 +528,7 @@ export const mockFamilyTemplate: FamilyTemplate = {
   org_type: 1,
   holdings: [],
   default_succession_law: null,
+  starting_kin_slots: 3,
   aspect_definitions: [
     {
       id: 601,

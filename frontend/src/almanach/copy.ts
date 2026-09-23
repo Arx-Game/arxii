@@ -38,5 +38,3 @@ export const PUBLISH_STATUS = {
   draft: 'draft',
   published: 'published',
 } as const;
-
-export const DASH = '—';

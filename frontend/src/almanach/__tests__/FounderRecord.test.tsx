@@ -109,6 +109,7 @@ function template(): HouseTemplateOption {
     features: [],
     holdings: [],
     default_succession_law: null,
+    starting_kin_slots: 3,
   };
 }
 

@@ -77,6 +77,13 @@
   display: flex;
   gap: 1rem;
 }
+/* Matches the plate's `.bar .mode{color:var(--ink-mute)}` explicitly (final
+   review M6) — `.bar` already sets this color and `.mode` inherits it, but
+   an explicit rule keeps the chip's color from silently drifting if `.bar`'s
+   own color rule ever changes for an unrelated reason. */
+.almanach .bar .mode {
+  color: hsl(var(--muted-foreground));
+}
 
 /* --- the three-column grid --- */
 
@@ -764,34 +771,6 @@
   color: hsl(var(--primary));
 }
 
-/* --- the Atlas pin, a placeholder image until BaronyPage links out instead --- */
-.almanach .pin {
-  border: 1px solid hsl(var(--border));
-  background: hsl(var(--muted));
-  height: 11rem;
-  position: relative;
-  margin: 0.4rem 0 1rem;
-  max-width: 100%;
-}
-.almanach .pin .dot {
-  position: absolute;
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 50%;
-  background: hsl(var(--primary));
-  border: 2px solid hsl(var(--background));
-}
-.almanach .pin .lbl {
-  position: absolute;
-  font-size: 0.8rem;
-  color: hsl(var(--muted-foreground));
-}
-.almanach .pin .isle {
-  position: absolute;
-  border: 1px dashed hsl(var(--muted-foreground));
-  border-radius: 40% 55% 45% 50%;
-}
-
 /* --- a demesne's produces ledger --- */
 .almanach table.ledger {
   width: 100%;
@@ -858,15 +837,6 @@
   top: -3px;
   height: 8px;
   background: hsl(var(--primary) / 0.42);
-}
-.almanach .range .track .k {
-  position: absolute;
-  top: -5px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: hsl(var(--primary));
-  margin-left: -6px;
 }
 /* The founder House chapter's own principle sliders (#3983 Plan B Task 5,
    plate F-II) — a real `<input type="range">` sits over `.win`'s decorative

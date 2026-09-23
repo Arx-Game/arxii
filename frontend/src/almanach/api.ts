@@ -3,7 +3,12 @@
  * REGISTRY dispatch, following `world-builder/api.ts` line for line in shape
  * — `apiFetch`/`withQuery` for GET, `throwApiError` on a non-ok response,
  * and the shared `dispatchCanvasAction` for the ten REGISTRY actions Task 6
- * wired. Every route here is staff-only (`IsAdminUser`, `almanach_views.py`).
+ * wired. Most routes here are staff-only (`IsAdminUser`, `almanach_views.py`)
+ * — the ten REGISTRY actions and `fetchHouses`/`fetchHouseDocument`. Plan B
+ * Task 3 opened `fetchRealms`/`fetchLadder`/`fetchLandShapes`/`fetchCharter`
+ * to any authenticated player (`IsAuthenticated`) so the Founder Almanach
+ * can read them directly (`fetchCharter`'s own comment says so; see
+ * `types.ts`'s `LadderMode` for the ladder's own `?for=staff|founder` cut).
  */
 import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
