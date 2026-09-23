@@ -6,6 +6,7 @@ from django.test import TestCase
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.locations.models import LocationOwnership
 from world.roster.factories import FamilyFactory, KinspersonFactory
 from world.roster.models import FamilyMembership
@@ -25,7 +26,7 @@ from world.societies.houses.almanach import (
 from world.societies.houses.constants import HouseState, TitleTier
 from world.societies.houses.models import LandShape
 from world.societies.houses.services import HousesServiceError
-from world.societies.models import Vacancy
+from world.societies.models import OrganizationMembership, Vacancy
 
 
 class HouseServiceTests(TestCase):
@@ -114,6 +115,33 @@ class HouseServiceTests(TestCase):
         second = add_household_member(house=self.house, kinsperson=ward, position="Steward")
         assert first.pk == second.pk
         assert Vacancy.objects.filter(organization=self.house, name="Steward").count() == 1
+
+    def test_sheeted_household_member_gets_a_real_membership(self) -> None:
+        sheet = CharacterSheetFactory()
+        primary = sheet.primary_persona
+        person = KinspersonFactory(sheet=sheet, name="Corvin")
+        vacancy = add_household_member(house=self.house, kinsperson=person)
+        membership = OrganizationMembership.objects.get(
+            organization=self.house,
+            persona=primary,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+        )
+        assert membership.rank.name == HOUSEHOLD_RANK_TITLE
+        assert vacancy.holder_kinsperson_id == person.pk
+        assert not FamilyMembership.objects.filter(kinsperson=person).exists()
+        # A second call must not raise (AlreadyOrganizationMemberError guarded
+        # against via active_membership_for_persona) and must not duplicate it.
+        add_household_member(house=self.house, kinsperson=person)
+        assert (
+            OrganizationMembership.objects.filter(
+                organization=self.house,
+                persona=primary,
+                left_at__isnull=True,
+                exiled_at__isnull=True,
+            ).count()
+            == 1
+        )
 
     def test_public_belief_is_separate_from_truth(self) -> None:
         person = KinspersonFactory(name="Anastasia")
