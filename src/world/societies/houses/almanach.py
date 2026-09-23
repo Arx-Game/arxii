@@ -196,6 +196,15 @@ def plant_rung(
     bottom). Unclaimed (``held_by=None``) rungs are left ``is_claimable``.
     """
     parent_area = _rung_area(parent_title) if parent_title is not None else None
+    if parent_area is not None and TIER_TO_AREA_LEVEL[tier] >= parent_area.level:
+        # ``Area.save()`` runs ``full_clean()`` and would raise a bare
+        # ``ValidationError`` here (a county under a barony, a march under a
+        # county — same Atlas level); refused as a house refusal instead, so
+        # every caller gets a sentence it can show (#3983 review M7).
+        msg = f"tier {tier} does not nest inside {parent_title.tier}"
+        raise HousesServiceError(
+            msg, user_message="That rung does not sit beneath the one you picked."
+        )
     top_area = _make_area(name=name, tier=tier, parent=parent_area, realm=realm)
     chain_areas = [top_area]
     for lower_tier in _CHAIN_BELOW[tier]:

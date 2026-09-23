@@ -502,8 +502,22 @@ _KIN_RELATION_ONLY_KWARGS = (
     "relation",
     "parent_kinsperson_id",
     "spouse_kinsperson_id",
+    "relative_kinsperson_id",
     "born_into_family_id",
 )
+
+
+def _anchored_relations() -> tuple[str, ...]:
+    """Relations that only mean anything relative to somebody already in the
+    tree (#3983 review I3); ``relative_kinsperson_id`` names that somebody."""
+    from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
+
+    return (
+        ClaimKinRelation.MOTHER,
+        ClaimKinRelation.FATHER,
+        ClaimKinRelation.SIBLING,
+        ClaimKinRelation.GRANDPARENT,
+    )
 
 
 @dataclass
@@ -513,13 +527,27 @@ class AlmanachEditKinAction(_AlmanachAction):
     Kwargs: ``org_id``, ``name``, ``is_deceased``, ``believed_deceased``,
     optional ``gender_id``, optional ``age``.
 
-    **Create** (``kinsperson_id`` absent) additionally reads ``relation``
-    (``child``/``spouse``/``head``/other), optional ``parent_kinsperson_id``
-    (``relation="child"``), optional ``spouse_kinsperson_id``
-    (``relation="spouse"``), optional ``born_into_family_id`` (a secondary,
-    non-primary BORN membership regardless of ``relation``), and
-    ``is_household`` (household retainer instead of family — no family
-    membership is written for these, #3983 Decision 1).
+    **Create** (``kinsperson_id`` absent) additionally reads ``relation``,
+    ``parent_kinsperson_id`` (``relation="child"``),
+    ``spouse_kinsperson_id`` (``relation="spouse"``),
+    ``relative_kinsperson_id`` (mother/father/sibling/grandparent — the
+    person the new node is written relative to), optional
+    ``born_into_family_id`` (a secondary, non-primary BORN membership
+    regardless of ``relation``), and ``is_household`` (household retainer
+    instead of family — no family membership is written for these, #3983
+    Decision 1).
+
+    Every relation is anchored to somebody (#3983 review I3): a mother,
+    father or grandparent becomes a parent of ``relative_kinsperson_id``, a
+    sibling shares that relative's own parents, and all four join the house
+    on ``MembershipBasis.BORN``. Unanchored, such a node had no edge and no
+    membership at all, so ``family_tree_for`` never listed it and nothing
+    could reach it again. A grandparent's relative must itself be a parent
+    of someone — a grandparent is a parent's parent.
+
+    ``relation="position"`` is not a person at all: it posts an OPEN
+    household Vacancy titled by ``name`` (``open_household_position``) and
+    returns only its ``vacancy_id``.
 
     **Update** (``kinsperson_id`` given) changes ONLY a plain field
     (name/gender_id/age/is_deceased/believed_deceased) whose kwarg was
@@ -549,10 +577,17 @@ class AlmanachEditKinAction(_AlmanachAction):
         from django.db import transaction  # noqa: PLC0415
 
         from world.character_sheets.models import Gender  # noqa: PLC0415
-        from world.roster.models import Family, Kinsperson, UnionKind  # noqa: PLC0415
+        from world.roster.constants import MembershipBasis  # noqa: PLC0415
+        from world.roster.models import (  # noqa: PLC0415
+            Family,
+            Kinsperson,
+            ParentageEdge,
+            UnionKind,
+        )
         from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
         from world.seeds.kinship import MARRIAGE_KIND_NAME  # noqa: PLC0415
         from world.societies.houses.almanach import (  # noqa: PLC0415
+            open_household_position,
             record_kin,
             record_public_belief,
         )
@@ -644,7 +679,30 @@ class AlmanachEditKinAction(_AlmanachAction):
         # not roll it back (only a propagating exception does), so any check
         # found only mid-write would risk committing a partial write (e.g.
         # an orphan Kinsperson) alongside a reported failure.
+        if relation == ClaimKinRelation.POSITION:
+            # A post, not a person (#3983 ruling I2): an open household
+            # Vacancy titled by the name, with nobody in it.
+            try:
+                vacancy = open_household_position(house=house, position=kin_name)
+            except HousesServiceError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+            return ActionResult(
+                success=True,
+                message=f"{vacancy.name} posted.",
+                data={"vacancy_id": vacancy.pk, "org_id": house.pk},
+            )
+
+        is_household = bool(kwargs.get("is_household"))
+        if is_household and not kin_name:
+            # A household row titles its own Vacancy, and Vacancy is unique
+            # on (organization, name): an unnamed one would take another
+            # ward's row (#3983 review I2).
+            return ActionResult(success=False, message="Name the ward.")
+
         parent = spouse = marriage_kind = born_into_family = None
+        child = None
+        parents: list[Kinsperson] = []
+        basis = ""
         if relation == ClaimKinRelation.CHILD:
             parent_id = kwargs.get("parent_kinsperson_id")
             parent = Kinsperson.objects.filter(pk=parent_id).first() if parent_id else None
@@ -660,6 +718,28 @@ class AlmanachEditKinAction(_AlmanachAction):
                 return ActionResult(
                     success=False, message="Marriage is not configured for this realm."
                 )
+        elif relation in _anchored_relations():
+            relative_id = kwargs.get("relative_kinsperson_id")
+            relative = Kinsperson.objects.filter(pk=relative_id).first() if relative_id else None
+            if relative is None:
+                label = dict(ClaimKinRelation.choices)[relation].lower()
+                return ActionResult(success=False, message=f"Pick whose {label} this is.")
+            if relation == ClaimKinRelation.SIBLING:
+                parents = [edge.parent for edge in ParentageEdge.objects.filter(child=relative)]
+                if not parents:
+                    return ActionResult(
+                        success=False, message="Write that person's parents in first."
+                    )
+            elif relation == ClaimKinRelation.GRANDPARENT:
+                if not ParentageEdge.objects.filter(parent=relative).exists():
+                    return ActionResult(
+                        success=False,
+                        message="A grandparent is a parent's parent: pick a parent.",
+                    )
+                child = relative
+            else:
+                child = relative
+            basis = MembershipBasis.BORN
         born_into_family_id = kwargs.get("born_into_family_id")
         if born_into_family_id:
             born_into_family = Family.objects.filter(pk=born_into_family_id).first()
@@ -676,10 +756,13 @@ class AlmanachEditKinAction(_AlmanachAction):
                 is_deceased=is_deceased,
                 believed_deceased=believed_deceased,
                 parent=parent,
+                parents=parents,
+                child=child,
                 spouse=spouse,
                 marriage_kind=marriage_kind,
                 born_into=born_into_family,
-                is_household=bool(kwargs.get("is_household")),
+                basis=basis,
+                is_household=is_household,
             )
         except (HousesServiceError, KinshipServiceError) as exc:
             return ActionResult(success=False, message=exc.user_message)

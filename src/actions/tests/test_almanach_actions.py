@@ -27,6 +27,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import GenderFactory
+from world.roster.constants import MembershipBasis
 from world.roster.factories import FamilyFactory, KinspersonFactory, UnionKindFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import plant_rung
@@ -108,6 +109,79 @@ class AlmanachActionTests(TestCase):
         assert result.success, result.message
         self.crown.refresh_from_db()
         assert self.crown.published_at is not None
+
+    def test_staff_lay_inferna_and_the_ladder_matches_the_plate(self) -> None:
+        """#3983 spec Testing (1): lay Piropa's own holdings through the
+        actions, then read the ladder and check it against plate S-I —
+        Vampa demesne 4 / vassals 1, the County of Inferna demesne 3, the
+        seat barony marked, and the house document's own four baronies."""
+        from world.societies.houses.almanach_reads import document_for_house, ladder_for_realm
+
+        chain = {t.tier: t for t in Title.objects.filter(seat_domain=self.kingdom.seat_domain)}
+        for tier, rung_name in (
+            (TitleTier.DUCHY, "Vampa"),
+            (TitleTier.COUNTY, "County of Inferna"),
+            (TitleTier.BARONY, "Perdition"),
+        ):
+            result = AlmanachNameRungAction().run(
+                self.staff, title_id=chain[tier].pk, name=rung_name
+            )
+            assert result.success, result.message
+
+        # Two more baronies the crown keeps personally inside its own county.
+        for barony_name in ("Bochorno", "Lumbre"):
+            result = AlmanachPlantRungAction().run(
+                self.staff,
+                realm_id=self.realm.pk,
+                tier="barony",
+                name=barony_name,
+                parent_title_id=chain[TitleTier.COUNTY].pk,
+                held_by_org_id=self.crown.pk,
+            )
+            assert result.success, result.message
+
+        # A county granted away, with one crown barony still inside it.
+        solano = OrganizationFactory(name="Solano")
+        result = AlmanachPlantRungAction().run(
+            self.staff,
+            realm_id=self.realm.pk,
+            tier="county",
+            name="Ardor",
+            parent_title_id=chain[TitleTier.DUCHY].pk,
+            held_by_org_id=solano.pk,
+        )
+        assert result.success, result.message
+        ardor_id = result.data["title_id"]
+        result = AlmanachPlantRungAction().run(
+            self.staff,
+            realm_id=self.realm.pk,
+            tier="barony",
+            name="Seawatch",
+            parent_title_id=ardor_id,
+            held_by_org_id=self.crown.pk,
+        )
+        assert result.success, result.message
+
+        result = AlmanachPublishAction().run(self.staff, org_id=self.crown.pk, publish=True)
+        assert result.success, result.message
+
+        rows = {r.name: r for r in ladder_for_realm(self.realm).rows if r.name}
+        vampa = rows["Vampa"]
+        assert vampa.demesne == 4, "Perdition, Bochorno, Lumbre and Seawatch"
+        assert vampa.vassals == 1, "Solano, once"
+        assert rows["County of Inferna"].demesne == 3, "Seawatch lies under Ardor, not here"
+        assert rows["Perdition"].is_seat_of == "Piropa"
+        assert rows["Seawatch"].house_name == "Piropa", "held inside a vassal's county"
+        assert rows["Ardor"].sworn_to == "Piropa (crown)"
+
+        doc = document_for_house(self.crown, viewer=None, staff=True)
+        assert {row["name"] for row in doc.realm["demesne"]} == {
+            "Perdition",
+            "Bochorno",
+            "Lumbre",
+            "Seawatch",
+        }
+        assert doc.lands["seat"] == "Perdition"
 
     def test_plant_rung_refuses_parent_title_with_no_seat_domain(self) -> None:
         orphan = Title.objects.create(name="Orphan", tier=TitleTier.BARONY, realm=self.realm)
@@ -346,8 +420,146 @@ class AlmanachActionTests(TestCase):
         from world.societies.models import Vacancy
 
         vacancy = Vacancy.objects.get(pk=result.data["vacancy_id"])
-        assert vacancy.name == "Ward"
+        # The ward's own row, titled by the ward (#3983 review I2): Vacancy is
+        # unique on (organization, name), so a shared "Ward" title made the
+        # second ward take the first's place.
+        assert vacancy.name == "Ward: Ward Tomas"
         assert vacancy.holder_kinsperson_id == result.data["kinsperson_id"]
+
+    def test_edit_kin_position_posts_an_open_slot_with_nobody_in_it(self) -> None:
+        """#3983 ruling I2: "Master-at-arms · position · open" — a titled
+        post, not an NPC named after the job."""
+        result = AlmanachEditKinAction().run(
+            self.staff, org_id=self.crown.pk, name="Master-at-arms", relation="position"
+        )
+        assert result.success, result.message
+        assert "kinsperson_id" not in result.data
+
+        from world.roster.models import Kinsperson
+        from world.societies.models import Vacancy
+
+        vacancy = Vacancy.objects.get(pk=result.data["vacancy_id"])
+        assert vacancy.name == "Master-at-arms"
+        assert vacancy.holder_kinsperson_id is None
+        assert vacancy.is_open
+        assert not Kinsperson.objects.filter(name="Master-at-arms").exists()
+
+    def test_edit_kin_position_needs_a_title(self) -> None:
+        result = AlmanachEditKinAction().run(
+            self.staff, org_id=self.crown.pk, name="  ", relation="position"
+        )
+        assert not result.success
+        assert result.message
+
+    def test_edit_kin_mother_is_anchored_to_a_relative(self) -> None:
+        """#3983 review I3: every relation is written relative to somebody.
+        Without the anchor the node had no edge and no membership, so the
+        tree never listed it and nothing could reach it again."""
+        from world.roster.models import FamilyMembership, Kinsperson, ParentageEdge
+
+        heir = KinspersonFactory(family=self.family, name="Heir Casella")
+        refused = AlmanachEditKinAction().run(
+            self.staff, org_id=self.crown.pk, name="Dowager Fiamma", relation="mother"
+        )
+        assert not refused.success
+
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Dowager Fiamma",
+            relation="mother",
+            relative_kinsperson_id=heir.pk,
+        )
+        assert result.success, result.message
+        mother = Kinsperson.objects.get(pk=result.data["kinsperson_id"])
+        assert ParentageEdge.objects.filter(child=heir, parent=mother).exists()
+        membership = FamilyMembership.objects.get(kinsperson=mother, family=self.family)
+        assert membership.basis == MembershipBasis.BORN
+
+    def test_edit_kin_sibling_shares_the_relatives_parents(self) -> None:
+        from world.roster.models import Kinsperson, ParentageEdge
+        from world.roster.services.kinship import record_parentage
+
+        parent = KinspersonFactory(family=self.family, name="Dowager Fiamma")
+        heir = KinspersonFactory(family=self.family, name="Heir Casella")
+        record_parentage(child=heir, parent=parent)
+
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Second Son",
+            relation="sibling",
+            relative_kinsperson_id=heir.pk,
+        )
+        assert result.success, result.message
+        sibling = Kinsperson.objects.get(pk=result.data["kinsperson_id"])
+        assert ParentageEdge.objects.filter(child=sibling, parent=parent).exists()
+
+    def test_edit_kin_sibling_of_a_parentless_relative_is_refused(self) -> None:
+        orphan = KinspersonFactory(family=self.family, name="Orphan")
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Second Son",
+            relation="sibling",
+            relative_kinsperson_id=orphan.pk,
+        )
+        assert not result.success
+
+    def test_edit_kin_grandparent_needs_a_parent_to_hang_from(self) -> None:
+        from world.roster.models import Kinsperson, ParentageEdge
+        from world.roster.services.kinship import record_parentage
+
+        childless = KinspersonFactory(family=self.family, name="Childless")
+        refused = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Old Nonna",
+            relation="grandparent",
+            relative_kinsperson_id=childless.pk,
+        )
+        assert not refused.success
+
+        parent = KinspersonFactory(family=self.family, name="Dowager Fiamma")
+        heir = KinspersonFactory(family=self.family, name="Heir Casella")
+        record_parentage(child=heir, parent=parent)
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Old Nonna",
+            relation="grandparent",
+            relative_kinsperson_id=parent.pk,
+        )
+        assert result.success, result.message
+        nonna = Kinsperson.objects.get(pk=result.data["kinsperson_id"])
+        assert ParentageEdge.objects.filter(child=parent, parent=nonna).exists()
+
+    def test_plant_rung_at_the_realm_root(self) -> None:
+        """#3983 I9: a realm with no ladder at all has to start somewhere —
+        a rung with no parent is planted at the realm root."""
+        result = AlmanachPlantRungAction().run(
+            self.staff, realm_id=self.realm.pk, tier="kingdom", name="Cinderus"
+        )
+        assert result.success, result.message
+        planted = Title.objects.get(pk=result.data["title_id"])
+        assert planted.tier == TitleTier.KINGDOM
+        assert planted.seat_domain.area.parent.parent.parent.parent is None
+
+    def test_plant_rung_refuses_a_tier_that_does_not_nest(self) -> None:
+        """#3983 review M7: a county under a barony is an Atlas-level
+        violation; it used to escape as a bare ValidationError."""
+        barony = plant_rung(
+            realm=self.realm, tier=TitleTier.BARONY, name="Cinderhold", parent_title=self.kingdom
+        )
+        result = AlmanachPlantRungAction().run(
+            self.staff,
+            realm_id=self.realm.pk,
+            tier="county",
+            name="Impossible",
+            parent_title_id=barony.pk,
+        )
+        assert not result.success
+        assert result.message
 
     def test_edit_kin_update_only_age_leaves_other_fields_untouched(self) -> None:
         """#3983 Task 10 fold-in: a plain field changes ONLY when its kwarg
