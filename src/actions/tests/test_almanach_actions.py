@@ -108,6 +108,77 @@ class AlmanachActionTests(TestCase):
         self.crown.refresh_from_db()
         assert self.crown.published_at is not None
 
+    def test_plant_rung_refuses_parent_title_with_no_seat_domain(self) -> None:
+        orphan = Title.objects.create(name="Orphan", tier=TitleTier.BARONY, realm=self.realm)
+        result = AlmanachPlantRungAction().run(
+            self.staff,
+            realm_id=self.realm.pk,
+            tier="barony",
+            name="Cinderhold",
+            parent_title_id=orphan.pk,
+        )
+        assert not result.success
+        assert result.message
+
+    def test_edit_house_replaces_aspects_features_and_succession_law(self) -> None:
+        from world.societies.houses.constants import SuccessionDerivation
+        from world.societies.houses.models import (
+            HouseAspectDefinition,
+            HouseAspectOption,
+            HouseFeature,
+            OrganizationAspect,
+            OrganizationFeature,
+            SuccessionLaw,
+        )
+
+        definition = HouseAspectDefinition.objects.create(name="Quiddity", prompt="Pick one.")
+        option_a = HouseAspectOption.objects.create(definition=definition, name="Ember-Touched")
+        option_b = HouseAspectOption.objects.create(definition=definition, name="Ashbound")
+        feature = HouseFeature.objects.create(
+            name="Black Ledger", slug="black-ledger", description="Keeps a debt ledger."
+        )
+        law = SuccessionLaw.objects.create(
+            name="Test Succession", derivation=SuccessionDerivation.PRIMOGENITURE_WEDLOCK
+        )
+
+        result = AlmanachEditHouseAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            aspect_option_ids=[option_a.pk],
+            feature_ids=[feature.pk],
+            default_succession_law_id=law.pk,
+        )
+        assert result.success, result.message
+        self.crown.refresh_from_db()
+        assert self.crown.default_succession_law_id == law.pk
+        assert list(
+            OrganizationAspect.objects.filter(organization=self.crown).values_list(
+                "option_id", flat=True
+            )
+        ) == [option_a.pk]
+        assert list(
+            OrganizationFeature.objects.filter(organization=self.crown).values_list(
+                "feature_id", flat=True
+            )
+        ) == [feature.pk]
+
+        # Replace with the other option; the first row is gone, the second present.
+        result = AlmanachEditHouseAction().run(
+            self.staff, org_id=self.crown.pk, aspect_option_ids=[option_b.pk]
+        )
+        assert result.success, result.message
+        assert list(
+            OrganizationAspect.objects.filter(organization=self.crown).values_list(
+                "option_id", flat=True
+            )
+        ) == [option_b.pk]
+        # feature_ids wasn't passed on this call — the earlier feature survives untouched.
+        assert list(
+            OrganizationFeature.objects.filter(organization=self.crown).values_list(
+                "feature_id", flat=True
+            )
+        ) == [feature.pk]
+
     def test_swear(self) -> None:
         vassal = OrganizationFactory(name="House Vassal")
         result = AlmanachSwearAction().run(
@@ -168,6 +239,95 @@ class AlmanachActionTests(TestCase):
 
         heir = Kinsperson.objects.get(pk=heir_id)
         assert heir.family_id == self.family.pk
+
+    def test_edit_kin_child_second_edit_does_not_remint_relation_effects(self) -> None:
+        """#3983 review fix 1: an update (``kinsperson_id`` given) touches only
+        plain fields — it must never re-run the create-time relation wiring."""
+        parent = KinspersonFactory(family=self.family, name="Consort Alden")
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Heir Casella",
+            relation="child",
+            parent_kinsperson_id=parent.pk,
+            is_deceased=False,
+            believed_deceased=False,
+            is_household=False,
+        )
+        assert result.success, result.message
+        heir_id = result.data["kinsperson_id"]
+
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            kinsperson_id=heir_id,
+            name="Heir Casella the Younger",
+            is_deceased=False,
+            believed_deceased=False,
+        )
+        assert result.success, result.message
+
+        from world.roster.models import FamilyMembership, Kinsperson, ParentageEdge
+
+        heir = Kinsperson.objects.get(pk=heir_id)
+        assert heir.name == "Heir Casella the Younger"
+        assert ParentageEdge.objects.filter(child_id=heir_id).count() == 1
+        assert FamilyMembership.objects.filter(kinsperson_id=heir_id).count() == 1
+
+    def test_edit_kin_spouse_second_edit_does_not_remint_union(self) -> None:
+        """#3983 review fix 1: same guarantee for the ``spouse`` relation."""
+        spouse = KinspersonFactory(family=self.family, name="Consort Beatrys")
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Duke Aldric",
+            relation="spouse",
+            spouse_kinsperson_id=spouse.pk,
+            is_deceased=False,
+            believed_deceased=False,
+            is_household=False,
+        )
+        assert result.success, result.message
+        duke_id = result.data["kinsperson_id"]
+
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            kinsperson_id=duke_id,
+            name="Duke Aldric Renamed",
+            is_deceased=False,
+            believed_deceased=False,
+        )
+        assert result.success, result.message
+
+        from world.roster.models import Union
+
+        assert Union.objects.filter(members__pk=duke_id).count() == 1
+
+    def test_edit_kin_update_refuses_relation_kwargs(self) -> None:
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Elder Fen",
+            relation="head",
+            is_deceased=False,
+            believed_deceased=False,
+            is_household=False,
+        )
+        assert result.success, result.message
+        kin_id = result.data["kinsperson_id"]
+
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            kinsperson_id=kin_id,
+            name="Elder Fen Renamed",
+            relation="head",
+            is_deceased=False,
+            believed_deceased=False,
+        )
+        assert not result.success
+        assert result.message
 
     def test_edit_kin_household_ward(self) -> None:
         result = AlmanachEditKinAction().run(

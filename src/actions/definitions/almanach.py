@@ -81,6 +81,7 @@ class AlmanachPlantRungAction(_AlmanachAction):
         from world.societies.houses.almanach import plant_rung  # noqa: PLC0415
         from world.societies.houses.constants import TitleTier  # noqa: PLC0415
         from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
         from world.societies.models import Organization  # noqa: PLC0415
 
         realm = Realm.objects.filter(pk=kwargs.get("realm_id")).first()
@@ -103,9 +104,12 @@ class AlmanachPlantRungAction(_AlmanachAction):
             if held_by is None:
                 return ActionResult(success=False, message=_NO_SUCH_HOUSE)
         rung_name = (kwargs.get("name") or "").strip()
-        title = plant_rung(
-            realm=realm, tier=tier, name=rung_name, parent_title=parent_title, held_by=held_by
-        )
+        try:
+            title = plant_rung(
+                realm=realm, tier=tier, name=rung_name, parent_title=parent_title, held_by=held_by
+            )
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
             message=f"{title.name or 'An unnamed rung'} planted (title #{title.pk}).",
@@ -134,6 +138,7 @@ class AlmanachBatchUnclaimedAction(_AlmanachAction):
         from world.societies.houses.almanach import batch_unclaimed  # noqa: PLC0415
         from world.societies.houses.constants import TitleTier  # noqa: PLC0415
         from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
         parent_title = Title.objects.filter(pk=kwargs.get("parent_title_id")).first()
         if parent_title is None:
@@ -152,12 +157,15 @@ class AlmanachBatchUnclaimedAction(_AlmanachAction):
             baronies_per_county = int(kwargs.get("baronies_per_county") or 0)
         except (TypeError, ValueError):
             return ActionResult(success=False, message="Baronies per county must be a number.")
-        titles = batch_unclaimed(
-            parent_title=parent_title,
-            tier=tier,
-            count=count,
-            baronies_per_county=baronies_per_county,
-        )
+        try:
+            titles = batch_unclaimed(
+                parent_title=parent_title,
+                tier=tier,
+                count=count,
+                baronies_per_county=baronies_per_county,
+            )
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
             message=f"{len(titles)} unclaimed rung(s) planted.",
@@ -181,6 +189,7 @@ class AlmanachNameRungAction(_AlmanachAction):
     ) -> ActionResult:
         from world.societies.houses.almanach import name_rung  # noqa: PLC0415
         from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
         title = Title.objects.filter(pk=kwargs.get("title_id")).first()
         if title is None:
@@ -188,7 +197,10 @@ class AlmanachNameRungAction(_AlmanachAction):
         rung_name = (kwargs.get("name") or "").strip()
         if not rung_name:
             return ActionResult(success=False, message="Name the rung.")
-        title = name_rung(title, rung_name)
+        try:
+            title = name_rung(title, rung_name)
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
             message=f"{title.name} named.",
@@ -477,19 +489,46 @@ class AlmanachPlanEstateAction(_AlmanachAction):
         )
 
 
+_KIN_UPDATE_ONLY_MESSAGE = (
+    "Editing an existing kinsperson only changes name, gender, age, deceased "
+    "status, and public belief — start a new entry to change relation, marriage, "
+    "or family membership."
+)
+
+# Kwargs that mint a relation side effect (parentage/union/membership/household
+# retainer) — refused outright alongside ``kinsperson_id`` (#3983 review fix 1):
+# an update only ever touches the plain fields below.
+_KIN_RELATION_ONLY_KWARGS = (
+    "relation",
+    "parent_kinsperson_id",
+    "spouse_kinsperson_id",
+    "born_into_family_id",
+)
+
+
 @dataclass
 class AlmanachEditKinAction(_AlmanachAction):
-    """Author (or update) one node of a house's family tree.
+    """Author a new node of a house's family tree, or update an existing one.
 
-    Kwargs: ``org_id``, optional ``kinsperson_id`` (update instead of
-    create), ``name``, ``relation``, optional ``parent_kinsperson_id``
+    Kwargs: ``org_id``, ``name``, ``is_deceased``, ``believed_deceased``,
+    optional ``gender_id``, optional ``age``.
+
+    **Create** (``kinsperson_id`` absent) additionally reads ``relation``
+    (``child``/``spouse``/``head``/other), optional ``parent_kinsperson_id``
     (``relation="child"``), optional ``spouse_kinsperson_id``
-    (``relation="spouse"``), optional ``gender_id``, optional ``age``,
-    ``is_deceased``, ``believed_deceased``, optional ``born_into_family_id``
-    (a secondary, non-primary membership regardless of ``relation``),
-    optional ``basis`` (the membership basis for ``born_into_family_id``,
-    default BORN), ``is_household`` (household retainer instead of family —
-    no family membership is written for these, #3983 Decision 1).
+    (``relation="spouse"``), optional ``born_into_family_id`` (a secondary,
+    non-primary BORN membership regardless of ``relation``), and
+    ``is_household`` (household retainer instead of family — no family
+    membership is written for these, #3983 Decision 1).
+
+    **Update** (``kinsperson_id`` given) changes ONLY the plain fields above
+    (name/gender/age/is_deceased/believed_deceased) — relation, marriage,
+    membership and household side effects run exactly once, at creation, and
+    never re-fire on a later edit (#3983 review fix 1: a second edit used to
+    re-mint a ``ParentageEdge``/``Union``, or downgrade a ``head``'s FOUNDING
+    membership to BORN). Passing any of ``relation``/``parent_kinsperson_id``/
+    ``spouse_kinsperson_id``/``born_into_family_id`` alongside ``kinsperson_id``
+    is refused.
     """
 
     key: str = "almanach_edit_kin"
@@ -504,6 +543,7 @@ class AlmanachEditKinAction(_AlmanachAction):
     ) -> ActionResult:
         from django.db import transaction  # noqa: PLC0415
 
+        from world.character_sheets.models import Gender  # noqa: PLC0415
         from world.roster.constants import DefinitionTier, MembershipBasis  # noqa: PLC0415
         from world.roster.models import (  # noqa: PLC0415
             Family,
@@ -537,8 +577,12 @@ class AlmanachEditKinAction(_AlmanachAction):
             return ActionResult(success=False, message="That house has no family on record.")
 
         kin_name = (kwargs.get("name") or "").strip()
-        relation = (kwargs.get("relation") or "").strip()
         gender_id = kwargs.get("gender_id")
+        gender = None
+        if gender_id:
+            gender = Gender.objects.filter(pk=gender_id).first()
+            if gender is None:
+                return ActionResult(success=False, message="No such gender.")
         age = kwargs.get("age")
         if age is not None:
             try:
@@ -546,6 +590,30 @@ class AlmanachEditKinAction(_AlmanachAction):
             except (TypeError, ValueError):
                 return ActionResult(success=False, message="Age must be a number.")
         is_deceased = bool(kwargs.get("is_deceased"))
+        believed_deceased = bool(kwargs.get("believed_deceased"))
+
+        kinsperson_id = kwargs.get("kinsperson_id")
+        if kinsperson_id:
+            if any(kwargs.get(field) for field in _KIN_RELATION_ONLY_KWARGS):
+                return ActionResult(success=False, message=_KIN_UPDATE_ONLY_MESSAGE)
+            node = Kinsperson.objects.filter(pk=kinsperson_id).first()
+            if node is None:
+                return ActionResult(success=False, message="No such kinsperson.")
+            with transaction.atomic():
+                node.name = kin_name
+                node.gender = gender
+                node.age = age
+                node.is_deceased = is_deceased
+                node.save(update_fields=["name", "gender", "age", "is_deceased"])
+                if believed_deceased:
+                    record_public_belief(node, believed_deceased=True)
+            return ActionResult(
+                success=True,
+                message=f"{node.name or 'The kinsperson'} updated.",
+                data={"kinsperson_id": node.pk, "org_id": house.pk},
+            )
+
+        relation = (kwargs.get("relation") or "").strip()
 
         # Resolve and validate EVERYTHING before the first write below (the
         # atomic block that follows) — a bare ``return`` inside
@@ -574,30 +642,17 @@ class AlmanachEditKinAction(_AlmanachAction):
             born_into_family = Family.objects.filter(pk=born_into_family_id).first()
             if born_into_family is None:
                 return ActionResult(success=False, message="No such family.")
-        node = None
-        kinsperson_id = kwargs.get("kinsperson_id")
-        if kinsperson_id:
-            node = Kinsperson.objects.filter(pk=kinsperson_id).first()
-            if node is None:
-                return ActionResult(success=False, message="No such kinsperson.")
 
         vacancy = None
         try:
             with transaction.atomic():
-                if node is not None:
-                    node.name = kin_name
-                    node.gender_id = gender_id
-                    node.age = age
-                    node.is_deceased = is_deceased
-                    node.save(update_fields=["name", "gender", "age", "is_deceased"])
-                else:
-                    node = Kinsperson.objects.create(
-                        definition_tier=DefinitionTier.NAME_ONLY,
-                        name=kin_name,
-                        gender_id=gender_id,
-                        age=age,
-                        is_deceased=is_deceased,
-                    )
+                node = Kinsperson.objects.create(
+                    definition_tier=DefinitionTier.NAME_ONLY,
+                    name=kin_name,
+                    gender=gender,
+                    age=age,
+                    is_deceased=is_deceased,
+                )
 
                 if relation == ClaimKinRelation.CHILD:
                     record_parentage(child=node, parent=parent)
@@ -616,16 +671,18 @@ class AlmanachEditKinAction(_AlmanachAction):
                     add_membership(kinsperson=node, family=house.family, basis=basis)
 
                 if born_into_family is not None:
-                    basis = kwargs.get("basis") or MembershipBasis.BORN
                     add_membership(
-                        kinsperson=node, family=born_into_family, basis=basis, is_primary=False
+                        kinsperson=node,
+                        family=born_into_family,
+                        basis=MembershipBasis.BORN,
+                        is_primary=False,
                     )
 
                 if kwargs.get("is_household"):
                     position = dict(ClaimKinRelation.choices).get(relation) or "Ward"
                     vacancy = add_household_member(house=house, kinsperson=node, position=position)
 
-                if kwargs.get("believed_deceased"):
+                if believed_deceased:
                     record_public_belief(node, believed_deceased=True)
         except (HousesServiceError, KinshipServiceError) as exc:
             return ActionResult(success=False, message=exc.user_message)
