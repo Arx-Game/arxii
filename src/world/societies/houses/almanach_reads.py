@@ -57,11 +57,17 @@ realm, ordered by the Area's ancestry depth then name.
 and ``estate`` are lists of dicts — naturally repeating, not aggregates) so
 Task 5 can serialize the payload with plain DRF fields, no nested
 dataclasses. ``realm``'s ``demesne``/``vassals`` lists and ``lands`` reuse
-the same title/Area maps ``ladder_for_realm`` builds, scoped to this house's
-own chain and its direct child rungs, so the two reads never diverge.
-``staff=True`` reads the family tree with the omniscient viewer (mechanical
-truth); otherwise the caller's own ``viewer`` gates what's visible, exactly
-like every other kinship read.
+the same title/Area maps ``ladder_for_realm`` builds, so the two reads never
+diverge. ``realm["demesne"]`` is every barony-tier title the house holds
+directly, wherever it sits (a barony seated inside a vassal's own county is
+still the house's own land); ``realm["vassals"]`` is every direct child rung
+of ANY title the house holds — not only its own top chain — excluding
+children that are themselves on one of the house's own chains.
+``household`` is filtered to retainer Vacancy rows (no ``kin_node``/
+``kin_pool`` link — those mark an appable kin slot, never a household
+position) at the Household rank. ``staff=True`` reads the family tree with
+the omniscient viewer (mechanical truth); otherwise the caller's own
+``viewer`` gates what's visible, exactly like every other kinship read.
 """
 
 from __future__ import annotations
@@ -511,8 +517,16 @@ def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict
 
 
 def _household_payload(house: Organization) -> list[dict]:
+    # A household member is a RETAINER Vacancy (Vacancy's own docstring: no
+    # kin_node/kin_pool link) at the Household rank — the kin-link test is
+    # the defining one (a kin Vacancy is an appable claim slot, never a
+    # household position), and the rank filter narrows to the Household rung
+    # specifically rather than every retainer vacancy on the org.
     vacancies = Vacancy.objects.filter(
-        organization=house, rank__name=HOUSEHOLD_RANK_TITLE
+        organization=house,
+        rank__name=HOUSEHOLD_RANK_TITLE,
+        kin_node__isnull=True,
+        kin_pool__isnull=True,
     ).select_related("holder_kinsperson")
     out = []
     for v in vacancies:
@@ -544,12 +558,22 @@ def _realm_payload(house: Organization, titles: list[Title], all_rows: list[Ladd
     obligation_pct = None
     if fealty is not None and fealty.obligation_id is not None:
         obligation_pct = fealty.obligation.percent
-    own_family_ids = {t.pk for t in titles if t.seat_domain_id == top.seat_domain_id}
-    demesne = [_row_summary(r) for r in all_rows if r.title_id in own_family_ids]
+    # Demesne is every barony the house holds personally, wherever it lies —
+    # a barony seated deep in a vassal's own county is still the house's own
+    # land (spec Decision 3), not only the ones on its own top chain.
+    held_rows = [r for r in all_rows if r.house_id == house.pk]
+    held_title_ids = {r.title_id for r in held_rows}
+    own_chain_seat_ids = {r.seat_domain_id for r in held_rows}
+    demesne = [_row_summary(r) for r in held_rows if r.tier == TitleTier.BARONY]
+    # Vassals are the houses/unclaimed rungs sworn beneath ANY rung the house
+    # holds, not only its own top chain — a direct child of a barony it holds
+    # inside someone else's territory is still its vassal. Excludes children
+    # that are themselves on one of the house's own chains (an internal
+    # chain member's "child" is just the next rung down the same chain).
     vassals = [
         _row_summary(r)
         for r in all_rows
-        if r.parent_title_id in own_family_ids and r.seat_domain_id != top.seat_domain_id
+        if r.parent_title_id in held_title_ids and r.seat_domain_id not in own_chain_seat_ids
     ]
     return {
         "sworn_to": sworn_to,
