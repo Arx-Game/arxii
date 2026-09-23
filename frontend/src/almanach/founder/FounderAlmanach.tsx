@@ -26,7 +26,12 @@ import type { CharacterDraft } from '@/character-creation/types';
 
 import '../almanach.css';
 import { FOUNDER_CRUMB, STATES } from '../copy';
-import { defaultPressedTier, TIER_LABELS } from '../ladder/tree';
+import {
+  crownOrRootSwornTo,
+  defaultPressedTier,
+  TIER_LABELS,
+  unclaimedForTier,
+} from '../ladder/tree';
 import { useCharter, useLadder, useRealms } from '../queries';
 import type { LadderRow } from '../types';
 
@@ -65,28 +70,12 @@ function atOrPast(step: FounderStep, target: FounderStep): boolean {
 }
 
 /** "N ducal/county/barony seats unclaimed" (plates F-I/F-I b's `vassals` dd)
- * — `unclaimed_by_tier[tier]`, folding march into county like `LevelBar`. */
+ * — `unclaimedForTier` (`../ladder/tree`) for the fold, this file's own
+ * label formatting on top. */
 function seatsUnclaimed(unclaimedByTier: Record<string, number>, tier: string): string {
-  const base = unclaimedByTier[tier] ?? 0;
-  const count = tier === 'county' ? base + (unclaimedByTier.march ?? 0) : base;
+  const count = unclaimedForTier(unclaimedByTier, tier);
   const label = (TIER_LABELS[tier] ?? tier).toLowerCase();
   return `${count} ${label} seats unclaimed`;
-}
-
-/** The realm's crown-holding house name, crown-suffix stripped — mirrors
- * `AlmanachPage.tsx`'s own `crownHolder` convention (a root row's
- * `sworn_to` ends " (crown)" when it's sworn straight to the realm's own
- * crown house). Falls back to any root row's raw `sworn_to` when no row
- * carries that suffix. */
-function crownName(rows: LadderRow[]): string {
-  return (
-    rows
-      .map((row) => row.sworn_to)
-      .find((swornTo) => swornTo.endsWith(' (crown)'))
-      ?.replace(/ \(crown\)$/, '') ??
-    rows.find((row) => row.parent_title_id == null)?.sworn_to ??
-    ''
-  );
 }
 
 /** Every rung `houseName` holds, by name, joined "Fervor · Arsura" (plate
@@ -159,7 +148,7 @@ function LiegeRealmAside({
   const realm = realmsPayload?.results.find((r) => r.id === realmId);
   const { data: charter } = useCharter(realmId);
   const tier = defaultPressedTier(rows);
-  const liegeName = crownName(rows);
+  const liegeName = crownOrRootSwornTo(rows);
 
   // The selected rung's own liege, when it's a claimed rung's own vassal
   // (its parent title is held by a house) — plate F-I b: selecting

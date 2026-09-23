@@ -15,18 +15,13 @@
 import { CountChip } from '@/components/folio';
 
 import type { LadderRow } from '../types';
-import { levelBarTiers, TIER_LABELS, tierNoun } from './tree';
+import { levelBarTiers, TIER_LABELS, tierNoun, unclaimedForTier } from './tree';
 
 export interface LevelBarProps {
   rows: LadderRow[];
   unclaimedByTier: Record<string, number>;
   pressedTier: string | null;
   onPressTier: (tier: string) => void;
-}
-
-function tierCount(unclaimedByTier: Record<string, number>, tier: string): number {
-  const base = unclaimedByTier[tier] ?? 0;
-  return tier === 'county' ? base + (unclaimedByTier.march ?? 0) : base;
 }
 
 export function LevelBar({ rows, unclaimedByTier, pressedTier, onPressTier }: LevelBarProps) {
@@ -36,7 +31,7 @@ export function LevelBar({ rows, unclaimedByTier, pressedTier, onPressTier }: Le
   return (
     <div className="lvl" role="group" aria-label="Level">
       {tiers.map((tier) => {
-        const count = tierCount(unclaimedByTier, tier);
+        const count = unclaimedForTier(unclaimedByTier, tier);
         return (
           <button
             key={tier}

@@ -145,3 +145,42 @@ export interface LadderParentRef {
   name: string;
   tier: string;
 }
+
+/**
+ * `unclaimed_by_tier[tier]`, folding march into county's own count — a
+ * march row counts as a county row everywhere else in this app
+ * (`displayTier`, above). `LevelBar`/`SeatPicker` each reimplemented this
+ * identically as an unexported `tierCount`; one shared body (#3983 final
+ * review M12).
+ */
+export function unclaimedForTier(unclaimedByTier: Record<string, number>, tier: string): number {
+  const base = unclaimedByTier[tier] ?? 0;
+  return tier === 'county' ? base + (unclaimedByTier.march ?? 0) : base;
+}
+
+/**
+ * A root row's own " (crown)"-suffixed `sworn_to`, crown-suffix stripped —
+ * `undefined` when no row carries that suffix (`almanach_reads`'s only
+ * place it appears). `AlmanachPage.tsx`'s own `crownHolder` reads exactly
+ * this and nothing more (#3983 final review M12).
+ */
+export function crownSwornTo(rows: LadderRow[]): string | undefined {
+  return rows
+    .map((row) => row.sworn_to)
+    .find((swornTo) => swornTo.endsWith(' (crown)'))
+    ?.replace(/ \(crown\)$/, '');
+}
+
+/**
+ * `crownSwornTo`, falling back to any root row's own plain `sworn_to` when
+ * no row carries the "(crown)" suffix — the founder-facing "vassal of
+ * House X" caption's more forgiving read (`FounderAlmanach`/`SeatPicker`
+ * both reimplemented this identically, #3983 final review M12). Never
+ * `undefined`; `''` when nothing at all is known. Deliberately NOT what
+ * `AlmanachPage.tsx` uses — its own staff "on record" `crown` field wants
+ * the bare `crownSwornTo` (a dash when no row carries the suffix, not a
+ * guessed fallback).
+ */
+export function crownOrRootSwornTo(rows: LadderRow[]): string {
+  return crownSwornTo(rows) ?? rows.find((row) => row.parent_title_id == null)?.sworn_to ?? '';
+}

@@ -21,7 +21,13 @@ import { useState, type ReactNode } from 'react';
 import { CLAIM, REVIEW_NOTE, STATES } from '../copy';
 import { LadderTable } from '../ladder/LadderTable';
 import { LevelBar } from '../ladder/LevelBar';
-import { defaultPressedTier, levelBarTiers, tierNoun } from '../ladder/tree';
+import {
+  crownOrRootSwornTo,
+  defaultPressedTier,
+  levelBarTiers,
+  tierNoun,
+  unclaimedForTier,
+} from '../ladder/tree';
 import { useLadder, useRealms } from '../queries';
 import type { LadderRow } from '../types';
 import { TIER_RANK } from './steps';
@@ -40,13 +46,6 @@ export interface SeatPickerProps {
 
 function capitalize(word: string): string {
   return word.length === 0 ? word : word[0].toUpperCase() + word.slice(1);
-}
-
-/** `unclaimed_by_tier[tier]`, folding march into county — mirrors
- * `LevelBar`'s own (unexported) `tierCount`. */
-function tierCount(unclaimedByTier: Record<string, number>, tier: string): number {
-  const base = unclaimedByTier[tier] ?? 0;
-  return tier === 'county' ? base + (unclaimedByTier.march ?? 0) : base;
 }
 
 function trailingCell(
@@ -102,15 +101,9 @@ export function SeatPicker({
   const tiers = levelBarTiers(rows);
 
   // Plate F-I's tier span reads "vassal of House Piropa" — whoever the
-  // ladder's own root rows are sworn to, crown-suffix stripped (mirrors
-  // `AlmanachPage.tsx`'s `crownHolder`).
-  const liegeName =
-    rows
-      .map((row) => row.sworn_to)
-      .find((swornTo) => swornTo.endsWith(' (crown)'))
-      ?.replace(/ \(crown\)$/, '') ??
-    rows.find((row) => row.parent_title_id == null)?.sworn_to ??
-    '';
+  // ladder's own root rows are sworn to, crown-suffix stripped, falling
+  // back to any root row's plain `sworn_to` (`crownOrRootSwornTo`, `../ladder/tree`).
+  const liegeName = crownOrRootSwornTo(rows);
 
   if (!payload) {
     return <p className="meta">Loading the ladder…</p>;
@@ -141,7 +134,7 @@ export function SeatPicker({
                       setTierOpen(false);
                     }}
                   >
-                    {capitalize(tierNoun(tier, 2))} · {tierCount(unclaimedByTier, tier)}
+                    {capitalize(tierNoun(tier, 2))} · {unclaimedForTier(unclaimedByTier, tier)}
                   </button>
                 </li>
               ))}

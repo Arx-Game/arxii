@@ -329,6 +329,15 @@
 .almanach .lad tr.sel td {
   background: hsl(var(--muted));
 }
+/* A contested title (`claimant_name !== ''`, final review deferred item 2)
+   — the plate's `.cl` row, `.lad .cl td{color:var(--claimed)}`. `--claimed`
+   is the plate's own alias for the same value as `--ink-mute` in both
+   themes (base.css's token block), which this app already renders as
+   `hsl(var(--muted-foreground))` everywhere else (`.meta`, `.tip`, `.bar
+   .mode`) — so this rule reuses that token rather than inventing a new one. */
+.almanach .lad .cl td {
+  color: hsl(var(--muted-foreground));
+}
 
 /* --- column-header glosses (plate S-I `.tip`/`.bub` — hover/focus, not help text) --- */
 

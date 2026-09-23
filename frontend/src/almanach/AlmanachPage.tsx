@@ -29,7 +29,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { useAlmanachMutation, useCharter, useHouses, useLadder, useRealms } from './queries';
-import { buildLadderTree, defaultPressedTier, levelBarTiers } from './ladder/tree';
+import { buildLadderTree, crownSwornTo, defaultPressedTier, levelBarTiers } from './ladder/tree';
 import { LevelBar } from './ladder/LevelBar';
 import { LadderTable } from './ladder/LadderTable';
 import { PlantRungDialog } from './ladder/PlantRungDialog';
@@ -132,10 +132,11 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
   // own formal name plus whoever holds its crown, read off any row's own
   // " (crown)"-suffixed `sworn_to` (`almanach_reads`'s only place that
   // suffix appears) rather than a field the realm read doesn't carry.
-  const crownHolder = rows
-    .map((row) => row.sworn_to)
-    .find((swornTo) => swornTo.endsWith(' (crown)'))
-    ?.replace(/ \(crown\)$/, '');
+  // `crownSwornTo` (`./ladder/tree`), never the fuller founder-facing
+  // `crownOrRootSwornTo` fallback — a staff realm ladder with no crowned
+  // row genuinely has no crown to report, not a guessed root row's own
+  // sworn_to (#3983 final review M12).
+  const crownHolder = crownSwornTo(rows);
 
   if (!payload) {
     return (
