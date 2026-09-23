@@ -313,14 +313,19 @@ export function FamilyChapter({
   const renderNode = (
     node: AlmanachFamilyNode,
     depth: number,
-    relationOverride?: string
+    relationOverride?: string,
+    asConsort = false
   ): ReactNode => {
     if (renderedIds.has(node.id)) return null;
     renderedIds.add(node.id);
     const relation = relationOverrides?.[node.id] ?? relationOverride ?? relationLabel(depth);
     const selected = selectedId === node.id;
-    const outsiders = index.outsiderSpousesOf.get(node.id) ?? [];
-    const childIds = index.childrenByParent.get(node.id) ?? [];
+    // A consort rendered beside their partner never carries the union's
+    // children: those hang under the partner who is in the line, so a
+    // daughter is never drawn a rung below her outsider parent as a
+    // "grandchild" (#3983 demo-fidelity finding 2).
+    const outsiders = asConsort ? [] : (index.outsiderSpousesOf.get(node.id) ?? []);
+    const childIds = asConsort ? [] : (index.childrenByParent.get(node.id) ?? []);
     const hasChildList = outsiders.length > 0 || childIds.length > 0;
     const hidden = node.believed_deceased || hasParentageSecret(node.id, family.parentage);
     const status = statusOverrides?.[node.id];
@@ -345,7 +350,7 @@ export function FamilyChapter({
           ))}
         {hasChildList && (
           <ul>
-            {outsiders.map((spouse) => renderNode(spouse, depth + 1, 'consort'))}
+            {outsiders.map((spouse) => renderNode(spouse, depth + 1, 'consort', true))}
             {childIds.map((childId) => {
               const childNode = nodeById.get(childId);
               return childNode ? renderNode(childNode, depth + 1) : null;

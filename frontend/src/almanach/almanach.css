@@ -93,6 +93,11 @@
   gap: 2.2rem;
   padding: 1.8rem 1.6rem 2rem;
 }
+/* Tailwind's `contents` utility (display: contents) matches the rail's class
+   and would dissolve it into the grid, letting its groups take the tracks. */
+.almanach .contents {
+  display: block;
+}
 /* Grid items default to min-width:auto, so a wide ladder table would push the
    chapter's column into the record rail instead of scrolling inside `.scroll`;
    the three columns must be allowed to shrink to their tracks. */

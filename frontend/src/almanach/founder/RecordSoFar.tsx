@@ -118,7 +118,11 @@ export function RecordSoFar({
   }
 
   if (youName != null) {
-    entries.push({ q: 'you', text: `${youName} · ${draft.founder_is_heir ? 'heir' : 'younger'}` });
+    let place = draft.founder_is_heir ? 'heir' : 'younger';
+    if (draft.founder_relation === 'head') {
+      place = 'head of house';
+    }
+    entries.push({ q: 'you', text: `${youName} · ${place}` });
   }
 
   if (landText != null) {

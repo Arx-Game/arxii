@@ -16,7 +16,7 @@
  * wording for a row whose public record and truth diverge.
  */
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -308,4 +308,44 @@ test('a child with parentage edges to both a head and their spouse renders once,
     (el) => el.textContent
   );
   expect(topLevelNames).toEqual(['Ilsabet']);
+});
+
+test('a child of a member and an outsider consort renders once, under the member, as a child', () => {
+  const person = (id: number, name: string, family_id: number) => ({
+    id,
+    name,
+    tier: 'standing',
+    family_id,
+    is_deceased: false,
+    is_appable: false,
+    sheet_id: null,
+    gender: 'Woman',
+    age: 40,
+    description: '',
+    believed_deceased: false,
+  });
+  const family: AlmanachFamily = {
+    nodes: [person(1, 'Galerna', 1), person(2, 'Tempesta', 1), person(3, 'Bourrasque', 7)],
+    parentage: [
+      { child_id: 2, parent_id: 3, kind: 'birth', is_true: true, via_secret: false },
+      { child_id: 2, parent_id: 1, kind: 'birth', is_true: true, via_secret: false },
+    ],
+    unions: [{ id: 1, kind: 'marriage', member_ids: [1, 3], ended: false }],
+  };
+  renderWithProviders(
+    <FamilyChapter
+      houseId={1}
+      houseName="Piropa"
+      family={family}
+      household={[]}
+      onEdit={() => undefined}
+    />
+  );
+  const names = screen
+    .getAllByRole('button', { name: /^(Galerna|Tempesta|Bourrasque)$/ })
+    .map((b) => b.textContent);
+  expect(names).toEqual(['Galerna', 'Bourrasque', 'Tempesta']);
+  const tempesta = screen.getByRole('button', { name: 'Tempesta' }).closest('li') as HTMLElement;
+  expect(within(tempesta).getByText('child')).toBeInTheDocument();
+  expect(screen.queryByText('grandchild')).toBeNull();
 });
