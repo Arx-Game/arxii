@@ -249,8 +249,13 @@ def seed_houses_demo() -> None:
     )
     # Called on every run, not just the first: an existing demo house from an
     # older seed run that predates this call would otherwise stay draft
-    # forever (#3983 Plan B Task 7 fold-in).
+    # forever (#3983 Plan B Task 7 fold-in). The founder ladder and the demo
+    # capital are here for the same reason (#3983 review M3) — both are
+    # idempotent by name, and a dev database seeded before this branch would
+    # otherwise never get either of them.
     publish_house(house)
+    _seed_demo_founder_ladder(realm=realm, house=house)
+    _ensure_demo_capital(realm)
     if not created:
         return
 
@@ -302,9 +307,6 @@ def seed_houses_demo() -> None:
             "seat_domain": domain,
         },
     )
-
-    _seed_demo_founder_ladder(realm=realm, house=house)
-    _ensure_demo_capital(realm)
 
 
 def _seed_demo_founder_ladder(*, realm, house) -> None:
