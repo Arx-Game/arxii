@@ -3,20 +3,22 @@
  * rendered INSIDE their `<li>` by `FamilyChapter`. Editable fields are
  * exactly `almanach_edit_kin`'s update-only "plain fields"
  * (name/gender_id/age/is_deceased/believed_deceased, `almanach.py`'s
- * `AlmanachEditKinAction.execute`) — and that action overwrites all four
- * unconditionally from whatever the call sends (`node.gender = gender` runs
- * even when `gender_id` is omitted), so Save always resends every field,
- * never only the one the viewer touched. `name` has no field of its own
- * here (the plate never draws one — the person's name is already the
- * selection button's own label) so it rides through unedited on every save.
+ * `AlmanachEditKinAction.execute`) — that action applies present-only
+ * (Task 10 fix; corrected here, M5): an absent kwarg is a no-op, so Save
+ * still resends every field it tracks (this panel keeps no per-field dirty
+ * state) but never touches `name`, which has no field of its own here (the
+ * plate never draws one — the person's name is already the selection
+ * button's own label).
  *
  * `tier`, `in the house as`, `born into`, `description` are read-only: no
- * kwarg on the action can change them. `public record` / `in truth` /
- * `known to the world as` are read-only for a second reason too — the
- * document payload never carries secret text (`AlmanachFamilyNode` has no
- * field for it), so all three render a dash; `known to the world as` adds
- * the "believed dead" chip when `believed_deceased` is true, the one signal
- * the payload does carry.
+ * kwarg on the action can change them. `in truth` stays read-only for a
+ * second reason too — the document payload never carries secret text
+ * (`AlmanachFamilyNode` has no field for it), so it renders a dash.
+ * `public record` (final review I8) is the one field the payload DOES carry
+ * a control for: a living/believed-dead seg writing `believed_deceased`
+ * through the same Save as `deceased`/age/gender — the "known to the world
+ * as" chip below it mirrors the seg's own live (unsaved) state, not
+ * `subject.believedDeceased`, so toggling previews immediately.
  *
  * Plain `<input>`/`<select>` rather than the shadcn form primitives — this
  * panel lives in the page body, not a `Dialog`, and every other editable
@@ -74,6 +76,7 @@ export function PersonPanel({ subject, onSave }: PersonPanelProps) {
   const [age, setAge] = useState(subject.age != null ? String(subject.age) : '');
   const [genderId, setGenderId] = useState('');
   const [isDeceased, setIsDeceased] = useState(subject.isDeceased);
+  const [believedDeceased, setBelievedDeceased] = useState(subject.believedDeceased);
   const ageInputId = useId();
   const genderSelectId = useId();
 
@@ -83,7 +86,8 @@ export function PersonPanel({ subject, onSave }: PersonPanelProps) {
   useEffect(() => {
     setAge(subject.age != null ? String(subject.age) : '');
     setIsDeceased(subject.isDeceased);
-  }, [subject.kinspersonId, subject.age, subject.isDeceased]);
+    setBelievedDeceased(subject.believedDeceased);
+  }, [subject.kinspersonId, subject.age, subject.isDeceased, subject.believedDeceased]);
 
   useEffect(() => {
     const needle = subject.gender.trim().toLowerCase();
@@ -103,7 +107,7 @@ export function PersonPanel({ subject, onSave }: PersonPanelProps) {
       age: age.trim() === '' ? null : Number(age),
       gender_id: genderId === '' ? null : Number(genderId),
       is_deceased: isDeceased,
-      believed_deceased: subject.believedDeceased,
+      believed_deceased: believedDeceased,
     });
   };
 
@@ -164,8 +168,21 @@ export function PersonPanel({ subject, onSave }: PersonPanelProps) {
       <div className="row3">
         <div className="field">
           <span className="label">public record</span>
-          <div className="val" aria-label="public record">
-            <Dash />
+          <div className="seg" role="group" aria-label="public record">
+            <button
+              type="button"
+              aria-pressed={!believedDeceased}
+              onClick={() => setBelievedDeceased(false)}
+            >
+              living
+            </button>
+            <button
+              type="button"
+              aria-pressed={believedDeceased}
+              onClick={() => setBelievedDeceased(true)}
+            >
+              believed dead
+            </button>
           </div>
         </div>
         <div className="field">
@@ -178,7 +195,7 @@ export function PersonPanel({ subject, onSave }: PersonPanelProps) {
           <span className="label">known to the world as</span>
           <div className="val" aria-label="known to the world as">
             <Dash />
-            {subject.believedDeceased && <span className="chip">believed dead</span>}
+            {believedDeceased && <span className="chip">believed dead</span>}
           </div>
         </div>
       </div>

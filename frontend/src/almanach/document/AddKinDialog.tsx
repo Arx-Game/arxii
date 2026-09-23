@@ -3,9 +3,25 @@
  * "⊕ a person of the household · a position" doors) — mints a new
  * `Kinsperson` via `almanach_edit_kin`'s create branch (`kinsperson_id`
  * absent). Both doors open the same dialog; `defaultHousehold` seeds
- * `relation="ward"` and pins `is_household` true (the household band's
- * entry point never needs a parent/spouse pick), while the tree's own door
- * seeds `relation="child"`.
+ * `relation="ward"` (the household band's entry point never needs a
+ * parent/spouse pick), while the tree's own door seeds `relation="child"`.
+ * `is_household` is forced true whenever the CHOSEN relation is ward or
+ * position, regardless of which door opened the dialog (final review I2c
+ * — the founder's own relation list offers ward/position from the tree
+ * door too, and a row submitted with `is_household: false` there becomes
+ * an orphan `Kinsperson`, never a household `Vacancy`).
+ *
+ * `mother`/`father`/`sibling`/`grandparent` get an "of whom" node pick
+ * (final review I3/deferred item 8) sending `relative_kinsperson_id` — the
+ * node the relation is anchored on (the child of whom this is the mother,
+ * the sibling of whom this shares parents, …). This is DISTINCT from
+ * `child`'s own "parent" pick (`parent_kinsperson_id`, the reverse
+ * direction) and `spouse`'s "spouse" pick.
+ *
+ * `allowEmptyName` (final review I4, the founder dialog only — the staff
+ * dialog never passes it) lets a `child`/`sibling` row submit with a blank
+ * name: a "to be defined" slot (`FounderRecord.tsx`'s `familyLine` already
+ * renders one, "a sibling, to be defined").
  *
  * Follows `PlantRungDialog`'s shape (`Dialog`/`DialogContent`/
  * `DialogFooter`/`DialogTitle`, Cancel outlined + a primary submit).
@@ -66,6 +82,10 @@ export interface CreateKinFields {
   relation: KinRelation;
   parent_kinsperson_id?: number;
   spouse_kinsperson_id?: number;
+  /** The node `mother`/`father`/`sibling`/`grandparent` is anchored on —
+   * "of whom" this is the mother/father/sibling/grandparent (final review
+   * I3/deferred item 8). */
+  relative_kinsperson_id?: number;
   gender_id?: number;
   age?: number;
   is_deceased?: boolean;
@@ -90,7 +110,21 @@ export interface AddKinDialogProps {
    * The founder dialog passes the head-relative subset (never
    * `grandparent`) — see `founder/familyShape.ts`. */
   relations?: KinRelation[];
+  /** Lets a `child`/`sibling` row submit with a blank name — a "to be
+   * defined" slot (final review I4). The founder dialog only; omitted (the
+   * staff dialog's default) keeps every relation requiring a name. */
+  allowEmptyName?: boolean;
+  /** Whether `mother`/`father`/`sibling`/`grandparent` need an "of whom"
+   * node pick (final review I3/deferred item 8) — `AlmanachEditKinAction`
+   * requires it. Default `true` (every staff caller). The founder dialog
+   * passes `false`: its own submit path is the local draft
+   * (`FounderKin[]` → the nested claim payload), never
+   * `almanach_edit_kin`, and every founder head-relative relation already
+   * attaches unambiguously off `founder_relation`/the head. */
+  requireRelativeAnchor?: boolean;
 }
+
+const RELATIVE_ANCHOR_RELATIONS: KinRelation[] = ['mother', 'father', 'sibling', 'grandparent'];
 
 export function AddKinDialog({
   houseId,
@@ -100,6 +134,8 @@ export function AddKinDialog({
   onClose,
   onConfirm,
   relations,
+  allowEmptyName = false,
+  requireRelativeAnchor = true,
 }: AddKinDialogProps) {
   const { data: genders } = useGenders();
   const { data: houses } = useAllHouses();
@@ -113,6 +149,7 @@ export function AddKinDialog({
   const [relation, setRelation] = useState<KinRelation>(defaultHousehold ? 'ward' : 'child');
   const [parentId, setParentId] = useState('');
   const [spouseId, setSpouseId] = useState('');
+  const [relativeId, setRelativeId] = useState('');
   const [genderId, setGenderId] = useState('');
   const [age, setAge] = useState('');
   const [bornIntoFamilyId, setBornIntoFamilyId] = useState('');
@@ -123,6 +160,7 @@ export function AddKinDialog({
     setRelation(defaultHousehold ? 'ward' : 'child');
     setParentId('');
     setSpouseId('');
+    setRelativeId('');
     setGenderId('');
     setAge('');
     setBornIntoFamilyId('');
@@ -131,8 +169,15 @@ export function AddKinDialog({
   const trimmedName = name.trim();
   const needsParent = relation === 'child';
   const needsSpouse = relation === 'spouse';
+  const needsRelativeAnchor = requireRelativeAnchor && RELATIVE_ANCHOR_RELATIONS.includes(relation);
+  const isHousehold = relation === 'ward' || relation === 'position';
+  const nameOk =
+    trimmedName !== '' || (allowEmptyName && (relation === 'child' || relation === 'sibling'));
   const canSubmit =
-    trimmedName !== '' && (!needsParent || parentId !== '') && (!needsSpouse || spouseId !== '');
+    nameOk &&
+    (!needsParent || parentId !== '') &&
+    (!needsSpouse || spouseId !== '') &&
+    (!needsRelativeAnchor || relativeId !== '');
 
   const submit = () => {
     if (!canSubmit) return;
@@ -142,10 +187,13 @@ export function AddKinDialog({
       relation,
       ...(needsParent && parentId !== '' ? { parent_kinsperson_id: Number(parentId) } : {}),
       ...(needsSpouse && spouseId !== '' ? { spouse_kinsperson_id: Number(spouseId) } : {}),
+      ...(needsRelativeAnchor && relativeId !== ''
+        ? { relative_kinsperson_id: Number(relativeId) }
+        : {}),
       ...(genderId !== '' ? { gender_id: Number(genderId) } : {}),
       ...(age.trim() !== '' ? { age: Number(age) } : {}),
       ...(bornIntoFamilyId !== '' ? { born_into_family_id: Number(bornIntoFamilyId) } : {}),
-      ...(defaultHousehold ? { is_household: true } : {}),
+      ...(defaultHousehold || isHousehold ? { is_household: true } : {}),
     });
     onClose();
   };
@@ -209,6 +257,23 @@ export function AddKinDialog({
             <Select value={spouseId} onValueChange={setSpouseId}>
               <SelectTrigger id="add-kin-spouse">
                 <SelectValue placeholder="pick a spouse" />
+              </SelectTrigger>
+              <SelectContent>
+                {nodes.map((node) => (
+                  <SelectItem key={node.id} value={String(node.id)}>
+                    {node.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {needsRelativeAnchor && (
+          <div className="field">
+            <Label htmlFor="add-kin-relative">of whom</Label>
+            <Select value={relativeId} onValueChange={setRelativeId}>
+              <SelectTrigger id="add-kin-relative">
+                <SelectValue placeholder="pick who this is of" />
               </SelectTrigger>
               <SelectContent>
                 {nodes.map((node) => (

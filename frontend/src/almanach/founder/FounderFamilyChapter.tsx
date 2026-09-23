@@ -125,11 +125,7 @@ export function FounderFamilyChapter({
     });
   };
 
-  // `HouseTemplateOption` (`src/generated/api.d.ts`, Task 3's regen) has no
-  // `starting_kin_slots` field yet — the narrowed read below is forward
-  // provisioning for when it lands, not a claim that it exists today; see
-  // the task report's findings.
-  const startingSlots = (template as { starting_kin_slots?: number }).starting_kin_slots;
+  const startingSlots = template.starting_kin_slots;
   const namedCount = draft.kin.filter((kin) => !kin.is_household).length;
   const familyDefineText =
     startingSlots != null ? `${startingSlots} · ${namedCount} named` : String(namedCount);
@@ -182,6 +178,8 @@ export function FounderFamilyChapter({
       addLabel="⊕ a sibling · a spouse"
       householdAddLabel="⊕ a ward · a captain of the guard · a position"
       relations={offeredRelations}
+      allowEmptyKinName
+      requireRelativeAnchor={false}
       row3={row3}
       relationOverrides={relationOverrides}
       statusOverrides={statusOverrides}

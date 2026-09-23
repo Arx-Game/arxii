@@ -5,10 +5,14 @@
  * whether the selected node is the founder's own (`FOUNDER_NODE_ID`,
  * `./familyShape`):
  *
- * - The founder's own row: mother/father read straight off the shape as
- *   plain `.val` text (never editable here — they're edited by selecting
- *   THEIR OWN row instead, which falls through to the kin-edit panel
- *   below), a heir/younger `.seg` writing `founder_is_heir`, and "on the
+ * - The founder's own row: a "you are" `.seg` (final review I4) writing
+ *   `founder_relation` — head / child / sibling / spouse "of the head"
+ *   (never mother/father/grandparent for the founder HERSELF; those stay
+ *   reachable only as separate kin rows) — mother/father read straight off
+ *   the shape as plain `.val` text (never editable here — they're edited by
+ *   selecting THEIR OWN row instead, which falls through to the kin-edit
+ *   panel below), a heir/younger `.seg` writing `founder_is_heir`
+ *   (unchanged by I4 — still offered regardless of place), and "on the
  *   public record" chips, one per parent on record.
  * - Every other row (head, mother, father, spouse, sibling, child, a ward)
  *   is a `FounderKin` the founder wrote herself, so it's fully editable:
@@ -30,11 +34,22 @@
  */
 import { useId } from 'react';
 
+import type { ClaimKinRelation } from '@/character-creation/types';
+
 import { useAllHouses, useGenders } from '../queries';
 import type { AlmanachFamilyNode } from '../types';
 import type { FounderDraft, FounderKin } from './founderDraft';
 import { FOUNDER_NODE_ID } from './familyShape';
 import type { UseFounderDraftResult } from './founderDraft';
+
+/** The "you are" seg's four options (final review I4) — never
+ * mother/father/grandparent for the founder herself (see module comment). */
+const FOUNDER_PLACE_CHOICES: { value: ClaimKinRelation; label: string }[] = [
+  { value: 'head', label: 'head of house' },
+  { value: 'child', label: 'child' },
+  { value: 'sibling', label: 'sibling' },
+  { value: 'spouse', label: 'spouse' },
+];
 
 export interface FounderPersonPanelProps {
   node: AlmanachFamilyNode;
@@ -71,6 +86,21 @@ function FounderOwnPanel({
 
   return (
     <div className="panel">
+      <div className="field">
+        <span className="label">you are</span>
+        <div className="seg" role="group" aria-label="Your place in the house">
+          {FOUNDER_PLACE_CHOICES.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={draft.founder_relation === choice.value}
+              onClick={() => set('founder_relation', choice.value)}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="row3">
         <div className="field">
           <span className="label">mother</span>

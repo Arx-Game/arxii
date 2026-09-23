@@ -68,6 +68,15 @@ export interface FamilyChapterProps {
    * `founder/familyShape.ts`). Omitted keeps `AddKinDialog`'s own default
    * (every relation). */
   relations?: KinRelation[];
+  /** Forwarded to `AddKinDialog` (final review I4) — the founder chapter
+   * passes `true` so a child/sibling row can be left "to be defined";
+   * every staff caller omits it and keeps requiring a name. */
+  allowEmptyKinName?: boolean;
+  /** Forwarded to `AddKinDialog` (final review I3/deferred item 8) — the
+   * founder chapter passes `false` (its submit path never reaches
+   * `almanach_edit_kin`); every staff caller omits it and keeps the "of
+   * whom" requirement. */
+  requireRelativeAnchor?: boolean;
   /**
    * Replaces the built-in `.row3` stat fields (#3983 Plan B Task 5) — the
    * founder plate's own "family you may define"/"household" counts have no
@@ -249,6 +258,8 @@ export function FamilyChapter({
   addLabel = '⊕ a child · a spouse',
   householdAddLabel = '⊕ a person of the household · a position',
   relations,
+  allowEmptyKinName,
+  requireRelativeAnchor,
   row3,
   relationOverrides,
   statusOverrides,
@@ -444,6 +455,8 @@ export function FamilyChapter({
           onClose={() => setAddOpen(null)}
           onConfirm={onCreate}
           relations={relations}
+          allowEmptyName={allowEmptyKinName}
+          requireRelativeAnchor={requireRelativeAnchor}
         />
       )}
       {footer}

@@ -166,6 +166,76 @@ test('the "born into" pick renders and its value reaches the create payload', as
   expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ born_into_family_id: 4 }));
 });
 
+test('the staff dialog\'s "of whom" pick sends relative_kinsperson_id for mother/father/sibling/grandparent (I3)', async () => {
+  vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
+  const onCreate = vi.fn();
+  renderWithProviders(
+    <FamilyChapter
+      houseId={9}
+      houseName="Piropa"
+      family={family}
+      household={household}
+      onEdit={() => {}}
+      onCreate={onCreate}
+    />
+  );
+  await userEvent.click(screen.getByRole('button', { name: /a child · a spouse/i }));
+  await userEvent.selectOptions(screen.getByLabelText('relation'), 'mother');
+  expect(screen.getByLabelText('of whom')).toBeInTheDocument();
+  // No pick yet — Add stays refused even with a name.
+  await userEvent.type(screen.getByLabelText('name'), 'Yolanda');
+  expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+
+  await userEvent.selectOptions(screen.getByLabelText('of whom'), '1');
+  await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ relation: 'mother', relative_kinsperson_id: 1 })
+  );
+});
+
+test('is_household is forced for a ward/position row picked from the tree door, not only the household door (I2c)', async () => {
+  vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
+  const onCreate = vi.fn();
+  renderWithProviders(
+    <FamilyChapter
+      houseId={9}
+      houseName="Piropa"
+      family={family}
+      household={household}
+      onEdit={() => {}}
+      onCreate={onCreate}
+    />
+  );
+  // The TREE door, not the household door — `defaultHousehold` is false.
+  await userEvent.click(screen.getByRole('button', { name: /a child · a spouse/i }));
+  await userEvent.selectOptions(screen.getByLabelText('relation'), 'ward');
+  await userEvent.type(screen.getByLabelText('name'), 'Petra');
+  await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ relation: 'ward', is_household: true })
+  );
+});
+
+test('the staff dialog refuses an empty name even for sibling, with every other field filled (I4 contrast)', async () => {
+  vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
+  renderWithProviders(
+    <FamilyChapter
+      houseId={9}
+      houseName="Piropa"
+      family={family}
+      household={household}
+      onEdit={() => {}}
+      onCreate={vi.fn()}
+    />
+  );
+  await userEvent.click(screen.getByRole('button', { name: /a child · a spouse/i }));
+  await userEvent.selectOptions(screen.getByLabelText('relation'), 'sibling');
+  // The "of whom" requirement is satisfied — name is the only thing left
+  // blank, and that alone keeps Add refused (unlike the founder dialog).
+  await userEvent.selectOptions(screen.getByLabelText('of whom'), '1');
+  expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+});
+
 // #3983 Plan B Task 5 fix round 1, Finding I1 (this component's own bug,
 // exposed first by the founder Almanach's `familyShape.ts`, which gives a
 // `child`-relation kin parentage edges to BOTH the head and the head's own
