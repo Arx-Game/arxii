@@ -74,13 +74,22 @@ export interface CreateKinFields {
 }
 
 export interface AddKinDialogProps {
-  houseId: number;
+  /** Omitted for the founder Almanach (#3983 Plan B Task 5), which has no
+   * real house org yet — `submit()` sends `org_id: 0` in that case; Task 6's
+   * claim submission never reads this dialog's payload directly (it maps
+   * through `FounderKin` first), so the placeholder id never reaches the
+   * server. */
+  houseId?: number;
   /** The tree's own nodes, for the parent/spouse pick. */
   nodes: AlmanachFamilyNode[];
   defaultHousehold: boolean;
   open: boolean;
   onClose: () => void;
   onConfirm: (fields: CreateKinFields) => void;
+  /** Narrows the relation picker (default: every `RELATION_CHOICES` entry).
+   * The founder dialog passes the head-relative subset (never
+   * `grandparent`) — see `founder/familyShape.ts`. */
+  relations?: KinRelation[];
 }
 
 export function AddKinDialog({
@@ -90,12 +99,16 @@ export function AddKinDialog({
   open,
   onClose,
   onConfirm,
+  relations,
 }: AddKinDialogProps) {
   const { data: genders } = useGenders();
   const { data: houses } = useAllHouses();
   const bornIntoOptions = (houses?.results ?? []).filter(
     (house): house is typeof house & { family_id: number } => house.family_id != null
   );
+  const relationChoices = relations
+    ? RELATION_CHOICES.filter((choice) => relations.includes(choice.value))
+    : RELATION_CHOICES;
   const [name, setName] = useState('');
   const [relation, setRelation] = useState<KinRelation>(defaultHousehold ? 'ward' : 'child');
   const [parentId, setParentId] = useState('');
@@ -124,7 +137,7 @@ export function AddKinDialog({
   const submit = () => {
     if (!canSubmit) return;
     onConfirm({
-      org_id: houseId,
+      org_id: houseId ?? 0,
       name: trimmedName,
       relation,
       ...(needsParent && parentId !== '' ? { parent_kinsperson_id: Number(parentId) } : {}),
@@ -165,7 +178,7 @@ export function AddKinDialog({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {RELATION_CHOICES.map((choice) => (
+              {relationChoices.map((choice) => (
                 <SelectItem key={choice.value} value={choice.value}>
                   {choice.label}
                 </SelectItem>

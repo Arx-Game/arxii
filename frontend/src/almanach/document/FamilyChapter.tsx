@@ -40,7 +40,7 @@ import { useState, type ReactNode } from 'react';
 
 import type { AlmanachFamily, AlmanachFamilyNode, AlmanachHouseholdMember } from '../types';
 import { PersonPanel, type PersonPanelSaveFields, type PersonPanelSubject } from './PersonPanel';
-import { AddKinDialog, type CreateKinFields } from './AddKinDialog';
+import { AddKinDialog, type CreateKinFields, type KinRelation } from './AddKinDialog';
 
 export interface FamilyChapterProps {
   houseId: number;
@@ -50,6 +50,73 @@ export interface FamilyChapterProps {
   onEdit: (fields: PersonPanelSaveFields) => void;
   /** Optional — omitted in isolation (e.g. the unit test) disables the add doors. */
   onCreate?: (fields: CreateKinFields) => void;
+  /**
+   * Replaces the built-in `PersonPanel` for BOTH a selected tree node and a
+   * selected household row (#3983 Plan B Task 5) — a household row is
+   * repackaged as an `AlmanachFamilyNode`-shaped stand-in
+   * (`nodeFromHousehold`) so the founder Almanach's `FounderPersonPanel` has
+   * one override surface for both. Omitted (the default): every other
+   * caller keeps the built-in `PersonPanel`/`onEdit` wiring unchanged.
+   */
+  renderPanel?: (node: AlmanachFamilyNode) => ReactNode;
+  /** The tree's own "add a child/spouse" door label — default unchanged. */
+  addLabel?: string;
+  /** The household band's own add-door label — default unchanged. */
+  householdAddLabel?: string;
+  /** Narrows `AddKinDialog`'s relation choices (the founder dialog offers
+   * only head-relative relations, never `grandparent` — see
+   * `founder/familyShape.ts`). Omitted keeps `AddKinDialog`'s own default
+   * (every relation). */
+  relations?: KinRelation[];
+  /**
+   * Replaces the built-in `.row3` stat fields (#3983 Plan B Task 5) — the
+   * founder plate's own "family you may define"/"household" counts have no
+   * relationship to this component's "on record"/"open positions"/"hidden
+   * truths" trio, which stays hardcoded for every other (staff) caller.
+   * Omitted keeps the built-in three fields.
+   */
+  row3?: ReactNode;
+  /** Node id -> `.who .rel` text, overriding the structural depth-based
+   * `relationLabel`/outsider-spouse "consort" this component would
+   * otherwise compute (the founder tree's vocabulary is head-relative, not
+   * depth-relative — see `founder/familyShape.ts`). Omitted keeps the
+   * built-in structural words. */
+  relationOverrides?: Record<number, string>;
+  /** Node id -> `.who .st` text/class, overriding the structural
+   * deceased/hidden-truth/tier status this component would otherwise
+   * compute — only the founder's own row needs one ("your character",
+   * `st you`). Omitted keeps the built-in status text. */
+  statusOverrides?: Record<number, { text: string; className: string }>;
+  /** Rendered at the end of the `<main className="chapter">` this component
+   * owns, after the add-kin dialog (#3983 Plan B Task 5) — this component
+   * draws no savebar of its own (see the module docstring), but the founder
+   * Almanach's own chapters always need a "draft kept as you type" + Next
+   * savebar, and that savebar has to sit INSIDE the same `<main>` element
+   * the plate's CSS grid expects, not as a trailing sibling. Omitted keeps
+   * today's no-footer shape. */
+  footer?: ReactNode;
+}
+
+/** A household row, repackaged as the shape `renderPanel` takes — lets one
+ * override function (keyed by node/holder id) cover both the tree and the
+ * household band (#3983 Plan B Task 5). Every field `AlmanachHouseholdMember`
+ * doesn't carry (tier, family_id, is_appable, sheet_id, gender, age,
+ * description) reads as the same "unknown" value `PersonPanel`'s own
+ * `subjectForHousehold` already falls back to. */
+function nodeFromHousehold(row: AlmanachHouseholdMember): AlmanachFamilyNode {
+  return {
+    id: row.holder_id as number,
+    name: row.holder_name,
+    tier: '',
+    family_id: null,
+    is_deceased: row.is_deceased,
+    is_appable: false,
+    sheet_id: null,
+    gender: '',
+    age: null,
+    description: '',
+    believed_deceased: row.believed_deceased,
+  };
 }
 
 const HIDDEN_TRUTH = 'hidden truth';
@@ -134,6 +201,14 @@ export function FamilyChapter({
   household,
   onEdit,
   onCreate,
+  renderPanel,
+  addLabel = '⊕ a child · a spouse',
+  householdAddLabel = '⊕ a person of the household · a position',
+  relations,
+  row3,
+  relationOverrides,
+  statusOverrides,
+  footer,
 }: FamilyChapterProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState<'kin' | 'household' | null>(null);
@@ -176,12 +251,13 @@ export function FamilyChapter({
     depth: number,
     relationOverride?: string
   ): ReactNode => {
-    const relation = relationOverride ?? relationLabel(depth);
+    const relation = relationOverrides?.[node.id] ?? relationOverride ?? relationLabel(depth);
     const selected = selectedId === node.id;
     const outsiders = index.outsiderSpousesOf.get(node.id) ?? [];
     const childIds = index.childrenByParent.get(node.id) ?? [];
     const hasChildList = outsiders.length > 0 || childIds.length > 0;
     const hidden = node.believed_deceased || hasParentageSecret(node.id, family.parentage);
+    const status = statusOverrides?.[node.id];
     return (
       <li key={node.id} className={selected ? 'sel' : undefined}>
         <div className="who">
@@ -191,9 +267,16 @@ export function FamilyChapter({
             </button>
           </span>
           <span className="rel">{relation}</span>
-          <span className={hidden ? 'st hid' : 'st'}>{nodeStatusText(node, family)}</span>
+          <span className={status?.className ?? (hidden ? 'st hid' : 'st')}>
+            {status?.text ?? nodeStatusText(node, family)}
+          </span>
         </div>
-        {selected && <PersonPanel subject={subjectForNode(node, relation)} onSave={onEdit} />}
+        {selected &&
+          (renderPanel ? (
+            renderPanel(node)
+          ) : (
+            <PersonPanel subject={subjectForNode(node, relation)} onSave={onEdit} />
+          ))}
         {hasChildList && (
           <ul>
             {outsiders.map((spouse) => renderNode(spouse, depth + 1, 'consort'))}
@@ -218,25 +301,29 @@ export function FamilyChapter({
         The Family <span className="tier">{houseName}</span>
       </h3>
       <div className="row3">
-        <div className="field">
-          <span className="label">on record</span>
-          <div className="val">{family.nodes.length}</div>
-        </div>
-        <div className="field">
-          <span className="label">open positions</span>
-          <div className="val">{openHousehold}</div>
-        </div>
-        <div className="field">
-          <span className="label">hidden truths</span>
-          <div className="val">{hiddenTruths}</div>
-        </div>
+        {row3 ?? (
+          <>
+            <div className="field">
+              <span className="label">on record</span>
+              <div className="val">{family.nodes.length}</div>
+            </div>
+            <div className="field">
+              <span className="label">open positions</span>
+              <div className="val">{openHousehold}</div>
+            </div>
+            <div className="field">
+              <span className="label">hidden truths</span>
+              <div className="val">{hiddenTruths}</div>
+            </div>
+          </>
+        )}
       </div>
       <ul className="tree">
         {index.roots.map((root) => renderNode(root, 0))}
         <li>
           <div className="who">
             <button type="button" className="add" onClick={() => setAddOpen('kin')}>
-              ⊕ a child · a spouse
+              {addLabel}
             </button>
           </div>
         </li>
@@ -274,9 +361,12 @@ export function FamilyChapter({
                       {householdStatusText(row)}
                     </span>
                   </div>
-                  {selectedId === row.holder_id && (
-                    <PersonPanel subject={subjectForHousehold(row)} onSave={onEdit} />
-                  )}
+                  {selectedId === row.holder_id &&
+                    (renderPanel ? (
+                      renderPanel(nodeFromHousehold(row))
+                    ) : (
+                      <PersonPanel subject={subjectForHousehold(row)} onSave={onEdit} />
+                    ))}
                 </li>
               )
             )}
@@ -285,7 +375,7 @@ export function FamilyChapter({
         <li>
           <div className="who">
             <button type="button" className="add" onClick={() => setAddOpen('household')}>
-              ⊕ a person of the household · a position
+              {householdAddLabel}
             </button>
           </div>
         </li>
@@ -298,8 +388,10 @@ export function FamilyChapter({
           open={addOpen != null}
           onClose={() => setAddOpen(null)}
           onConfirm={onCreate}
+          relations={relations}
         />
       )}
+      {footer}
     </main>
   );
 }

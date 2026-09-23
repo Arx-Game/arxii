@@ -681,7 +681,8 @@
 .almanach .tree .who .st.open {
   color: hsl(var(--primary));
 }
-.almanach .tree .who .st.hid {
+.almanach .tree .who .st.hid,
+.almanach .tree .who .st.you {
   color: hsl(var(--primary));
 }
 .almanach .tree ul {
@@ -846,6 +847,23 @@
   border-radius: 50%;
   background: hsl(var(--primary));
   margin-left: -6px;
+}
+/* The founder House chapter's own principle sliders (#3983 Plan B Task 5,
+   plate F-II) — a real `<input type="range">` sits over `.win`'s decorative
+   window so the founder can drag a value the template's own min/max
+   constrains; the browser's default thumb stands in for the plate's static
+   `.k` dot (a styling pass, not a mechanics gap — see the task report). */
+.almanach .range .track input[type='range'] {
+  position: absolute;
+  inset: -9px 0 auto 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+.almanach .range .track input[type='range']:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
 }
 
 .almanach .faint {

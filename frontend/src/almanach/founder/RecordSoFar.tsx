@@ -5,7 +5,21 @@
  * a section nothing has been entered for yet prints as a `.todo` entry
  * instead of guessing at what Tasks 5-6's House/Family/Land/Estate chapters
  * will eventually fill in.
+ *
+ * Task 5 fold-in: `quiddityName`/`features`/`youName` are optional — a
+ * caller on the Seat step (before a template or a founder placement exist)
+ * passes none of them and the rail renders exactly as it did before. Once
+ * the House/Family chapters are reached, `FounderHouseChapter`/
+ * `FounderFamilyChapter`'s own callers (Task 6's wiring) pass them, adding
+ * plate F-II's "quiddity" row + "features" `<dl>` and plate F-III's "you"
+ * row + "linked houses" `<dl>`. `quiddityName`/`features` stay two separate
+ * `sofar` rows ("house" and "quiddity") rather than plate F-III's own
+ * combined "Candela · the Veiled" wording — one row per named thing is
+ * simpler and holds across every step, not just the one the plate happened
+ * to draw that way; see the task report.
  */
+import { Fragment } from 'react';
+
 import type { FounderDraft } from './founderDraft';
 
 export interface RecordSoFarProps {
@@ -14,9 +28,26 @@ export interface RecordSoFarProps {
   seatName: string;
   /** Who the seat is sworn to, e.g. "Piropa" — '' when unknown. */
   swornTo: string;
+  /** The picked template's first aspect definition's chosen option name
+   * (plate F-II's "quiddity" row) — omitted before a template/pick exist. */
+  quiddityName?: string;
+  /** The picked template's own cultural features (plate F-II's "features"
+   * `<dl>`) — omitted before a template is picked. */
+  features?: { name: string; codexEntryId: number | null }[];
+  /** The founder's own name (plate F-III's "you" row) — omitted before the
+   * Family chapter is reached. See `FounderHouseChapter`'s own doc comment
+   * on why this is always the literal `'Given name'` today. */
+  youName?: string;
 }
 
-export function RecordSoFar({ draft, seatName, swornTo }: RecordSoFarProps) {
+export function RecordSoFar({
+  draft,
+  seatName,
+  swornTo,
+  quiddityName,
+  features,
+  youName,
+}: RecordSoFarProps) {
   const entries: { q: string; text: string }[] = [];
   const todos: string[] = [];
 
@@ -35,11 +66,26 @@ export function RecordSoFar({ draft, seatName, swornTo }: RecordSoFarProps) {
     todos.push('the house');
   }
 
+  if (quiddityName != null) {
+    entries.push({ q: 'quiddity', text: quiddityName });
+  }
+
+  if (
+    draft.house_name !== '' &&
+    (draft.words === '' || draft.colors === '' || draft.sigil_description === '')
+  ) {
+    todos.push('words, colors, sigil');
+  }
+
   const head = draft.kin.find((kin) => kin.relation === 'head');
   if (head) {
     entries.push({ q: 'head', text: head.name });
   } else {
     todos.push('the family');
+  }
+
+  if (youName != null) {
+    entries.push({ q: 'you', text: `${youName} · ${draft.founder_is_heir ? 'heir' : 'younger'}` });
   }
 
   const landCount = Object.keys(draft.lands).length;
@@ -58,6 +104,16 @@ export function RecordSoFar({ draft, seatName, swornTo }: RecordSoFarProps) {
     todos.push('the estate');
   }
 
+  // Plate F-III's "linked houses" `<dl>` — every kin born into a house
+  // other than the one being founded, grouped by that house's name.
+  const linkedHouses = new Map<string, string[]>();
+  for (const kin of draft.kin) {
+    if (kin.born_into_name === '') continue;
+    const list = linkedHouses.get(kin.born_into_name) ?? [];
+    list.push(kin.name);
+    linkedHouses.set(kin.born_into_name, list);
+  }
+
   return (
     <aside className="record">
       <h4>the record, so far</h4>
@@ -74,6 +130,41 @@ export function RecordSoFar({ draft, seatName, swornTo }: RecordSoFarProps) {
           </li>
         ))}
       </ul>
+      {features != null && features.length > 0 && (
+        <>
+          <h4>features</h4>
+          <dl>
+            {features.map((feature) => (
+              <Fragment key={feature.name}>
+                <dt>{feature.name}</dt>
+                <dd>
+                  {feature.codexEntryId != null ? (
+                    <a href={`/codex/${feature.codexEntryId}`}>codex</a>
+                  ) : (
+                    <abbr title="none">—</abbr>
+                  )}
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+        </>
+      )}
+      {linkedHouses.size > 0 && (
+        <>
+          <h4>linked houses</h4>
+          <dl>
+            {Array.from(linkedHouses.entries()).map(([houseName, names]) => (
+              <Fragment key={houseName}>
+                <dt>{houseName}</dt>
+                {/* No staff route a founder can open a house on yet (Plan B
+                    is a player-facing surface) — the name prints without a
+                    link, unlike the staff Almanach's own "open" doors. */}
+                <dd>{names.map((name) => `${name}, born`).join(' · ')}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </>
+      )}
     </aside>
   );
 }
