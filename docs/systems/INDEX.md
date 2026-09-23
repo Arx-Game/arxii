@@ -1488,11 +1488,16 @@ Social structures, organizations, reputation, and legend tracking.
   (`organization`, `name`, `description`, `importance`/`presumed_importance`,
   `cg_point_cost`/`cost_per_influence` priced via `cost_for(influence)`, `rank`,
   `kin_pool`/`kin_node` (at most one; sets `basis` to `kin`, else `retainer`),
+  `holder_kinsperson` (#3983 — the NPC filling a retainer opening; distinct from
+  `kin_node`, which marks a *kin* vacancy on the family's claim path — a Household
+  member is a retainer with a holder, never a kin vacancy),
   `count_remaining` (blank = standing, always open), `allowed_upbringings`,
   `is_active`). `NaturalKeyMixin` + `CreditedContent` (visible
   in the Authoring Workbench) but not in `CONTENT_MODELS`: it belongs to one
   installation's family, not the corpus. `OrganizationMembership.vacancy` FK records
-  which Vacancy a membership was taken through.
+  which Vacancy a membership was taken through. `houses.almanach.add_household_member`
+  (#3983) is the service seam that mints/updates a retainer Vacancy for a house's
+  household, refusing when the house has no `family` on record.
 - **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`,
   open (unless `require_open=False`, used by CG draft validation re-checking an
   already-selected Vacancy), realm-matched, Upbringing-gated CG offer;
