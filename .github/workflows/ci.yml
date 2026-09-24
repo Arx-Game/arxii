@@ -377,13 +377,11 @@ jobs:
           # unpickleable WeakKeyDictionary callback under Django multiprocessing.
           # Keep the same labels and assertions, but run this shard serially so
           # a runner serialization error cannot mask the test result.
-          if [[ "${{ matrix.shard.name }}" == "shard-7" ]]; then
+          if [[ "${{ matrix.shard.name }}" == "shard-7" || "${{ matrix.shard.name }}" == "shard-11" ]]; then
+            # These shards contain migration-sensitive tests. Running them
+            # serially avoids PostgreSQL migration-lock contention; the tests
+            # and assertions remain unchanged.
             uv run arx test --keepdb $LABELS -- --durations 25
-          elif [[ "${{ matrix.shard.name }}" == "shard-11" ]]; then
-            # Character-creation previously shared a shard that went silent
-            # before the 20-minute job timeout. Verbosity 2 identifies the
-            # exact test if this suite stalls in isolation.
-            uv run arx test --keepdb --parallel $LABELS -- --durations 25 --verbosity 2
           else
             uv run arx test --keepdb --parallel $LABELS -- --durations 25
           fi
