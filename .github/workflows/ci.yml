@@ -128,7 +128,7 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Ten shards balanced by measured runtime. Test counts and the old
+          # Eleven shards balanced by measured runtime. Test counts and the old
           # per-app estimates drifted substantially as these suites grew, so
           # oversized apps are split below rather than left on one shard.
           # (rebalanced from 6 shards 2026-07-17; corrected same day from the
@@ -268,11 +268,13 @@ jobs:
             split_part: 2
             split_of: 2
             apps: ""
-          # shard-10: character_creation and web run independently from the
-          # story slice. Keeping these suites together avoids extending the
-          # story shard while preserving complete backend coverage.
+          # shard-10: web's 746 tests run independently.
           - name: shard-10
-            apps: world.character_creation web
+            apps: web
+          # shard-11: character_creation's 681 tests run independently. This
+          # suite previously shared shard-10 and approached the job timeout.
+          - name: shard-11
+            apps: world.character_creation
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
@@ -377,10 +379,10 @@ jobs:
           # a runner serialization error cannot mask the test result.
           if [[ "${{ matrix.shard.name }}" == "shard-7" ]]; then
             uv run arx test --keepdb $LABELS -- --durations 25
-          elif [[ "${{ matrix.shard.name }}" == "shard-9" ]]; then
-            # This shard previously went silent inside one test before the
-            # 20-minute job timeout. Verbosity 2 prints each test name so a
-            # repeat identifies the exact test entered before the stall.
+          elif [[ "${{ matrix.shard.name }}" == "shard-11" ]]; then
+            # Character-creation previously shared a shard that went silent
+            # before the 20-minute job timeout. Verbosity 2 identifies the
+            # exact test if this suite stalls in isolation.
             uv run arx test --keepdb --parallel $LABELS -- --durations 25 --verbosity 2
           else
             uv run arx test --keepdb --parallel $LABELS -- --durations 25
