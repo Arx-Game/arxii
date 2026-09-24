@@ -116,11 +116,10 @@ class CharacterSheetQuerySet(ArxSharedMemoryQuerySet):
         )
         other_stale = has_entry & ~is_low & login_stale & puppet_stale & any_signal
 
-        # No roster entry: fall back to the creating account. A null login is
-        # excluded by the comparison itself.
-        no_entry_stale = Q(roster_entry__isnull=True) & Q(created_by__last_login__lte=cutoff)
-
-        return annotated.filter(low_stale | other_stale | no_entry_stale)
+        # No roster entry means no holder and no signal to go stale: such a sheet is
+        # never inactive, matching CharacterSheet._last_activity_signal_at (#3996
+        # retired the sheet-level creator column).
+        return annotated.filter(low_stale | other_stale)
 
 
 class CharacterSheetManager(GuardedSharedMemoryManager, models.Manager):

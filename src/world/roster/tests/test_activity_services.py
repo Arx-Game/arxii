@@ -20,7 +20,7 @@ from world.character_sheets.types import (
     LifecycleState,
 )
 from world.roster.factories import RosterEntryFactory, RosterFactory, RosterTenureFactory
-from world.roster.models.choices import ActivityRequirement, RosterType
+from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType
 from world.roster.seeds import ensure_rosters
 from world.roster.services.activity import (
     FREEZE_COOLDOWN_DAYS,
@@ -277,9 +277,9 @@ class HiatusServiceTests(TestCase):
 
 class FreezeUnfreezeTests(TestCase):
     def setUp(self):
-        self.sheet, *_ = _build_sheet_with_tenure()
-        self.sheet.is_oc = True
-        self.sheet.save()
+        # RosterEntryFactory's default provenance is PLAYER: an original character,
+        # the only kind that freezes (#3996).
+        self.sheet, _account, _roster, self.entry = _build_sheet_with_tenure()
 
     def test_freeze_sets_state_and_cooldown(self):
         before = timezone.now()
@@ -293,9 +293,9 @@ class FreezeUnfreezeTests(TestCase):
             expected_min - timedelta(seconds=5),
         )
 
-    def test_freeze_rejects_non_oc(self):
-        self.sheet.is_oc = False
-        self.sheet.save()
+    def test_freeze_rejects_roster_character(self):
+        self.entry.creation_provenance = CreationProvenance.STAFF
+        self.entry.save(update_fields=["creation_provenance"])
         with self.assertRaises(FreezeError):
             freeze_character(self.sheet)
 
