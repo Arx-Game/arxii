@@ -109,6 +109,14 @@ class CmdCharacters(Command):  # ty: ignore[invalid-base]
             status = " (playing)" if char in puppeted_chars else ""
             self.caller.msg(f"  {char.name}{status}")
 
+        # Character slots (#3996): the same ledger the Hall shows. Exempt (staff)
+        # accounts have no total and see no line.
+        from world.roster.services.slots import character_slots  # noqa: PLC0415
+
+        slots = character_slots(self.account)
+        if not slots.exempt:
+            self.caller.msg(f"Slots: {slots.used} of {slots.total}")
+
         available_sessions = self.account.get_available_sessions()
         if available_sessions:
             session_count = len(available_sessions)

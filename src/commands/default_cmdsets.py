@@ -572,7 +572,9 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
-        for cmdname in ("ic", "characters", "account", "page"):
+        # charcreate/chardelete (#3996): Evennia's stock character mint bypasses
+        # sheets, rosters and the slot ledger. Characters are made on the web.
+        for cmdname in ("ic", "characters", "account", "page", "charcreate", "chardelete"):
             self.remove(cmdname)
 
         self.add(CmdIC())
