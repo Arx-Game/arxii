@@ -50,3 +50,114 @@ class EnsureGameTickScriptTests(TestCase):
         mock_gts.objects.first.return_value = None
         ensure_game_tick_script()
         mock_create.assert_called_once()
+
+
+class EnsureGameTickScriptRearmTests(TestCase):
+    """The row existing is not enough: its timer has to be running (#4001).
+
+    Evennia re-arms a persistent script at boot only through
+    ``_unpause_task(auto_unpause=True)``, which needs a ``_paused_time`` the
+    previous stop stored. A hard kill stores nothing, so the row stays
+    ``db_is_active=True`` with no timer across every later boot. Production
+    ran that way from the 2026-08-23 SIGKILL recovery until #3993, with the
+    tick-level connection heal from #3327 deployed and never ticking.
+    """
+
+    def tearDown(self) -> None:
+        from world.game_clock.scripts import GameTickScript
+
+        for script in GameTickScript.objects.all():
+            script.stop()
+
+    def test_rearms_an_existing_row_whose_timer_is_not_running(self) -> None:
+        from evennia.utils.create import create_script
+
+        from world.game_clock.scripts import (
+            SCRIPT_KEY,
+            TICK_INTERVAL,
+            GameTickScript,
+            ensure_game_tick_script,
+        )
+
+        script = create_script(
+            GameTickScript,
+            key=SCRIPT_KEY,
+            persistent=True,
+            interval=TICK_INTERVAL,
+            autostart=False,
+        )
+        self.assertIsNone(script.ndb._task)
+
+        ensure_game_tick_script()
+
+        script = GameTickScript.objects.get(db_key=SCRIPT_KEY)
+        self.assertIsNotNone(script.ndb._task)
+        self.assertTrue(script.ndb._task.running)
+
+    def test_leaves_a_running_timer_alone(self) -> None:
+        from evennia.utils.create import create_script
+
+        from world.game_clock.scripts import (
+            SCRIPT_KEY,
+            TICK_INTERVAL,
+            GameTickScript,
+            ensure_game_tick_script,
+        )
+
+        script = create_script(
+            GameTickScript, key=SCRIPT_KEY, persistent=True, interval=TICK_INTERVAL
+        )
+        task = script.ndb._task
+        self.assertTrue(task.running)
+
+        ensure_game_tick_script()
+
+        self.assertIs(GameTickScript.objects.get(db_key=SCRIPT_KEY).ndb._task, task)
+
+
+class MaintenanceLoopRearmTests(TestCase):
+    """The tick re-arms Evennia's maintenance loop when it has died (#4001).
+
+    That LoopingCall stops for good when its own database call raises (a
+    Postgres restart under the Server does exactly that), and it is what
+    saves runtime, processes idle timeouts and closes the connection every
+    seven hours. Nothing else restarts it.
+    """
+
+    @patch("world.game_clock.scripts.run_due_tasks")
+    @patch("world.game_clock.scripts.get_ic_now", MagicMock(return_value=None))
+    @patch("world.game_clock.scripts.close_old_connections", MagicMock())
+    @patch("world.game_clock.scripts.evennia")
+    def test_at_repeat_restarts_a_stopped_maintenance_loop(
+        self,
+        mock_evennia: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        from world.game_clock.scripts import GameTickScript
+
+        mock_run.return_value = []
+        task = mock_evennia.EVENNIA_SERVER_SERVICE.maintenance_task
+        task.running = False
+
+        GameTickScript.at_repeat(MagicMock())
+
+        task.start.assert_called_once_with(60, now=False)
+
+    @patch("world.game_clock.scripts.run_due_tasks")
+    @patch("world.game_clock.scripts.get_ic_now", MagicMock(return_value=None))
+    @patch("world.game_clock.scripts.close_old_connections", MagicMock())
+    @patch("world.game_clock.scripts.evennia")
+    def test_at_repeat_leaves_a_running_maintenance_loop_alone(
+        self,
+        mock_evennia: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        from world.game_clock.scripts import GameTickScript
+
+        mock_run.return_value = []
+        task = mock_evennia.EVENNIA_SERVER_SERVICE.maintenance_task
+        task.running = True
+
+        GameTickScript.at_repeat(MagicMock())
+
+        task.start.assert_not_called()
