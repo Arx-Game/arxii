@@ -554,6 +554,14 @@ services:
     # against a 6GB .wslconfig VM cap, leaving ~1GB for dockerd/kernel.
     mem_limit: 4g
     memswap_limit: 4g
+    # pre-commit fans `pass_filenames: true` hooks out to cpu_count() batches
+    # at once, and the container sees the host's 16 CPUs, not its 4 GiB. A
+    # merge from main staging 64 frontend files ran 16 eslint processes
+    # (~275 MB each) and the OOM killer took the Claude session, four times
+    # on 2026-09-23. The repo marks the node hooks `require_serial`; this
+    # serialises every hook on this box, including branches cut before that.
+    environment:
+      PRE_COMMIT_NO_CONCURRENCY: "1"
   db:
     # Throwaway-DB durability trade: this DB is test-only and wipe-safe
     # (production lives elsewhere); full-durability defaults spent ~90s per
