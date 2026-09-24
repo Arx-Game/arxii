@@ -23,6 +23,7 @@ from django.conf import settings
 from world.character_sheets.types import ActivityState, LifecycleState
 from world.roster.models.applications import RosterApplication
 from world.roster.models.choices import ActivityRequirement, ApplicationStatus, SlotHolderKind
+from world.roster.models.roster_core import RosterEntry
 from world.roster.types import CharacterSlots, SlotHolder
 
 if TYPE_CHECKING:
@@ -96,14 +97,22 @@ def character_slots(
         applications = applications.exclude(pk=exclude_application.pk)
     for application in applications:
         sheet = application.character
-        entry = sheet.roster_entry
+        # The web application path requires a roster entry, but nothing at the
+        # model level does (a staff-made row, or an entry removed after the
+        # application went pending): such an application still holds a slot,
+        # with no activity requirement to read.
+        try:
+            entry = sheet.roster_entry
+        except RosterEntry.DoesNotExist:
+            entry = None
         holders.append(
             SlotHolder(
                 kind=SlotHolderKind.APPLICATION,
                 name=sheet.character.db_key,
-                roster_entry_id=entry.pk,
+                roster_entry_id=entry.pk if entry is not None else None,
                 counts=True,
-                activity=entry.activity_requirement != ActivityRequirement.NONE,
+                activity=entry is not None
+                and entry.activity_requirement != ActivityRequirement.NONE,
             )
         )
 

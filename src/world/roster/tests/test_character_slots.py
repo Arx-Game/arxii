@@ -224,3 +224,81 @@ class SlotGatesTests(TestCase):
         assert tenure
         application.refresh_from_db()
         assert application.status == ApplicationStatus.APPROVED
+
+
+class SlotGateWrapperTests(TestCase):
+    """The approval wrappers turn SlotsFullError into their own refusal (#3996)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.roster.seeds import ensure_rosters
+
+        ensure_rosters()
+        cls.staff = AccountFactory(is_staff=True)
+        PlayerDataFactory(account=cls.staff)
+        cls.player = AccountFactory()
+        cls.player_data = PlayerDataFactory(account=cls.player)
+
+    def _full_application(self):
+        from world.roster.models import Roster
+
+        target = RosterEntryFactory(roster=Roster.objects.get(roster_type=RosterType.AVAILABLE))
+        application = RosterApplicationFactory(
+            player_data=self.player_data, character=target.character_sheet
+        )
+        _held(self.player_data)
+        self.player_data.__dict__.pop("cached_tenures", None)
+        return application
+
+    @override_settings(CHARACTER_SLOTS_BASELINE=1)
+    def test_review_serializer_refuses_with_the_code(self):
+        from rest_framework import serializers as drf
+        from rest_framework.test import APIRequestFactory
+
+        from world.roster.models.choices import ApplicationAction
+        from world.roster.serializers.applications import RosterApplicationApprovalSerializer
+
+        application = self._full_application()
+        request = APIRequestFactory().post("/")
+        request.user = self.staff
+        serializer = RosterApplicationApprovalSerializer(
+            data={"action": ApplicationAction.APPROVE},
+            context={"application": application, "request": request},
+        )
+        assert serializer.is_valid(), serializer.errors
+        with self.assertRaises(drf.ValidationError) as ctx:
+            serializer.save()
+        assert ctx.exception.detail["code"] == SLOTS_FULL
+        application.refresh_from_db()
+        assert application.status == ApplicationStatus.PENDING
+
+    @override_settings(CHARACTER_SLOTS_BASELINE=1)
+    def test_admin_action_reports_the_refusal_and_continues(self):
+        from unittest.mock import MagicMock
+
+        from django.contrib.admin.sites import AdminSite
+        from rest_framework.test import APIRequestFactory
+
+        from world.roster.admin import RosterApplicationAdmin
+        from world.roster.models import RosterApplication
+
+        application = self._full_application()
+        model_admin = RosterApplicationAdmin(RosterApplication, AdminSite())
+        model_admin.message_user = MagicMock()
+        request = APIRequestFactory().post("/")
+        request.user = self.staff
+        model_admin.approve_applications(
+            request, RosterApplication.objects.filter(pk=application.pk)
+        )
+        messages = [str(call.args[1]) for call in model_admin.message_user.call_args_list]
+        assert any("not approved" in m for m in messages), messages
+        assert any("Approved 0 applications" in m for m in messages), messages
+        application.refresh_from_db()
+        assert application.status == ApplicationStatus.PENDING
+
+    def test_pending_application_without_an_entry_still_holds_a_slot(self):
+        RosterApplicationFactory(player_data=self.player_data, character=CharacterSheetFactory())
+        slots = character_slots(self.player)
+        assert slots.used == 1
+        assert slots.holders[0].roster_entry_id is None
+        assert slots.holders[0].activity is False

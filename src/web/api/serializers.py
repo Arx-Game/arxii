@@ -1,6 +1,7 @@
 """Serializers for the web API."""
 
 from allauth.account.models import EmailAddress
+from django.conf import settings
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
@@ -11,6 +12,9 @@ from world.roster.serializers import CharacterSlotsSerializer, MyRosterEntrySeri
 from world.roster.services.slots import character_slots
 from world.roster.types import CharacterSlots
 from world.scenes.models import Persona
+
+# The payload context key build_account_payload_context fills (#3996).
+CHARACTER_SLOTS_CONTEXT_KEY = "character_slots"
 
 
 class PageBackgroundSerializer(serializers.Serializer):
@@ -136,8 +140,21 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             return False
 
     def _slots(self, obj) -> CharacterSlots:
-        slots = self.context.get("character_slots")
-        return slots if slots is not None else character_slots(obj)
+        # The payload context computes the ledger once; a context that names it
+        # as None is an account with no PlayerData yet (nothing held, baseline
+        # total), distinct from a caller that built no context at all.
+        if CHARACTER_SLOTS_CONTEXT_KEY in self.context:
+            slots = self.context[CHARACTER_SLOTS_CONTEXT_KEY]
+            if slots is not None:
+                return slots
+            return CharacterSlots(
+                total=settings.CHARACTER_SLOTS_BASELINE,
+                used=0,
+                activity_total=1,
+                activity_used=0,
+                holders=[],
+            )
+        return character_slots(obj)
 
     def get_can_create_characters(self, obj) -> bool:
         """Verified email and a free character slot (#3996)."""
