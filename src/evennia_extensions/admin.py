@@ -34,6 +34,7 @@ class PlayerDataAdmin(admin.ModelAdmin):
         "display_name",
         "karma",
         "arx1_archive_access",
+        "extra_character_slots",
         "created_date",
         "profile_picture",
         "media_quota_bytes",
@@ -61,6 +62,17 @@ class PlayerDataAdmin(admin.ModelAdmin):
             },
         ),
         ("Preferences", {"fields": ("karma", "hide_from_watch", "private_mode")}),
+        (
+            "Character Slots",
+            {
+                "fields": ("extra_character_slots",),
+                "description": (
+                    "Slots beyond the baseline every account has "
+                    "(settings.CHARACTER_SLOTS_BASELINE). Staff accounts are exempt "
+                    "from the cap regardless (#3996)."
+                ),
+            },
+        ),
         (
             "Media Settings",
             {"fields": ("profile_picture", "media_quota_bytes")},

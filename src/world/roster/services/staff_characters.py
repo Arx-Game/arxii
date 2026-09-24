@@ -66,7 +66,7 @@ def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
     from world.character_sheets.services import create_character_with_sheet  # noqa: PLC0415
     from world.roster.models import Roster, RosterEntry, RosterTenure  # noqa: PLC0415
-    from world.roster.models.choices import RosterType  # noqa: PLC0415
+    from world.roster.models.choices import CreationProvenance, RosterType  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
 
     name = (name or "").strip()
@@ -92,7 +92,10 @@ def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -
     # roster_type column, raising IntegrityError. roster_type is the shelf's real
     # identity (#2728) -- match it the way seeds.py itself does.
     roster, _ = Roster.objects.get_or_create(roster_type=RosterType.NPC, defaults={"name": "NPCs"})
-    entry = RosterEntry.objects.create(character_sheet=sheet, roster=roster)
+    # A GM or staff character is staff-authored, never a player's own (#3996).
+    entry = RosterEntry.objects.create(
+        character_sheet=sheet, roster=roster, creation_provenance=CreationProvenance.STAFF
+    )
     player_data, _ = PlayerData.objects.get_or_create(account=account)
     RosterTenure.objects.create(
         player_data=player_data,

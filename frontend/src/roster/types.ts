@@ -32,6 +32,8 @@ export type MyRosterEntry = components['schemas']['MyRosterEntry'];
  * `serializer_class`/`@extend_schema`, so it stays out of the schema entirely).
  */
 export type SelectedEntryResult = components['schemas']['SelectedEntryResult'];
+/** Result of giving up a roster character (#3996): its id and new shelf. */
+export type ReleasedEntryResult = components['schemas']['ReleasedEntryResult'];
 
 export interface CharacterGallery {
   name: string;

@@ -49,6 +49,10 @@ const rosterEntry: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'player',
+  thaw_available_at: null,
 };
 
 // A second, background puppet (#2166) — Aria stays active; Bianca's session
@@ -67,6 +71,10 @@ const rosterEntry2: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'player',
+  thaw_available_at: null,
 };
 
 function makeWhisperInteraction(

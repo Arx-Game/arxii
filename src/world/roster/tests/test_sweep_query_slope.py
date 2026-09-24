@@ -40,7 +40,7 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import Roster, RosterEntry, RosterTenure
-from world.roster.models.choices import ActivityRequirement, RosterType
+from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType
 from world.roster.seeds import ensure_rosters
 from world.roster.services.activity import sweep_activity_states
 
@@ -59,6 +59,9 @@ def _stale_active_character(
     """A character on the Active shelf with an open tenure and a stale login."""
     sheet = CharacterSheetFactory()
     entry = RosterEntryFactory(
+        # Roster characters (#3996): a PLAYER-provenance entry is an original
+        # character and is never released.
+        creation_provenance=CreationProvenance.STAFF,
         character_sheet=sheet,
         roster=RosterFactory(roster_type=RosterType.ACTIVE),
         activity_requirement=requirement,

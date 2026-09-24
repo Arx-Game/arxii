@@ -104,7 +104,7 @@ def graduate_to_roster(sheet, *, allow_applications_roster: bool = True):
     Staff-gated by the caller. Returns the RosterEntry.
     """
     from world.roster.models import Roster, RosterEntry  # noqa: PLC0415
-    from world.roster.models.choices import RosterType  # noqa: PLC0415
+    from world.roster.models.choices import CreationProvenance, RosterType  # noqa: PLC0415
 
     target, _ = Roster.objects.get_or_create(
         roster_type=RosterType.AVAILABLE,
@@ -117,7 +117,14 @@ def graduate_to_roster(sheet, *, allow_applications_roster: bool = True):
     )
     entry = RosterEntry.objects.filter(character_sheet=sheet).first()
     if entry is None:
-        return RosterEntry.objects.create(character_sheet=sheet, roster=target)
+        # A graduated NPC is a roster character, never a player's own (#3996): the
+        # entry default of PLAYER would make it unreleasable by the sweep and
+        # freezable by whoever later plays it.
+        return RosterEntry.objects.create(
+            character_sheet=sheet,
+            roster=target,
+            creation_provenance=CreationProvenance.STAFF,
+        )
     entry.previous_roster = entry.roster
     entry.roster = target
     entry.save(update_fields=["previous_roster", "roster"])

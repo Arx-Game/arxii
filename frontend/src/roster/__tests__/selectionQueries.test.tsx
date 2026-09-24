@@ -51,6 +51,10 @@ describe('postSelectEntry', () => {
         lifecycle_state: 'ALIVE',
         roster_type: 'ACTIVE',
         character_type: 'PC',
+        activity_state: 'ACTIVE',
+        activity_requirement: 'NONE',
+        creation_provenance: 'player',
+        thaw_available_at: null,
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
@@ -116,6 +120,10 @@ describe('useSelectCharacterMutation', () => {
         lifecycle_state: 'ALIVE',
         roster_type: 'ACTIVE',
         character_type: 'PC',
+        activity_state: 'ACTIVE',
+        activity_requirement: 'NONE',
+        creation_provenance: 'player',
+        thaw_available_at: null,
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));

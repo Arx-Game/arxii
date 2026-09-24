@@ -11,9 +11,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
@@ -51,7 +50,7 @@ from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.constants import ParentageKind
 from world.roster.models import Roster, RosterEntry, RosterTenure
-from world.roster.models.choices import CreationProvenance, RosterType
+from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -278,12 +277,15 @@ def finalize_character(
     else:
         # Character awaiting approval — placed in Pending roster.
         # approve_application() moves to Active and creates RosterTenure.
+        # An original character carries no activity requirement (#3996): the
+        # entry default of HIGH is authored for staff-made roster characters.
         roster = Roster.objects.get(roster_type=RosterType.PENDING)
         RosterEntry.objects.create(
             character_sheet=character.sheet_data,
             roster=roster,
             creation_provenance=provenance,
             created_by_account=author,
+            activity_requirement=ActivityRequirement.NONE,
         )
 
     # Family is already set on CharacterSheet above
@@ -2179,12 +2181,14 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
     if not account.player_data.can_apply_for_characters():
         return False, "Verify your email address to create a character."
 
-    # Check character limit
-    max_characters = settings.CG_MAX_CHARACTERS
-    current_count = account.character_drafts.count()
-    # TODO: Also count actual characters owned by account
-    if current_count >= max_characters:
-        return False, f"Maximum of {max_characters} characters reached"
+    # Character slots (#3996): a new draft takes a slot the moment it opens, so the
+    # ledger counts held characters, open drafts and pending applications together.
+    from world.roster.services.slots import SlotsFullError, assert_slot_available  # noqa: PLC0415
+
+    try:
+        assert_slot_available(cast("AccountDB", account), wants_activity_requirement=False)
+    except SlotsFullError as exc:
+        return False, exc.user_message
 
     return True, ""
 

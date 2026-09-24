@@ -19,8 +19,9 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 if TYPE_CHECKING:
+    from evennia_extensions.models import PlayerData
     from world.character_sheets.models import CharacterSheet
-    from world.roster.models import Roster, RosterEntry
+    from world.roster.models import Roster, RosterEntry, RosterTenure
 
 
 # 30-day cooldown floor on OC freeze/thaw swaps.
@@ -52,6 +53,10 @@ class FreezeError(InactivityServiceError):
 
 class LifecycleStateError(InactivityServiceError):
     """Invalid lifecycle_state transition."""
+
+
+class ReleaseError(InactivityServiceError):
+    """A player-initiated give-up is invalid."""
 
 
 def current_roster_entry(sheet: CharacterSheet) -> RosterEntry | None:
@@ -200,6 +205,19 @@ def sweep_activity_states() -> dict[str, int]:
     }
 
 
+def is_original_character(sheet: CharacterSheet) -> bool:
+    """Whether this character is a player's own creation (#3996).
+
+    Roster versus original character is the entry's ``creation_provenance``: staff
+    and GM-table entries are roster characters; a PLAYER entry is an original
+    character. A sheet with no entry is nobody's roster character either.
+    """
+    from world.roster.models.choices import CreationProvenance  # noqa: PLC0415
+
+    entry = current_roster_entry(sheet)
+    return entry is not None and entry.creation_provenance == CreationProvenance.PLAYER
+
+
 def may_auto_release(sheet: CharacterSheet) -> bool:
     """Whether an inactive character should be handed back to the roster (#2728 §7).
 
@@ -208,14 +226,15 @@ def may_auto_release(sheet: CharacterSheet) -> bool:
     someone else is waiting for it — true of a roster character whose authored
     stories block on its absence, not of a player's own creation.
 
-    * ``is_oc`` — **never**. A player's own character is theirs.
+    * original character (PLAYER provenance) — **never**. A player's own character
+      is theirs; they freeze it instead (#3996).
     * ``activity_requirement`` NONE — no. That is the authored "this character
       carries no activity expectation" tier.
     * NPCs — excluded by shelf before this is ever called.
     """
     from world.roster.models.choices import ActivityRequirement  # noqa: PLC0415
 
-    if sheet.is_oc:
+    if is_original_character(sheet):
         return False
     entry = current_roster_entry(sheet)
     if entry is None:
@@ -261,13 +280,53 @@ def release_inactive_character(
     if available_roster is None:
         available_roster = Roster.objects.get(roster_type=RosterType.AVAILABLE)
 
+    _end_tenure_to_available(entry, tenure, available_roster)
+    return True
+
+
+def _end_tenure_to_available(
+    entry: RosterEntry, tenure: RosterTenure, available_roster: Roster
+) -> None:
+    """End ``tenure`` and put ``entry`` back on the Available shelf.
+
+    Shared by the inactivity sweep and a player's own give-up. The tenure is
+    ended, never deleted, so a returning player is re-seated onto the same row.
+    """
     tenure.end_date = timezone.now()
     tenure.save(update_fields=["end_date"])
     entry.move_to_roster(available_roster)
     # The tenure caches memoise the pre-release state; the caller may go on to read
     # accepts_applications, which would otherwise still see an open tenure.
     entry.invalidate_tenure_cache()
-    return True
+
+
+@transaction.atomic
+def release_tenure(sheet: CharacterSheet, *, player_data: PlayerData) -> None:
+    """A player gives up a roster character they hold (#3996).
+
+    Ends the current tenure and returns the entry to Available so another player
+    can take it, freeing one of the player's character slots. Raises
+    ``ReleaseError`` when the character is an original character (those freeze
+    instead), when ``player_data`` does not hold it, or when it is puppeted right
+    now (leave the world first: never strand a puppet on the grid).
+    """
+    from world.roster.models import Roster  # noqa: PLC0415
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+
+    if is_original_character(sheet):
+        msg = f"Character {sheet.pk} is an original character; freeze it instead."
+        raise ReleaseError(msg, user_message="An original character is frozen, not given up.")
+    entry = current_roster_entry(sheet)
+    tenure = entry.current_tenure if entry is not None else None
+    if entry is None or tenure is None or tenure.player_data_id != player_data.pk:
+        msg = f"Character {sheet.pk} is not held by player {player_data.pk}."
+        raise ReleaseError(msg, user_message="That isn't one of your characters.")
+    if sheet.character.sessions.count():
+        msg = f"Character {sheet.pk} is puppeted; refuse to release."
+        raise ReleaseError(msg, user_message="Leave the world as this character first.")
+
+    available_roster = Roster.objects.get(roster_type=RosterType.AVAILABLE)
+    _end_tenure_to_available(entry, tenure, available_roster)
 
 
 def mark_character_active(sheet: CharacterSheet) -> bool:
@@ -324,17 +383,18 @@ def end_hiatus(sheet: CharacterSheet) -> None:
 
 
 def freeze_character(sheet: CharacterSheet) -> None:
-    """Mark an OC FROZEN with a 30-day cooldown.
+    """Mark an original character FROZEN with a 30-day cooldown.
 
-    Raises ``FreezeError`` if the sheet is not an OC, not currently ACTIVE,
-    or not currently ALIVE. The OC cap is enforced at OC creation time, not
-    here — freezing a character FREES the slot, it doesn't take one.
+    Raises ``FreezeError`` if the sheet is not an original character (roster
+    characters are given up, see ``release_tenure``), not currently ACTIVE, or not
+    currently ALIVE. Freezing FREES a character slot (#3996); the slot ledger in
+    ``world.roster.services.slots`` leaves frozen characters out of the count.
     """
     from world.character_sheets.types import ActivityState, LifecycleState  # noqa: PLC0415
 
-    if not sheet.is_oc:
-        msg = f"Character {sheet.pk} is not an OC; cannot freeze."
-        raise FreezeError(msg, user_message="Only OCs can be frozen.")
+    if not is_original_character(sheet):
+        msg = f"Character {sheet.pk} is not an original character; cannot freeze."
+        raise FreezeError(msg, user_message="Only original characters can be frozen.")
     if sheet.activity_state != ActivityState.ACTIVE:
         msg = f"Character {sheet.pk} is not ACTIVE (current: {sheet.activity_state})."
         raise FreezeError(msg, user_message="Only active characters can be frozen.")

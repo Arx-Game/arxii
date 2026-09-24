@@ -23,11 +23,19 @@ from world.roster.models.choices import RosterType
 from world.roster.permissions import IsPlayerOrStaff
 from world.roster.serializers import (
     MyRosterEntrySerializer,
+    ReleasedEntryResultSerializer,
     RosterApplicationCreateSerializer,
     RosterApplicationSerializer,
     RosterEntrySerializer,
     SelectedEntryResultSerializer,
     SelectEntryRequestSerializer,
+)
+from world.roster.services.activity import (
+    FreezeError,
+    ReleaseError,
+    freeze_character,
+    release_tenure,
+    unfreeze_character,
 )
 from world.roster.services.selection import SelectionError, set_selected_entry
 
@@ -198,6 +206,68 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             raise serializers.ValidationError(exc.user_message) from exc
 
         return Response(SelectedEntryResultSerializer(player_data).data)
+
+    def _held_entry(self, request: Request, pk: int | None) -> RosterEntry:
+        """The account's own current roster entry ``pk``, for the slot actions (#3996).
+
+        Looked up directly, not through ``get_queryset``: a player's own Active-shelf
+        entry is theirs whatever the public visibility rules say. A foreign or
+        unknown id is rejected uniformly, mirroring ``select``.
+        """
+        try:
+            player_data = request.user.player_data
+        except AttributeError:
+            msg = "Account has no player data."
+            raise serializers.ValidationError(msg) from None
+        entry = (
+            RosterEntry.objects.filter(pk=pk)
+            .select_related("roster", "character_sheet__character")
+            .first()
+        )
+        tenure = entry.current_tenure if entry is not None else None
+        if entry is None or tenure is None or tenure.player_data_id != player_data.pk:
+            msg = "That isn't one of your characters."
+            raise serializers.ValidationError(msg)
+        return entry
+
+    @extend_schema(request=None, responses={200: MyRosterEntrySerializer}, tags=["roster"])
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsAuthenticated])
+    def freeze(self, request: Request, pk: int | None = None) -> Response:
+        """Freeze an original character, freeing its slot (#3996)."""
+        entry = self._held_entry(request, pk)
+        try:
+            freeze_character(entry.character_sheet)
+        except FreezeError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        return Response(MyRosterEntrySerializer(entry, context=self.get_serializer_context()).data)
+
+    @extend_schema(request=None, responses={200: MyRosterEntrySerializer}, tags=["roster"])
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsAuthenticated])
+    def thaw(self, request: Request, pk: int | None = None) -> Response:
+        """Thaw a frozen original character once its cooldown has passed (#3996)."""
+        entry = self._held_entry(request, pk)
+        try:
+            unfreeze_character(entry.character_sheet)
+        except FreezeError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        return Response(MyRosterEntrySerializer(entry, context=self.get_serializer_context()).data)
+
+    @extend_schema(request=None, responses={200: ReleasedEntryResultSerializer}, tags=["roster"])
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        permission_classes=[IsAuthenticated],
+        url_path="give-up",
+    )
+    def give_up(self, request: Request, pk: int | None = None) -> Response:
+        """Give up a roster character: end the tenure, return it to Available (#3996)."""
+        entry = self._held_entry(request, pk)
+        try:
+            release_tenure(entry.character_sheet, player_data=request.user.player_data)
+        except ReleaseError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        entry.refresh_from_db()
+        return Response(ReleasedEntryResultSerializer(entry).data)
 
     @action(
         detail=True,

@@ -1,11 +1,12 @@
 import type {
-  RosterEntryData,
-  MyRosterEntry,
-  RosterData,
   CharacterData,
+  MyRosterEntry,
   PlayerMedia,
-  TenureGallery,
+  ReleasedEntryResult,
+  RosterData,
+  RosterEntryData,
   SelectedEntryResult,
+  TenureGallery,
 } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 import { apiFetch } from '@/evennia_replacements/api';
@@ -65,6 +66,46 @@ export async function postSelectEntry(entryId: number | null): Promise<SelectedE
     throw new Error('Could not switch to that character.');
   }
   return res.json();
+}
+
+/** The server's own refusal text, when the response body carries one (#3996). */
+async function refusalMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    if (Array.isArray(body) && typeof body[0] === 'string') return body[0];
+    if (body && typeof body === 'object') {
+      const record = body as Record<string, unknown>;
+      for (const key of ['detail', 'message']) {
+        if (typeof record[key] === 'string') return record[key] as string;
+      }
+    }
+  } catch {
+    // no JSON body
+  }
+  return fallback;
+}
+
+async function postSlotAction<T>(entryId: number, path: string, fallback: string): Promise<T> {
+  const res = await apiFetch(`/api/roster/entries/${entryId}/${path}/`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(await refusalMessage(res, fallback));
+  }
+  return res.json();
+}
+
+/** Freeze an original character, freeing its slot (#3996). */
+export function postFreezeEntry(entryId: number): Promise<MyRosterEntry> {
+  return postSlotAction(entryId, 'freeze', 'Could not freeze that character.');
+}
+
+/** Thaw a frozen original character once its cooldown has passed (#3996). */
+export function postThawEntry(entryId: number): Promise<MyRosterEntry> {
+  return postSlotAction(entryId, 'thaw', 'Could not thaw that character.');
+}
+
+/** Give up a roster character: the tenure ends and it returns to Available (#3996). */
+export function postGiveUpEntry(entryId: number): Promise<ReleasedEntryResult> {
+  return postSlotAction(entryId, 'give-up', 'Could not give up that character.');
 }
 
 export async function fetchMyTenures(): Promise<{ id: number; display_name: string }[]> {

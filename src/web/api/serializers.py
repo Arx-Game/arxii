@@ -1,14 +1,20 @@
 """Serializers for the web API."""
 
 from allauth.account.models import EmailAddress
+from django.conf import settings
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from evennia_extensions.models import PageBackground
 from web.api.character_type import derive_character_type
 from world.roster.models import RosterApplication, RosterEntry
-from world.roster.serializers import MyRosterEntrySerializer
+from world.roster.serializers import CharacterSlotsSerializer, MyRosterEntrySerializer
+from world.roster.services.slots import character_slots
+from world.roster.types import CharacterSlots
 from world.scenes.models import Persona
+
+# The payload context key build_account_payload_context fills (#3996).
+CHARACTER_SLOTS_CONTEXT_KEY = "character_slots"
 
 
 class PageBackgroundSerializer(serializers.Serializer):
@@ -116,6 +122,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     )
     email_verified = serializers.SerializerMethodField()
     can_create_characters = serializers.SerializerMethodField()
+    character_slots = serializers.SerializerMethodField()
     is_staff = serializers.BooleanField(read_only=True)
     is_gm = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
@@ -132,9 +139,30 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
         except EmailAddress.DoesNotExist:
             return False
 
-    def get_can_create_characters(self, obj):
-        """Check if user can create new characters."""
-        return obj.player_data.can_apply_for_characters()
+    def _slots(self, obj) -> CharacterSlots:
+        # The payload context computes the ledger once; a context that names it
+        # as None is an account with no PlayerData yet (nothing held, baseline
+        # total), distinct from a caller that built no context at all.
+        if CHARACTER_SLOTS_CONTEXT_KEY in self.context:
+            slots = self.context[CHARACTER_SLOTS_CONTEXT_KEY]
+            if slots is not None:
+                return slots
+            return CharacterSlots(
+                total=settings.CHARACTER_SLOTS_BASELINE,
+                used=0,
+                activity_total=1,
+                activity_used=0,
+                holders=[],
+            )
+        return character_slots(obj)
+
+    def get_can_create_characters(self, obj) -> bool:
+        """Verified email and a free character slot (#3996)."""
+        return obj.player_data.can_apply_for_characters() and self._slots(obj).has_free_slot
+
+    def get_character_slots(self, obj) -> dict:
+        """The account's slot ledger (#3996); ``total`` is null for exempt staff."""
+        return CharacterSlotsSerializer(self._slots(obj)).data
 
     def get_is_gm(self, obj) -> bool:
         """Whether this account has a GMProfile (#2004)."""
@@ -200,6 +228,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "email",
             "email_verified",
             "can_create_characters",
+            "character_slots",
             "is_staff",
             "is_gm",
             "avatar_url",

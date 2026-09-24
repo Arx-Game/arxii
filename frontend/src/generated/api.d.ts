@@ -19118,6 +19118,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/entries/{id}/freeze/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Freeze an original character, freeing its slot (#3996). */
+    post: operations['roster_entries_freeze_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/entries/{id}/give-up/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Give up a roster character: end the tenure, return it to Available (#3996). */
+    post: operations['roster_entries_give_up_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/entries/{id}/set_profile_picture/': {
     parameters: {
       query?: never;
@@ -19129,6 +19163,23 @@ export interface paths {
     put?: never;
     /** @description Set the profile picture for this roster entry. */
     post: operations['roster_entries_set_profile_picture_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/entries/{id}/thaw/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Thaw a frozen original character once its cooldown has passed (#3996). */
+    post: operations['roster_entries_thaw_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -34552,6 +34603,11 @@ export interface components {
       readonly lifecycle_state: string;
       readonly roster_type: string;
       readonly character_type: string;
+      readonly activity_state: string;
+      readonly activity_requirement: string;
+      readonly creation_provenance: string;
+      /** Format: date-time */
+      readonly thaw_available_at: string | null;
     };
     /**
      * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
@@ -42812,6 +42868,14 @@ export interface components {
      * @enum {string}
      */
     RelationshipTypeValenceEnum: 'warm' | 'hostile' | 'neutral';
+    /**
+     * @description Result of giving up a roster character (#3996): the entry is no longer
+     *     the account's, so only its id and new shelf come back.
+     */
+    ReleasedEntryResult: {
+      readonly id: number;
+      readonly roster_type: string;
+    };
     /**
      * @description Full renown payload for a single persona.
      *
@@ -74643,6 +74707,50 @@ export interface operations {
       };
     };
   };
+  roster_entries_freeze_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyRosterEntry'];
+        };
+      };
+    };
+  };
+  roster_entries_give_up_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReleasedEntryResult'];
+        };
+      };
+    };
+  };
   roster_entries_set_profile_picture_create: {
     parameters: {
       query?: never;
@@ -74661,6 +74769,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RosterEntry'];
+        };
+      };
+    };
+  };
+  roster_entries_thaw_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyRosterEntry'];
         };
       };
     };

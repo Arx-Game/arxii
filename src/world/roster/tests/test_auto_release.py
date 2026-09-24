@@ -24,7 +24,7 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import RosterApplication
-from world.roster.models.choices import ActivityRequirement, RosterType
+from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType
 from world.roster.seeds import ensure_rosters
 from world.roster.services.activity import sweep_activity_states
 
@@ -33,15 +33,20 @@ def _played_character(
     *,
     requirement: str = ActivityRequirement.HIGH,
     days_inactive: int = 400,
-    is_oc: bool = False,
+    provenance: str = CreationProvenance.STAFF,
     shelf: str = RosterType.ACTIVE,
 ):
-    """A character on ``shelf`` with an open tenure and a stale login."""
-    sheet = CharacterSheetFactory(is_oc=is_oc)
+    """A character on ``shelf`` with an open tenure and a stale login.
+
+    Staff provenance by default: a roster character. PLAYER provenance is an
+    original character, which the sweep never releases (#3996).
+    """
+    sheet = CharacterSheetFactory()
     entry = RosterEntryFactory(
         character_sheet=sheet,
         roster=RosterFactory(roster_type=shelf),
         activity_requirement=requirement,
+        creation_provenance=provenance,
     )
     tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
     account = tenure.player_data.account
@@ -93,7 +98,7 @@ class AutoReleaseScopeTests(TestCase):
         """A player's own character is theirs, whatever its requirement says."""
         sheet, entry, tenure = _played_character(
             requirement=ActivityRequirement.HIGH,
-            is_oc=True,
+            provenance=CreationProvenance.PLAYER,
         )
 
         self._sweep_and_reload(sheet, entry, tenure)

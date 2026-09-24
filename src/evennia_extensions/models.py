@@ -133,6 +133,14 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         db_index=True,
         help_text="Player is looking for a GM table to join.",
     )
+
+    # Character slots granted beyond settings.CHARACTER_SLOTS_BASELINE (#3996).
+    # Staff set it in the admin; a future purchase path adds to it. Read only
+    # by world.roster.services.slots.character_slots.
+    extra_character_slots = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Character slots granted beyond the baseline every account has.",
+    )
     looking_for_table_set_at = models.DateTimeField(
         null=True,
         blank=True,

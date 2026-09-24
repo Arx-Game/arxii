@@ -42,7 +42,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   the companion-defeat pool's condition for surviving a lethal mauling
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
-- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - also holds the CG Lineage-step
+- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - character slots, original vs roster character, freeze / give up (#3996); also holds the CG Lineage-step
   terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
   Kind, Influence, plus (#3648) Family Template, Vacancy, Importance / Presumed importance,
   Served house, (#3660) Connection, Anchor, Stance, Follow-up, Question kind, (#3675)

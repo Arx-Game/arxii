@@ -2394,27 +2394,42 @@ class CanCreateCharacterEmailVerificationTests(TestCase):
         assert reason == ""
 
 
-class CanCreateCharacterMaxCharactersTests(TestCase):
-    """max_characters is configurable via CG_MAX_CHARACTERS (#3046, was hardcoded 3)."""
+class CanCreateCharacterSlotTests(TestCase):
+    """can_create_character asks the character slot ledger (#3996)."""
 
-    def test_max_characters_honors_settings_override(self):
+    def _verified_account(self):
         from evennia_extensions.factories import AccountFactory, EmailAddressFactory
-        from world.character_creation.factories import CharacterDraftFactory
 
         account = AccountFactory()
         EmailAddressFactory(user=account, email=account.email, verified=True, primary=True)
+        return account
+
+    def test_refused_when_slots_are_full_and_names_the_draft(self):
+        from world.character_creation.factories import CharacterDraftFactory
+
+        account = self._verified_account()
         CharacterDraftFactory(account=account)
 
-        with override_settings(CG_MAX_CHARACTERS=1):
+        with override_settings(CHARACTER_SLOTS_BASELINE=1):
             can_create, reason = can_create_character(account)
 
         assert can_create is False
-        assert reason == "Maximum of 1 characters reached"
+        assert "character slots are in use" in reason
+        assert "finish or discard your draft" in reason
 
-    def test_default_max_characters_is_three(self):
+    def test_allowed_with_a_free_slot(self):
+        account = self._verified_account()
+
+        with override_settings(CHARACTER_SLOTS_BASELINE=1):
+            can_create, reason = can_create_character(account)
+
+        assert can_create is True
+        assert reason == ""
+
+    def test_default_baseline_is_four(self):
         from django.conf import settings
 
-        assert settings.CG_MAX_CHARACTERS == 3
+        assert settings.CHARACTER_SLOTS_BASELINE == 4
 
 
 class GetAccessibleStartingAreasStaffOnlyTests(TestCase):

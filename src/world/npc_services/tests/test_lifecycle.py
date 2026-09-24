@@ -71,3 +71,7 @@ class GraduationTests(TestCase):
         RosterEntry.objects.filter(character_sheet=sheet).delete()
         entry = graduate_to_roster(sheet)
         self.assertEqual(entry.roster.roster_type, RosterType.AVAILABLE)
+        # A graduated NPC is a roster character, not a player's own (#3996).
+        from world.roster.models.choices import CreationProvenance
+
+        self.assertEqual(entry.creation_provenance, CreationProvenance.STAFF)

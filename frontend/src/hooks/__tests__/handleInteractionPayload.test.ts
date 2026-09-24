@@ -48,6 +48,10 @@ function makeRosterEntries(): MyRosterEntry[] {
       lifecycle_state: 'ALIVE',
       roster_type: 'Active',
       character_type: 'PC',
+      activity_state: 'ACTIVE',
+      activity_requirement: 'NONE',
+      creation_provenance: 'player',
+      thaw_available_at: null,
     },
     {
       id: 2,
@@ -63,6 +67,10 @@ function makeRosterEntries(): MyRosterEntry[] {
       lifecycle_state: 'ALIVE',
       roster_type: 'Active',
       character_type: 'PC',
+      activity_state: 'ACTIVE',
+      activity_requirement: 'NONE',
+      creation_provenance: 'player',
+      thaw_available_at: null,
     },
   ];
 }

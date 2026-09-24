@@ -49,6 +49,7 @@ function makeAccount(overrides: Partial<AccountData> = {}): AccountData {
     email: 'tester@example.com',
     email_verified: true,
     can_create_characters: true,
+    character_slots: { total: 4, used: 0, activity_total: 1, activity_used: 0, holders: [] },
     is_staff: false,
     is_gm: false,
     available_characters: [],

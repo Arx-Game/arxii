@@ -796,23 +796,6 @@ class CharacterSheet(SharedMemoryModel):
         ),
     )
 
-    # OC distinction (#671 — minimal pair; full OC creation flow is a follow-up)
-    is_oc = models.BooleanField(
-        default=False,
-        help_text="True if this character was created by a player as their own OC.",
-    )
-    created_by = models.ForeignKey(
-        "accounts.AccountDB",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="characters_created",
-        help_text=(
-            "The account that created this character. Null for grandfathered or"
-            " staff-seeded rows. Survives account deletion via SET_NULL."
-        ),
-    )
-
     # Mission cap (#686 — applies to NPC-mediated missions only; trigger-based
     # mission offers from rooms/items explicitly bypass this cap)
     max_active_npc_missions = models.PositiveSmallIntegerField(
@@ -1070,7 +1053,9 @@ class CharacterSheet(SharedMemoryModel):
         """
         entry = self.roster_entry_or_none
         if entry is None:
-            return self.created_by.last_login if self.created_by_id else None
+            # No roster entry means no holder to read a login from (#3996 retired
+            # the sheet-level creator column; provenance lives on the entry).
+            return None
 
         current = entry.current_tenure
         last_login = current.player_data.account.last_login if current is not None else None
