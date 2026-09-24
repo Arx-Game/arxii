@@ -393,7 +393,7 @@ export function GamePage() {
   const account = useAccount();
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
-  const { connect } = useGameSocket();
+  const { connect, resume } = useGameSocket();
   // #3774 -- the game screen is the one place that polls this. Focus and the
   // 60s timer are what make a badge clear on this device after the player read
   // the poses on another one; nothing pushes read state.
@@ -435,6 +435,41 @@ export function GamePage() {
   // cross-tab flip of `active` slip past the guard. Only null-before-hydration
   // runs leave the crossing unspent.
   useAutoStartSession(active, sessions, dispatch, connect);
+
+  // Edge can suspend an inactive tab and leave its WebSocket looking OPEN while
+  // the transport is already gone. On wake, replace that socket immediately so
+  // the player does not wait for a stale backoff timer or click the character
+  // again. A short threshold avoids reconnecting for ordinary tab switches;
+  // focus also catches timer gaps when visibilitychange is throttled (#3933).
+  const hasActiveSession = active ? Boolean(sessions[active]) : false;
+  useEffect(() => {
+    if (!active || !hasActiveSession) return;
+    const wakeThresholdMs = 30_000;
+    let hiddenAt = document.visibilityState === 'hidden' ? performance.now() : null;
+    let lastActivity = performance.now();
+
+    const resumeIfGap = () => {
+      const now = performance.now();
+      const gap = now - lastActivity;
+      lastActivity = now;
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = now;
+        return;
+      }
+      const hiddenGap = hiddenAt === null ? 0 : now - hiddenAt;
+      hiddenAt = null;
+      if (Math.max(gap, hiddenGap) >= wakeThresholdMs) {
+        resume(active);
+      }
+    };
+
+    document.addEventListener('visibilitychange', resumeIfGap);
+    window.addEventListener('focus', resumeIfGap);
+    return () => {
+      document.removeEventListener('visibilitychange', resumeIfGap);
+      window.removeEventListener('focus', resumeIfGap);
+    };
+  }, [active, hasActiveSession, resume]);
 
   const focus = useFocusStack(DEFAULT_ROOM_ENTRY);
 

@@ -687,6 +687,37 @@ export function useGameSocket() {
     [account, dispatch, navigate]
   );
 
+  /**
+   * Resume a session after the browser wakes from a suspended page.
+   *
+   * A suspended WebSocket can remain in OPEN state while its transport is
+   * already unusable. Remove it before starting the replacement so the stale
+   * close event cannot reset the fresh session. This is deliberately separate
+   * from explicit disconnect: wake recovery is not player intent to leave.
+   */
+  const resume = useCallback(
+    (character: MyRosterEntry['name']) => {
+      clearReconnect(character);
+      const socket = sockets[character];
+      if (socket) {
+        delete sockets[character];
+        const generation = connectionGenerations[character] ?? 0;
+        finishGenerationResyncs(character, generation, dispatch);
+        dispatch(setSessionConnectionStatus({ character, status: false }));
+        dispatch(setSessionLifecycle({ character, lifecycleState: 'reconnecting' }));
+        try {
+          // 1001 is the browser's "going away" code. The close handler treats
+          // it as recoverable; explicit disconnect still uses the normal 1000.
+          socket.close(1001, 'page-resume');
+        } catch {
+          // The replacement connection is still attempted below.
+        }
+      }
+      connect(character).catch(swallowReconnectError);
+    },
+    [connect, dispatch]
+  );
+
   const send = useCallback(
     (character: MyRosterEntry['name'], command: string, clientRequestId?: string) => {
       const socket = sockets[character];
@@ -807,6 +838,7 @@ export function useGameSocket() {
 
   return {
     connect,
+    resume,
     disconnect,
     send,
     sendConsole,
