@@ -128,7 +128,7 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Eleven shards balanced by measured runtime. Test counts and the old
+          # Ten shards balanced by measured runtime. Test counts and the old
           # per-app estimates drifted substantially as these suites grew, so
           # oversized apps are split below rather than left on one shard.
           # (rebalanced from 6 shards 2026-07-17; corrected same day from the
@@ -268,13 +268,10 @@ jobs:
             split_part: 2
             split_of: 2
             apps: ""
-          # shard-10: web's 746 tests run independently.
+          # shard-10: web and character_creation. Their old estimate was small,
+          # but both suites are now large enough to keep off the story shards.
           - name: shard-10
-            apps: web
-          # shard-11: character_creation's 681 tests run independently. This
-          # suite previously shared shard-10 and approached the job timeout.
-          - name: shard-11
-            apps: world.character_creation
+            apps: world.character_creation web
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
@@ -377,10 +374,9 @@ jobs:
           # unpickleable WeakKeyDictionary callback under Django multiprocessing.
           # Keep the same labels and assertions, but run this shard serially so
           # a runner serialization error cannot mask the test result.
-          if [[ "${{ matrix.shard.name }}" == "shard-7" || "${{ matrix.shard.name }}" == "shard-11" ]]; then
-            # These shards contain migration-sensitive tests. Running them
-            # serially avoids PostgreSQL migration-lock contention; the tests
-            # and assertions remain unchanged.
+          if [[ "${{ matrix.shard.name }}" == "shard-7" ]]; then
+            # Shard 7 contains a teardown path that is not safe under
+            # multiprocessing. Keep its tests and assertions unchanged.
             uv run arx test --keepdb $LABELS -- --durations 25
           else
             uv run arx test --keepdb --parallel $LABELS -- --durations 25
