@@ -1,7 +1,7 @@
 # Review evidence, issue #3996, Character slots: start a new character from the Hall
 
-- Reviewed revision: `98f8113cd287a7e4375e0066bcc5390538584172`
-- Reviewer: the implementing agent, one pass over the seven captures at this revision (no demo page: standard lane, one tile and one card menu on the existing Hall band)
+- Reviewed revision: `290c6d95580adde26fae6162834c58e99ad33da0`
+- Reviewer: the implementing agent over the seven captures, plus the migration-reviewer, blast-radius-reviewer and schema-shape-reviewer agents on the diff; the migration reviewer's finding (the backfill and the Hall compared provenance against uppercase strings while the stored values are lowercase) was fixed in 290c6d955 and the captures re-taken at this revision (no demo page: standard lane, one tile and one card menu on the existing Hall band)
 - Reviewer verdict: PASS
 - Application/build identity: the shipped `HallPage` (`frontend/src/home/HallPage.tsx`) mounted at its real route `/hall` inside the real application shell (Header, providers, `ProtectedRoute`), composing the shipped `CharactersBand`, `NewCharacterTile`, `CharacterActionsMenu` and `SlotActionDialog` with the application's real token cascade, served from the production build (`pnpm build`, Vite preview on localhost:4173)
 - Environment: Chromium driven by Playwright (`frontend/e2e/evidence/character-slots-3996.spec.ts`) in the project devcontainer on Linux, deviceScaleFactor 1
