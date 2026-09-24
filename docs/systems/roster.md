@@ -135,7 +135,7 @@ account's data, since every read re-derives from the account's own tenures).
 | `activity_requirement` HIGH | yes | **yes** |
 | `activity_requirement` LOW | yes | **yes** |
 | `activity_requirement` NONE | yes | no |
-| OCs (`is_oc=True`) | yes | **never** |
+| Original characters (entry `creation_provenance` PLAYER) | yes | **never** |
 | NPCs (NPC shelf) | not swept | n/a |
 
 The flag is broad because its job is to stop accrual for an absent player. The
@@ -157,6 +157,34 @@ than deriving absence from timestamps. Mothballing (90d) reads
 definition of it.
 
 ---
+
+## Character slots (#3996, ADR-0317)
+
+**One service counts.** `world.roster.services.slots.character_slots(account)` returns a
+`CharacterSlots` ledger: `total` (`settings.CHARACTER_SLOTS_BASELINE`, default 4, plus
+`PlayerData.extra_character_slots`; `None` for an exempt staff account), `used`, the one
+`activity_total` slot with `activity_used`, and `holders`. A slot is used by a current
+tenure whose character is neither `FROZEN` nor `RETIRED`, by an open `CharacterDraft`
+and by a pending `RosterApplication`, so the slot is reserved the moment work starts.
+`assert_slot_available(account, wants_activity_requirement=...)` raises
+`SlotsFullError` (`slots_full` / `activity_slot_full`) with a message that names what
+to free. Callers: `can_create_character`, `RosterApplicationCreateSerializer`,
+`RosterApplication.approve` (re-checked with the application left out), the account
+payload (`character_slots`, and `can_create_characters` now also needs a free slot),
+telnet `@characters`.
+
+**Roster versus original character is provenance.** `RosterEntry.creation_provenance`
+STAFF or GM_TABLE is a roster character; PLAYER is an original character. Character
+creation leaves a player-made entry with `activity_requirement=NONE`. The former
+`CharacterSheet.is_oc` / `created_by` columns are gone (0159 carried the flag onto
+provenance, 0160 dropped them).
+
+**Freeing a slot.** An original character is *frozen* (`freeze_character`, 30-day thaw
+cooldown, `activity_state=FROZEN`; the tenure stays) and later *thawed*. A roster
+character is *given up* (`release_tenure`): the tenure ends and the entry returns to
+the Available shelf, refused while the character is puppeted. Both are player actions
+on the Hall card and the new-character tile, over `POST /api/roster/entries/{id}/freeze/`,
+`/thaw/` and `/give-up/`.
 
 ## Models
 
@@ -368,6 +396,9 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 - `POST /api/roster/entries/{id}/apply/` - Apply for a character (requires verified email)
 - `POST /api/roster/entries/{id}/set_profile_picture/` - Set profile picture from tenure media
 - `POST /api/roster/entries/select/` - Set/clear the account's durable character selection
+- `POST /api/roster/entries/{id}/freeze/`, `/thaw/`, `/give-up/` - Slot actions on the
+  account's own entry (#3996): freeze/thaw an original character, give up a roster
+  character. Refusals come back as the service's message.
   (`{entry_id}` or `null`) — the state 2.5 substrate (#3412). Mirrors the persona
   set-active endpoint's shape: the entry must be one of `mine`'s own-current-entries
   population, a foreign/unknown id is rejected uniformly, and `entry_id: null` always

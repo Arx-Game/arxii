@@ -2553,6 +2553,12 @@ to the room. Pure chance at MVP (no skill input); server-side `randint`.
 Character lifecycle management with web-first applications and player anonymity.
 
 - **Models:** `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `PlayerMail`
+- **Character slots (#3996, ADR-0317):** `services/slots.py` is the only counter —
+  `character_slots(account)` / `assert_slot_available(...)` over tenures (not frozen or
+  retired), open drafts and pending applications, one activity-requirement slot,
+  staff exempt, `CHARACTER_SLOTS_BASELINE` + `PlayerData.extra_character_slots`. Roster
+  vs original character is `RosterEntry.creation_provenance`; `freeze_character` /
+  `release_tenure` free a slot behind `POST entries/{id}/freeze|thaw|give-up/`.
 - **`Roster.roster_type` is the key (#2728):** a `RosterType` TextChoices
   (`ACTIVE`/`INACTIVE`/`AVAILABLE`/`RESTRICTED`/`FROZEN`/`PENDING`/`NPC` — PENDING and
   NPC were previously real shelves living outside the enum, matched on `name` text)

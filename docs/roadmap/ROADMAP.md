@@ -286,6 +286,12 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   [roster.md](../systems/roster.md) and ADR-0245.
   - **Seams closed this slice:** per-character narrative unread counts — **DONE**
     (was the top slice-1 seam).
+  - **Character slots (#3996, ADR-0317, built):** a new-character tile after the
+    cards (`used of total`, browse the roster / create a character, disabled when full
+    with the holders and their free-up action listed) and a per-card menu (Freeze /
+    Thaw for an original character, Give up for a roster character). One backend
+    ledger enforces four slots per account, one of them for a roster character with
+    an activity requirement, at draft, application and approval; staff exempt.
   - **Seams still open:** no boards-index surface exists anywhere in the app
     (`src/boards/` only mounts a `BoardPanel` at a room/org) — "Your Attention" ships
     with **no boards row at all**, deliberately; a `/game` placeholder link was tried

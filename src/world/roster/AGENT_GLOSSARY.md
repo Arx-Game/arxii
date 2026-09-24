@@ -462,3 +462,20 @@ distinctions this route never offers, in any chapter, regardless of whether
 some other opener would otherwise satisfy it. Read by
 `world.character_creation.offers.closed_for` for every chapter alike; a route
 closes by field on `OriginTemplate`, never by matching a distinction's name.
+
+- **Character slot** (#3996) — one of the places an account has for characters:
+  `CHARACTER_SLOTS_BASELINE` plus `PlayerData.extra_character_slots`, counted by
+  `services/slots.py` over held characters, the open draft and pending applications.
+  _Avoid_: "alt limit", "character cap".
+- **Activity slot** (#3996) — the one slot a roster character with an activity
+  requirement (HIGH or LOW) may take. _Avoid_: "high-activity slot".
+- **Original character** (#3996) — a player's own creation: a `RosterEntry` with
+  PLAYER `creation_provenance`. Frozen and thawed, never auto-released or given up.
+  _Avoid_: "OC" in code, `is_oc`.
+- **Roster character** (#3996) — an entry with STAFF or GM_TABLE provenance, the tag
+  only staff or a table GM apply. Given up, never frozen.
+- **Freeze / thaw** (#3996) — `freeze_character` / `unfreeze_character`: an original
+  character keeps its tenure and stops using a slot; thaw after the 30-day cooldown.
+- **Give up** (#3996) — `release_tenure`: a player ends their own tenure on a roster
+  character, returning it to Available. _Avoid_: "release" for the player-initiated case
+  (that word is the sweep's).

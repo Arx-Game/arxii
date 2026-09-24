@@ -380,9 +380,13 @@ checks. (1) Email verification is real: it reuses
 `PlayerData.can_apply_for_characters()` (allauth `EmailAddress`, primary +
 verified), the same check that drives the frontend's `can_create_characters`
 field, rejecting with "Verify your email address to create a character." (2)
-`max_characters` is `settings.CG_MAX_CHARACTERS` (`CG_MAX_CHARACTERS` env var,
-default 3), counted against `account.character_drafts`. The trust floor that
-used to sit between them is gone — nothing ever set `account.trust`.
+The character cap is the slot ledger (#3996, `world.roster.services.slots`):
+`settings.CHARACTER_SLOTS_BASELINE` (default 4) plus `PlayerData.extra_character_slots`,
+counted over held characters, the open draft and pending roster applications; the
+refusal names what to freeze, give up or finish. The trust floor that used to sit
+between them is gone — nothing ever set `account.trust`. A player-made character
+finalizes with `activity_requirement=NONE` and PLAYER provenance (an original
+character).
 
 **`access_level` is the whole gate on a starting area (#3726).**
 `get_accessible_starting_areas` filters the queryset: active rows, minus
