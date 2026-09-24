@@ -762,6 +762,11 @@ chk   "watchdog ignores a stale reboot request (bounded age)" \
   "has_code 'REBOOT_REQUEST_MAX_AGE_S' \"${WATCHDOG}\""
 chk   "watchdog deletes the request before starting, so a failed start cannot loop" \
   "has_code 'rm -f \"\\$\{REBOOT_REQUEST\}\"' \"${WATCHDOG}\""
+# Review finding (#4001): a request left behind by the \`failed\` resurrection
+# path would auto-start the next deliberate stop within the age bound. Both
+# non-active branches must consume it.
+chk   "watchdog consumes a reboot request in the failed branch as well as the inactive one" \
+  "[[ \"\$(grep -c 'consumed=\"\$(consume_reboot_request)\"' \"${WATCHDOG}\")\" -ge 2 ]]"
 chk   "the request file name is the same in the watchdog and in the Python service" \
   "[[ -n \"\$(grep -oP 'server/\\K[a-z]+\\.requested' \"${WATCHDOG}\")\" && \
      \"\$(grep -oP 'server/\\K[a-z]+\\.requested' \"${WATCHDOG}\")\" \

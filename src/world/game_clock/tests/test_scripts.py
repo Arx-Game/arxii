@@ -95,6 +95,59 @@ class EnsureGameTickScriptRearmTests(TestCase):
         self.assertIsNotNone(script.ndb._task)
         self.assertTrue(script.ndb._task.running)
 
+    def test_leaves_a_script_staff_paused_by_hand_paused(self) -> None:
+        """A manual pause is a choice, not a lost timer; Evennia's own boot unpause
+        (auto_unpause=True) respects it and so does the re-arm."""
+        from evennia.utils.create import create_script
+
+        from world.game_clock.scripts import (
+            SCRIPT_KEY,
+            TICK_INTERVAL,
+            GameTickScript,
+            ensure_game_tick_script,
+        )
+
+        script = create_script(
+            GameTickScript, key=SCRIPT_KEY, persistent=True, interval=TICK_INTERVAL
+        )
+        script.pause()
+        self.assertIsNone(script.time_until_next_repeat())
+
+        ensure_game_tick_script()
+
+        self.assertIsNone(GameTickScript.objects.get(db_key=SCRIPT_KEY).time_until_next_repeat())
+
+    def test_boot_order_rearm_then_evennia_unpause_keeps_one_timer(self) -> None:
+        """At boot our at_server_start hook runs before Evennia's
+        update_scripts_after_server_start (run_init_hooks precedes
+        at_post_portal_sync); the second pass must not replace or double the timer."""
+        from evennia import ScriptDB
+        from evennia.utils.create import create_script
+
+        from world.game_clock.scripts import (
+            SCRIPT_KEY,
+            TICK_INTERVAL,
+            GameTickScript,
+            ensure_game_tick_script,
+        )
+
+        create_script(
+            GameTickScript,
+            key=SCRIPT_KEY,
+            persistent=True,
+            interval=TICK_INTERVAL,
+            autostart=False,
+        )
+        ensure_game_tick_script()
+        task = GameTickScript.objects.get(db_key=SCRIPT_KEY).ndb._task
+        self.assertTrue(task.running)
+
+        ScriptDB.objects.update_scripts_after_server_start()
+
+        after = GameTickScript.objects.get(db_key=SCRIPT_KEY).ndb._task
+        self.assertIs(after, task)
+        self.assertTrue(after.running)
+
     def test_leaves_a_running_timer_alone(self) -> None:
         from evennia.utils.create import create_script
 

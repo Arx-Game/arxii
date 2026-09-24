@@ -91,6 +91,11 @@ def ensure_game_tick_script() -> None:
         if script.time_until_next_repeat() is not None:
             logger.info("GameTickScript already exists and is ticking.")
             return
+        # A pause staff chose is not a lost timer; Evennia's own boot unpause
+        # (auto_unpause=True) leaves it alone, and so does this.
+        if script.attributes.get("_manually_paused"):
+            logger.warning("GameTickScript is paused by hand; leaving it paused.")
+            return
         script.start()
         logger.warning("GameTickScript existed without a running timer; re-armed it.")
         return
