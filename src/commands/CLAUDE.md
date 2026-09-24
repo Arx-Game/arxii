@@ -1009,6 +1009,18 @@ actions, backends, and service functions.
   caller's own `PlayerData` (no id-based lookup exists, so it can't leak another account's
   applications).
 - **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
+- **`reboot.py`**: `CmdReboot` (`@reboot`, `perm(reboot) or perm(Developer)`, #4001) — stop
+  and restart BOTH Evennia daemons from inside the game. Thin over
+  `evennia_extensions.reboot.request_reboot`: announce, write
+  `<GAME_DIR>/server/reboot.requested`, then `SESSION_HANDLER.portal_shutdown()` exactly as
+  `@shutdown` does; the root watchdog (`arxii-watchdog.sh.j2`, once a minute) starts the
+  inactive unit when it finds a fresh request file. Deliberately its own verb: Evennia's
+  `@shutdown` stays a real shutdown (a staffer taking the game down to work on it must not
+  get it back by surprise, maintainer ruling 2026-09-24), and Evennia's `@restart` is an
+  alias of `@reload` (Server only), which is why this is not called `@restart`. The staff
+  console's "Restart game" control sends this line after an inline confirm. Not an Action:
+  it is a system command beside the inherited `@reload`/`@reset`/`@shutdown`, with no game
+  state to dispatch.
 - **`sheet.py`**: `CmdSheet` — the character sheet **hub**. Bare `sheet` shows the overview;
   `sheet/<section>` dispatches to a section (mirroring the web sheet tabs). The sheet is the
   baseline for a character and sections (secrets, and — as built — renown, relationships, society

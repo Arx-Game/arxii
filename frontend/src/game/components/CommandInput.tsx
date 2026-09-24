@@ -997,7 +997,7 @@ export function CommandInput({
   // console control stands alone there (#3857).
   const sceneRightSlot = sceneId ? (
     <div className="flex items-center gap-1">
-      {isStaff && <StaffConsole character={character} active={false} />}
+      {isStaff && <StaffConsole character={character} active={false} sendConsole={sendConsole} />}
       {isEntrance && personaId != null && (
         <span
           role="status"
@@ -1186,7 +1186,13 @@ export function CommandInput({
             {!isCommandsMode && <CompanionSelector value={asCompanion} onChange={setAsCompanion} />}
           </div>
         }
-        rightSlot={isCommandsMode ? <StaffConsole character={character} active /> : sceneRightSlot}
+        rightSlot={
+          isCommandsMode ? (
+            <StaffConsole character={character} active sendConsole={sendConsole} />
+          ) : (
+            sceneRightSlot
+          )
+        }
         ghostText={ghostText}
         autocompleteItems={autocompleteItems}
       />

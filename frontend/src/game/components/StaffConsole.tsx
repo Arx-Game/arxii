@@ -16,6 +16,8 @@ interface StaffConsoleProps {
   character: MyRosterEntry['name'];
   /** True while the composer is in Commands mode: a new line opens the console by itself. */
   active: boolean;
+  /** Sends a raw command line the way a typed Commands-mode line goes (#4001). */
+  sendConsole: (character: MyRosterEntry['name'], command: string) => void;
 }
 
 /**
@@ -26,10 +28,13 @@ interface StaffConsoleProps {
  * never reads as a terminal bolted onto the page. Lines arriving while the
  * sheet is closed are counted on the control; Clear empties them.
  */
-export function StaffConsole({ character, active }: StaffConsoleProps) {
+export function StaffConsole({ character, active, sendConsole }: StaffConsoleProps) {
   const dispatch = useAppDispatch();
   const lines = useAppSelector((state) => state.game.sessions[character]?.consoleLines ?? []);
   const [open, setOpen] = useState(false);
+  // The restart control asks first (#4001): @reboot stops both daemons for
+  // everyone, and a stray press must not do that.
+  const [confirmingReboot, setConfirmingReboot] = useState(false);
   const [seenCount, setSeenCount] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   // How many lines the auto-open has already answered, so closing the sheet
@@ -92,8 +97,15 @@ export function StaffConsole({ character, active }: StaffConsoleProps) {
               <SheetTitle className="font-serif text-lg font-medium">Console</SheetTitle>
               <button
                 type="button"
-                onClick={() => dispatch(clearConsoleLines(character))}
+                onClick={() => setConfirmingReboot(true)}
                 className="ml-auto rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                Restart game
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch(clearConsoleLines(character))}
+                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               >
                 Clear
               </button>
@@ -108,6 +120,32 @@ export function StaffConsole({ character, active }: StaffConsoleProps) {
             <SheetDescription className="text-xs">
               Staff commands and what the server said back.
             </SheetDescription>
+            {confirmingReboot && (
+              <div
+                role="group"
+                aria-label="Restart the game"
+                className="mt-2 flex flex-wrap items-center gap-2 rounded border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs"
+              >
+                <span>Both daemons stop and come back in about a minute.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sendConsole(character, '@reboot');
+                    setConfirmingReboot(false);
+                  }}
+                  className="rounded bg-destructive px-2 py-1 font-medium text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Restart for everyone
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingReboot(false)}
+                  className="rounded px-2 py-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </SheetHeader>
           <div
             className="min-h-0 flex-1 overflow-y-auto px-4 py-3"

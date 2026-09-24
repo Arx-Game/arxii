@@ -747,6 +747,33 @@ chkno "premigrate dir is not the backups staging dir" \
   "grep -q 'app_premigrate_dir: /var/backups/arxii$' \
      infra/ansible/roles/app_deploy/defaults/main.yml"
 
+echo "== #4001 (staff @reboot: request file + watchdog start; @shutdown stays down) =="
+# The game user has no sudo and Restart=always was rejected (it would turn
+# every @shutdown into a restart). @reboot writes a request file and shuts
+# both daemons down; the root watchdog starts the unit again only when the
+# unit is inactive AND a fresh request file exists, deleting it first so a
+# start that fails cannot loop. The file name is a cross-file contract
+# between the Python service and the shell template.
+WATCHDOG=infra/ansible/roles/app_deploy/templates/arxii-watchdog.sh.j2
+REBOOTPY=src/evennia_extensions/reboot.py
+chk   "watchdog starts an inactive unit when a reboot request file is present" \
+  "has_code 'REBOOT_REQUEST' \"${WATCHDOG}\" && has_code 'systemctl start \"\\$\{SERVICE\}\"' \"${WATCHDOG}\""
+chk   "watchdog ignores a stale reboot request (bounded age)" \
+  "has_code 'REBOOT_REQUEST_MAX_AGE_S' \"${WATCHDOG}\""
+chk   "watchdog deletes the request before starting, so a failed start cannot loop" \
+  "has_code 'rm -f \"\\$\{REBOOT_REQUEST\}\"' \"${WATCHDOG}\""
+# Review finding (#4001): a request left behind by the \`failed\` resurrection
+# path would auto-start the next deliberate stop within the age bound. Both
+# non-active branches must consume it.
+chk   "watchdog consumes a reboot request in the failed branch as well as the inactive one" \
+  "[[ \"\$(grep -c 'consumed=\"\$(consume_reboot_request)\"' \"${WATCHDOG}\")\" -ge 2 ]]"
+chk   "the request file name is the same in the watchdog and in the Python service" \
+  "[[ -n \"\$(grep -oP 'server/\\K[a-z]+\\.requested' \"${WATCHDOG}\")\" && \
+     \"\$(grep -oP 'server/\\K[a-z]+\\.requested' \"${WATCHDOG}\")\" \
+     == \"\$(grep -oP '\"server\" / \"\\K[a-z]+\\.requested' \"${REBOOTPY}\")\" ]]"
+chkno "arxii.service does not Restart=always (a deliberate @shutdown must stay down)" \
+  "has_code 'Restart=always' infra/ansible/roles/app_deploy/templates/arxii.service.j2"
+
 echo
 if [[ "${fails}" -gt 0 ]]; then
   echo "ACCEPTANCE: ${fails} FAILED"; exit 1

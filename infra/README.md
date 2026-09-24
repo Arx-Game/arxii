@@ -425,7 +425,13 @@ Installed once by the converge, then running unattended on the box:
   Portal as two separate processes; if the unit's supervised process (Server) stays up but
   the Portal alone dies, systemd sees the unit as "active" and does nothing while players
   can no longer connect. The watchdog checks both pidfiles, restarts the unit, and fires an
-  off-box alert when either is dead but the unit claims active.
+  off-box alert when either is dead but the unit claims active. It also honours a staff
+  `@reboot` (#4001): the game writes `<gamedir>/server/reboot.requested` and shuts both
+  daemons down; the watchdog starts the unit again when it finds it inactive with a request
+  younger than ten minutes, deleting the file first. A plain `@shutdown` writes no file and
+  stays down, which is the point of keeping the two verbs apart (see
+  `docs/operations/ops-access.md`, "Restarting the game without SSH"). The unit deliberately
+  stays `Restart=on-failure`, never `Restart=always`; `acceptance.sh` checks both halves.
 - **Memory alerting** (#3200, in the heartbeat). The game runs inside `arxii.slice`, capped
   at `base_game_memory_max` (1500 M), so a leak gets the SLICE OOM-killed instead of taking
   the box and Postgres down. That contains the damage but makes it **invisible**: the kernel

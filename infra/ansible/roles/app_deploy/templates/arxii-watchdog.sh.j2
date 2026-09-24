@@ -44,8 +44,35 @@ SERVICE="{{ app_service }}.service"
 SERVER_PID="{{ app_pidfile }}"
 PORTAL_PID="{{ app_portal_pidfile }}"
 GRACE_PERIOD_S=120
+# Staff @reboot (#4001): the game writes this file, then shuts both daemons
+# down the way @shutdown does. The game user cannot touch systemd, and
+# Restart=always was rejected (it would turn every deliberate @shutdown into
+# a restart), so THIS is what brings the unit back: inactive unit + fresh
+# request file = start. The file is deleted before the start so a start that
+# fails cannot loop, and a request older than the bound is discarded (a
+# forgotten file must never start a game somebody stopped on purpose later).
+# Same path as src/evennia_extensions/reboot.py; acceptance.sh checks the two agree.
+REBOOT_REQUEST="{{ app_gamedir }}/server/reboot.requested"
+REBOOT_REQUEST_MAX_AGE_S=600
 
 log() { printf '[watchdog] %s\n' "$*"; }
+
+# consume_reboot_request: delete the staff reboot request (if any) and print
+# "<age in seconds> <requester>" so the caller can log who asked and decide
+# whether the request is still fresh. Prints nothing when there is no file.
+# Every branch that acts on a non-active unit calls this FIRST, so a request
+# is consumed exactly once whichever state the unit landed in; a request left
+# behind by the `failed` path would otherwise auto-start the next deliberate
+# stop within the age bound.
+consume_reboot_request() {
+  [ -f "${REBOOT_REQUEST}" ] || return 0
+  local now_s request_s requester
+  now_s="$(date +%s)"
+  request_s="$(stat -c %Y "${REBOOT_REQUEST}" 2>/dev/null || echo 0)"
+  requester="$(sed -n 's/^requested_by=//p' "${REBOOT_REQUEST}" 2>/dev/null | head -n1)"
+  rm -f "${REBOOT_REQUEST}"
+  printf '%s %s\n' "$(( now_s - request_s ))" "${requester:-unknown}"
+}
 
 # Three states matter here:
 #   active  -> fall through to the half-dead pidfile checks below.
@@ -65,6 +92,10 @@ RESURRECT_STAMP=/run/arxii-watchdog.resurrect-stamp
 active_state="$(systemctl is-active "${SERVICE}" 2>/dev/null || true)"
 if [ "${active_state}" != "active" ]; then
   if [ "${active_state}" = "failed" ]; then
+    consumed="$(consume_reboot_request)"
+    if [ -n "${consumed}" ]; then
+      log "unit is failed; a staff reboot request (${consumed#* }, ${consumed%% *}s old) is consumed here and not honoured separately"
+    fi
     now_s="$(date +%s)"
     last_s="$(stat -c %Y "${RESURRECT_STAMP}" 2>/dev/null || echo 0)"
     if [ $(( now_s - last_s )) -lt "${RESURRECT_INTERVAL_S}" ]; then
@@ -82,6 +113,25 @@ if [ "${active_state}" != "active" ]; then
     fi
     exit 0
   fi
+  if [ "${active_state}" = "inactive" ] && [ -f "${REBOOT_REQUEST}" ]; then
+    consumed="$(consume_reboot_request)"
+    request_age_s="${consumed%% *}"
+    requester="${consumed#* }"
+    if [ "${request_age_s}" -gt "${REBOOT_REQUEST_MAX_AGE_S}" ]; then
+      log "reboot request by ${requester} is ${request_age_s}s old (> ${REBOOT_REQUEST_MAX_AGE_S}s) — discarded, not starting"
+      exit 0
+    fi
+    log "reboot requested by ${requester} from inside the game ${request_age_s}s ago — starting ${SERVICE}"
+    systemctl start "${SERVICE}" || log "start failed; the deploy button or a human takes it from here"
+    if [ -x /usr/local/sbin/arxii-alert ]; then
+      /usr/local/sbin/arxii-alert "watchdog started ${SERVICE} after a staff @reboot request by ${requester}"
+    fi
+    exit 0
+  fi
+  # This is also what keeps the pidfile checks below away from a unit that
+  # is stopping itself (a staff @reboot, a deploy, an operator's stop):
+  # systemd reports every stop sub-state as ActiveState=deactivating, which
+  # lands here, never in the "active" path.
   log "unit not active (${active_state}) — nothing to do"
   exit 0
 fi
