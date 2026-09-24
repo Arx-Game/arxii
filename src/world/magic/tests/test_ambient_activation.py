@@ -38,7 +38,6 @@ from world.magic.types.pull import PullActionContext
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipCapstoneFactory,
-    RelationshipTrackProgressFactory,
 )
 from world.room_features.constants import RoomFeatureServiceStrategy
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
@@ -194,11 +193,10 @@ class RelationshipTrackArmTests(TestCase):
         sheet = CharacterSheetFactory()
         target_sheet = CharacterSheetFactory()
         relationship = CharacterRelationshipFactory(source=sheet, target=target_sheet)
-        progress = RelationshipTrackProgressFactory(relationship=relationship)
         thread = ThreadFactory(
             owner=sheet,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
-            target_relationship_track=progress,
+            target_relationship=relationship,
             target_trait=None,
         )
         return thread, sheet.character, target_sheet.character

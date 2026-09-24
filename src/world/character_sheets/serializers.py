@@ -69,6 +69,8 @@ from world.character_sheets.types import (
     StorySection,
     TechniqueEntry,
     ThemingSection,
+    TieCardEntry,
+    TieLabelEntry,
     VacancyRef,
     WornEntry,
 )
@@ -1755,6 +1757,131 @@ def _build_mentors(sheet: CharacterSheet, *, privileged: bool) -> list[MentorBon
     return entries
 
 
+def _active_tie_sides(sheet: CharacterSheet) -> list:
+    """Every active side of this sheet's ties, in ONE query, shaped for the cast (#3957).
+
+    Read once per payload and handed to both ties consumers (``_build_ties`` and
+    ``_ties_ap_this_week``) rather than each fetching its own: a sheet with no ties then
+    costs exactly one ties query for the whole block, which is what
+    ``test_query_count_bounded`` measures (#3957 CI round — the block was costing four on
+    a sheet with none).
+    """
+    from world.relationships.models import RelationshipLabel  # noqa: PLC0415
+
+    return list(
+        sheet.relationships_as_source.filter(is_active=True)
+        .select_related("target", "target__character", "target__roster_entry", "target_companion")
+        .prefetch_related(
+            # Why this is suppressed (#3957 review): a Prefetch without to_attr writes
+            # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly as a
+            # bare string does. Contained because this queryset's own rows are the only ones
+            # read here; never read .labels.all() off a side this queryset did not load.
+            Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
+                "labels",
+                queryset=RelationshipLabel.objects.select_related(
+                    "type", "type__counterpart", "replaced__type", "declared_by_tenure"
+                ).order_by("since"),
+            )
+        )
+        .order_by("-updated_at")
+    )
+
+
+def _build_ties(sides: list, viewer_sheet, *, privileged: bool) -> list[TieCardEntry]:
+    """The cast (#3957): one card per active side, shaped for who is looking.
+
+    Owner and staff see every card with numbers; the other party of a tie sees that
+    card's known labels and numbers; anyone else sees public labels and the first line
+    of the summary, and a tie with no public label is not on their list at all. Companion
+    cards (``target_companion`` set) are owner/staff-only — a companion has no player of
+    its own to weigh being named on a public tie card. Batched via ``reads.build_tie_page``
+    (#3957 review): one query each for the reverse sides, the open threads and the tier
+    ladder, regardless of how many ties are on the page.
+
+    ``sides`` comes from ``_active_tie_sides`` already evaluated, and an empty one returns
+    before ``build_tie_page`` is entered at all (#3957 CI round): its batched reads are
+    per-page, not per-row, so a sheet with no ties was still paying for the tier ladder it
+    would never read.
+    """
+    from world.relationships.constants import TieAudience  # noqa: PLC0415
+    from world.relationships.reads import (  # noqa: PLC0415
+        build_tie_page,
+        entry_id_for,
+        has_open_public_label,
+    )
+
+    if not sides:
+        return []
+    visible_sides = [side for side in sides if side.target_companion_id is None or privileged]
+    # No per-card AP field on TieCardEntry (that total lives in _ties_ap_this_week instead),
+    # so skip build_tie_page's allocation lookup entirely rather than fetch-and-discard it
+    # once per OWNER/STAFF-visible side (#3957 review).
+    rows = build_tie_page(
+        visible_sides, viewer_sheet=viewer_sheet, is_staff=privileged, include_allocation=False
+    )
+    cards: list[TieCardEntry] = []
+    for row in rows:
+        side = row["side"]
+        if row["audience"] == TieAudience.THIRD_PARTY and not has_open_public_label(
+            side.labels.all()
+        ):
+            continue
+        cards.append(
+            TieCardEntry(
+                relationship_id=side.pk,
+                other_name=side.target_name,
+                other_sheet_id=side.target_id,
+                other_entry_id=entry_id_for(side.target),
+                other_companion_id=side.target_companion_id,
+                labels=[
+                    TieLabelEntry(
+                        # Already on the row (``label_payload``'s "id"), so keying the
+                        # chips on the label itself costs no extra query.
+                        label_id=label["id"],
+                        type_name=label["type_name"],
+                        awareness=label["awareness"],
+                        # Already on the row: ``label_payload`` reads it off the
+                        # select_related ``type``, so colouring the cast's chips costs
+                        # nothing the card was not already paying for.
+                        valence=label["type_valence"],
+                        is_former=label["ended_at"] is not None,
+                        is_mutual=label["is_mutual"],
+                    )
+                    for label in row["labels"]
+                ],
+                depth=row["depth"],
+                tier=row["tier"],
+                summary_line=side.summary.split("\n", 1)[0][:160],
+                thread=(
+                    f"Thread, level {row['thread']['level']}, {row['thread']['resonance_name']}"
+                    if row["thread"]
+                    else None
+                ),
+            )
+        )
+    return cards
+
+
+def _ties_ap_this_week(sides: list) -> int:
+    """Total AP the owner has set across the sides on their cast this week (#3957).
+
+    Takes the sides ``_active_tie_sides`` already loaded, so a sheet with no ties answers
+    0 without a query (#3957 CI round) and a sheet with ties still costs exactly one SUM.
+    Scoped to those active sides deliberately: a frozen side is the one the weekly turn
+    refuses to pay (``process_weekly_relationship_allocations`` filters
+    ``relationship__is_active=True``) and is not on the cast either, so counting its AP
+    in the ledger line would promise the owner depth nothing will buy.
+    """
+    from world.relationships.models import RelationshipAllocation  # noqa: PLC0415
+
+    if not sides:
+        return 0
+    total = RelationshipAllocation.objects.filter(
+        relationship_id__in=[side.pk for side in sides]
+    ).aggregate(total=models.Sum("ap_amount"))["total"]
+    return total or 0
+
+
 _WORN_SELECT_RELATED: tuple[str, ...] = ()
 # The layer walk reads the template's `is_revealing` and both silhouettes, so they are
 # selected here rather than left to fire one query per worn piece. No ``to_attr``
@@ -1897,6 +2024,8 @@ class CharacterSheetSerializer(serializers.Serializer):
     def to_representation(self, instance: Any) -> dict[str, Any]:
         sheet: CharacterSheet = instance
         request: Request | None = self.context.get("request")
+        from world.relationships.reads import resolve_viewer_sheet  # noqa: PLC0415
+
         roster_entry = sheet.roster_entry
         user = request.user if request else None
 
@@ -1922,6 +2051,14 @@ class CharacterSheetSerializer(serializers.Serializer):
         # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real
         # one when revealed, a cover persona's own when presenting one, else blank.
         bio_profile = _presented_bio_profile(sheet, active, reveal_identity=reveal_identity)
+        # #3957 — the ties block's one read, shared by the cast and the weekly AP total
+        # below. Both consumers take the evaluated list, so neither fires a query of its
+        # own and a sheet with no ties pays for this lookup alone.
+        tie_sides = _active_tie_sides(sheet)
+        # Who is looking, as which of their own characters, decides each card's audience.
+        # ``character_for_request`` reads the account's player data, so a sheet with no
+        # ties never asks; the audience question has nothing to shape.
+        viewer_sheet = resolve_viewer_sheet(request) if tie_sides else None
 
         return {
             "id": sheet.pk,
@@ -1980,6 +2117,12 @@ class CharacterSheetSerializer(serializers.Serializer):
             # whether this character may enter it is a tenancy question, not this one.
             "domains": _build_domains(sheet, privileged=privileged),
             "keyring": _build_keyring(sheet, privileged=privileged),
+            # Ties' cast (#3957): one card per active side, shaped per-viewer; the
+            # weekly AP total is owner/staff-only, like the allocations it sums. Both
+            # read the SAME loaded sides, so the block costs one query on a sheet with
+            # no ties rather than one per consumer plus their batched reads.
+            "ties": _build_ties(tie_sides, viewer_sheet, privileged=privileged),
+            "ties_ap_this_week": _ties_ap_this_week(tie_sides) if privileged else None,
         }
 
 

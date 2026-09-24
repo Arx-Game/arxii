@@ -246,7 +246,7 @@ actions, backends, and service functions.
   - `ritual sessions` — list pending sessions
   - `ritual draft <name> invite=<char>[,<char>] [<extra k=v ...>]`
     — draft a session; extra kwargs are adapter-specific (see `ritual_adapters.py`):
-    - soul-tether BILATERAL: `role=sinner|sineater resonance=<name> [writeup=...]`
+    - soul-tether BILATERAL: `role=sinner|sineater resonance=<name>`
     - covenant induction: `covenant=<name>` (the covenant to induct into)
     - banner-call rise: `covenant=<name>` (the dormant STANDING covenant to rise)
     - organization induction: `organization=<name>` (the non-Covenant organization to induct into)
@@ -271,7 +271,7 @@ actions, backends, and service functions.
   `ritual.service_function_path`. Adapters translate the flat `key=value` tokens that
   `CmdRitual._handle_draft`/`_handle_join` parse into `DraftParse`/`JoinParse` dataclasses
   the session services accept. Five concrete adapters:
-  - `SoulTetherAdapter` — `role=` / `resonance=` / `writeup=` for the soul-tether BILATERAL
+  - `SoulTetherAdapter` — `role=` / `resonance=` for the soul-tether BILATERAL
     session.
   - `CovenantInductionAdapter` — `covenant=<name>` on draft (emits a session-level COVENANT
     reference); `role=<covenant role name>` on join (emits a COVENANT_ROLE reference the
@@ -298,9 +298,12 @@ actions, backends, and service functions.
   `weave resonance=<name> <anchor>=<value> [name=<...>]`, one anchor kwarg per call (#2033
   extends the original TRAIT-only reference grammar to mirror `ThreadSerializer
   ._resolve_target`'s `TargetKind` coverage): `trait=<name or id>`,
-  `track=<partner>/<track name>` (the caller's OWN developed `RelationshipTrackProgress`
-  toward the named partner — partner name resolves via `search_or_raise`, the same
-  found/not-found/numbered-disambiguation convention every other command uses),
+  `track=<partner>/<type name>` (#3957: the caller's OWN side of the tie
+  (`CharacterRelationship`) toward the named partner, which must hold an OPEN label of
+  that `RelationshipType`, and whose claimed tier must reach
+  `RelationshipGrowthConfig.thread_min_tier` — partner name resolves via
+  `search_or_raise`, the same found/not-found/numbered-disambiguation convention every
+  other command uses),
   `capstone=<id or title>` (one of the caller's OWN recorded `RelationshipCapstone` rows),
   `facet=<name or id>`, `technique=<name or id>` (signature thread; caller must know it),
   `role=<name or id>` (covenant role), `mantle=<name or id>`. SANCTUM (own slot grammar,
@@ -940,17 +943,16 @@ actions, backends, and service functions.
   `SetPathIntentAction` / `ClearPathIntentAction`. All are thin REGISTRY `ArxCommand` subclasses;
   no business logic — behavior lives in `actions/definitions/progression_rewards.py` and
   `world/progression/services/`.
-- **`relationships.py`**: `CmdRelationship` (`relationship`, #1485) — the relationship-building
-  namespace. One `ArxCommand` routes a leading subverb (`relationship impression <name> ...` /
-  `develop <name> ...` / `capstone <name> ...` / `redistribute <name> ...`) and runs the matching
-  relationship Action via `action.run()` directly — the same seam the web
-  `RelationshipUpdateViewSet` uses (not the dispatcher; these are plain REGISTRY actions). Bare
-  `relationship` / `relationship list` renders the caller's relationships; `relationship show
-  <name|#>` renders one in detail (telnet-only — the web gets list/detail implicitly from
-  `CharacterRelationshipViewSet`). Tracks resolve by name (iexact) or id; `title=`/`writeup=` are
-  free text (values run to the next `key=`); an active scene in the caller's current room is
-  linked automatically when the target is co-located. No consent gate (ADR-0024) — these describe
-  regard, they don't compel behavior; kudos/complaint feedback is a follow-up.
+- **`relationships.py`**: `CmdRelationship` (`relationship`, #3957, was #1485) — the tie
+  namespace. One `ArxCommand` routes a leading subverb (`declare <name>=<type>[,awareness]` /
+  `shift <name>=<from>,<to>[,note]` / `end <name>=<type>` / `reveal <name>=<type>,<awareness>` /
+  `ap <name>=<n>` / `advance <name>=<journal entry id>` / `summary <name>=<text>` / `plus`/`neg
+  <name>`) and runs the matching tie Action via `action.run()` directly — the same seam the web
+  tie panel uses (plain REGISTRY actions, not the dispatcher). Bare `relationship` / `relationship
+  list` renders one line per side (labels, depth, tier); `relationship show <name|#>` adds
+  gauges/AP/summary. Relationship types resolve by name (iexact); `advance` looks the named
+  journal entry up among the caller's own (`author=sheet`). No consent gate (ADR-0024) — these
+  describe the caller's own side of a tie, they don't compel the target's behavior.
 - **`covenant.py`**: `CmdCovenant` (`covenant`, #1346) — covenant membership lifecycle namespace.
   One `ArxCommand` routes a leading subverb to the matching covenant Action via `action.run()` —
   the same seam the web covenant viewsets use (both converge on `world.covenants.services`).

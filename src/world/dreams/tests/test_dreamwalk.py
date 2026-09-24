@@ -87,7 +87,6 @@ class DreamwalkActionTests(TestCase):
             source=self.sheet,
             target=self.target_sheet,
             is_soul_tether=True,
-            is_pending=False,
         )
 
         result = DreamwalkAction().run(self.char, target=self.target_char.pk)

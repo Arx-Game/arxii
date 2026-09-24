@@ -33,6 +33,7 @@ from world.magic.exceptions import (
     InvalidImbueAmount,
     MantleNotClearedError,
     RelationshipBondNotOwned,
+    RelationshipTierTooLow,
     WeavingUnlockMissing,
     XPInsufficient,
 )
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
         ThreadWeavingUnlock,
     )
     from world.magic.models.gifts import Gift
+    from world.relationships.models import CharacterRelationship, RelationshipCapstone
 
 logger = logging.getLogger(__name__)
 
@@ -171,14 +173,11 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
       CharacterTraitValue.character is a FK to ObjectDB, so we navigate
       thread.owner.character (CharacterSheet → ObjectDB) for the lookup.
     - TECHNIQUE: target_technique.level × 10
-    - RELATIONSHIP_TRACK: target_relationship_track.developed_points.
-      target_relationship_track is a FK to RelationshipTrackProgress;
-      developed_points reflects the relationship's accumulated permanent
-      depth on this track. anchor_cap grows continuously with relationship
-      depth (every point matters, not just tier thresholds).
-    - RELATIONSHIP_CAPSTONE: target_capstone.points. The capstone's own
-      points value (set at authoring time by the relationship system) is
-      the anchor cap. path_cap remains the absolute ceiling on Thread.level.
+    - RELATIONSHIP_TRACK: the tie's pair depth (both sides).
+    - RELATIONSHIP_CAPSTONE: the same tie's pair depth, read through
+      target_capstone.relationship (#3957) — a capstone thread inherits its anchor
+      from the RELATIONSHIP_TRACK it was formed on; RelationshipCapstone carries no
+      cap value of its own (it's a receipt: tier_claimed, xp_spent, ritual).
     - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR,
       path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE).
     - COVENANT_ROLE: max_covenant_level × ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER (covenant
@@ -203,9 +202,9 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
         case TargetKind.TECHNIQUE:
             return int(thread.target_technique.level * 10)
         case TargetKind.RELATIONSHIP_TRACK:
-            return int(thread.target_relationship_track.developed_points)
+            return int(thread.target_relationship.pair_depth())
         case TargetKind.RELATIONSHIP_CAPSTONE:
-            return int(thread.target_capstone.points)
+            return int(thread.target_capstone.relationship.pair_depth())
         case TargetKind.FACET:
             lifetime = thread.owner.character.resonances.lifetime(thread.resonance)
             hard_max = _current_path_stage(thread.owner) * ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE
@@ -499,10 +498,13 @@ def _has_weaving_unlock(
             return handler.has_unlock_for_trait(target)
         case TargetKind.TECHNIQUE:
             return handler.has_unlock_for_gift(target.gift)  # type: ignore[union-attr]
-        case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
-            # Both RelationshipTrackProgress and RelationshipCapstone expose .track
-            track = target.track  # type: ignore[union-attr]
-            return handler.has_unlock_for_track(track)
+        case TargetKind.RELATIONSHIP_TRACK:
+            return handler.has_unlock_for_relationship(target)  # type: ignore[arg-type]
+        case TargetKind.RELATIONSHIP_CAPSTONE:
+            # RELATIONSHIP_CAPSTONE inherits from RELATIONSHIP_TRACK unlocks — there is
+            # no CAPSTONE-kind unlock row (model constraint "threadweaving_no_capstone").
+            # Any RELATIONSHIP_TRACK unlock suffices (#3957).
+            return handler.has_unlock_for_kind(TargetKind.RELATIONSHIP_TRACK)
         # Kind-level unlocks: any unlock of that target_kind suffices.
         case TargetKind.FACET | TargetKind.SANCTUM | TargetKind.ORGANIZATION:
             return handler.has_unlock_for_kind(target_kind)
@@ -564,22 +566,38 @@ def _validate_organization_anchor(
         raise WeavingUnlockMissing(msg)
 
 
+def relationship_side_from_row(
+    row: CharacterRelationship | RelationshipCapstone,
+) -> CharacterRelationship:
+    """Narrow a RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE anchor row to its
+    ``CharacterRelationship`` side (#3957).
+
+    ``row`` is either a ``CharacterRelationship`` (RELATIONSHIP_TRACK — the side
+    itself) or a ``RelationshipCapstone`` (RELATIONSHIP_CAPSTONE — exposes
+    ``.relationship``). Shared by ``_validate_relationship_ownership`` (this module)
+    and ``_relationship_target_present`` (``services/resonance.py``) so the two
+    ``hasattr`` narrowing spellings can't drift (review Minor 12).
+    """
+    return row if hasattr(row, "source_id") else row.relationship  # type: ignore[union-attr]
+
+
 def _validate_relationship_ownership(
     character_sheet: CharacterSheet,
     target: object,
 ) -> None:
     """Raise ``RelationshipBondNotOwned`` when the target's relationship is foreign.
 
-    Both RelationshipTrackProgress and RelationshipCapstone expose
-    ``.relationship``; only the relationship's own source may weave a thread
-    on it. Checked AFTER the unlock gate (#2033 adversarial review): defense-
-    in-depth for direct service callers — the API and telnet resolvers are
-    already scoped, so neither can reach this branch with a foreign row.
-    Ordering it after the unlock check means an unlocked-but-unauthorized
-    caller sees WeavingUnlockMissing first, never learning whether the
-    foreign row even exists.
+    ``target`` is either a ``CharacterRelationship`` (RELATIONSHIP_TRACK — the side
+    itself) or a ``RelationshipCapstone`` (RELATIONSHIP_CAPSTONE — exposes
+    ``.relationship``); only the relationship's own source may weave a thread on it.
+    Checked AFTER the unlock gate (#2033 adversarial review): defense-in-depth for
+    direct service callers — the API and telnet resolvers are already scoped, so
+    neither can reach this branch with a foreign row. Ordering it after the unlock
+    check means an unlocked-but-unauthorized caller sees WeavingUnlockMissing first,
+    never learning whether the foreign row even exists.
     """
-    if target.relationship.source_id != character_sheet.pk:  # type: ignore[union-attr]
+    side = relationship_side_from_row(target)  # type: ignore[arg-type]
+    if side.source_id != character_sheet.pk:
         raise RelationshipBondNotOwned
 
 
@@ -636,8 +654,8 @@ def weave_thread(  # noqa: PLR0913
     Args:
         character_sheet: Character creating the thread.
         target_kind: TargetKind discriminator string.
-        target: The anchor object (Trait, Technique, RelationshipTrackProgress,
-                RelationshipCapstone, Facet, CovenantRole).
+        target: The anchor object (Trait, Technique, CharacterRelationship (the
+                weaver's own side), RelationshipCapstone, Facet, CovenantRole).
         resonance: Resonance this thread channels.
         name: Optional narrative name.
         description: Optional narrative description.
@@ -652,6 +670,8 @@ def weave_thread(  # noqa: PLR0913
         RelationshipBondNotOwned: If target_kind is RELATIONSHIP_TRACK or
                 RELATIONSHIP_CAPSTONE and the target's relationship is not the
                 weaving character's own (relationship.source != character_sheet).
+        RelationshipTierTooLow: If target_kind is RELATIONSHIP_TRACK and the side's
+                claimed tier is below ``RelationshipGrowthConfig.thread_min_tier``.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
@@ -667,6 +687,12 @@ def weave_thread(  # noqa: PLR0913
     if target_kind in (TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE):
         _validate_relationship_ownership(character_sheet, target)
 
+    if target_kind == TargetKind.RELATIONSHIP_TRACK:
+        from world.relationships.services import get_growth_config  # noqa: PLC0415
+
+        if target.tier < get_growth_config().thread_min_tier:  # type: ignore[union-attr]
+            raise RelationshipTierTooLow
+
     # A signature (TECHNIQUE) thread requires that the character actually knows
     # the technique being signed (#1582).
     if target_kind == TargetKind.TECHNIQUE:
@@ -675,7 +701,7 @@ def weave_thread(  # noqa: PLR0913
     field_map: dict[str, str] = {
         TargetKind.TRAIT: "target_trait",
         TargetKind.TECHNIQUE: "target_technique",
-        TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+        TargetKind.RELATIONSHIP_TRACK: "target_relationship",
         TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
         TargetKind.FACET: "target_facet",
         TargetKind.COVENANT_ROLE: "target_covenant_role",
@@ -752,7 +778,10 @@ def update_thread_narrative(
 # query; ThreadHubSummaryView calls all three, so a hub render is 3 thread queries plus
 # any per-kind anchor-cap queries (compute_anchor_cap hits CharacterTraitValue,
 # current_tier traversal, etc.). Acceptable at low thread counts but worth profiling
-# if a character grows past ~20 threads.
+# if a character grows past ~20 threads. RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE anchor
+# caps (#3957) additionally call CharacterRelationship.pair_depth(), which reads the
+# OTHER side via CharacterRelationship.reverse — a fresh query per relationship-anchored
+# thread that select_related cannot reach (it isn't an FK from the thread's own row).
 
 
 def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
@@ -765,8 +794,9 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
             "resonance__affinity",
             "target_trait",
             "target_technique",
-            "target_relationship_track",
+            "target_relationship",
             "target_capstone",
+            "target_capstone__relationship",
         )
     )
     crs = {

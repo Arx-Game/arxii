@@ -42,6 +42,7 @@ import type {
   CharacterSheetMentor,
   CharacterSheetPayload,
   CharacterSheetStanding,
+  CharacterSheetTie,
 } from '@/character_sheets/api';
 import { Entries, Entry, Heading, Ledger, Stack, Tag } from './primitives';
 
@@ -60,6 +61,8 @@ export function TiesPanel({
   mentors,
   standing,
   covenants,
+  ties,
+  tiesApThisWeek,
 }: {
   sheetId: number;
   entryId: number;
@@ -72,13 +75,23 @@ export function TiesPanel({
   standing: CharacterSheetStanding;
   /** Active covenant roles (#3906). Public. */
   covenants: CharacterSheetCovenantRole[];
+  /** The cast (#3957), already shaped for the viewer by the sheet payload. */
+  ties: CharacterSheetTie[];
+  /** AP across every tie this week (#3957); null for anyone but the owner and staff. */
+  tiesApThisWeek: number | null;
 }) {
   return (
     <div className="refsheet-columns-2">
       <Stack wide>
         <Stack>
           <Heading>Relationships</Heading>
-          <RelationshipsSection characterSheetId={sheetId} isMyCharacter={isMyCharacter} />
+          <RelationshipsSection
+            characterSheetId={sheetId}
+            entryId={entryId}
+            isMyCharacter={isMyCharacter}
+            ties={ties}
+            tiesApThisWeek={tiesApThisWeek}
+          />
         </Stack>
         {mentors.length > 0 && (
           <Stack>

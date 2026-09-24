@@ -65,7 +65,7 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   (the price) that the world collects. **Placed** when linked to a real person or group;
   **pending** until staff link a free-written one. The row is owner, staff and assigned-GM
   reading; the sheet shows the **public line**. _Avoid_: antagonist, nemesis (a nemesis is
-  the destroy degree), rival (relationships' Rivalry track), obstacle.
+  the destroy degree), rival (the Rival label, #3957), obstacle.
 - **Reach** — how far a group can reach a character who made an enemy of it: a household,
   a house or company, a society or church, a realm. Set once per `OrganizationType`; a
   Beginning's enemy offer may override it for a group that cannot reach where the character

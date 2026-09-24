@@ -8,6 +8,8 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource
+from world.relationships.models import RelationshipAllocation
+from world.relationships.services import get_or_create_side
 from world.roster.factories import RosterEntryFactory
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import (
@@ -377,6 +379,49 @@ class CreateTrainingAllocationTests(TestCase):
                 skill=self.skill,
                 ap_amount=0,
             )
+
+    def test_a_standing_tie_allocation_fills_the_same_weekly_budget(self) -> None:
+        """Ties and training share ONE weekly purse (#3957), enforced at BOTH doors.
+
+        The tie door already counted training; without this the player could simply set
+        their ties first and then train on a budget that was already spent.
+        """
+        budget = ActionPointConfig.get_weekly_regen()
+        side = get_or_create_side(source=self.identity, target=CharacterSheetFactory())
+        RelationshipAllocation.objects.create(relationship=side, ap_amount=budget)
+        with self.assertRaises(ValueError):
+            create_training_allocation(
+                character=self.character,
+                skill=self.skill,
+                ap_amount=1,
+            )
+
+    def test_training_may_take_exactly_what_the_ties_left(self) -> None:
+        """The shared budget refuses over-commitment, not the last AP of it."""
+        budget = ActionPointConfig.get_weekly_regen()
+        side = get_or_create_side(source=self.identity, target=CharacterSheetFactory())
+        RelationshipAllocation.objects.create(relationship=side, ap_amount=budget - 3)
+        alloc = create_training_allocation(
+            character=self.character,
+            skill=self.skill,
+            ap_amount=3,
+        )
+        self.assertEqual(alloc.ap_amount, 3)
+
+    def test_an_update_counts_standing_ties_too(self) -> None:
+        """The update door reads the same shared total as the create door."""
+        budget = ActionPointConfig.get_weekly_regen()
+        alloc = create_training_allocation(
+            character=self.character,
+            skill=self.skill,
+            ap_amount=2,
+        )
+        side = get_or_create_side(source=self.identity, target=CharacterSheetFactory())
+        RelationshipAllocation.objects.create(relationship=side, ap_amount=budget - 2)
+        with self.assertRaises(ValueError):
+            update_training_allocation(alloc, ap_amount=3)
+        updated = update_training_allocation(alloc, ap_amount=2)
+        self.assertEqual(updated.ap_amount, 2)
 
 
 class UpdateTrainingAllocationTests(TestCase):

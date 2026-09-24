@@ -14,9 +14,10 @@ class ConsentMode(models.TextChoices):
       *that* person" setting (#1698).
     - ``FRIENDS_WHITELIST`` — only OOC friends (``scenes.Friendship``) plus anyone on
       the explicit per-category whitelist (default-deny, friends auto-pass) (#1698).
-    - ``RIVALS`` — only your **declared mutual rivals** (``scenes.Rivalry``, double
-      opt-in) plus the per-category whitelist. The "bring it on, but only from the
-      characters I've agreed to feud with" setting (#2170).
+    - ``RIVALS`` — only characters you hold a **mutual hostile relationship label**
+      with (``world.relationships.services.mutual_hostile``, #3957 — each side must
+      have declared the other hostile) plus the per-category whitelist. The "bring it
+      on, but only from the characters I've agreed to feud with" setting (#2170).
     - ``ALLOWLIST`` — only actors on the explicit per-category whitelist (strict
       default-deny; friendship/rivalry alone is not enough).
     """

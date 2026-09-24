@@ -7,6 +7,19 @@
 Surfaces), and D (Rituals + Ritual-Grade Items) are referenced here but authored
 separately.
 
+
+> **Superseded in part by #3957 (ties, redrawn — ADR-0308), 2026-09-21.** Every reference
+> below to `RelationshipTrack`, `RelationshipTrackProgress`, track points,
+> `developed_absolute_value` or per-track tiers describes a shape that no longer exists. A
+> relationship is now two directed sides (`CharacterRelationship`) that pool one depth
+> (`pair_depth()`), each holding `RelationshipLabel` rows and claiming its own tier on one
+> shared ladder. `Thread.target_relationship` anchors to the SIDE row (was
+> `target_relationship_track`), `ThreadWeavingUnlock.unlock_type` names a `RelationshipType`
+> (was `unlock_track`), and weaving a RELATIONSHIP_TRACK thread is gated on the weaver's
+> claimed tier reaching `RelationshipGrowthConfig.thread_min_tier`. For the current shape
+> read `src/world/relationships/CLAUDE.md` and `docs/systems/magic.md`; this document stays
+> as the record of the design as approved.
+
 ---
 
 ## 1. Scope & Core Pivot

@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
     from world.magic.models.weaving import ThreadWeavingUnlock
     from world.mechanics.models import Property
-    from world.relationships.models import RelationshipTrack
+    from world.relationships.models import RelationshipType
     from world.seeds.game_content.combat import FleeSeedResult, PenetrationContestResult
     from world.traits.models import CheckOutcome
 
@@ -2464,7 +2464,7 @@ class FacetThreadUnlockResult:
 class RelationshipTrackThreadUnlockResult:
     """Returned by seed_relationship_track_thread_unlock()."""
 
-    track: RelationshipTrack
+    type: RelationshipType
     unlock: ThreadWeavingUnlock
 
 
@@ -2592,8 +2592,8 @@ class MagicDevSeedResult:
     ``technique_cast_template`` is the shared Technique Cast ActionTemplate seeded
     by ensure_technique_cast_content() (#1306).
     ``relationship_track_thread_unlock`` holds the canonical RELATIONSHIP_TRACK
-    ThreadWeavingUnlock (+ backing RelationshipTrack) seeded by
-    seed_relationship_track_thread_unlock() (#2027) — the Soul Tether formation
+    ThreadWeavingUnlock (+ backing RelationshipType) seeded by
+    seed_relationship_track_thread_unlock() (#2027, #3957) — the Soul Tether formation
     prerequisite.
     ``soul_tether_content`` holds the Soul Tether authored content (Rituals,
     ConditionTemplates, TriggerDefinitions) seeded by wire_soul_tether_content()
@@ -2647,58 +2647,57 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
 
 
 def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResult:
-    """Resolve the RELATIONSHIP_TRACK ThreadWeavingUnlock (+ its backing track).
+    """Resolve the RELATIONSHIP_TRACK ThreadWeavingUnlock (+ its backing type).
 
     Soul Tether formation (``accept_soul_tether`` in
     ``world.magic.services.soul_tether``) gates on the Sinner holding a
     ``CharacterThreadWeavingUnlock`` for ``TargetKind.RELATIONSHIP_TRACK``
     (``_validate_unlock``) before they can weave the RELATIONSHIP_CAPSTONE
-    Thread that carries the Hollow. Unlike FACET, ``ThreadWeavingUnlock.unlock_track``
+    Thread that carries the Hollow. Unlike FACET, ``ThreadWeavingUnlock.unlock_type``
     is a required non-null FK (per-kind CheckConstraint), so this function also
-    resolves the "Devotion" ``RelationshipTrack`` to hang the unlock off of —
+    resolves the "Sworn" ``RelationshipType`` to hang the unlock off of —
     both rows are content-repo-owned (#2973) and looked up via
     ``authored_or_sample``, never lazy-created against a real deploy. This is
     the minimum authored content needed for the Rite of the Soul Tether to be
-    purchasable/reachable at all; a richer multi-track catalog (Trust/Respect/
-    Rivalry/Fear, etc.) is separate content-authoring work, not framework work.
+    purchasable/reachable at all; a richer multi-type catalog is separate
+    content-authoring work, not framework work.
 
-    Idempotent: the track and the unlock (keyed on the
-    ``unique_threadweaving_unlock_track`` constraint's natural key:
-    ``target_kind`` + ``unlock_track``) are each looked up rather than
+    Idempotent: the type and the unlock (keyed on the
+    ``unique_threadweaving_unlock_type`` constraint's natural key:
+    ``target_kind`` + ``unlock_type``) are each looked up rather than
     unconditionally created.
 
-    Both the track and the unlock are content-repo-owned (#2698) — looked up
+    Both the type and the unlock are content-repo-owned (#2698) — looked up
     rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
-    ``ThreadWeavingUnlock.unlock_track`` is a required FK for this kind, so a
-    missing "Devotion" track means there is nothing to hang the unlock off
-    of; this returns a result with both fields ``None`` in that case.
+    ``ThreadWeavingUnlock.unlock_type`` is a required FK for this kind, so a
+    missing "Sworn" type means there is nothing to hang the unlock off of;
+    this returns a result with both fields ``None`` in that case.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
-    from world.relationships.constants import TrackSign  # noqa: PLC0415
-    from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+    from world.relationships.constants import TypeFamily, TypeValence  # noqa: PLC0415
+    from world.relationships.models import RelationshipType  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    track = authored_or_sample(
-        RelationshipTrack,
+    rel_type = authored_or_sample(
+        RelationshipType,
         {
-            "slug": "devotion",
-            "description": (
-                "Depth of bond between two souls — the axis Soul Tether capstones anchor to."
-            ),
-            "sign": TrackSign.POSITIVE,
+            "slug": "sworn",
+            "description": "An oath between you.",
+            "family": TypeFamily.BLOOD_AND_OATH,
+            "valence": TypeValence.NEUTRAL,
         },
-        name="Devotion",
+        name="Sworn",
     )
-    if track is None:
-        return RelationshipTrackThreadUnlockResult(track=None, unlock=None)
+    if rel_type is None:
+        return RelationshipTrackThreadUnlockResult(type=None, unlock=None)
     unlock = authored_or_sample(
         ThreadWeavingUnlock,
         {"xp_cost": 50},  # baseline cost; staff may tune
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=rel_type,
     )
-    return RelationshipTrackThreadUnlockResult(track=track, unlock=unlock)
+    return RelationshipTrackThreadUnlockResult(type=rel_type, unlock=unlock)
 
 
 def seed_starter_magic_story() -> None:
@@ -2767,8 +2766,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
     7. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
        singleton + tier modifiers + starter consequence pool (#878)
     8. ``seed_relationship_track_thread_unlock()`` — RELATIONSHIP_TRACK
-       ThreadWeavingUnlock + its backing "Devotion" RelationshipTrack, both
-       resolved via ``authored_or_sample`` (content-repo-owned, #2698/#2973) (#2027)
+       ThreadWeavingUnlock + its backing "Sworn" RelationshipType, both
+       resolved via ``authored_or_sample`` (content-repo-owned, #2698/#2973) (#2027, #3957)
     9. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
        soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
        and the two reactive TriggerDefinitions (#2027). Previously created only

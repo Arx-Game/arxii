@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import F
 
 from world.combat.constants import ParticipantStatus, SurgeTriggerKind
 from world.combat.types import DramaticSurgeBeat, EscalationTickResult
@@ -417,12 +418,15 @@ def apply_relationship_escalation_spike(
         if fallen_sheet is not None:
             participants = participants.exclude(character_sheet=fallen_sheet)
         for participant in participants:
-            bond = CharacterRelationship.objects.filter(
-                source=participant.character_sheet,
-                is_active=True,
-                is_pending=False,
-                track_progress__track__fuels_escalation_spikes=True,
-                track_progress__developed_points__gte=curve.spike_minimum_track_points,
+            bond = (
+                CharacterRelationship.objects.filter(
+                    source=participant.character_sheet,
+                    is_active=True,
+                    labels__ended_at__isnull=True,
+                    labels__type__fuels_escalation_spikes=True,
+                )
+                .annotate(_depth=F("scene_depth") + F("invested_depth"))
+                .filter(_depth__gte=curve.spike_minimum_track_points)
             )
             if fallen_companion is not None:
                 bond = bond.filter(target_companion=fallen_companion)
@@ -492,14 +496,18 @@ def apply_peril_escalation_spike(
             .select_related("character_sheet__character")
         )
         for participant in participants:
-            qualifies = CharacterRelationship.objects.filter(
-                source=participant.character_sheet,
-                target=victim_sheet,
-                is_active=True,
-                is_pending=False,
-                track_progress__track__fuels_escalation_spikes=True,
-                track_progress__developed_points__gte=curve.spike_minimum_track_points,
-            ).exists()
+            qualifies = (
+                CharacterRelationship.objects.filter(
+                    source=participant.character_sheet,
+                    target=victim_sheet,
+                    is_active=True,
+                    labels__ended_at__isnull=True,
+                    labels__type__fuels_escalation_spikes=True,
+                )
+                .annotate(_depth=F("scene_depth") + F("invested_depth"))
+                .filter(_depth__gte=curve.spike_minimum_track_points)
+                .exists()
+            )
             if not qualifies:
                 continue
             apply_dramatic_surge(
@@ -538,19 +546,19 @@ def _maybe_surge_hated_foe(
     """Shared qualification + write for one (PC, hated-NPC) pair (#2013).
 
     Deliberately has NO spike_minimum_track_points floor (unlike the
-    grief/peril legs) — decisions 4-6 gate hated-foe only on sign + the
+    grief/peril legs) — decisions 4-6 gate hated-foe only on valence + the
     fuels_escalation_spikes flag.
     """
-    from world.relationships.constants import TrackSign  # noqa: PLC0415
+    from world.relationships.constants import TypeValence  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     qualifies = CharacterRelationship.objects.filter(
         source=participant.character_sheet,
         target=subject_sheet,
         is_active=True,
-        is_pending=False,
-        track_progress__track__fuels_escalation_spikes=True,
-        track_progress__track__sign=TrackSign.NEGATIVE,
+        labels__ended_at__isnull=True,
+        labels__type__fuels_escalation_spikes=True,
+        labels__type__valence=TypeValence.HOSTILE,
     ).exists()
     if not qualifies:
         return

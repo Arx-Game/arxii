@@ -2738,6 +2738,15 @@ class TestCharacterSheetQueryCount(TestCase):
                to, then every active grant reaching any of them, directly or through
                those organizations. Fixed however many grants they hold -- the fixture
                seeds one of each holder kind to prove the pair is measured.
+        55.    the ties block, #3957 (the cast and the owner's weekly AP total). ONE
+               query: the character's active sides, read once by
+               ``_active_tie_sides`` and handed to both consumers. This fixture's
+               character has no ties, and one query is what that must cost -- the block
+               first shipped at four, because ``build_tie_page``'s batched reads (the
+               tier ladder above all) fired for an empty page and
+               ``_ties_ap_this_week`` ran its SUM whether or not a single side existed.
+               ``character_sheets.tests.test_sheet_ties_section`` measures the same
+               floor directly, by table, so a regression names itself there too.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
@@ -2753,7 +2762,8 @@ class TestCharacterSheetQueryCount(TestCase):
         # them -- directly or through those organizations. FIXED: the fixture seeds two
         # grants of different holder kinds and the pair still costs two queries,
         # however many places a character can walk into.
-        with self.assertNumQueries(54):
+        # +1 (#3957): the ties block's single sides read, per 55.
+        with self.assertNumQueries(55):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

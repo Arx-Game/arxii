@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models import BooleanField, Case, Count, Exists, OuterRef, Prefetch, Q, Value, When
+from django.db.models import BooleanField, Case, Count, Prefetch, Q, Value, When
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -118,28 +118,17 @@ def visible_entries_q(*, viewer_sheet: CharacterSheet | None, is_staff: bool) ->
 def can_retort(*, viewer_sheet: CharacterSheet | None, author: CharacterSheet) -> bool:
     """Whether ``viewer_sheet`` may Retort or Condemn ``author``'s entries (ADR-0307).
 
-    True when the author's ``retort_consent`` is ANYONE, or when an active, non-pending
-    ``CharacterRelationship`` in EITHER direction carries progress on a negative-sign
-    track. This is the whole rivalry predicate today; when the relationships pass names a
-    Rivalry kind it narrows here and nowhere else -- and in ``annotate_can_retort`` below,
-    the same rule written as SQL for a whole page of rows at once.
+    True when the author's ``retort_consent`` is ANYONE, or the two hold mutual hostile
+    labels (#3957) — see ``annotate_can_retort`` below for the same rule written as SQL
+    for a whole page of rows at once.
     """
     if viewer_sheet is None or viewer_sheet.pk == author.pk:
         return False
     if author.retort_consent == RetortConsent.ANYONE:
         return True
-    from world.relationships.constants import TrackSign
-    from world.relationships.models import CharacterRelationship
+    from world.relationships.services import mutual_hostile
 
-    pair = Q(source_id=viewer_sheet.pk, target_id=author.pk) | Q(
-        source_id=author.pk, target_id=viewer_sheet.pk
-    )
-    return CharacterRelationship.objects.filter(
-        pair,
-        is_active=True,
-        is_pending=False,
-        track_progress__track__sign=TrackSign.NEGATIVE,
-    ).exists()
+    return mutual_hostile(viewer_sheet, author)
 
 
 def annotate_can_retort(
@@ -152,26 +141,19 @@ def annotate_can_retort(
     ``world.journals.tests.test_views.CanRetortAnnotationTests`` asserts the two agree).
     A feed serializing the predicate per row would otherwise run one EXISTS per entry;
     this folds all of them into the list query itself, so the query count no longer grows
-    with the page size.
+    with the page size. The rivalry leg reads mutual hostile labels (#3957) via
+    ``mutual_hostile_expression``.
     """
     if viewer_sheet is None:
         return queryset.annotate(viewer_can_retort=Value(False, output_field=BooleanField()))
 
-    from world.relationships.constants import TrackSign
-    from world.relationships.models import CharacterRelationship
+    from world.relationships.services import mutual_hostile_expression
 
-    rivalry = CharacterRelationship.objects.filter(
-        Q(source_id=viewer_sheet.pk, target_id=OuterRef("author_id"))
-        | Q(source_id=OuterRef("author_id"), target_id=viewer_sheet.pk),
-        is_active=True,
-        is_pending=False,
-        track_progress__track__sign=TrackSign.NEGATIVE,
-    )
     return queryset.annotate(
         viewer_can_retort=Case(
             When(author_id=viewer_sheet.pk, then=Value(False)),
             When(author__retort_consent=RetortConsent.ANYONE, then=Value(True)),
-            default=Exists(rivalry),
+            default=mutual_hostile_expression(viewer_sheet.pk, "author_id"),
             output_field=BooleanField(),
         )
     )

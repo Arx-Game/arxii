@@ -52,61 +52,71 @@ class CmdThreads(ArxCommand):
             self.msg("Usage: threads list | threads crossing list | threads crossing choose <id>")
 
     def _list_threads(self, sheet: object) -> None:
-        from world.magic.crossing.handlers import _anchor_label_for  # noqa: PLC0415
+        from world.magic.crossing.handlers import (  # noqa: PLC0415
+            _anchor_label_for,
+            _open_labels_by_relationship_id,
+        )
         from world.magic.models import Thread  # noqa: PLC0415
 
-        threads = Thread.objects.filter(
-            owner=sheet,
-            retired_at__isnull=True,
-        ).select_related(
-            "resonance",
-            "target_trait",
-            "target_facet",
-            "target_technique",
-            "target_mantle",
-            "target_relationship_track__track",
-            "target_relationship_track__relationship__target__character",
-            "target_relationship_track__relationship__target_companion",
-            "target_capstone__relationship__target__character",
-            "target_capstone__relationship__target_companion",
-            "target_sanctum_details__feature_instance__room_profile__objectdb",
+        threads = list(
+            Thread.objects.filter(
+                owner=sheet,
+                retired_at__isnull=True,
+            ).select_related(
+                "resonance",
+                "target_trait",
+                "target_facet",
+                "target_technique",
+                "target_mantle",
+                "target_relationship__target__character",
+                "target_relationship__target_companion",
+                "target_capstone__relationship__target__character",
+                "target_capstone__relationship__target_companion",
+                "target_sanctum_details__feature_instance__room_profile__objectdb",
+            )
         )
         if not threads:
             self.msg("You have no active threads.")
             return
 
+        open_labels = _open_labels_by_relationship_id(threads)
         lines = ["|wYour threads:|n"]
         for thread in threads:
-            anchor = _anchor_label_for(thread)
+            anchor = _anchor_label_for(thread, open_labels)
             res_name = thread.resonance.name if thread.resonance else "???"
             display_level = thread.level // 10
             lines.append(f"  {res_name} {anchor} (level {display_level})")
         self.msg("\n".join(lines))
 
     def _list_crossing_offers(self, sheet: object) -> None:
-        from world.magic.crossing.handlers import _anchor_label_for  # noqa: PLC0415
+        from world.magic.crossing.handlers import (  # noqa: PLC0415
+            _anchor_label_for,
+            _open_labels_by_relationship_id,
+        )
         from world.magic.models.crossing import (  # noqa: PLC0415
             CrossingOption,
             PendingCrossingOffer,
         )
 
-        offers = PendingCrossingOffer.objects.filter(thread__owner=sheet).select_related(
-            "thread__resonance",
-            "thread__target_trait",
-            "thread__target_facet",
-            "thread__target_mantle",
-            "thread__target_relationship_track__track",
-            "thread__target_relationship_track__relationship__target__character",
-            "thread__target_relationship_track__relationship__target_companion",
-            "thread__target_capstone__relationship__target__character",
-            "thread__target_capstone__relationship__target_companion",
-            "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
+        offers = list(
+            PendingCrossingOffer.objects.filter(thread__owner=sheet).select_related(
+                "thread__resonance",
+                "thread__target_trait",
+                "thread__target_facet",
+                "thread__target_mantle",
+                "thread__target_relationship__target__character",
+                "thread__target_relationship__target_companion",
+                "thread__target_capstone__relationship__target__character",
+                "thread__target_capstone__relationship__target_companion",
+                "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
+            )
         )
         if not offers:
             self.msg("You have no pending crossing offers.")
             return
+        open_labels = _open_labels_by_relationship_id(offer.thread for offer in offers)
         for offer in offers:
-            anchor_label = _anchor_label_for(offer.thread)
+            anchor_label = _anchor_label_for(offer.thread, open_labels)
             res_name = offer.thread.resonance.name if offer.thread.resonance else "???"
             self.msg(f"|wCrossing level {offer.crossing_level}|n - {res_name} {anchor_label}")
             options = CrossingOption.objects.filter(

@@ -6,7 +6,27 @@
  * about — so the answer is derived once, here, from the rows the page already
  * holds. No endpoint: this is a way into what is on the page, not a catalogue.
  */
+import { cn } from '@/lib/utils';
+
 import type { JournalEntrySummary } from './api';
+
+/** The band a private entry wears, in both places that draw one (#3941, #3957). */
+export const BLACK_JOURNAL_BAND = 'Black journal';
+
+/** An entry row's own classes: hairline-separated, night ground when private. */
+export function entryRowClass({
+  isBlack,
+  isRevealed,
+}: {
+  isBlack?: boolean;
+  isRevealed?: boolean;
+} = {}): string {
+  return cn(
+    'grid gap-[.35rem] border-t py-[1.1rem] first:border-t-0 first:pt-0',
+    isBlack && 'jr-black my-[.35rem] border-t-0 px-5',
+    isRevealed && 'border-l-[3px] border-l-primary pl-4'
+  );
+}
 
 /** One character the current rows are about, with how many of them are. */
 export interface AboutSubject {

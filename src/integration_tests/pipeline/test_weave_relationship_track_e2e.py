@@ -1,15 +1,15 @@
-"""Telnet E2E: weaving a RELATIONSHIP_TRACK thread + imbuing it (#2033).
+"""Telnet E2E: weaving a RELATIONSHIP_TRACK thread + imbuing it (#2033, #3957).
 
-Proves the ``weave track=<partner>/<track name>`` grammar added by #2033 reaches
+Proves the ``weave track=<partner>/<type name>`` grammar added by #2033 reaches
 the real ``WeaveThreadAction`` → ``weave_thread`` seam exactly like the
 TRAIT-anchored reference grammar (#1337), and that the kind-agnostic
 ``imbue`` finisher accepts the resulting thread with no special-casing.
 
 Steps:
   1. CmdRitual → Rite of Weaving ceremony  → PendingRitualEffect (weaving)
-  2. CmdWeaveThread → ``weave resonance=<r> track=<partner>/<track>``
+  2. CmdWeaveThread → ``weave resonance=<r> track=<partner>/<type>``
      → RELATIONSHIP_TRACK Thread row created, anchored to the caller's OWN
-       ``RelationshipTrackProgress`` toward the partner, effect consumed
+       ``CharacterRelationship`` side toward the partner, effect consumed
   3. CmdRitual → Rite of Imbuing ceremony  → PendingRitualEffect (imbuing)
   4. CmdImbue → imbue the woven thread     → developed_points advances,
      effect consumed (imbue is kind-agnostic — no RELATIONSHIP_TRACK-specific
@@ -38,8 +38,8 @@ from world.magic.factories import (
 from world.magic.models import PendingRitualEffect, Thread
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
 
 
@@ -54,20 +54,22 @@ class WeaveRelationshipTrackImbueE2ETests(TestCase):
         CharacterAuraFactory(character=cls.sheet)  # Gifted: hedge gate (#3001)
         cls.partner_sheet = CharacterSheetFactory()
         cls.resonance = ResonanceFactory(name="Embers")
-        cls.track = RelationshipTrackFactory(name="Trust")
+        cls.rel_type = RelationshipTypeFactory(name="Trust")
 
         cls.relationship = CharacterRelationshipFactory(source=cls.sheet, target=cls.partner_sheet)
-        # developed_points=50 → anchor_cap=50 (RELATIONSHIP_TRACK anchor cap is
-        # the track-progress row's own developed_points), plenty of room for
-        # the level-0 → 5 imbue advance below.
-        cls.progress = RelationshipTrackProgressFactory(
-            relationship=cls.relationship, track=cls.track, developed_points=50
-        )
+        # invested_depth=50 → pair_depth()=50 (no reverse side, so pair_depth is just
+        # this side's own depth) — RELATIONSHIP_TRACK anchor cap is the tie's pair
+        # depth (#3957), plenty of room for the level-0 → 5 imbue advance below.
+        # tier=2 clears the default RelationshipGrowthConfig.thread_min_tier gate.
+        cls.relationship.invested_depth = 50
+        cls.relationship.tier = 2
+        cls.relationship.save()
+        RelationshipLabelFactory(relationship=cls.relationship, type=cls.rel_type)
 
         unlock = ThreadWeavingUnlockFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             unlock_trait=None,
-            unlock_track=cls.track,
+            unlock_type=cls.rel_type,
         )
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=unlock, xp_spent=100)
 
@@ -112,7 +114,7 @@ class WeaveRelationshipTrackImbueE2ETests(TestCase):
 
         thread = Thread.objects.get(owner=self.sheet, name="Bound to Partner")
         self.assertEqual(thread.target_kind, TargetKind.RELATIONSHIP_TRACK)
-        self.assertEqual(thread.target_relationship_track, self.progress)
+        self.assertEqual(thread.target_relationship, self.relationship)
         self.assertEqual(thread.resonance, self.resonance)
         self.assertFalse(
             PendingRitualEffect.objects.filter(

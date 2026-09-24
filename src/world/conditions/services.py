@@ -3713,19 +3713,19 @@ def _map_outcome_to_mend(outcome: "object", treatment: TreatmentTemplate) -> int
 def _thread_anchors_to_character(thread: "Thread", target_sheet: "CharacterSheet") -> bool:
     """Return True if a Thread's anchor resolves to target_sheet.
 
-    Anchor access path (Correction #3 from Phase 6 plan):
-    - RELATIONSHIP_TRACK anchor: thread.target_relationship_track is a
-      RelationshipTrackProgress, whose .relationship FK is a CharacterRelationship
-      with .source and .target FKs to CharacterSheet. The thread owner (helper)
-      holds a relationship *toward* the target, so we check relationship.target.
+    Anchor access path (Correction #3 from Phase 6 plan; #3957):
+    - RELATIONSHIP_TRACK anchor: thread.target_relationship IS the weaver's own
+      CharacterRelationship side, with .source and .target FKs to CharacterSheet.
+      The thread owner (helper) holds a relationship *toward* the target, so we
+      check target_relationship.target directly.
     - RELATIONSHIP_CAPSTONE anchor: thread.target_capstone is a RelationshipCapstone,
       whose .relationship FK similarly has .target pointing at the other party.
     Returns False if neither anchor kind is set.
     """
-    track = thread.target_relationship_track
-    if track is not None:
-        # RelationshipTrackProgress → CharacterRelationship → target CharacterSheet
-        return int(track.relationship.target_id) == int(target_sheet.pk)
+    side = thread.target_relationship
+    if side is not None:
+        # CharacterRelationship → target CharacterSheet
+        return int(side.target_id) == int(target_sheet.pk)
     capstone = thread.target_capstone
     if capstone is not None:
         # RelationshipCapstone → CharacterRelationship → target CharacterSheet

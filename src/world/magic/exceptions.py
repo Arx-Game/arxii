@@ -534,13 +534,21 @@ class TechniqueNotOwned(MagicError):
 
 class RelationshipBondNotOwned(MagicError):
     """Raised when weaving a RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE thread on a
-    relationship-track or capstone row the weaving character does not itself hold
-    (i.e. the row's ``relationship.source`` is a different CharacterSheet, #2033).
-    Protects both the telnet and web (``ThreadSerializer``) weave paths — the two
-    relationship-kind anchors are the only ones whose owning row can belong to
-    someone else's relationship."""
+    ``CharacterRelationship`` side (or a ``RelationshipCapstone`` receipt hanging off
+    one) the weaving character does not itself hold — i.e. the side's/capstone's
+    ``relationship.source`` is a different CharacterSheet (#2033, redrawn for the
+    side-row/label model in #3957). Protects both the telnet and web
+    (``ThreadSerializer``) weave paths — the two relationship-kind anchors are the
+    only ones whose owning row can belong to someone else's relationship."""
 
     user_message = "That isn't your own relationship bond to weave a thread on."
+
+
+class RelationshipTierTooLow(MagicError):
+    """Raised when weaving a RELATIONSHIP_TRACK thread on a side that has not
+    claimed the tier ``RelationshipGrowthConfig.thread_min_tier`` requires (#3957)."""
+
+    user_message = "The relationship has not reached the tier a thread needs."
 
 
 # =============================================================================

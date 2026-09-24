@@ -29,8 +29,8 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
     """
 
     class NaturalKeyConfig:
-        fields = ["target_kind", "unlock_trait", "unlock_gift", "unlock_track"]
-        dependencies = ["arxii.Trait", "arxii.Gift", "arxii.RelationshipTrack"]
+        fields = ["target_kind", "unlock_trait", "unlock_gift", "unlock_type"]
+        dependencies = ["arxii.Trait", "arxii.Gift", "arxii.RelationshipType"]
 
     objects = NaturalKeyManager()
 
@@ -56,13 +56,13 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
         related_name="thread_weaving_unlocks",
         help_text="Set when target_kind=TECHNIQUE; covers all techniques under Gift.",
     )
-    unlock_track = models.ForeignKey(
-        "arxii.RelationshipTrack",
+    unlock_type = models.ForeignKey(
+        "arxii.RelationshipType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="thread_weaving_unlocks",
-        help_text="Set when target_kind=RELATIONSHIP_TRACK; per-track unlock.",
+        help_text="Set when target_kind=RELATIONSHIP_TRACK; the label type the weaver must hold.",
     )
 
     xp_cost = models.PositiveIntegerField(
@@ -95,9 +95,9 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
                 name="unique_threadweaving_unlock_gift",
             ),
             models.UniqueConstraint(
-                fields=["unlock_track"],
+                fields=["unlock_type"],
                 condition=models.Q(target_kind="RELATIONSHIP_TRACK"),
-                name="unique_threadweaving_unlock_track",
+                name="unique_threadweaving_unlock_type",
             ),
             # ---- Per-kind CheckConstraints (exactly one target_* set, others null) ----
             models.CheckConstraint(
@@ -107,7 +107,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
                     | (
                         models.Q(unlock_trait__isnull=False)
                         & models.Q(unlock_gift__isnull=True)
-                        & models.Q(unlock_track__isnull=True)
+                        & models.Q(unlock_type__isnull=True)
                     )
                 ),
             ),
@@ -118,18 +118,18 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
                     | (
                         models.Q(unlock_trait__isnull=True)
                         & models.Q(unlock_gift__isnull=False)
-                        & models.Q(unlock_track__isnull=True)
+                        & models.Q(unlock_type__isnull=True)
                     )
                 ),
             ),
             models.CheckConstraint(
-                name="threadweaving_track_payload",
+                name="threadweaving_type_payload",
                 check=(
                     ~models.Q(target_kind="RELATIONSHIP_TRACK")
                     | (
                         models.Q(unlock_trait__isnull=True)
                         & models.Q(unlock_gift__isnull=True)
-                        & models.Q(unlock_track__isnull=False)
+                        & models.Q(unlock_type__isnull=False)
                     )
                 ),
             ),
@@ -150,14 +150,14 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
     # update here.
     _F_TRAIT = "unlock_trait"
     _F_GIFT = "unlock_gift"
-    _F_TRACK = "unlock_track"
+    _F_TYPE = "unlock_type"
 
     # Discriminator -> required field name. CAPSTONE is intentionally absent
     # (capstones inherit from RELATIONSHIP_TRACK unlocks per spec line 426).
     _KIND_TO_FIELD: dict[str, str | None] = {
         TargetKind.TRAIT: _F_TRAIT,
         TargetKind.TECHNIQUE: _F_GIFT,
-        TargetKind.RELATIONSHIP_TRACK: _F_TRACK,
+        TargetKind.RELATIONSHIP_TRACK: _F_TYPE,
         # Kind-level unlocks: no per-instance FK required (all typed FKs null).
         # Mirrors the FACET precedent — any FACET-kind unlock suffices for all
         # facets. SANCTUM and ORGANIZATION follow the same pattern.
@@ -168,7 +168,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
     _ALL_TARGET_FIELDS: tuple[str, ...] = (
         _F_TRAIT,
         _F_GIFT,
-        _F_TRACK,
+        _F_TYPE,
     )
 
     def _get_target_value(self, field_name: str) -> object | None:
@@ -182,7 +182,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
         if self.target_kind == TargetKind.TECHNIQUE:
             return f"ThreadWeaving: Gift of {self.unlock_gift.name}"
         if self.target_kind == TargetKind.RELATIONSHIP_TRACK:
-            return f"ThreadWeaving: {self.unlock_track.name} bonds"
+            return f"ThreadWeaving: {self.unlock_type.name} bonds"
         kind_labels = {
             TargetKind.FACET: "ThreadWeaving: Facets",
             TargetKind.SANCTUM: "ThreadWeaving: Sanctums",

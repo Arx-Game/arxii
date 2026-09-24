@@ -176,8 +176,8 @@ telnet `@characters`.
 **Roster versus original character is provenance.** `RosterEntry.creation_provenance`
 STAFF or GM_TABLE is a roster character; PLAYER is an original character. Character
 creation leaves a player-made entry with `activity_requirement=NONE`. The former
-`CharacterSheet.is_oc` / `created_by` columns are gone (0159 carried the flag onto
-provenance, 0160 dropped them).
+`CharacterSheet.is_oc` / `created_by` columns are gone (`0159_is_oc_to_provenance` carried
+the flag onto provenance, `0159_remove_charactersheet_is_oc_created_by` dropped them).
 
 **Freeing a slot.** An original character is *frozen* (`freeze_character`, 30-day thaw
 cooldown, `activity_state=FROZEN`; the tenure stays) and later *thawed*. A roster

@@ -225,10 +225,8 @@ def consent_blocks_targeting(
     master switch is unique to the preference row). The scene-wide picker sweep batches the
     same decision in ``actions.player_interface._consent_excluded_persona_ids``.
     """
-    from world.scenes.friend_services import (  # noqa: PLC0415
-        is_friend as _is_friend,
-        is_rival as _is_rival,
-    )
+    from world.relationships.services import mutual_hostile  # noqa: PLC0415
+    from world.scenes.friend_services import is_friend as _is_friend  # noqa: PLC0415
 
     # Reverse OneToOne accessor (cached on the tenure instance) rather than a fresh filter,
     # so a warmed caller doesn't pay a query for the common has-a-preference-row path.
@@ -270,7 +268,10 @@ def consent_blocks_targeting(
         if not whitelisted and rule_mode == ConsentMode.FRIENDS_WHITELIST:
             friended = _is_friend(owner_tenure=owner_tenure, friend_tenure=actor_tenure)
         elif not whitelisted and rule_mode == ConsentMode.RIVALS:
-            rivaled = _is_rival(owner_tenure=owner_tenure, rival_tenure=actor_tenure)
+            rivaled = mutual_hostile(
+                owner_tenure.roster_entry.character_sheet,
+                actor_tenure.roster_entry.character_sheet,
+            )
     return _decide_consent_block(
         rule_mode,
         actor_present=True,

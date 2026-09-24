@@ -1,92 +1,104 @@
-"""API views for the relationships system."""
+"""API views for the relationships system (#3957)."""
 
-from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import CharField, Count, Exists, F, OuterRef, Prefetch, Q, Value
+from __future__ import annotations
+
+from typing import Any
+
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.mixins import ListModelMixin
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from world.mechanics.models import ModifierTarget
-from world.relationships.constants import UpdateVisibility
-from world.relationships.filters import RelationshipCapstoneFilter, RelationshipUpdateFilter
+from world.relationships.constants import TieAudience
+from world.relationships.filters import RelationshipCapstoneFilter
 from world.relationships.models import (
     CharacterRelationship,
-    HybridRelationshipType,
-    HybridRequirement,
     RelationshipCapstone,
     RelationshipCondition,
-    RelationshipDevelopment,
-    RelationshipTier,
-    RelationshipTrack,
-    RelationshipTrackProgress,
-    RelationshipUpdate,
-    WriteupKudos,
+    RelationshipLabel,
+    RelationshipType,
+)
+from world.relationships.reads import (
+    build_tie_page,
+    entry_id_for,
+    resolve_viewer_sheet,
+    third_party_can_see,
+    tie_audience,
+    tie_stream,
 )
 from world.relationships.serializers import (
-    CapstoneWriteSerializer,
-    CharacterRelationshipListSerializer,
-    CharacterRelationshipSerializer,
-    DevelopmentWriteSerializer,
-    FirstImpressionWriteSerializer,
-    HybridRelationshipTypeSerializer,
-    RedistributeWriteSerializer,
+    AdvanceWriteSerializer,
+    AllocationWriteSerializer,
+    AwarenessWriteSerializer,
+    DeclareWriteSerializer,
+    LabelWriteSerializer,
     RelationshipCapstoneSerializer,
     RelationshipConditionSerializer,
-    RelationshipTimelineEntrySerializer,
-    RelationshipTrackSerializer,
-    RelationshipUpdateSerializer,
-    WriteupComplaintWriteSerializer,
-    WriteupKudosWriteSerializer,
+    RelationshipTypeSerializer,
+    ShiftWriteSerializer,
+    SummaryWriteSerializer,
+    TieSerializer,
+    TieStreamItemSerializer,
+    TieWriteResultSerializer,
 )
 
 NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
 
-# Shared column shape projected by ``_timeline_rows`` for every writeup model so the
-# three per-model querysets can be combined with ``.union()`` into one ordered feed.
-_TIMELINE_VALUES = (
-    "id",
-    "kind",
-    "relationship",
-    "author",
-    "author_name",
-    "track",
-    "track_name",
-    "title",
-    "writeup",
-    "visibility",
-    "created_at",
-)
 
+def _ap_pools_for(sheet_ids: set[int]) -> dict[int, dict[str, int]]:
+    """Each owner's weekly AP purse, keyed by CharacterSheet pk (#3957).
 
-def _timeline_rows(model, kind: str, filter_q: Q):
-    """Return one writeup model's contribution to the merged timeline, tagged with ``kind``.
+    ``total`` is the week's AP budget and ``remaining`` is what is left of it after EVERY
+    standing weekly commitment the character has made — tie allocations and training
+    allocations alike, because both are spent from the one ``ActionPointPool`` at the
+    weekly turn (#3957 final review: the line used to read the pool's live balance against
+    its maximum, which let "31 / 40" sit above allocations already promising 80).
 
-    Projects the shared ``_TIMELINE_VALUES`` column shape (via ``.annotate()`` +
-    ``.values()``) so ``RelationshipUpdate``/``RelationshipDevelopment``/
-    ``RelationshipCapstone`` querysets — which don't share a common base model —
-    can still be combined with ``.union()``. All visibility scoping happens in
-    ``filter_q`` at the database level (never Python-side row filtering).
-
-    Clears each model's default ``Meta.ordering = ["-created_at"]`` with a bare
-    ``.order_by()``: the DB backend (SQLite, at least) rejects an ``ORDER BY`` in
-    a ``.union()`` branch subquery — the caller orders the combined result instead.
+    Keyed and batched rather than read off ``side.source`` per row: ``list`` pages over
+    every side of every character the ACCOUNT plays, so the loop is over distinct owners
+    (one, in practice) and never over ties. The pool row is still what makes a purse
+    exist — a character with no pool has no AP economy to show — but its columns no
+    longer answer the budget question.
     """
-    return (
-        model.objects.filter(filter_q)
-        .annotate(
-            kind=Value(kind, output_field=CharField()),
-            author_name=F("author__character__db_key"),
-            track_name=F("track__name"),
+    from django.db.models import Sum  # noqa: PLC0415
+
+    from world.action_points.models import ActionPointConfig, ActionPointPool  # noqa: PLC0415
+    from world.relationships.models import RelationshipAllocation  # noqa: PLC0415
+    from world.skills.models import TrainingAllocation  # noqa: PLC0415
+
+    owner_ids = set(
+        ActionPointPool.objects.filter(character_id__in=sheet_ids).values_list(
+            "character_id", flat=True
         )
-        .values(*_TIMELINE_VALUES)
-        .order_by()
     )
+    if not owner_ids:
+        return {}
+    budget = ActionPointConfig.get_weekly_regen()
+    committed: dict[int, int] = dict.fromkeys(owner_ids, 0)
+    tie_rows = (
+        RelationshipAllocation.objects.filter(relationship__source_id__in=owner_ids)
+        .values("relationship__source_id")
+        .annotate(total=Sum("ap_amount"))
+    )
+    for row in tie_rows:
+        committed[row["relationship__source_id"]] += row["total"] or 0
+    training_rows = (
+        TrainingAllocation.objects.filter(character_id__in=owner_ids)
+        .values("character_id")
+        .annotate(total=Sum("ap_amount"))
+    )
+    for row in training_rows:
+        committed[row["character_id"]] += row["total"] or 0
+    return {
+        owner_id: {"remaining": max(budget - spoken_for, 0), "total": budget}
+        for owner_id, spoken_for in committed.items()
+    }
 
 
 class RelationshipConditionViewSet(ReadOnlyModelViewSet):
@@ -104,116 +116,18 @@ class RelationshipConditionViewSet(ReadOnlyModelViewSet):
     pagination_class = None
 
 
-class RelationshipTrackViewSet(ReadOnlyModelViewSet):
-    """List and retrieve relationship tracks with nested tiers."""
+class RelationshipTypeViewSet(ReadOnlyModelViewSet):
+    """List and retrieve the catalogue of tie types (#3957)."""
 
-    queryset = RelationshipTrack.objects.prefetch_related(
-        Prefetch(
-            "tiers",
-            queryset=RelationshipTier.objects.all(),
-            to_attr="cached_tiers",
-        ),
-    )
-    serializer_class = RelationshipTrackSerializer
+    queryset = RelationshipType.objects.select_related("counterpart")
+    serializer_class = RelationshipTypeSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
-
-
-class HybridRelationshipTypeViewSet(ReadOnlyModelViewSet):
-    """List and retrieve hybrid relationship types with nested requirements."""
-
-    queryset = HybridRelationshipType.objects.prefetch_related(
-        Prefetch(
-            "requirements",
-            queryset=HybridRequirement.objects.select_related("track"),
-            to_attr="cached_requirements",
-        ),
-    )
-    serializer_class = HybridRelationshipTypeSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None
-
-
-class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
-    """List and retrieve character relationships."""
-
-    permission_classes = [IsAuthenticated]
-    pagination_class = PageNumberPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = [
-        "source",
-        "target",
-        "target_companion",
-        "is_active",
-        "is_pending",
-        "is_soul_tether",
-    ]
-
-    def get_queryset(self):  # type: ignore[override]
-        """Return relationships the caller may read, with related data prefetched.
-
-        Numeric relationship state (tracks, affection, tiers) is author-private:
-        scoped to rows where ``source`` belongs to one of the caller's own
-        characters, via a current (``end_date__isnull=True``) ``RosterTenure``
-        join — mirroring ``RelationshipUpdateViewSet.get_queryset``'s tenure
-        join rather than Evennia's live-puppet ``db_account`` field, so an
-        owner browsing while not currently puppeting that character still sees
-        their own outbound rows. ``is_soul_tether=True`` rows are a ratified
-        carve-out and stay universally readable regardless of ownership: the
-        Soul Tether panel rendered on a *foreign* character's sheet depends on
-        being able to read the tether row (see ADR-0117).
-        """
-        # drf-spectacular introspects the filterset by calling get_queryset()
-        # with an anonymous dummy request; without this guard the user-filter
-        # makes introspection fail and the filter params vanish from the schema.
-        # Suppression justified: drf-spectacular swagger_fake_view probe (documented idiom).
-        if getattr(self, "swagger_fake_view", False):  # noqa: GETATTR_LITERAL
-            return CharacterRelationship.objects.none()
-        user = self.request.user
-        return (
-            CharacterRelationship.objects.filter(
-                Q(
-                    source__roster_entry__tenures__player_data__account=user,
-                    source__roster_entry__tenures__end_date__isnull=True,
-                )
-                | Q(is_soul_tether=True)
-            )
-            .distinct()
-            .select_related(
-                "source",
-                "source__character",
-                "target",
-                "target__character",
-                "target_companion",
-            )
-            .prefetch_related(
-                Prefetch(
-                    "track_progress",
-                    queryset=RelationshipTrackProgress.objects.select_related("track"),
-                    to_attr="cached_track_progress",
-                ),
-                Prefetch(
-                    "updates",
-                    queryset=RelationshipUpdate.objects.all(),
-                    to_attr="cached_updates",
-                ),
-                Prefetch(
-                    "conditions",
-                    queryset=RelationshipCondition.objects.all(),
-                    to_attr="cached_conditions",
-                ),
-            )
-        )
-
-    def get_serializer_class(self):  # type: ignore[override]
-        """Use list serializer for list action, full serializer for detail."""
-        if self.action == "list":
-            return CharacterRelationshipListSerializer
-        return CharacterRelationshipSerializer
+    filterset_fields = ["family", "valence"]
 
 
 class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
-    """Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+    """Read-only ViewSet exposing the caller's RelationshipCapstone rows (#3957).
 
     Used by the frontend to populate the Soul Tether ritual perform form's
     capstone picker. The ``?other_character_sheet_id=`` filter narrows to
@@ -226,250 +140,251 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = RelationshipCapstoneFilter
 
-    def get_queryset(self) -> RelationshipCapstone.objects.__class__:  # type: ignore[override]
-        """Return capstones authored by the caller's character sheets, newest first.
+    def get_queryset(self):  # type: ignore[override]
+        """Return capstones authored on relationships the caller's sheets source.
 
-        Annotates ``kudos_count`` (total commendations) and ``viewer_has_kudosed``
-        (whether this user has commended each capstone) on every row to avoid N+1
-        queries when serializing the list.
+        Numeric relationship state is author-private: scoped to rows whose parent
+        side's ``source`` belongs to one of the caller's own characters, via a
+        current (``end_date__isnull=True``) ``RosterTenure`` join (mirrors
+        ``CharacterRelationshipViewSet.get_queryset``).
         """
         user = self.request.user
         return (
-            RelationshipCapstone.objects.filter(author__character__db_account=user)
-            .select_related(
-                "author",
-                "author__character",
-                "track",
-                "relationship",
+            RelationshipCapstone.objects.filter(
+                relationship__source__roster_entry__tenures__player_data__account=user,
+                relationship__source__roster_entry__tenures__end_date__isnull=True,
             )
-            .annotate(
-                kudos_count=Count("writeupkudos_set"),
-                viewer_has_kudosed=Exists(
-                    WriteupKudos.objects.filter(account_id=user.pk, capstone=OuterRef("pk"))
-                ),
-            )
-            .order_by("-created_at")
+            .select_related("journal_entry", "relationship")
+            .distinct()
         )
 
 
-class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
-    """Mutation actions for relationship-building verbs, plus a narrow list route.
+class CharacterRelationshipViewSet(GenericViewSet):
+    """One tie per audience: list is the caller's own sides; retrieve shapes by viewer (#3957).
 
-    Detail/browsing of relationship state in general remains on
-    CharacterRelationshipViewSet; the ``list`` action here exists only to feed
-    the commend button on the requesting user's own writeups-about-them (the
-    subject side of ``give_writeup_kudos``'s rule) — it is not a general
-    writeup browser. Scoped to writeups where the caller's character is the
-    parent relationship's ``target`` (the writeup's commendable subject) and
-    visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
-    here regardless of subject. Subject eligibility is tenure-based (current,
-    un-ended ``RosterTenure``, mirroring ``get_account_for_character``), not
-    Evennia's live-puppet ``db_account`` field, so a subject browsing while
-    not currently puppeting the character still sees writeups they can
-    legally commend. ``?subject_character=<CharacterSheet pk>`` narrows to one
-    owned character sheet (see ``RelationshipUpdateFilter``) for accounts with
-    several owned characters.
+    ``list`` and ``retrieve`` both emit ``TieSerializer`` rows built by
+    ``reads.build_tie_page`` (batched even for ``retrieve``'s one-row page — same query cost,
+    one shared implementation), but from different starting points: ``list`` scopes to the
+    caller's own outbound sides (always audience OWNER — it's only ever the caller's own
+    data), while ``retrieve`` accepts any pk and computes the viewer's actual audience,
+    404ing for a third party with no public label, and for anyone but the owner/staff on a
+    companion-target side (no second player to name on a public card). The seven POST
+    actions converge on ``actions.definitions.relationships`` — the one seam telnet and the
+    web share (``action.run()``).
     """
 
     permission_classes = [IsAuthenticated]
-    serializer_class = FirstImpressionWriteSerializer
-    pagination_class = PageNumberPagination
+    serializer_class = TieSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_class = RelationshipUpdateFilter
+    filterset_fields = ["target", "target_companion"]
 
-    def get_serializer_class(self):  # type: ignore[override]
-        """Return the write serializer matching the current action."""
-        mapping = {
-            "list": RelationshipUpdateSerializer,
-            "first_impression": FirstImpressionWriteSerializer,
-            "develop": DevelopmentWriteSerializer,
-            "capstone": CapstoneWriteSerializer,
-            "redistribute": RedistributeWriteSerializer,
-            "kudos": WriteupKudosWriteSerializer,
-            "complaint": WriteupComplaintWriteSerializer,
-            "timeline": RelationshipTimelineEntrySerializer,
-        }
-        return mapping.get(self.action, FirstImpressionWriteSerializer)
+    # drf-spectacular sets this to True on the view instance while generating the
+    # schema. Declaring the default here keeps get_queryset's guard a plain attribute
+    # read rather than a getattr with a literal name (see the same guard on
+    # ConsequenceOutcomeViewSet / GiftViewSet).
+    swagger_fake_view = False
 
-    def get_queryset(self):  # type: ignore[override]
-        """Return SHARED/PUBLIC writeups about the caller's tenure-owned subject character(s).
+    def get_queryset(self):
+        """Own sides only: a tenure join on ``source``, mirroring the capstone viewset.
 
-        Subject eligibility mirrors ``world.roster.selectors.get_account_for_character``'s
-        tenure join — a current (``end_date__isnull=True``) ``RosterTenure`` — rather than
-        the live-puppet ``db_account`` field: a subject browsing their sheet while not
-        currently puppeting that character must still see (and be able to commend)
-        writeups about them.
-
-        The eligible subject pks are resolved via a separate ``.distinct()`` lookup and
-        applied to the annotated queryset with ``pk__in`` rather than joining ``tenures``
-        directly alongside the ``Count``/``Exists`` annotations — joining the to-many
-        ``tenures`` relation on the same query as those aggregates would risk inflating
-        ``kudos_count`` if a character ever had more than one current tenure row (should
-        not happen, but isn't DB-enforced).
+        drf-spectacular introspects the filterset by calling ``get_queryset()`` with an
+        anonymous dummy request; without this guard the user-filter would explode
+        during schema generation. select_related/prefetch here is what makes ``list``'s
+        page a fixed query count rather than one label/allocation/thread lookup per row.
         """
+        if self.swagger_fake_view:
+            return CharacterRelationship.objects.none()
         user = self.request.user
-        eligible_ids = (
-            RelationshipUpdate.objects.filter(
-                relationship__target__roster_entry__tenures__player_data__account=user,
-                relationship__target__roster_entry__tenures__end_date__isnull=True,
+        return (
+            CharacterRelationship.objects.filter(
+                source__roster_entry__tenures__player_data__account=user,
+                source__roster_entry__tenures__end_date__isnull=True,
             )
-            .values_list("pk", flat=True)
             .distinct()
-        )
-        return (
-            RelationshipUpdate.objects.filter(
-                pk__in=eligible_ids,
-                visibility__in=[UpdateVisibility.SHARED, UpdateVisibility.PUBLIC],
+            .select_related(
+                "source",
+                "source__character",
+                "target",
+                "target__character",
+                "target__roster_entry",
+                "target_companion",
+                "allocation",
             )
-            .select_related("author", "author__character", "track", "relationship")
-            .annotate(
-                kudos_count=Count("writeupkudos_set"),
-                viewer_has_kudosed=Exists(
-                    WriteupKudos.objects.filter(account_id=user.pk, update=OuterRef("pk"))
-                ),
-            )
-            .order_by("-created_at")
-        )
-
-    def _timeline_visibility_q(self, user) -> Q:
-        """Queryset-level generalization of ``services._can_view_writeup``.
-
-        Non-PRIVATE rows (SHARED/GOSSIP/PUBLIC) are visible to anyone. PRIVATE rows
-        are visible only when the requester's account is the writeup's author or the
-        parent relationship's subject (``target``) — resolved via the tenure join
-        (mirrors ``get_account_for_character`` rather than Evennia's live-puppet
-        ``db_account`` field, same as ``CharacterRelationshipViewSet.get_queryset``),
-        so a viewer browsing while not currently puppeting the character still sees
-        their own writeups.
-        """
-        return (
-            ~Q(visibility=UpdateVisibility.PRIVATE)
-            | Q(
-                visibility=UpdateVisibility.PRIVATE,
-                author__roster_entry__tenures__player_data__account=user,
-                author__roster_entry__tenures__end_date__isnull=True,
-            )
-            | Q(
-                visibility=UpdateVisibility.PRIVATE,
-                relationship__target__roster_entry__tenures__player_data__account=user,
-                relationship__target__roster_entry__tenures__end_date__isnull=True,
-            )
-        )
-
-    def _timeline_about_character_queryset(self, about_character_id: int):
-        """Merge non-PRIVATE (+ own-visible PRIVATE) writeups about one character.
-
-        ``.distinct()`` per branch guards against the tenure join fanning a row out
-        more than once (should not happen — a character has at most one current
-        tenure — but isn't DB-enforced); ``.union()`` itself only dedupes *across*
-        the three combined querysets, not within one.
-        """
-        user = self.request.user
-        scope_q = Q(relationship__target_id=about_character_id) & self._timeline_visibility_q(user)
-        updates = _timeline_rows(RelationshipUpdate, "update", scope_q).distinct()
-        developments = _timeline_rows(RelationshipDevelopment, "development", scope_q).distinct()
-        capstones = _timeline_rows(RelationshipCapstone, "capstone", scope_q).distinct()
-        return updates.union(developments, capstones).order_by("-created_at")
-
-    def _timeline_relationship_queryset(self, relationship_id: int, user):
-        """Full (incl. PRIVATE) history of one relationship, source-owner-only.
-
-        Returns ``(queryset, None)`` on success or ``(None, error_response)`` when
-        the relationship doesn't exist (404) or the caller isn't its tenure-owned
-        source (403).
-        """
-        if not CharacterRelationship.objects.filter(pk=relationship_id).exists():
-            return None, Response(
-                {"success": False, "message": "Relationship not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        is_source_owner = CharacterRelationship.objects.filter(
-            pk=relationship_id,
-            source__roster_entry__tenures__player_data__account=user,
-            source__roster_entry__tenures__end_date__isnull=True,
-        ).exists()
-        if not is_source_owner:
-            return None, Response(
-                {"success": False, "message": "You are not this relationship's source."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        scope_q = Q(relationship_id=relationship_id)
-        updates = _timeline_rows(RelationshipUpdate, "update", scope_q)
-        developments = _timeline_rows(RelationshipDevelopment, "development", scope_q)
-        capstones = _timeline_rows(RelationshipCapstone, "capstone", scope_q)
-        return updates.union(developments, capstones).order_by("-created_at"), None
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter(
-                name="about_character",
-                type=int,
-                required=False,
-                description=(
-                    "CharacterSheet pk. Every non-PRIVATE writeup about this character "
-                    "from any author, plus PRIVATE writeups where the caller is the "
-                    "author or the subject. Mutually exclusive with `relationship`."
-                ),
-            ),
-            OpenApiParameter(
-                name="relationship",
-                type=int,
-                required=False,
-                description=(
-                    "CharacterRelationship pk. Full history (incl. PRIVATE) of one "
-                    "relationship; caller must be its tenure-owned source. Mutually "
-                    "exclusive with `about_character`."
-                ),
-            ),
-        ],
-        responses=RelationshipTimelineEntrySerializer(many=True),
-    )
-    @action(detail=False, methods=["get"])
-    def timeline(self, request):
-        """Merged Update/Development/Capstone writeup history (#2159).
-
-        Exactly one of `about_character` or `relationship` must be provided (400
-        otherwise); see ``_timeline_about_character_queryset`` /
-        ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
-        are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
-        viewset's ``pagination_class``.
-        """
-        about_raw = request.query_params.get("about_character")  # noqa: USE_FILTERSET
-        relationship_raw = request.query_params.get("relationship")  # noqa: USE_FILTERSET
-        if bool(about_raw) == bool(relationship_raw):
-            return Response(
-                {
-                    "success": False,
-                    "message": "Provide exactly one of about_character or relationship.",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if about_raw is not None:
-            if not about_raw.isdigit():
-                return Response(
-                    {"success": False, "message": "about_character must be a positive integer."},
-                    status=status.HTTP_400_BAD_REQUEST,
+            .prefetch_related(
+                # Why this is suppressed (#3957 review): a Prefetch without to_attr writes
+                # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly
+                # as a bare string does. Contained because every reader re-prefetches on
+                # the queryset it reads from; never read .labels.all() off a side this
+                # queryset did not load.
+                Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
+                    "labels",
+                    queryset=RelationshipLabel.objects.select_related(
+                        "type", "type__counterpart", "replaced__type", "declared_by_tenure"
+                    ).order_by("since"),
                 )
-            queryset = self._timeline_about_character_queryset(int(about_raw))
-        else:
-            if not relationship_raw.isdigit():
-                return Response(
-                    {"success": False, "message": "relationship must be a positive integer."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            queryset, error = self._timeline_relationship_queryset(
-                int(relationship_raw), request.user
             )
-            if error is not None:
-                return error
+        )
 
+    @extend_schema(responses=TieSerializer)
+    def list(self, request):
+        """The caller's own outbound sides, always shaped as their OWNER view."""
+        queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
+        sides = list(page if page is not None else queryset)
+        rows = build_tie_page(
+            sides, viewer_sheet=None, is_staff=False, force_audience=TieAudience.OWNER
+        )
+        # Every row here came through ``get_queryset``'s tenure join on ``source``, so
+        # each one is by construction a side of the caller's own.
+        pools = _ap_pools_for({side.source_id for side in sides})
+        data = [
+            self._row_to_payload(row, is_own_side=True, ap_pool=pools.get(row["side"].source_id))
+            for row in rows
+        ]
+        serializer = TieSerializer(data, many=True)
         if page is not None:
-            serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @extend_schema(responses=TieSerializer)
+    def retrieve(self, request, pk=None):
+        """One side of a tie, shaped for whoever is asking.
+
+        Bypasses ``get_queryset()`` (own-sides-only) deliberately: any authenticated
+        viewer may look up any side by pk, and ``tie_audience`` + ``third_party_can_see``
+        decide what comes back — a third party with no open Public label gets a 404, not
+        a 403, so a tie's mere existence is never leaked. A companion-target side 404s for
+        anyone but the owner or staff, regardless of label visibility.
+        """
+        side = (
+            CharacterRelationship.objects.select_related(
+                "source",
+                "source__character",
+                "target",
+                "target__character",
+                "target_companion",
+                "allocation",
+            )
+            .prefetch_related(
+                # Why this is suppressed (#3957 review): a Prefetch without to_attr writes
+                # _prefetched_objects_cache["labels"] onto an idmapper-shared side exactly
+                # as a bare string does. Contained because every reader re-prefetches on
+                # the queryset it reads from; never read .labels.all() off a side this
+                # queryset did not load.
+                Prefetch(  # noqa: PREFETCH_STRING - re-prefetched on every queryset that reads it
+                    "labels",
+                    queryset=RelationshipLabel.objects.select_related(
+                        "type", "type__counterpart", "replaced__type", "declared_by_tenure"
+                    ).order_by("since"),
+                )
+            )
+            .filter(pk=pk)
+            .first()
+        )
+        if side is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        viewer_sheet = resolve_viewer_sheet(request)
+        is_staff = bool(request.user.is_staff)
+        audience = tie_audience(side, viewer_sheet, is_staff)
+        if audience == TieAudience.THIRD_PARTY and not third_party_can_see(side):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if side.target_companion_id is not None and audience not in (
+            TieAudience.OWNER,
+            TieAudience.STAFF,
+        ):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        row = build_tie_page(
+            [side], viewer_sheet=viewer_sheet, is_staff=is_staff, force_audience=audience
+        )[0]
+        is_own_side = viewer_sheet is not None and side.source_id == viewer_sheet.pk
+        pools = _ap_pools_for({side.source_id}) if is_own_side else {}
+        payload = self._row_to_payload(
+            row, is_own_side=is_own_side, ap_pool=pools.get(side.source_id)
+        )
+        return Response(TieSerializer(payload).data)
+
+    @extend_schema(responses=TieStreamItemSerializer(many=True))
+    @action(detail=True, methods=["get"], pagination_class=None)
+    def stream(self, request, pk=None):
+        """Journal entries and shared scenes between the two sides, viewer-filtered."""
+        side = (
+            CharacterRelationship.objects.select_related("source", "target").filter(pk=pk).first()
+        )
+        if side is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        viewer_sheet = resolve_viewer_sheet(request)
+        is_staff = bool(request.user.is_staff)
+        audience = tie_audience(side, viewer_sheet, is_staff)
+        if audience == TieAudience.THIRD_PARTY and not third_party_can_see(side):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if side.target_companion_id is not None and audience not in (
+            TieAudience.OWNER,
+            TieAudience.STAFF,
+        ):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        items = tie_stream(side, viewer_sheet, is_staff, account=request.user)
+        return Response(TieStreamItemSerializer(items, many=True).data)
+
+    # -- shared read-side plumbing ------------------------------------------------
+
+    def _row_to_payload(
+        self,
+        row: dict[str, Any],
+        *,
+        is_own_side: bool,
+        ap_pool: dict[str, int] | None = None,
+    ) -> dict[str, Any]:
+        """A ``build_tie_page`` row plus the side's own scalars, in ``TieSerializer``'s shape.
+
+        ``is_own_side`` is passed rather than derived here: ``list`` already knows it is
+        True for every row it builds (its queryset is a tenure join on ``source``) and
+        would otherwise have to resolve a viewer sheet it never needs.
+
+        ``ap_pool`` is passed in for the same reason and for one more: it is fetched once
+        per request by the caller (ADR-0260 leaves a view nowhere to memoise it), so a
+        page of ties costs one pool lookup rather than one per row. A caller that passes
+        nothing sends null, which is the right answer for anyone but the side's owner.
+        """
+        side = row["side"]
+        return {
+            "id": side.pk,
+            "source": side.source_id,
+            "target": side.target_id,
+            "target_companion": side.target_companion_id,
+            "target_name": side.target_name,
+            "other_sheet_id": side.target_id,
+            "other_entry_id": entry_id_for(side.target),
+            "audience": row["audience"],
+            "is_own_side": is_own_side,
+            "labels": row["labels"],
+            "depth": row["depth"],
+            "next_tier_threshold": row["next_tier_threshold"],
+            "breakdown": row["breakdown"],
+            "summary": side.summary,
+            "ap_this_week": row["ap_this_week"],
+            "ap_pool": ap_pool if is_own_side else None,
+            "thread": row["thread"],
+            "is_soul_tether": side.is_soul_tether,
+        }
+
+    # -- write plumbing -------------------------------------------------------------
+
+    def _resolve_actor(self, request):
+        """Return the caller's selected character if they own its sheet."""
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+        actor = character_for_request(request, entry_id=None)
+        if actor is None:
+            return None, NO_ACTIVE_CHARACTER_MESSAGE
+        try:
+            sheet = actor.sheet_data
+        except ObjectDoesNotExist:
+            return None, NO_ACTIVE_CHARACTER_MESSAGE
+        if sheet.character.db_account_id != request.user.pk:
+            return None, NO_ACTIVE_CHARACTER_MESSAGE
+        return actor, ""
 
     def _resolve_target_sheet(self, target_persona_id: int):
         """Resolve a target persona ID to its CharacterSheet."""
@@ -489,198 +404,207 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
             .first()
         )
 
-    def _resolve_actor(self, request):
-        """Return the caller's selected character if they own its sheet."""
-        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+    def _resolve_target(self, data: dict) -> tuple[Any, Any, Response | None]:
+        """``(target_sheet, target_companion, None)`` or ``(None, None, error_response)``."""
+        if data.get("target_persona_id") is not None:
+            persona = self._resolve_target_sheet(data["target_persona_id"])
+            if persona is None:
+                return None, None, self._error_response("Target persona not found.")
+            return persona.character_sheet, None, None
+        companion = self._resolve_target_companion(data["target_companion_id"])
+        if companion is None:
+            return None, None, self._error_response("Target companion not found.")
+        return None, companion, None
 
-        actor = character_for_request(request, entry_id=None)
-        if actor is None:
-            return None, NO_ACTIVE_CHARACTER_MESSAGE
-        try:
-            sheet = actor.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            return None, NO_ACTIVE_CHARACTER_MESSAGE
-        if sheet.character.db_account_id != request.user.pk:
-            return None, NO_ACTIVE_CHARACTER_MESSAGE
-        return actor, ""
+    def _resolve_label(self, label_id: int):
+        return (
+            RelationshipLabel.objects.select_related("relationship", "type")
+            .filter(pk=label_id)
+            .first()
+        )
 
-    def _resolve_track(self, track_id: int, label: str):
-        """Resolve a track by pk; return ``(track, None)`` or ``(None, Response)``."""
-        try:
-            return RelationshipTrack.objects.get(pk=track_id), None
-        except RelationshipTrack.DoesNotExist:
-            return None, Response(
-                {"success": False, "message": f"{label} track not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    def _error_response(self, message: str) -> Response:
+        return Response(
+            {"success": False, "message": message, "data": {}},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    def _build_kwargs(self, data: dict) -> tuple[dict | None, Response | None]:
-        """Build action kwargs from validated serializer data.
+    def _result_response(self, result) -> Response:
+        if not result.success:
+            return self._error_response(result.message)
+        return Response(
+            {"success": True, "message": result.message, "data": result.data or {}},
+            status=status.HTTP_200_OK,
+        )
 
-        Returns ``(kwargs, None)`` on success or ``(None, error_response)`` if a
-        referenced track cannot be resolved. impression/develop/capstone target a
-        single ``track``; redistribute moves points between ``source_track`` and
-        ``target_track`` instead.
+    def _validation_error_response(self, serializer) -> Response:
+        """Wrap DRF's field-dict validation errors into the same honest write shape (#3957
+        review) — a caller reads one ``message``, not a per-field error tree.
         """
-        kwargs: dict[str, object] = {
-            "target_sheet": data["target_sheet"],
-            "target_companion": data["target_companion"],
-            "points": data["points"],
-            "title": data["title"],
-            "writeup": data["writeup"],
-            "visibility": data["visibility"],
-        }
-        if "track_id" in data:  # noqa: STRING_LITERAL
-            track, err = self._resolve_track(data["track_id"], "Relationship")
-            if err is not None:
-                return None, err
-            kwargs["track"] = track
-        if "coloring" in data:  # noqa: STRING_LITERAL
-            kwargs["coloring"] = data["coloring"]
-        if "xp_awarded" in data:  # noqa: STRING_LITERAL
-            kwargs["xp_awarded"] = data["xp_awarded"]
-        if "source_track_id" in data:  # noqa: STRING_LITERAL
-            track, err = self._resolve_track(data["source_track_id"], "Source")
-            if err is not None:
-                return None, err
-            kwargs["source_track"] = track
-        if "target_track_id" in data:  # noqa: STRING_LITERAL
-            track, err = self._resolve_track(data["target_track_id"], "Target")
-            if err is not None:
-                return None, err
-            kwargs["target_track"] = track
-        return kwargs, None
+        first_field_errors = next(iter(serializer.errors.values()))
+        return self._error_response(str(first_field_errors[0]))
 
-    def _run_action(self, request, action_class):
-        """Validate input, resolve IDs, and run the relationship action."""
+    @extend_schema(request=DeclareWriteSerializer, responses=TieWriteResultSerializer)
+    @action(detail=False, methods=["post"])
+    def declare(self, request):
+        """Name a type on the caller's side of a tie (#3957)."""
+        from actions.definitions.relationships import DeclareLabelAction  # noqa: PLC0415
+
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return Response(
-                {"success": False, "message": error},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+            return self._error_response(error)
+        serializer = DeclareWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
         data = serializer.validated_data
-
-        target_sheet = None
-        target_companion = None
-        if data.get("target_persona_id") is not None:
-            target_persona = self._resolve_target_sheet(data["target_persona_id"])
-            if target_persona is None:
-                return Response(
-                    {"success": False, "message": "Target persona not found."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            target_sheet = target_persona.character_sheet
-        else:
-            target_companion = self._resolve_target_companion(data["target_companion_id"])
-            if target_companion is None:
-                return Response(
-                    {"success": False, "message": "Target companion not found."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        data["target_sheet"] = target_sheet
-        data["target_companion"] = target_companion
-
-        kwargs, err = self._build_kwargs(data)
+        target_sheet, target_companion, err = self._resolve_target(data)
         if err is not None:
             return err
-
-        result = action_class().run(actor=actor, **kwargs)
-        if not result.success:
-            return Response(
-                {"success": False, "message": result.message},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response(
-            {
-                "success": True,
-                "message": result.message,
-                "data": result.data or {},
-            },
-            status=status.HTTP_200_OK,
+        rel_type = RelationshipType.objects.filter(pk=data["type_id"]).first()
+        if rel_type is None:
+            return self._error_response("Unknown type.")
+        result = DeclareLabelAction().run(
+            actor=actor,
+            target_sheet=target_sheet,
+            target_companion=target_companion,
+            type=rel_type,
+            awareness=data["awareness"],
         )
+        return self._result_response(result)
 
+    @extend_schema(request=ShiftWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
-    def first_impression(self, request):
-        """Record a first impression toward another character."""
-        from actions.definitions.relationships import (  # noqa: PLC0415
-            CreateFirstImpressionAction,
-        )
+    def shift(self, request):
+        """Change one label into another (#3957)."""
+        from actions.definitions.relationships import ShiftLabelAction  # noqa: PLC0415
 
-        return self._run_action(request, CreateFirstImpressionAction)
-
-    @action(detail=False, methods=["post"])
-    def develop(self, request):
-        """Solidify temporary points into permanent developed points."""
-        from actions.definitions.relationships import (  # noqa: PLC0415
-            CreateDevelopmentAction,
-        )
-
-        return self._run_action(request, CreateDevelopmentAction)
-
-    @action(detail=False, methods=["post"])
-    def capstone(self, request):
-        """Record a monumental relationship capstone."""
-        from actions.definitions.relationships import (  # noqa: PLC0415
-            CreateCapstoneAction,
-        )
-
-        return self._run_action(request, CreateCapstoneAction)
-
-    @action(detail=False, methods=["post"])
-    def redistribute(self, request):
-        """Move developed points between tracks in an existing relationship."""
-        from actions.definitions.relationships import (  # noqa: PLC0415
-            RedistributePointsAction,
-        )
-
-        return self._run_action(request, RedistributePointsAction)
-
-    def _run_feedback_action(self, request, action_class):
-        """Resolve actor, validate input, and dispatch a writeup-feedback action.
-
-        Simpler than ``_run_action``: no target persona resolution or track
-        building — the feedback actions only need ``actor`` + the validated
-        serializer kwargs (``writeup_type``, ``writeup_id``, optional ``reason``).
-        """
         actor, error = self._resolve_actor(request)
         if actor is None:
-            return Response(
-                {"success": False, "message": error},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        result = action_class().run(actor=actor, **serializer.validated_data)
-        if not result.success:
-            return Response(
-                {"success": False, "message": result.message},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response(
-            {
-                "success": True,
-                "message": result.message,
-                "data": result.data or {},
-            },
-            status=status.HTTP_200_OK,
+            return self._error_response(error)
+        serializer = ShiftWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
+        data = serializer.validated_data
+        label = self._resolve_label(data["label_id"])
+        if label is None:
+            return self._error_response("Label not found.")
+        new_type = RelationshipType.objects.filter(pk=data["new_type_id"]).first()
+        if new_type is None:
+            return self._error_response("Unknown type.")
+        result = ShiftLabelAction().run(
+            actor=actor, label=label, new_type=new_type, note=data.get("note", "")
         )
+        return self._result_response(result)
 
+    @extend_schema(request=LabelWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
-    def kudos(self, request):
-        """Commend a shared relationship writeup on behalf of its subject."""
-        from actions.definitions.relationships import GiveWriteupKudosAction  # noqa: PLC0415
+    def end(self, request):
+        """End an open label; it shows as former from then on (#3957)."""
+        from actions.definitions.relationships import EndLabelAction  # noqa: PLC0415
 
-        return self._run_feedback_action(request, GiveWriteupKudosAction)
+        actor, error = self._resolve_actor(request)
+        if actor is None:
+            return self._error_response(error)
+        serializer = LabelWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
+        data = serializer.validated_data
+        label = self._resolve_label(data["label_id"])
+        if label is None:
+            return self._error_response("Label not found.")
+        result = EndLabelAction().run(actor=actor, label=label)
+        return self._result_response(result)
 
+    @extend_schema(request=AwarenessWriteSerializer, responses=TieWriteResultSerializer)
     @action(detail=False, methods=["post"])
-    def complaint(self, request):
-        """File a bad-faith-RP complaint against a writeup for staff triage."""
-        from actions.definitions.relationships import FileWriteupComplaintAction  # noqa: PLC0415
+    def awareness(self, request):
+        """Move a label's awareness forward (#3957)."""
+        from actions.definitions.relationships import AdvanceLabelAwarenessAction  # noqa: PLC0415
 
-        return self._run_feedback_action(request, FileWriteupComplaintAction)
+        actor, error = self._resolve_actor(request)
+        if actor is None:
+            return self._error_response(error)
+        serializer = AwarenessWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
+        data = serializer.validated_data
+        label = self._resolve_label(data["label_id"])
+        if label is None:
+            return self._error_response("Label not found.")
+        result = AdvanceLabelAwarenessAction().run(
+            actor=actor, label=label, awareness=data["awareness"]
+        )
+        return self._result_response(result)
+
+    @extend_schema(request=AllocationWriteSerializer, responses=TieWriteResultSerializer)
+    @action(detail=False, methods=["post"])
+    def allocation(self, request):
+        """Set this week's AP toward one side of a tie (#3957)."""
+        from actions.definitions.relationships import SetTieAllocationAction  # noqa: PLC0415
+
+        actor, error = self._resolve_actor(request)
+        if actor is None:
+            return self._error_response(error)
+        serializer = AllocationWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
+        data = serializer.validated_data
+        target_sheet, target_companion, err = self._resolve_target(data)
+        if err is not None:
+            return err
+        result = SetTieAllocationAction().run(
+            actor=actor,
+            target_sheet=target_sheet,
+            target_companion=target_companion,
+            ap_amount=data["ap_amount"],
+        )
+        return self._result_response(result)
+
+    @extend_schema(request=AdvanceWriteSerializer, responses=TieWriteResultSerializer)
+    @action(detail=False, methods=["post"])
+    def advance(self, request):
+        """Claim the next tier with a capstone journal entry and XP (#3957)."""
+        from actions.definitions.relationships import AdvanceRelationshipTierAction  # noqa: PLC0415
+        from world.journals.models import JournalEntry  # noqa: PLC0415
+
+        actor, error = self._resolve_actor(request)
+        if actor is None:
+            return self._error_response(error)
+        serializer = AdvanceWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
+        data = serializer.validated_data
+        target_sheet, _target_companion, err = self._resolve_target(data)
+        if err is not None:
+            return err
+        entry = JournalEntry.objects.filter(pk=data["journal_entry_id"]).first()
+        if entry is None:
+            return self._error_response("Entry not found.")
+        result = AdvanceRelationshipTierAction().run(
+            actor=actor, target_sheet=target_sheet, journal_entry=entry
+        )
+        return self._result_response(result)
+
+    @extend_schema(request=SummaryWriteSerializer, responses=TieWriteResultSerializer)
+    @action(detail=False, methods=["post"])
+    def summary(self, request):
+        """Set the player's own paragraph on one side of a tie (#3957)."""
+        from actions.definitions.relationships import SetTieSummaryAction  # noqa: PLC0415
+
+        actor, error = self._resolve_actor(request)
+        if actor is None:
+            return self._error_response(error)
+        serializer = SummaryWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self._validation_error_response(serializer)
+        data = serializer.validated_data
+        target_sheet, target_companion, err = self._resolve_target(data)
+        if err is not None:
+            return err
+        result = SetTieSummaryAction().run(
+            actor=actor,
+            target_sheet=target_sheet,
+            target_companion=target_companion,
+            summary=data["summary"],
+        )
+        return self._result_response(result)

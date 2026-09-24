@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.relationships.factories import GrievanceOptionFactory
-from world.relationships.models import CharacterRelationship, RelationshipCapstone
+from world.relationships.models import CharacterRelationship
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.secrets.factories import SecretFactory, SecretVictimFactory
 from world.secrets.services import (
@@ -35,20 +35,25 @@ class RegisterSecretGrievanceServiceTests(TestCase):
             organization=None,
             persona=self.entry.character_sheet.primary_persona,
         )
-        self.option = GrievanceOptionFactory(points=900)
+        self.option = GrievanceOptionFactory(conflict_points=900)
 
     def test_victim_who_knows_registers_a_one_sided_grievance(self) -> None:
         grant_secret_knowledge(roster_entry=self.entry, secret=self.secret)
 
-        capstone = register_secret_grievance(
+        side = register_secret_grievance(
             roster_entry=self.entry, secret=self.secret, option=self.option
         )
 
-        assert isinstance(capstone, RelationshipCapstone)
+        assert isinstance(side, CharacterRelationship)
         relationship = CharacterRelationship.objects.get(
             source=self.entry.character_sheet, target=self.secret.subject_sheet
         )
-        assert relationship.is_pending is True  # unilateral
+        # Unilateral: only the victim's own side exists, never the perpetrator's.
+        assert not CharacterRelationship.objects.filter(
+            source=self.secret.subject_sheet, target=self.entry.character_sheet
+        ).exists()
+        assert relationship.conflict == 900
+        assert side.conflict == 900
 
     def test_a_non_victim_is_rejected(self) -> None:
         other = _piloted_entry()

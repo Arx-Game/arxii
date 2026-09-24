@@ -15,7 +15,7 @@ from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.models import FuryConfig, FuryTier
-from world.relationships.helpers import get_relationship_tier
+from world.relationships.models import CharacterRelationship
 
 if TYPE_CHECKING:
     from world.checks.models import CheckType
@@ -35,7 +35,25 @@ def _config() -> FuryConfig:
     return FuryConfig.objects.filter(pk=1).first() or FuryConfig()
 
 
-def provocation_cap(character: ObjectDB | None, anchor: CharacterSheet | None) -> int:
+def _bond_tier(character: CharacterSheet | ObjectDB, anchor: CharacterSheet) -> int:
+    """The claimed tier of ``character``'s OWN side toward ``anchor``, else 0 (#3957).
+
+    Deliberately NOT ``relationships.helpers.get_relationship_tier``: that helper is
+    training's mentor multiplier and answers a narrower question (the lower tier of a
+    MUTUAL Teaching-family tie). Fury's provocation cap has always read bond strength
+    one-sidedly and from any relationship -- a character can be provoked over someone
+    who never declared anything back -- so it reads the side row directly.
+    """
+    sheet = character if isinstance(character, CharacterSheet) else character.character_sheet
+    if sheet is None:
+        return 0
+    side = CharacterRelationship.objects.filter(source=sheet, target=anchor).first()
+    return side.tier if side is not None else 0
+
+
+def provocation_cap(
+    character: CharacterSheet | ObjectDB | None, anchor: CharacterSheet | None
+) -> int:
     """Bond-derived ceiling on fury depth.
 
     Returns 0 when fury is unavailable (missing character or anchor, or the
@@ -43,15 +61,16 @@ def provocation_cap(character: ObjectDB | None, anchor: CharacterSheet | None) -
     """
     if character is None or anchor is None:
         return 0
-    anchor_char = anchor.character
-    if anchor_char is None:
+    if anchor.character is None:
         return 0
-    bond = get_relationship_tier(character, anchor_char)
+    bond = _bond_tier(character, anchor)
     per = max(_config().provocation_cap_per_tier, 1)
     return bond // per if per else bond
 
 
-def provocation_ease(character: ObjectDB | None, anchor: CharacterSheet | None) -> int:
+def provocation_ease(
+    character: CharacterSheet | ObjectDB | None, anchor: CharacterSheet | None
+) -> int:
     """Check-difficulty reduction from the bond (cap * cap_ease_per_point)."""
     return provocation_cap(character, anchor) * _config().cap_ease_per_point
 

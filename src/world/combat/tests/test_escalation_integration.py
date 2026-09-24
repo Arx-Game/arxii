@@ -42,10 +42,11 @@ from world.magic.services.techniques import get_runtime_technique_stats
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.relationships.constants import TypeValence
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
@@ -248,20 +249,16 @@ class BondedSpikeRealDamagePathTests(TestCase):
         wire_escalation_content()
 
     def _bond(self, source_sheet, target_sheet, *, points: int = 10) -> None:
-        """Active, non-pending relationship with spike-fueling track progress."""
-        track = RelationshipTrackFactory(fuels_escalation_spikes=True)
+        """Active relationship, an open label of a spike-fueling type, and depth."""
+        rel_type = RelationshipTypeFactory(valence=TypeValence.WARM, fuels_escalation_spikes=True)
         relationship = CharacterRelationshipFactory(
             source=source_sheet,
             target=target_sheet,
             is_active=True,
-            is_pending=False,
         )
-        RelationshipTrackProgressFactory(
-            relationship=relationship,
-            track=track,
-            developed_points=points,
-            capacity=points,
-        )
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
+        relationship.invested_depth = points
+        relationship.save()
 
     def _reset_vitals(self, sheet, *, health: int = 100, max_health: int = 100) -> None:
         vitals, _ = CharacterVitals.objects.get_or_create(

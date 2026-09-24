@@ -86,7 +86,10 @@ resolves an attempt through the rank/chart/outcome pipeline into a graded
 **Round** (action-driven) sequences declarations inside a **Scene**; **combat** is
 one specialization. **Personas** are the IC identities that own reputation and
 appear in scenes; **Threads** are the magic currency that anchors to traits,
-techniques, sanctums, relationships and other targets. Progression runs along a
+techniques, sanctums, relationships and other targets. A **Tie** is two people: each
+**Side** names the other with **Labels** at one of three forward-only awareness stages,
+both sides pool one **Depth** grown by scenes together and weekly AP, and each side
+claims its own **Tier** with a capstone journal entry and XP. Progression runs along a
 **Path** of **Levels**, narrated as **the Durance**, measured by **Legend** and
 awarded live through **Renown**.
 
@@ -388,7 +391,7 @@ Surge lives in [combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md).
 
 **Thread**:
 The magic currency/anchor (`world.magic.Thread`) that ties a character to a typed target
-(trait, technique, facet, relationship track, capstone, covenant role, or sanctum) and is
+(trait, technique, facet, relationship side, capstone, covenant role, or sanctum) and is
 levelled and pulled. _Avoid_: bond, string, link.
 
 **Anima**:

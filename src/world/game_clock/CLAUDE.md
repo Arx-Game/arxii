@@ -86,7 +86,7 @@ money bands rather than being one task.
 | AP daily regen | 24h real | action_points |
 | AP weekly regen | 7d real | action_points |
 | Journal weekly reset | daily sweep | journals |
-| Relationship weekly reset | daily sweep | relationships |
+| Relationship weekly depth conversion | daily sweep | relationships (#3957) |
 | Form expiration cleanup | hourly | forms |
 | Condition expiration cleanup | hourly | conditions |
 | Relationship temp-condition cleanup (Very Attracted drop-off) | hourly | relationships (#1697) |

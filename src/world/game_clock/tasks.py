@@ -80,7 +80,7 @@ def weekly_rollover_task() -> None:
     3. Generates new random scene targets
     4. Processes skill development audit + rust
     5. Resets journal weekly XP trackers
-    6. Resets relationship weekly counters
+    6. Turns ties' weekly AP allocations into depth (#3957)
     7. Applies weekly AP regeneration
 
     Individual weekly tasks are kept registered as fallbacks but this
@@ -103,7 +103,7 @@ def weekly_rollover_task() -> None:
         ("random scene generation", _run_random_scene_generation),
         ("skill development", _run_skill_development),
         ("journal weekly reset", batch_journal_weekly_reset),
-        ("relationship weekly reset", batch_relationship_weekly_reset),
+        ("relationship depth", _run_relationship_depth),
         ("AP weekly regen", batch_ap_weekly_regen),
         ("weekly economy", _run_weekly_economy),
         ("domain food consumption", _run_domain_food_consumption),
@@ -407,25 +407,12 @@ def batch_journal_weekly_reset() -> None:
     logger.info("Journal weekly reset: %d trackers reset", count)
 
 
-def batch_relationship_weekly_reset() -> None:
-    """Reset stale weekly relationship counters for non-current game weeks."""
-    from world.game_clock.week_services import get_current_game_week
-    from world.relationships.models import CharacterRelationship
+def _run_relationship_depth() -> None:
+    """Turn every tie's weekly AP allocation into depth (#3957)."""
+    from world.relationships.services import process_weekly_relationship_allocations
 
-    current_week = get_current_game_week()
-    count = (
-        CharacterRelationship.objects.exclude(game_week=current_week)
-        .filter(
-            models.Q(developments_this_week__gt=0) | models.Q(changes_this_week__gt=0),
-        )
-        .update_with_reason(
-            reason="issue #3817: intentional atomic write",
-            developments_this_week=0,
-            changes_this_week=0,
-            game_week=current_week,
-        )
-    )
-    logger.info("Relationship weekly reset: %d relationships reset", count)
+    count = process_weekly_relationship_allocations()
+    logger.info("Relationship depth: %d allocations processed", count)
 
 
 def batch_form_expiration_cleanup() -> None:
@@ -639,10 +626,10 @@ def register_all_tasks() -> None:
     )
     register_task(
         CronDefinition(
-            task_key="relationships.weekly_reset",
-            callable=batch_relationship_weekly_reset,
+            task_key="relationships.depth",
+            callable=_run_relationship_depth,
             interval=timedelta(hours=24),
-            description="Reset stale weekly relationship counters.",
+            description="Turn weekly AP allocations into relationship depth.",
         )
     )
     register_task(

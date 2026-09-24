@@ -60,7 +60,7 @@ class CharacterThreadHandler:
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",
-                "target_relationship_track__relationship",
+                "target_relationship",
                 "target_capstone__relationship",
                 "target_facet",
                 "target_covenant_role",
@@ -1072,11 +1072,13 @@ class CharacterWeavingUnlockHandler:
             for r in self._rows
         )
 
-    def has_unlock_for_track(self, track) -> bool:
-        """Return True if the character has a RELATIONSHIP_TRACK-kind unlock for the given track."""
+    def has_unlock_for_relationship(self, side) -> bool:
+        """Return True if the character holds a RELATIONSHIP_TRACK unlock matching any
+        type the given side has an open label for (#3957)."""
+        type_ids = set(side.open_labels().values_list("type_id", flat=True))
         return any(
             r.unlock.target_kind == TargetKind.RELATIONSHIP_TRACK
-            and r.unlock.unlock_track_id == track.pk
+            and r.unlock.unlock_type_id in type_ids
             for r in self._rows
         )
 

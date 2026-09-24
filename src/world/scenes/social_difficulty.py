@@ -34,26 +34,26 @@ _TIER_ORDER = [
 ]
 _NORMAL_INDEX = _TIER_ORDER.index(DifficultyChoice.NORMAL)
 
-# Fallback affection-band thresholds when the #1699 system-track tiers aren't
-# seeded (mirrors the relationship_scale seed values). PLACEHOLDER magnitudes.
+# Fallback affection-band thresholds when the #3957 tier ladder isn't seeded
+# (mirrors the relationship_scale seed values). PLACEHOLDER magnitudes.
 _FALLBACK_BAND_THRESHOLDS = [25, 100, 500, 2000]
 
 
-def _affection_band_thresholds(*, positive: bool) -> list[int]:
-    """The ladder's rungs: the system tracks' RelationshipTier thresholds (#1697/#1699).
+def _affection_band_thresholds(*, positive: bool) -> list[int]:  # noqa: ARG001
+    """The ladder's rungs: the single ``RelationshipTier`` ladder's depth thresholds (#3957).
 
-    Positive affection reads the Regard track's bands, negative the Friction
-    track's, so the difficulty ladder and the relationship screen share one
-    authored scale. Falls back to the seed constants when unseeded.
+    One ladder serves both signs — positive and negative affection are read off
+    the same authored ``depth_threshold`` rungs (kept as a call-site parameter for
+    readability at each call, even though the body no longer branches on it), so
+    the difficulty ladder and the relationship screen share one scale. Falls back
+    to the seed constants when unseeded.
     """
-    from world.relationships.constants import TrackSystemKey  # noqa: PLC0415
     from world.relationships.models import RelationshipTier  # noqa: PLC0415
 
-    key = TrackSystemKey.REGARD if positive else TrackSystemKey.FRICTION
     thresholds = list(
-        RelationshipTier.objects.filter(track__system_key=key)
-        .order_by("point_threshold")
-        .values_list("point_threshold", flat=True)
+        RelationshipTier.objects.order_by("depth_threshold").values_list(
+            "depth_threshold", flat=True
+        )
     )
     return thresholds or _FALLBACK_BAND_THRESHOLDS
 
@@ -64,8 +64,8 @@ def _affection_base_index(affection: int) -> int:
     Neutral (0 — the stranger/NPC default) = NORMAL. Each positive band the
     affection crosses eases one tier; each negative band crossed hardens one
     tier; clamped to the tier range. Bands come from the seeded 25/100/500/2000
-    system-track ladder, so "how much they like you" reads off the same scale
-    players see on the relationship screen.
+    ``RelationshipTier`` ladder, so "how much they like you" reads off the same
+    scale players see on the relationship screen.
     """
     if affection == 0:
         return _NORMAL_INDEX
@@ -80,7 +80,9 @@ def _affection_toward(perceiver: CharacterSheet, perceived: CharacterSheet) -> i
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     relationship = CharacterRelationship.objects.filter(source=perceiver, target=perceived).first()
-    return relationship.affection if relationship is not None else 0
+    if relationship is None:
+        return 0
+    return relationship.affection - relationship.conflict
 
 
 def _exploitable_easing(target_sheet: CharacterSheet) -> int:

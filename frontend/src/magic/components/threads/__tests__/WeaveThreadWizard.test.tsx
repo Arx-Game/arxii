@@ -78,7 +78,7 @@ function makeSummary(overrides: Partial<ThreadHubSummary> = {}): ThreadHubSummar
     weaving_eligibility: {},
     weavable_traits: [],
     weavable_techniques: [],
-    weavable_relationship_track_ids: [],
+    weavable_relationship_type_ids: [],
     ...overrides,
   };
 }
@@ -388,71 +388,66 @@ describe('WeaveThreadWizard', () => {
     });
   });
 
-  describe('Step 2 — RELATIONSHIP_TRACK "with whom" partner→track gating (#2159)', () => {
-    const RELATIONSHIPS_RESPONSE = [
-      {
-        id: 20,
-        source: 5,
-        source_name: 'Me',
-        target: 9,
-        target_name: 'Aria',
-        is_active: true,
-        is_pending: false,
-        is_soul_tether: false,
-        soul_tether_role: '',
-        absolute_value: 10,
-        developed_absolute_value: 10,
-        affection: 5,
-        updated_at: '2025-01-01T00:00:00Z',
-      },
-    ];
-
-    const RELATIONSHIP_DETAIL_RESPONSE = {
-      id: 20,
-      source: 5,
-      source_name: 'Me',
-      target: 9,
-      target_name: 'Aria',
-      is_active: true,
-      is_pending: false,
-      is_deceitful: false,
-      track_progress: [
+  describe('Step 2 — RELATIONSHIP_TRACK "with whom" partner→label gating (#2159, #3957)', () => {
+    /** One tie whose open Lover label (type 7) is weavable. */
+    const TIES_RESPONSE = {
+      results: [
         {
-          track: 7,
-          track_name: 'Devotion',
-          track_sign: '+',
-          capacity: 100,
-          developed_points: 10,
-          temporary_points: 0,
-          total_points: 10,
-          current_tier_name: 'Bond',
+          id: 20,
+          source: 5,
+          target: 9,
+          target_companion: null,
+          target_name: 'Aria',
+          other_sheet_id: 9,
+          other_entry_id: 3,
+          audience: 'owner',
+          labels: [
+            {
+              id: 1,
+              type: 7,
+              type_name: 'Devotion',
+              type_family: 'heart',
+              type_valence: 'warm',
+              awareness: 'public',
+              since: '1012-01-01T00:00:00Z',
+              ended_at: null,
+              replaced_type_name: null,
+              note: '',
+              is_mutual: false,
+            },
+          ],
+          depth: 300,
+          next_tier_threshold: 500,
+          breakdown: null,
+          summary: '',
+          ap_this_week: 0,
+          thread: null,
+          is_soul_tether: false,
         },
       ],
-      absolute_value: 10,
-      developed_absolute_value: 10,
-      mechanical_bonus: 0,
-      affection: 5,
-      created_at: '2025-01-01T00:00:00Z',
-      updated_at: '2025-01-01T00:00:00Z',
+    };
+
+    /** A companion tie (#3575): no persona to weave with, so it is never a partner. */
+    const COMPANION_TIE = {
+      ...TIES_RESPONSE.results[0],
+      id: 21,
+      target: null,
+      target_companion: 7,
+      target_name: 'Ash',
+      other_sheet_id: null,
     };
 
     const PERSONA_RESPONSE = {
       results: [{ id: 55, persona_type: 'primary' }],
     };
 
-    function mockRelationshipTrackApis() {
+    function mockTieApis(ties: unknown[]) {
       vi.mocked(apiModule.apiFetch).mockImplementation((url: string) => {
         const urlStr = String(url);
-        if (urlStr.includes('/api/relationships/relationships/?source=')) {
+        if (urlStr.includes('/api/relationships/relationships/?')) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(RELATIONSHIPS_RESPONSE),
-          } as Response);
-        }
-        if (urlStr.includes('/api/relationships/relationships/20/')) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(RELATIONSHIP_DETAIL_RESPONSE),
+            json: () => Promise.resolve({ results: ties }),
           } as Response);
         }
         if (urlStr.includes('/api/personas/?character_sheet=9')) {
@@ -472,11 +467,11 @@ describe('WeaveThreadWizard', () => {
           typeof magicQueries.useWeaveThread
         >
       );
-      mockRelationshipTrackApis();
+      mockTieApis(TIES_RESPONSE.results);
 
       const summary = makeSummary({
         weaving_eligibility: { RELATIONSHIP_TRACK: true },
-        weavable_relationship_track_ids: [7],
+        weavable_relationship_type_ids: [7],
       });
       render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
         wrapper: createWrapper(),
@@ -525,55 +520,12 @@ describe('WeaveThreadWizard', () => {
       );
     });
 
-    it('does not offer a companion-targeted relationship as a partner (#3575)', async () => {
-      vi.mocked(apiModule.apiFetch).mockImplementation((url: string) => {
-        const urlStr = String(url);
-        if (urlStr.includes('/api/relationships/relationships/?source=')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve([
-                ...RELATIONSHIPS_RESPONSE,
-                {
-                  id: 21,
-                  source: 5,
-                  source_name: 'Me',
-                  target: null,
-                  target_companion: 7,
-                  target_name: 'Ash',
-                  is_active: true,
-                  is_pending: false,
-                  is_soul_tether: false,
-                  soul_tether_role: '',
-                  absolute_value: 10,
-                  developed_absolute_value: 10,
-                  affection: 5,
-                  updated_at: '2025-01-01T00:00:00Z',
-                },
-              ]),
-          } as Response);
-        }
-        if (urlStr.includes('/api/relationships/relationships/20/')) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(RELATIONSHIP_DETAIL_RESPONSE),
-          } as Response);
-        }
-        if (urlStr.includes('/api/personas/?character_sheet=9')) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(PERSONA_RESPONSE),
-          } as Response);
-        }
-        // Relationship 21 (companion-targeted) is filtered out before any detail
-        // or persona lookup, so nothing should hit that URL; fall through to a
-        // failure response that would fail the test if it were ever requested.
-        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) } as Response);
-      });
+    it('does not offer a companion-targeted tie as a partner (#3575)', async () => {
+      mockTieApis([...TIES_RESPONSE.results, COMPANION_TIE]);
 
       const summary = makeSummary({
         weaving_eligibility: { RELATIONSHIP_TRACK: true },
-        weavable_relationship_track_ids: [7],
+        weavable_relationship_type_ids: [7],
       });
       render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
         wrapper: createWrapper(),
@@ -587,6 +539,30 @@ describe('WeaveThreadWizard', () => {
       });
       expect(screen.queryByTestId('partner-option-7')).not.toBeInTheDocument();
       expect(screen.queryByText('Ash')).not.toBeInTheDocument();
+    });
+
+    it('does not offer a tie whose only weavable label has ended', async () => {
+      mockTieApis([
+        {
+          ...TIES_RESPONSE.results[0],
+          labels: [{ ...TIES_RESPONSE.results[0].labels[0], ended_at: '1012-06-01T00:00:00Z' }],
+        },
+      ]);
+
+      const summary = makeSummary({
+        weaving_eligibility: { RELATIONSHIP_TRACK: true },
+        weavable_relationship_type_ids: [7],
+      });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+
+      fireEvent.click(screen.getByTestId('kind-button-RELATIONSHIP_TRACK'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('wizard-step-2-partner')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('partner-option-9')).not.toBeInTheDocument();
     });
   });
 

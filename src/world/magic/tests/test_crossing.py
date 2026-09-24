@@ -763,13 +763,16 @@ class AnchorLabelTests(TestCase):
             level=2,
         )
 
-    def test_track_anchor_label_includes_partner_and_track(self) -> None:
+    def test_track_anchor_label_includes_partner_and_type(self) -> None:
         from world.magic.crossing.handlers import _anchor_label_for
+        from world.relationships.factories import RelationshipLabelFactory, RelationshipTypeFactory
+
+        rel_type = RelationshipTypeFactory(name="Loyalty")
+        RelationshipLabelFactory(relationship=self.track_thread.target_relationship, type=rel_type)
 
         label = _anchor_label_for(self.track_thread)
         self.assertIn("bond with", label)
-        track = self.track_thread.target_relationship_track
-        self.assertIn(track.track.name, label)
+        self.assertIn(rel_type.name, label)
 
     def test_capstone_anchor_label_includes_title_and_partner(self) -> None:
         from world.magic.crossing.handlers import _anchor_label_for
@@ -779,6 +782,31 @@ class AnchorLabelTests(TestCase):
         cap = self.capstone_thread.target_capstone
         self.assertIn(cap.title, label)
 
+    def test_track_anchor_label_skips_an_ended_label(self) -> None:
+        """An ENDED label is never chosen while a later OPEN label exists (review
+        round 2, N2) -- the ``ended_at`` filter moved from SQL to hand-rolled
+        Python in ``_anchor_label_for`` and nothing previously proved it fires."""
+        from django.utils import timezone
+
+        from world.magic.crossing.handlers import _anchor_label_for
+        from world.relationships.factories import RelationshipLabelFactory, RelationshipTypeFactory
+
+        ended_type = RelationshipTypeFactory(name="Rivalry")
+        RelationshipLabelFactory(
+            relationship=self.track_thread.target_relationship,
+            type=ended_type,
+            ended_at=timezone.now(),
+        )
+        open_type = RelationshipTypeFactory(name="Loyalty")
+        RelationshipLabelFactory(
+            relationship=self.track_thread.target_relationship,
+            type=open_type,
+        )
+
+        label = _anchor_label_for(self.track_thread)
+        self.assertIn(open_type.name, label)
+        self.assertNotIn(ended_type.name, label)
+
     def test_track_anchor_label_names_a_companion_partner(self) -> None:
         from world.companions.factories import CompanionFactory
         from world.magic.constants import TargetKind
@@ -786,25 +814,27 @@ class AnchorLabelTests(TestCase):
         from world.magic.factories import ThreadFactory
         from world.relationships.factories import (
             CharacterRelationshipFactory,
-            RelationshipTrackProgressFactory,
+            RelationshipLabelFactory,
+            RelationshipTypeFactory,
         )
 
         companion = CompanionFactory(owner=self.sheet, name="Ash")
         relationship = CharacterRelationshipFactory(
-            source=self.sheet, target=None, target_companion=companion, is_pending=False
+            source=self.sheet, target=None, target_companion=companion
         )
-        progress = RelationshipTrackProgressFactory(relationship=relationship)
+        rel_type = RelationshipTypeFactory(name="Bonded")
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
         thread = ThreadFactory(
             owner=self.sheet,
             resonance=self.resonance,
             level=2,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
-            target_relationship_track=progress,
+            target_relationship=relationship,
             target_trait=None,
         )
         label = _anchor_label_for(thread)
         self.assertIn("Ash", label)
-        self.assertIn(progress.track.name, label)
+        self.assertIn(rel_type.name, label)
 
 
 # ---------------------------------------------------------------------------

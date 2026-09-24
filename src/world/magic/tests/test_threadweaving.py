@@ -23,7 +23,7 @@ from world.magic.factories import (
     ThreadWeavingUnlockFactory,
 )
 from world.magic.models import ThreadWeavingUnlock
-from world.relationships.factories import RelationshipTrackFactory
+from world.relationships.factories import RelationshipTypeFactory
 from world.traits.factories import TraitFactory
 
 
@@ -61,7 +61,7 @@ class ThreadWeavingUnlockPartialUniqueTests(TestCase):
         ThreadWeavingUnlockFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             unlock_trait=None,
-            unlock_track=RelationshipTrackFactory(name="Consecrated"),
+            unlock_type=RelationshipTypeFactory(name="Consecrated"),
         )
 
 
@@ -81,11 +81,11 @@ class ThreadWeavingUnlockDisplayNameTests(TestCase):
         self.assertEqual(u.display_name, "ThreadWeaving: Gift of Blade")
 
     def test_relationship_track_display_name(self) -> None:
-        track = RelationshipTrackFactory(name="Romantic")
+        track = RelationshipTypeFactory(name="Romantic")
         u = ThreadWeavingUnlockFactory(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             unlock_trait=None,
-            unlock_track=track,
+            unlock_type=track,
         )
         self.assertEqual(u.display_name, "ThreadWeaving: Romantic bonds")
 

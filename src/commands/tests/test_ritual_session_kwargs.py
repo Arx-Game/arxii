@@ -130,7 +130,7 @@ class RitualJoinKwargsParseTests(TestCase):
             CmdRitual,
             self.initiator,
             f"draft accept_soul_tether invite=JoinPartner role=sinner "
-            f"resonance={self.resonance.name} writeup=test",
+            f"resonance={self.resonance.name}",
         )
         cmd.caller.search = MagicMock(return_value=self.partner)
         cmd.func()

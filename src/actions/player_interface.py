@@ -581,14 +581,14 @@ def _fury_tier_options() -> tuple[FuryTierOption, ...]:
 
 
 def _eligible_fury_anchors(character: ObjectDB, sheet: CharacterSheet) -> tuple[AnchorOption, ...]:
-    """Consented, active relationships whose bond can carry a provocation (#1543)."""
+    """Active relationships whose bond can carry a provocation (#1543, #3957)."""
     from world.magic.services.fury import provocation_cap  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     anchors: list[AnchorOption] = []
-    for rel in CharacterRelationship.objects.filter(
-        source=sheet, is_active=True, is_pending=False
-    ).select_related("target", "target__character"):
+    for rel in CharacterRelationship.objects.filter(source=sheet, is_active=True).select_related(
+        "target", "target__character"
+    ):
         anchor_sheet = rel.target
         cap = provocation_cap(character, anchor_sheet)
         if cap < 1:
@@ -1603,26 +1603,27 @@ def _load_category_consent_data(
     category: object | None,
     actor_tenure: object | None,
 ) -> _CategoryConsentData:
-    """Batch-load the per-category consent data for a participant sweep (#2170).
+    """Batch-load the per-category consent data for a participant sweep (#2170, #3957).
 
     Returns a :class:`_CategoryConsentData` whose ``effective_mode_by_pref`` maps a
     preference id to its *resolved* ConsentMode after tree inheritance (the nearest rule up
     the category's ancestor chain, else the root's ``default_mode``), ``root_default_mode``
     holds that root default for owner tenures with no preference row, and whose four
     owner-id sets record which owner tenures have (respectively) whitelisted, blacklisted,
-    friended, or mutually-rivalled *actor_tenure*. Everything is empty when *category* is
-    ``None`` (uncategorized → master switch only). Rules and whitelist/blacklist are loaded
-    across the whole ancestor chain in one query each, independent of participant count;
-    friendship/rivalry are category-independent. This mirrors
-    :func:`world.consent.services.consent_blocks_targeting` so the picker sweep and the
-    per-tenure gate agree.
+    friended *actor_tenure*, or hold a mutual hostile relationship label with it
+    (``world.relationships.services.mutual_hostile``, #3957 — the RIVALS predicate).
+    Everything is empty when *category* is ``None`` (uncategorized → master switch only).
+    Rules and whitelist/blacklist are loaded across the whole ancestor chain in one query
+    each, independent of participant count; friendship/mutual-hostile-labels are
+    category-independent. This mirrors :func:`world.consent.services.consent_blocks_targeting`
+    so the picker sweep and the per-tenure gate agree.
     """
     from world.consent.models import (  # noqa: PLC0415
         SocialConsentBlacklist,
         SocialConsentCategoryRule,
         SocialConsentWhitelist,
     )
-    from world.scenes.models import Friendship, Rivalry  # noqa: PLC0415
+    from world.scenes.models import Friendship  # noqa: PLC0415
 
     effective_mode_by_pref: dict[int, str] = {}
     whitelisted_owner_ids: set[int] = set()
@@ -1684,19 +1685,44 @@ def _load_category_consent_data(
                 friend_tenure=actor_tenure,
             ).values_list("friender_tenure_id", flat=True)
         )
-        # Mutual rivalry (#2170, double opt-in): owner tenures that declared the actor a
-        # rival AND whom the actor declared a rival — the intersection is the RIVALS set.
-        owners_declaring_actor = set(
-            Rivalry.objects.filter(
-                rivaler_tenure_id__in=tenure_ids, rival_tenure=actor_tenure
-            ).values_list("rivaler_tenure_id", flat=True)
+        # Mutual hostile labels (#3957, was Rivalry double opt-in): owner tenures whose
+        # sheet holds a hostile label toward the actor's sheet AND whom the actor's sheet
+        # holds a hostile label toward — the intersection is the RIVALS set. Two label
+        # queries (bounded, independent of tenure_ids' size) rather than one per tenure.
+        from django.db.models import F, Q  # noqa: PLC0415
+
+        from world.relationships.constants import TypeValence  # noqa: PLC0415
+        from world.relationships.models import RelationshipLabel  # noqa: PLC0415
+        from world.relationships.services import known_label_q  # noqa: PLC0415
+        from world.roster.models import RosterTenure  # noqa: PLC0415
+
+        actor_sheet = actor_tenure.roster_entry.character_sheet
+        hostile = Q(type__valence=TypeValence.HOSTILE)
+        # known_label_q's target_ref=None leaves the target unconstrained (any target) while
+        # still applying its known-ness checks — the actor's own hostile labels, any direction.
+        actor_hostile_target_ids = set(
+            RelationshipLabel.objects.filter(known_label_q(actor_sheet.pk, None) & hostile)
+            .order_by()
+            .values_list("relationship__target_id", flat=True)
         )
-        owners_actor_declared = set(
-            Rivalry.objects.filter(
-                rivaler_tenure=actor_tenure, rival_tenure_id__in=tenure_ids
-            ).values_list("rival_tenure_id", flat=True)
+        # The mirror "any source, target fixed" case has no native shortcut (only the target
+        # slot takes None) — F("relationship__source_id") self-compares to the same effect.
+        hostile_toward_actor_source_ids = set(
+            RelationshipLabel.objects.filter(
+                known_label_q(F("relationship__source_id"), actor_sheet.pk) & hostile
+            )
+            .order_by()
+            .values_list("relationship__source_id", flat=True)
         )
-        rival_owner_ids = owners_declaring_actor & owners_actor_declared
+        mutual_hostile_sheet_ids = actor_hostile_target_ids & hostile_toward_actor_source_ids
+        # One query: map the mutually-hostile sheet ids back to the owning tenures.
+        rival_owner_ids = {
+            tenure_id
+            for tenure_id, sheet_id in RosterTenure.objects.filter(pk__in=tenure_ids).values_list(
+                "pk", "roster_entry__character_sheet_id"
+            )
+            if sheet_id in mutual_hostile_sheet_ids
+        }
     return _CategoryConsentData(
         effective_mode_by_pref,
         root_default_mode,

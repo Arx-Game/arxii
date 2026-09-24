@@ -18505,40 +18505,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/relationships/hybrid-types/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description List and retrieve hybrid relationship types with nested requirements. */
-    get: operations['relationships_hybrid_types_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/hybrid-types/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description List and retrieve hybrid relationship types with nested requirements. */
-    get: operations['relationships_hybrid_types_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/relationships/relationship-capstones/': {
     parameters: {
       query?: never;
@@ -18547,7 +18513,7 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows (#3957).
      *
      *     Used by the frontend to populate the Soul Tether ritual perform form's
      *     capstone picker. The ``?other_character_sheet_id=`` filter narrows to
@@ -18570,174 +18536,13 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows (#3957).
      *
      *     Used by the frontend to populate the Soul Tether ritual perform form's
      *     capstone picker. The ``?other_character_sheet_id=`` filter narrows to
      *     capstones whose parent relationship involves a specific target character.
      */
     get: operations['relationships_relationship_capstones_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Mutation actions for relationship-building verbs, plus a narrow list route.
-     *
-     *     Detail/browsing of relationship state in general remains on
-     *     CharacterRelationshipViewSet; the ``list`` action here exists only to feed
-     *     the commend button on the requesting user's own writeups-about-them (the
-     *     subject side of ``give_writeup_kudos``'s rule) — it is not a general
-     *     writeup browser. Scoped to writeups where the caller's character is the
-     *     parent relationship's ``target`` (the writeup's commendable subject) and
-     *     visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
-     *     here regardless of subject. Subject eligibility is tenure-based (current,
-     *     un-ended ``RosterTenure``, mirroring ``get_account_for_character``), not
-     *     Evennia's live-puppet ``db_account`` field, so a subject browsing while
-     *     not currently puppeting the character still sees writeups they can
-     *     legally commend. ``?subject_character=<CharacterSheet pk>`` narrows to one
-     *     owned character sheet (see ``RelationshipUpdateFilter``) for accounts with
-     *     several owned characters.
-     */
-    get: operations['relationships_relationship_updates_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/capstone/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Record a monumental relationship capstone. */
-    post: operations['relationships_relationship_updates_capstone_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/complaint/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description File a bad-faith-RP complaint against a writeup for staff triage. */
-    post: operations['relationships_relationship_updates_complaint_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/develop/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Solidify temporary points into permanent developed points. */
-    post: operations['relationships_relationship_updates_develop_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/first_impression/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Record a first impression toward another character. */
-    post: operations['relationships_relationship_updates_first_impression_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/kudos/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Commend a shared relationship writeup on behalf of its subject. */
-    post: operations['relationships_relationship_updates_kudos_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/redistribute/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Move developed points between tracks in an existing relationship. */
-    post: operations['relationships_relationship_updates_redistribute_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/relationships/relationship-updates/timeline/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Merged Update/Development/Capstone writeup history (#2159).
-     *
-     *     Exactly one of `about_character` or `relationship` must be provided (400
-     *     otherwise); see ``_timeline_about_character_queryset`` /
-     *     ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
-     *     are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
-     *     viewset's ``pagination_class``.
-     */
-    get: operations['relationships_relationship_updates_timeline_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -18753,7 +18558,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve character relationships. */
+    /** @description The caller's own outbound sides, always shaped as their OWNER view. */
     get: operations['relationships_relationships_list'];
     put?: never;
     post?: never;
@@ -18770,7 +18575,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve character relationships. */
+    /**
+     * @description One side of a tie, shaped for whoever is asking.
+     *
+     *     Bypasses ``get_queryset()`` (own-sides-only) deliberately: any authenticated
+     *     viewer may look up any side by pk, and ``tie_audience`` + ``third_party_can_see``
+     *     decide what comes back — a third party with no open Public label gets a 404, not
+     *     a 403, so a tie's mere existence is never leaked. A companion-target side 404s for
+     *     anyone but the owner or staff, regardless of label visibility.
+     */
     get: operations['relationships_relationships_retrieve'];
     put?: never;
     post?: never;
@@ -18780,15 +18593,15 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/relationships/tracks/': {
+  '/api/relationships/relationships/{id}/stream/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve relationship tracks with nested tiers. */
-    get: operations['relationships_tracks_list'];
+    /** @description Journal entries and shared scenes between the two sides, viewer-filtered. */
+    get: operations['relationships_relationships_stream_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -18797,15 +18610,151 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/relationships/tracks/{id}/': {
+  '/api/relationships/relationships/advance/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve relationship tracks with nested tiers. */
-    get: operations['relationships_tracks_retrieve'];
+    get?: never;
+    put?: never;
+    /** @description Claim the next tier with a capstone journal entry and XP (#3957). */
+    post: operations['relationships_relationships_advance_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationships/allocation/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Set this week's AP toward one side of a tie (#3957). */
+    post: operations['relationships_relationships_allocation_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationships/awareness/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Move a label's awareness forward (#3957). */
+    post: operations['relationships_relationships_awareness_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationships/declare/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Name a type on the caller's side of a tie (#3957). */
+    post: operations['relationships_relationships_declare_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationships/end/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description End an open label; it shows as former from then on (#3957). */
+    post: operations['relationships_relationships_end_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationships/shift/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Change one label into another (#3957). */
+    post: operations['relationships_relationships_shift_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationships/summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Set the player's own paragraph on one side of a tie (#3957). */
+    post: operations['relationships_relationships_summary_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve the catalogue of tie types (#3957). */
+    get: operations['relationships_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve the catalogue of tie types (#3957). */
+    get: operations['relationships_types_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -18850,59 +18799,6 @@ export interface paths {
     head?: never;
     /** @description ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5). */
     patch: operations['risk_calibrations_partial_update'];
-    trace?: never;
-  };
-  '/api/rivals/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description The requesting player's rival declarations: list, declare, withdraw (#2170).
-     *
-     *     Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
-     *     RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
-     *     removes only your own side.
-     */
-    get: operations['rivals_list'];
-    put?: never;
-    /**
-     * @description The requesting player's rival declarations: list, declare, withdraw (#2170).
-     *
-     *     Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
-     *     RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
-     *     removes only your own side.
-     */
-    post: operations['rivals_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/rivals/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /**
-     * @description The requesting player's rival declarations: list, declare, withdraw (#2170).
-     *
-     *     Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
-     *     RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
-     *     removes only your own side.
-     */
-    delete: operations['rivals_destroy'];
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   '/api/room-features/defenses/fund-ward/': {
@@ -24617,14 +24513,12 @@ export interface components {
      *     ``partner_sheet_id`` identifies the partner's character sheet.
      *     ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
      *     ``resonance_id`` selects the resonance for the Sinner's Thread.
-     *     ``writeup`` is the narrative description of the bond (20+ chars).
      */
     AcceptSoulTetherRequest: {
       actor_sheet_id: number;
       partner_sheet_id: number;
       sinner_role: components['schemas']['SinnerRoleEnum'];
       resonance_id: number;
-      writeup: string;
     };
     /**
      * @description Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
@@ -24863,6 +24757,11 @@ export interface components {
       probing_threshold?: number | null;
       position_id?: number | null;
     };
+    AdvanceWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      journal_entry_id: number;
+    };
     /** @description Schema-only shape of the beat line in an aftermath digest (#3551). */
     AftermathBeat: {
       outcome: string;
@@ -24911,6 +24810,11 @@ export interface components {
       readonly source_note: string;
       /** Format: date-time */
       readonly recorded_at: string;
+    };
+    AllocationWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      ap_amount: number;
     };
     AlmanachHouseAspect: {
       definition: string;
@@ -25211,6 +25115,14 @@ export interface components {
       offer_id: number;
       accept: boolean;
     };
+    /**
+     * @description * `owner` - Owner
+     *     * `other_side` - Other side
+     *     * `third_party` - Third party
+     *     * `staff` - Staff
+     * @enum {string}
+     */
+    AudienceEnum: 'owner' | 'other_side' | 'third_party' | 'staff';
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     AuthoredSecret: {
       readonly id: number;
@@ -25287,6 +25199,17 @@ export interface components {
       readonly technique_name: string;
       readonly effective_cost: number;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
+    };
+    /**
+     * @description * `private` - Private
+     *     * `clandestine` - Clandestine
+     *     * `public` - Public
+     * @enum {string}
+     */
+    AwarenessEnum: 'private' | 'clandestine' | 'public';
+    AwarenessWriteRequest: {
+      label_id: number;
+      awareness: components['schemas']['AwarenessEnum'];
     };
     /**
      * @description * `TONE` - Tone
@@ -26589,28 +26512,6 @@ export interface components {
       readonly name: string;
       readonly description: string;
     };
-    /** @description Serializer for creating a relationship capstone event. */
-    CapstoneWrite: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default shared */
-      visibility: components['schemas']['VisibilityFdaEnum'];
-    };
-    /** @description Serializer for creating a relationship capstone event. */
-    CapstoneWriteRequest: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default shared */
-      visibility: components['schemas']['VisibilityFdaEnum'];
-    };
     /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
       resonance_id: number;
@@ -27349,73 +27250,6 @@ export interface components {
        */
       balance?: number;
     };
-    /** @description Full serializer for CharacterRelationship detail view. */
-    CharacterRelationship: {
-      readonly id: number;
-      /** @description The character who holds this relationship */
-      readonly source: number;
-      readonly source_name: string;
-      /** @description The character this relationship is about; null when target_companion is set (#3575). Exactly one of target / target_companion is set. */
-      readonly target: number | null;
-      /** @description The bonded companion this relationship is about (#3575); null when target is set. Only the companion's owner may hold such a row. */
-      readonly target_companion: number | null;
-      readonly target_name: string;
-      /** @description Whether this relationship is currently active */
-      readonly is_active: boolean;
-      /** @description Whether this relationship is awaiting mutual consent */
-      readonly is_pending: boolean;
-      /** @description Whether the displayed track/tier differs from the actual values */
-      readonly is_deceitful: boolean;
-      readonly track_progress: components['schemas']['RelationshipTrackProgress'][];
-      readonly absolute_value: number;
-      readonly developed_absolute_value: number;
-      /** Format: double */
-      readonly mechanical_bonus: number;
-      readonly affection: number;
-      /**
-       * Format: date-time
-       * @description When this relationship was created
-       */
-      readonly created_at: string;
-      /**
-       * Format: date-time
-       * @description When this relationship was last modified
-       */
-      readonly updated_at: string;
-    };
-    /** @description Lightweight serializer for CharacterRelationship list view. */
-    CharacterRelationshipList: {
-      readonly id: number;
-      /** @description The character who holds this relationship */
-      readonly source: number;
-      readonly source_name: string;
-      /** @description The character this relationship is about; null when target_companion is set (#3575). Exactly one of target / target_companion is set. */
-      readonly target: number | null;
-      /** @description The bonded companion this relationship is about (#3575); null when target is set. Only the companion's owner may hold such a row. */
-      readonly target_companion: number | null;
-      readonly target_name: string;
-      /** @description Whether this relationship is currently active */
-      readonly is_active: boolean;
-      /** @description Whether this relationship is awaiting mutual consent */
-      readonly is_pending: boolean;
-      /** @description Whether this relationship is a soul-tether bond (Spec B mechanics). */
-      readonly is_soul_tether: boolean;
-      /**
-       * @description Soul-tether role (SINNER or SINEATER); empty when not a tether.
-       *
-       *     * `SINEATER` - Sineater
-       *     * `SINNER` - Sinner
-       */
-      readonly soul_tether_role: components['schemas']['SoulTetherRoleEnum'];
-      readonly absolute_value: number;
-      readonly developed_absolute_value: number;
-      readonly affection: number;
-      /**
-       * Format: date-time
-       * @description When this relationship was last modified
-       */
-      readonly updated_at: string;
-    };
     /** @description Serialize character data for roster entry views. */
     CharacterRequest: {
       name: string;
@@ -27919,13 +27753,6 @@ export interface components {
         [key: string]: unknown;
       }[];
     };
-    /**
-     * @description * `positive` - Positive
-     *     * `neutral` - Neutral
-     *     * `negative` - Negative
-     * @enum {string}
-     */
-    ColoringEnum: 'positive' | 'neutral' | 'negative';
     /**
      * @description * `win` - Win
      *     * `loss` - Loss
@@ -28893,6 +28720,13 @@ export interface components {
      * @enum {string}
      */
     DecisionEnum: 'accept' | 'deny';
+    DeclareWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      type_id: number;
+      /** @default private */
+      awareness: components['schemas']['AwarenessEnum'];
+    };
     /**
      * @description * `none` - None
      *     * `low` - Low
@@ -28989,6 +28823,14 @@ export interface components {
      * @enum {string}
      */
     DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
+    DepthBreakdown: {
+      tier: number;
+      scenes: number;
+      invested: number;
+      their_added_depth: number;
+      affection: number | null;
+      conflict: number | null;
+    };
     /**
      * @description An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
      *
@@ -28999,32 +28841,6 @@ export interface components {
       id: number;
       name: string;
       influence: number | null;
-    };
-    /** @description Serializer for creating a relationship development update. */
-    DevelopmentWrite: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default 0 */
-      xp_awarded: number;
-      /** @default private */
-      visibility: components['schemas']['VisibilityFdaEnum'];
-    };
-    /** @description Serializer for creating a relationship development update. */
-    DevelopmentWriteRequest: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default 0 */
-      xp_awarded: number;
-      /** @default private */
-      visibility: components['schemas']['VisibilityFdaEnum'];
     };
     /**
      * @description * `trivial` - Trivial
@@ -30612,6 +30428,15 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /**
+     * @description * `heart` - Heart
+     *     * `company` - Company
+     *     * `contest` - Contest
+     *     * `blood_and_oath` - Blood and oath
+     *     * `teaching` - Teaching
+     * @enum {string}
+     */
+    FamilyEnum: 'heart' | 'company' | 'contest' | 'blood_and_oath' | 'teaching';
     /** @description Serializer for a family's authored kind (#3617). */
     FamilyKind: {
       readonly id: number;
@@ -30750,32 +30575,6 @@ export interface components {
      * @enum {string}
      */
     FieldEnum: 'background' | 'never_do' | 'protect' | 'fear';
-    /** @description Serializer for creating a first impression. */
-    FirstImpressionWrite: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default neutral */
-      coloring: components['schemas']['ColoringEnum'];
-      /** @default private */
-      visibility: components['schemas']['VisibilityFdaEnum'];
-    };
-    /** @description Serializer for creating a first impression. */
-    FirstImpressionWriteRequest: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default neutral */
-      coloring: components['schemas']['ColoringEnum'];
-      /** @default private */
-      visibility: components['schemas']['VisibilityFdaEnum'];
-    };
     /** @description One axis a fixture kind mitigates (negative value = mitigation). */
     FixtureAffinity: {
       key: string;
@@ -31738,8 +31537,7 @@ export interface components {
     GrievanceOption: {
       readonly id: number;
       readonly label: string;
-      readonly points: number;
-      readonly track: string;
+      readonly conflict_points: number;
     };
     /** @description Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036). */
     GroupBallotState: {
@@ -32244,25 +32042,6 @@ export interface components {
       /** Format: date-time */
       until: string;
       explanation: string;
-    };
-    /** @description Serializer for HybridRelationshipType with nested requirements. */
-    HybridRelationshipType: {
-      readonly id: number;
-      /** @description Hybrid type name (e.g., 'Rivalry', 'Devotion') */
-      readonly name: string;
-      /** @description URL-safe identifier for this hybrid type */
-      readonly slug: string;
-      /** @description Description of what this hybrid type represents */
-      readonly description: string;
-      readonly requirements: components['schemas']['HybridRequirement'][];
-    };
-    /** @description Serializer for a single track/tier requirement on a hybrid type. */
-    HybridRequirement: {
-      /** @description The track that must meet the minimum tier */
-      readonly track: number;
-      readonly track_name: string;
-      /** @description The minimum tier number that must be reached on this track */
-      readonly minimum_tier: number;
     };
     /**
      * @description * `table` - Table
@@ -33132,13 +32911,6 @@ export interface components {
       readonly parent_names: string[];
     };
     /**
-     * @description * `update` - update
-     *     * `development` - development
-     *     * `capstone` - capstone
-     * @enum {string}
-     */
-    Kind4adEnum: 'update' | 'development' | 'capstone';
-    /**
      * @description * `wall` - Wall
      *     * `gate` - Gate
      *     * `battlement` - Battlement
@@ -33246,6 +33018,9 @@ export interface components {
       | 'cousin'
       | 'past-incarnation'
       | 'later-incarnation';
+    LabelWriteRequest: {
+      label_id: number;
+    };
     /** @description A realm's whole ladder (mirrors ``almanach_reads.LadderPayload``). */
     LadderPayload: {
       rows: components['schemas']['LadderRow'][];
@@ -36693,21 +36468,6 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['CharacterCovenantRole'][];
     };
-    PaginatedCharacterRelationshipListList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['CharacterRelationshipList'][];
-    };
     PaginatedCheckProposalDetailList: {
       /** @example 123 */
       count: number;
@@ -38412,7 +38172,7 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['RelationshipCapstone'][];
     };
-    PaginatedRelationshipTimelineEntryList: {
+    PaginatedRelationshipTypeList: {
       /** @example 123 */
       count: number;
       /**
@@ -38425,22 +38185,7 @@ export interface components {
        * @example http://api.example.org/accounts/?page=2
        */
       previous?: string | null;
-      results: components['schemas']['RelationshipTimelineEntry'][];
-    };
-    PaginatedRelationshipUpdateList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['RelationshipUpdate'][];
+      results: components['schemas']['RelationshipType'][];
     };
     PaginatedResonanceGrantList: {
       /** @example 123 */
@@ -38486,21 +38231,6 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Ritual'][];
-    };
-    PaginatedRivalryList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['Rivalry'][];
     };
     PaginatedRoomAlarmDetailsList: {
       /** @example 123 */
@@ -39251,6 +38981,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ThreatPool'][];
+    };
+    PaginatedTieList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Tie'][];
     };
     PaginatedTransitionList: {
       /** @example 123 */
@@ -41151,7 +40896,7 @@ export interface components {
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
        *     * `FACET` - Facet
-       *     * `RELATIONSHIP_TRACK` - Relationship Track
+       *     * `RELATIONSHIP_TRACK` - Relationship
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
        *     * `MANTLE` - Mantle
@@ -43007,30 +42752,6 @@ export interface components {
      * @enum {string}
      */
     RecordedProfileStatusEnum: 'commissioned' | 'recorded';
-    /** @description Serializer for redistributing relationship points between tracks. */
-    RedistributeWrite: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      source_track_id: number;
-      target_track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default private */
-      visibility: components['schemas']['VisibilityFdaEnum'];
-    };
-    /** @description Serializer for redistributing relationship points between tracks. */
-    RedistributeWriteRequest: {
-      target_persona_id?: number;
-      target_companion_id?: number;
-      source_track_id: number;
-      target_track_id: number;
-      points: number;
-      title: string;
-      writeup: string;
-      /** @default private */
-      visibility: components['schemas']['VisibilityFdaEnum'];
-    };
     /**
      * @description * `story_resolved` - Story resolved
      *     * `chapter_reached` - Chapter reached or passed
@@ -43060,43 +42781,18 @@ export interface components {
       | 'grandparent'
       | 'ward'
       | 'position';
-    /** @description Serializer for relationship capstone events. */
     RelationshipCapstone: {
       readonly id: number;
-      /** @description The character who recorded this capstone */
-      readonly author: number;
-      readonly author_name: string;
-      /** @description Title of the monumental moment */
+      readonly relationship: number;
+      readonly journal_entry: number | null;
+      readonly journal_entry_title: string;
       readonly title: string;
-      /** @description Narrative description of the capstone event */
-      readonly writeup: string;
-      /** @description The track that gains points and capacity */
-      readonly track: number;
-      readonly track_name: string;
-      /** @description Points added to both capacity and developed_points */
-      readonly points: number;
-      /**
-       * @description Who can see this capstone
-       *
-       *     * `private` - Private
-       *     * `shared` - Shared
-       *     * `gossip` - Gossip
-       *     * `public` - Public
-       */
-      readonly visibility: components['schemas']['VisibilityFdaEnum'];
-      /** @description Optional scene this capstone is based on */
-      readonly linked_scene: number | null;
-      /**
-       * Format: date-time
-       * @description When this capstone was recorded
-       */
+      readonly tier_claimed: number;
+      readonly xp_spent: number;
+      readonly is_ritual_capstone: boolean;
+      /** Format: date-time */
       readonly created_at: string;
-      /** @description Return pre-annotated kudos count, or fall back to a query. */
-      readonly kudos_count: number;
-      /** @description Return True if the request user has kudosed this capstone. */
-      readonly viewer_has_kudosed: boolean;
     };
-    /** @description Serializer for RelationshipCondition lookup table. */
     RelationshipCondition: {
       readonly id: number;
       /** @description Condition name (e.g., 'Attracted To', 'Fears', 'Trusts') */
@@ -43105,6 +42801,30 @@ export interface components {
       readonly description: string;
       /** @description Order for display purposes (lower values appear first) */
       readonly display_order: number;
+    };
+    /**
+     * @description One label, as a flat dict built by ``reads.label_payload`` (#3957 review).
+     *
+     *     No ``source=`` indirection: the payload builder — not the model instance — computes
+     *     every audience-gated value (``replaced_type_name``, ``note``, ``is_mutual``), since a
+     *     plain model-sourced field can't express "show this only when it clears the viewer's
+     *     audience." Passing a ``RelationshipLabel`` instance here would also mean stamping
+     *     computed attributes onto an idmapper-shared row; a dict avoids that entirely.
+     */
+    RelationshipLabel: {
+      id: number;
+      type: number;
+      type_name: string;
+      type_family: string;
+      type_valence: string;
+      awareness: string;
+      /** Format: date-time */
+      since: string;
+      /** Format: date-time */
+      ended_at: string | null;
+      replaced_type_name: string | null;
+      note: string;
+      is_mutual: boolean;
     };
     RelationshipLine: {
       other_being: number;
@@ -43126,120 +42846,28 @@ export interface components {
      * @enum {string}
      */
     RelationshipLineValenceEnum: 'ally' | 'rival' | 'feud' | 'unknown';
-    /** @description Serializer for RelationshipTier. */
-    RelationshipTier: {
+    RelationshipType: {
       readonly id: number;
-      /** @description Tier name (e.g., 'Wary', 'Acquaintance', 'Confidant') */
+      /** @description Type name, e.g. 'Rival'. */
       readonly name: string;
-      /** @description Numeric rank of this tier within the track (0 = lowest) */
-      readonly tier_number: number;
-      /** @description Minimum points required to reach this tier */
-      readonly point_threshold: number;
-      /** @description Narrative description of what this tier represents */
+      /** @description URL-safe identifier. */
+      readonly slug: string;
+      /** @description The one line shown in the picker. PLACEHOLDER copy. */
       readonly description: string;
+      readonly family: components['schemas']['FamilyEnum'];
+      readonly valence: components['schemas']['RelationshipTypeValenceEnum'];
+      /** @description The type the other side must hold for this label to be mutual; null = itself. */
+      readonly counterpart: number | null;
+      readonly counterpart_name: string;
+      readonly display_order: number;
     };
     /**
-     * @description One row of the merged Update/Development/Capstone writeup timeline (#2159).
-     *
-     *     Serializes a plain dict row (not a model instance) — projected by
-     *     ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
-     *     which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
-     *     ``RelationshipCapstone`` rows the same shared column shape regardless of which
-     *     of the three writeup models a given row came from.
+     * @description * `warm` - Warm
+     *     * `hostile` - Hostile
+     *     * `neutral` - Neutral
+     * @enum {string}
      */
-    RelationshipTimelineEntry: {
-      kind: components['schemas']['Kind4adEnum'];
-      id: number;
-      relationship: number;
-      author: number;
-      author_name: string;
-      track: number;
-      track_name: string;
-      title: string;
-      writeup: string;
-      visibility: components['schemas']['VisibilityFdaEnum'];
-      /** Format: date-time */
-      created_at: string;
-    };
-    /** @description Serializer for RelationshipTrack with nested tiers. */
-    RelationshipTrack: {
-      readonly id: number;
-      /** @description Track name (e.g., 'Trust', 'Respect', 'Rivalry', 'Fear') */
-      readonly name: string;
-      /** @description URL-safe identifier for this track */
-      readonly slug: string;
-      /** @description Description of what this track represents */
-      readonly description: string;
-      /**
-       * @description Whether this track represents positive or negative feelings
-       *
-       *     * `positive` - Positive
-       *     * `negative` - Negative
-       */
-      readonly sign: components['schemas']['SignEnum'];
-      readonly tiers: components['schemas']['RelationshipTier'][];
-    };
-    /** @description Serializer for track progress within a relationship. */
-    RelationshipTrackProgress: {
-      /** @description The track being progressed */
-      readonly track: number;
-      readonly track_name: string;
-      readonly track_sign: string;
-      /** @description Maximum developed points allowed on this track */
-      readonly capacity: number;
-      /** @description Permanent points earned through development and capstones */
-      readonly developed_points: number;
-      readonly temporary_points: number;
-      readonly total_points: number;
-      /** @description Return the name of the current tier, or None if no tier reached. */
-      readonly current_tier_name: string | null;
-    };
-    /** @description Serializer for relationship updates. */
-    RelationshipUpdate: {
-      readonly id: number;
-      /** @description The character who wrote this update */
-      readonly author: number;
-      readonly author_name: string;
-      /** @description Brief title summarizing the update */
-      readonly title: string;
-      /** @description Narrative writeup describing how the relationship developed */
-      readonly writeup: string;
-      /** @description The track that gains points from this update */
-      readonly track: number;
-      readonly track_name: string;
-      /** @description Points earned: increases capacity and sets temporary value base */
-      readonly points_earned: number;
-      /**
-       * @description Emotional coloring for first impressions (blank for normal updates)
-       *
-       *     * `positive` - Positive
-       *     * `neutral` - Neutral
-       *     * `negative` - Negative
-       */
-      readonly coloring: components['schemas']['ColoringEnum'];
-      /**
-       * @description Who can see this update
-       *
-       *     * `private` - Private
-       *     * `shared` - Shared
-       *     * `gossip` - Gossip
-       *     * `public` - Public
-       */
-      readonly visibility: components['schemas']['VisibilityFdaEnum'];
-      /** @description Whether this is a first impression update */
-      readonly is_first_impression: boolean;
-      /** @description Optional scene this update is based on */
-      readonly linked_scene: number | null;
-      /**
-       * Format: date-time
-       * @description When this update was created
-       */
-      readonly created_at: string;
-      /** @description Return pre-annotated kudos count, or fall back to a query. */
-      readonly kudos_count: number;
-      /** @description Return True if the request user has kudosed this update. */
-      readonly viewer_has_kudosed: boolean;
-    };
+    RelationshipTypeValenceEnum: 'warm' | 'hostile' | 'neutral';
     /**
      * @description Result of giving up a roster character (#3996): the entry is no longer
      *     the account's, so only its id and new shelf come back.
@@ -43725,46 +43353,6 @@ export interface components {
       state: string;
       /** Format: date-time */
       responded_at: string | null;
-    };
-    /**
-     * @description One of your rival declarations — target name, which character declared, mutual or pending.
-     *
-     *     ``is_mutual`` reports the #2170 double-opt-in state: True only once the other side has
-     *     declared you back (the list queryset annotates it; the create path stamps it explicitly).
-     *     ``rivaler_entry`` / ``rival_entry`` expose the RosterEntry pks web clients speak.
-     */
-    Rivalry: {
-      readonly id: number;
-      /** @description The declarer's tenure (this player's run of the character that named a rival). */
-      readonly rivaler_tenure: number;
-      /** @description The named rival's tenure (a specific player's run of that character). */
-      readonly rival_tenure: number;
-      readonly rivaler_entry: number;
-      readonly rival_entry: number;
-      readonly rival_name: string;
-      readonly is_mutual: boolean;
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /**
-     * @description Declare a rival by character (web-friendly): your declaring character + the target.
-     *
-     *     ``viewer`` / ``rival`` are ``RosterEntry`` pks; the view resolves each to its current tenure
-     *     (rivalries are tenure-based, mirroring ``FriendshipCreateSerializer``).
-     */
-    RivalryCreate: {
-      viewer: number;
-      rival: number;
-    };
-    /**
-     * @description Declare a rival by character (web-friendly): your declaring character + the target.
-     *
-     *     ``viewer`` / ``rival`` are ``RosterEntry`` pks; the view resolves each to its current tenure
-     *     (rivalries are tenure-based, mirroring ``FriendshipCreateSerializer``).
-     */
-    RivalryCreateRequest: {
-      viewer: number;
-      rival: number;
     };
     /**
      * @description * `informant` - Informant
@@ -44589,6 +44177,12 @@ export interface components {
     ShiftFormRequestRequest: {
       alternate_self_id: number;
     };
+    ShiftWriteRequest: {
+      label_id: number;
+      new_type_id: number;
+      /** @default  */
+      note: string;
+    };
     /**
      * @description Read-shape for a ship on the player's "My Ships" view.
      *
@@ -44639,12 +44233,6 @@ export interface components {
      * @enum {string}
      */
     SideRoleEnum: 'attacker' | 'defender';
-    /**
-     * @description * `positive` - Positive
-     *     * `negative` - Negative
-     * @enum {string}
-     */
-    SignEnum: 'positive' | 'negative';
     /** @description A piece's form (#2907): name + family + the prose noun the UI should use. */
     SilhouetteRead: {
       readonly id: number;
@@ -44978,12 +44566,6 @@ export interface components {
       resonance_id: number;
       scene_id: number;
     };
-    /**
-     * @description * `SINEATER` - Sineater
-     *     * `SINNER` - Sinner
-     * @enum {string}
-     */
-    SoulTetherRoleEnum: 'SINEATER' | 'SINNER';
     /** @description Minimal read-only representation of a SoulfrayWarning dataclass. */
     SoulfrayWarning: {
       readonly stage_name: string;
@@ -46322,6 +45904,11 @@ export interface components {
      * @enum {string}
      */
     SumTierEnum: 'minor' | 'fair' | 'great';
+    SummaryWriteRequest: {
+      target_persona_id?: number;
+      target_companion_id?: number;
+      summary: string;
+    };
     /** @description POST body for responding to a summons. */
     SummonsRespondRequest: {
       accept: boolean;
@@ -47058,7 +46645,7 @@ export interface components {
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
        *     * `FACET` - Facet
-       *     * `RELATIONSHIP_TRACK` - Relationship Track
+       *     * `RELATIONSHIP_TRACK` - Relationship
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
        *     * `MANTLE` - Mantle
@@ -47113,7 +46700,7 @@ export interface components {
       };
       weavable_traits: components['schemas']['_WeavableTrait'][];
       weavable_techniques: components['schemas']['_WeavableTechnique'][];
-      weavable_relationship_track_ids: number[];
+      weavable_relationship_type_ids: number[];
     };
     /**
      * @description Request serializer for POST /api/magic/thread-pull-preview/.
@@ -47163,7 +46750,7 @@ export interface components {
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
        *     * `FACET` - Facet
-       *     * `RELATIONSHIP_TRACK` - Relationship Track
+       *     * `RELATIONSHIP_TRACK` - Relationship
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
        *     * `MANTLE` - Mantle
@@ -47184,7 +46771,7 @@ export interface components {
      * @description * `TRAIT` - Trait
      *     * `TECHNIQUE` - Technique
      *     * `FACET` - Facet
-     *     * `RELATIONSHIP_TRACK` - Relationship Track
+     *     * `RELATIONSHIP_TRACK` - Relationship
      *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
      *     * `COVENANT_ROLE` - Covenant Role
      *     * `MANTLE` - Mantle
@@ -47243,6 +46830,68 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly description: string;
+    };
+    /** @description One side of a tie, shaped for the viewer's audience (built in the viewset). */
+    Tie: {
+      id: number;
+      source: number;
+      target: number | null;
+      target_companion: number | null;
+      target_name: string;
+      other_sheet_id: number | null;
+      other_entry_id: number | null;
+      audience: components['schemas']['AudienceEnum'];
+      is_own_side: boolean;
+      labels: components['schemas']['RelationshipLabel'][];
+      depth: number | null;
+      next_tier_threshold: number | null;
+      breakdown: components['schemas']['DepthBreakdown'] | null;
+      summary: string;
+      ap_this_week: number | null;
+      ap_pool: components['schemas']['TieApPool'] | null;
+      thread: components['schemas']['TieThread'] | null;
+      is_soul_tether: boolean;
+    };
+    /**
+     * @description The owner's whole weekly AP purse, as the budget line beside the tie's AP field
+     *     reads it (#3957): what is left to spend over what the week holds.
+     *
+     *     Not the same number as ``ap_this_week``, which is this ONE tie's standing order.
+     *     ``remaining`` is ``ActionPointPool.current`` — the spendable balance every other AP
+     *     surface means by "current" — and ``total`` is ``get_effective_maximum()``, so a
+     *     distinction that widens the purse widens this line too.
+     */
+    TieApPool: {
+      remaining: number;
+      total: number;
+    };
+    TieStreamItem: {
+      kind: string;
+      id: number;
+      title: string;
+      author_id: number | null;
+      author_name: string;
+      body: string;
+      is_public: boolean;
+      is_capstone: boolean;
+      capstone_tier: number | null;
+      created_at: string;
+      ic_timestamp: string | null;
+    };
+    TieThread: {
+      level: number;
+      resonance_name: string;
+    };
+    /**
+     * @description The honest shape every tie write action returns (#3957 review) — used only for the
+     *     OpenAPI schema; the views build this dict by hand (``success``/``message``/``data``).
+     */
+    TieWriteResult: {
+      success: boolean;
+      message: string;
+      data: {
+        [key: string]: unknown;
+      };
     };
     /**
      * @description * `1` - Cosmetic Touch
@@ -48277,14 +47926,6 @@ export interface components {
      */
     Visibility352Enum: 'default' | 'perceived_only' | 'very_private';
     /**
-     * @description * `private` - Private
-     *     * `shared` - Shared
-     *     * `gossip` - Gossip
-     *     * `public` - Public
-     * @enum {string}
-     */
-    VisibilityFdaEnum: 'private' | 'shared' | 'gossip' | 'public';
-    /**
      * @description * `public` - Public
      *     * `private` - Private
      *     * `characters` - Specific Characters
@@ -48810,57 +48451,6 @@ export interface components {
     WorshippedBeingRefRequest: {
       name: string;
     };
-    /**
-     * @description Validate input for the complaint endpoint.
-     *
-     *     Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
-     *     Permissions (visibility check) are enforced inside the action / service.
-     */
-    WriteupComplaintWrite: {
-      writeup_type: components['schemas']['WriteupTypeEnum'];
-      writeup_id: number;
-      reason: string;
-    };
-    /**
-     * @description Validate input for the complaint endpoint.
-     *
-     *     Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
-     *     Permissions (visibility check) are enforced inside the action / service.
-     */
-    WriteupComplaintWriteRequest: {
-      writeup_type: components['schemas']['WriteupTypeEnum'];
-      writeup_id: number;
-      reason: string;
-    };
-    /**
-     * @description Validate input for the kudos endpoint.
-     *
-     *     ``writeup_type`` selects which of the three writeup models the ID refers to.
-     *     ``writeup_id`` is the pk of that writeup. Existence is validated inside the
-     *     action (raises WriteupFeedbackError → mapped to a 400 response body).
-     */
-    WriteupKudosWrite: {
-      writeup_type: components['schemas']['WriteupTypeEnum'];
-      writeup_id: number;
-    };
-    /**
-     * @description Validate input for the kudos endpoint.
-     *
-     *     ``writeup_type`` selects which of the three writeup models the ID refers to.
-     *     ``writeup_id`` is the pk of that writeup. Existence is validated inside the
-     *     action (raises WriteupFeedbackError → mapped to a 400 response body).
-     */
-    WriteupKudosWriteRequest: {
-      writeup_type: components['schemas']['WriteupTypeEnum'];
-      writeup_id: number;
-    };
-    /**
-     * @description * `update` - update
-     *     * `development` - development
-     *     * `capstone` - capstone
-     * @enum {string}
-     */
-    WriteupTypeEnum: 'update' | 'development' | 'capstone';
     /**
      * @description * `fresh` - Fresh
      *     * `strained` - Strained
@@ -74254,47 +73844,6 @@ export interface operations {
       };
     };
   };
-  relationships_hybrid_types_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HybridRelationshipType'][];
-        };
-      };
-    };
-  };
-  relationships_hybrid_types_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this hybrid relationship type. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HybridRelationshipType'];
-        };
-      };
-    };
-  };
   relationships_relationship_capstones_list: {
     parameters: {
       query?: {
@@ -74338,201 +73887,13 @@ export interface operations {
       };
     };
   };
-  relationships_relationship_updates_list: {
-    parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedRelationshipUpdateList'];
-        };
-      };
-    };
-  };
-  relationships_relationship_updates_capstone_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CapstoneWriteRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CapstoneWrite'];
-        };
-      };
-    };
-  };
-  relationships_relationship_updates_complaint_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['WriteupComplaintWriteRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WriteupComplaintWrite'];
-        };
-      };
-    };
-  };
-  relationships_relationship_updates_develop_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DevelopmentWriteRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DevelopmentWrite'];
-        };
-      };
-    };
-  };
-  relationships_relationship_updates_first_impression_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['FirstImpressionWriteRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FirstImpressionWrite'];
-        };
-      };
-    };
-  };
-  relationships_relationship_updates_kudos_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['WriteupKudosWriteRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WriteupKudosWrite'];
-        };
-      };
-    };
-  };
-  relationships_relationship_updates_redistribute_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RedistributeWriteRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RedistributeWrite'];
-        };
-      };
-    };
-  };
-  relationships_relationship_updates_timeline_list: {
-    parameters: {
-      query?: {
-        /** @description CharacterSheet pk. Every non-PRIVATE writeup about this character from any author, plus PRIVATE writeups where the caller is the author or the subject. Mutually exclusive with `relationship`. */
-        about_character?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description CharacterRelationship pk. Full history (incl. PRIVATE) of one relationship; caller must be its tenure-owned source. Mutually exclusive with `about_character`. */
-        relationship?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedRelationshipTimelineEntryList'];
-        };
-      };
-    };
-  };
   relationships_relationships_list: {
     parameters: {
       query?: {
-        is_active?: boolean;
-        is_pending?: boolean;
-        is_soul_tether?: boolean;
         /** @description A page number within the paginated result set. */
         page?: number;
-        source?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
         target?: number;
         target_companion?: number;
       };
@@ -74547,7 +73908,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedCharacterRelationshipListList'];
+          'application/json': components['schemas']['PaginatedTieList'];
         };
       };
     };
@@ -74569,36 +73930,20 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CharacterRelationship'];
+          'application/json': components['schemas']['Tie'];
         };
       };
     };
   };
-  relationships_tracks_list: {
+  relationships_relationships_stream_list: {
     parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RelationshipTrack'][];
-        };
+      query?: {
+        target?: number;
+        target_companion?: number;
       };
-    };
-  };
-  relationships_tracks_retrieve: {
-    parameters: {
-      query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this relationship track. */
+        /** @description A unique integer value identifying this character relationship. */
         id: number;
       };
       cookie?: never;
@@ -74610,7 +73955,228 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['RelationshipTrack'];
+          'application/json': components['schemas']['TieStreamItem'][];
+        };
+      };
+    };
+  };
+  relationships_relationships_advance_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AdvanceWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TieWriteResult'];
+        };
+      };
+    };
+  };
+  relationships_relationships_allocation_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AllocationWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TieWriteResult'];
+        };
+      };
+    };
+  };
+  relationships_relationships_awareness_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AwarenessWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TieWriteResult'];
+        };
+      };
+    };
+  };
+  relationships_relationships_declare_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DeclareWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TieWriteResult'];
+        };
+      };
+    };
+  };
+  relationships_relationships_end_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LabelWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TieWriteResult'];
+        };
+      };
+    };
+  };
+  relationships_relationships_shift_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ShiftWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TieWriteResult'];
+        };
+      };
+    };
+  };
+  relationships_relationships_summary_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SummaryWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TieWriteResult'];
+        };
+      };
+    };
+  };
+  relationships_types_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `heart` - Heart
+         *     * `company` - Company
+         *     * `contest` - Contest
+         *     * `blood_and_oath` - Blood and oath
+         *     * `teaching` - Teaching
+         */
+        family?: 'blood_and_oath' | 'company' | 'contest' | 'heart' | 'teaching';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `warm` - Warm
+         *     * `hostile` - Hostile
+         *     * `neutral` - Neutral
+         */
+        valence?: 'hostile' | 'neutral' | 'warm';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRelationshipTypeList'];
+        };
+      };
+    };
+  };
+  relationships_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this relationship type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RelationshipType'];
         };
       };
     };
@@ -74756,71 +74322,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['RiskCalibration'];
         };
-      };
-    };
-  };
-  rivals_list: {
-    parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedRivalryList'];
-        };
-      };
-    };
-  };
-  rivals_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RivalryCreateRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RivalryCreate'];
-        };
-      };
-    };
-  };
-  rivals_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };

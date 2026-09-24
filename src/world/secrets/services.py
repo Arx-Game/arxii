@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionDeedRecord
-    from world.relationships.models import GrievanceOption, RelationshipCapstone, RelationshipTrack
+    from world.relationships.models import CharacterRelationship, GrievanceOption
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona, Scene
     from world.secrets.models import SecretCategory
@@ -290,22 +290,21 @@ def secret_known_to(secret: Secret, roster_entry: RosterEntry) -> bool:
     return SecretKnowledge.objects.filter(secret=secret, roster_entry=roster_entry).exists()
 
 
-def register_secret_grievance(  # noqa: PLR0913 — keyword-only; each arg is a distinct field
+def register_secret_grievance(
     *,
     roster_entry: RosterEntry,
     secret: Secret,
     option: GrievanceOption | None = None,
     custom_points: int | None = None,
-    custom_track: RelationshipTrack | None = None,
-    writeup: str = "",
-) -> RelationshipCapstone:
+) -> CharacterRelationship:
     """A secret's victim registers a grievance against its subject (#1429).
 
     The shared seam both the web endpoint and the telnet ``+grievance`` command call. The viewing
     character must be a registered ``SecretVictim`` of ``secret`` **and** already hold the fact —
     you can't grudge a wrong you haven't learned. Source is the victim's sheet, target the secret's
-    subject (the perpetrator); the chosen swing is applied via ``relationships.register_grievance``.
-    Raises ``SecretError`` if the caller isn't an entitled victim.
+    subject (the perpetrator); the chosen swing is applied via ``relationships.register_grievance``,
+    which returns the victim's own side of the tie. Raises ``SecretError`` if the caller isn't an
+    entitled victim.
     """
     from world.relationships.services import register_grievance  # noqa: PLC0415 — avoid cycle
     from world.secrets.models import SecretGrievance, SecretVictim  # noqa: PLC0415
@@ -322,16 +321,14 @@ def register_secret_grievance(  # noqa: PLR0913 — keyword-only; each arg is a 
     if SecretGrievance.objects.filter(secret=secret, victim_sheet=sheet).exists():
         msg = "You have already answered this secret."
         raise SecretError(msg, user_message=msg)
-    capstone = register_grievance(
+    side = register_grievance(
         source=sheet,
         target=secret.subject_sheet,
         option=option,
         custom_points=custom_points,
-        custom_track=custom_track,
-        writeup=writeup,
     )
-    SecretGrievance.objects.create(secret=secret, victim_sheet=sheet, capstone=capstone)
-    return capstone
+    SecretGrievance.objects.create(secret=secret, victim_sheet=sheet)
+    return side
 
 
 # --- Reputation bridge (#1429) ------------------------------------------------------------

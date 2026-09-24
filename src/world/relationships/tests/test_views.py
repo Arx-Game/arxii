@@ -1,505 +1,532 @@
-"""Tests for relationships API views."""
+"""Tie API (#3957): per-audience reads, the seven writes, the stream, the catalogue."""
 
-from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
-from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
+from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
+from evennia_extensions.models import PlayerData
+from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.constants import TrackSign
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    HybridRelationshipTypeFactory,
-    HybridRequirementFactory,
-    RelationshipConditionFactory,
-    RelationshipTierFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+from world.companions.factories import CompanionFactory
+from world.journals.factories import JournalEntryFactory
+from world.magic.constants import TargetKind
+from world.magic.factories import ResonanceFactory
+from world.magic.models import Thread
+from world.relationships.constants import LabelAwareness, TypeFamily, TypeValence
+from world.relationships.factories import RelationshipTierFactory, RelationshipTypeFactory
+from world.relationships.models import RelationshipAllocation, RelationshipLabel
+from world.relationships.services import (
+    advance_awareness,
+    declare_label,
+    get_or_create_side,
+    shift_label,
 )
-from world.relationships.views import RelationshipUpdateViewSet
-from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
+from world.scenes.constants import ScenePrivacyMode
+from world.scenes.factories import InteractionFactory, SceneFactory
+from world.skills.factories import TrainingAllocationFactory
 
 
-class RelationshipTrackViewSetTests(TestCase):
-    """Tests for RelationshipTrackViewSet."""
+def _owned_sheet(account):
+    """A sheet with a roster entry + current tenure the account owns, and selected.
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        """Set up test data."""
-        User = get_user_model()
-        cls.user = User.objects.create_user(username="trackuser", password="testpass")
-
-        cls.track = RelationshipTrackFactory(name="Trust", sign=TrackSign.POSITIVE)
-        cls.tier1 = RelationshipTierFactory(
-            track=cls.track, name="Wary", tier_number=0, point_threshold=0
-        )
-        cls.tier2 = RelationshipTierFactory(
-            track=cls.track, name="Acquaintance", tier_number=1, point_threshold=10
-        )
-        cls.track2 = RelationshipTrackFactory(name="Fear", sign=TrackSign.NEGATIVE)
-
-    def setUp(self) -> None:
-        """Set up test client."""
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
-
-    def test_list_tracks(self) -> None:
-        """Authenticated users can list tracks."""
-        response = self.client.get("/api/relationships/tracks/")
-        assert response.status_code == status.HTTP_200_OK
-        assert isinstance(response.data, list)
-        names = [t["name"] for t in response.data]
-        assert "Trust" in names
-        assert "Fear" in names
-
-    def test_detail_includes_nested_tiers(self) -> None:
-        """Track detail includes nested tier data."""
-        response = self.client.get(f"/api/relationships/tracks/{self.track.pk}/")
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["name"] == "Trust"
-        assert response.data["sign"] == TrackSign.POSITIVE
-        tiers = response.data["tiers"]
-        assert len(tiers) == 2
-        tier_names = [t["name"] for t in tiers]
-        assert "Wary" in tier_names
-        assert "Acquaintance" in tier_names
-
-    def test_unauthenticated_rejected(self) -> None:
-        """Unauthenticated users cannot access tracks."""
-        self.client.force_authenticate(user=None)
-        response = self.client.get("/api/relationships/tracks/")
-        assert response.status_code in (
-            status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_403_FORBIDDEN,
-        )
-
-    def test_tracks_no_pagination(self) -> None:
-        """Tracks endpoint returns a flat list (no pagination wrapper)."""
-        response = self.client.get("/api/relationships/tracks/")
-        assert response.status_code == status.HTTP_200_OK
-        assert isinstance(response.data, list)
-
-    def test_tracks_read_only(self) -> None:
-        """Tracks viewset is read-only; POST should fail."""
-        response = self.client.post(
-            "/api/relationships/tracks/",
-            {"name": "New", "slug": "new", "sign": "positive"},
-            format="json",
-        )
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
-
-
-class CharacterRelationshipViewSetTests(TestCase):
-    """Tests for CharacterRelationshipViewSet."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        """Set up test data."""
-        User = get_user_model()
-        cls.user = User.objects.create_user(username="reluser", password="testpass")
-
-        cls.sheet1 = CharacterSheetFactory()
-        cls.sheet2 = CharacterSheetFactory()
-        cls.sheet3 = CharacterSheetFactory()
-
-        # cls.user owns sheet1 via a current RosterTenure — required for it to
-        # read sheet1's outbound relationships under the privacy scoping.
-        cls.player_data = PlayerDataFactory(account=cls.user)
-        cls.roster_entry1 = RosterEntryFactory(character_sheet=cls.sheet1)
-        cls.tenure1 = RosterTenureFactory(
-            player_data=cls.player_data, roster_entry=cls.roster_entry1
-        )
-
-        cls.track = RelationshipTrackFactory(name="Respect", sign=TrackSign.POSITIVE)
-        cls.tier = RelationshipTierFactory(
-            track=cls.track, name="Acknowledged", tier_number=0, point_threshold=0
-        )
-
-        cls.rel1 = CharacterRelationshipFactory(source=cls.sheet1, target=cls.sheet2)
-        cls.rel2 = CharacterRelationshipFactory(source=cls.sheet1, target=cls.sheet3)
-        cls.rel3 = CharacterRelationshipFactory(source=cls.sheet2, target=cls.sheet1)
-
-        # Add track progress to rel1
-        cls.progress = RelationshipTrackProgressFactory(
-            relationship=cls.rel1, track=cls.track, capacity=50, developed_points=25
-        )
-
-    def setUp(self) -> None:
-        """Set up test client."""
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
-
-    def test_list_relationships(self) -> None:
-        """Authenticated users can list relationships whose source they own."""
-        response = self.client.get("/api/relationships/relationships/")
-        assert response.status_code == status.HTTP_200_OK
-        data = self._get_results(response.data)
-        # rel1 and rel2 both source from sheet1 (owned by cls.user); rel3
-        # sources from sheet2 (unowned, not a soul tether) and is excluded.
-        ids = [r["id"] for r in data]
-        assert self.rel1.pk in ids
-        assert self.rel2.pk in ids
-        assert self.rel3.pk not in ids
-
-    def test_list_uses_list_serializer(self) -> None:
-        """List response uses lightweight serializer (no track_progress)."""
-        response = self.client.get("/api/relationships/relationships/")
-        assert response.status_code == status.HTTP_200_OK
-        data = self._get_results(response.data)
-        first = data[0]
-        # List serializer should not include track_progress
-        assert "track_progress" not in first
-        # But should include summary fields
-        assert "source_name" in first
-        assert "absolute_value" in first
-        assert "developed_absolute_value" in first
-        assert "affection" in first
-
-    def test_filter_by_source(self) -> None:
-        """Can filter relationships by source."""
-        response = self.client.get(f"/api/relationships/relationships/?source={self.sheet1.pk}")
-        assert response.status_code == status.HTTP_200_OK
-        data = self._get_results(response.data)
-        assert len(data) == 2
-        for rel in data:
-            assert rel["source"] == self.sheet1.pk
-
-    def test_detail_includes_track_progress(self) -> None:
-        """Detail response includes nested track_progress with new fields."""
-        response = self.client.get(f"/api/relationships/relationships/{self.rel1.id}/")
-        assert response.status_code == status.HTTP_200_OK
-        assert "track_progress" in response.data
-        progress_list = response.data["track_progress"]
-        assert len(progress_list) == 1
-        progress = progress_list[0]
-        assert progress["track"] == self.track.pk
-        assert progress["track_name"] == "Respect"
-        assert progress["capacity"] == 50
-        assert progress["developed_points"] == 25
-        assert progress["current_tier_name"] == "Acknowledged"
-
-    def test_detail_includes_computed_fields(self) -> None:
-        """Detail response includes absolute_value, developed_absolute_value, and affection."""
-        response = self.client.get(f"/api/relationships/relationships/{self.rel1.id}/")
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["developed_absolute_value"] == 25
-        assert "mechanical_bonus" in response.data
-
-    def test_unauthenticated_rejected(self) -> None:
-        """Unauthenticated users cannot access relationships."""
-        self.client.force_authenticate(user=None)
-        response = self.client.get("/api/relationships/relationships/")
-        assert response.status_code in (
-            status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_403_FORBIDDEN,
-        )
-
-    def test_filter_by_is_soul_tether(self) -> None:
-        """Can filter relationships by is_soul_tether."""
-        # Create one tether and one non-tether relationship between new sheets
-        sheet_a = CharacterSheetFactory()
-        sheet_b = CharacterSheetFactory()
-        sheet_c = CharacterSheetFactory()
-        tether_rel = CharacterRelationshipFactory(
-            source=sheet_a, target=sheet_b, is_soul_tether=True
-        )
-        non_tether_rel = CharacterRelationshipFactory(
-            source=sheet_a, target=sheet_c, is_soul_tether=False
-        )
-
-        response = self.client.get("/api/relationships/relationships/?is_soul_tether=true")
-        assert response.status_code == status.HTTP_200_OK
-        data = self._get_results(response.data)
-        ids = [r["id"] for r in data]
-        assert tether_rel.pk in ids
-        assert non_tether_rel.pk not in ids
-
-    def test_list_serializer_exposes_soul_tether_fields(self) -> None:
-        """List serializer includes is_soul_tether and soul_tether_role fields."""
-        response = self.client.get("/api/relationships/relationships/")
-        assert response.status_code == status.HTTP_200_OK
-        data = self._get_results(response.data)
-        assert len(data) > 0
-        first = data[0]
-        assert "is_soul_tether" in first
-        assert "soul_tether_role" in first
-
-    def test_relationships_read_only(self) -> None:
-        """Viewset is read-only; POST should fail."""
-        response = self.client.post(
-            "/api/relationships/relationships/",
-            {"source": self.sheet1.pk, "target": self.sheet2.pk},
-            format="json",
-        )
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
-
-    def _get_results(self, response_data: dict | list) -> list:
-        """Extract results from paginated or non-paginated response."""
-        if isinstance(response_data, dict) and "results" in response_data:
-            return response_data["results"]
-        return response_data
-
-
-class CharacterRelationshipViewSetPrivacyTests(TestCase):
-    """Privacy scoping tests for CharacterRelationshipViewSet.get_queryset (#2159).
-
-    Numeric relationship state is author-private: the caller may only read
-    rows whose ``source`` is one of their own (tenure-owned) characters, or
-    rows flagged ``is_soul_tether=True`` (a ratified carve-out — the tether
-    panel rendered on a foreign character's sheet depends on it).
+    ``CharacterSheetFactory`` alone builds no ``RosterEntry`` (``sheet.roster_entry``
+    would raise), so one is built explicitly here and the sheet's ObjectDB is given the
+    account (``_resolve_actor`` checks ``sheet.character.db_account_id``); mirrors
+    ``world.companions.tests.test_views._actor_user``.
     """
+    sheet = CharacterSheetFactory()
+    entry = RosterEntryFactory(character_sheet=sheet)
+    tenure = RosterTenureFactory(player_data__account=account, roster_entry=entry)
+    sheet.character.db_account = account
+    sheet.character.save(update_fields=["db_account"])
+    set_selected_entry(tenure.player_data, entry)
+    return sheet, tenure
 
+
+class TieApiTests(TestCase):
     @classmethod
-    def setUpTestData(cls) -> None:
-        """Set up two accounts, each with an owned character, plus a bystander."""
-        User = get_user_model()
-        cls.owner_user = User.objects.create_user(username="owner", password="testpass")
-        cls.other_user = User.objects.create_user(username="other", password="testpass")
-
-        cls.owner_sheet = CharacterSheetFactory()
-        cls.other_sheet = CharacterSheetFactory()
-        cls.bystander_sheet = CharacterSheetFactory()
-        cls.tether_target_sheet = CharacterSheetFactory()
-
-        cls.owner_player_data = PlayerDataFactory(account=cls.owner_user)
-        cls.owner_roster_entry = RosterEntryFactory(character_sheet=cls.owner_sheet)
-        cls.owner_tenure = RosterTenureFactory(
-            player_data=cls.owner_player_data, roster_entry=cls.owner_roster_entry
+    def setUpTestData(cls):
+        cls.owner = AccountFactory()
+        cls.other = AccountFactory()
+        cls.stranger = AccountFactory()
+        cls.staff = AccountFactory(is_staff=True)
+        cls.a, cls.tenure_a = _owned_sheet(cls.owner)
+        cls.b, cls.tenure_b = _owned_sheet(cls.other)
+        cls.c, _ = _owned_sheet(cls.stranger)
+        cls.lover = RelationshipTypeFactory(
+            name="Lover", valence=TypeValence.WARM, family=TypeFamily.HEART
         )
-
-        # Own outbound relationship (source=owner_sheet).
-        cls.own_outbound = CharacterRelationshipFactory(
-            source=cls.owner_sheet, target=cls.bystander_sheet
+        cls.enemy = RelationshipTypeFactory(
+            name="Enemy", valence=TypeValence.HOSTILE, family=TypeFamily.CONTEST
         )
-        # A pair entirely foreign to owner_user (neither side owned).
-        cls.foreign_pair = CharacterRelationshipFactory(
-            source=cls.other_sheet, target=cls.bystander_sheet
+        cls.rival = RelationshipTypeFactory(
+            name="Rival", valence=TypeValence.HOSTILE, family=TypeFamily.CONTEST
         )
-        # A foreign soul-tether row — should remain readable via the carve-out.
-        cls.foreign_tether = CharacterRelationshipFactory(
-            source=cls.other_sheet, target=cls.tether_target_sheet, is_soul_tether=True
+        RelationshipTierFactory(tier_number=1, depth_threshold=25)
+        RelationshipTierFactory(tier_number=2, depth_threshold=100)
+        RelationshipTierFactory(tier_number=3, depth_threshold=500)
+        cls.ab = get_or_create_side(source=cls.a, target=cls.b)
+        cls.ab.scene_depth, cls.ab.invested_depth, cls.ab.tier = 48, 184, 2
+        cls.ab.affection, cls.ab.conflict, cls.ab.summary = 41, 28, "A throat."
+        cls.ab.save()
+        cls.ba = get_or_create_side(source=cls.b, target=cls.a)
+        cls.ba.scene_depth, cls.ba.invested_depth = 48, 60
+        cls.ba.save()
+        declare_label(
+            side=cls.ab, type=cls.lover, awareness=LabelAwareness.CLANDESTINE, tenure=cls.tenure_a
         )
+        declare_label(side=cls.ab, type=cls.enemy, tenure=cls.tenure_a)
+        # A staff account that also PLAYS someone, so "staff reading a foreign tie" and
+        # "staff reading their own" are two distinguishable cases (#3957 review C2).
+        cls.s, cls.tenure_s = _owned_sheet(cls.staff)
+        cls.sa = get_or_create_side(source=cls.s, target=cls.a)
+        declare_label(side=cls.sa, type=cls.rival, tenure=cls.tenure_s)
 
-    def setUp(self) -> None:
-        """Set up test client."""
-        self.client = APIClient()
+    def _client(self, account):
+        client = APIClient()
+        client.force_authenticate(user=account)
+        return client
 
-    def test_foreign_pair_excluded_from_list(self) -> None:
-        """A relationship neither owned nor soul-tethered is absent from the list."""
-        self.client.force_authenticate(user=self.owner_user)
-        response = self.client.get("/api/relationships/relationships/")
-        assert response.status_code == status.HTTP_200_OK
-        ids = [r["id"] for r in self._get_results(response.data)]
-        assert self.foreign_pair.pk not in ids
+    def test_owner_sees_everything(self):
+        data = self._client(self.owner).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        self.assertEqual(data["audience"], "owner")
+        self.assertEqual(data["depth"], 340)
+        self.assertEqual(data["next_tier_threshold"], 500)
+        self.assertEqual([lab["type_name"] for lab in data["labels"]], ["Lover", "Enemy"])
+        self.assertEqual(data["breakdown"]["affection"], 41)
+        self.assertEqual(data["breakdown"]["their_added_depth"], 108)
+        self.assertEqual(data["summary"], "A throat.")
 
-    def test_foreign_pair_retrieve_404s(self) -> None:
-        """Directly retrieving a foreign, non-tethered relationship 404s."""
-        self.client.force_authenticate(user=self.owner_user)
-        response = self.client.get(f"/api/relationships/relationships/{self.foreign_pair.pk}/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+    def test_other_side_sees_known_labels_and_no_feeling(self):
+        data = self._client(self.other).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        self.assertEqual(data["audience"], "other_side")
+        self.assertEqual([lab["type_name"] for lab in data["labels"]], ["Lover"])
+        self.assertEqual(data["depth"], 340)
+        self.assertIsNone(data["breakdown"]["affection"])
+        self.assertNotIn("ap_this_week", {k: v for k, v in data.items() if v is not None})
 
-    def test_own_outbound_relationship_readable(self) -> None:
-        """The caller can list and retrieve their own outbound relationship."""
-        self.client.force_authenticate(user=self.owner_user)
-        list_response = self.client.get("/api/relationships/relationships/")
-        ids = [r["id"] for r in self._get_results(list_response.data)]
-        assert self.own_outbound.pk in ids
+    def test_third_party_404s_without_a_public_label(self):
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        response = self._client(self.stranger).get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-        detail_response = self.client.get(
-            f"/api/relationships/relationships/{self.own_outbound.pk}/"
-        )
-        assert detail_response.status_code == status.HTTP_200_OK
+    def test_third_party_sees_public_labels_and_no_numbers(self):
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.stranger).get(url).data
+        self.assertEqual(data["audience"], "third_party")
+        self.assertEqual([lab["type_name"] for lab in data["labels"]], ["Lover"])
+        self.assertIsNone(data["depth"])
+        self.assertIsNone(data["breakdown"])
+        self.assertEqual(data["summary"], "A throat.")
 
-    def test_foreign_soul_tether_readable(self) -> None:
-        """A soul-tether row is readable even though neither side is owned."""
-        self.client.force_authenticate(user=self.owner_user)
-        list_response = self.client.get("/api/relationships/relationships/")
-        ids = [r["id"] for r in self._get_results(list_response.data)]
-        assert self.foreign_tether.pk in ids
+    def test_staff_sees_all(self):
+        data = self._client(self.staff).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        self.assertEqual(data["audience"], "staff")
+        self.assertEqual(len(data["labels"]), 2)
 
-        detail_response = self.client.get(
-            f"/api/relationships/relationships/{self.foreign_tether.pk}/"
-        )
-        assert detail_response.status_code == status.HTTP_200_OK
+    def test_is_own_side_true_only_for_the_side_the_viewer_plays(self):
+        """The one flag the web client gates a write door on (#3957 review C2).
 
-    def test_multi_character_account_sees_non_puppeted_characters_rows(self) -> None:
-        """A tenure-owned character's rows are visible even while not currently puppeted.
-
-        Ownership is resolved via the current ``RosterTenure`` join (mirroring
-        ``RelationshipUpdateViewSet``), never Evennia's live-puppet ``db_account``
-        field, so an account with several owned characters sees every owned
-        character's outbound rows regardless of which one it is puppeting.
+        ``audience`` cannot serve: ``tie_audience`` short-circuits on ``is_staff``, so a
+        staff account reading ANY tie gets STAFF. Four of the seven writes resolve their
+        side as ``get_or_create(source=the caller's own sheet, ...)``, so a door offered on
+        that basis would have written a durable row on the staff character's own side.
         """
-        second_sheet = CharacterSheetFactory()
-        second_roster_entry = RosterEntryFactory(character_sheet=second_sheet)
-        RosterTenureFactory(player_data=self.owner_player_data, roster_entry=second_roster_entry)
-        second_outbound = CharacterRelationshipFactory(
-            source=second_sheet, target=self.bystander_sheet
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        self.assertTrue(self._client(self.owner).get(url).data["is_own_side"])
+
+    def test_is_own_side_false_for_the_other_party(self):
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.other).get(url).data
+        self.assertEqual(data["audience"], "other_side")
+        self.assertFalse(data["is_own_side"])
+
+    def test_is_own_side_false_for_a_third_party(self):
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.stranger).get(url).data
+        self.assertEqual(data["audience"], "third_party")
+        self.assertFalse(data["is_own_side"])
+
+    def test_is_own_side_false_for_staff_on_someone_elses_tie(self):
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.staff).get(url).data
+        self.assertEqual(data["audience"], "staff")
+        self.assertFalse(data["is_own_side"])
+
+    def test_is_own_side_true_for_staff_on_their_own_tie(self):
+        url = f"/api/relationships/relationships/{self.sa.pk}/"
+        data = self._client(self.staff).get(url).data
+        self.assertEqual(data["audience"], "staff")
+        self.assertTrue(data["is_own_side"])
+
+    def test_list_rows_are_all_own_sides(self):
+        data = self._client(self.owner).get("/api/relationships/relationships/").data
+        self.assertTrue(all(row["is_own_side"] for row in data["results"]))
+
+    def test_list_is_own_sides_only(self):
+        data = self._client(self.owner).get("/api/relationships/relationships/").data
+        ids = [row["id"] for row in data["results"]]
+        self.assertEqual(ids, [self.ab.pk])
+
+    def test_writes(self):
+        client = self._client(self.other)
+        response = client.post(
+            "/api/relationships/relationships/declare/",
+            {
+                "target_persona_id": self.a.personas.first().pk,
+                "type_id": self.rival.pk,
+                "awareness": "public",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        label_id = response.data["data"]["label_id"]
+        response = client.post(
+            "/api/relationships/relationships/awareness/",
+            {"label_id": label_id, "awareness": "private"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        response = client.post(
+            "/api/relationships/relationships/shift/",
+            {"label_id": label_id, "new_type_id": self.enemy.pk, "note": "worse"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        response = client.post(
+            "/api/relationships/relationships/summary/",
+            {"target_persona_id": self.a.personas.first().pk, "summary": "Hers."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        response = client.post(
+            "/api/relationships/relationships/end/",
+            {"label_id": response.data["data"].get("label_id", label_id)},
+            format="json",
+        )
+        self.assertIn(response.status_code, (status.HTTP_200_OK, status.HTTP_400_BAD_REQUEST))
+
+    def test_label_write_refused_for_someone_elses_label(self):
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        response = self._client(self.other).post(
+            "/api/relationships/relationships/end/", {"label_id": label.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["message"], "That is not your relationship.")
+
+    def test_stream_filters_by_viewer(self):
+        JournalEntryFactory(author=self.a, about=self.b, is_public=False, title="Black")
+        JournalEntryFactory(author=self.b, about=self.a, is_public=True, title="White")
+        url = f"/api/relationships/relationships/{self.ab.pk}/stream/"
+        data = self._client(self.other).get(url).data
+        self.assertEqual([i["title"] for i in data], ["White"])
+
+    def _shared_scene(self, privacy_mode, *, participants):
+        """A scene both sides took part in, at ``privacy_mode``, with those participants."""
+        scene = SceneFactory(
+            name=f"Scene {privacy_mode}", privacy_mode=privacy_mode, participants=participants
+        )
+        for sheet in (self.a, self.b):
+            persona = sheet.personas.first() or sheet.personas.create(name=sheet.character.db_key)
+            InteractionFactory(scene=scene, persona=persona)
+        return scene
+
+    def _stream_scene_ids(self, account, side=None):
+        url = f"/api/relationships/relationships/{(side or self.ab).pk}/stream/"
+        response = self._client(account).get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return {row["id"] for row in response.data if row["kind"] == "scene"}
+
+    def _make_lover_public(self):
+        """Open the side to a THIRD_PARTY, which is the audience the leak reached."""
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+
+    def test_stream_scenes_go_through_the_scenes_app_privacy_rule(self):
+        """A PRIVATE scene the two shared reaches only who ``viewable_by`` admits (#3957).
+
+        The scene half of the stream used to list every shared scene and stamp it
+        ``is_public=True``, so a stranger who could see one public label learned that the
+        two had been alone together — exactly the fact Clandestine exists to protect.
+        """
+        self._make_lover_public()
+        private = self._shared_scene(ScenePrivacyMode.PRIVATE, participants=[self.owner])
+
+        self.assertNotIn(private.pk, self._stream_scene_ids(self.stranger))
+        self.assertNotIn(private.pk, self._stream_scene_ids(self.other))
+        self.assertIn(private.pk, self._stream_scene_ids(self.owner))
+        self.assertIn(private.pk, self._stream_scene_ids(self.staff))
+
+    def test_stream_hides_an_ephemeral_scene_from_non_participants(self):
+        """EPHEMERAL is gated by the same rule, and never re-labelled public."""
+        self._make_lover_public()
+        ephemeral = self._shared_scene(ScenePrivacyMode.EPHEMERAL, participants=[self.owner])
+
+        self.assertNotIn(ephemeral.pk, self._stream_scene_ids(self.stranger))
+        self.assertNotIn(ephemeral.pk, self._stream_scene_ids(self.other))
+        self.assertIn(ephemeral.pk, self._stream_scene_ids(self.owner))
+
+        url = f"/api/relationships/relationships/{self.ab.pk}/stream/"
+        rows = self._client(self.owner).get(url).data
+        row = next(r for r in rows if r["kind"] == "scene" and r["id"] == ephemeral.pk)
+        self.assertFalse(row["is_public"])
+
+    def test_stream_keeps_a_public_scene_for_every_audience(self):
+        """The gate is the scenes app's own, not a blanket refusal of the scene half."""
+        self._make_lover_public()
+        public = self._shared_scene(ScenePrivacyMode.PUBLIC, participants=[])
+
+        for account in (self.stranger, self.other, self.owner, self.staff):
+            self.assertIn(public.pk, self._stream_scene_ids(account), account)
+
+    def test_types_catalogue(self):
+        data = self._client(self.stranger).get("/api/relationships/types/").data
+        names = {row["name"] for row in data.get("results", data)}
+        self.assertEqual(names, {"Lover", "Enemy", "Rival"})
+
+    def test_ap_this_week_visible_to_owner_and_staff_only(self):
+        RelationshipAllocation.objects.create(relationship=self.ab, ap_amount=7)
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        owner_data = self._client(self.owner).get(url).data
+        self.assertEqual(owner_data["ap_this_week"], 7)
+        other_data = self._client(self.other).get(url).data
+        self.assertIsNone(other_data["ap_this_week"])
+        staff_data = self._client(self.staff).get(url).data
+        self.assertEqual(staff_data["ap_this_week"], 7)
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+        stranger_data = self._client(self.stranger).get(url).data
+        self.assertIsNone(stranger_data["ap_this_week"])
+
+    def test_ap_pool_is_the_owners_own_and_nobody_elses(self):
+        """The budget line beside the AP field (#3957): remaining over the week's total.
+
+        Gated on the side being the viewer's OWN, not on audience — so the other party
+        gets null, and so does a staff account, whose own purse this is not.
+
+        ``total`` is the WEEK's budget and ``remaining`` is what is left of it after every
+        standing commitment, ties and training alike (#3957 final review): reading the
+        pool's live balance against its maximum let the line read "31 / 40" while the
+        character had already promised the week away twice over.
+        """
+        ActionPointPool.get_or_create_for_character(self.a.character)
+        budget = ActionPointConfig.get_weekly_regen()
+        RelationshipAllocation.objects.create(relationship=self.ab, ap_amount=6)
+        TrainingAllocationFactory(character=self.a, ap_amount=3)
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+
+        owner_data = self._client(self.owner).get(url).data
+        self.assertEqual(owner_data["ap_pool"], {"remaining": budget - 9, "total": budget})
+
+        self.assertIsNone(self._client(self.other).get(url).data["ap_pool"])
+        self.assertIsNone(self._client(self.staff).get(url).data["ap_pool"])
+
+        label = RelationshipLabel.objects.get(relationship=self.ab, type=self.lover)
+        label.awareness = LabelAwareness.PUBLIC
+        label.save(update_fields=["awareness"])
+        self.assertIsNone(self._client(self.stranger).get(url).data["ap_pool"])
+
+    def test_ap_pool_is_null_when_the_owner_has_no_pool_row(self):
+        """No pool row is a data state, not a reason to refuse the page."""
+        ActionPointPool.objects.filter(character=self.a).delete()
+        data = self._client(self.owner).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        self.assertIsNone(data["ap_pool"])
+
+    def test_breakdown_conflict_null_for_other_side(self):
+        data = self._client(self.other).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        self.assertIsNone(data["breakdown"]["conflict"])
+
+    def test_third_party_never_sees_thread_or_a_hidden_replaced_label(self):
+        Thread.objects.create(
+            owner=self.a,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship=self.ab,
+            level=20,
+        )
+        secret_type = RelationshipTypeFactory(name="Secret")
+        known_type = RelationshipTypeFactory(name="Known")
+        private_label = declare_label(
+            side=self.ab, type=secret_type, awareness=LabelAwareness.PRIVATE
+        )
+        shifted = shift_label(label=private_label, new_type=known_type)
+        advance_awareness(label=shifted, to=LabelAwareness.PUBLIC)
+
+        owner_data = (
+            self._client(self.owner).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        )
+        self.assertIsNotNone(owner_data["thread"])
+        owner_known = next(lab for lab in owner_data["labels"] if lab["type_name"] == "Known")
+        self.assertEqual(owner_known["replaced_type_name"], "Secret")
+
+        stranger_data = (
+            self._client(self.stranger).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        )
+        self.assertIsNone(stranger_data["thread"])
+        stranger_known = next(lab for lab in stranger_data["labels"] if lab["type_name"] == "Known")
+        self.assertIsNone(stranger_known["replaced_type_name"])
+
+    def test_third_party_mutual_needs_both_sides_public(self):
+        mutual_type = RelationshipTypeFactory(name="Ally")
+        declare_label(
+            side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
+        )
+        declare_label(
+            side=self.ba,
+            type=mutual_type,
+            awareness=LabelAwareness.CLANDESTINE,
+            tenure=self.tenure_b,
+        )
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+
+        data = self._client(self.stranger).get(url).data
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Ally")
+        self.assertFalse(row["is_mutual"])
+
+        ba_label = RelationshipLabel.objects.get(relationship=self.ba, type=mutual_type)
+        ba_label.awareness = LabelAwareness.PUBLIC
+        ba_label.save(update_fields=["awareness"])
+        data = self._client(self.stranger).get(url).data
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Ally")
+        self.assertTrue(row["is_mutual"])
+
+    def test_mutual_needs_an_open_tenure_on_both_labels(self):
+        mutual_type = RelationshipTypeFactory(name="Confidant")
+        declare_label(
+            side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
+        )
+        closed_tenure = RosterTenureFactory(roster_entry=self.b.roster_entry)
+        closed_tenure.end_date = closed_tenure.start_date
+        closed_tenure.save(update_fields=["end_date"])
+        declare_label(
+            side=self.ba, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=closed_tenure
+        )
+        data = (
+            self._client(self.stranger).get(f"/api/relationships/relationships/{self.ab.pk}/").data
+        )
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Confidant")
+        self.assertFalse(row["is_mutual"])
+
+    def test_mutual_needs_an_active_reverse_side(self):
+        mutual_type = RelationshipTypeFactory(name="Bonded")
+        declare_label(
+            side=self.ab, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
+        )
+        declare_label(
+            side=self.ba, type=mutual_type, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_b
+        )
+        self.ba.is_active = False
+        self.ba.save(update_fields=["is_active"])
+        url = f"/api/relationships/relationships/{self.ab.pk}/"
+        data = self._client(self.stranger).get(url).data
+        row = next(lab for lab in data["labels"] if lab["type_name"] == "Bonded")
+        self.assertFalse(row["is_mutual"])
+
+        # A frozen reverse side stops EARNING but keeps the depth it already earned (spec
+        # Decision 2): the owner still sees the full pair_depth(), including ba's frozen
+        # contribution, even though mutuality (above) correctly stays false regardless.
+        owner_data = self._client(self.owner).get(url).data
+        self.assertEqual(owner_data["depth"], 340)
+        self.assertEqual(owner_data["breakdown"]["their_added_depth"], 108)
+
+    def test_companion_side_404s_for_anyone_but_owner_or_staff(self):
+        companion = CompanionFactory(owner=self.a)
+        companion_side = get_or_create_side(source=self.a, target_companion=companion)
+        declare_label(side=companion_side, type=self.lover, awareness=LabelAwareness.PUBLIC)
+        retrieve_url = f"/api/relationships/relationships/{companion_side.pk}/"
+        stream_url = f"/api/relationships/relationships/{companion_side.pk}/stream/"
+
+        self.assertEqual(self._client(self.owner).get(retrieve_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(self._client(self.staff).get(retrieve_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self._client(self.stranger).get(retrieve_url).status_code, status.HTTP_404_NOT_FOUND
+        )
+        self.assertEqual(self._client(self.owner).get(stream_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self._client(self.stranger).get(stream_url).status_code, status.HTTP_404_NOT_FOUND
         )
 
-        self.client.force_authenticate(user=self.owner_user)
-        response = self.client.get("/api/relationships/relationships/")
-        ids = [r["id"] for r in self._get_results(response.data)]
-        assert second_outbound.pk in ids
-
-    def _get_results(self, response_data: dict | list) -> list:
-        """Extract results from paginated or non-paginated response."""
-        if isinstance(response_data, dict) and "results" in response_data:
-            return response_data["results"]
-        return response_data
-
-
-class RelationshipConditionViewSetTests(TestCase):
-    """Tests for RelationshipConditionViewSet."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        """Set up test data."""
-        User = get_user_model()
-        cls.user = User.objects.create_user(username="conduser", password="testpass")
-        cls.condition = RelationshipConditionFactory(name="Trusts", display_order=1)
-
-    def setUp(self) -> None:
-        """Set up test client."""
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
-
-    def test_list_conditions(self) -> None:
-        """Authenticated users can list conditions."""
-        response = self.client.get("/api/relationships/conditions/")
-        assert response.status_code == status.HTTP_200_OK
-        assert isinstance(response.data, list)
-        names = [c["name"] for c in response.data]
-        assert "Trusts" in names
-
-    def test_retrieve_condition(self) -> None:
-        """Can retrieve a single condition."""
-        response = self.client.get(f"/api/relationships/conditions/{self.condition.pk}/")
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["name"] == "Trusts"
-        assert response.data["display_order"] == 1
-
-
-class HybridRelationshipTypeViewSetTests(TestCase):
-    """Tests for HybridRelationshipTypeViewSet."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        """Set up test data."""
-        User = get_user_model()
-        cls.user = User.objects.create_user(username="hybriduser", password="testpass")
-
-        cls.track_trust = RelationshipTrackFactory(name="TrustH", sign=TrackSign.POSITIVE)
-        cls.track_respect = RelationshipTrackFactory(name="RespectH", sign=TrackSign.POSITIVE)
-        cls.hybrid = HybridRelationshipTypeFactory(name="Devotion", slug="devotion")
-        HybridRequirementFactory(hybrid_type=cls.hybrid, track=cls.track_trust, minimum_tier=2)
-        HybridRequirementFactory(hybrid_type=cls.hybrid, track=cls.track_respect, minimum_tier=1)
-
-    def setUp(self) -> None:
-        """Set up test client."""
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
-
-    def test_list_hybrid_types(self) -> None:
-        """Authenticated users can list hybrid types."""
-        response = self.client.get("/api/relationships/hybrid-types/")
-        assert response.status_code == status.HTTP_200_OK
-        assert isinstance(response.data, list)
-        names = [h["name"] for h in response.data]
-        assert "Devotion" in names
-
-    def test_detail_includes_requirements(self) -> None:
-        """Hybrid type detail includes nested requirements."""
-        response = self.client.get(f"/api/relationships/hybrid-types/{self.hybrid.pk}/")
-        assert response.status_code == status.HTTP_200_OK
-        reqs = response.data["requirements"]
-        assert len(reqs) == 2
-        track_names = {r["track_name"] for r in reqs}
-        assert "TrustH" in track_names
-        assert "RespectH" in track_names
-
-
-class CompanionTargetWriteEndpointTests(TestCase):
-    """POST write verbs with target_companion_id (#3575)."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from world.companions.factories import CompanionFactory
-
-        cls.tenure = RosterTenureFactory()
-        cls.user = cls.tenure.player_data.account
-        cls.sheet = cls.tenure.roster_entry.character_sheet
-        cls.sheet.character.db_account = cls.user
-        cls.sheet.character.save(update_fields=["db_account"])
-        set_selected_entry(cls.tenure.player_data, cls.tenure.roster_entry)
-        cls.companion = CompanionFactory(owner=cls.sheet, name="Ash")
-        cls.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE)
-
-    def setUp(self) -> None:
-        set_selected_entry(self.tenure.player_data, self.tenure.roster_entry)
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
-        self.factory = APIRequestFactory()
-
-    def _actor_user(self):
-        """Return the real account with its durable roster selection."""
-        return self.user
-
-    def _post(self, action: str, payload: dict):
-        url = f"/api/relationships/relationship-updates/{action}/"
-        request = self.factory.post(url, payload, format="json")
-        force_authenticate(request, user=self._actor_user())
-        view = RelationshipUpdateViewSet.as_view({"post": action})
-        return view(request)
-
-    def _payload(self, **extra):
-        body = {
-            "target_companion_id": self.companion.pk,
-            "track_id": self.track.pk,
-            "points": 3,
-            "title": "Ash at the gate",
-            "writeup": "It did not flinch.",
-        }
-        body.update(extra)
-        return body
-
-    def test_first_impression_with_companion_id(self) -> None:
-        response = self._post("first_impression", self._payload())
-        assert response.status_code == status.HTTP_200_OK, response.data
-        from world.relationships.models import CharacterRelationship
-
-        rel = CharacterRelationship.objects.get(source=self.sheet, target_companion=self.companion)
-        assert rel.is_pending is False
-
-    def test_both_target_ids_rejected(self) -> None:
-        from world.scenes.services import active_persona_for_sheet
-
-        other = CharacterSheetFactory()
-        response = self._post(
-            "first_impression",
-            self._payload(target_persona_id=active_persona_for_sheet(other).pk),
+    def test_declare_validation_failure_returns_the_honest_shape(self):
+        response = self._client(self.owner).post(
+            "/api/relationships/relationships/declare/",
+            {"type_id": self.lover.pk, "awareness": "public"},
+            format="json",
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["success"])
+        self.assertIn("message", response.data)
+        self.assertIn("data", response.data)
 
-    def test_neither_target_id_rejected(self) -> None:
-        body = self._payload()
-        del body["target_companion_id"]
-        response = self._post("first_impression", body)
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+    def test_list_query_budget_stays_flat_across_a_page(self):
+        """``build_tie_page`` adds a small, page-size-independent query count (#3957 review):
+        17 queries for a 6-row page here (session + count + queryset + labels prefetch +
+        reverse sides + reverse labels prefetch + threads + tier ladder + the owners' AP
+        purse, plus session-save bookkeeping) — not one per row.
 
-    def test_unknown_companion_rejected(self) -> None:
-        response = self._post("first_impression", self._payload(target_companion_id=999999))
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.data["message"] == "Target companion not found."
+        The AP purse costs three of those and each is batched over the page's distinct
+        OWNERS (#3957 final review: the pool row, then the tie-allocation and
+        training-allocation totals standing against the week's budget). The pool lookup is
+        asserted by count rather than left to the ceiling: a per-row
+        ``side.source.action_points`` would pass the ceiling on a small page and fail on
+        a full one.
+        """
+        for i in range(5):
+            target, _ = _owned_sheet(AccountFactory())
+            side = get_or_create_side(source=self.a, target=target)
+            side.scene_depth = 10 * i
+            side.save()
+            declare_label(side=side, type=self.lover, awareness=LabelAwareness.PUBLIC)
+        with CaptureQueriesContext(connection) as ctx:
+            response = self._client(self.owner).get("/api/relationships/relationships/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 6)
+        pool_table = ActionPointPool._meta.db_table
+        pool_queries = [q for q in ctx.captured_queries if pool_table in q["sql"]]
+        self.assertEqual(len(pool_queries), 1)
+        self.assertLessEqual(len(ctx.captured_queries), 17)
 
-    def test_list_row_names_the_companion(self) -> None:
-        CharacterRelationshipFactory(
-            source=self.sheet, target=None, target_companion=self.companion
-        )
-        response = self.client.get(f"/api/relationships/relationships/?source={self.sheet.pk}")
-        assert response.status_code == status.HTTP_200_OK
-        rows = response.data["results"] if isinstance(response.data, dict) else response.data
-        row = next(r for r in rows if r["target_companion"] == self.companion.pk)
-        assert row["target"] is None
-        assert row["target_name"] == "Ash"
+    def test_list_matches_reverse_depth_per_target_when_two_owned_characters_share_one(self):
+        """Two characters under one account, each with a side toward the SAME target: the
+        reverse-side map must key on the (source, target) PAIR, not the target alone — both
+        reverse rows share a source_id (the shared target), so a source-only key collides and
+        hands one row the other's depth (#3957 review).
+        """
+        player_data, _ = PlayerData.objects.get_or_create(account=self.owner)
+        second_owned = CharacterSheetFactory()
+        second_entry = RosterEntryFactory(character_sheet=second_owned)
+        RosterTenureFactory(player_data=player_data, roster_entry=second_entry)
+
+        side_a_to_c = get_or_create_side(source=self.a, target=self.c)
+        side_a_to_c.scene_depth = 10
+        side_a_to_c.save()
+        side_second_to_c = get_or_create_side(source=second_owned, target=self.c)
+        side_second_to_c.scene_depth = 20
+        side_second_to_c.save()
+        reverse_c_to_a = get_or_create_side(source=self.c, target=self.a)
+        reverse_c_to_a.scene_depth = 100
+        reverse_c_to_a.save()
+        reverse_c_to_second = get_or_create_side(source=self.c, target=second_owned)
+        reverse_c_to_second.scene_depth = 200
+        reverse_c_to_second.save()
+
+        data = self._client(self.owner).get("/api/relationships/relationships/").data
+        rows = {row["id"]: row for row in data["results"]}
+        row_a = rows[side_a_to_c.pk]
+        row_second = rows[side_second_to_c.pk]
+        self.assertEqual(row_a["depth"], 10 + 100)
+        self.assertEqual(row_a["breakdown"]["their_added_depth"], 100)
+        self.assertEqual(row_second["depth"], 20 + 200)
+        self.assertEqual(row_second["breakdown"]["their_added_depth"], 200)

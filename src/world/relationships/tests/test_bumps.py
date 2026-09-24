@@ -1,29 +1,20 @@
-"""Tests for ambient relationship bumps (#1699): models, service, seeds."""
+"""Tests for ambient relationship bumps (#1699): model constraints + service (#3957)."""
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.constants import BUMP_POINTS, BumpValence, TrackSign, TrackSystemKey
-from world.relationships.exceptions import AlreadyAcknowledgedError, SystemTracksNotSeededError
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipBumpFactory,
-    RelationshipTrackFactory,
-)
-from world.relationships.models import (
-    CharacterRelationship,
-    RelationshipBump,
-    RelationshipTrack,
-    RelationshipTrackProgress,
-)
+from world.relationships.constants import BUMP_POINTS, BumpValence
+from world.relationships.exceptions import AlreadyAcknowledgedError
+from world.relationships.factories import CharacterRelationshipFactory, RelationshipBumpFactory
+from world.relationships.models import CharacterRelationship, RelationshipBump
 from world.relationships.services import apply_relationship_bump
 from world.scenes.factories import InteractionFactory
 
 
 class RelationshipBumpModelTests(TestCase):
-    """Model-level constraints for RelationshipBump and system tracks."""
+    """Model-level constraints for RelationshipBump."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -46,39 +37,17 @@ class RelationshipBumpModelTests(TestCase):
         self.assertEqual(RelationshipBump.objects.filter(interaction=self.interaction).count(), 2)
         self.assertEqual(bump.timestamp, self.interaction.timestamp)
 
-    def test_system_key_unique(self) -> None:
-        RelationshipTrackFactory(name="Regard", system_key=TrackSystemKey.REGARD)
-        with transaction.atomic(), self.assertRaises(IntegrityError):
-            RelationshipTrack.objects.create(
-                name="Regard2",
-                slug="regard2",
-                sign=TrackSign.POSITIVE,
-                system_key=TrackSystemKey.REGARD,
-            )
-
-    def test_system_key_nullable_for_authored_tracks(self) -> None:
-        a = RelationshipTrackFactory(name="Friendship")
-        b = RelationshipTrackFactory(name="Rivalry", sign=TrackSign.NEGATIVE)
-        self.assertIsNone(a.system_key)
-        self.assertIsNone(b.system_key)
-
 
 class ApplyRelationshipBumpTests(TestCase):
-    """Service-level behavior of apply_relationship_bump."""
+    """Service-level behavior of apply_relationship_bump (#3957: gauges, not tracks)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.regard = RelationshipTrackFactory(
-            name="Regard", sign=TrackSign.POSITIVE, system_key=TrackSystemKey.REGARD
-        )
-        cls.friction = RelationshipTrackFactory(
-            name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
-        )
         cls.source = CharacterSheetFactory()
         cls.target = CharacterSheetFactory()
         cls.interaction = InteractionFactory()
 
-    def test_positive_bump_lands_on_regard(self) -> None:
+    def test_positive_bump_adds_affection(self) -> None:
         bump = apply_relationship_bump(
             source=self.source,
             target=self.target,
@@ -87,15 +56,10 @@ class ApplyRelationshipBumpTests(TestCase):
         )
         self.assertEqual(bump.valence, BumpValence.POSITIVE)
         relationship = CharacterRelationship.objects.get(source=self.source, target=self.target)
-        self.assertTrue(relationship.is_pending)
-        progress = RelationshipTrackProgress.objects.get(
-            relationship=relationship, track=self.regard
-        )
-        self.assertEqual(progress.developed_points, BUMP_POINTS)
-        self.assertEqual(progress.capacity, BUMP_POINTS)
         self.assertEqual(relationship.affection, BUMP_POINTS)
+        self.assertEqual(relationship.conflict, 0)
 
-    def test_negative_bump_lands_on_friction_and_cools_affection(self) -> None:
+    def test_negative_bump_adds_conflict(self) -> None:
         apply_relationship_bump(
             source=self.source,
             target=self.target,
@@ -103,11 +67,8 @@ class ApplyRelationshipBumpTests(TestCase):
             valence=-1,
         )
         relationship = CharacterRelationship.objects.get(source=self.source, target=self.target)
-        progress = RelationshipTrackProgress.objects.get(
-            relationship=relationship, track=self.friction
-        )
-        self.assertEqual(progress.developed_points, BUMP_POINTS)
-        self.assertEqual(relationship.affection, -BUMP_POINTS)
+        self.assertEqual(relationship.conflict, BUMP_POINTS)
+        self.assertEqual(relationship.affection, 0)
 
     def test_duplicate_raises_and_applies_no_points(self) -> None:
         apply_relationship_bump(
@@ -118,10 +79,7 @@ class ApplyRelationshipBumpTests(TestCase):
                 source=self.source, target=self.target, interaction=self.interaction, valence=1
             )
         relationship = CharacterRelationship.objects.get(source=self.source, target=self.target)
-        progress = RelationshipTrackProgress.objects.get(
-            relationship=relationship, track=self.regard
-        )
-        self.assertEqual(progress.developed_points, BUMP_POINTS)
+        self.assertEqual(relationship.affection, BUMP_POINTS)
         self.assertEqual(RelationshipBump.objects.filter(relationship=relationship).count(), 1)
 
     def test_opposite_valence_on_same_interaction_still_deduped(self) -> None:
@@ -138,65 +96,3 @@ class ApplyRelationshipBumpTests(TestCase):
             apply_relationship_bump(
                 source=self.source, target=self.source, interaction=self.interaction, valence=1
             )
-
-    def test_unseeded_tracks_raise(self) -> None:
-        RelationshipTrack.objects.filter(system_key__isnull=False).delete()
-        with self.assertRaises(SystemTracksNotSeededError):
-            apply_relationship_bump(
-                source=self.source, target=self.target, interaction=self.interaction, valence=1
-            )
-
-
-@override_settings(SEED_SAMPLE_CONTENT=True)
-class RelationshipScaleSeedTests(TestCase):
-    """The relationship_scale seed cluster is idempotent; tiers/emoji re-apply edits,
-    but the system tracks themselves preserve a staff edit (#2698).
-
-    ``relationships.RelationshipTrack`` is content-repo-owned (#2698) — looked up
-    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on (this suite opts in).
-    Unlike ``RelationshipTier``/``ReactionEmoji`` (still config, still
-    ``update_or_create``), the track row itself no longer upserts: a real behavior
-    change from the pre-#2698 ``update_or_create``, which silently re-applied the
-    PLACEHOLDER name over a staff edit on every re-seed.
-    """
-
-    def test_seed_idempotent_and_upserting(self) -> None:
-        from world.relationships.models import RelationshipTier
-        from world.scenes.models import ReactionEmoji
-        from world.seeds.relationship_scale import seed_relationship_scale_content
-
-        seed_relationship_scale_content()
-        seed_relationship_scale_content()
-
-        system_tracks = RelationshipTrack.objects.filter(system_key__isnull=False)
-        self.assertEqual(system_tracks.count(), 2)
-        regard = RelationshipTrack.objects.get(system_key=TrackSystemKey.REGARD)
-        friction = RelationshipTrack.objects.get(system_key=TrackSystemKey.FRICTION)
-        self.assertEqual(regard.sign, TrackSign.POSITIVE)
-        self.assertEqual(friction.sign, TrackSign.NEGATIVE)
-
-        tiers = RelationshipTier.objects.filter(track__in=[regard, friction])
-        self.assertEqual(tiers.count(), 8)
-        self.assertEqual(
-            sorted(tiers.filter(track=regard).values_list("point_threshold", flat=True)),
-            [25, 100, 500, 2000],
-        )
-
-        self.assertEqual(ReactionEmoji.objects.count(), 3)
-        self.assertEqual(ReactionEmoji.objects.filter(valence=0).count(), 1)
-
-        # Tiers still upsert (config, not content) — an edited tier name re-applies.
-        tier = tiers.get(track=regard, tier_number=1)
-        tier.name = "Renamed Tier"
-        tier.save(update_fields=["name"])
-        seed_relationship_scale_content()
-        tier.refresh_from_db()
-        self.assertEqual(tier.name, "Noticed")
-
-        # The track itself is content-repo-owned (#2698, ADR-0168) — a staff
-        # edit to its name now survives a re-seed instead of being clobbered.
-        regard.name = "Renamed"
-        regard.save(update_fields=["name"])
-        seed_relationship_scale_content()
-        regard.refresh_from_db()
-        self.assertEqual(regard.name, "Renamed")

@@ -157,7 +157,7 @@ class TargetKind(models.TextChoices):
     TRAIT = "TRAIT", "Trait"
     TECHNIQUE = "TECHNIQUE", "Technique"
     FACET = "FACET", "Facet"
-    RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship Track"
+    RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship"
     RELATIONSHIP_CAPSTONE = "RELATIONSHIP_CAPSTONE", "Relationship Capstone"
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
     MANTLE = "MANTLE", "Mantle"
