@@ -377,6 +377,11 @@ jobs:
           # a runner serialization error cannot mask the test result.
           if [[ "${{ matrix.shard.name }}" == "shard-7" ]]; then
             uv run arx test --keepdb $LABELS -- --durations 25
+          elif [[ "${{ matrix.shard.name }}" == "shard-9" ]]; then
+            # This shard previously went silent inside one test before the
+            # 20-minute job timeout. Verbosity 2 prints each test name so a
+            # repeat identifies the exact test entered before the stall.
+            uv run arx test --keepdb --parallel $LABELS -- --durations 25 --verbosity 2
           else
             uv run arx test --keepdb --parallel $LABELS -- --durations 25
           fi
