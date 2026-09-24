@@ -126,6 +126,15 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # mapping the account payload's AvailableCharacterSerializer uses. Lets the
     # GM-profile UI distinguish its own GM character from ordinary PCs.
     character_type = serializers.SerializerMethodField()
+    # Character slots (#3996). The Hall decides a card's action from these:
+    # PLAYER provenance freezes and thaws, anything else is given up; a frozen
+    # character shows its thaw date and does not count against the slots.
+    activity_state = serializers.CharField(source="character_sheet.activity_state", read_only=True)
+    activity_requirement = serializers.CharField(read_only=True)
+    creation_provenance = serializers.CharField(read_only=True)
+    thaw_available_at = serializers.DateTimeField(
+        source="character_sheet.activity_state_until", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = RosterEntry
@@ -143,6 +152,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "lifecycle_state",
             "roster_type",
             "character_type",
+            "activity_state",
+            "activity_requirement",
+            "creation_provenance",
+            "thaw_available_at",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
@@ -241,6 +254,34 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         """
         attention = self.context.get("character_attention")
         return attention.as_of_id if attention else 0
+
+
+class SlotHolderSerializer(serializers.Serializer):
+    """One occupant of an account's character slots (#3996); see ``SlotHolder``."""
+
+    kind = serializers.CharField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    roster_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    counts = serializers.BooleanField(read_only=True)
+    activity = serializers.BooleanField(read_only=True)
+
+
+class CharacterSlotsSerializer(serializers.Serializer):
+    """An account's slot ledger (#3996); ``total`` is null for an exempt account."""
+
+    total = serializers.IntegerField(read_only=True, allow_null=True)
+    used = serializers.IntegerField(read_only=True)
+    activity_total = serializers.IntegerField(read_only=True)
+    activity_used = serializers.IntegerField(read_only=True)
+    holders = SlotHolderSerializer(many=True, read_only=True)
+
+
+class ReleasedEntryResultSerializer(serializers.Serializer):
+    """Result of giving up a roster character (#3996): the entry is no longer
+    the account's, so only its id and new shelf come back."""
+
+    id = serializers.IntegerField(read_only=True)
+    roster_type = serializers.CharField(source="roster.roster_type", read_only=True)
 
 
 class SelectEntryRequestSerializer(serializers.Serializer):

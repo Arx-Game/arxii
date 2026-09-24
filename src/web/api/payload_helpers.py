@@ -16,6 +16,8 @@ from world.roster.models import (
     RosterEntry,
     RosterType,
 )
+from world.roster.services.slots import character_slots
+from world.roster.types import CharacterSlots
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
@@ -27,6 +29,7 @@ class AccountPayloadContext(TypedDict):
     pending_applications: list[RosterApplication]
     puppeted_character_ids: set[int]
     selected_entry: RosterEntry | None
+    character_slots: CharacterSlots | None
 
 
 def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
@@ -104,4 +107,8 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
         "pending_applications": pending_applications,
         "puppeted_character_ids": puppeted_character_ids,
         "selected_entry": selected_entry,
+        # Character slots (#3996): computed once here, read by both the
+        # `character_slots` field and `can_create_characters` (ADR-0260: context,
+        # never a memo on the serializer).
+        "character_slots": character_slots(account) if player_data else None,
     }

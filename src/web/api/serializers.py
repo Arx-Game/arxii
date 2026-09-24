@@ -7,7 +7,9 @@ from rest_framework import serializers
 from evennia_extensions.models import PageBackground
 from web.api.character_type import derive_character_type
 from world.roster.models import RosterApplication, RosterEntry
-from world.roster.serializers import MyRosterEntrySerializer
+from world.roster.serializers import CharacterSlotsSerializer, MyRosterEntrySerializer
+from world.roster.services.slots import character_slots
+from world.roster.types import CharacterSlots
 from world.scenes.models import Persona
 
 
@@ -116,6 +118,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     )
     email_verified = serializers.SerializerMethodField()
     can_create_characters = serializers.SerializerMethodField()
+    character_slots = serializers.SerializerMethodField()
     is_staff = serializers.BooleanField(read_only=True)
     is_gm = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
@@ -132,9 +135,17 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
         except EmailAddress.DoesNotExist:
             return False
 
-    def get_can_create_characters(self, obj):
-        """Check if user can create new characters."""
-        return obj.player_data.can_apply_for_characters()
+    def _slots(self, obj) -> CharacterSlots:
+        slots = self.context.get("character_slots")
+        return slots if slots is not None else character_slots(obj)
+
+    def get_can_create_characters(self, obj) -> bool:
+        """Verified email and a free character slot (#3996)."""
+        return obj.player_data.can_apply_for_characters() and self._slots(obj).has_free_slot
+
+    def get_character_slots(self, obj) -> dict:
+        """The account's slot ledger (#3996); ``total`` is null for exempt staff."""
+        return CharacterSlotsSerializer(self._slots(obj)).data
 
     def get_is_gm(self, obj) -> bool:
         """Whether this account has a GMProfile (#2004)."""
@@ -200,6 +211,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "email",
             "email_verified",
             "can_create_characters",
+            "character_slots",
             "is_staff",
             "is_gm",
             "avatar_url",

@@ -31075,6 +31075,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/RosterApplication'
           description: ''
+  /api/roster/entries/{id}/freeze/:
+    post:
+      operationId: roster_entries_freeze_create
+      description: Freeze an original character, freeing its slot (#3996).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyRosterEntry'
+          description: ''
+  /api/roster/entries/{id}/give-up/:
+    post:
+      operationId: roster_entries_give_up_create
+      description: 'Give up a roster character: end the tenure, return it to Available
+        (#3996).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleasedEntryResult'
+          description: ''
   /api/roster/entries/{id}/set_profile_picture/:
     post:
       operationId: roster_entries_set_profile_picture_create
@@ -31096,6 +31141,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RosterEntry'
+          description: ''
+  /api/roster/entries/{id}/thaw/:
+    post:
+      operationId: roster_entries_thaw_create
+      description: Thaw a frozen original character once its cooldown has passed (#3996).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyRosterEntry'
           description: ''
   /api/roster/entries/mine/:
     get:
@@ -61141,11 +61208,28 @@ components:
         character_type:
           type: string
           readOnly: true
+        activity_state:
+          type: string
+          readOnly: true
+        activity_requirement:
+          type: string
+          readOnly: true
+        creation_provenance:
+          type: string
+          readOnly: true
+        thaw_available_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
       required:
       - active_persona_id
+      - activity_requirement
+      - activity_state
       - attention_as_of_id
       - character_id
       - character_type
+      - creation_provenance
       - has_ambient_unread
       - id
       - lifecycle_state
@@ -61153,6 +61237,7 @@ components:
       - primary_persona_id
       - profile_picture_url
       - roster_type
+      - thaw_available_at
       - unread_direct
       - unread_narrative_count
     MyStoryGrant:
@@ -76010,6 +76095,21 @@ components:
       - viewer_has_kudosed
       - visibility
       - writeup
+    ReleasedEntryResult:
+      type: object
+      description: |-
+        Result of giving up a roster character (#3996): the entry is no longer
+        the account's, so only its id and new shelf come back.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        roster_type:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - roster_type
     Renown:
       type: object
       description: |-

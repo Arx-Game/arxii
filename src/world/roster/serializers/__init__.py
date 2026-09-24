@@ -51,12 +51,15 @@ from world.roster.serializers.npc_presets import (
     NPCStatlinePresetSerializer,
 )
 from world.roster.serializers.roster_core import (
+    CharacterSlotsSerializer,
     MyRosterEntrySerializer,
+    ReleasedEntryResultSerializer,
     RosterEntryListSerializer,
     RosterEntrySerializer,
     RosterListSerializer,
     SelectedEntryResultSerializer,
     SelectEntryRequestSerializer,
+    SlotHolderSerializer,
 )
 from world.roster.serializers.tenures import (
     RosterTenureLookupSerializer,
@@ -69,6 +72,7 @@ __all__ = [
     # Character serializers
     "CharacterGallerySerializer",
     "CharacterSerializer",
+    "CharacterSlotsSerializer",
     # Family serializers
     "FamilySerializer",
     "FamilyTreeSerializer",
@@ -87,6 +91,7 @@ __all__ = [
     "NPCStatlinePresetSerializer",
     # Mail serializers
     "PlayerMailSerializer",
+    "ReleasedEntryResultSerializer",
     "RosterApplicationApprovalSerializer",
     "RosterApplicationCreateSerializer",
     "RosterApplicationDetailSerializer",
@@ -103,6 +108,7 @@ __all__ = [
     "RosterTenureSerializer",
     "SelectEntryRequestSerializer",
     "SelectedEntryResultSerializer",
+    "SlotHolderSerializer",
     "TenureGallerySerializer",
     "TenureMediaSerializer",
     "UnreadMailCountSerializer",
