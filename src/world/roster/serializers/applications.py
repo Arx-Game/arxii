@@ -15,6 +15,8 @@ from world.roster.models import (
     ValidationErrorCodes,
     ValidationMessages,
 )
+from world.roster.models.choices import ActivityRequirement
+from world.roster.services.slots import SlotsFullError, assert_slot_available
 
 
 class RosterApplicationSerializer(serializers.Serializer):
@@ -112,6 +114,19 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
                     "message": ValidationMessages.DUPLICATE_PENDING_APPLICATION,
                 },
             )
+
+        # 5. The account must have a free character slot, and a free activity slot
+        # when this character carries an activity requirement (#3996).
+        entry = character.sheet_data.roster_entry
+        try:
+            assert_slot_available(
+                player_data.account,
+                wants_activity_requirement=entry.activity_requirement != ActivityRequirement.NONE,
+            )
+        except SlotsFullError as exc:
+            raise serializers.ValidationError(
+                {"code": exc.code, "message": exc.user_message},
+            ) from exc
 
     def get_policy_issues(self, player_data, character):
         """Get policy issues that would affect approval (but not creation)"""
@@ -268,7 +283,12 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
         review_notes = self.validated_data.get("review_notes", "")
 
         if action == ApplicationAction.APPROVE:
-            result = application.approve(request.user.player_data)
+            try:
+                result = application.approve(request.user.player_data)
+            except SlotsFullError as exc:
+                raise serializers.ValidationError(
+                    {"code": exc.code, "message": exc.user_message},
+                ) from exc
             return {"action": "approved", "tenure_created": bool(result)}
         result = application.deny(request.user.player_data, review_notes)
         return {"action": "denied", "success": result}

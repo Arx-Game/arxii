@@ -74,6 +74,18 @@ class RosterApplication(SharedMemoryModel):
 
         entry = self.character.roster_entry
 
+        # Character slots (#3996): the player may have taken another character
+        # since applying, so approval re-checks with this application left out of
+        # the count. Raises SlotsFullError for the caller to show the reviewer.
+        from world.roster.models.choices import ActivityRequirement
+        from world.roster.services.slots import assert_slot_available
+
+        assert_slot_available(
+            self.player_data.account,
+            wants_activity_requirement=entry.activity_requirement != ActivityRequirement.NONE,
+            exclude_application=self,
+        )
+
         # A returning player is re-seated onto their own past tenure rather than
         # given a new one (#2728 §7) — minting a second row would announce them as
         # "2nd player of X" when they are the same person, which is exactly what

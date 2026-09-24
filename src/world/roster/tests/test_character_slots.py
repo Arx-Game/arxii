@@ -155,3 +155,72 @@ class CharacterSlotsTests(TestCase):
         assert_slot_available(
             self.account, wants_activity_requirement=False, exclude_application=application
         )
+
+
+class SlotGatesTests(TestCase):
+    """The application and approval gates ask the ledger (#3996)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.roster.seeds import ensure_rosters
+
+        ensure_rosters()
+        cls.staff = AccountFactory(is_staff=True)
+        PlayerDataFactory(account=cls.staff)
+        cls.player = AccountFactory()
+        cls.player_data = PlayerDataFactory(account=cls.player)
+        from evennia_extensions.factories import EmailAddressFactory
+
+        EmailAddressFactory(user=cls.player, email=cls.player.email, verified=True, primary=True)
+
+    def _available_entry(self, requirement=ActivityRequirement.NONE):
+        from world.roster.models import Roster
+
+        return RosterEntryFactory(
+            roster=Roster.objects.get(roster_type=RosterType.AVAILABLE),
+            activity_requirement=requirement,
+        )
+
+    def test_apply_is_refused_on_the_activity_slot(self):
+        from rest_framework.test import APIClient
+
+        _held(self.player_data, requirement=ActivityRequirement.HIGH)
+        target = self._available_entry(ActivityRequirement.HIGH)
+        client = APIClient()
+        client.force_authenticate(self.player)
+        response = client.post(
+            f"/api/roster/entries/{target.pk}/apply/",
+            {"message": "I would like to play this character because they seem interesting."},
+            format="json",
+        )
+        assert response.status_code == 400, response.content
+        assert ACTIVITY_SLOT_FULL in response.content.decode()
+
+    @override_settings(CHARACTER_SLOTS_BASELINE=1)
+    def test_approve_is_refused_when_the_slot_filled_after_applying(self):
+        from world.roster.models import RosterTenure
+
+        target = self._available_entry()
+        application = RosterApplicationFactory(
+            player_data=self.player_data, character=target.character_sheet
+        )
+        # The player takes a character after applying; the reviewer's approval must
+        # not seat a second one.
+        _held(self.player_data)
+        self.player_data.__dict__.pop("cached_tenures", None)
+        with self.assertRaises(SlotsFullError):
+            application.approve(self.staff.player_data)
+        application.refresh_from_db()
+        assert application.status == ApplicationStatus.PENDING
+        assert not RosterTenure.objects.filter(roster_entry=target).exists()
+
+    @override_settings(CHARACTER_SLOTS_BASELINE=1)
+    def test_approve_counts_its_own_application_out(self):
+        target = self._available_entry()
+        application = RosterApplicationFactory(
+            player_data=self.player_data, character=target.character_sheet
+        )
+        tenure = application.approve(self.staff.player_data)
+        assert tenure
+        application.refresh_from_db()
+        assert application.status == ApplicationStatus.APPROVED

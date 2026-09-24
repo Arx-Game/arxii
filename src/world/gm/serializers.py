@@ -36,6 +36,7 @@ from world.mechanics.serializers import (
     SituationTemplateListSerializer,
 )
 from world.roster.models.applications import RosterApplication
+from world.roster.services.slots import SlotsFullError
 from world.scenes.action_constants import DifficultyChoice
 from world.societies.constants import RenownRisk
 
@@ -618,7 +619,12 @@ class GMApplicationActionSerializer(serializers.Serializer):
         notes = self.validated_data.get("review_notes", "")
 
         if action == self.APPROVE:
-            approve_application_as_gm(gm, application)
+            try:
+                approve_application_as_gm(gm, application)
+            except SlotsFullError as exc:
+                raise serializers.ValidationError(
+                    {"code": exc.code, "message": exc.user_message},
+                ) from exc
         else:
             deny_application_as_gm(gm, application, review_notes=notes)
         return application

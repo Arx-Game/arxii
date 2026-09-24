@@ -113,6 +113,9 @@ class ValidationErrorCodes:
     STORY_CONFLICT = "story_conflict"
     ROSTER_PERMISSION_DENIED = "roster_permission_denied"
     APPLICATION_LIMIT_EXCEEDED = "application_limit_exceeded"
+    # Character slots (#3996): mirror world.roster.services.slots' codes.
+    SLOTS_FULL = "slots_full"
+    ACTIVITY_SLOT_FULL = "activity_slot_full"
 
 
 class ValidationMessages:
