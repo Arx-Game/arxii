@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -2186,7 +2186,7 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
     from world.roster.services.slots import SlotsFullError, assert_slot_available  # noqa: PLC0415
 
     try:
-        assert_slot_available(account, wants_activity_requirement=False)
+        assert_slot_available(cast("AccountDB", account), wants_activity_requirement=False)
     except SlotsFullError as exc:
         return False, exc.user_message
 

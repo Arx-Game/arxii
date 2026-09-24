@@ -318,7 +318,7 @@ def release_tenure(sheet: CharacterSheet, *, player_data: PlayerData) -> None:
         raise ReleaseError(msg, user_message="An original character is frozen, not given up.")
     entry = current_roster_entry(sheet)
     tenure = entry.current_tenure if entry is not None else None
-    if tenure is None or tenure.player_data_id != player_data.pk:
+    if entry is None or tenure is None or tenure.player_data_id != player_data.pk:
         msg = f"Character {sheet.pk} is not held by player {player_data.pk}."
         raise ReleaseError(msg, user_message="That isn't one of your characters.")
     if sheet.character.sessions.count():

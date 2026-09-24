@@ -225,7 +225,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             .first()
         )
         tenure = entry.current_tenure if entry is not None else None
-        if tenure is None or tenure.player_data_id != player_data.pk:
+        if entry is None or tenure is None or tenure.player_data_id != player_data.pk:
             msg = "That isn't one of your characters."
             raise serializers.ValidationError(msg)
         return entry
