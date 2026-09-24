@@ -51,6 +51,9 @@ for _noisy_logger, _level in [
     # Character-draft tests intentionally exercise missing-starting-room
     # fallbacks; the model logs one ERROR per draft in those cases.
     ("world.character_creation.models", "CRITICAL"),
+    # View tests intentionally inject GiftResonanceUnresolvable to verify the
+    # 400 response; avoid printing the expected traceback for every worker.
+    ("world.character_creation.views", "CRITICAL"),
     ("flows.emit", "ERROR"),
 ]:
     LOGGING["loggers"].setdefault(

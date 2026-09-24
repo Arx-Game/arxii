@@ -128,7 +128,7 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Nine shards balanced by measured runtime. Test counts and the old
+          # Ten shards balanced by measured runtime. Test counts and the old
           # per-app estimates drifted substantially as these suites grew, so
           # oversized apps are split below rather than left on one shard.
           # (rebalanced from 6 shards 2026-07-17; corrected same day from the
@@ -260,15 +260,19 @@ jobs:
               commands world.missions world.relationships world.roster world.secrets
               world.goals world.agriculture world.journals world.tarot
               world.ceremonies world.worship
-          # shard-9: the second half of world.stories plus the two formerly
-          # oversized shard-6 apps. split_test_labels.py keeps the story halves
-          # complete and disjoint as test modules change.
+          # shard-9: the second half of world.stories plus character_creation.
+          # split_test_labels.py keeps the story halves complete and disjoint as
+          # test modules change. web is isolated on shard-10 because it is a
+          # large suite despite the old 30-test estimate.
           - name: shard-9
             split_app: world.stories
             split_part: 2
             split_of: 2
-            apps: >-
-              world.character_creation web
+            apps: world.character_creation
+          # shard-10: web's 746 discovered tests run independently instead of
+          # extending the already-heavy story/character-creation shard.
+          - name: shard-10
+            apps: web
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
