@@ -10,6 +10,16 @@ def forwards(apps, schema_editor):
     RosterEntry.objects.filter(character_sheet__is_oc=True).update(
         creation_provenance="player",  # CreationProvenance.PLAYER's stored value
     )
+    # Historical rows: before #3996 the two staff paths that mint an entry outside
+    # character creation (a graduated NPC, a GM or staff character) left the
+    # column default, PLAYER. An entry on the Available, Restricted or NPC shelf
+    # is staff-authored by construction (an original character is frozen, never
+    # returned to a shelf), so retag those; Active-shelf rows with a tenure are
+    # left as they are, and staff can correct one in the admin.
+    RosterEntry.objects.filter(
+        roster__roster_type__in=["Available", "Restricted", "NPC"],
+        creation_provenance="player",
+    ).update(creation_provenance="staff")  # CreationProvenance.STAFF's stored value
 
 
 class Migration(migrations.Migration):
