@@ -12,7 +12,9 @@
 # runs after removing the branch's linked worktree. The old code ran bare
 # `git checkout main` + `git branch -d`, which failed from inside a worktree
 # ("'main' is already checked out at ...", "cannot delete branch checked out
-# at ...").
+# at ..."). The script also `cd`s into the primary tree before removing the
+# branch worktree, so the `gh` calls after removal never run from a deleted cwd
+# (#3978).
 #
 # Exits:
 #   0  success (cleanup complete, JSON emitted)
@@ -71,6 +73,10 @@ git -C "$MAIN_WT" pull --ff-only --quiet
 # Remove the branch's linked worktree first — a branch checked out in a worktree
 # cannot be deleted. --force because the worktree carries untracked build
 # artifacts (tracked changes already gated to exit 8 above).
+# Step into the main tree first: the caller usually stands in the branch
+# worktree, and every later `gh` call runs git in the cwd, which fails with
+# "Unable to read current working directory" once that directory is gone (#3978).
+cd "$MAIN_WT"
 if [[ -n "$BRANCH_WT" ]]; then
   git -C "$MAIN_WT" worktree remove --force "$BRANCH_WT"
 fi

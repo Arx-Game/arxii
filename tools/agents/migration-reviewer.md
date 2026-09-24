@@ -42,28 +42,48 @@ schema-then-data is broken running down. The fix is expand/migrate/contract: add
 columns in one migration, copy in the next, drop in a third. `tools/lint_migration_ddl_dml.py`
 flags this mechanically; its grandfather list is closed, so never propose adding to it.
 
-**2. A backfill that carries nothing.** Before accepting any `RunPython`, query the
+**2. A constraint added over rows that do not satisfy it yet.** This broke a
+production deploy on 2026-09-24. `0149_partitioned_metadata_integrity` added a
+nullable `PoseSubmission.timestamp` and, in the same migration, a CHECK that
+`interaction_id` and `timestamp` are both null or both set. Every existing row had
+an `interaction_id` and no `timestamp`, so the converge died with:
+
+```
+psycopg.errors.CheckViolation: check constraint "pose_submission_interaction_timestamp_pair"
+of relation "arxii_posesubmission" is violated by some row
+```
+
+Report it whenever an `AddConstraint` (check, unique or conditional unique), a
+`RunSQL` foreign key, an `AlterField` to `unique=True` or to `null=False`, or a
+non-null `AddField` with no default lands on a table that already has rows. For
+each one, name the rows that would violate it: especially a column added in the
+same migration or the same PR, which is null on every existing row. The fix is a
+backfill migration (or a stated manual cleanup of play-state rows) that runs
+before the constraint, in its own migration. Never accept "the new column is only
+written by new code" as evidence, since existing rows never pass through that code.
+
+**3. A backfill that carries nothing.** Before accepting any `RunPython`, query the
 column it reads. If it holds one value across every row, it is a constant, and the
 correct operation is `AddField(default=<value>, preserve_default=False)` — pure DDL,
 no data migration. The 0220 backfill read a column that was `True` on all 15 rows.
 
-**3. Content creation dressed as migration.** A `create`/`get_or_create` of a
+**4. Content creation dressed as migration.** A `create`/`get_or_create` of a
 content row is seed data (banned; `tools/check_migration_seed_data.py`). A
 migration that invents a row for every parent lacking one is authoring — that
 belongs to a human in the admin, with a dashboard sentinel for the gap.
 
-**4. A destructive operation with no stated disposition.** Per ADR-0237, every
+**5. A destructive operation with no stated disposition.** Per ADR-0237, every
 `RemoveField`/`DeleteModel` on an authored-content table is a restructure (backfill
 in its own migration, same PR), a deliberate discard (stated, signed off), or empty
 in production (a claim to be *checked against the dump*, never assumed). If the PR
 body does not say which, that is a finding. Play-state tables are exempt;
 `RenameField` is not data loss.
 
-**5. A `max_migration.txt` collision.** One sentinel repo-wide since #2906, so any
+**6. A `max_migration.txt` collision.** One sentinel repo-wide since #2906, so any
 two migration-bearing PRs collide. Fix is `arx manage rebase_migration arxii`,
 never hand-renumbering.
 
-**6. Old code against new schema.** Deploy migrates before it swaps the release, so
+**7. Old code against new schema.** Deploy migrates before it swaps the release, so
 a dropped or narrowed column breaks the still-running old code. Flag anything the
 previous release still reads.
 
