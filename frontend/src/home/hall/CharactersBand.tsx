@@ -46,7 +46,9 @@ import {
   clearBrowsingIdentity,
 } from '@/store/gameSlice';
 import { writeTabIdentity, clearTabIdentity } from '@/store/browsingIdentity';
+import { CharacterActionsMenu } from './CharacterActionsMenu';
 import { GMSlot } from './GMSlot';
+import { NewCharacterTile } from './NewCharacterTile';
 
 function getInitials(name: string): string {
   return name
@@ -77,6 +79,7 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
         label="tidings waiting"
         className="absolute right-2 top-2"
       />
+      <CharacterActionsMenu entry={entry} />
       <button
         type="button"
         onClick={() => onSelect(entry)}
@@ -95,6 +98,9 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
           <span className="font-body text-xs text-muted-foreground">
             {live ? 'In the world' : dockedStateLabel(entry.lifecycle_state)}
           </span>
+        )}
+        {entry.activity_state === 'FROZEN' && (
+          <span className="font-body text-xs text-muted-foreground">Frozen</span>
         )}
       </button>
       <PersonaTiles
@@ -156,6 +162,7 @@ export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) 
             onSelect={handleSelect}
           />
         )}
+        <NewCharacterTile slots={account?.character_slots} characters={pcs} />
       </div>
       <div className="mt-3 flex justify-end">
         <Button

@@ -28,6 +28,30 @@ export interface PendingApplication {
   applied_date: string;
 }
 
+/**
+ * One occupant of the account's character slots (#3996). `kind` is
+ * `character`, `frozen` (listed, not counted), `draft` or `application`;
+ * `activity` marks the one roster character with an activity requirement.
+ * Hand-rolled with `AccountData` below: `/api/user/` is not in the generated
+ * schema.
+ */
+export interface SlotHolder {
+  kind: 'character' | 'frozen' | 'draft' | 'application';
+  name: string;
+  roster_entry_id: number | null;
+  counts: boolean;
+  activity: boolean;
+}
+
+/** The account's slot ledger (#3996). `total` is null for an exempt (staff) account. */
+export interface CharacterSlots {
+  total: number | null;
+  used: number;
+  activity_total: number;
+  activity_used: number;
+  holders: SlotHolder[];
+}
+
 export interface AccountData {
   id: number;
   username: string;
@@ -36,6 +60,7 @@ export interface AccountData {
   email: string;
   email_verified: boolean;
   can_create_characters: boolean;
+  character_slots: CharacterSlots;
   is_staff: boolean;
   /** Whether this account has an approved GMProfile (#2004). */
   is_gm: boolean;

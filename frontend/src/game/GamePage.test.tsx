@@ -58,6 +58,10 @@ const rosterEntry: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 // A second puppet (#2156 review fix — multi-puppet threading/baseline tests
@@ -77,6 +81,10 @@ const rosterEntry2: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 vi.mock('@/roster/queries', () => ({

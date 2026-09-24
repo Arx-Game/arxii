@@ -65,6 +65,10 @@ const aria: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 function gmAccount(overrides: Partial<AccountData> = {}): AccountData {
@@ -76,6 +80,7 @@ function gmAccount(overrides: Partial<AccountData> = {}): AccountData {
     email: 'gm@example.com',
     email_verified: true,
     can_create_characters: true,
+    character_slots: { total: 4, used: 0, activity_total: 1, activity_used: 0, holders: [] },
     is_staff: false,
     is_gm: true,
     available_characters: [],

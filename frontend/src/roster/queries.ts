@@ -1,20 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  fetchRosterEntry,
+  associateMedia,
+  createTenureGallery,
   fetchMyRosterEntries,
   fetchMyTenures,
-  fetchRosters,
+  fetchPlayerMedia,
   fetchRosterEntries,
+  fetchRosterEntry,
+  fetchRosters,
+  fetchTenureGalleries,
+  postFreezeEntry,
+  postGiveUpEntry,
   postRosterApplication,
   postSelectEntry,
-  fetchPlayerMedia,
-  uploadPlayerMedia,
-  associateMedia,
-  fetchTenureGalleries,
-  createTenureGallery,
-  updateTenureGallery,
+  postThawEntry,
   setEntryProfilePicture,
+  updateTenureGallery,
+  uploadPlayerMedia,
 } from './api';
 import type { RosterEntryFilters } from './api';
 import type { RosterEntryData, RosterData, PlayerMedia, TenureGallery } from './types';
@@ -167,6 +170,33 @@ export function useSelectCharacterMutation() {
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Couldn't save your character selection."),
   });
+}
+
+/**
+ * Slot actions (#3996). Each invalidates the Hall's list and the account
+ * payload, which carries the slot ledger.
+ */
+function useSlotActionMutation<T>(action: (entryId: number) => Promise<T>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: action,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['account'] });
+    },
+  });
+}
+
+export function useFreezeEntryMutation() {
+  return useSlotActionMutation(postFreezeEntry);
+}
+
+export function useThawEntryMutation() {
+  return useSlotActionMutation(postThawEntry);
+}
+
+export function useGiveUpEntryMutation() {
+  return useSlotActionMutation(postGiveUpEntry);
 }
 
 export function usePlayerMediaQuery(enabled = true) {

@@ -65,6 +65,10 @@ const gmEntry: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'GM',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 const approvedMineData: MockMineData = {

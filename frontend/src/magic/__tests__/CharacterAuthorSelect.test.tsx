@@ -18,6 +18,10 @@ function makeEntry(overrides: Partial<MyRosterEntry> & { character_id: number })
     lifecycle_state: 'ALIVE',
     roster_type: 'Active',
     character_type: 'PC',
+    activity_state: 'ACTIVE',
+    activity_requirement: 'NONE',
+    creation_provenance: 'PLAYER',
+    thaw_available_at: null,
     ...overrides,
   };
 }

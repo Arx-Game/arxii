@@ -205,6 +205,10 @@ describe('Header', () => {
       lifecycle_state: 'ALIVE',
       roster_type: 'Active',
       character_type: 'PC',
+      activity_state: 'ACTIVE',
+      activity_requirement: 'NONE',
+      creation_provenance: 'PLAYER',
+      thaw_available_at: null,
     };
 
     it("renders no chip when there is no selection (byte-for-byte today's header)", () => {

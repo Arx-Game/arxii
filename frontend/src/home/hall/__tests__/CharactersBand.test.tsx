@@ -20,6 +20,10 @@ import type { MyRosterEntry } from '@/roster/types';
 const mockSelectMutate = vi.fn();
 vi.mock('@/roster/queries', () => ({
   useSelectCharacterMutation: () => ({ mutate: mockSelectMutate, isPending: false }),
+  // #3996 slot actions, reached through the card menu and the new-character tile.
+  useFreezeEntryMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useThawEntryMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useGiveUpEntryMutation: () => ({ mutate: vi.fn(), isPending: false }),
   // useBrowsingIdentity() calls this internally; CharactersBand only reads
   // `entryId` off the hook (not `entry`/`name`), so an empty roster here is
   // fine: the docked-highlight comparison is id-to-id straight off Redux.
@@ -45,6 +49,10 @@ const aria: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 const bianca: MyRosterEntry = {
@@ -61,6 +69,10 @@ const bianca: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 describe('CharactersBand', () => {

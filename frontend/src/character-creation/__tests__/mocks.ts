@@ -32,6 +32,7 @@ export function createMockAccount(options: MockAccountOptions = {}): AccountData
     email: isStaff ? 'staff@test.com' : 'player@test.com',
     email_verified: true,
     can_create_characters: canCreateCharacters,
+    character_slots: { total: 4, used: 0, activity_total: 1, activity_used: 0, holders: [] },
     is_staff: isStaff,
     is_gm: isGM,
     available_characters: [],

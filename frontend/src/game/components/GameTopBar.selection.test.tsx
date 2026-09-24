@@ -60,6 +60,10 @@ const aria: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 const bianca: MyRosterEntry = {
@@ -76,6 +80,10 @@ const bianca: MyRosterEntry = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  activity_state: 'ACTIVE',
+  activity_requirement: 'NONE',
+  creation_provenance: 'PLAYER',
+  thaw_available_at: null,
 };
 
 describe('GameTopBar selection wiring (#3479 decision 4)', () => {

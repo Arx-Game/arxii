@@ -60,6 +60,10 @@ function rosterEntry(id: number, name: string): MyRosterEntry {
     lifecycle_state: 'ALIVE',
     roster_type: 'Active',
     character_type: 'PC',
+    activity_state: 'ACTIVE',
+    activity_requirement: 'NONE',
+    creation_provenance: 'PLAYER',
+    thaw_available_at: null,
   };
 }
 
@@ -84,6 +88,7 @@ const BASE_ACCOUNT: AccountData = {
   email: 't@example.com',
   email_verified: true,
   can_create_characters: true,
+  character_slots: { total: 4, used: 0, activity_total: 1, activity_used: 0, holders: [] },
   is_staff: false,
   is_gm: false,
   available_characters: [],
@@ -124,6 +129,10 @@ describe('useAccountQuery hydration (#3412)', () => {
         lifecycle_state: 'ALIVE',
         roster_type: 'Active',
         character_type: 'PC',
+        activity_state: 'ACTIVE',
+        activity_requirement: 'NONE',
+        creation_provenance: 'PLAYER',
+        thaw_available_at: null,
       },
     });
 
@@ -194,6 +203,10 @@ describe('useAccountQuery hydration (#3412)', () => {
         lifecycle_state: 'ALIVE',
         roster_type: 'Active',
         character_type: 'PC',
+        activity_state: 'ACTIVE',
+        activity_requirement: 'NONE',
+        creation_provenance: 'PLAYER',
+        thaw_available_at: null,
       },
     });
 
