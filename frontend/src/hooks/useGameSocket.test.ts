@@ -90,7 +90,7 @@ class MockWebSocket {
   /** Records the caller's intent only; a test dispatches the resulting
    * `close` event itself, the way a real socket fires it asynchronously. */
   closed = false;
-  close(): void {
+  close(..._args: unknown[]): void {
     this.closed = true;
   }
 
@@ -194,6 +194,51 @@ describe('useGameSocket connection generation', () => {
     });
 
     expect(mockDispatch.mock.calls.length).toBe(dispatchCallsBeforeStaleMessage);
+  });
+});
+
+describe('useGameSocket wake resume (#3933)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('replaces a stale suspended socket and ignores its late close event', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Wake-Resume';
+
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const staleSocket = MockWebSocket.instances[0];
+
+    act(() => {
+      result.current.resume(character);
+    });
+
+    expect(staleSocket.closed).toBe(true);
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'game/setSessionConnectionStatus',
+      payload: { character, status: false },
+    });
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'game/setSessionLifecycle',
+      payload: { character, lifecycleState: 'reconnecting' },
+    });
+
+    act(() => {
+      staleSocket.dispatch('close', { code: 1001 });
+    });
+    expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'game/resetGame', payload: undefined });
   });
 });
 
