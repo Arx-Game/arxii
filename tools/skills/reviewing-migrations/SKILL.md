@@ -152,6 +152,25 @@ Never migrate `arxiidev` itself, and never point any of this at production.
 `CREATE DATABASE ... TEMPLATE arxiidev` fails whenever anything holds a
 connection to it; the `pg_dump` pipe above has no such problem.
 
+### Do not test a backfill by replaying the migration graph
+
+A unit test that rewinds the schema with `MigrationExecutor` to the migration
+before a backfill, builds rows through historical models, and migrates forward
+again costs the whole chain's DDL twice per test, and that cost grows with every
+migration anyone adds afterwards. `test_offers_migration.py` (#3684) did this for
+0110: by 2026-09-24 its two tests took 1043 s and 992 s on `main`, 34 minutes of a
+shard budgeted at ~344 s, and on a branch seven migrations further along they died
+with `MemoryError` and hung the parallel runner until the 4-hour cancel (#3998). It
+was also doomed by design: ADR-0276 regenerates the chain from a deployed commit,
+which deletes the very nodes such a test names.
+
+Prove a backfill the way section 5 says, against a database with rows in it, and
+keep any unit test on the backfill's own function: call `forwards(apps, editor)`
+with `django.apps.apps` and factory rows when the source models still exist, or
+skip the unit test when the same PR's contract migration removes them. A test
+that still needs historical models is a sign the expand/migrate/contract split
+put the contract too early.
+
 ## Checklist
 
 - [ ] Read every operation in the generated file
