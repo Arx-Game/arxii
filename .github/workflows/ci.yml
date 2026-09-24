@@ -260,19 +260,19 @@ jobs:
               commands world.missions world.relationships world.roster world.secrets
               world.goals world.agriculture world.journals world.tarot
               world.ceremonies world.worship
-          # shard-9: the second half of world.stories plus character_creation.
+          # shard-9: the second half of world.stories by itself.
           # split_test_labels.py keeps the story halves complete and disjoint as
-          # test modules change. web is isolated on shard-10 because it is a
-          # large suite despite the old 30-test estimate.
+          # test modules change.
           - name: shard-9
             split_app: world.stories
             split_part: 2
             split_of: 2
-            apps: world.character_creation
-          # shard-10: web's 746 discovered tests run independently instead of
-          # extending the already-heavy story/character-creation shard.
+            apps: ""
+          # shard-10: character_creation and web run independently from the
+          # story slice. Keeping these suites together avoids extending the
+          # story shard while preserving complete backend coverage.
           - name: shard-10
-            apps: web
+            apps: world.character_creation web
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
