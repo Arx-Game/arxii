@@ -36,11 +36,18 @@ LOGGING["loggers"]["django.request"]["level"] = "ERROR"
 # in production for ops visibility but pure noise in tests. Set to WARNING so
 # unexpected ERROR-level events still surface.
 # world.skills is set to ERROR because the noisy line is at WARNING level.
+# Seed and settlement tests intentionally exercise missing content and rejected
+# contracts. Their per-fixture diagnostics are useful during a focused debug run
+# but can produce megabytes of CI output; errors remain visible.
 for _noisy_logger, _level in [
     ("world.game_clock", "WARNING"),
     ("world.progression", "WARNING"),
     ("world.fatigue", "WARNING"),
     ("world.skills", "ERROR"),
+    ("world.stories", "ERROR"),
+    ("world.battles", "ERROR"),
+    ("world.seeds", "ERROR"),
+    ("world.areas.seeds", "ERROR"),
     ("flows.emit", "ERROR"),
 ]:
     LOGGING["loggers"].setdefault(
