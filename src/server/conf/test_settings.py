@@ -48,6 +48,9 @@ for _noisy_logger, _level in [
     ("world.battles", "ERROR"),
     ("world.seeds", "ERROR"),
     ("world.areas.seeds", "ERROR"),
+    # Character-draft tests intentionally exercise missing-starting-room
+    # fallbacks; the model logs one ERROR per draft in those cases.
+    ("world.character_creation.models", "CRITICAL"),
     ("flows.emit", "ERROR"),
 ]:
     LOGGING["loggers"].setdefault(
