@@ -8,7 +8,7 @@ import type { MyRosterEntry } from '@/roster/types';
 export type SlotAction = 'freeze' | 'thaw' | 'give-up';
 
 export function slotActionFor(entry: MyRosterEntry): SlotAction {
-  if (entry.creation_provenance !== 'PLAYER') return 'give-up';
+  if (entry.creation_provenance !== 'player') return 'give-up';
   return entry.activity_state === 'FROZEN' ? 'thaw' : 'freeze';
 }
 

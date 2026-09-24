@@ -36,14 +36,14 @@ function entry(id: number, name: string, provenance: string): MyRosterEntry {
     roster_type: 'Active',
     character_type: 'PC',
     activity_state: 'ACTIVE',
-    activity_requirement: provenance === 'PLAYER' ? 'NONE' : 'HIGH',
+    activity_requirement: provenance === 'player' ? 'NONE' : 'HIGH',
     creation_provenance: provenance,
     thaw_available_at: null,
   };
 }
 
-const aria = entry(1, 'Aria', 'PLAYER');
-const bram = entry(2, 'Bram', 'STAFF');
+const aria = entry(1, 'Aria', 'player');
+const bram = entry(2, 'Bram', 'staff');
 
 const roomy: CharacterSlots = {
   total: 4,

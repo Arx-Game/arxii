@@ -66,7 +66,7 @@ const aria: MyRosterEntry = {
   character_type: 'PC',
   activity_state: 'ACTIVE',
   activity_requirement: 'NONE',
-  creation_provenance: 'PLAYER',
+  creation_provenance: 'player',
   thaw_available_at: null,
 };
 
@@ -86,7 +86,7 @@ const bianca: MyRosterEntry = {
   character_type: 'PC',
   activity_state: 'ACTIVE',
   activity_requirement: 'NONE',
-  creation_provenance: 'PLAYER',
+  creation_provenance: 'player',
   thaw_available_at: null,
 };
 

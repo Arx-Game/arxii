@@ -20,7 +20,7 @@ function makeEntry(overrides: Partial<MyRosterEntry> & { character_id: number })
     character_type: 'PC',
     activity_state: 'ACTIVE',
     activity_requirement: 'NONE',
-    creation_provenance: 'PLAYER',
+    creation_provenance: 'player',
     thaw_available_at: null,
     ...overrides,
   };

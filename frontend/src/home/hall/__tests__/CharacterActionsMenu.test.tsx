@@ -36,7 +36,7 @@ function entry(overrides: Partial<MyRosterEntry>): MyRosterEntry {
     character_type: 'PC',
     activity_state: 'ACTIVE',
     activity_requirement: 'NONE',
-    creation_provenance: 'PLAYER',
+    creation_provenance: 'player',
     thaw_available_at: null,
     ...overrides,
   };
@@ -64,7 +64,7 @@ describe('CharacterActionsMenu', () => {
 
   it('offers Give up for a roster character', async () => {
     renderWithProviders(
-      <CharacterActionsMenu entry={entry({ creation_provenance: 'STAFF', name: 'Bram' })} />
+      <CharacterActionsMenu entry={entry({ creation_provenance: 'staff', name: 'Bram' })} />
     );
     await openMenu('Bram');
     expect(screen.getByRole('menuitem', { name: 'Give up' })).toBeInTheDocument();

@@ -8,7 +8,7 @@ from django.db import migrations
 def forwards(apps, schema_editor):
     RosterEntry = apps.get_model("arxii", "RosterEntry")
     RosterEntry.objects.filter(character_sheet__is_oc=True).update(
-        creation_provenance="PLAYER",  # CreationProvenance.PLAYER
+        creation_provenance="player",  # CreationProvenance.PLAYER's stored value
     )
 
 

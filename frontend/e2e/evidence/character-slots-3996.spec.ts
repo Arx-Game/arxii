@@ -14,7 +14,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const EVIDENCE_DIR = path.join(REPO_ROOT, 'docs', 'reviews', '3996');
 const shot = (name: string) => path.join(EVIDENCE_DIR, name);
 
-function entry(id: number, name: string, provenance: 'PLAYER' | 'STAFF', frozen = false) {
+function entry(id: number, name: string, provenance: 'player' | 'staff', frozen = false) {
   return {
     id,
     name,
@@ -30,14 +30,14 @@ function entry(id: number, name: string, provenance: 'PLAYER' | 'STAFF', frozen 
     roster_type: 'Active',
     character_type: 'PC',
     activity_state: frozen ? 'FROZEN' : 'ACTIVE',
-    activity_requirement: provenance === 'PLAYER' ? 'NONE' : 'HIGH',
+    activity_requirement: provenance === 'player' ? 'NONE' : 'HIGH',
     creation_provenance: provenance,
     thaw_available_at: frozen ? '2026-10-24T00:00:00Z' : null,
   };
 }
 
-const ARIA = entry(1, 'Aria Vell', 'PLAYER');
-const BRAM = entry(2, 'Bram Solano', 'STAFF');
+const ARIA = entry(1, 'Aria Vell', 'player');
+const BRAM = entry(2, 'Bram Solano', 'staff');
 
 function slots(total: number | null, used: number, holders: object[]) {
   return { total, used, activity_total: 1, activity_used: used > 1 ? 1 : 0, holders };
@@ -150,7 +150,7 @@ test.describe('character slots evidence (#3996)', () => {
   });
 
   test('5 a frozen character shows Frozen on its card and Thaw in its menu', async ({ page }) => {
-    const frozen = entry(1, 'Aria Vell', 'PLAYER', true);
+    const frozen = entry(1, 'Aria Vell', 'player', true);
     const errors = await mountHall(page, {
       total: 4,
       used: 1,

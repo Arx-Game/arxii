@@ -207,7 +207,7 @@ describe('Header', () => {
       character_type: 'PC',
       activity_state: 'ACTIVE',
       activity_requirement: 'NONE',
-      creation_provenance: 'PLAYER',
+      creation_provenance: 'player',
       thaw_available_at: null,
     };
 
