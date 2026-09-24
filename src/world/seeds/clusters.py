@@ -566,8 +566,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Social relationships: the allure ModifierTarget + Attracted To / Very Attracted conditions
     # the directed-allure engine reads + Flirt/Seduce effects set (#1697).
     "social_relationships": _seed_social_relationships,
-    # Relationship scale: the Regard/Friction system tracks ambient bumps write to,
-    # their 25/100/500/2000 tier bands, and the ReactionEmoji catalog (#1699).
+    # Relationship scale: the starter RelationshipType catalogue, the single
+    # RelationshipTier ladder (25/100/500/2000 depth), the RelationshipGrowthConfig
+    # singleton, and the ReactionEmoji catalog (#1699, #3957).
     "relationship_scale": _seed_relationship_scale,
     # Social actions: authoritative social ActionTemplates + pools + Flirt/Seduce attraction
     # effects. After social_relationships (its conditions) + checks (its CheckTypes) (#1697).
@@ -715,9 +716,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "building_listings": _seed_building_listings,
     "agriculture": _seed_agriculture,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
-    # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
-    # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
-    # any other cluster.
+    # reaction-kind + weekly-grant paths need, plus the "xp" KudosClaimCategory the claim UI
+    # needs to offer anything (#2026). No dependencies on any other cluster.
     "kudos": _seed_kudos,
     # Survivability: the knockout/default-death/default-wound pools + Bleeding
     # Out staged condition + Unconscious capability zeroing + foundational
@@ -868,7 +868,12 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         ContributionMethod,
         ProjectKindResonanceAward,
     )
-    from world.relationships.models import RelationshipCondition, RelationshipTier  # noqa: PLC0415
+    from world.relationships.models import (  # noqa: PLC0415
+        RelationshipCondition,
+        RelationshipGrowthConfig,
+        RelationshipTier,
+        RelationshipType,
+    )
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.roster.models import GameInvite, Kinsperson, NPCStatlinePreset  # noqa: PLC0415
     from world.scenes.models import ReactionEmoji  # noqa: PLC0415
@@ -933,9 +938,14 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social relationships: the allure target + Attracted/Very-Attracted RelationshipConditions
         # (a shared lookup); represented by RelationshipCondition (#1697).
         "social_relationships": [RelationshipCondition],
-        # Relationship scale: Regard/Friction system tracks + tier bands + emoji
-        # catalog; represented by RelationshipTier and ReactionEmoji (#1699).
-        "relationship_scale": [RelationshipTier, ReactionEmoji],
+        # Relationship scale: the starter tie-type catalogue + tier ladder + growth
+        # config + emoji catalog (#1699, #3957).
+        "relationship_scale": [
+            RelationshipType,
+            RelationshipTier,
+            RelationshipGrowthConfig,
+            ReactionEmoji,
+        ],
         # Social actions seed ActionTemplate rows (#1697).
         "social_actions": [ActionTemplate],
         # Social combat: 4 CheckTypes + Inspired condition + Charming Word
@@ -1062,9 +1072,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Building listings: a placeholder for-sale Building so purchase_building
         # is exercisable on a fresh dev DB before real sale inventory is authored (#2991).
         "building_listings": [BuildingListing],
-        # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
-        # relationship_writeup) + the "xp" KudosClaimCategory; represented by
-        # KudosSourceCategory (#2026).
+        # Kudos: 3 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement)
+        # + the "xp" KudosClaimCategory; represented by KudosSourceCategory (#2026).
         "kudos": [KudosSourceCategory],
         # Survivability: knockout/default-death/default-wound pools + Bleeding Out
         # staged condition + foundational CapabilityTypes + dream room (#2287).

@@ -77,7 +77,8 @@ and the 5-axis Thread model no longer exist.
 this app (each with an optional OneToOne link back to `mechanics.ModifierTarget`
 for modifier-system integration). The old `ThreadType` lookup was deleted as
 part of the Resonance Pivot — relationship flavor is now carried by
-`relationships.RelationshipTrack`.
+`relationships.RelationshipType` (the label catalogue; renamed from
+`RelationshipTrack` in #3957).
 
 ### Character State
 
@@ -1123,13 +1124,13 @@ cast seam, combat cosmetic narration, and the web `SignatureViewSet`.
 The legacy 5-axis `Thread` / `ThreadType` / `ThreadJournal` / `ThreadResonance`
 family was deleted in favor of a discriminator + typed-FK design. A Thread is
 owned by a CharacterSheet, channels a single Resonance, and is anchored to
-exactly one of: Trait / Technique / Facet / RelationshipTrackProgress /
-RelationshipCapstone / CovenantRole / Mantle / SanctumDetails. The bare ROOM
+exactly one of: Trait / Technique / Facet / CharacterRelationship (one SIDE of a
+tie since #3957) / RelationshipCapstone / CovenantRole / Mantle / SanctumDetails. The bare ROOM
 `target_kind` was removed; SANCTUM is the leveled room anchor.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER), `signature_bonus` (nullable FK to `SignatureMotifBonus`, PROTECT — only settable on TECHNIQUE-kind threads, enforced by `clean()` + `CheckConstraint`, #1582 ADR-0072) |
+| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship` / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER), `signature_bonus` (nullable FK to `SignatureMotifBonus`, PROTECT — only settable on TECHNIQUE-kind threads, enforced by `clean()` + `CheckConstraint`, #1582 ADR-0072) |
 | `ThreadLevelUnlock` | Per-thread XP-locked-boundary receipt | `thread` FK, `unlocked_level`, `xp_spent`, `acquired_at` (unique per (thread, unlocked_level)) |
 
 **Integrity layers on Thread.** (1) `clean()` asserts exactly one `target_*`
@@ -1293,7 +1294,7 @@ thread anchors — they appear here only as unlock dimensions.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ThreadWeavingUnlock` | Authored unlock catalog | `target_kind`, one of (`unlock_trait` FK Trait / `unlock_gift` FK Gift / `unlock_item_typeclass_path` str / `unlock_track` FK RelationshipTrack), `xp_cost`, `paths` M2M (in-band Paths), `out_of_path_multiplier` Decimal default 2.0. Per-kind partial unique constraints guarantee one unlock per anchor. CheckConstraints mirror the typed-FK rule; `target_kind=RELATIONSHIP_CAPSTONE` is forbidden (inherited from parent track). SANCTUM threads do not use this model — no unlock row needed. Has a derived `display_name` property |
+| `ThreadWeavingUnlock` | Authored unlock catalog | `target_kind`, one of (`unlock_trait` FK Trait / `unlock_gift` FK Gift / `unlock_item_typeclass_path` str / `unlock_type` FK RelationshipType), `xp_cost`, `paths` M2M (in-band Paths), `out_of_path_multiplier` Decimal default 2.0. Per-kind partial unique constraints guarantee one unlock per anchor. CheckConstraints mirror the typed-FK rule; `target_kind=RELATIONSHIP_CAPSTONE` is forbidden (inherited from the parent RELATIONSHIP_TRACK unlock). SANCTUM threads do not use this model — no unlock row needed. Has a derived `display_name` property |
 | `CharacterThreadWeavingUnlock` | Per-character purchase record | `character` FK CharacterSheet, `unlock` FK, `acquired_at`, `xp_spent` (actual — in-Path=xp_cost, out-of-Path=xp_cost × multiplier), optional `teacher` FK RosterTenure. Unique per (character, unlock) |
 | `ThreadWeavingTeachingOffer` | Teacher-side offer | `teacher` FK RosterTenure, `unlock` FK, `pitch`, `gold_cost`, `banked_ap`, `created_at`. Mirrors `CodexTeachingOffer` |
 
@@ -1443,9 +1444,10 @@ resolvable at all — the base pull is simply unmodulated in that case.
 The `RELATIONSHIP_TRACK` sibling rule, `relationship_bond_modulation(thread,
 target, effect_row, base_scaled)` (`world/magic/services/pull_modulation_relationship.py`).
 Fires when the live target IS the thread's threaded person
-(`thread.target_relationship_track.relationship.target`), or holds an active,
-mutually-consented (`is_active=True, is_pending=False`), net-negative
-`CharacterRelationship.affection` toward them (hostile — "threatening"). The
+(`thread.target_relationship.target` — the side row the thread anchors to since
+#3957), or holds an active side toward them whose `conflict` exceeds its
+`affection` (hostile — "threatening"). Each side is independent: no reciprocity
+is required. The
 shared `_relationship_pull_would_trigger(x_sheet, y_sheet)` helper decides this
 for both the resolution path and the picker, mirroring
 `_regard_polarity_matches`'s role for Court modulation.
@@ -1457,7 +1459,8 @@ this rule rewards any PC-to-PC relationship investment unconditionally (rival or
 lover alike).
 
 Magnitude: `bonus = round(cap × S / (S + half_saturation))` where `S = coefficient
-× CharacterRelationship(source=owner, target=threaded_person).developed_absolute_value`
+× CharacterRelationship(source=owner, target=threaded_person).pair_depth()`
+(#3957 — the tie's depth pooled across both sides)
 — a saturating curve (reusing `_soft_cap` from `world/magic/services/threads.py`,
 the same formula shape `ThreadSurvivabilityTuning` uses) rather than Court's fixed
 ratio, since `CharacterRelationship` values grow unbounded (unlike `NpcRegard`'s
@@ -1474,15 +1477,12 @@ owner can't perceive that third party).
 additive, valence-aware terms sit on top of the sign-blind base bonus above:
 
 - **Fraught** — `fraught_bonus = round(fraught_cap × S / (S + fraught_half_saturation))`
-  where `S = fraught_coefficient × min(pos_sum, neg_sum)`, and `(pos_sum, neg_sum) =
-  bond.developed_signed_sums` (`world/relationships/models.py` — a `(positive_sum,
-  negative_sum)` split of the same `developed_points` measure `developed_absolute_value`
-  sums, computed off the cached `cached_track_progress` path, never a fresh query).
-  Rewards a bond invested heavily in BOTH positive- and negative-sign tracks at once (a
-  love/hate dynamic); a bond lopsided entirely in one direction earns nothing here, no
-  matter how large.
+  where `S = fraught_coefficient × min(bond.affection, bond.conflict)` (#3957 — the
+  two unsigned gauges on the side row, both moved only by play). Rewards a bond that
+  play has moved in BOTH directions at once (a love/hate dynamic); a bond lopsided
+  entirely in one direction earns nothing here, no matter how large.
 - **Devotion** — `devotion_bonus = round(devotion_cap × S / (S + devotion_half_saturation))`
-  where `S = devotion_coefficient × max(0, developed_absolute_value - devotion_threshold)`.
+  where `S = devotion_coefficient × max(0, pair_depth() - devotion_threshold)`.
   Rewards a bond so overwhelmingly deep it clears a threshold well past the base curve's
   own half-saturation point; depth alone gates it, deliberately — no ritual/ceremony
   requirement (Tehom, 2026-07-06).
@@ -1497,7 +1497,7 @@ on the same `RelationshipBondPullTuning` singleton as the base curve's `coeffici
 generic curve is already ≥⅔ saturated). Because both terms live inside the one modulation
 function, they surface in `preview_resonance_pull` automatically alongside the base bonus —
 no separate wiring — since preview and commit share the one `apply_target_modulation` seam
-(#2035). See ADR-0110 for the rejected alternatives (`HybridRelationshipType`-driven
+(#2035). See ADR-0110 for the rejected alternatives (hybrid-combo-type-driven
 bonuses, sign-flip transition detection) and the cross-link to #1991 (the expression half —
 a ceremony beat at RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE thread crossings; this feature
 is the power half only).
@@ -2912,7 +2912,7 @@ aura.save()  # Calls full_clean() automatically
 
 ```python
 # The populated FK, picked by target_kind
-thread.target   # Returns the Trait / Technique / ObjectDB / RelationshipTrackProgress / RelationshipCapstone
+thread.target   # Returns the Trait / Technique / ObjectDB / CharacterRelationship / RelationshipCapstone
 
 # Resolved level cap (per Spec A §2.4)
 from world.magic.services import (
@@ -3138,7 +3138,7 @@ threads = Thread.objects.filter(
     "target_trait",
     "target_technique",
     "target_facet",
-    "target_relationship_track",
+    "target_relationship",
     "target_capstone",
     "target_covenant_role",
     "target_sanctum_details__feature_instance",
@@ -3296,7 +3296,7 @@ Telnet parity: `train <technique> [=<ap>]` / bare `train` for the meter list (`C
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/threads/` | GET | List threads owned by requesting account (staff see all); excludes retired |
-| `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread`. For `target_kind=RELATIONSHIP_TRACK`, `target_id` is the `RelationshipTrack` **catalog** id (not a `RelationshipTrackProgress` pk) and `target_persona_id` (required, that kind only) names the partner — see the RELATIONSHIP_TRACK contract note below (#2159) |
+| `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread`. For `target_kind=RELATIONSHIP_TRACK`, `target_id` is the `RelationshipType` **catalog** id (not a relationship row pk) and `target_persona_id` (required, that kind only) names the partner — see the RELATIONSHIP_TRACK contract note below (#2159, #3957) |
 | `/threads/{id}/` | GET | Thread detail with anchor + resonance |
 | `/threads/{id}/` | DELETE | Soft-retire (stamps `retired_at`; row remains for historical references) |
 | `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, resonance_id, tier, thread_ids[], action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
@@ -3311,19 +3311,21 @@ Telnet parity: `train <technique> [=<ap>]` / bare `train` for the meter list (`C
   `WeavingUnlockMissing`, `RelationshipBondNotOwned`, `XPInsufficient`,
   `RitualComponentError`). Views surface those messages as HTTP 400 detail
   (never raw `str(exc)`).
-- **RELATIONSHIP_TRACK catalog-id contract (#2159).** `target_id` for a RELATIONSHIP_TRACK
-  weave is the `RelationshipTrack` catalog id, never a `RelationshipTrackProgress` pk — no
-  API exposes that pk (`RelationshipTrackProgressSerializer` has no id field). The request
-  must also carry `target_persona_id` (write-only, RELATIONSHIP_TRACK only, same Persona-pk
-  convention `RelationshipUpdateViewSet._resolve_target_sheet` uses) naming the partner.
-  `ThreadSerializer._resolve_relationship_track_target` resolves the caller's own
-  `RelationshipTrackProgress` by `(relationship__source=character_sheet,
-  relationship__target=partner_sheet, track_id=target_id)` and never creates a progress row
-  — mirroring telnet's `CmdWeaveThread._resolve_track_anchor` — surfacing a friendly message
-  when the pair has no developed history on that track yet, instead of a raw not-found error.
-  RELATIONSHIP_CAPSTONE keeps resolving by its own pk (`target_persona_id` not used).
+- **RELATIONSHIP_TRACK catalog-id contract (#2159, retargeted #3957).** `target_id` for a
+  RELATIONSHIP_TRACK weave is the `RelationshipType` catalog id, never a relationship row
+  pk. The request must also carry `target_persona_id` (write-only, RELATIONSHIP_TRACK only)
+  naming the partner. `ThreadSerializer._resolve_relationship_track_target` resolves the
+  caller's OWN side (`CharacterRelationship(source=character_sheet, target=partner_sheet,
+  is_active=True)`) and refuses unless that side holds an OPEN label of that type — mirroring
+  telnet's `CmdWeaveThread._resolve_track_anchor` — with a friendly, alt-safe message rather
+  than a raw not-found error. The weave additionally requires the side's claimed `tier` to
+  reach `RelationshipGrowthConfig.thread_min_tier` (`RelationshipTierTooLow`); soul-tether
+  formation still weaves its RELATIONSHIP_CAPSTONE thread on a tier-0 tie. RELATIONSHIP_CAPSTONE
+  keeps resolving by its own pk (`target_persona_id` not used).
 - `weave_thread` asserts relationship-bond ownership for RELATIONSHIP_TRACK /
-  RELATIONSHIP_CAPSTONE anchors (`target.relationship.source == character_sheet`,
+  RELATIONSHIP_CAPSTONE anchors (`_validate_relationship_ownership` resolves the
+  side row through `relationship_side_from_row` — for RELATIONSHIP_TRACK the target IS
+  that side since #3957 — and compares `side.source_id != character_sheet.pk`,
   raising `RelationshipBondNotOwned`, #2033) **after** the `ThreadWeavingUnlock`
   gate — the unlock gate alone is not sufficient because track-progress/capstone
   rows can belong to any character's relationship, but ordering the ownership

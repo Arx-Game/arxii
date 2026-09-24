@@ -156,12 +156,11 @@ def _get_or_create_relationship(
 # =============================================================================
 
 
-def accept_soul_tether(  # noqa: PLR0913
+def accept_soul_tether(
     initiator_sheet: CharacterSheet,
     partner_sheet: CharacterSheet,
     sinner_role: SoulTetherRoleEnum,
     resonance: Resonance,
-    writeup: str,
     ritual_components: list[Any],  # noqa: ARG001
 ) -> RelationshipCapstone:
     """Form a Soul Tether bond (Spec B §12.4).
@@ -176,7 +175,6 @@ def accept_soul_tether(  # noqa: PLR0913
         sinner_role: Which role the INITIATOR has. If SINNER, initiator is the
             Sinner. If SINEATER, initiator is the Sineater (partner is Sinner).
         resonance: The Resonance the Sinner's Thread will channel.
-        writeup: Narrative description of the bond's formation.
         ritual_components: Items consumed by the ritual (validated by caller).
 
     Returns:
@@ -217,34 +215,18 @@ def accept_soul_tether(  # noqa: PLR0913
         # 6. Locate the accept_soul_tether Ritual row (seeded by wire_soul_tether_content).
         ritual = Ritual.objects.get(name="accept_soul_tether")
 
-        # 7. Determine a default relationship track for the capstone.
-        #    We use the Sinner's first RELATIONSHIP_TRACK unlock's track so
-        #    that weave_thread's unlock-check passes for this specific capstone.
-        unlock_row = (
-            CharacterThreadWeavingUnlock.objects.filter(
-                character=sinner_sheet,
-                unlock__target_kind=TargetKind.RELATIONSHIP_TRACK,
-            )
-            .select_related("unlock__unlock_track")
-            .first()
-        )
-        # unlock_row is guaranteed non-None because _validate_unlock passed.
-        assert unlock_row is not None  # noqa: S101  # type narrowing for mypy
-        capstone_track = unlock_row.unlock.unlock_track
-
-        # 8. Create the RelationshipCapstone (the ritual formation event).
+        # 7. Create the RelationshipCapstone (the ritual formation event) — a receipt,
+        #    not authored content (#3957). No track/points/author/writeup/title fields
+        #    exist anymore; the Thread woven in step 9 carries the mechanical power.
         capstone = RelationshipCapstone.objects.create(
             relationship=rel_outgoing,
-            author=sinner_sheet,
-            title="Soul Tether Formation",
-            writeup=writeup,
-            track=capstone_track,
-            points=0,  # Formation capstones grant no points; power comes from the Thread.
+            tier_claimed=rel_outgoing.tier,
+            xp_spent=0,
             is_ritual_capstone=True,
             ritual=ritual,
         )
 
-        # 9. Flag both directional relationship rows.
+        # 8. Flag both directional relationship rows.
         rel_outgoing.is_soul_tether = True
         rel_outgoing.soul_tether_role = SoulTetherRole.SINNER
         rel_outgoing.save(update_fields=["is_soul_tether", "soul_tether_role"])
@@ -253,9 +235,9 @@ def accept_soul_tether(  # noqa: PLR0913
         rel_incoming.soul_tether_role = SoulTetherRole.SINEATER
         rel_incoming.save(update_fields=["is_soul_tether", "soul_tether_role"])
 
-        # 10. Weave the Sinner's RELATIONSHIP_CAPSTONE Thread (§4.1).
-        #     weave_thread validates the unlock again internally; if the track
-        #     mismatch causes WeavingUnlockMissing, let it propagate.
+        # 9. Weave the Sinner's RELATIONSHIP_CAPSTONE Thread (§4.1).
+        #    weave_thread validates the unlock again internally (coarse "any
+        #    RELATIONSHIP_TRACK unlock" check, #3957); let a raise propagate.
         weave_thread(
             character_sheet=sinner_sheet,
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
@@ -268,7 +250,7 @@ def accept_soul_tether(  # noqa: PLR0913
             ),
         )
 
-        # 11. Install the SoulTetherActive ConditionInstance on the Sinner if absent.
+        # 10. Install the SoulTetherActive ConditionInstance on the Sinner if absent.
         #     Multiple tethers reuse the single ConditionInstance (no duplicate).
         active_template = ConditionTemplate.get_by_name("Soul Tether Active")
         active_condition = ConditionInstance.objects.filter(
@@ -284,10 +266,10 @@ def accept_soul_tether(  # noqa: PLR0913
                 source_description="Soul Tether bond active",
             )
 
-            # 12. Install the 2 Trigger rows (only on first tether; later tethers reuse them).
+            # 11. Install the 2 Trigger rows (only on first tether; later tethers reuse them).
             _install_soul_tether_triggers(sinner_sheet, active_condition)
 
-        # 13. Fire achievement stat increment for tether.formed (Spec B §14.3).
+        # 12. Fire achievement stat increment for tether.formed (Spec B §14.3).
         _increment_stat_safe(sinner_sheet, "tether.formed", 1)
 
     return capstone
@@ -549,7 +531,7 @@ def _compute_per_scene_sineating_cap(
     Defaults reproduce original behaviour (hard_max=20, level_mult=2, base=5).
     When no Sinner Thread exists the bond has no Hollow; cap is 0.
     The ``relationship`` parameter is accepted for future formula tuning
-    (e.g., capping on ``developed_absolute_value``).
+    (e.g. capping on the tie's pair depth).
 
     Args:
         sinner_thread: The Sinner's RELATIONSHIP_CAPSTONE Thread for the bond
@@ -1990,16 +1972,13 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
         "resonance_id" (int): PK of the Resonance the Sinner's Thread will
             channel. Required; raises RequiredReferenceMissingError if absent
             or invalid.
-        "writeup" (str): Narrative description of the bond formation. Optional;
-            defaults to empty string if not provided.
         "ritual_components" (list): Component items (validated by caller).
             Optional; defaults to [].
 
-    NOTE (Slice B scope): resonance and writeup come from session_kwargs as
-    scalar values (ID and string). The frontend draft dialog (Phase 9) will
-    populate these via the session draft. No session_reference kinds exist yet
-    for Resonance objects — if that changes, this wrapper should be updated to
-    read from references instead.
+    NOTE (Slice B scope): resonance comes from session_kwargs as a scalar ID
+    value. The frontend draft dialog (Phase 9) will populate it via the session
+    draft. No session_reference kinds exist yet for Resonance objects — if that
+    changes, this wrapper should be updated to read from references instead.
 
     Raises:
         RequiredReferenceMissingError: If participant count != 2, any
@@ -2041,7 +2020,6 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
     except Resonance.DoesNotExist as exc:
         raise RequiredReferenceMissingError from exc
 
-    writeup: str = session.session_kwargs.get("writeup", "")
     ritual_components: list[Any] = session.session_kwargs.get("ritual_components", [])
 
     # 4. Build the accept_soul_tether call using its initiator/partner + sinner_role shape.
@@ -2052,6 +2030,5 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
         partner_sheet=role_to_sheet[SoulTetherRoleEnum.SINEATER],
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup=writeup,
         ritual_components=ritual_components,
     )

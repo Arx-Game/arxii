@@ -37,10 +37,7 @@ from world.magic.factories import (
     ThreadFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTrackProgressFactory,
-)
+from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.traits.factories import CheckOutcomeFactory
 
@@ -274,13 +271,12 @@ class TreatmentBondGateTests(TestCase):
         relationship = CharacterRelationshipFactory(
             source=self.helper_sheet, target=self.target_sheet
         )
-        progress = RelationshipTrackProgressFactory(relationship=relationship)
         thread = ThreadFactory(
             owner=other_sheet,  # wrong owner
             resonance=resonance,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             target_trait=None,
-            target_relationship_track=progress,
+            target_relationship=relationship,
         )
         with self.assertRaises(NoSupportingBondThread):
             perform_treatment(
@@ -298,13 +294,12 @@ class TreatmentBondGateTests(TestCase):
         resonance = ResonanceFactory()
         # relationship helper→stranger, not helper→target
         relationship = CharacterRelationshipFactory(source=self.helper_sheet, target=stranger)
-        progress = RelationshipTrackProgressFactory(relationship=relationship)
         thread = ThreadFactory(
             owner=self.helper_sheet,
             resonance=resonance,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             target_trait=None,
-            target_relationship_track=progress,
+            target_relationship=relationship,
         )
         with self.assertRaises(NoSupportingBondThread):
             perform_treatment(
@@ -324,13 +319,12 @@ class TreatmentBondGateTests(TestCase):
         relationship = CharacterRelationshipFactory(
             source=self.helper_sheet, target=self.target_sheet
         )
-        progress = RelationshipTrackProgressFactory(relationship=relationship)
         thread = ThreadFactory(
             owner=self.helper_sheet,
             resonance=resonance,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             target_trait=None,
-            target_relationship_track=progress,
+            target_relationship=relationship,
         )
         thread.retired_at = timezone.now()
         thread.save(update_fields=["retired_at"])
@@ -592,13 +586,12 @@ class TreatmentResonanceGateTests(TestCase):
         relationship = CharacterRelationshipFactory(
             source=self.helper_sheet, target=self.target_sheet
         )
-        progress = RelationshipTrackProgressFactory(relationship=relationship)
         self.thread = ThreadFactory(
             owner=self.helper_sheet,
             resonance=self.resonance,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             target_trait=None,
-            target_relationship_track=progress,
+            target_relationship=relationship,
         )
 
     def _make_resonance_treatment(self, cost: int):

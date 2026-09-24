@@ -464,7 +464,7 @@ and added the regression coverage that had never existed for either:
   strip-absence tests (`test_no_fall_redemption_example_rows_authored`). Lore
   authoring for these rows is still owed — the gate just means an absent row
   degrades loudly instead of getting invented.
-- The "Devotion" `RelationshipTrack` (`seed_relationship_track_thread_unlock()`)
+- The "Devotion" `RelationshipType` (`seed_relationship_track_thread_unlock()`; the catalogue model was renamed from `RelationshipTrack` in #3957)
   — `authored_or_sample()`-gated since #2698, predating this series; no lazy-create
   path remained by the time #2973 looked. #2973 added strip-absence tests
   (`test_no_devotion_track_authored`) and corrected stale docstring/CLAUDE.md

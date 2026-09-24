@@ -386,6 +386,60 @@ export interface CharacterSheetPayload {
   standing: CharacterSheetStanding;
   /** #3906 — active covenant roles. Public. */
   covenants: CharacterSheetCovenantRole[];
+  /**
+   * #3957 — the cast. One card per active side of a tie, already shaped for the viewer:
+   * a third party's cards carry no numbers and a tie with no open Public label is not
+   * in this list at all.
+   */
+  ties: CharacterSheetTie[];
+  /**
+   * #3957 — AP the owner has set across every tie this week. `null` for anyone but the
+   * owner and staff, which is also what says the AP ledger line must not be drawn.
+   */
+  ties_ap_this_week: number | null;
+}
+
+/**
+ * Mirrors `world.character_sheets.types.TieLabelEntry` (#3957) — one label on a tie
+ * card. `awareness` is `public` for an unmarked label, and a third party only ever
+ * receives public, unended ones.
+ *
+ * `valence` is the label TYPE's warm/hostile/neutral. It rides the card so the cast's
+ * chips are colour-coded the way the tie page's already are: without it the grid was
+ * monochrome and a reader could not tell a lover from an enemy without opening each
+ * tie.
+ *
+ * `label_id` is the label row's own id and the only safe React key for a chip: two
+ * FORMER labels of one type are identical in every other field, so a key built from
+ * type/awareness/former collides after declare -> end -> declare -> end.
+ */
+export interface CharacterSheetTieLabel {
+  label_id: number;
+  type_name: string;
+  awareness: string;
+  valence: string;
+  is_former: boolean;
+  is_mutual: boolean;
+}
+
+/**
+ * Mirrors `world.character_sheets.types.TieCardEntry` (#3957) — one card on the cast.
+ *
+ * `depth`/`tier` are null for a third party, and that null IS the instruction: the card
+ * prints `summary_line` in place of the numbers rather than a zero. `thread` arrives as
+ * the finished sentence the server built, not as its parts.
+ */
+export interface CharacterSheetTie {
+  relationship_id: number;
+  other_name: string;
+  other_sheet_id: number | null;
+  other_entry_id: number | null;
+  other_companion_id: number | null;
+  labels: CharacterSheetTieLabel[];
+  depth: number | null;
+  tier: number | null;
+  summary_line: string;
+  thread: string | null;
 }
 
 /**

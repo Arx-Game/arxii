@@ -101,7 +101,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Mage Scars (renamed from Magical Scars — display-only, §7.2):**
     `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
   - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
-    `target_trait` / `target_technique` / `target_facet` / `target_relationship_track`
+    `target_trait` / `target_technique` / `target_facet` / `target_relationship`
     / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle`
     / `target_sanctum_details` — bare `ROOM` removed; SANCTUM is the leveled room
     anchor, cap = sanctum level × 10, in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
@@ -325,14 +325,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     PROTECTIVE / NEUTRAL, `world/magic/constants.py`). Tuning constant
     `COURT_REGARD_PULL_K` (placeholder, `1.0`). `relationship_bond_modulation(...)`
     (`world/magic/services/pull_modulation_relationship.py`, #1849) empowers a
-    RELATIONSHIP_TRACK pull by the owner's own `CharacterRelationship.developed_absolute_value`
-    bond to the thread's threaded person, when the live target IS that person or is
-    hostile toward them — no polarity gate, saturating-curve magnitude via
+    RELATIONSHIP_TRACK pull by the tie's own `CharacterRelationship.pair_depth()` (#3957 —
+    both sides' depth pooled) to the thread's threaded person, when the live target IS that
+    person or is hostile toward them (a side whose `conflict` exceeds its `affection`) — no
+    polarity gate, saturating-curve magnitude via
     `RelationshipBondPullTuning` (staff-tunable singleton). Two additive valence-aware
-    terms (#2034, ADR-0110) layer on top: **fraught** (keyed on `min` of
-    `CharacterRelationship.developed_signed_sums`' positive/negative split — rewards a
-    bond invested in both valences at once) and **devotion** (keyed on
-    `max(0, developed_absolute_value - devotion_threshold)` — rewards depth alone, no
+    terms (#2034, ADR-0110) layer on top: **fraught** (keyed on
+    `min(affection, conflict)` — rewards a
+    bond moved in both directions at once) and **devotion** (keyed on
+    `max(0, pair_depth() - devotion_threshold)` — rewards depth alone, no
     ritual gate), each with its own tuning columns on the same singleton. The combat-UI picker
     (`compute_thread_applicability`, `world/magic/services/pull_applicability.py`) surfaces
     `InapplicabilityReason.COURT_LEADER_NO_STAKE` / `RELATIONSHIP_NO_STAKE` respectively when
@@ -768,8 +769,16 @@ allocations that convert AP to development points.
   web `TrainingAllocationViewSet` and telnet `training` command
 - **Cron:** `run_weekly_skill_cron()` registered as `skills.weekly_training` in
   `world/game_clock/tasks.py`
+- **Weekly AP budget (shared with ties, #3957):** `create_training_allocation` /
+  `update_training_allocation` validate the character's training total PLUS their standing
+  `RelationshipAllocation` rows (`relationships.services.standing_tie_ap`) against
+  `ActionPointConfig.get_weekly_regen()`. Ties and training are one weekly commitment paid
+  from one `ActionPointPool`, and BOTH doors enforce it — the tie door reads
+  `standing_weekly_ap` (ties + training), the training door reads its own training total
+  plus `standing_tie_ap`, so neither counts a row twice.
 - **Integrates with:** traits (skill checks), character_creation (skill selection),
-  action_points (weekly AP spend), progression (`DevelopmentTransaction` rows)
+  action_points (weekly AP spend), progression (`DevelopmentTransaction` rows),
+  relationships (the shared weekly AP budget above)
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
 ### Distinctions
@@ -1734,10 +1743,11 @@ weekly XP — read at **World › Journals**, the Reading Room (#3941).
   non-sealed private corpus via `GET /api/journals/entries/?deceased=<sheet_id>`.
 - **Retort/Condemn consent gate (#3941, ADR-0307):** `ResponseType.CONDEMN` joins praise/retort
   (XP mirrors retort: `CONDEMN_GIVEN_XP`/`CONDEMN_RECEIVED_XP`). Both are offered only when the
-  author's `retort_consent` is ANYONE, or the viewer is a rival — an active, non-pending
-  `CharacterRelationship` in either direction with progress on a negative-sign track
-  (`services.can_retort`, one function so a later dedicated Rivalry relationship kind narrows it
-  there). Enforced in `create_journal_response`, not only the UI; a refusal is the neutral
+  author's `retort_consent` is ANYONE, or the viewer is a rival — which since #3957 means
+  `relationships.services.mutual_hostile`: BOTH sides hold an open HOSTILE-valence label
+  (Rival / Enemy / Nemesis) at Clandestine or Public under a still-open tenure
+  (`services.can_retort`, the one function ADR-0307 said the relationships pass would narrow
+  in place; `annotate_can_retort` uses `mutual_hostile_expression`). Enforced in `create_journal_response`, not only the UI; a refusal is the neutral
   shared `JournalError.UNAVAILABLE`. Praise and Nominate are never gated.
 - **Kinds (#3621):** `JournalEntry.kind` (`JournalKind`: entry, first_journal, application,
   whispers) marks the three CG Introductions so the sheet and, later, an institution's reading
@@ -2155,10 +2165,13 @@ so web and telnet converge on the same write path.
   (owner_tenure / allowed_tenure / category), `SocialConsentBlacklist` (#1698 —
   owner_tenure / blocked_tenure / category; consulted under `ALL_BUT_BLACKLIST`)
 - **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
-  `scenes.Friendship`) / `RIVALS` (declared **mutual** rivals via `scenes.Rivalry`, double
-  opt-in — #2170; `friend_services.is_rival` + `declare_rival`/`undeclare_rival`, telnet
-  `rival`/`unrival`/`rivals`, web `RivalryViewSet` `/api/scenes/rivals/` + the sheet/card
-  `RivalButton`) / `ALLOWLIST`. Settable at any tree node; `CONSENT_MODE_GUIDANCE`
+  `scenes.Friendship`) / `RIVALS` (**mutual** hostile relationship labels since #3957:
+  `relationships.services.mutual_hostile` — both sides hold an open Rival/Enemy/Nemesis
+  label at Clandestine or Public under a still-open tenure, so the IC declaration IS the
+  opt-in and a roster successor's inherited label opens nothing until re-declared.
+  `scenes.Rivalry`, `RivalryViewSet`, `declare_rival`/`is_rival`, the telnet
+  `rival`/`unrival`/`rivals` verbs and `RivalButton` are gone) / `ALLOWLIST`. Settable at
+  any tree node; `CONSENT_MODE_GUIDANCE`
   + `consent_mode_guidance()` (constants) give the per-mode pros/cons copy the settings page /
   telnet `consent modes` / `GET /api/consent/categories/modes/` render (PLACEHOLDER, #2170).
   Onboarding: the "Terms of Engagement" tutorial side-step (tutor-offered, gated on T1;
@@ -2226,9 +2239,11 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `MultiClassRequirement` — multiple class levels
   - `TierRequirement` — tier 1 vs tier 2
   - `AchievementRequirement` — checks `CharacterAchievement` for a granted `Achievement`
-  - `RelationshipRequirement` — counts the character's own qualifying `RelationshipTrackProgress`
-    rows (tier >= `minimum_tier`, optionally narrowed to `required_track_kind`) against
-    `minimum_count` (#2116)
+  - `RelationshipRequirement` — counts the character's own active **sides** that hold an open
+    label and have claimed `tier >= minimum_tier`, optionally narrowed to one `required_type`
+    (FK to `RelationshipType`, null = any), against `minimum_count`. The count is
+    `.values("relationship_id").distinct()`, so two labels on one side count once: the gate
+    is "N ties", never "N labels" (#2116, retargeted #3957)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
   - `CodexKnowledgeRequirement` — checks `CharacterCodexKnowledge` at `KNOWN` status for a specific `CodexEntry`; gates Path selection behind codex knowledge (#2603)
 - **Key Functions:**
@@ -3594,15 +3609,17 @@ without one stands at the threshold (marked in the Here panel, not addressable r
   within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)
   are the seam both `PlaceViewSet` (`place_views.py`) and telnet `CmdPlaces` (`places`,
   `commands/places.py`) dispatch through.
-- **Block/Mute/Friendship/Rivalry (#1278, #1727, #2170, #2996):** the OOC safety + connection
+- **Block/Mute/Friendship (#1278, #1727, #2170, #2996):** the OOC safety + connection
   primitives, all keyed on `PlayerData`/`RosterTenure` (never derived from IC relationships).
+  Rivalry is the exception and left this set in #3957: antagonism consent is now an IC
+  declaration (mutual hostile relationship labels), not an OOC pairing.
   `Block` (mutual, account-first by default since #2996) and `Mute` (one-way, also account-first
   by default) are the enforcement primitives every OOC delivery seam (mail, journal
   reactions/feed, event invites, kudos, pages/tells, friend adds) consults via the shared query
   helpers `block_services.account_block_active`/`blocked_player_ids_for` and
-  `mute_services.account_muted`/`muted_player_ids_for`; `Friendship`/`Rivalry` are the positive
-  connection primitives (`friend_services.py`) feeding the `FRIENDS_WHITELIST`/`RIVALS` consent
-  modes. See `world/scenes/CLAUDE.md`'s Block/Mute entries and ADR-0204 for the full seam table.
+  `mute_services.account_muted`/`muted_player_ids_for`; `Friendship` is the positive
+  connection primitive (`friend_services.py`) feeding the `FRIENDS_WHITELIST` consent mode
+  (`RIVALS` reads `relationships.services.mutual_hostile` instead since #3957). See `world/scenes/CLAUDE.md`'s Block/Mute entries and ADR-0204 for the full seam table.
 - **Perception & altered reality (#2997):** three axes for "who perceives what is
   real" — room-broadcast membership exclusion (Axis 1, `register_broadcast_exclusion`/
   `resolve_broadcast_exclusions` in `flows/service_functions/perception_registry.py`),
@@ -4555,13 +4572,12 @@ register as additional kinds.
     shape) lets a CG distinction pre-seed a bond with a named NPC, reconciled via
     `reconcile_distinction_regard_seeds()` in the chargen `CharacterDistinction`
     bulk-create loop.
-  - **Bridge to #2013:** `mirror_npc_regard_event_to_track(event)`
-    (`world/relationships/services.py`) reuses `apply_affection_shift`'s
-    track-selection/capstone-write-shape but dedups on the event row itself
-    (no `Scene`+`ConsequenceEffect` needed) — every `record_npc_regard_event` call
-    also mirrors onto the PC's own `CharacterRelationship`/`RelationshipTrackProgress`
-    Regard/Friction system tracks, so #2013's hated-foe surge (unmodified) picks
-    up nemesis buildup for free.
+  - **Bridge to #2013:** `mirror_npc_regard_event(event)`
+    (`world/relationships/services.py`) moves the PC's own side toward the NPC through
+    `move_gauges` (positive → Affection, negative → Conflict), dedup-free because it is
+    driven per event row — every `record_npc_regard_event` call mirrors onto the PC's own
+    `CharacterRelationship`, so #2013's hated-foe surge picks up nemesis buildup for free.
+    Renamed from `mirror_npc_regard_event_to_track` with the system tracks in #3957.
 - **Interaction state machine:** ephemeral `InteractionSession` (lives in caller's
   session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
   → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`
@@ -8875,138 +8891,148 @@ combat, poison, spells, exhaustion, and any damage source.
 - **Details:** `src/world/vitals/CLAUDE.md` · `docs/roadmap/combat.md` (§Phase 8, Phase 9)
 
 ### Relationships
-Track-based character-to-character regard, conditions, situational modifier gating, and
-writeup kudos/complaint feedback.
+Ties between characters (#3957, ADR-0308): two directed sides, labels with awareness and
+history, one pooled depth, a tier claimed per side by capstone journal entry and XP.
 
-- **Models:** `RelationshipCondition`, `RelationshipTrack` (+ `RelationshipTier`,
-  `HybridRelationshipType`), `CharacterRelationship` (#3575: `target` nullable +
-  `target_companion` FK to `Companion`, exactly one set; `target_name` property;
-  owner-only, active from creation via `companion_target_error`), `RelationshipTrackProgress`,
-  `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
-  (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
-  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429),
-  `RelationshipBump` (#1699 — ambient ±1 nudge anchored to an Interaction;
-  `UniqueConstraint(relationship, interaction)` is the whole anti-spam cap);
-  **writeup feedback (#1537):** `WriteupKudos` (subject's non-revocable commendation;
-  awards kudos to the author), `WriteupComplaint` (bad-faith-RP flag for staff triage;
-  `resolved` bool; zero player signal)
-- **Key Fields:** `CharacterRelationship.affection` (signed sum), track
-  `capacity` / `developed_points`; `UpdateVisibility` (private/shared/gossip/public);
-  `RelationshipTrack.system_key` (#1699 — `TrackSystemKey.REGARD`/`FRICTION` on the two
-  generic system tracks ambient bumps write to; null on authored tracks);
-  `CharacterRelationship.developed_signed_sums` (#2034 — `(positive_sum, negative_sum)`
-  split of `developed_absolute_value` by `track.sign`, cached path; consumed by
-  `world.magic`'s fraught pull term, see ADR-0110)
-- **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
-- **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
-- **Services:** `create_first_impression(*, source, target=None, target_companion=None, ...)`,
-  `create_development`, `create_capstone`,
-  `redistribute_points` (`services.py`) — the four positive relationship-building verbs;
-  `companion_target_error(source, companion) -> str` (#3575) - why `source` may not hold a
-  relationship toward `companion`, else `""`;
-  `apply_relationship_bump(*, source, target, interaction, valence, source_emoji=None)`
-  (#1699) — permanent ungated `BUMP_POINTS` (±1) onto the Regard/Friction system track
-  (capstone write-shape: capacity + developed together), deduped per interaction;
-  `give_writeup_kudos(*, giver_account, writeup)` — commend a writeup, awards kudos to
-  author (warn-skips when `"relationship_writeup"` `KudosSourceCategory` not seeded);
-  `file_writeup_complaint(*, complainant_account, writeup, reason)` — file a bad-faith-RP
-  complaint for staff triage
-- **Exceptions:** `WriteupFeedbackError` base + `WriteupNotSharedError`,
-  `NotWriteupSubjectError`, `CannotCommendOwnWriteupError`, `AlreadyCommendedError`,
-  `WriteupNotVisibleError`; `RelationshipBumpError` base + `AlreadyAcknowledgedError`,
-  `SystemTracksNotSeededError` (#1699) — each with `user_message` for 400 API responses
-- **Seeds:** `relationship_scale` cluster (#1699, `world/seeds/relationship_scale.py`) —
-  Regard/Friction system tracks, 4 `RelationshipTier` bands each at 25/100/500/2000
-  (names PLACEHOLDER), starter `ReactionEmoji` rows (👍 neutral, ❤️ +1, 😠 −1)
-- **Player surface (#1485, #1537):** all four verbs plus kudos/complaint are reachable
-  from both web and telnet — the web `RelationshipUpdateViewSet` POST endpoints
-  (`first_impression` / `develop` / `capstone` / `redistribute` / `kudos` / `complaint`)
-  and the telnet `relationship <subverb>` namespace both dispatch the Actions via
-  `action.run()` (ADR-0001). Read serializers expose `kudos_count` + `viewer_has_kudosed`
-  on every writeup row. No consent gate — these describe the caller's regard, they do not
-  compel the target's behavior (ADR-0024). FK direction: feedback lives in relationships,
-  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014). Both
-  surfaces accept a bonded companion as the target (#3575): web `target_companion_id`
-  (exactly one of it and `target_persona_id`), telnet by the companion's room-present name.
-- **Ambient bumps (#1699):** telnet `relationship plus|neg <name>` (aliases `rel/plus`,
-  `rel/neg`) backfill-anchor to the target's most recent unacknowledged visible pose in
-  the active scene; web valenced `ReactionEmoji` reactions bump the pose's author
-  directly (`InteractionReactionViewSet.create` side-effect, `bump_applied` in the
-  response). Both dispatch `RelationshipBumpAction` (key `"relationship_bump"`). Not
-  consent-gated (private write to the actor's own regard, ADR-0024); bumps render only
-  in the actor's own relationship views; the target is never notified.
-- **Writeup list route (#2031):** `RelationshipUpdateViewSet` also mixes in `ListModelMixin`
-  for `GET /api/relationships/relationship-updates/` — narrow (not a general writeup
-  browser): tenure-scoped to `RelationshipUpdate` rows whose parent relationship's `target`
-  is a character the requesting account currently holds a **RosterTenure** on, SHARED/PUBLIC
-  visibility only. `?relationship=`/`?track=`/`?subject_character=<CharacterSheet pk>`
-  filters (`RelationshipUpdateFilter`); the last narrows a multi-character account down to
-  one owned sheet. Frontend: the commend button on the "Writeups" subsection of
-  `RelationshipsSection` (`frontend/src/components/character/RelationshipsSection.tsx`, own-
-  sheet gated), fed by `frontend/src/relationships/` (`api.ts`/`queries.ts`), POSTs
-  `{writeup_type: "update", writeup_id}` to `.../kudos/`. A "Report" button beside Commend
-  opens `WriteupComplaintDialog` (#2159, `frontend/src/relationships/components/`), which
-  POSTs `{writeup_type, writeup_id, reason}` to `.../complaint/` — zero follow-up read
-  surface, matching `WriteupComplaint`'s staff-only visibility.
-- **Writeup timeline action (#2159):** `GET .../relationship-updates/timeline/` merges
-  Update/Development/Capstone history into one type-tagged (`kind`), `-created_at`-ordered,
-  paginated feed. Exactly one of two mutually exclusive params (both/neither → 400):
-  `?about_character=<CharacterSheet pk>` — non-PRIVATE writeups about that character from
-  any author, plus PRIVATE ones where the caller is the author or the subject (the
-  queryset-level generalization of `services._can_view_writeup`, entirely DB-side, no
-  Python row filtering); `?relationship=<CharacterRelationship pk>` — one relationship's
-  full history incl. PRIVATE, source-owner-only (tenure join; 404 missing, 403 non-source).
-  Implementation: each writeup model's queryset is projected to a shared column shape and
-  combined via `.union()` (per-branch `.order_by()` clears `Meta.ordering` — SQLite
-  rejects `ORDER BY` inside a union branch).
-- **RelationshipPanel (#2159):** the "Ties" subsection of `RelationshipsSection`, replacing
-  the old free-text `CharacterData.relationships` Notes list. Branches on `isMyCharacter`
-  (`frontend/src/relationships/components/RelationshipPanel.tsx`), mirroring
-  `CharacterRelationshipViewSet`'s author-private scoping (ADR-0117): own sheet renders
-  `OwnRelationshipsList` — `GET .../relationships/?source=<sheet pk>` (list serializer, no
-  `track_progress`) for target/affection rows, each expandable (Radix `Accordion`, lazy —
-  no N+1 up front) into `GET .../relationships/<id>/` (detail serializer, for
-  `track_progress` points/tiers) plus the `?relationship=` timeline arm for full history,
-  and buttons opening `RelationshipWriteupDialog` in development/capstone/redistribute
-  modes (`target_persona_id` resolved via `GET /api/personas/?character_sheet=`, since the
-  list/detail relationship serializers only carry the target's CharacterSheet pk, not a
-  Persona pk). Foreign sheet renders `ForeignRelationshipTimeline` — the `?about_character=`
-  arm only, type-tagged, deliberately no numeric fields (`RelationshipTimelineEntry` itself
-  carries none).
-- **Automatic affection shifts (#1697, boon mode #2540):** `AffectionShift` model +
-  `apply_affection_shift(*, source, target, scene, effect, amount, boon=None)` — the generic
-  valence-signed success consequence (`EffectType.SHIFT_AFFECTION`, handler in
-  `world/mechanics/effect_handlers.py`, `ConsequenceEffect.affection_amount`): a
-  successful Flirt (+5) / Seduce (+50, PLACEHOLDER) moves the TARGET's regard toward
-  the actor on the system tracks; gated offensive actions carry
-  negative amounts onto Friction. Two provenance modes, exactly one per row
-  (`affection_shift_has_provenance` CheckConstraint): effect-keyed rows keep the
-  `UniqueConstraint(relationship, scene, effect)` diminishing-returns rule — first success
-  per scene per pair shifts, repeats no-op — while boon-keyed rows (a granted Boon's
-  `-BOON_AFFECTION_COST` drain, charged by the `boon` resolver) dedup on the Boon
-  OneToOne itself, so serial granted boons stack even within one scene. Shifted points
-  never decay — the drain persists until rebuilt through play (Apostate's ≥3-months
-  ruling is automatic). Seeded in `world/seeds/social_actions.py`.
+- **Models:** `RelationshipType` (the catalogue: `family`, `valence` WARM/HOSTILE/NEUTRAL,
+  `counterpart` self-FK null = symmetric, `fuels_escalation_spikes`; `CreditedContent` +
+  `NaturalKeyMixin`), `RelationshipTier` (ONE ladder for every tie: `tier_number`,
+  `depth_threshold`, `combat_bonus`), `CharacterRelationship` (one side: `target` XOR
+  `target_companion` (#3575), `scene_depth`, `invested_depth`, `tier`, `affection`,
+  `conflict`, `summary`, `is_active`, the soul-tether fields), `RelationshipLabel`
+  (side + type + `awareness` + `declared_by_tenure` + `since`/`clandestine_at`/`public_at`/
+  `ended_at` + `replaced` self-FK + `note`; one open label per type per side),
+  `RelationshipAllocation` (this week's AP, mirrors `TrainingAllocation`),
+  `RelationshipDepthTransaction` (the audit behind the two depth columns),
+  `RelationshipGrowthConfig` (pk=1: `scene_base_gain`, `depth_per_ap`, `xp_per_tier`,
+  `thread_min_tier`), `RelationshipCapstone` (the advance receipt: `journal_entry` O2O,
+  `tier_claimed`, `xp_spent`, or `is_ritual_capstone` + `ritual`), `BondCombatConfig`
+  (pk=1: `min_tier`, `soul_tether_multiplier`), `GrievanceOption` (#1429,
+  `conflict_points`), `RelationshipCondition` + `TemporaryRelationshipCondition` (#1696/
+  #1697), `RelationshipBump` (#1699), `AffectionShift` (#1697/#2540)
+- **Key Fields:** `LabelAwareness` PRIVATE → CLANDESTINE → PUBLIC (forward only;
+  `KNOWN_AWARENESS` = the last two, what the other side may read and all that counts toward
+  mutual); `side.depth` = `scene_depth + invested_depth`, `side.pair_depth()` = both sides'
+  (the number every threshold and the magic pull term read); `affection`/`conflict` are
+  unsigned and moved only by play; `declared_by_tenure` is read by **consent only** (an
+  inherited label opens nothing until the successor re-declares)
+- **Visibility (`TieAudience`, decided server-side in `reads.tie_audience`):** OWNER sees
+  everything incl. Private labels + both gauges; OTHER_SIDE sees Clandestine/Public labels,
+  pair depth, both tiers and the breakdown, never the gauges; THIRD_PARTY sees Public labels
+  and the summary line and **no number**, and a side with no open Public label is absent from
+  lists and **404s** on retrieve (never 403); STAFF sees everything. Companion sides are
+  owner/staff-only. ADR-0117 amended, not repealed.
+- **Services (`services.py`):** `get_or_create_side(*, source, target=None,
+  target_companion=None)`, `declare_label(*, side, type, awareness=PRIVATE, tenure=None)`,
+  `shift_label(*, label, new_type, note="")` (old row ends, new row records `replaced`),
+  `end_label(*, label)`, `advance_awareness(*, label, to)`, `set_summary`,
+  `set_allocation(*, side, ap_amount)` (ties and training share ONE weekly budget —
+  `ActionPointConfig.get_weekly_regen()` against this amount + the character's other tie
+  allocations + their standing `TrainingAllocation` total, `AllocationTooLargeError` past
+  it; `standing_weekly_ap(sheet_id, *, exclude_side_id=None)` is that sum,
+  `standing_tie_ap(...)` its tie half — which the TRAINING door reads alongside its own
+  total, so the rule is enforced from both sides — and
+  `skills.services.total_allocated_training_ap(character_id)` its training half),
+  `process_weekly_relationship_allocations()` (idempotent per game week, logs a warning on
+  a skip the pool cannot pay), `credit_scene_depth(scene)` (called from `Scene.finish_scene`;
+  first scene together per week, both must have taken part — it reads every `Interaction`
+  in the scene, so a say counts as surely as a pose), `advance_tier(*, side,
+  journal_entry)` (cost `xp_per_tier × new tier`), `move_gauges(*, side, amount)`,
+  `register_grievance`, `apply_relationship_bump`, `apply_affection_shift`,
+  `mirror_npc_regard_event`, `is_mutual(side, type, *, public_only=False)`,
+  `mutual_hostile(a, b)` + `mutual_hostile_expression(...)`, `known_label_q(...)`,
+  `bond_combat_bonus` / `bond_bonus`, `companion_target_error`;
+  `helpers.get_relationship_tier(a, b)` = the lower claimed tier of a mutual TEACHING-family
+  tie, read only by training's mentor multiplier (magic's fury cap reads the side's own
+  `tier` directly, `world/magic/services/fury.py:_bond_tier`)
+- **Reads (`reads.py`):** `build_tie_page(sides, *, viewer_sheet, is_staff,
+  force_audience=None, include_allocation=True)` is the batched entry point the tie API and
+  the sheet cast share (three extra queries regardless of page size — callers MUST pass the
+  labels prefetch: on an idmapper-shared side a missing one serves an earlier request's
+  cache rather than falling back to a query); plus `tie_audience`,
+  `third_party_can_see` / `has_open_public_label`, `visible_labels`, `label_payload`,
+  `depth_breakdown`, `tie_stream(side, viewer_sheet, is_staff, *, account)` (the account is
+  the viewer's, and the scene half of the stream goes through
+  `Scene.objects.viewable_by(account)`), `labels_by_relationship_id(ids, *,
+  open_only=False)` (the batched per-request alternative to a labels prefetch, shared by the
+  telnet reads and magic's crossing helper), `resolve_viewer_sheet`, `entry_id_for`
+- **Exceptions:** `TieError` base + `LabelAlreadyDeclaredError`, `LabelEndedError`,
+  `AwarenessBackwardError`, `SameTypeShiftError`, `TierNotReachedError`,
+  `CapstoneEntryInvalidError`, `AllocationTooLargeError`, `NotYourTieError`;
+  `RelationshipBumpError` base + `AlreadyAcknowledgedError` (#1699) — each with
+  `user_message` for 400 API responses
+- **Seeds:** `relationship_scale` cluster (`world/seeds/relationship_scale.py`) — twenty-three
+  PLACEHOLDER `RelationshipType` rows in five families (Heart 5, Company 4, Contest 4,
+  Blood and oath 6, Teaching 4; Kin is WARM) with the five asymmetric counterpart pairs
+  (Beloved↔Admirer, Ward↔Guardian, Liege↔Vassal, Mentor↔Student, Patron↔Protege), the four
+  `RelationshipTier` rungs at 25/100/500/2000, the growth-config singleton, and the starter
+  `ReactionEmoji` rows (👍 neutral, ❤️ +1, 😠 −1)
+- **Player surface:** both surfaces converge on `actions/definitions/relationships.py`
+  (`declare_label`, `shift_label`, `end_label`, `advance_label_awareness`,
+  `set_tie_allocation`, `advance_relationship_tier`, `set_tie_summary`,
+  `relationship_bump`) through `action.run()` (ADR-0001). Web:
+  `CharacterRelationshipViewSet` at `/api/relationships/relationships/` — `list` (own sides,
+  OWNER shape), `retrieve` (any pk, audience computed; every row also carries `is_own_side`,
+  the flag the frontend branches its owner-only doors on; `ap_pool` rides `is_own_side` and
+  is null for everyone else, staff included — it reports the week's budget and what is left
+  of it after every standing tie AND training commitment), `GET {id}/stream/` (journal
+  entries either side wrote about the other, visibility-filtered row by row, merged with the
+  scenes both took part in that the viewer may see — `Scene.objects.viewable_by(account)`,
+  so a PRIVATE or EPHEMERAL scene reaches only a participant or staff), and POST `declare` / `shift` / `end` / `awareness` / `allocation` /
+  `advance` / `summary`; `RelationshipTypeViewSet` (`/api/relationships/types/`) is the
+  picker catalogue. Sheet payload carries `ties` (`_build_ties`, one `TieCardEntry` per
+  visible side) and `ties_ap_this_week` (owner/staff only); the cast is the Ties section and
+  a card opens `/characters/:id/ties/:tieId`. Telnet: `CmdRelationship`
+  (`relationship list | show | plus | neg | declare | shift | end | reveal | ap | advance |
+  summary`) — the reads are telnet-only, the tie page and stream are web-only. No consent
+  gate on any declaration (ADR-0024).
+- **Ambient bumps (#1699):** telnet `relationship plus|neg <name>` backfill-anchors to the
+  target's most recent unacknowledged visible pose; web valenced `ReactionEmoji` reactions
+  bump the pose's author (`InteractionReactionViewSet.create` side-effect, `bump_applied` in
+  the response). `UniqueConstraint(relationship, interaction)` is the whole anti-spam cap.
+  Both dispatch `RelationshipBumpAction` (key `"relationship_bump"`, `actions/definitions/
+  relationships.py`). +1 adds Affection, -1 adds Conflict; the target is never notified.
+- **Automatic affection shifts (#1697, boon mode #2540):** `apply_affection_shift(...)` — a
+  successful Flirt (+5) / Seduce (+50, PLACEHOLDER) moves the TARGET's side toward the actor
+  (`EffectType.SHIFT_AFFECTION`, `ConsequenceEffect.affection_amount`, handler in
+  `world/mechanics/effect_handlers.py`); negative amounts from gated offensive actions and
+  boon drains add Conflict instead. Two provenance modes, exactly one per row
+  (`affection_shift_has_provenance`): effect-keyed rows keep the
+  `UniqueConstraint(relationship, scene, effect)` first-per-scene-per-pair rule; boon-keyed
+  rows dedup on the Boon O2O so serial granted boons stack. Seeded in
+  `world/seeds/social_actions.py`.
 - **Affection-tier difficulty ladder (#1697):** `resolved_base_difficulty`
-  (`world/scenes/social_difficulty.py`) derives its bands from the #1699 system-track
-  `RelationshipTier` thresholds (Regard for warm, Friction for hostile) — one tier
-  easier/harder per band crossed, neutral = Normal (fallback constants when unseeded).
-  Also applies `ConditionTemplate.exploitable_tiers` — the exploitable-state seam:
-  checks rolled at a Smitten bearer resolve 2 tiers easier (PLACEHOLDER); Smitten's
-  other teeth (Melee Defense penalty via `ConditionCheckModifier`, Force ×2 damage via
-  `ConditionDamageInteraction` riding #2018) + the Attractive distinction's allure
-  grant (base allure = sum of allure modifiers) are seed rows in
+  (`world/scenes/social_difficulty.py`) reads its bands off the single `RelationshipTier`
+  ladder's `depth_threshold` rungs — one tier easier/harder per band the net affection
+  crosses, neutral = Normal (fallback constants when unseeded). Also applies
+  `ConditionTemplate.exploitable_tiers` — checks rolled at a Smitten bearer resolve 2 tiers
+  easier (PLACEHOLDER); Smitten's other teeth (Melee Defense penalty via
+  `ConditionCheckModifier`, Force ×2 damage via `ConditionDamageInteraction` riding #2018)
+  + the Attractive distinction's allure grant are seed rows in
   `social_actions`/`social_relationships`.
-- **Admin:** `WriteupComplaint` registered for staff triage (no player-facing complaint UI)
-- **Actions:** `GiveWriteupKudosAction` (key `"give_writeup_kudos"`),
-  `FileWriteupComplaintAction` (key `"file_writeup_complaint"`),
-  `RelationshipBumpAction` (key `"relationship_bump"`, #1699)
-  (`actions/definitions/relationships.py`)
-- **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK),
-  scenes (optional `linked_scene` defaults to the caller's active scene), progression
-  (XP + `award_kudos`)
+- **Conditions & modifier gating (#1696/#1697):** `RelationshipCondition.gates_modifiers`
+  (M2M to `ModifierTarget`) — "Attracted To" gates the Allure modifier, "Fears" gates
+  intimidation. `relationship_gated_contributions(*, perceiver, perceived)` folds the
+  perceived's modifier total in once per gating condition; permanent conditions live on the
+  `conditions` M2M, temporary ones on `TemporaryRelationshipCondition` with an `expires_at`,
+  pruned hourly by the `relationships.temp_condition_cleanup` game_clock task.
+- **Admin:** types (family/valence/counterpart), the tier ladder, both singleton configs,
+  grievance options, conditions, `CharacterRelationship` with a `RelationshipLabel` inline;
+  allocations, depth transactions and capstones registered through `_AuditReadOnlyAdmin`
+  (add, change and delete all refused — the rows are the audit behind the side's columns)
+- **Integrates with:** consent (`ConsentMode.RIVALS` → `mutual_hostile`), journals
+  (`can_retort`/`annotate_can_retort`, and the capstone IS a `JournalEntry`), combat (bond
+  bonus off the claimed tier; the surge engine off `fuels_escalation_spikes` + side depth),
+  magic (`Thread.target_relationship`, weaving gated on `thread_min_tier`, pull modulation
+  off `pair_depth()` and the gauges, fury's provocation cap off the side's own `tier`), scenes
+  (`finish_scene` → `credit_scene_depth`; social difficulty), skills (mentor multiplier),
+  progression (`RelationshipRequirement` — it counts qualifying SIDES, not labels, so two
+  labels on one side count once; XP spend),
+  game_clock (the weekly turn), npc_services (the regard mirror)
 - **Source:** `src/world/relationships/`; frontend: `frontend/src/relationships/` +
   `frontend/src/components/character/RelationshipsSection.tsx`
+- **Details:** `src/world/relationships/CLAUDE.md` · `docs/roadmap/relationships.md` ·
+  ADR-0308
 
 ---
 
@@ -9018,7 +9044,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier GM distinction award/rank-up, telnet `grant_distinction`, wraps `distinctions.grant_distinction`, #2037), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537), `StagePropAction` / `StagePropertyAction` (`registry_key="stage_prop"`/`"stage_property"`, `actions/definitions/gm_props.py`, #2503) — GM improv: materialize a curated `ItemTemplate` as a physical prop in the room, or tag an existing object with a curated `Property`; gated on the room's active scene GM/owner or staff; shared by telnet `CmdStage` (`stage prop <template>` / `stage property <property> [=<target>]`, `commands/gm_props.py`)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier GM distinction award/rank-up, telnet `grant_distinction`, wraps `distinctions.grant_distinction`, #2037), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `DeclareLabelAction` / `ShiftLabelAction` / `EndLabelAction` / `AdvanceLabelAwarenessAction` / `SetTieAllocationAction` / `AdvanceRelationshipTierAction` / `SetTieSummaryAction` (the tie verbs — name what another character is to yours, change or end that label, move its awareness forward, set this week's AP, claim the next tier with a capstone journal entry and XP, write the summary; shared by telnet `CmdRelationship` and web `CharacterRelationshipViewSet`, #3957), `StagePropAction` / `StagePropertyAction` (`registry_key="stage_prop"`/`"stage_property"`, `actions/definitions/gm_props.py`, #2503) — GM improv: materialize a curated `ItemTemplate` as a physical prop in the room, or tag an existing object with a curated `Property`; gated on the room's active scene GM/owner or staff; shared by telnet `CmdStage` (`stage prop <template>` / `stage property <property> [=<target>]`, `commands/gm_props.py`)
 - **WORLD_INTERACTION backend (#2503):** a fifth `ActionBackend` (alongside CHALLENGE, COMBAT,
   REGISTRY, SCENE_ADAPTIVE) for bare-object affordances synthesized by `get_available_actions`'s
   second source (see the Mechanics section). `ActionRef` carries `application_id` +

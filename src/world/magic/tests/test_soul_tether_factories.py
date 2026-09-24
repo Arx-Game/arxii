@@ -19,8 +19,10 @@ class AcceptSoulTetherRitualFactoryTests(TestCase):
         ritual = Ritual.objects.get(name="accept_soul_tether")
         self.assertIsNotNone(ritual.input_schema)
         field_names = {f["name"] for f in ritual.input_schema["fields"]}
-        # Slice B: session-level fields (resonance_id, writeup) — no sineater_sheet_id
+        # Slice B: session-level fields (resonance_id) — no sineater_sheet_id
         # because partner identity comes from participation, not session_kwargs.
-        self.assertEqual(field_names, {"resonance_id", "writeup"})
+        # No writeup field (#3957) — a ritual capstone has no journal entry by
+        # design, so the game must not demand text it discards.
+        self.assertEqual(field_names, {"resonance_id"})
         participant_field_names = {f["name"] for f in ritual.input_schema["participant_fields"]}
         self.assertEqual(participant_field_names, {"soul_tether_role"})

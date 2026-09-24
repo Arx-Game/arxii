@@ -43,6 +43,8 @@ import {
   QUIET_BUTTON_CLASS,
 } from '../fieldClasses';
 import { PillButton } from './Pill';
+import { EntryBand, EntryBody, EntryMeta, EntryTitle } from './EntryRowParts';
+import { BLACK_JOURNAL_BAND, entryRowClass } from '../rows';
 import {
   journalsKeys,
   useEditJournalEntry,
@@ -80,7 +82,7 @@ const CHIP_CLASS =
 
 function bandText(entry: JournalEntrySummary): string | null {
   if (entry.revealed_at) return `Post mortem · ${formatPostingDate(entry.revealed_at)}`;
-  if (!entry.is_public) return 'Black journal';
+  if (!entry.is_public) return BLACK_JOURNAL_BAND;
   if (entry.kind !== 'entry') return KIND_BANDS[entry.kind] ?? null;
   return null;
 }
@@ -469,29 +471,18 @@ function JournalRowHeader({
       onKeyDown={onKeyDown}
       className="grid cursor-pointer gap-[.2rem]"
     >
-      {band ? (
-        <div
-          className={cn(
-            'jr-sans jr-soft text-[.6875rem] uppercase tracking-[.14em] text-muted-foreground',
-            entry.revealed_at && 'text-primary'
-          )}
-        >
-          {band}
-        </div>
-      ) : null}
-      <div className="jr-sans jr-soft flex flex-wrap items-baseline gap-x-[.9rem] gap-y-1 text-[.8125rem] text-muted-foreground">
-        <span className="jr-strong font-body text-[1.05rem] font-semibold text-foreground">
-          <WriterLink to={`/journals?writer=${entry.author}`}>{entry.author_name}</WriterLink>
-        </span>
-        <DateStamp entry={entry} />
-      </div>
-      <h3 className="m-0 font-body text-[1.4rem] font-medium leading-[1.2]">{entry.title}</h3>
+      {band ? <EntryBand accent={Boolean(entry.revealed_at)}>{band}</EntryBand> : null}
+      <EntryMeta
+        who={<WriterLink to={`/journals?writer=${entry.author}`}>{entry.author_name}</WriterLink>}
+        date={<DateStamp entry={entry} />}
+      />
+      <EntryTitle>{entry.title}</EntryTitle>
       {entry.about_name ? (
         <div className="jr-sans jr-soft text-[.8125rem] text-muted-foreground">
           About <b className="jr-strong font-semibold text-foreground">{entry.about_name}</b>
         </div>
       ) : null}
-      {body ? <div className={cn('jr-body font-body', !open && 'jr-clamp')}>{body}</div> : null}
+      {body ? <EntryBody clamped={!open}>{body}</EntryBody> : null}
     </div>
   );
 }
@@ -675,14 +666,7 @@ export function JournalRow({ entry, open, onToggle, viewer }: JournalRowProps) {
   }
 
   return (
-    <article
-      className={cn(
-        'grid gap-[.35rem] border-t py-[1.1rem] first:border-t-0 first:pt-0',
-        isBlack && 'jr-black my-[.35rem] border-t-0 px-5',
-        isRevealed && 'border-l-[3px] border-l-primary pl-4'
-      )}
-      data-entry-id={entry.id}
-    >
+    <article className={entryRowClass({ isBlack, isRevealed })} data-entry-id={entry.id}>
       <JournalRowHeader
         entry={entry}
         open={open}

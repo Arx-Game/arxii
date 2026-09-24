@@ -59,7 +59,7 @@ from world.magic.services.soul_tether import (
 from world.magic.types.soul_tether import SineatingOffer, SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
+    RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
 
@@ -122,17 +122,18 @@ def _set_primary_affinity_primal(sheet: object) -> None:
         )
 
 
-def _grant_relationship_track_unlock(sheet: object, track: object) -> object:
+def _grant_relationship_track_unlock(sheet: object, rel_type: object) -> object:
     """Give the character a RELATIONSHIP_TRACK CharacterThreadWeavingUnlock.
 
     RELATIONSHIP_CAPSTONE thread weaving inherits from RELATIONSHIP_TRACK
     unlocks (ThreadWeavingUnlock has no CAPSTONE kind — constraint enforces
-    this). A RELATIONSHIP_TRACK unlock for the same track as the capstone
-    satisfies weave_thread's unlock check for RELATIONSHIP_CAPSTONE anchors.
+    this): any RELATIONSHIP_TRACK unlock satisfies weave_thread's coarse
+    unlock check for RELATIONSHIP_CAPSTONE anchors (#3957) — *rel_type* need
+    not match anything on the capstone itself.
     """
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=rel_type,
         unlock_trait=None,
     )
     return CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -141,7 +142,8 @@ def _grant_relationship_track_unlock(sheet: object, track: object) -> object:
 def _make_eligible_pair(track: object | None = None) -> tuple:
     """Return (sinner_sheet, sineater_sheet) satisfying all affinity + unlock gates.
 
-    sinner: Abyssal-primary with RELATIONSHIP_TRACK unlock for *track*.
+    sinner: Abyssal-primary with a RELATIONSHIP_TRACK unlock (*track*, a
+    RelationshipType, or a fresh one).
     sineater: Primal-primary (Celestial or Primal both pass the Sineater gate).
     Also seeds the required Soul Tether authored content (Ritual, ConditionTemplate, etc.).
     """
@@ -151,15 +153,15 @@ def _make_eligible_pair(track: object | None = None) -> tuple:
     _set_primary_affinity_abyssal(sinner)
     _set_primary_affinity_primal(sineater)
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     _grant_relationship_track_unlock(sinner, track)
     return sinner, sineater
 
 
 def _make_active_relationship(source: object, target: object) -> object:
     """Create both directional CharacterRelationships (not pending)."""
-    rel = CharacterRelationshipFactory(source=source, target=target, is_pending=False)
-    CharacterRelationshipFactory(source=target, target=source, is_pending=False)
+    rel = CharacterRelationshipFactory(source=source, target=target)
+    CharacterRelationshipFactory(source=target, target=source)
     return rel
 
 
@@ -174,7 +176,7 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         self.resonance = ResonanceFactory()
 
     def test_rejects_abyssal_primary_sineater(self) -> None:
@@ -192,7 +194,6 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
                 partner_sheet=sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="A bond is forged.",
                 ritual_components=[],
             )
         self.assertIn("Sineater", ctx.exception.user_message)
@@ -212,7 +213,6 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
                 partner_sheet=sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="A bond is forged.",
                 ritual_components=[],
             )
         self.assertIn("Sinner", ctx.exception.user_message)
@@ -234,7 +234,6 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="A celestial bond.",
             ritual_components=[],
         )
 
@@ -250,7 +249,7 @@ class AcceptSoulTetherUnlockTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         self.resonance = ResonanceFactory()
 
     def test_sinner_without_unlock_raises(self) -> None:
@@ -268,7 +267,6 @@ class AcceptSoulTetherUnlockTests(TestCase):
                 partner_sheet=sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="No unlock.",
                 ritual_components=[],
             )
 
@@ -287,7 +285,6 @@ class AcceptSoulTetherUnlockTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Has unlock.",
             ritual_components=[],
         )
 
@@ -304,19 +301,18 @@ class AcceptSoulTetherHappyPathTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         wire_soul_tether_content()
-        cls.track = RelationshipTrackFactory()
+        cls.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         cls.resonance = ResonanceFactory(affinity=abyssal_affinity)
         cls.sinner, cls.sineater = _make_eligible_pair(track=cls.track)
-        CharacterRelationshipFactory(source=cls.sinner, target=cls.sineater, is_pending=False)
-        CharacterRelationshipFactory(source=cls.sineater, target=cls.sinner, is_pending=False)
+        CharacterRelationshipFactory(source=cls.sinner, target=cls.sineater)
+        CharacterRelationshipFactory(source=cls.sineater, target=cls.sinner)
 
         cls.capstone = accept_soul_tether(
             initiator_sheet=cls.sinner,
             partner_sheet=cls.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance,
-            writeup="They knelt and joined hands beneath the witch-light.",
             ritual_components=[],
         )
 
@@ -326,8 +322,9 @@ class AcceptSoulTetherHappyPathTests(TestCase):
     def test_capstone_ritual_is_accept_soul_tether(self) -> None:
         self.assertEqual(self.capstone.ritual.name, "accept_soul_tether")
 
-    def test_capstone_writeup_preserved(self) -> None:
-        self.assertIn("witch-light", self.capstone.writeup)
+    def test_capstone_tier_claimed_matches_relationship_tier(self) -> None:
+        rel_out = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater)
+        self.assertEqual(self.capstone.tier_claimed, rel_out.tier)
 
     def test_both_relationships_flagged_as_soul_tether(self) -> None:
         rel_out = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater)
@@ -401,7 +398,7 @@ class AcceptSoulTetherIdempotencyTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         self.resonance = ResonanceFactory()
         self.sinner, self.sineater = _make_eligible_pair(track=self.track)
         _make_active_relationship(self.sinner, self.sineater)
@@ -413,7 +410,6 @@ class AcceptSoulTetherIdempotencyTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="First bond.",
             ritual_components=[],
         )
         # Second formation — should raise
@@ -423,7 +419,6 @@ class AcceptSoulTetherIdempotencyTests(TestCase):
                 partner_sheet=self.sineater,
                 sinner_role=SoulTetherRoleEnum.SINNER,
                 resonance=self.resonance,
-                writeup="Duplicate bond.",
                 ritual_components=[],
             )
         self.assertIn("already exists", ctx.exception.user_message)
@@ -440,7 +435,7 @@ class AcceptSoulTetherMultiTetherTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
 
     def test_second_tether_reuses_condition_instance(self) -> None:
         abyssal_affinity = AffinityFactory(name="Abyssal")
@@ -456,24 +451,22 @@ class AcceptSoulTetherMultiTetherTests(TestCase):
             partner_sheet=sineater1,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance1,
-            writeup="First bond.",
             ritual_components=[],
         )
 
         # Second tether: different Sineater; new track unlock for the new capstone
         sineater2 = CharacterSheetFactory()
         _set_primary_affinity_primal(sineater2)
-        track2 = RelationshipTrackFactory()
+        track2 = RelationshipTypeFactory()
         _grant_relationship_track_unlock(sinner, track2)
-        CharacterRelationshipFactory(source=sinner, target=sineater2, is_pending=False)
-        CharacterRelationshipFactory(source=sineater2, target=sinner, is_pending=False)
+        CharacterRelationshipFactory(source=sinner, target=sineater2)
+        CharacterRelationshipFactory(source=sineater2, target=sinner)
 
         accept_soul_tether(
             initiator_sheet=sinner,
             partner_sheet=sineater2,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance2,
-            writeup="Second bond.",
             ritual_components=[],
         )
 
@@ -498,23 +491,21 @@ class AcceptSoulTetherMultiTetherTests(TestCase):
             partner_sheet=sineater1,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance1,
-            writeup="First bond.",
             ritual_components=[],
         )
 
         sineater2 = CharacterSheetFactory()
         _set_primary_affinity_primal(sineater2)
-        track2 = RelationshipTrackFactory()
+        track2 = RelationshipTypeFactory()
         _grant_relationship_track_unlock(sinner, track2)
-        CharacterRelationshipFactory(source=sinner, target=sineater2, is_pending=False)
-        CharacterRelationshipFactory(source=sineater2, target=sinner, is_pending=False)
+        CharacterRelationshipFactory(source=sinner, target=sineater2)
+        CharacterRelationshipFactory(source=sineater2, target=sinner)
 
         accept_soul_tether(
             initiator_sheet=sinner,
             partner_sheet=sineater2,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance2,
-            writeup="Second bond.",
             ritual_components=[],
         )
 
@@ -544,7 +535,7 @@ def _make_tethered_pair(
     """
     wire_soul_tether_content()
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     abyssal_affinity = AffinityFactory(name="Abyssal")
     resonance = ResonanceFactory(affinity=abyssal_affinity)
     sinner, sineater = _make_eligible_pair(track=track)
@@ -554,7 +545,6 @@ def _make_tethered_pair(
         partner_sheet=sineater,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Bond forged for Sineating tests.",
         ritual_components=[],
     )
     relationship = CharacterRelationship.objects.get(source=sinner, target=sineater)
@@ -604,7 +594,7 @@ class RequestSineatingValidationTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         self.sinner, self.sineater = _make_eligible_pair(track=self.track)
@@ -635,7 +625,6 @@ class RequestSineatingValidationTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Seed a CharacterResonance so the resonance gate passes too.
@@ -659,7 +648,6 @@ class RequestSineatingValidationTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Use a *different* resonance that Sinner has no CharacterResonance for.
@@ -692,7 +680,6 @@ class RequestSineatingValidationTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Seed a CharacterResonance so the resonance gate passes.
@@ -725,7 +712,7 @@ class ResolveSineatingHappyPathTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         wire_soul_tether_content()
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
         cls.sinner, cls.sineater, cls.resonance, cls.relationship = _make_tethered_pair(track=track)
 
         # Seed Sineater's anima so the deduction can proceed.
@@ -854,7 +841,7 @@ class ResolveSineatingDeclineTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         wire_soul_tether_content()
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
         cls.sinner, cls.sineater, cls.resonance, cls.relationship = _make_tethered_pair(track=track)
         # Seed Sineater's anima for deduction baseline.
         cls.sineater_anima = CharacterAnimaFactory(
@@ -946,7 +933,7 @@ class PerSceneCapTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -958,7 +945,7 @@ class PerSceneCapTests(TestCase):
     def test_compute_per_scene_cap_level_zero_thread_returns_five(self) -> None:
         """A level-0 thread gives cap = min(20, 0*2+5) = 5."""
         wire_soul_tether_content()
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
         sinner, sineater = _make_eligible_pair(track=track)
         _make_active_relationship(sinner, sineater)
         accept_soul_tether(
@@ -966,7 +953,6 @@ class PerSceneCapTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         rel = CharacterRelationship.objects.get(source=sinner, target=sineater)
@@ -990,7 +976,6 @@ class PerSceneCapTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Seed CharacterResonance for the Sinner so the resonance gate passes.
@@ -1024,7 +1009,6 @@ class PerSceneCapTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         rel = CharacterRelationship.objects.get(source=sinner, target=sineater)
@@ -1096,7 +1080,7 @@ def _make_tethered_pair_with_corruption(
 
     wire_soul_tether_content()
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     abyssal_affinity = AffinityFactory(name="Abyssal")
     resonance = ResonanceFactory(affinity=abyssal_affinity)
     sinner, sineater = _make_eligible_pair(track=track)
@@ -1107,7 +1091,6 @@ def _make_tethered_pair_with_corruption(
         partner_sheet=sineater,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Bond forged for rescue tests.",
         ritual_components=[],
     )
 
@@ -1302,7 +1285,7 @@ class PerformSoulTetherRescueGateTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -1319,7 +1302,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=2)
@@ -1380,7 +1362,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=3)
@@ -1413,7 +1394,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=3)
@@ -1447,7 +1427,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         with_corruption_at_stage(sinner, self.resonance, stage=3)
@@ -1487,7 +1466,6 @@ class PerformSoulTetherRescueGateTests(TestCase):
             partner_sheet=sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond.",
             ritual_components=[],
         )
         # Use stage 5 with success_level=0 (failure) so budget=250, reducing from
@@ -1568,12 +1546,12 @@ class DissolveSoulTetherSingleTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         self.sinner, self.sineater = _make_eligible_pair(track=self.track)
-        CharacterRelationshipFactory(source=self.sinner, target=self.sineater, is_pending=False)
-        CharacterRelationshipFactory(source=self.sineater, target=self.sinner, is_pending=False)
+        CharacterRelationshipFactory(source=self.sinner, target=self.sineater)
+        CharacterRelationshipFactory(source=self.sineater, target=self.sinner)
 
         # Seed Sineater anima for resolve_sineating.
         CharacterAnimaFactory(character=self.sineater, current=20, maximum=20)
@@ -1584,7 +1562,6 @@ class DissolveSoulTetherSingleTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="A bond is formed.",
             ritual_components=[],
         )
         self.relationship = CharacterRelationship.objects.get(
@@ -1734,8 +1711,8 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        track1 = RelationshipTrackFactory()
-        track2 = RelationshipTrackFactory()
+        track1 = RelationshipTypeFactory()
+        track2 = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         resonance1 = ResonanceFactory(affinity=abyssal_affinity)
         resonance2 = ResonanceFactory(affinity=abyssal_affinity)
@@ -1749,7 +1726,6 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
             partner_sheet=self.sineater1,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance1,
-            writeup="First bond.",
             ritual_components=[],
         )
 
@@ -1757,15 +1733,14 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
         self.sineater2 = CharacterSheetFactory()
         _set_primary_affinity_primal(self.sineater2)
         _grant_relationship_track_unlock(self.sinner, track2)
-        CharacterRelationshipFactory(source=self.sinner, target=self.sineater2, is_pending=False)
-        CharacterRelationshipFactory(source=self.sineater2, target=self.sinner, is_pending=False)
+        CharacterRelationshipFactory(source=self.sinner, target=self.sineater2)
+        CharacterRelationshipFactory(source=self.sineater2, target=self.sinner)
 
         self.capstone2 = accept_soul_tether(
             initiator_sheet=self.sinner,
             partner_sheet=self.sineater2,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance2,
-            writeup="Second bond.",
             ritual_components=[],
         )
 
@@ -1880,12 +1855,12 @@ class DissolveSoulTetherEmitTests(TestCase):
 
     def setUp(self) -> None:
         wire_soul_tether_content()
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         self.sinner, self.sineater = _make_eligible_pair(track=self.track)
-        CharacterRelationshipFactory(source=self.sinner, target=self.sineater, is_pending=False)
-        CharacterRelationshipFactory(source=self.sineater, target=self.sinner, is_pending=False)
+        CharacterRelationshipFactory(source=self.sinner, target=self.sineater)
+        CharacterRelationshipFactory(source=self.sineater, target=self.sinner)
 
         CharacterAnimaFactory(character=self.sineater, current=20, maximum=20)
         CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
@@ -1895,7 +1870,6 @@ class DissolveSoulTetherEmitTests(TestCase):
             partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="A bond is formed.",
             ritual_components=[],
         )
         self.relationship = CharacterRelationship.objects.get(

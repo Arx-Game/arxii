@@ -32,10 +32,11 @@ from world.companions.services import materialize_companion_as_combat_opponent
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
+from world.relationships.constants import TypeValence
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
 
 
@@ -69,17 +70,16 @@ class CompanionFallSurgeTests(TestCase):
         install_escalation_room_triggers(self.encounter)
 
     def _bond(self, source_sheet, *, points=10, fuels=True):
-        track = RelationshipTrackFactory(fuels_escalation_spikes=fuels)
+        rel_type = RelationshipTypeFactory(valence=TypeValence.WARM, fuels_escalation_spikes=fuels)
         relationship = CharacterRelationshipFactory(
             source=source_sheet,
             target=None,
             target_companion=self.companion,
             is_active=True,
-            is_pending=False,
         )
-        RelationshipTrackProgressFactory(
-            relationship=relationship, track=track, developed_points=points, capacity=points
-        )
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
+        relationship.invested_depth = points
+        relationship.save()
         return relationship
 
     def _intensity(self, sheet) -> int:

@@ -522,7 +522,7 @@ const mockThreadHubSummary = {
   },
   weavable_traits: [],
   weavable_techniques: [],
-  weavable_relationship_track_ids: [],
+  weavable_relationship_type_ids: [],
 };
 
 const mockTeachingOffer = {

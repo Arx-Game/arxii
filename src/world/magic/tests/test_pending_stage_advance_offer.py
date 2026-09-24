@@ -48,7 +48,7 @@ from world.magic.services.soul_tether import (
 from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
+    RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
 from world.roster.factories import RosterTenureFactory
@@ -99,7 +99,7 @@ def _grant_relationship_track_unlock(sheet: object, track: object) -> None:
     """Give the character a RELATIONSHIP_TRACK CharacterThreadWeavingUnlock."""
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -113,7 +113,7 @@ def _make_tethered_pair_with_tenures(track=None):
     """
     wire_soul_tether_content()
     if track is None:
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
     abyssal_affinity = AffinityFactory(name="Abyssal")
     resonance = ResonanceFactory(affinity=abyssal_affinity)
 
@@ -126,15 +126,14 @@ def _make_tethered_pair_with_tenures(track=None):
     _set_primary_affinity_primal(sineater_sheet)
     _grant_relationship_track_unlock(sinner_sheet, track)
 
-    CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet, is_pending=False)
-    CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet, is_pending=False)
+    CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet)
+    CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet)
 
     accept_soul_tether(
         initiator_sheet=sinner_sheet,
         partner_sheet=sineater_sheet,
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
-        writeup="Bond for stage advance tests, at least twenty chars.",
         ritual_components=[],
     )
 
@@ -246,7 +245,7 @@ class PendingStageAdvanceOfferUniquenessTests(TestCase):
         from django.db import IntegrityError
 
         wire_soul_tether_content()
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
         resonance = ResonanceFactory()
         sinner_tenure = RosterTenureFactory()
         sineater_tenure = RosterTenureFactory()
@@ -257,15 +256,14 @@ class PendingStageAdvanceOfferUniquenessTests(TestCase):
         _set_primary_affinity_primal(sineater_sheet)
         _grant_relationship_track_unlock(sinner_sheet, track)
 
-        CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet, is_pending=False)
-        CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet, is_pending=False)
+        CharacterRelationshipFactory(source=sinner_sheet, target=sineater_sheet)
+        CharacterRelationshipFactory(source=sineater_sheet, target=sinner_sheet)
 
         accept_soul_tether(
             initiator_sheet=sinner_sheet,
             partner_sheet=sineater_sheet,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance,
-            writeup="Bond for uniqueness constraint test, at least twenty chars.",
             ritual_components=[],
         )
 
@@ -314,7 +312,7 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
             db_key="Room_SAPromptDB",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         CorruptionConditionTemplateFactory(corruption_resonance=self.resonance)
@@ -329,18 +327,13 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
         _set_primary_affinity_abyssal(self.sinner_sheet)
         _set_primary_affinity_primal(self.sineater_sheet)
         _grant_relationship_track_unlock(self.sinner_sheet, self.track)
-        CharacterRelationshipFactory(
-            source=self.sinner_sheet, target=self.sineater_sheet, is_pending=False
-        )
-        CharacterRelationshipFactory(
-            source=self.sineater_sheet, target=self.sinner_sheet, is_pending=False
-        )
+        CharacterRelationshipFactory(source=self.sinner_sheet, target=self.sineater_sheet)
+        CharacterRelationshipFactory(source=self.sineater_sheet, target=self.sinner_sheet)
         accept_soul_tether(
             initiator_sheet=self.sinner_sheet,
             partner_sheet=self.sineater_sheet,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond for subscriber DB write test, at least twenty chars.",
             ritual_components=[],
         )
         CharacterResonanceFactory(character_sheet=self.sinner_sheet, resonance=self.resonance)
@@ -470,7 +463,7 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
             db_key="Room_SAPromptNoScene",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.track = RelationshipTrackFactory()
+        self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
         CorruptionConditionTemplateFactory(corruption_resonance=self.resonance)
@@ -483,18 +476,13 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
         _set_primary_affinity_abyssal(self.sinner_sheet)
         _set_primary_affinity_primal(self.sineater_sheet)
         _grant_relationship_track_unlock(self.sinner_sheet, self.track)
-        CharacterRelationshipFactory(
-            source=self.sinner_sheet, target=self.sineater_sheet, is_pending=False
-        )
-        CharacterRelationshipFactory(
-            source=self.sineater_sheet, target=self.sinner_sheet, is_pending=False
-        )
+        CharacterRelationshipFactory(source=self.sinner_sheet, target=self.sineater_sheet)
+        CharacterRelationshipFactory(source=self.sineater_sheet, target=self.sinner_sheet)
         accept_soul_tether(
             initiator_sheet=self.sinner_sheet,
             partner_sheet=self.sineater_sheet,
             sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
-            writeup="Bond for no-scene DB skip test, at least twenty chars.",
             ritual_components=[],
         )
         CharacterResonanceFactory(character_sheet=self.sinner_sheet, resonance=self.resonance)

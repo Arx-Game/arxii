@@ -9,31 +9,31 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 class RelationshipBondPullTuning(SharedMemoryModel):
     """Singleton tuning surface (pk=1) for the RELATIONSHIP_TRACK pull-modulation
-    saturating curve (#1849), plus the fraught/devotion differential terms (#2034).
+    saturating curve (#1849), plus the fraught/devotion differential terms (#2034,
+    redrawn for the side-row/label model in #3957).
 
     Generic curve: ``bonus = round(cap * S / (S + half_saturation))`` where
-    ``S = coefficient * CharacterRelationship.developed_absolute_value``. Access
-    via ``get_relationship_bond_pull_tuning()`` — singleton-by-convention, no
-    DB-level uniqueness constraint (mirrors ``SoulTetherConfig``).
+    ``S = coefficient * CharacterRelationship.pair_depth()`` — the tie's depth
+    summed across both sides. Access via ``get_relationship_bond_pull_tuning()``
+    — singleton-by-convention, no DB-level uniqueness constraint (mirrors
+    ``SoulTetherConfig``).
 
-    Fraught term — rewards a bond that is simultaneously heavily invested in
-    BOTH positive and negative tracks (a love/hate dynamic), keyed on the
-    smaller of the two signed sub-sums (``CharacterRelationship
-    .developed_signed_sums``) so a bond that's lopsided in one direction earns
-    nothing here::
+    Fraught term — rewards a bond that has moved BOTH the Affection and Conflict
+    gauges (a love/hate dynamic), keyed on the smaller of the two so a bond
+    that's lopsided entirely in one direction earns nothing here::
 
         fraught = soft_cap(
-            fraught_coefficient * min(pos_sum, neg_sum),
+            fraught_coefficient * min(bond.affection, bond.conflict),
             fraught_cap,
             fraught_half_saturation,
         )
 
-    Devotion term — rewards a bond so overwhelmingly deep that it clears a
-    threshold well past the generic curve's own half-saturation point (only
-    genuinely extreme devotion earns the second wind)::
+    Devotion term — rewards a bond so overwhelmingly deep that its pair depth
+    clears a threshold well past the generic curve's own half-saturation point
+    (only genuinely extreme devotion earns the second wind)::
 
         devotion = soft_cap(
-            devotion_coefficient * max(0, developed_absolute_value - devotion_threshold),
+            devotion_coefficient * max(0, pair_depth() - devotion_threshold),
             devotion_cap,
             devotion_half_saturation,
         )
@@ -44,7 +44,7 @@ class RelationshipBondPullTuning(SharedMemoryModel):
     coefficient = models.PositiveSmallIntegerField(
         default=1,
         help_text="Linear multiplier on the owner-to-threaded-person bond's "
-        "developed_absolute_value.",
+        "pair depth (pair_depth()).",
     )
     cap = models.PositiveSmallIntegerField(
         default=20,
@@ -56,8 +56,8 @@ class RelationshipBondPullTuning(SharedMemoryModel):
     )
     fraught_coefficient = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Linear multiplier on min(positive_sum, negative_sum) from "
-        "developed_signed_sums — the fraught (love/hate) term's investment score.",
+        help_text="Linear multiplier on min(affection, conflict) — the fraught "
+        "(love/hate) term's investment score.",
     )
     fraught_cap = models.PositiveSmallIntegerField(
         default=10,
@@ -71,12 +71,12 @@ class RelationshipBondPullTuning(SharedMemoryModel):
     )
     devotion_threshold = models.PositiveSmallIntegerField(
         default=60,
-        help_text="developed_absolute_value must exceed this before any devotion "
+        help_text="pair_depth() must exceed this before any devotion "
         "bonus accrues — only genuinely extreme bonds earn the second wind.",
     )
     devotion_coefficient = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Linear multiplier on the amount developed_absolute_value exceeds "
+        help_text="Linear multiplier on the amount pair_depth() exceeds "
         "devotion_threshold — the devotion term's investment score.",
     )
     devotion_cap = models.PositiveSmallIntegerField(

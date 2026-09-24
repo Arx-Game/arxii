@@ -695,14 +695,14 @@ admin all converge on the same service layer.
 - `RelationshipBondPullTuning` - Singleton (pk=1, `get_relationship_bond_pull_tuning()`)
   tuning surface for `relationship_bond_modulation` (`world/magic/services/
   pull_modulation_relationship.py`, #1849, ADR-0092), the RELATIONSHIP_TRACK sibling of
-  Court's `court_regard_modulation`. Base term is sign-blind (keyed on the owner's own
-  `CharacterRelationship.developed_absolute_value` bond to the thread's threaded person);
-  two additive valence-aware terms (#2034, ADR-0110) sit on top, each with its own
-  soft-cap columns on the same singleton: **fraught** (`fraught_coefficient/_cap/
-  _half_saturation`, keyed on `min` of `CharacterRelationship.developed_signed_sums` —
-  rewards a bond invested in both positive AND negative tracks at once) and **devotion**
+  Court's `court_regard_modulation`. Base term is keyed on `CharacterRelationship
+  .pair_depth()` — the tie's depth summed across both sides; two additive valence-aware
+  terms (#2034, ADR-0110, redrawn for the side-row/label model in #3957) sit on top, each
+  with its own soft-cap columns on the same singleton: **fraught** (`fraught_coefficient/
+  _cap/_half_saturation`, keyed on `min(bond.affection, bond.conflict)` — rewards a bond
+  that has moved BOTH gauges at once) and **devotion**
   (`devotion_threshold/_coefficient/_cap/_half_saturation`, keyed on
-  `max(0, developed_absolute_value - devotion_threshold)` — rewards raw depth past a
+  `max(0, pair_depth() - devotion_threshold)` — rewards raw depth past a
   threshold, no ritual/ceremony gate). All three terms reuse `_soft_cap`
   (`world/magic/services/threads.py`); see docs/systems/magic.md's "Relationship Bond
   Pull Modulation" section for the full formulas.
@@ -723,7 +723,7 @@ admin all converge on the same service layer.
   inert until rows exist. Staff-tunable in admin.
 - `ThreadWeavingUnlock` - Authored catalog of "you can weave threads on X"
   unlocks. Same discriminator + typed-FK pattern as Thread: `unlock_trait`,
-  `unlock_gift`, `unlock_track`. `xp_cost` + M2M to `Path` (in-band) +
+  `unlock_gift`, `unlock_type` (a `RelationshipType`). `xp_cost` + M2M to `Path` (in-band) +
   `out_of_path_multiplier`. SANCTUM threads do not require a
   `ThreadWeavingUnlock` — the anchor cap (`sanctum.feature_instance.level × 10`)
   is the only gate at imbue time.
@@ -756,7 +756,8 @@ admin all converge on the same service layer.
 **Per-thread and per-character records:**
 - `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
   `target_trait`, `target_technique`, `target_facet`,
-  `target_relationship_track`, `target_capstone`, `target_covenant_role`,
+  `target_relationship` (the weaver's own `CharacterRelationship` side, #3957),
+  `target_capstone`, `target_covenant_role`,
   `target_gift`, `target_mantle`, `target_sanctum_details`. Fields: `owner` (FK CharacterSheet), `resonance`
   (FK Resonance), `name`, `description`, `developed_points`, `level`, timestamps,
   `retired_at` (soft-retire), `slot_kind` (required for SANCTUM threads —
@@ -1185,9 +1186,12 @@ during Sineating actions, which refills the Hollow's capacity.
 All wired via `wire_soul_tether_content()` in `factories.py`, which `seed_magic_dev()` calls
 (#2027) so this content exists in a real deploy, not only under test setup.
 `seed_relationship_track_thread_unlock()` (`world/seeds/game_content/magic.py`) resolves the
-paired RELATIONSHIP_TRACK `ThreadWeavingUnlock` + its "Devotion" `RelationshipTrack` that
-`accept_soul_tether`'s `_validate_unlock` gates on — `ThreadWeavingUnlock.unlock_track` is a
-required FK, so both rows are needed to make Soul Tether formation reachable. Both are
+paired RELATIONSHIP_TRACK `ThreadWeavingUnlock` + its "Sworn" `RelationshipType` (#3957) that
+`accept_soul_tether`'s `_validate_unlock` gates on — `ThreadWeavingUnlock.unlock_type` is a
+required FK, so both rows are needed to make Soul Tether formation reachable. The gate itself
+is coarse: any RELATIONSHIP_TRACK-kind unlock the Sinner holds satisfies it, since
+`ThreadWeavingUnlock` has no CAPSTONE-kind row to match against (the Sinner's specific
+`unlock_type` need not match anything on the tie). Both rows are
 content-repo-owned (#2698/#2973): resolved via `authored_or_sample`, never lazy-created
 against a real deploy; `accept_soul_tether` raises `NoSoulTetherUnlockError` cleanly when
 either is absent.

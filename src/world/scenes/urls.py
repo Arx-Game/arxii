@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.scenes.action_views import SceneActionRequestViewSet, SceneActionTargetViewSet
-from world.scenes.friend_views import FriendshipViewSet, RivalryViewSet
+from world.scenes.friend_views import FriendshipViewSet
 from world.scenes.interaction_views import (
     InteractionFavoriteViewSet,
     InteractionReactionViewSet,
@@ -78,7 +78,6 @@ router.register(
 router.register(r"blocks", BlockViewSet, basename="block")
 router.register(r"mutes", MuteViewSet, basename="mute")
 router.register(r"friends", FriendshipViewSet, basename="friend")
-router.register(r"rivals", RivalryViewSet, basename="rival")
 
 urlpatterns = [
     path("api/play/conversations/", PlayConversationsView.as_view(), name="play-conversations"),

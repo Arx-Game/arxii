@@ -14,8 +14,11 @@ from world.consent.factories import (
     SocialConsentWhitelistFactory,
 )
 from world.consent.services import consent_blocks_targeting, effective_consent_mode
+from world.relationships.constants import LabelAwareness, TypeValence
+from world.relationships.factories import RelationshipTypeFactory
+from world.relationships.services import declare_label, get_or_create_side
 from world.roster.factories import RosterTenureFactory
-from world.scenes.friend_services import add_friend, declare_rival
+from world.scenes.friend_services import add_friend
 
 
 class ConsentTreeTests(TestCase):
@@ -61,9 +64,23 @@ class ConsentTreeTests(TestCase):
         # Leaf now inherits RIVALS from the root; a non-rival stranger is blocked.
         self.assertEqual(effective_consent_mode(pref, self.leaf), ConsentMode.RIVALS)
         self.assertTrue(self._blocks())
-        # A mutual rival passes.
-        declare_rival(rivaler_tenure=self.owner, rival_tenure=self.actor)
-        declare_rival(rivaler_tenure=self.actor, rival_tenure=self.owner)
+        # A mutual hostile relationship label passes (#3957 — RIVALS now reads
+        # world.relationships.services.mutual_hostile instead of scenes.Rivalry).
+        owner_sheet = self.owner.roster_entry.character_sheet
+        actor_sheet = self.actor.roster_entry.character_sheet
+        rival_type = RelationshipTypeFactory(name="Rival", valence=TypeValence.HOSTILE)
+        declare_label(
+            side=get_or_create_side(source=owner_sheet, target=actor_sheet),
+            type=rival_type,
+            awareness=LabelAwareness.PUBLIC,
+            tenure=self.owner,
+        )
+        declare_label(
+            side=get_or_create_side(source=actor_sheet, target=owner_sheet),
+            type=rival_type,
+            awareness=LabelAwareness.PUBLIC,
+            tenure=self.actor,
+        )
         self.assertFalse(self._blocks())
 
     def test_leaf_rule_overrides_root_rule(self):

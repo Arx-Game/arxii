@@ -5,7 +5,7 @@ Proves CmdTether and CmdSineater converge on the same service seam as the
 8 web APIViews.
 
 Journey:
-  1. Sinner runs ``tether burden Sineater resonance=... writeup=...``
+  1. Sinner runs ``tether burden Sineater resonance=...``
      → CharacterRelationship.is_soul_tether=True + RELATIONSHIP_CAPSTONE Thread created
   2. Sinner runs ``tether entreat Sineater sins=3``
      → SineatingPendingOffer row created
@@ -51,7 +51,7 @@ from world.magic.factories import (
 )
 from world.magic.models import Thread
 from world.magic.models.soul_tether import PendingStageAdvanceOffer, SineatingPendingOffer
-from world.relationships.factories import CharacterRelationshipFactory, RelationshipTrackFactory
+from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.relationships.models import CharacterRelationship
 from world.scenes.factories import SceneFactory
 
@@ -102,7 +102,7 @@ def _set_primal_primary(sheet: object) -> None:
 def _grant_track_unlock(sheet: object, track: object) -> object:
     unlock = ThreadWeavingUnlockFactory(
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        unlock_track=track,
+        unlock_type=track,
         unlock_trait=None,
     )
     return CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
@@ -160,19 +160,17 @@ class SoulTetherJourneyTests(TestCase):
         # Sinner needs a CharacterResonance row for request_sineating validation.
         CharacterResonanceFactory(character_sheet=self.sinner_sheet, resonance=self.resonance)
 
-        track = RelationshipTrackFactory()
+        track = RelationshipTypeFactory()
         _grant_track_unlock(self.sinner_sheet, track)
 
         # Both directional relationship rows must pre-exist before formation.
         CharacterRelationshipFactory(
             source=self.sinner_sheet,
             target=self.sineater_sheet,
-            is_pending=False,
         )
         CharacterRelationshipFactory(
             source=self.sineater_sheet,
             target=self.sinner_sheet,
-            is_pending=False,
         )
 
         self.scene = SceneFactory(is_active=True, location=self.room)
@@ -222,11 +220,7 @@ class SoulTetherJourneyTests(TestCase):
         self._run(
             CmdTether,
             self.sinner_char,
-            (
-                f"burden {self.sineater_char.db_key}"
-                f" resonance={self.resonance.name}"
-                f" writeup=A bond sealed in shadow and light."
-            ),
+            (f"burden {self.sineater_char.db_key} resonance={self.resonance.name}"),
         )
         rel = CharacterRelationship.objects.get(
             source=self.sinner_sheet,
@@ -312,25 +306,12 @@ class SoulTetherJourneyTests(TestCase):
     # Error paths
     # ------------------------------------------------------------------
 
-    def test_burden_missing_writeup_sends_error(self) -> None:
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            f"burden {self.sineater_char.db_key} resonance={self.resonance.name}",
-        )
-        msg = self.sinner_char.msg.call_args[0][0]
-        self.assertIn("writeup", msg.lower())
-
     def test_entreat_no_active_scene_sends_error(self) -> None:
         # Form the tether first.
         self._run(
             CmdTether,
             self.sinner_char,
-            (
-                f"burden {self.sineater_char.db_key}"
-                f" resonance={self.resonance.name}"
-                f" writeup=Test bond."
-            ),
+            (f"burden {self.sineater_char.db_key} resonance={self.resonance.name}"),
         )
         # Remove character from room so get_active_scene returns None.
         self.sinner_char.location = None
@@ -351,11 +332,7 @@ class SoulTetherJourneyTests(TestCase):
         self._run(
             CmdTether,
             self.sinner_char,
-            (
-                f"burden {self.sineater_char.db_key}"
-                f" resonance={self.resonance.name}"
-                f" writeup=Test bond."
-            ),
+            (f"burden {self.sineater_char.db_key} resonance={self.resonance.name}"),
         )
         self._run(
             CmdTether,
@@ -371,11 +348,7 @@ class SoulTetherJourneyTests(TestCase):
         self._run(
             CmdTether,
             self.sinner_char,
-            (
-                f"burden {self.sineater_char.db_key}"
-                f" resonance={self.resonance.name}"
-                f" writeup=Test bond."
-            ),
+            (f"burden {self.sineater_char.db_key} resonance={self.resonance.name}"),
         )
         self._run(
             CmdTether,

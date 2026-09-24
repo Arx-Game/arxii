@@ -41,12 +41,12 @@ live in `AGENT_GLOSSARY_MAP.md`.
   Retort. Gated by the same Retort Consent rule and awards the same weekly XP
   (`CONDEMN_GIVEN_XP`/`CONDEMN_RECEIVED_XP` alias `RETORT_GIVEN_XP`/`RETORT_RECEIVED_XP`).
 - **Retort Consent** — `CharacterSheet.retort_consent` (`RetortConsent`: RIVALS default /
-  ANYONE, #3941, ADR-0307): who may Retort or Condemn this character's entries. RIVALS means an
-  active, non-pending `CharacterRelationship` in either direction carrying progress on a
-  negative-sign track (`journals.services.can_retort` — one function, so a future dedicated
-  Rivalry relationship kind narrows it there without touching callers); ANYONE opens the door to
-  every reader. Praise and a Nomination are never gated by this. _Avoid:_ a per-entry toggle —
-  the dial is about who may address the writer, not about any one piece of writing.
+  ANYONE, #3941, ADR-0307): who may Retort or Condemn this character's entries. RIVALS means a
+  mutual hostile relationship label with the writer (#3957,
+  `world.relationships.services.mutual_hostile` — one function, `journals.services.can_retort`
+  calls it without reimplementing the predicate); ANYONE opens the door to every reader. Praise
+  and a Nomination are never gated by this. _Avoid:_ a per-entry toggle — the dial is about who
+  may address the writer, not about any one piece of writing.
 - **Weekly Journal XP** — `WeeklyJournalXP`, a per-character rolling 7-day counter
   (`posts_this_week`, praise/retort given/received flags) gating the diminishing per-post XP
   award. Resets on a timestamp check, not a scheduled job — same pattern as `relationships`.

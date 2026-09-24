@@ -138,14 +138,19 @@ They do not use the command system, dispatchers, or handlers.
   backend, `target_type=SELF`; thin wrappers around `world.npc_services.services.start_interaction`,
   `resolve_offer`, and `end_interaction`. Shared by telnet `CmdHire` and the web
   `InteractionViewSet`;
-  `relationships.py` (#1485) — the four positive relationship-building verbs, all REGISTRY backend:
-  `CreateFirstImpressionAction` (key `"create_first_impression"`), `CreateDevelopmentAction`
-  (`"create_development"`), `CreateCapstoneAction` (`"create_capstone"`, visibility defaults
-  SHARED), `RedistributePointsAction` (`"redistribute_points"`). Each wraps its
-  `world.relationships.services` counterpart; `linked_scene` defaults to the caller's active scene
-  when the target is co-located. Shared `BaseRelationshipAction` reuses
+  `relationships.py` (#3957, was #1485) — the tie verbs, all REGISTRY backend, wrapping
+  `world.relationships.services`: `DeclareLabelAction` (key `"declare_label"`, defaults
+  Private awareness), `ShiftLabelAction` (`"shift_label"`), `EndLabelAction` (`"end_label"`),
+  `AdvanceLabelAwarenessAction` (`"advance_label_awareness"`, forward-only), `SetTieAllocationAction`
+  (`"set_tie_allocation"`, this week's AP), `AdvanceRelationshipTierAction`
+  (`"advance_relationship_tier"`, a capstone journal entry + XP), `SetTieSummaryAction`
+  (`"set_tie_summary"`). The three label-row actions (`Shift`/`End`/`AdvanceLabelAwareness`) take
+  a `label` kwarg the caller already owns (`_LabelRowAction._own_label` refuses one that isn't
+  theirs); every other action takes `target_sheet` or `target_companion` (exactly one) and resolves
+  the side via `get_or_create_side`. Shared `BaseRelationshipAction` reuses
   `HasCharacterSheetPrerequisite` from `actions.prerequisites`. Shared by telnet `CmdRelationship`
-  (`relationship <subverb>`) and the web `RelationshipUpdateViewSet`; no consent gate (ADR-0024);
+  (`relationship <subverb>`) and the web tie panel; no consent gate (ADR-0024). Plus
+  `RelationshipBumpAction` (`"relationship_bump"`, #1699, unchanged) — the ambient +/-1 nudge;
   `progression_rewards.py` (#1348) — the 7 progression-reward verbs, all REGISTRY backend,
   `target_type=SELF`: `ClaimKudosAction` (key `"claim_kudos"`; wraps `claim_kudos_for_xp`),
   `CastVoteAction` / `RemoveVoteAction` (keys `"cast_vote"` / `"remove_vote"`; wrap

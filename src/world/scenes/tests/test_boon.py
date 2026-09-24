@@ -455,7 +455,7 @@ class RankGapShiftTests(TestCase):
         self.assertEqual(npc_boon_tier_shift(request), 4)  # 2 (cost band) + 2 (rank gap)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
+@override_settings(SEED_SAMPLE_CONTENT=True)  # RelationshipType catalogue gates on #3957
 class BoonResolverE2ETests(TestCase):
     """The full consent path: dispatch → NPC auto-accept → resolver fulfills + charges."""
 
@@ -471,7 +471,7 @@ class BoonResolverE2ETests(TestCase):
         seed_social_check_content()
         seed_social_relationship_content()
         seed_social_action_content()  # seeds the "Boon" ActionTemplate
-        seed_relationship_scale_content()  # Regard/Friction system tracks
+        seed_relationship_scale_content()  # tie-type catalogue, tier ladder, growth config
         cls.scene = SceneFactory()
 
     def setUp(self) -> None:
@@ -521,6 +521,9 @@ class BoonResolverE2ETests(TestCase):
         self.assertEqual(
             shift.relationship.source_id, self.npc_target.character_sheet_id
         )  # the granter's regard for the asker is what drops
+        # move_gauges: a negative shift lands on Conflict, never a negative Affection.
+        self.assertEqual(shift.relationship.conflict, BOON_AFFECTION_COST)
+        self.assertEqual(shift.relationship.affection, 0)
 
     def test_deleting_granted_boon_cascades_the_affection_shift(self) -> None:
         """#2540 fold-in: AffectionShift.boon was SET_NULL, but
@@ -713,3 +716,4 @@ class BoonAskFlavorResolverE2ETests(TestCase):
         self.assertIsNotNone(request.boon.fulfilled_at)
         shift = AffectionShift.objects.get(boon=request.boon)
         self.assertEqual(shift.amount, -BOON_AFFECTION_COST)
+        self.assertEqual(shift.relationship.conflict, BOON_AFFECTION_COST)

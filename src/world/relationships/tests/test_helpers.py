@@ -1,16 +1,14 @@
-"""Tests for relationship helper functions."""
+"""Tests for relationship helper functions (#3957: mutual Mentor/Student tier)."""
 
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTierFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
+from world.relationships.constants import LabelAwareness, TypeFamily
+from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.relationships.helpers import get_relationship_tier
+from world.relationships.services import declare_label
+from world.roster.factories import grant_test_tenure
 
 
 class GetRelationshipTierTests(TestCase):
@@ -19,12 +17,20 @@ class GetRelationshipTierTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        # bare ObjectDB characters with no CharacterSheet — for no-sheet edge cases
+        # bare ObjectDB characters with no CharacterSheet -- for no-sheet edge cases
         cls.char_a = CharacterFactory()
         cls.char_b = CharacterFactory()
         # Characters that have CharacterSheets (needed for relationship lookups)
         cls.sheet_a = CharacterSheetFactory()
         cls.sheet_b = CharacterSheetFactory()
+        cls.tenure_a = grant_test_tenure(cls.sheet_a)
+        cls.tenure_b = grant_test_tenure(cls.sheet_b)
+        cls.mentor = RelationshipTypeFactory(name="Mentor", family=TypeFamily.TEACHING)
+        cls.student = RelationshipTypeFactory(
+            name="Student", family=TypeFamily.TEACHING, counterpart=cls.mentor
+        )
+        cls.mentor.counterpart = cls.student
+        cls.mentor.save(update_fields=["counterpart"])
 
     def test_returns_zero_without_relationship(self) -> None:
         """Returns 0 when no relationship exists between the characters."""
@@ -34,45 +40,25 @@ class GetRelationshipTierTests(TestCase):
         """Returns 0 when a character has no CharacterSheet attached."""
         self.assertEqual(get_relationship_tier(self.char_a, self.char_b), 0)
 
-    def test_returns_int(self) -> None:
-        """Return type is int."""
-        tier = get_relationship_tier(self.char_a, self.char_b)
-        self.assertIsInstance(tier, int)
-
-    def test_returns_tier_from_developed_points(self) -> None:
-        """Returns the highest crossed tier_number based on developed points."""
-        track = RelationshipTrackFactory()
-        # tier_number=1 requires 10 points; tier_number=2 requires 20 points
-        RelationshipTierFactory(track=track, tier_number=1, point_threshold=10)
-        RelationshipTierFactory(track=track, tier_number=2, point_threshold=20)
-        rel = CharacterRelationshipFactory(
-            source=self.sheet_a,
-            target=self.sheet_b,
+    def test_mutual_mentor_student_returns_the_lower_claimed_tier(self) -> None:
+        """A mutual Mentor/Student pair returns the lower of the two claimed tiers."""
+        ab = CharacterRelationshipFactory(source=self.sheet_a, target=self.sheet_b, tier=2)
+        ba = CharacterRelationshipFactory(source=self.sheet_b, target=self.sheet_a, tier=1)
+        declare_label(
+            side=ab, type=self.mentor, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
         )
-        # 25 developed points — crosses tier 1 (10) and tier 2 (20)
-        RelationshipTrackProgressFactory(
-            relationship=rel,
-            track=track,
-            capacity=25,
-            developed_points=25,
+        declare_label(
+            side=ba, type=self.student, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_b
         )
         result = get_relationship_tier(self.sheet_a.character, self.sheet_b.character)
-        self.assertEqual(result, 2)
+        self.assertEqual(result, 1)
 
-    def test_returns_zero_when_no_progress_crosses_threshold(self) -> None:
-        """Returns 0 when there is a relationship but points don't reach any tier."""
-        track = RelationshipTrackFactory()
-        RelationshipTierFactory(track=track, tier_number=1, point_threshold=50)
-        rel = CharacterRelationshipFactory(
-            source=self.sheet_a,
-            target=self.sheet_b,
-        )
-        # Only 5 developed points — below the 50-point threshold
-        RelationshipTrackProgressFactory(
-            relationship=rel,
-            track=track,
-            capacity=10,
-            developed_points=5,
+    def test_one_sided_label_returns_zero(self) -> None:
+        """Only one side naming the teaching label is not mutual -- returns 0."""
+        ab = CharacterRelationshipFactory(source=self.sheet_a, target=self.sheet_b, tier=2)
+        CharacterRelationshipFactory(source=self.sheet_b, target=self.sheet_a, tier=1)
+        declare_label(
+            side=ab, type=self.mentor, awareness=LabelAwareness.PUBLIC, tenure=self.tenure_a
         )
         result = get_relationship_tier(self.sheet_a.character, self.sheet_b.character)
         self.assertEqual(result, 0)

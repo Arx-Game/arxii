@@ -45,6 +45,7 @@ class WeaveThreadAction(Action):
         from world.magic.exceptions import (  # noqa: PLC0415
             MantleNotClearedError,
             RelationshipBondNotOwned,
+            RelationshipTierTooLow,
             TechniqueNotOwned,
             UnsupportedGiftResonanceError,
             WeavingUnlockMissing,
@@ -67,6 +68,7 @@ class WeaveThreadAction(Action):
             MantleNotClearedError,
             UnsupportedGiftResonanceError,
             RelationshipBondNotOwned,
+            RelationshipTierTooLow,
             TechniqueNotOwned,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)

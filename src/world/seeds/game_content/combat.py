@@ -9,6 +9,7 @@ production seed data.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from world.combat.models import FleeConfig
     from world.conditions.models import PenetrationOutcomeFactor
     from world.mechanics.models import ModifierTarget
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -117,15 +120,15 @@ def seed_encounter_beat_wiring() -> None:
 
 
 def seed_dramatic_surge_content() -> None:
-    """Seed the dramatic surge engine's default content (#2013).
+    """Seed the dramatic surge engine's default content (#2013/#3957).
 
-    Idempotent (get_or_create at every layer). Creates:
-    - "Bond" (POSITIVE), "Rivalry" / "Enemies" (NEGATIVE) — all
-      fuels_escalation_spikes=True. Without the negative tracks the
-      hated-foe leg is content-dead. ``relationships.RelationshipTrack`` is
-      content-repo-owned (#2698) — each is looked up rather than invented
-      unless ``SEED_SAMPLE_CONTENT`` is on; nothing else in this function
-      depends on them existing, so a missing track is simply skipped.
+    Idempotent (get_or_create at every layer). Verifies:
+    - "Friend" (WARM), "Rival" / "Enemy" (HOSTILE) all carry
+      ``fuels_escalation_spikes=True``. Without the hostile types the
+      hated-foe leg is content-dead. ``relationships.RelationshipType`` is
+      staff-authored content (#3957) seeded by the ``relationship_scale``
+      cluster (which runs earlier — see ``CLUSTER_SEEDERS``); this function
+      never invents them, only warns if one is missing.
     - a default "Standard Dramatic Escalation" EscalationCurve.
     - StakesEscalationModifier rows for all five StakesLevel values;
       REGIONAL and above carry the default curve + increasing bonuses
@@ -138,45 +141,26 @@ def seed_dramatic_surge_content() -> None:
         wire_escalation_content,
     )
     from world.combat.models import EscalationCurve, StakesEscalationModifier  # noqa: PLC0415
-    from world.relationships.constants import TrackSign  # noqa: PLC0415
-    from world.relationships.models import RelationshipTrack  # noqa: PLC0415
-    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.relationships.constants import TypeValence  # noqa: PLC0415
+    from world.relationships.models import RelationshipType  # noqa: PLC0415
 
     wire_escalation_content()
 
-    authored_or_sample(
-        RelationshipTrack,
-        {
-            "slug": "bond",
-            "description": "A deep, protective attachment between characters.",
-            "sign": TrackSign.POSITIVE,
-            "display_order": 10,
-            "fuels_escalation_spikes": True,
-        },
-        name="Bond",
-    )
-    authored_or_sample(
-        RelationshipTrack,
-        {
-            "slug": "rivalry",
-            "description": "Competitive antagonism — a foe you measure yourself against.",
-            "sign": TrackSign.NEGATIVE,
-            "display_order": 20,
-            "fuels_escalation_spikes": True,
-        },
-        name="Rivalry",
-    )
-    authored_or_sample(
-        RelationshipTrack,
-        {
-            "slug": "enemies",
-            "description": "Open, active hostility.",
-            "sign": TrackSign.NEGATIVE,
-            "display_order": 21,
-            "fuels_escalation_spikes": True,
-        },
-        name="Enemies",
-    )
+    for type_name, valence in (
+        ("Friend", TypeValence.WARM),
+        ("Rival", TypeValence.HOSTILE),
+        ("Enemy", TypeValence.HOSTILE),
+    ):
+        if not RelationshipType.objects.filter(
+            name=type_name, fuels_escalation_spikes=True, valence=valence
+        ).exists():
+            logger.warning(
+                "RelationshipType %r (fuels_escalation_spikes=True, valence=%s) not found; "
+                "seed the relationship_scale cluster first, or the surge engine's "
+                "hated-foe/ally-fallen legs will never qualify for it (#3957).",
+                type_name,
+                valence,
+            )
 
     # checks.CheckType is content-repo-owned (#2698); pace_check_type is a
     # required FK on EscalationCurve, so the curve is skipped entirely (curve

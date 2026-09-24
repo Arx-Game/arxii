@@ -304,8 +304,7 @@ class SecretGrievance(SharedMemoryModel):
 
     Grieving is a **one-time choice**: this row marks the secret *answered* for that victim, so it
     drops off the grievance menu / `can_grieve` flag and a second attempt is rejected (no stacking
-    grudge swings). Links the `RelationshipCapstone` the answer applied, so a past response can be
-    shown.
+    grudge swings).
     """
 
     secret = models.ForeignKey(
@@ -319,14 +318,6 @@ class SecretGrievance(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="secret_grievances",
         help_text="The wronged character who answered it.",
-    )
-    capstone = models.ForeignKey(
-        "arxii.RelationshipCapstone",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text="The relationship capstone this grievance applied.",
     )
     created_date = models.DateTimeField(auto_now_add=True)
 

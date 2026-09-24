@@ -15,6 +15,7 @@ from world.classes.models import CharacterClassLevel
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
+from world.relationships.services import standing_tie_ap
 from world.roster.models import RosterEntry
 from world.skills.models import (
     CharacterSkillValue,
@@ -238,18 +239,24 @@ def calculate_training_development(
     return int(base_gain + mentor_bonus)
 
 
-def _get_total_allocated_ap(character: ObjectDB, exclude_pk: int | None = None) -> int:
+def total_allocated_training_ap(character_id: int, exclude_pk: int | None = None) -> int:
     """Get total AP currently allocated across all training for a character.
 
+    Public because ties spend from the same weekly purse and must count this total in
+    their own budget check (``world.relationships.services.standing_weekly_ap``, #3957
+    final review). Takes the id rather than the character: ``TrainingAllocation.character``
+    is the ``CharacterSheet``, which shares ``ObjectDB``'s pk, so a caller holding either
+    passes ``.pk`` and no row is fetched to ask the question.
+
     Args:
-        character: The character whose allocations to sum.
+        character_id: pk of the character (or their sheet) whose allocations to sum.
         exclude_pk: Optional allocation PK to exclude from the total (used when
             validating an update).
 
     Returns:
         Total AP allocated, or 0 if none.
     """
-    qs = TrainingAllocation.objects.filter(character_id=character.pk)
+    qs = TrainingAllocation.objects.filter(character_id=character_id)
     if exclude_pk is not None:
         qs = qs.exclude(pk=exclude_pk)
     return qs.aggregate(total=Sum("ap_amount"))["total"] or 0
@@ -276,15 +283,16 @@ def create_training_allocation(
         The created TrainingAllocation instance.
 
     Raises:
-        ValueError: If ap_amount is <= 0 or total allocations would exceed
-            the weekly AP budget.
+        ValueError: If ap_amount is <= 0, or the character's standing allocations —
+            training AND ties, which share one weekly purse (#3957) — would exceed the
+            weekly AP budget.
     """
     if ap_amount <= 0:
         msg = "AP amount must be greater than 0."
         raise ValueError(msg)
 
     budget = ActionPointConfig.get_weekly_regen()
-    current_total = _get_total_allocated_ap(character)
+    current_total = total_allocated_training_ap(character.pk) + standing_tie_ap(character.pk)
     if current_total + ap_amount > budget:
         msg = (
             f"Total allocated AP ({current_total + ap_amount}) would exceed "
@@ -319,8 +327,9 @@ def update_training_allocation(
         The updated TrainingAllocation instance.
 
     Raises:
-        ValueError: If ap_amount is <= 0 or total allocations would exceed
-            the weekly AP budget.
+        ValueError: If ap_amount is <= 0, or the character's standing allocations —
+            training AND ties, which share one weekly purse (#3957) — would exceed the
+            weekly AP budget.
     """
     if ap_amount is not None:
         if ap_amount <= 0:
@@ -328,7 +337,9 @@ def update_training_allocation(
             raise ValueError(msg)
 
         budget = ActionPointConfig.get_weekly_regen()
-        current_total = _get_total_allocated_ap(allocation.character, exclude_pk=allocation.pk)
+        current_total = total_allocated_training_ap(
+            allocation.character_id, exclude_pk=allocation.pk
+        ) + standing_tie_ap(allocation.character_id)
         if current_total + ap_amount > budget:
             msg = (
                 f"Total allocated AP ({current_total + ap_amount}) would exceed "

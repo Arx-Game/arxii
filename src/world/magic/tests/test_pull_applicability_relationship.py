@@ -1,4 +1,4 @@
-"""Tests for the RELATIONSHIP_NO_STAKE picker inapplicability signal (#1849).
+"""Tests for the RELATIONSHIP_NO_STAKE picker inapplicability signal (#1849, #3957).
 
 Mirrors world/magic/tests/test_pull_applicability_court.py's structure.
 """
@@ -15,12 +15,7 @@ from world.magic.services.pull_applicability import (
     PullActionContext,
     compute_thread_applicability,
 )
-from world.relationships.constants import TrackSign
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
+from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.services import active_persona_for_sheet
 
 
@@ -31,14 +26,11 @@ def _context(target_persona_id: int | None) -> PullActionContext:
 
 
 def _relationship_track_thread(*, owner, threaded_sheet):
-    relationship = CharacterRelationshipFactory(
-        source=owner, target=threaded_sheet, is_active=True, is_pending=False
-    )
-    progress = RelationshipTrackProgressFactory(relationship=relationship, developed_points=0)
+    relationship = CharacterRelationshipFactory(source=owner, target=threaded_sheet, is_active=True)
     return ThreadFactory(
         owner=owner,
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        target_relationship_track=progress,
+        target_relationship=relationship,
         target_trait=None,
         level=10,
     )
@@ -74,11 +66,11 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
             resonance=thread.resonance,
             effect_kind=EffectKind.FLAT_BONUS,
         )
-        # Owner needs an active, non-pending bond to threaded_sheet for step-4 "has a
-        # rewardable bond" to pass (else it's equally a no-stake case), but the picker
-        # only checks row *existence* -- _relationship_track_thread's own anchor
-        # relationship (is_active=True, is_pending=False) already satisfies it; no
-        # additional developed_points or tuning config is read here.
+        # Owner needs an active bond to threaded_sheet for step-4 "has a rewardable
+        # bond" to pass (else it's equally a no-stake case), but the picker only
+        # checks row *existence* -- _relationship_track_thread's own anchor
+        # relationship (is_active=True) already satisfies it; no additional
+        # invested_depth or tuning config is read here.
         context = _context(active_persona_for_sheet(threaded_sheet).pk)
 
         rows = compute_thread_applicability(owner, context)
@@ -100,12 +92,10 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
         # relationship _relationship_track_thread created (see the note above).
         x_sheet = CharacterSheetFactory()
         hostile = CharacterRelationshipFactory(
-            source=x_sheet, target=threaded_sheet, is_active=True, is_pending=False
+            source=x_sheet, target=threaded_sheet, is_active=True
         )
-        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(
-            relationship=hostile, track=negative_track, developed_points=5
-        )
+        hostile.conflict = 5
+        hostile.save()
         context = _context(active_persona_for_sheet(x_sheet).pk)
 
         rows = compute_thread_applicability(owner, context)
@@ -115,15 +105,14 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
         self.assertIsNone(rows[0].reason)
 
     def test_no_stake_when_owner_has_no_rewardable_bond_even_if_target_is_y(self) -> None:
-        """Trigger holds (target IS Y) but the owner's bond to Y is still PENDING
-        (never mutually consented) -- equally a no-stake case per Design step 4.
+        """Trigger holds (target IS Y) but the owner's bond to Y is FROZEN
+        (is_active=False) -- equally a no-stake case per Design step 4.
 
         Note: the thread's own anchor relationship (owner->threaded_sheet) can't be
-        deleted here -- Thread.target_relationship_track is on_delete=PROTECT, so
-        deleting the relationship it anchors on would raise ProtectedError. Instead,
-        flip the anchor relationship itself to pending, which is a realistic shape
-        (the thread was woven before the relationship's mutual-consent handshake
-        completed) and correctly fails the is_pending=False filter.
+        deleted here -- Thread.target_relationship is on_delete=PROTECT, so deleting
+        the relationship it anchors on would raise ProtectedError. Instead, freeze
+        the anchor relationship itself (#3957 — a frozen side takes no credit),
+        which correctly fails the is_active=True filter.
         """
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
@@ -133,9 +122,9 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
             resonance=thread.resonance,
             effect_kind=EffectKind.FLAT_BONUS,
         )
-        anchor_relationship = thread.target_relationship_track.relationship
-        anchor_relationship.is_pending = True
-        anchor_relationship.save(update_fields=["is_pending"])
+        anchor_relationship = thread.target_relationship
+        anchor_relationship.is_active = False
+        anchor_relationship.save(update_fields=["is_active"])
         context = _context(active_persona_for_sheet(threaded_sheet).pk)
 
         rows = compute_thread_applicability(owner, context)
@@ -156,13 +145,11 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
             target=None,
             target_companion=companion,
             is_active=True,
-            is_pending=False,
         )
-        progress = RelationshipTrackProgressFactory(relationship=relationship, developed_points=0)
         thread = ThreadFactory(
             owner=owner,
             target_kind=TargetKind.RELATIONSHIP_TRACK,
-            target_relationship_track=progress,
+            target_relationship=relationship,
             target_trait=None,
             level=10,
         )
@@ -198,12 +185,10 @@ class RelationshipNoStakePrivacyTests(TestCase):
         # relationship _relationship_track_thread created.
         x_sheet = CharacterSheetFactory()
         hostile = CharacterRelationshipFactory(
-            source=x_sheet, target=threaded_sheet, is_active=True, is_pending=False
+            source=x_sheet, target=threaded_sheet, is_active=True
         )
-        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(
-            relationship=hostile, track=negative_track, developed_points=5
-        )
+        hostile.conflict = 5
+        hostile.save()
         owner_room = ObjectDBFactory(
             db_key="OwnerRoom2", db_typeclass_path="typeclasses.rooms.Room"
         )

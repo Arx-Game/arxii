@@ -117,7 +117,7 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset()
 #: for the full list.
 #:
 #: Stand-ins 5 (reaction conditions + achievement bridge), 7 (fall-redemption
-#: examples), and 8 (the "Devotion" ``RelationshipTrack``) touch only registered
+#: examples), and 8 (the "Devotion" ``RelationshipType``, #3957) touch only registered
 #: models, so the two tests below already assert the general invariant for them
 #: directly: a fresh ``seed_magic_dev()``/``seed_starter_magic_story()`` call (one
 #: of ``CLUSTER_SEEDERS``) authors zero rows in any registered content model. Of

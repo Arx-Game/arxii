@@ -120,7 +120,7 @@ The transient, never-persisted record of how a cast's Power was derived — an o
 The enum naming each phase of power derivation in the ledger (base, flat modifier, multiplier, term, environment, reactive, combat pull, penetration, clamp). Each ledger entry is tagged with one stage.
 
 **Thread**:
-A per-character attachment owned by a CharacterSheet, anchored to exactly one anchor (Trait / Technique / Facet / relationship track / relationship capstone / covenant role / Mantle / Sanctum) and channeling a single Resonance. It accrues `developed_points` into a `level` and is the unit of long-term magical investment.
+A per-character attachment owned by a CharacterSheet, anchored to exactly one anchor (Trait / Technique / Facet / relationship side / relationship capstone / covenant role / Mantle / Sanctum) and channeling a single Resonance. It accrues `developed_points` into a `level` and is the unit of long-term magical investment.
 
 **Imbue**:
 Spending Resonance currency to advance an existing Thread's developed points and level. Player-facing it is the Rite of Imbuing, a CEREMONY-kind Ritual completed by the `imbue` finisher.
@@ -298,9 +298,9 @@ when no candidate effect on the thread would ever be empowered against the given
 The `RELATIONSHIP_TRACK` sibling to Court Regard Modulation
 (`relationship_bond_modulation`, `world/magic/services/pull_modulation_relationship.py`):
 empowers a relationship-thread pull by the owner's own bond strength
-(`CharacterRelationship.developed_absolute_value`) to the thread's threaded person
-(`Thread.target_relationship_track.relationship.target`), when the live target IS
-that person or holds a net-negative (`affection < 0`) relationship toward them
+(`CharacterRelationship.pair_depth()`) to the thread's threaded person
+(`Thread.target_relationship.target`), when the live target IS
+that person or holds a hostile (`conflict > affection`) relationship toward them
 (they're "threatening" them). Deliberately **no** `Regard Polarity` gate — unlike
 Court's NPC-preference sign-matching, this rewards any PC-to-PC relationship
 investment unconditionally (rival or lover alike). Magnitude is a staff-tunable

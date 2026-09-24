@@ -27,10 +27,11 @@ from world.combat.services import apply_damage_to_participant
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
+from world.relationships.constants import TypeValence
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
 from world.vitals.models import CharacterVitals
 
@@ -70,20 +71,16 @@ class EscalationSpikeTests(TestCase):
         install_escalation_room_triggers(self.encounter)
 
     def _bond(self, source_sheet, target_sheet, *, points=10, fuels=True):
-        """Create an active, non-pending relationship with track progress."""
-        track = RelationshipTrackFactory(fuels_escalation_spikes=fuels)
+        """Create an active relationship, an open label of a spike-fueling type, and depth."""
+        rel_type = RelationshipTypeFactory(valence=TypeValence.WARM, fuels_escalation_spikes=fuels)
         relationship = CharacterRelationshipFactory(
             source=source_sheet,
             target=target_sheet,
             is_active=True,
-            is_pending=False,
         )
-        RelationshipTrackProgressFactory(
-            relationship=relationship,
-            track=track,
-            developed_points=points,
-            capacity=points,
-        )
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
+        relationship.invested_depth = points
+        relationship.save()
         return relationship
 
     def _emit_fall(self, character):

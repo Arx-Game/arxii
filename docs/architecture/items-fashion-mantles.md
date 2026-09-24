@@ -5,6 +5,14 @@
 **Date:** 2026-04-26
 **Primary apps:** `world.items`, `world.magic`, `world.covenants`, `world.mechanics`
 
+
+> **Superseded in part by #3957 (ties, redrawn — ADR-0308), 2026-09-21.** The
+> `target_relationship_track` FK named in the constraint sketch below is now
+> `Thread.target_relationship` and points at one SIDE of a tie
+> (`CharacterRelationship`), not a per-track progress row. Nothing else in this
+> document depends on the relationships shape; it stays as the record of the design as
+> drafted.
+
 ## 1. Summary
 
 This spec is the items-system unblocker. It wires together five tightly-coupled

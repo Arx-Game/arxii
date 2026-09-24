@@ -7,7 +7,9 @@
  * If formValues.sineater_sheet_id is not set, the dropdown is disabled and shows a
  * placeholder prompting the user to select a Sineater first.
  *
- * Each option's value is the RelationshipCapstone id. Label is the capstone title.
+ * Each option's value is the RelationshipCapstone id. The label is the journal entry's
+ * own title (#3957 — a capstone IS a journal entry now and has no title of its own),
+ * falling back to the serializer's computed `title`.
  *
  * Cross-field dependency: reads formValues?.sineater_sheet_id to filter results.
  * FieldProps was extended with formValues for this purpose (see types.ts).
@@ -94,7 +96,7 @@ export function RelationshipCapstonePickerField({
         <SelectContent>
           {capstones.map((capstone) => (
             <SelectItem key={capstone.id} value={String(capstone.id)}>
-              {capstone.title}
+              {capstone.journal_entry_title ?? capstone.title}
             </SelectItem>
           ))}
         </SelectContent>

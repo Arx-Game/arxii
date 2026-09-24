@@ -37,8 +37,8 @@ Per-character weekly XP tracking. Resets after 7 days.
 - `visible_entries_q(*, viewer_sheet, is_staff)` — the one visibility rule (#3941 Decision 1) as
   a `Q`: public, or revealed at settlement, or the viewer's own, or (staff) everything
 - `can_retort(*, viewer_sheet, author)` — ADR-0307 predicate: True when `author.retort_consent`
-  is ANYONE, or an active, non-pending `CharacterRelationship` exists between the two (either
-  direction) with progress on a negative-sign track
+  is ANYONE, or the two hold mutual hostile relationship labels (#3957,
+  `world.relationships.services.mutual_hostile`)
 - `annotate_can_retort(queryset, viewer_sheet)` — the same predicate as one `Case` + `Exists`
   annotation (`viewer_can_retort`) on the stream and `mine/` querysets, so a page costs one
   query, not one per row; the serializer prefers the annotation and falls back to `can_retort()`
@@ -106,12 +106,13 @@ antagonism budget, not two.
 - **Achievements**: Emits `journals.total_written`, `journals.total_public` stats
 - **Progression**: Awards XP via `award_xp()` service
 - **Fame**: Praises should emit fame signal (not yet built)
-- **Relationships (#3941, ADR-0307)**: Retort and Condemn are enforced against
-  `world.relationships.models.CharacterRelationship` in `can_retort()` — an active, non-pending
-  relationship in either direction with progress on a negative-sign track counts as a rival;
-  `retort_consent=ANYONE` bypasses the relationship check entirely. This structural "rival" is
-  provisional: a dedicated Rivalry relationship kind is a later relationships-pass item, and
-  `can_retort` is the one place that will narrow when it lands.
+- **Relationships (#3941/#3957, ADR-0307)**: Retort and Condemn are enforced against
+  `world.relationships.services.mutual_hostile` in `can_retort()` — each side must hold an
+  active, known (Clandestine/Public) hostile-valence relationship label toward the other
+  (declared under a still-open tenure); `retort_consent=ANYONE` bypasses the check entirely.
+  `annotate_can_retort` reads the same predicate as `mutual_hostile_expression`. This folded in
+  `scenes.Rivalry` (#3957) — a mutual rivalry is now one instance of a mutual hostile label,
+  not a separate declaration.
 - **Account block/mute (#2996)**: `services.exclude_blocked_and_muted_authors` filters the
   public feed (`JournalEntryViewSet.list`) — an account-level `Block` hides an author's entries
   from a viewer **both directions** (`world.scenes.block_services.blocked_player_ids_for`); an

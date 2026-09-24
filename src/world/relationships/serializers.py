@@ -1,479 +1,214 @@
-"""DRF serializers for the relationships system."""
+"""Serializers for the tie API (#3957)."""
 
 from rest_framework import serializers
 
-from world.relationships.constants import FirstImpressionColoring, UpdateVisibility
+from world.relationships.constants import LabelAwareness, TieAudience
 from world.relationships.models import (
-    CharacterRelationship,
-    HybridRelationshipType,
-    HybridRequirement,
     RelationshipCapstone,
-    RelationshipChange,
     RelationshipCondition,
-    RelationshipDevelopment,
-    RelationshipTier,
-    RelationshipTrack,
-    RelationshipTrackProgress,
-    RelationshipUpdate,
+    RelationshipType,
 )
-
-# Choices accepted by the feedback write endpoints.
-WRITEUP_TYPE_CHOICES = ["update", "development", "capstone"]
-_TRACK_NAME_SOURCE = "track.name"
-_AUTHOR_NAME_SOURCE = "author.character.db_key"
 
 
 class RelationshipConditionSerializer(serializers.ModelSerializer):
-    """Serializer for RelationshipCondition lookup table."""
-
     class Meta:
         model = RelationshipCondition
         fields = ["id", "name", "description", "display_order"]
         read_only_fields = fields
 
 
-class RelationshipTierSerializer(serializers.ModelSerializer):
-    """Serializer for RelationshipTier."""
-
-    class Meta:
-        model = RelationshipTier
-        fields = ["id", "name", "tier_number", "point_threshold", "description"]
-        read_only_fields = fields
-
-
-class RelationshipTrackSerializer(serializers.ModelSerializer):
-    """Serializer for RelationshipTrack with nested tiers."""
-
-    tiers = RelationshipTierSerializer(source="cached_tiers", many=True, read_only=True)
-
-    class Meta:
-        model = RelationshipTrack
-        fields = ["id", "name", "slug", "description", "sign", "tiers"]
-        read_only_fields = fields
-
-
-class HybridRequirementSerializer(serializers.ModelSerializer):
-    """Serializer for a single track/tier requirement on a hybrid type."""
-
-    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
-
-    class Meta:
-        model = HybridRequirement
-        fields = ["track", "track_name", "minimum_tier"]
-        read_only_fields = fields
-
-
-class HybridRelationshipTypeSerializer(serializers.ModelSerializer):
-    """Serializer for HybridRelationshipType with nested requirements."""
-
-    requirements = HybridRequirementSerializer(
-        source="cached_requirements", many=True, read_only=True
+class RelationshipTypeSerializer(serializers.ModelSerializer):
+    counterpart_name = serializers.CharField(
+        source="counterpart.name", read_only=True, default=None
     )
 
     class Meta:
-        model = HybridRelationshipType
-        fields = ["id", "name", "slug", "description", "requirements"]
-        read_only_fields = fields
-
-
-class RelationshipTrackProgressSerializer(serializers.ModelSerializer):
-    """Serializer for track progress within a relationship."""
-
-    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
-    track_sign = serializers.CharField(source="track.sign", read_only=True)
-    current_tier_name = serializers.SerializerMethodField()
-    temporary_points = serializers.IntegerField(read_only=True)
-    total_points = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = RelationshipTrackProgress
-        fields = [
-            "track",
-            "track_name",
-            "track_sign",
-            "capacity",
-            "developed_points",
-            "temporary_points",
-            "total_points",
-            "current_tier_name",
-        ]
-        read_only_fields = fields
-
-    def get_current_tier_name(self, obj: RelationshipTrackProgress) -> str | None:
-        """Return the name of the current tier, or None if no tier reached."""
-        tier = obj.current_tier
-        return tier.name if tier else None
-
-
-class RelationshipUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for relationship updates."""
-
-    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
-    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
-    kudos_count = serializers.SerializerMethodField()
-    viewer_has_kudosed = serializers.SerializerMethodField()
-
-    class Meta:
-        model = RelationshipUpdate
+        model = RelationshipType
         fields = [
             "id",
-            "author",
-            "author_name",
-            "title",
-            "writeup",
-            "track",
-            "track_name",
-            "points_earned",
-            "coloring",
-            "visibility",
-            "is_first_impression",
-            "linked_scene",
-            "created_at",
-            "kudos_count",
-            "viewer_has_kudosed",
+            "name",
+            "slug",
+            "description",
+            "family",
+            "valence",
+            "counterpart",
+            "counterpart_name",
+            "display_order",
         ]
         read_only_fields = fields
 
-    def get_kudos_count(self, obj: RelationshipUpdate) -> int:
-        """Return pre-annotated kudos count, or fall back to a query."""
-        try:
-            return obj.kudos_count  # set by viewset annotation
-        except AttributeError:
-            # Fallback for un-annotated single-object reads only. Any viewset
-            # serving this serializer in a list/nested context must annotate
-            # kudos_count via Count() to avoid per-row N+1 queries.
-            return obj.writeupkudos_set.count()
 
-    def get_viewer_has_kudosed(self, obj: RelationshipUpdate) -> bool:
-        """Return True if the request user has kudosed this update."""
-        try:
-            return bool(obj.viewer_has_kudosed)  # set by viewset annotation
-        except AttributeError:
-            pass
-        request = self.context.get("request")
-        if request is None or not request.user.pk:
-            return False
-        # Fallback for un-annotated single-object reads only. Any viewset
-        # serving this serializer in a list/nested context must annotate
-        # viewer_has_kudosed via Exists() to avoid per-row N+1 queries.
-        return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
+class RelationshipLabelSerializer(serializers.Serializer):
+    """One label, as a flat dict built by ``reads.label_payload`` (#3957 review).
+
+    No ``source=`` indirection: the payload builder — not the model instance — computes
+    every audience-gated value (``replaced_type_name``, ``note``, ``is_mutual``), since a
+    plain model-sourced field can't express "show this only when it clears the viewer's
+    audience." Passing a ``RelationshipLabel`` instance here would also mean stamping
+    computed attributes onto an idmapper-shared row; a dict avoids that entirely.
+    """
+
+    id = serializers.IntegerField()
+    type = serializers.IntegerField()
+    type_name = serializers.CharField()
+    type_family = serializers.CharField()
+    type_valence = serializers.CharField()
+    awareness = serializers.CharField()
+    since = serializers.DateTimeField()
+    ended_at = serializers.DateTimeField(allow_null=True)
+    replaced_type_name = serializers.CharField(allow_null=True)
+    note = serializers.CharField(allow_blank=True)
+    is_mutual = serializers.BooleanField()
 
 
-class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
-    """Serializer for relationship development updates."""
+class DepthBreakdownSerializer(serializers.Serializer):
+    tier = serializers.IntegerField()
+    scenes = serializers.IntegerField()
+    invested = serializers.IntegerField()
+    their_added_depth = serializers.IntegerField()
+    affection = serializers.IntegerField(allow_null=True)
+    conflict = serializers.IntegerField(allow_null=True)
 
-    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
-    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
-    kudos_count = serializers.SerializerMethodField()
-    viewer_has_kudosed = serializers.SerializerMethodField()
 
-    class Meta:
-        model = RelationshipDevelopment
-        fields = [
-            "id",
-            "author",
-            "author_name",
-            "title",
-            "writeup",
-            "track",
-            "track_name",
-            "points_earned",
-            "xp_awarded",
-            "visibility",
-            "linked_scene",
-            "created_at",
-            "kudos_count",
-            "viewer_has_kudosed",
-        ]
-        read_only_fields = fields
+class TieThreadSerializer(serializers.Serializer):
+    level = serializers.IntegerField()
+    resonance_name = serializers.CharField()
 
-    def get_kudos_count(self, obj: RelationshipDevelopment) -> int:
-        """Return pre-annotated kudos count, or fall back to a query."""
-        try:
-            return obj.kudos_count  # set by viewset annotation
-        except AttributeError:
-            # Fallback for un-annotated single-object reads only. Any viewset
-            # serving this serializer in a list/nested context must annotate
-            # kudos_count via Count() to avoid per-row N+1 queries.
-            return obj.writeupkudos_set.count()
 
-    def get_viewer_has_kudosed(self, obj: RelationshipDevelopment) -> bool:
-        """Return True if the request user has kudosed this development."""
-        try:
-            return bool(obj.viewer_has_kudosed)  # set by viewset annotation
-        except AttributeError:
-            pass
-        request = self.context.get("request")
-        if request is None or not request.user.pk:
-            return False
-        # Fallback for un-annotated single-object reads only. Any viewset
-        # serving this serializer in a list/nested context must annotate
-        # viewer_has_kudosed via Exists() to avoid per-row N+1 queries.
-        return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
+class TieApPoolSerializer(serializers.Serializer):
+    """The owner's whole weekly AP purse, as the budget line beside the tie's AP field
+    reads it (#3957): what is left to spend over what the week holds.
+
+    Not the same number as ``ap_this_week``, which is this ONE tie's standing order.
+    ``remaining`` is ``ActionPointPool.current`` — the spendable balance every other AP
+    surface means by "current" — and ``total`` is ``get_effective_maximum()``, so a
+    distinction that widens the purse widens this line too.
+    """
+
+    remaining = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class TieSerializer(serializers.Serializer):
+    """One side of a tie, shaped for the viewer's audience (built in the viewset)."""
+
+    id = serializers.IntegerField()
+    source = serializers.IntegerField()
+    target = serializers.IntegerField(allow_null=True)
+    target_companion = serializers.IntegerField(allow_null=True)
+    target_name = serializers.CharField()
+    other_sheet_id = serializers.IntegerField(allow_null=True)
+    other_entry_id = serializers.IntegerField(allow_null=True)
+    audience = serializers.ChoiceField(choices=TieAudience.choices)
+    # Whether this side belongs to the viewer's own character — the ONLY thing the web
+    # client may gate a write door on (#3957 review). ``audience`` cannot answer it:
+    # ``tie_audience`` short-circuits on ``is_staff`` first, so a staff account reading
+    # ANY tie gets STAFF, and four of the seven writes resolve their side as
+    # ``get_or_create(source=the caller's own sheet, ...)``. Gating on the enum therefore
+    # offered staff an Edit/Declare door on someone else's tie whose press wrote a
+    # durable row on the staff character's own side.
+    is_own_side = serializers.BooleanField()
+    labels = RelationshipLabelSerializer(many=True)
+    depth = serializers.IntegerField(allow_null=True)
+    next_tier_threshold = serializers.IntegerField(allow_null=True)
+    breakdown = DepthBreakdownSerializer(allow_null=True)
+    summary = serializers.CharField(allow_blank=True)
+    ap_this_week = serializers.IntegerField(allow_null=True)
+    # The viewer's OWN purse, so it rides ``is_own_side`` rather than ``audience``: a
+    # staff account reading someone else's tie has no business being shown that
+    # character's balance, and the number would be useless to them anyway — every write
+    # door on that page is closed to them.
+    ap_pool = TieApPoolSerializer(allow_null=True)
+    thread = TieThreadSerializer(allow_null=True)
+    is_soul_tether = serializers.BooleanField()
+
+
+class TieStreamItemSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    author_id = serializers.IntegerField(allow_null=True)
+    author_name = serializers.CharField(allow_blank=True)
+    body = serializers.CharField(allow_blank=True)
+    is_public = serializers.BooleanField()
+    is_capstone = serializers.BooleanField()
+    capstone_tier = serializers.IntegerField(allow_null=True)
+    created_at = serializers.CharField()
+    ic_timestamp = serializers.CharField(allow_null=True)
+
+
+class TieWriteResultSerializer(serializers.Serializer):
+    """The honest shape every tie write action returns (#3957 review) — used only for the
+    OpenAPI schema; the views build this dict by hand (``success``/``message``/``data``).
+    """
+
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = serializers.DictField()
 
 
 class RelationshipCapstoneSerializer(serializers.ModelSerializer):
-    """Serializer for relationship capstone events."""
-
-    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
-    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
-    kudos_count = serializers.SerializerMethodField()
-    viewer_has_kudosed = serializers.SerializerMethodField()
+    title = serializers.CharField(read_only=True)
+    journal_entry_title = serializers.CharField(
+        source="journal_entry.title", read_only=True, default=None
+    )
 
     class Meta:
         model = RelationshipCapstone
         fields = [
             "id",
-            "author",
-            "author_name",
+            "relationship",
+            "journal_entry",
+            "journal_entry_title",
             "title",
-            "writeup",
-            "track",
-            "track_name",
-            "points",
-            "visibility",
-            "linked_scene",
+            "tier_claimed",
+            "xp_spent",
+            "is_ritual_capstone",
             "created_at",
-            "kudos_count",
-            "viewer_has_kudosed",
-        ]
-        read_only_fields = fields
-
-    def get_kudos_count(self, obj: RelationshipCapstone) -> int:
-        """Return pre-annotated kudos count, or fall back to a query."""
-        try:
-            return obj.kudos_count  # set by viewset annotation
-        except AttributeError:
-            return obj.writeupkudos_set.count()
-
-    def get_viewer_has_kudosed(self, obj: RelationshipCapstone) -> bool:
-        """Return True if the request user has kudosed this capstone."""
-        try:
-            return bool(obj.viewer_has_kudosed)  # set by viewset annotation
-        except AttributeError:
-            pass
-        request = self.context.get("request")
-        if request is None or not request.user.pk:
-            return False
-        return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
-
-
-class RelationshipChangeSerializer(serializers.ModelSerializer):
-    """Serializer for relationship changes (track-to-track point transfers)."""
-
-    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
-    source_track_name = serializers.CharField(source="source_track.name", read_only=True)
-    target_track_name = serializers.CharField(source="target_track.name", read_only=True)
-
-    class Meta:
-        model = RelationshipChange
-        fields = [
-            "id",
-            "author",
-            "author_name",
-            "title",
-            "writeup",
-            "source_track",
-            "source_track_name",
-            "target_track",
-            "target_track_name",
-            "points_moved",
-            "visibility",
-            "created_at",
-        ]
-        read_only_fields = fields
-
-
-class RelationshipTimelineEntrySerializer(serializers.Serializer):
-    """One row of the merged Update/Development/Capstone writeup timeline (#2159).
-
-    Serializes a plain dict row (not a model instance) — projected by
-    ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
-    which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
-    ``RelationshipCapstone`` rows the same shared column shape regardless of which
-    of the three writeup models a given row came from.
-    """
-
-    kind = serializers.ChoiceField(choices=WRITEUP_TYPE_CHOICES)
-    id = serializers.IntegerField()
-    relationship = serializers.IntegerField()
-    author = serializers.IntegerField()
-    author_name = serializers.CharField()
-    track = serializers.IntegerField()
-    track_name = serializers.CharField()
-    title = serializers.CharField()
-    writeup = serializers.CharField()
-    visibility = serializers.ChoiceField(choices=UpdateVisibility.choices)
-    created_at = serializers.DateTimeField()
-
-
-class CharacterRelationshipSerializer(serializers.ModelSerializer):
-    """Full serializer for CharacterRelationship detail view."""
-
-    source_name = serializers.CharField(source="source.character.db_key", read_only=True)
-    target_name = serializers.CharField(read_only=True)
-    track_progress = RelationshipTrackProgressSerializer(
-        source="cached_track_progress", many=True, read_only=True
-    )
-    absolute_value = serializers.IntegerField(read_only=True)
-    developed_absolute_value = serializers.IntegerField(read_only=True)
-    mechanical_bonus = serializers.FloatField(read_only=True)
-    affection = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = CharacterRelationship
-        fields = [
-            "id",
-            "source",
-            "source_name",
-            "target",
-            "target_companion",
-            "target_name",
-            "is_active",
-            "is_pending",
-            "is_deceitful",
-            "track_progress",
-            "absolute_value",
-            "developed_absolute_value",
-            "mechanical_bonus",
-            "affection",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = fields
-
-
-class CharacterRelationshipListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for CharacterRelationship list view."""
-
-    source_name = serializers.CharField(source="source.character.db_key", read_only=True)
-    target_name = serializers.CharField(read_only=True)
-    absolute_value = serializers.IntegerField(read_only=True)
-    developed_absolute_value = serializers.IntegerField(read_only=True)
-    affection = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = CharacterRelationship
-        fields = [
-            "id",
-            "source",
-            "source_name",
-            "target",
-            "target_companion",
-            "target_name",
-            "is_active",
-            "is_pending",
-            "is_soul_tether",
-            "soul_tether_role",
-            "absolute_value",
-            "developed_absolute_value",
-            "affection",
-            "updated_at",
         ]
         read_only_fields = fields
 
 
 class RelationshipTargetWriteSerializer(serializers.Serializer):
-    """Shared target choice for the four write verbs (#3575).
-
-    Exactly one of ``target_persona_id`` (a Persona pk, resolved to its
-    CharacterSheet) or ``target_companion_id`` (a bonded Companion pk) is required.
-    """
-
     target_persona_id = serializers.IntegerField(required=False)
     target_companion_id = serializers.IntegerField(required=False)
 
     def validate(self, attrs):
-        has_persona = attrs.get("target_persona_id") is not None
-        has_companion = attrs.get("target_companion_id") is not None
-        if has_persona == has_companion:
+        if (attrs.get("target_persona_id") is not None) == (
+            attrs.get("target_companion_id") is not None
+        ):
             msg = "Provide exactly one of target_persona_id or target_companion_id."
             raise serializers.ValidationError(msg)
         return attrs
 
 
-class FirstImpressionWriteSerializer(RelationshipTargetWriteSerializer):
-    """Serializer for creating a first impression."""
-
-    track_id = serializers.IntegerField()
-    points = serializers.IntegerField(min_value=0)
-    title = serializers.CharField()
-    writeup = serializers.CharField()
-    coloring = serializers.ChoiceField(
-        choices=FirstImpressionColoring.choices,
-        required=False,
-        default=FirstImpressionColoring.NEUTRAL,
-    )
-    visibility = serializers.ChoiceField(
-        choices=UpdateVisibility.choices,
-        required=False,
-        default=UpdateVisibility.PRIVATE,
+class DeclareWriteSerializer(RelationshipTargetWriteSerializer):
+    type_id = serializers.IntegerField()
+    awareness = serializers.ChoiceField(
+        choices=LabelAwareness.choices, default=LabelAwareness.PRIVATE
     )
 
 
-class DevelopmentWriteSerializer(RelationshipTargetWriteSerializer):
-    """Serializer for creating a relationship development update."""
-
-    track_id = serializers.IntegerField()
-    points = serializers.IntegerField(min_value=0)
-    title = serializers.CharField()
-    writeup = serializers.CharField()
-    xp_awarded = serializers.IntegerField(required=False, default=0)
-    visibility = serializers.ChoiceField(
-        choices=UpdateVisibility.choices,
-        required=False,
-        default=UpdateVisibility.PRIVATE,
-    )
+class LabelWriteSerializer(serializers.Serializer):
+    label_id = serializers.IntegerField()
 
 
-class CapstoneWriteSerializer(RelationshipTargetWriteSerializer):
-    """Serializer for creating a relationship capstone event."""
-
-    track_id = serializers.IntegerField()
-    points = serializers.IntegerField(min_value=0)
-    title = serializers.CharField()
-    writeup = serializers.CharField()
-    visibility = serializers.ChoiceField(
-        choices=UpdateVisibility.choices,
-        required=False,
-        default=UpdateVisibility.SHARED,
-    )
+class ShiftWriteSerializer(LabelWriteSerializer):
+    new_type_id = serializers.IntegerField()
+    note = serializers.CharField(required=False, allow_blank=True, default="", max_length=200)
 
 
-class RedistributeWriteSerializer(RelationshipTargetWriteSerializer):
-    """Serializer for redistributing relationship points between tracks."""
-
-    source_track_id = serializers.IntegerField()
-    target_track_id = serializers.IntegerField()
-    points = serializers.IntegerField(min_value=0)
-    title = serializers.CharField()
-    writeup = serializers.CharField()
-    visibility = serializers.ChoiceField(
-        choices=UpdateVisibility.choices,
-        required=False,
-        default=UpdateVisibility.PRIVATE,
-    )
+class AwarenessWriteSerializer(LabelWriteSerializer):
+    awareness = serializers.ChoiceField(choices=LabelAwareness.choices)
 
 
-class WriteupKudosWriteSerializer(serializers.Serializer):
-    """Validate input for the kudos endpoint.
-
-    ``writeup_type`` selects which of the three writeup models the ID refers to.
-    ``writeup_id`` is the pk of that writeup. Existence is validated inside the
-    action (raises WriteupFeedbackError → mapped to a 400 response body).
-    """
-
-    writeup_type = serializers.ChoiceField(choices=WRITEUP_TYPE_CHOICES)
-    writeup_id = serializers.IntegerField()
+class AllocationWriteSerializer(RelationshipTargetWriteSerializer):
+    ap_amount = serializers.IntegerField(min_value=0)
 
 
-class WriteupComplaintWriteSerializer(serializers.Serializer):
-    """Validate input for the complaint endpoint.
+class AdvanceWriteSerializer(RelationshipTargetWriteSerializer):
+    journal_entry_id = serializers.IntegerField()
 
-    Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
-    Permissions (visibility check) are enforced inside the action / service.
-    """
 
-    writeup_type = serializers.ChoiceField(choices=WRITEUP_TYPE_CHOICES)
-    writeup_id = serializers.IntegerField()
-    reason = serializers.CharField(allow_blank=False)
+class SummaryWriteSerializer(RelationshipTargetWriteSerializer):
+    summary = serializers.CharField(allow_blank=True, max_length=4000)

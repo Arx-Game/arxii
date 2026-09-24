@@ -34,6 +34,31 @@
   --sheet-hair: hsl(var(--border) / 0.6);
 }
 
+/*
+ * The sheet's own ink when nothing set a realm (#3957 demo-fidelity review, Findings 1
+ * and 6).
+ *
+ * `--accent` is a REALM token, and the sheet and tie routes never establish a realm:
+ * only the Gatefold and realm pages force one, and character creation persists one to
+ * localStorage. A player who arrived any other way gets shadcn's defaults, where
+ * `--accent` is #f4f4f5 — so every eyebrow, and the private label chip, rendered
+ * near-white on white paper. That is a reachable production state, not a harness
+ * artifact.
+ *
+ * So the Reference Sheet carries the Folio inks itself for that case, rather than
+ * leaving its whole palette hostage to a global the route never sets. The values are
+ * `[data-realm='arx']`'s own (`index.css`), and the `:not([data-realm])` guard means a
+ * realm — any realm — still wins: this is a fallback, not an override.
+ */
+:root:not([data-realm]) .refsheet {
+  --accent: 43 45% 44%;
+  --primary: 10 60% 34%;
+}
+:root:not([data-realm]).dark .refsheet {
+  --accent: 43 45% 45%;
+  --primary: 43 45% 50%;
+}
+
 .refsheet a {
   color: hsl(var(--primary));
   text-decoration: underline;
@@ -501,6 +526,113 @@
   border-color: hsl(var(--accent));
 }
 
+/* Label chips on a tie (#3957). VALENCE colours the resting state — a public label,
+   which carries no marker at all — and a MARKER, where there is one, takes the chip
+   whole: ink and border both.
+
+   That is the demo's own scheme (`ties.html:74-77, :139-140`) and its own mechanism:
+   `.tag.secret` and `.tag.shared` and `.tag.former` are declared AFTER `.tag.warm` and
+   `.tag.cold` at equal specificity, so they win on source order. The rules below are in
+   that same order for that same reason — later, not heavier, and no `!important`.
+
+   It is also the right reading. A label only the owner can see is not first a lover or
+   an enemy; a label two people share in confidence is not either; a label that has
+   ended is neither any more. Each of those is the one fact the reader needs off the
+   chip, and valence is what is left to say when there is no such fact.
+
+   `labelTagClass` appends the valence class unconditionally, so every marker rule here
+   must set a colour — a marker that sets only a border-style inherits the valence ink
+   and says the wrong thing (the former chip did exactly that, #3957 re-check). */
+.refsheet-tag-warm {
+  color: hsl(150 30% 34%);
+}
+.refsheet-tag-hostile {
+  color: hsl(var(--destructive));
+}
+/* Clandestine is the demo's `.tag.shared`: gilt, dashed. A token rather than a literal,
+   so it follows the realm (and the sheet's fallback ink) the way every other accent on
+   the paper does — which is also why it needs no `.dark` twin, unlike private below. */
+.refsheet-tag-clandestine {
+  border-style: dashed;
+  color: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+}
+.refsheet-tag-private {
+  border-style: dashed;
+  color: hsl(268 30% 42%);
+  border-color: hsl(268 30% 42%);
+}
+.dark .refsheet-tag-private {
+  color: hsl(268 40% 70%);
+  border-color: hsl(268 40% 70%);
+}
+.refsheet-tag-former {
+  opacity: 0.7;
+  border-style: dotted;
+  color: hsl(var(--muted-foreground));
+}
+
+/* The same chips, on the night plate (#3957 demo-fidelity review, Finding 2).
+   The paper palette does not survive `--plate-ground`: warm read 3.3:1 there and a
+   neutral public chip 3.5:1, at 10px tracked caps. The demo therefore re-colours every
+   chip inside the plate (`ties.html:89-91, :141, :143`), and these are its literals —
+   not tokens — so the plate is the same object in light, dark and plain mode, which is
+   the rule the plate already follows for its ground and its accent.
+
+   Ordered valence-then-marker for the same reason the paper rules are, and
+   base-then-variant because every selector here weighs the same; specificity over the
+   unscoped rules above is what makes the layer apply at all. */
+.refsheet-plate .refsheet-tag {
+  color: #c9b8a3;
+  border-color: rgb(255 255 255 / 25%);
+}
+.refsheet-plate .refsheet-tag-accent {
+  color: #e0c27a;
+  border-color: #e0c27a;
+}
+.refsheet-plate .refsheet-tag-warm {
+  color: #8fd1a8;
+  border-color: #8fd1a8;
+}
+.refsheet-plate .refsheet-tag-hostile {
+  color: #e58a8a;
+  border-color: #e58a8a;
+}
+.refsheet-plate .refsheet-tag-clandestine {
+  color: #e0c27a;
+  border-color: #e0c27a;
+}
+.refsheet-plate .refsheet-tag-private,
+.dark .refsheet-plate .refsheet-tag-private {
+  color: #c8a6f0;
+  border-color: #c8a6f0;
+}
+.refsheet-plate .refsheet-tag-former {
+  color: #c9b8a3;
+  border-color: rgb(255 255 255 / 25%);
+}
+
+/* A door on the plate is the plate's accent, as every other link there already is
+   (`ties.html:91`) — the summary's Edit was `--muted-foreground` grey on #1c1210. */
+.refsheet-plate .refsheet-quiet-door {
+  color: var(--plate-accent);
+  border-bottom-color: rgb(255 255 255 / 25%);
+}
+.refsheet-plate .refsheet-quiet-door:hover,
+.refsheet-plate .refsheet-quiet-door:focus-visible {
+  color: #f1e6d6;
+  border-bottom-color: #f1e6d6;
+}
+
+/* The cast's per-face extras (#3957): the label chips sit under the name, and the
+   thread line is the quietest thing on the card. */
+.refsheet-face-thread {
+  font-size: 0.8125rem;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--sheet-caps);
+  letter-spacing: 0.04em;
+}
+
 /* Distinctions as pills — the trait chips an OC sheet always carries. A disadvantage
    is dashed and muted rather than red: it is part of the character, not a warning. */
 .refsheet-pills {
@@ -703,4 +835,178 @@
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* ---------- the tie page (#3957) ---------- */
+
+/*
+ * The tie page borrows the sheet's plate, minus the art column: a tie has no portrait
+ * of its own, and a one-column plate is the same object with nothing missing from it.
+ * `.refsheet-plate` is a two-column grid, so without this the body would sit in the
+ * narrow art column and the right half of the plate would be empty.
+ */
+.refsheet-plate-solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+.refsheet-plate-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+.refsheet-plate-head .refsheet-heading {
+  color: #f1e6d6;
+}
+.refsheet-plate-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.refsheet-plate-prose {
+  max-width: 40rem;
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+/* The depth readout sits at the top right of the plate, with its breakdown hanging
+   under it. `position: relative` on the slot is what the panel is absolute against. */
+.refsheet-depth-slot {
+  position: relative;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: end;
+  text-align: right;
+}
+.refsheet-depth {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--plate-accent);
+  font-family: var(--sheet-caps);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.refsheet-depth-pop {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  margin-top: 0.4rem;
+  min-width: 14rem;
+  padding: 0.6rem 0.8rem;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  text-align: left;
+}
+.refsheet-depth-pop table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.refsheet-depth-pop td {
+  padding: 0.15rem 0;
+}
+.refsheet-depth-pop td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A block under the plate: hairline above, the sheet's own spacing inside. Relationship
+   Shift, Advance Relationship Tier and the labels block are all one of these. */
+.refsheet-block {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  padding-top: 1.25rem;
+  border-top: 1px solid hsl(var(--border));
+  max-width: 44rem;
+}
+.refsheet-block:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.refsheet-block > .refsheet-entries,
+.refsheet-block > .refsheet-picker-block,
+.refsheet-block > .refsheet-input {
+  width: 100%;
+}
+
+/* A field: a label in small caps and a line to write on, the same shape the Reading
+   Room uses. Never a boxed input — the sheet has one box and it is the plateau. */
+.refsheet-field {
+  display: grid;
+  gap: 0.3rem;
+}
+.refsheet-field label {
+  font-family: var(--sheet-caps);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.refsheet-input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+  padding: 0.35rem 0;
+  font: inherit;
+}
+.refsheet-input:focus {
+  outline: none;
+  border-bottom-color: hsl(var(--accent));
+}
+.refsheet-error {
+  color: hsl(var(--destructive));
+}
+
+/* The picker: five families side by side where there is room, stacked where there is
+   not. A type is a name, its counterpart where it has one, and its authored line. */
+.refsheet-picker-block {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+}
+.refsheet-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 1.25rem;
+}
+.refsheet-picker-family {
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+}
+.refsheet-picker-type {
+  display: grid;
+  gap: 0.1rem;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.35rem 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.refsheet-picker-type:hover,
+.refsheet-picker-type:focus-visible {
+  border-bottom-color: hsl(var(--accent));
+}
+.refsheet-picker-type[aria-pressed='true'] {
+  border-bottom-color: hsl(var(--accent));
+  border-bottom-width: 2px;
+}
+
+/* The stream roots itself in `.journals` for the Reading Room's row rules; this only
+   gives it the sheet's own measure so a tie's entries read at the same width. */
+.refsheet-stream {
+  width: 100%;
+  max-width: 48rem;
 }

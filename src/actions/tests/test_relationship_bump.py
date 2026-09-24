@@ -6,8 +6,7 @@ from evennia.utils.idmapper import models as idmapper_models
 from actions.definitions.relationships import RelationshipBumpAction
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.relationships.constants import BumpValence, TrackSign, TrackSystemKey
-from world.relationships.factories import RelationshipTrackFactory
+from world.relationships.constants import BumpValence
 from world.relationships.models import CharacterRelationship, RelationshipBump
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode
@@ -33,12 +32,6 @@ class RelationshipBumpActionTests(TestCase):
 
     def setUp(self) -> None:
         idmapper_models.flush_cache()
-        RelationshipTrackFactory(
-            name="Regard", sign=TrackSign.POSITIVE, system_key=TrackSystemKey.REGARD
-        )
-        RelationshipTrackFactory(
-            name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
-        )
         self.room = ObjectDBFactory(db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
         self.actor, self.actor_sheet, self.actor_account = _char_with_account(self.room)
@@ -63,6 +56,9 @@ class RelationshipBumpActionTests(TestCase):
         bump = RelationshipBump.objects.get()
         self.assertEqual(bump.interaction_id, second.pk)
         self.assertEqual(bump.valence, BumpValence.POSITIVE)
+        side = CharacterRelationship.objects.get(source=self.actor_sheet, target=self.target_sheet)
+        self.assertEqual(side.affection, 1)
+        self.assertEqual(side.conflict, 0)
 
         # Second bump backfills to the older pose.
         result = RelationshipBumpAction().run(
@@ -73,6 +69,9 @@ class RelationshipBumpActionTests(TestCase):
             set(RelationshipBump.objects.values_list("interaction_id", flat=True)),
             {first.pk, second.pk},
         )
+        side.refresh_from_db()
+        self.assertEqual(side.affection, 1)
+        self.assertEqual(side.conflict, 1)
 
     def test_budget_exhaustion_message(self) -> None:
         self._pose()

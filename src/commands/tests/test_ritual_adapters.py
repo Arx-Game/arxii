@@ -50,12 +50,11 @@ class SoulTetherAdapterDraftTests(TestCase):
     def test_resonance_goes_to_session_kwargs(self) -> None:
         adapter = SoulTetherAdapter()
         parse = adapter.parse_draft(
-            kwargs={"role": "sinner", "resonance": self.resonance.name, "writeup": "a bond"},
+            kwargs={"role": "sinner", "resonance": self.resonance.name},
             caller=None,
         )
         self.assertIn("resonance_id", parse.session_kwargs)
         self.assertEqual(parse.session_kwargs["resonance_id"], self.resonance.pk)
-        self.assertEqual(parse.session_kwargs["writeup"], "a bond")
 
     def test_role_goes_to_initiator_participant_kwargs(self) -> None:
         adapter = SoulTetherAdapter()

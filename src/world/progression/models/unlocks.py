@@ -536,86 +536,79 @@ class AchievementRequirement(AbstractClassLevelRequirement):
 
 
 class RelationshipRequirement(AbstractClassLevelRequirement):
-    """Requirement based on the character's own relationship-track progress.
+    """Requirement based on the character's own labelled ties (#3957).
 
     Character-intrinsic like every sibling requirement (#2116): counts the
-    character's own ``RelationshipTrackProgress`` rows (as the relationship's
-    ``source``) that have reached ``minimum_tier`` on a track, optionally
-    narrowed to one ``required_track_kind``. Met when at least
-    ``minimum_count`` such tracks qualify. Replaces the former freeform
-    ``relationship_target``/``minimum_level`` shape — a specific-named-person
-    gate was rejected (target resolution by name is ambiguous/renameable and
-    no sibling requirement is other-character-shaped; deferred as a
-    needs-design follow-up if content design wants it later).
+    character's own open ``RelationshipLabel`` rows (on relationships where the
+    character is the ``source``) whose side has claimed ``minimum_tier`` on the
+    single tier ladder, optionally narrowed to one ``required_type``. Met when
+    at least ``minimum_count`` such labelled sides qualify. Replaces the former
+    freeform ``relationship_target``/``minimum_level`` shape — a
+    specific-named-person gate was rejected (target resolution by name is
+    ambiguous/renameable and no sibling requirement is other-character-shaped;
+    deferred as a needs-design follow-up if content design wants it later).
     """
 
-    required_track_kind = models.ForeignKey(
-        "arxii.RelationshipTrack",
+    required_type = models.ForeignKey(
+        "arxii.RelationshipType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="+",
-        help_text="Track this requirement gates. Null = any track qualifies.",
+        help_text="Label type this requirement gates. Null = any type.",
     )
     minimum_tier = models.PositiveIntegerField(
-        help_text="Minimum RelationshipTier.tier_number the track must have reached.",
+        help_text=(
+            "Minimum RelationshipTier.tier_number a side holding an open label of the "
+            "required type must have reached."
+        ),
     )
     minimum_count = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Number of qualifying tracks required (at/above minimum_tier).",
+        help_text="Number of qualifying sides required (at/above minimum_tier).",
     )
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
-        """Count the character's own qualifying relationship tracks.
+        """Count the character's own qualifying labelled sides.
 
         Unmet text renders only the authored gate + the character's own progress —
         never another party's relationship data (#2116 leak-analysis contract).
         """
         from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-        from world.relationships.models import RelationshipTrackProgress  # noqa: PLC0415
+        from world.relationships.models import RelationshipLabel  # noqa: PLC0415
 
         try:
             sheet = character.sheet_data
         except (CharacterSheet.DoesNotExist, AttributeError):
             return False, f"{self._gate_description()}, have 0"
 
-        qs = RelationshipTrackProgress.objects.filter(
+        qs = RelationshipLabel.objects.filter(
             relationship__source=sheet,
             relationship__is_active=True,
-        ).select_related("track")
-        if self.required_track_kind_id is not None:
-            qs = qs.filter(track=self.required_track_kind_id)
-
-        count = 0
-        for progress in qs:
-            qualifying_tiers = [
-                tier
-                for tier in progress.track.cached_tiers
-                if tier.point_threshold <= progress.developed_points
-            ]
-            if not qualifying_tiers:
-                continue
-            highest_tier_number = max(tier.tier_number for tier in qualifying_tiers)
-            if highest_tier_number >= self.minimum_tier:
-                count += 1
+            relationship__tier__gte=self.minimum_tier,
+            ended_at__isnull=True,
+        )
+        if self.required_type_id is not None:
+            qs = qs.filter(type_id=self.required_type_id)
+        count = qs.values("relationship_id").distinct().count()
 
         if count >= self.minimum_count:
             return True, f"{self._gate_description()}, have {count}"
         return False, f"{self._gate_description()}, have {count}"
 
     def _gate_description(self) -> str:
-        """Authored-gate text only — never names another character's tracks."""
-        track_clause = (
-            f"on {self.required_track_kind.name}" if self.required_track_kind_id else "any track"
+        """Authored-gate text only — never names another character's ties."""
+        type_clause = (
+            f"labelled {self.required_type.name}" if self.required_type_id else "of any type"
         )
         return (
-            f"Need {self.minimum_count} relationship track(s) {track_clause} "
+            f"Need {self.minimum_count} relationship(s) {type_clause} "
             f"at tier >= {self.minimum_tier}"
         )
 
     def __str__(self) -> str:
-        track_name = self.required_track_kind.name if self.required_track_kind_id else "Any"
-        return f"Relationship: {track_name} tier >= {self.minimum_tier} (x{self.minimum_count})"
+        type_name = self.required_type.name if self.required_type_id else "Any"
+        return f"Relationship: {type_name} tier >= {self.minimum_tier} (x{self.minimum_count})"
 
 
 class LegendRequirement(AbstractClassLevelRequirement):

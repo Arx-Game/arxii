@@ -1339,7 +1339,7 @@ class ThreadAdmin(admin.ModelAdmin):
         "owner",
         "target_trait",
         "target_technique",
-        "target_relationship_track",
+        "target_relationship",
         "target_capstone",
     ]
     list_select_related = ["owner", "resonance"]
@@ -1363,12 +1363,12 @@ class ThreadWeavingUnlockAdmin(admin.ModelAdmin):
     search_fields = [
         "unlock_trait__name",
         "unlock_gift__name",
-        "unlock_track__name",
+        "unlock_type__name",
     ]
     raw_id_fields = [
         "unlock_trait",
         "unlock_gift",
-        "unlock_track",
+        "unlock_type",
     ]
     filter_horizontal = ["paths"]
 

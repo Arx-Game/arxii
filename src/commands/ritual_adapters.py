@@ -78,7 +78,6 @@ class RitualDraftAdapter:
 _SOUL_TETHER_SERVICE_PATH = "world.magic.services.soul_tether.accept_soul_tether_via_session"
 _PARTICIPANT_ROLE_KEY = "soul_tether_role"
 _SESSION_RESONANCE_ID_KEY = "resonance_id"
-_SESSION_WRITEUP_KEY = "writeup"
 
 
 def _resolve_soul_tether_role(token: str) -> str:
@@ -101,12 +100,12 @@ def _resolve_soul_tether_role(token: str) -> str:
 class SoulTetherAdapter(RitualDraftAdapter):
     """Adapter for the soul-tether BILATERAL session ritual.
 
-    Translates ``role=``, ``resonance=``, and ``writeup=`` tokens into the
-    ``draft_session`` kwargs that ``accept_soul_tether_via_session`` expects.
+    Translates ``role=`` and ``resonance=`` tokens into the ``draft_session``
+    kwargs that ``accept_soul_tether_via_session`` expects.
     """
 
     def parse_draft(self, *, kwargs: dict[str, str], caller: Any) -> DraftParse:
-        """Resolve role/resonance/writeup into session- and participant-level dicts."""
+        """Resolve role/resonance into session- and participant-level dicts."""
         from world.magic.models.affinity import Resonance  # noqa: PLC0415
 
         session_kwargs: dict[str, Any] = {}
@@ -114,7 +113,6 @@ class SoulTetherAdapter(RitualDraftAdapter):
 
         role_token = kwargs.get("role", "")
         resonance_token = kwargs.get("resonance", "")
-        writeup = kwargs.get("writeup", "")
 
         if role_token:
             initiator_participant_kwargs[_PARTICIPANT_ROLE_KEY] = _resolve_soul_tether_role(
@@ -127,8 +125,6 @@ class SoulTetherAdapter(RitualDraftAdapter):
                 msg = f"No resonance named '{resonance_name}'."
                 raise CommandError(msg)
             session_kwargs[_SESSION_RESONANCE_ID_KEY] = resonance.pk
-        if writeup:
-            session_kwargs[_SESSION_WRITEUP_KEY] = writeup
 
         return DraftParse(
             session_kwargs=session_kwargs,

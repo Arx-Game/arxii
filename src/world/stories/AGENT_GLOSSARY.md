@@ -30,8 +30,8 @@ persona). Three memories can each hold "how an NPC feels about a character"
 and only one backs this last predicate type: `NpcRegard` (the notable-NPC
 opinion axis, `world.npc_services`, read by `NPC_REGARD_AT_LEAST`) is distinct
 from `NPCStanding.affection` (the functionary disposition track,
-`adjust_npc_affection`, ADR-0085) and from the relationships affection track
-(`CharacterRelationship`/`RelationshipTrackProgress`, `SHIFT_AFFECTION`) - a
+`adjust_npc_affection`, ADR-0085) and from the relationships Affection gauge
+(`CharacterRelationship.affection`, `SHIFT_AFFECTION`, #3957) - a
 beat authored against the wrong memory silently never flips.
 _Avoid_: predicate (name the specific type), regard/standing used
 interchangeably (they are different memories with different writers).

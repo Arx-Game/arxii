@@ -1,31 +1,24 @@
-"""Factory classes for relationships models."""
+"""Factory classes for the relationships app (#3957)."""
 
 import factory
 from factory.django import DjangoModelFactory
 
-from world.relationships.constants import BumpValence, TrackSign
+from world.relationships.constants import BumpValence, LabelAwareness, TypeFamily, TypeValence
 from world.relationships.models import (
     CharacterRelationship,
     GrievanceOption,
-    HybridRelationshipType,
-    HybridRequirement,
     RelationshipBump,
     RelationshipCapstone,
-    RelationshipChange,
     RelationshipCondition,
-    RelationshipDevelopment,
+    RelationshipLabel,
     RelationshipTier,
-    RelationshipTrack,
-    RelationshipTrackProgress,
-    RelationshipUpdate,
+    RelationshipType,
 )
 
 _CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
 
 class RelationshipConditionFactory(DjangoModelFactory):
-    """Factory for creating RelationshipCondition instances."""
-
     class Meta:
         model = RelationshipCondition
         django_get_or_create = ("name",)
@@ -35,75 +28,42 @@ class RelationshipConditionFactory(DjangoModelFactory):
     display_order = factory.Sequence(lambda n: n)
 
 
-class RelationshipTrackFactory(DjangoModelFactory):
-    """Factory for creating RelationshipTrack instances."""
-
+class RelationshipTypeFactory(DjangoModelFactory):
     class Meta:
-        model = RelationshipTrack
+        model = RelationshipType
         django_get_or_create = ("name",)
 
-    name = factory.Sequence(lambda n: f"Track{n}")
+    name = factory.Sequence(lambda n: f"Type{n}")
     slug = factory.LazyAttribute(lambda o: o.name.lower().replace(" ", "-"))
     description = factory.Faker("sentence")
-    sign = TrackSign.POSITIVE
+    family = TypeFamily.COMPANY
+    valence = TypeValence.NEUTRAL
     display_order = factory.Sequence(lambda n: n)
 
 
-class GrievanceOptionFactory(DjangoModelFactory):
-    """Factory for GrievanceOption — defaults to a negative-sign track (grievances must be)."""
+class RelationshipTierFactory(DjangoModelFactory):
+    class Meta:
+        model = RelationshipTier
+        django_get_or_create = ("tier_number",)
 
+    tier_number = factory.Sequence(lambda n: n + 1)
+    name = factory.Sequence(lambda n: f"Tier{n + 1}")
+    depth_threshold = factory.LazyAttribute(lambda o: o.tier_number * 100)
+    combat_bonus = factory.LazyAttribute(lambda o: o.tier_number)
+
+
+class GrievanceOptionFactory(DjangoModelFactory):
     class Meta:
         model = GrievanceOption
         django_get_or_create = ("label",)
 
     label = factory.Sequence(lambda n: f"Grievance {n}")
-    track = factory.SubFactory(RelationshipTrackFactory, sign=TrackSign.NEGATIVE)
-    points = 500
+    conflict_points = 50
     display_order = factory.Sequence(lambda n: n)
     is_active = True
 
 
-class RelationshipTierFactory(DjangoModelFactory):
-    """Factory for creating RelationshipTier instances."""
-
-    class Meta:
-        model = RelationshipTier
-
-    track = factory.SubFactory(RelationshipTrackFactory)
-    name = factory.Sequence(lambda n: f"Tier{n}")
-    tier_number = factory.Sequence(lambda n: n)
-    point_threshold = factory.LazyAttribute(lambda o: o.tier_number * 10)
-    description = factory.Faker("sentence")
-    mechanical_bonus_description = ""
-
-
-class HybridRelationshipTypeFactory(DjangoModelFactory):
-    """Factory for creating HybridRelationshipType instances."""
-
-    class Meta:
-        model = HybridRelationshipType
-        django_get_or_create = ("name",)
-
-    name = factory.Sequence(lambda n: f"HybridType{n}")
-    slug = factory.LazyAttribute(lambda o: o.name.lower().replace(" ", "-"))
-    description = factory.Faker("sentence")
-    mechanical_bonus_description = ""
-
-
-class HybridRequirementFactory(DjangoModelFactory):
-    """Factory for creating HybridRequirement instances."""
-
-    class Meta:
-        model = HybridRequirement
-
-    hybrid_type = factory.SubFactory(HybridRelationshipTypeFactory)
-    track = factory.SubFactory(RelationshipTrackFactory)
-    minimum_tier = 1
-
-
 class CharacterRelationshipFactory(DjangoModelFactory):
-    """Factory for creating CharacterRelationship instances."""
-
     class Meta:
         model = CharacterRelationship
 
@@ -111,79 +71,28 @@ class CharacterRelationshipFactory(DjangoModelFactory):
     target = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
 
 
-class RelationshipTrackProgressFactory(DjangoModelFactory):
-    """Factory for creating RelationshipTrackProgress instances."""
-
+class RelationshipLabelFactory(DjangoModelFactory):
     class Meta:
-        model = RelationshipTrackProgress
+        model = RelationshipLabel
 
     relationship = factory.SubFactory(CharacterRelationshipFactory)
-    track = factory.SubFactory(RelationshipTrackFactory)
-    capacity = 0
-    developed_points = 0
-
-
-class RelationshipUpdateFactory(DjangoModelFactory):
-    """Factory for creating RelationshipUpdate instances."""
-
-    class Meta:
-        model = RelationshipUpdate
-
-    relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
-    title = factory.Faker("sentence", nb_words=4)
-    writeup = factory.Faker("paragraph")
-    track = factory.SubFactory(RelationshipTrackFactory)
-    points_earned = 5
-
-
-class RelationshipDevelopmentFactory(DjangoModelFactory):
-    """Factory for creating RelationshipDevelopment instances."""
-
-    class Meta:
-        model = RelationshipDevelopment
-
-    relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
-    title = factory.Faker("sentence", nb_words=4)
-    writeup = factory.Faker("paragraph")
-    track = factory.SubFactory(RelationshipTrackFactory)
-    points_earned = 5
-    xp_awarded = 0
+    type = factory.SubFactory(RelationshipTypeFactory)
+    awareness = LabelAwareness.PRIVATE
 
 
 class RelationshipCapstoneFactory(DjangoModelFactory):
-    """Factory for creating RelationshipCapstone instances."""
+    """A ritual capstone by default (no journal entry needed); pass ``journal_entry`` otherwise."""
 
     class Meta:
         model = RelationshipCapstone
 
     relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
-    title = factory.Faker("sentence", nb_words=4)
-    writeup = factory.Faker("paragraph")
-    track = factory.SubFactory(RelationshipTrackFactory)
-    points = 100
-
-
-class RelationshipChangeFactory(DjangoModelFactory):
-    """Factory for creating RelationshipChange instances."""
-
-    class Meta:
-        model = RelationshipChange
-
-    relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
-    title = factory.Faker("sentence", nb_words=4)
-    writeup = factory.Faker("paragraph")
-    source_track = factory.SubFactory(RelationshipTrackFactory)
-    target_track = factory.SubFactory(RelationshipTrackFactory)
-    points_moved = 5
+    tier_claimed = 1
+    xp_spent = 10
+    is_ritual_capstone = True
 
 
 class RelationshipBumpFactory(DjangoModelFactory):
-    """Factory for creating RelationshipBump instances (#1699)."""
-
     class Meta:
         model = RelationshipBump
 

@@ -10,11 +10,10 @@ import { fireEvent, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
-import { CharacterCardDrawer, resolveWriteupMode } from './CharacterCardDrawer';
+import { CharacterCardDrawer } from './CharacterCardDrawer';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { PaginatedResponse } from '@/shared/types';
 import type { RosterEntryData } from '@/roster/types';
-import type { CharacterRelationshipList } from '@/relationships/api';
 
 vi.mock('@/roster/queries', () => ({
   useRosterEntryByNameQuery: vi.fn(),
@@ -22,39 +21,14 @@ vi.mock('@/roster/queries', () => ({
 }));
 vi.mock('@/friends/queries', () => ({
   useAddFriendMutation: vi.fn(),
-  useRivalsQuery: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
-  useDeclareRivalMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
-  useWithdrawRivalMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
-}));
-vi.mock('@/relationships/queries', () => ({
-  useMyRelationshipToTarget: vi.fn(),
-  useRelationshipTracks: vi.fn(),
-  useCreateFirstImpression: vi.fn(),
-  useCreateDevelopment: vi.fn(),
-  useCreateCapstone: vi.fn(),
-  useRedistributePoints: vi.fn(),
 }));
 
 import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries';
 import { useAddFriendMutation } from '@/friends/queries';
-import {
-  useMyRelationshipToTarget,
-  useRelationshipTracks,
-  useCreateFirstImpression,
-  useCreateDevelopment,
-  useCreateCapstone,
-  useRedistributePoints,
-} from '@/relationships/queries';
 
 const mockSearchQuery = vi.mocked(useRosterEntryByNameQuery);
 const mockEntryQuery = vi.mocked(useRosterEntryQuery);
 const mockAddFriend = vi.mocked(useAddFriendMutation);
-const mockMyRelationship = vi.mocked(useMyRelationshipToTarget);
-const mockTracks = vi.mocked(useRelationshipTracks);
-const mockCreateFirstImpression = vi.mocked(useCreateFirstImpression);
-const mockCreateDevelopment = vi.mocked(useCreateDevelopment);
-const mockCreateCapstone = vi.mocked(useCreateCapstone);
-const mockRedistributePoints = vi.mocked(useRedistributePoints);
 
 const PERSONA: PoseUnitAvatarClickPersona = { id: 9, name: 'Alice', thumbnail_url: null };
 
@@ -142,37 +116,6 @@ describe('CharacterCardDrawer', () => {
       isError: false,
       error: null,
     } as unknown as UseQueryResult<RosterEntryData, Error>);
-    mockMyRelationship.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useMyRelationshipToTarget>);
-    mockTracks.mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useRelationshipTracks>);
-    const mutationStub = {
-      mutate: vi.fn(),
-      isPending: false,
-      isSuccess: false,
-      isError: false,
-      error: null,
-    };
-    mockCreateFirstImpression.mockReturnValue(
-      mutationStub as unknown as ReturnType<typeof useCreateFirstImpression>
-    );
-    mockCreateDevelopment.mockReturnValue(
-      mutationStub as unknown as ReturnType<typeof useCreateDevelopment>
-    );
-    mockCreateCapstone.mockReturnValue(
-      mutationStub as unknown as ReturnType<typeof useCreateCapstone>
-    );
-    mockRedistributePoints.mockReturnValue(
-      mutationStub as unknown as ReturnType<typeof useRedistributePoints>
-    );
   });
 
   it('renders the persona name and avatar immediately, before the roster search resolves', () => {
@@ -308,28 +251,66 @@ describe('CharacterCardDrawer', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  describe('resolveWriteupMode (#2159 — "Record an impression" quick action)', () => {
-    it('picks development mode when an existing relationship is found, else impression', () => {
-      const existing = [
-        {
-          id: 1,
-          source: 7,
-          source_name: 'Me',
-          target: 100,
-          target_name: 'Alice',
-          is_active: true,
-          is_pending: false,
-          is_soul_tether: false,
-          soul_tether_role: '',
-          absolute_value: 5,
-          developed_absolute_value: 2,
-          affection: 2,
-          updated_at: '2026-01-01T00:00:00Z',
-        },
-      ] as unknown as CharacterRelationshipList[];
-      expect(resolveWriteupMode(existing)).toBe('development');
-      expect(resolveWriteupMode([])).toBe('impression');
-      expect(resolveWriteupMode(undefined)).toBe('impression');
+  describe('the tie door (#3957)', () => {
+    it("leads to the VIEWER's own declare page, carrying the clicked persona and name", () => {
+      mockSearchMatch(matchedEntry());
+      renderWithProviders(
+        <CharacterCardDrawer
+          persona={PERSONA}
+          onClose={vi.fn()}
+          viewerEntryId={7}
+          onWhisper={vi.fn()}
+        />
+      );
+      // The route's `:id` is the character whose SIDE the tie is — the viewer. Pointing
+      // it at the target's entry (42) drew "Alice and / Alice" on arrival and hung the
+      // declare page off the wrong sheet.
+      expect(screen.getByRole('link', { name: 'Declare a tie' })).toHaveAttribute(
+        'href',
+        '/characters/7/ties/new?persona=9&name=Alice'
+      );
+    });
+
+    it('offers no tie door to a viewer who is playing nobody', () => {
+      mockSearchMatch(matchedEntry());
+      renderWithProviders(
+        <CharacterCardDrawer
+          persona={PERSONA}
+          onClose={vi.fn()}
+          viewerEntryId={null}
+          onWhisper={vi.fn()}
+        />
+      );
+      expect(screen.queryByRole('link', { name: 'Declare a tie' })).not.toBeInTheDocument();
+    });
+
+    it('offers no tie door for a face that is not on the public roster', () => {
+      mockNoSearchResult(false);
+      renderWithProviders(
+        <CharacterCardDrawer
+          persona={PERSONA}
+          onClose={vi.fn()}
+          viewerEntryId={7}
+          onWhisper={vi.fn()}
+        />
+      );
+      expect(screen.queryByRole('link', { name: 'Declare a tie' })).not.toBeInTheDocument();
+    });
+
+    it('has no impression or rival action left', () => {
+      mockSearchMatch(matchedEntry());
+      renderWithProviders(
+        <CharacterCardDrawer
+          persona={PERSONA}
+          onClose={vi.fn()}
+          viewerEntryId={7}
+          onWhisper={vi.fn()}
+        />
+      );
+      expect(
+        screen.queryByRole('button', { name: 'Record an impression' })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Rival/ })).not.toBeInTheDocument();
     });
   });
 });

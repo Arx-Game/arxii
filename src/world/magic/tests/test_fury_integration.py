@@ -59,12 +59,10 @@ from world.magic.factories import (
 )
 from world.magic.services import use_technique
 from world.mechanics.factories import CharacterEngagementFactory
-from world.relationships.factories import (
-    CharacterRelationshipFactory,
-    RelationshipTierFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
-)
+from world.relationships.constants import LabelAwareness, TypeFamily
+from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
+from world.relationships.services import declare_label
+from world.roster.factories import grant_test_tenure
 from world.scenes.action_constants import ConsentDecision
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
@@ -120,21 +118,26 @@ def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
         berserk_severity=3,
     )
 
-    track = RelationshipTrackFactory(name=f"IntBond_{tier_depth}_{bond_tier_number}")
-    rel_tier = RelationshipTierFactory(
-        track=track,
-        tier_number=bond_tier_number,
-        point_threshold=bond_tier_number * 10,
+    # Mutual Mentor/Student bond at bond_tier_number. Fury itself reads only the SOURCE
+    # side's tier (``fury._bond_tier``, any label), so this fixture builds more than the cap
+    # strictly needs: it stays mutual-TEACHING so the integration path keeps proving the cap
+    # is unchanged for the shape training's ``get_relationship_tier`` also recognises
+    # (#3957 final review — the old rationale named get_relationship_tier as fury's read).
+    mentor = RelationshipTypeFactory(family=TypeFamily.TEACHING)
+    student = RelationshipTypeFactory(family=TypeFamily.TEACHING, counterpart=mentor)
+    mentor.counterpart = student
+    mentor.save(update_fields=["counterpart"])
+    forward = CharacterRelationshipFactory(
+        source=initiator.character_sheet, target=anchor.character_sheet, tier=bond_tier_number
     )
-    rel = CharacterRelationshipFactory(
-        source=initiator.character_sheet,
-        target=anchor.character_sheet,
+    backward = CharacterRelationshipFactory(
+        source=anchor.character_sheet, target=initiator.character_sheet, tier=bond_tier_number
     )
-    RelationshipTrackProgressFactory(
-        relationship=rel,
-        track=track,
-        capacity=rel_tier.point_threshold + 10,
-        developed_points=rel_tier.point_threshold,
+    forward_tenure = grant_test_tenure(initiator.character_sheet)
+    backward_tenure = grant_test_tenure(anchor.character_sheet)
+    declare_label(side=forward, type=mentor, awareness=LabelAwareness.PUBLIC, tenure=forward_tenure)
+    declare_label(
+        side=backward, type=student, awareness=LabelAwareness.PUBLIC, tenure=backward_tenure
     )
 
     return scene, initiator, anchor, tier, cfg

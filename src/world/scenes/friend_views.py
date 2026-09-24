@@ -1,15 +1,17 @@
-"""OOC friends-list (#1727) + rivalry-declaration (#2170) API — the web face of
-world.scenes.friend_services.
+"""OOC friends-list (#1727) API — the web face of world.scenes.friend_services.
 
 A player's friendships (those made by any of their characters): list, add (one character or all),
-remove. Rivalries mirror the same shape: list, declare (double opt-in — mutual only once both
-sides declare), withdraw. Tenure-scoped + alt-private, mirroring the Block/Mute control API.
+remove. Tenure-scoped + alt-private, mirroring the Block/Mute control API.
+
+Rivalry declaration (#2170) lived here until #3957 folded ``scenes.Rivalry`` into the
+relationships app's labels — the RIVALS consent mode now reads a mutual hostile relationship
+label (``world.relationships.services.mutual_hostile``) instead of a dedicated declaration.
 """
 
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models import QuerySet
 from rest_framework import mixins, serializers, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -18,17 +20,11 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from evennia_extensions.models import PlayerData
-from world.scenes.friend_serializers import (
-    FriendshipCreateSerializer,
-    FriendshipSerializer,
-    RivalryCreateSerializer,
-    RivalrySerializer,
-)
-from world.scenes.friend_services import add_friend, add_friend_all_characters, declare_rival
-from world.scenes.models import Friendship, Rivalry
+from world.scenes.friend_serializers import FriendshipCreateSerializer, FriendshipSerializer
+from world.scenes.friend_services import add_friend, add_friend_all_characters
+from world.scenes.models import Friendship
 
 _NO_ACTIVE_TENURE = "That character has no active tenure to friend."
-_NO_ACTIVE_TENURE_RIVAL = "That character has no active tenure to declare a rival."
 
 
 class FriendsPagination(PageNumberPagination):
@@ -73,51 +69,3 @@ class FriendshipViewSet(
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
         return Response(FriendshipSerializer(friendship).data, status=status.HTTP_201_CREATED)
-
-
-class RivalryViewSet(
-    mixins.ListModelMixin,
-    mixins.CreateModelMixin,
-    mixins.DestroyModelMixin,
-    GenericViewSet,
-):
-    """The requesting player's rival declarations: list, declare, withdraw (#2170).
-
-    Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
-    RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
-    removes only your own side.
-    """
-
-    permission_classes = [IsAuthenticated]
-    pagination_class = FriendsPagination
-    filter_backends: list = []
-
-    def get_queryset(self) -> QuerySet[Rivalry]:
-        reciprocal = Rivalry.objects.filter(
-            rivaler_tenure=OuterRef("rival_tenure"), rival_tenure=OuterRef("rivaler_tenure")
-        )
-        return (
-            Rivalry.objects.filter(rivaler_tenure__player_data__account=self.request.user)
-            .select_related("rival_tenure__roster_entry__character_sheet__character")
-            .annotate(is_mutual=Exists(reciprocal))
-            .order_by("-created_at")
-        )
-
-    def get_serializer_class(self) -> type[serializers.BaseSerializer]:
-        return RivalryCreateSerializer if self.action == "create" else RivalrySerializer
-
-    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
-        serializer = RivalryCreateSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        # Resolve each character (RosterEntry) to its current tenure — rivalries are tenure-based.
-        viewer_tenure = data["viewer"].current_tenure
-        rival_tenure = data["rival"].current_tenure
-        if viewer_tenure is None or rival_tenure is None:
-            raise serializers.ValidationError(_NO_ACTIVE_TENURE_RIVAL)
-        rivalry = declare_rival(rivaler_tenure=viewer_tenure, rival_tenure=rival_tenure)
-        # The annotated list queryset supplies is_mutual; stamp it explicitly on the create path.
-        rivalry.is_mutual = Rivalry.objects.filter(
-            rivaler_tenure=rival_tenure, rival_tenure=viewer_tenure
-        ).exists()
-        return Response(RivalrySerializer(rivalry).data, status=status.HTTP_201_CREATED)

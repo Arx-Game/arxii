@@ -36,11 +36,11 @@ from world.magic.factories import (
 from world.magic.services.techniques import get_runtime_technique_stats
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
-from world.relationships.constants import TrackSign
+from world.relationships.constants import TypeValence
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
 from world.scenes.factories import PersonaFactory
 
@@ -51,14 +51,14 @@ def _make_technique():
     return TechniqueFactory(gift=gift, effect_type=effect_type, intensity=10, control=10)
 
 
-def _bond(source_sheet, target_sheet, *, sign=TrackSign.POSITIVE, fuels=True, points=10):
-    track = RelationshipTrackFactory(sign=sign, fuels_escalation_spikes=fuels)
+def _bond(source_sheet, target_sheet, *, valence=TypeValence.WARM, fuels=True, points=10):
+    rel_type = RelationshipTypeFactory(valence=valence, fuels_escalation_spikes=fuels)
     relationship = CharacterRelationshipFactory(
-        source=source_sheet, target=target_sheet, is_active=True, is_pending=False
+        source=source_sheet, target=target_sheet, is_active=True
     )
-    RelationshipTrackProgressFactory(
-        relationship=relationship, track=track, developed_points=points, capacity=points
-    )
+    RelationshipLabelFactory(relationship=relationship, type=rel_type)
+    relationship.invested_depth = points
+    relationship.save()
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
@@ -131,7 +131,7 @@ class DramaticSurgeE2ETests(TestCase):
         _bond(
             self.protector.character_sheet,
             foe_sheet,
-            sign=TrackSign.NEGATIVE,
+            valence=TypeValence.HOSTILE,
             points=0,
         )
         before = self._runtime_intensity(self.protector_char)

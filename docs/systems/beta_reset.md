@@ -50,7 +50,7 @@ Deletion runs in one transaction, in `SCOPE_TABLE` order — the order resolves 
 
 **Not touched, deliberately:** `CharacterSheet`/`Persona`/`RosterEntry`/`RosterTenure`/
 `Organization`/`Covenant` (structural identity — see the PR 2/PR 3 boundary below);
-`GMProfile`/`AccountDB`/kudos/`Block`/`Friendship`/`Rivalry`/`Mute` (account-level data);
+`GMProfile`/`AccountDB`/kudos/`Block`/`Friendship`/`Mute` (account-level data; `Rivalry` is gone since #3957 — rivalry is an IC relationship label now, and relationship rows are play state);
 catalog/config models (`CrimeKind`, `AreaLaw`, `SecretCategory`, `Profession`,
 `DistinctionPurseDrain`, tuning singletons); `CharacterCodexKnowledge` (no CG-vs-play
 discriminator exists on it today — flagged, not guessed at); org economics

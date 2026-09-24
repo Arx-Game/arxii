@@ -1,22 +1,9 @@
-"""Constants for the relationships app."""
+"""Constants for the relationships app (#3957: ties, labels, depth, tiers)."""
 
 from django.db import models
 
-# Number of days for temporary points to fully decay (linear: 10%/day)
-DECAY_DAYS = 10
-
-# Maximum development updates per character per week (across all relationships)
-MAX_DEVELOPMENTS_PER_WEEK = 7
-
 # Points applied per ambient relationship bump — rel plus/neg, valenced emoji reactions (#1699).
 BUMP_POINTS = 1
-
-
-class TrackSystemKey(models.TextChoices):
-    """Lookup keys for the generic system tracks that ambient bumps write to (#1699)."""
-
-    REGARD = "regard", "Regard"
-    FRICTION = "friction", "Friction"
 
 
 class BumpValence(models.IntegerChoices):
@@ -26,39 +13,58 @@ class BumpValence(models.IntegerChoices):
     NEGATIVE = -1, "Negative"
 
 
-class TrackSign(models.TextChoices):
-    """Whether a relationship track represents positive or negative feelings."""
+class TypeValence(models.TextChoices):
+    """Whether a label type reads as warm, hostile or neither (#3957).
 
-    POSITIVE = "positive", "Positive"
-    NEGATIVE = "negative", "Negative"
+    Hostile-valence labels are the ones consent's RIVALS mode and the journals' Retort
+    gate read; the surge engine's hated-foe leg reads them too.
+    """
+
+    WARM = "warm", "Warm"
+    HOSTILE = "hostile", "Hostile"
+    NEUTRAL = "neutral", "Neutral"
 
 
-class UpdateVisibility(models.TextChoices):
-    """Who can see a relationship update or change."""
+class TypeFamily(models.TextChoices):
+    """How the picker groups the catalogue (#3957). Purely presentational."""
+
+    HEART = "heart", "Heart"
+    COMPANY = "company", "Company"
+    CONTEST = "contest", "Contest"
+    BLOOD_AND_OATH = "blood_and_oath", "Blood and oath"
+    TEACHING = "teaching", "Teaching"
+
+
+class LabelAwareness(models.TextChoices):
+    """Who knows a label exists (#3957). Moves forward only; see ``advance_awareness``."""
 
     PRIVATE = "private", "Private"
-    SHARED = "shared", "Shared"
-    GOSSIP = "gossip", "Gossip"
+    CLANDESTINE = "clandestine", "Clandestine"
     PUBLIC = "public", "Public"
 
 
-class FirstImpressionColoring(models.TextChoices):
-    """The emotional coloring of a first impression."""
+#: The one-way order: a label may only move to a HIGHER rank.
+AWARENESS_RANK: dict[str, int] = {
+    LabelAwareness.PRIVATE: 0,
+    LabelAwareness.CLANDESTINE: 1,
+    LabelAwareness.PUBLIC: 2,
+}
 
-    POSITIVE = "positive", "Positive"
-    NEUTRAL = "neutral", "Neutral"
-    NEGATIVE = "negative", "Negative"
-
-
-# Per-commendation kudos award (staff-tunable; see KudosSourceCategory "relationship_writeup").
-WRITEUP_KUDOS_AMOUNT: int = 1
-# Natural key of the KudosSourceCategory row that explains writeup-commendation awards.
-RELATIONSHIP_WRITEUP_KUDOS_CATEGORY: str = "relationship_writeup"
+#: Awareness stages the OTHER side may see (and the only ones that count toward mutual).
+KNOWN_AWARENESS: tuple[str, ...] = (LabelAwareness.CLANDESTINE, LabelAwareness.PUBLIC)
 
 
-class ReferenceMode(models.TextChoices):
-    """How a relationship update references RP."""
+class DepthSource(models.TextChoices):
+    """Where a depth award came from (#3957) — the audit row's provenance."""
 
-    ALL_WEEKLY = "all_weekly", "All Interactions This Week"
-    SPECIFIC_INTERACTION = "specific_interaction", "Specific Interaction"
-    SPECIFIC_SCENE = "specific_scene", "Specific Scene"
+    ALLOCATION = "allocation", "Weekly allocation"
+    SCENE = "scene", "Scene together"
+
+
+class TieAudience(models.TextChoices):
+    """Who is looking at a side of a tie (#3957); decides which fields a read emits."""
+
+    OWNER = "owner", "Owner"
+    OTHER_SIDE = "other_side", "Other side"
+    THIRD_PARTY = "third_party", "Third party"
+    STAFF = "staff", "Staff"

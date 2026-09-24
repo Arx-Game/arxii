@@ -1734,10 +1734,6 @@
   - petitions_about <- player_submissions.Petition
   - relationships_as_source <- relationships.CharacterRelationship
   - relationships_as_target <- relationships.CharacterRelationship
-  - relationshipupdate_set <- relationships.RelationshipUpdate
-  - relationshipdevelopment_set <- relationships.RelationshipDevelopment
-  - relationshipcapstone_set <- relationships.RelationshipCapstone
-  - relationshipchange_set <- relationships.RelationshipChange
   - unseen_observations <- scenes.SceneUnseenObserver
   - personas <- scenes.Persona
   - persona_discoveries <- scenes.PersonaDiscovery
@@ -4060,7 +4056,6 @@
   - gm_reward_trackers <- gm.GMWeeklyRewardTracker
   - goal_journals <- goals.GoalJournal
   - journal_xp_trackers <- journals.WeeklyJournalXP
-  - relationships <- relationships.CharacterRelationship
   - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
   - rite_performances <- worship.WorshipRitePerformance
   - prayers <- worship.Prayer
@@ -4912,6 +4907,7 @@
   - legend_honors <- societies.LegendHonor
   - responses <- journals.JournalEntry
   - tags <- journals.JournalTag
+  - capstone <- relationships.RelationshipCapstone
 
 ### JournalTag
 **Foreign Keys:**
@@ -6126,7 +6122,7 @@
   - resonance -> magic.Resonance [FK]
   - target_trait -> traits.Trait [FK] (nullable)
   - target_technique -> magic.Technique [FK] (nullable)
-  - target_relationship_track -> relationships.RelationshipTrackProgress [FK] (nullable)
+  - target_relationship -> relationships.CharacterRelationship [FK] (nullable)
   - target_capstone -> relationships.RelationshipCapstone [FK] (nullable)
   - target_facet -> magic.Facet [FK] (nullable)
   - target_covenant_role -> covenants.CovenantRole [FK] (nullable)
@@ -6185,7 +6181,7 @@
 **Foreign Keys:**
   - unlock_trait -> traits.Trait [FK] (nullable)
   - unlock_gift -> magic.Gift [FK] (nullable)
-  - unlock_track -> relationships.RelationshipTrack [FK] (nullable)
+  - unlock_type -> relationships.RelationshipType [FK] (nullable)
   - paths -> classes.Path [M2M]
 **Pointed to by:**
   - character_purchases <- magic.CharacterThreadWeavingUnlock
@@ -7470,7 +7466,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
-  - required_track_kind -> relationships.RelationshipTrack [FK] (nullable)
+  - required_type -> relationships.RelationshipType [FK] (nullable)
 
 ### TierRequirement
 **Foreign Keys:**
@@ -7695,36 +7691,27 @@
   - source -> character_sheets.CharacterSheet [FK]
   - target -> character_sheets.CharacterSheet [FK] (nullable)
   - target_companion -> companions.Companion [FK] (nullable)
-  - displayed_track -> relationships.RelationshipTrack [FK] (nullable)
-  - displayed_tier -> relationships.RelationshipTier [FK] (nullable)
-  - game_week -> game_clock.GameWeek [FK] (nullable)
   - conditions -> relationships.RelationshipCondition [M2M]
 **Pointed to by:**
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
-  - track_progress <- relationships.RelationshipTrackProgress
-  - updates <- relationships.RelationshipUpdate
-  - developments <- relationships.RelationshipDevelopment
+  - anchored_threads <- magic.Thread
+  - labels <- relationships.RelationshipLabel
+  - allocation <- relationships.RelationshipAllocation
+  - depth_transactions <- relationships.RelationshipDepthTransaction
   - capstones <- relationships.RelationshipCapstone
   - bumps <- relationships.RelationshipBump
   - affection_shifts <- relationships.AffectionShift
-  - changes <- relationships.RelationshipChange
   - temporary_conditions <- relationships.TemporaryRelationshipCondition
 
 ### GrievanceOption
-**Foreign Keys:**
-  - track -> relationships.RelationshipTrack [FK]
 
-### HybridRelationshipType
-**Pointed to by:**
-  - requirements <- relationships.HybridRequirement
-
-### HybridRequirement
+### RelationshipAllocation
 **Foreign Keys:**
-  - hybrid_type -> relationships.HybridRelationshipType [FK]
-  - track -> relationships.RelationshipTrack [FK]
+  - relationship -> relationships.CharacterRelationship [OneToOne]
+  - game_week -> game_clock.GameWeek [FK] (nullable)
 
 ### RelationshipBump
 **Foreign Keys:**
@@ -7735,21 +7722,10 @@
 ### RelationshipCapstone
 **Foreign Keys:**
   - relationship -> relationships.CharacterRelationship [FK]
-  - author -> character_sheets.CharacterSheet [FK]
-  - track -> relationships.RelationshipTrack [FK]
-  - linked_scene -> scenes.Scene [FK] (nullable)
+  - journal_entry -> journals.JournalEntry [OneToOne] (nullable)
   - ritual -> magic.Ritual [FK] (nullable)
 **Pointed to by:**
   - anchored_threads <- magic.Thread
-  - writeupkudos_set <- relationships.WriteupKudos
-  - writeupcomplaint_set <- relationships.WriteupComplaint
-
-### RelationshipChange
-**Foreign Keys:**
-  - relationship -> relationships.CharacterRelationship [FK]
-  - author -> character_sheets.CharacterSheet [FK]
-  - source_track -> relationships.RelationshipTrack [FK]
-  - target_track -> relationships.RelationshipTrack [FK]
 
 ### RelationshipCondition
 **Foreign Keys:**
@@ -7759,96 +7735,72 @@
   - character_relationships <- relationships.CharacterRelationship
   - temporary_applications <- relationships.TemporaryRelationshipCondition
 
-### RelationshipDevelopment
+### RelationshipDepthTransaction
 **Foreign Keys:**
   - relationship -> relationships.CharacterRelationship [FK]
-  - author -> character_sheets.CharacterSheet [FK]
-  - track -> relationships.RelationshipTrack [FK]
-  - linked_scene -> scenes.Scene [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
+  - game_week -> game_clock.GameWeek [FK] (nullable)
+
+### RelationshipGrowthConfig
+**Foreign Keys:**
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### RelationshipLabel
+**Foreign Keys:**
+  - relationship -> relationships.CharacterRelationship [FK]
+  - type -> relationships.RelationshipType [FK]
+  - declared_by_tenure -> roster.RosterTenure [FK] (nullable)
+  - replaced -> relationships.RelationshipLabel [FK] (nullable)
 **Pointed to by:**
-  - writeupkudos_set <- relationships.WriteupKudos
-  - writeupcomplaint_set <- relationships.WriteupComplaint
+  - replaced_by <- relationships.RelationshipLabel
 
 ### RelationshipTier
-**Foreign Keys:**
-  - track -> relationships.RelationshipTrack [FK]
 
-### RelationshipTrack
+### RelationshipType
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - counterpart -> relationships.RelationshipType [FK] (nullable)
 **Pointed to by:**
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
-  - tiers <- relationships.RelationshipTier
-  - hybridrequirement_set <- relationships.HybridRequirement
-  - grievance_options <- relationships.GrievanceOption
-  - relationshiptrackprogress_set <- relationships.RelationshipTrackProgress
-  - relationshipupdate_set <- relationships.RelationshipUpdate
-  - relationshipdevelopment_set <- relationships.RelationshipDevelopment
-  - relationshipcapstone_set <- relationships.RelationshipCapstone
-  - changes_from <- relationships.RelationshipChange
-  - changes_to <- relationships.RelationshipChange
-
-### RelationshipTrackProgress
-**Foreign Keys:**
-  - relationship -> relationships.CharacterRelationship [FK]
-  - track -> relationships.RelationshipTrack [FK]
-**Pointed to by:**
-  - anchored_threads <- magic.Thread
-
-### RelationshipUpdate
-**Foreign Keys:**
-  - relationship -> relationships.CharacterRelationship [FK]
-  - author -> character_sheets.CharacterSheet [FK]
-  - track -> relationships.RelationshipTrack [FK]
-  - linked_scene -> scenes.Scene [FK] (nullable)
-  - linked_interaction -> scenes.Interaction [FK] (nullable)
-**Pointed to by:**
-  - writeupkudos_set <- relationships.WriteupKudos
-  - writeupcomplaint_set <- relationships.WriteupComplaint
+  - counterpart_of <- relationships.RelationshipType
+  - labels <- relationships.RelationshipLabel
 
 ### TemporaryRelationshipCondition
 **Foreign Keys:**
   - relationship -> relationships.CharacterRelationship [FK]
   - condition -> relationships.RelationshipCondition [FK]
 
-### WriteupComplaint
-**Foreign Keys:**
-  - update -> relationships.RelationshipUpdate [FK] (nullable)
-  - development -> relationships.RelationshipDevelopment [FK] (nullable)
-  - capstone -> relationships.RelationshipCapstone [FK] (nullable)
-  - complainant -> evennia.AccountDB [FK]
-
-### WriteupKudos
-**Foreign Keys:**
-  - update -> relationships.RelationshipUpdate [FK] (nullable)
-  - development -> relationships.RelationshipDevelopment [FK] (nullable)
-  - capstone -> relationships.RelationshipCapstone [FK] (nullable)
-  - account -> evennia.AccountDB [FK]
-
 ### Service Functions
-- `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' - Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).`
-- `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect | None', amount: 'int', boon: 'Boon | None' = None) -> 'AffectionShift | None' - Apply a social action's automatic affection shift (#1697, boon mode #2540).`
-- `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' - Apply an ambient ±1 bump to source's regard toward target (#1699).`
-- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.AwardResult - Award kudos to an account with full audit trail.`
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
-- `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int' - Return the bond bonus for protection checks (INTERPOSE/SUCCOR).`
-- `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' - Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.`
-- `clear_very_attracted(sheets) -> 'None' - Drop Very Attracted for the given characters — the scene-end early clear (#1697).`
+- `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' - Add a ``RelationshipCondition`` to the directed ``source -> target`` relationship (#1697).`
+- `advance_awareness(*, label: 'RelationshipLabel', to: 'str') -> 'RelationshipLabel' - Private -> Clandestine -> Public, or Private -> Public. Never backward.`
+- `advance_tier(*, side: 'CharacterRelationship', journal_entry: 'JournalEntry') -> 'RelationshipCapstone' - Claim the next tier with a capstone entry and XP (#3957). Cost = xp_per_tier x new tier.`
+- `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect | None', amount: 'int', boon: 'Boon | None' = None) -> 'AffectionShift | None' - A social action's automatic shift on the target's gauges (#1697, #2540, #3957).`
+- `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' - Ambient +/-1 on source's Affection or Conflict toward target (#1699, #3957).`
+- `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int'`
+- `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' - One contribution per bonded ACTIVE co-combatant, valued by this side's tier (#2021).`
+- `clear_very_attracted(sheets) -> 'None' - Drop Very Attracted for the given characters -- the scene-end early clear (#1697).`
 - `companion_target_error(source: 'CharacterSheet', companion: 'Companion') -> 'str' - Why ``source`` may not hold a relationship toward ``companion``, else "" (#3575).`
-- `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' - Record a capstone event — adds points to both capacity and developed_points.`
-- `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' - Add permanent (developed) points to a track, up to capacity.`
-- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet | None' = None, target_companion: 'Companion | None' = None, title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' - Create a pending relationship with an initial update and track progress.`
-- `file_writeup_complaint(*, complainant_account: 'AccountDB', writeup, reason: 'str') -> 'WriteupComplaint' - File a bad-faith-RP complaint against a writeup for staff triage.`
-- `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' - Get the account currently playing this character via roster tenure.`
+- `credit_scene_depth(scene: 'Scene') -> 'int' - First scene together in a game week credits each side ``scene_base_gain`` (#3957).`
+- `declare_label(*, side: 'CharacterRelationship', type: 'RelationshipType', awareness: 'str' = LabelAwareness.PRIVATE, tenure: 'RosterTenure | None' = None) -> 'RelationshipLabel' - Name one type on this side, Private unless told otherwise (#3957).`
+- `end_label(*, label: 'RelationshipLabel') -> 'RelationshipLabel'`
 - `get_bond_combat_config() -> 'BondCombatConfig' - Get-or-create the BondCombatConfig singleton (pk=1).`
-- `give_writeup_kudos(*, giver_account: 'AccountDB', writeup) -> 'WriteupKudos' - Award a non-revocable commendation to the writeup author on behalf of the subject.`
-- `increment_stat_for_group(character_sheets: 'list[CharacterSheet]', stat: 'StatDefinition', amount: 'int' = 1) -> 'None' - Increment a stat for several sheets as one simultaneous group moment.`
-- `mirror_npc_regard_event_to_track(event: 'NpcRegardEvent') -> 'RelationshipTrackProgress | None' - Mirror one NpcRegardEvent onto the PC's Regard/Friction system track (#2039).`
-- `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' - Move developed points from one track to another. No new value is added.`
-- `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' - Register a wronged character's one-sided grievance against whoever harmed them (#1429).`
+- `get_growth_config() -> 'RelationshipGrowthConfig'`
+- `get_or_create_side(*, source: 'CharacterSheet', target: 'CharacterSheet | None' = None, target_companion: 'Companion | None' = None) -> 'CharacterRelationship' - One character's side of a tie, created on first touch (#3957).`
+- `is_mutual(side: 'CharacterRelationship', type: 'RelationshipType', *, public_only: 'bool' = False) -> 'bool' - Both sides hold counterpart labels at Clandestine or Public (#3957).`
+- `known_label_q(source_id: 'int | OuterRef', target_ref: 'int | OuterRef | F | None' = None, type_ref=None, *, awareness=(LabelAwareness.CLANDESTINE, LabelAwareness.PUBLIC)) -> 'Q' - Labels the OTHER side may see, declared under a still-open tenure.`
+- `mirror_npc_regard_event(event: 'NpcRegardEvent') -> 'CharacterRelationship | None' - Mirror one NpcRegardEvent onto the PC's gauges toward the NPC (#2039, #3957).`
+- `move_gauges(*, side: 'CharacterRelationship', amount: 'int') -> 'None' - Positive adds Affection, negative adds Conflict; both floors are zero.`
+- `mutual_hostile(a_sheet: 'CharacterSheet', b_sheet: 'CharacterSheet') -> 'bool' - The one predicate consent's RIVALS mode and the journals' Retort gate read.`
+- `mutual_hostile_expression(viewer_sheet_id: 'int', other_ref: 'str' = 'author_id') - ``mutual_hostile`` as an annotatable expression against ``OuterRef(other_ref)``.`
+- `process_weekly_relationship_allocations() -> 'int' - The weekly turn: every allocation the pool can pay becomes depth (#3957).`
+- `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None) -> 'CharacterRelationship' - A wronged character's one-sided grievance: Conflict added on their side (#1429, #3957).`
 - `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' - Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
+- `set_allocation(*, side: 'CharacterRelationship', ap_amount: 'int') -> 'RelationshipAllocation'`
+- `set_summary(*, side: 'CharacterRelationship', summary: 'str') -> 'CharacterRelationship'`
+- `shift_label(*, label: 'RelationshipLabel', new_type: 'RelationshipType', note: 'str' = '') -> 'RelationshipLabel' - Change one label into another: the old row ends, the new one remembers it.`
 - `soul_tether_active(a_sheet: 'CharacterSheet', b_sheet: 'CharacterSheet') -> 'bool' - Check whether two characters have an active Soul Tether bond.`
+- `spend_xp_for_character(sheet: 'CharacterSheet', amount: 'int', description: 'str', *, reason: 'str' = ProgressionReason.XP_PURCHASE, gm: 'AccountDB | None' = None) -> 'XPTransaction | None' - Debit the account's pool for something bought for ``sheet``, and attribute it.`
 
 
 ## world.room_features
@@ -8157,8 +8109,6 @@
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
   - friendships_made <- scenes.Friendship
   - friendships_received <- scenes.Friendship
-  - rivalries_made <- scenes.Rivalry
-  - rivalries_received <- scenes.Rivalry
 
 ### Soul
 **Pointed to by:**
@@ -8263,7 +8213,6 @@
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - combat_round_actions <- combat.CombatRoundAction
   - clash_contributions <- combat.ClashContribution
-  - referencing_updates <- relationships.RelationshipUpdate
   - relationship_bumps <- relationships.RelationshipBump
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
@@ -8526,11 +8475,6 @@
   - witness_target <- justice.WitnessReactionTarget
   - reactions <- scenes.WindowReaction
 
-### Rivalry
-**Foreign Keys:**
-  - rivaler_tenure -> roster.RosterTenure [FK]
-  - rival_tenure -> roster.RosterTenure [FK]
-
 ### Scene
 **Foreign Keys:**
   - location -> evennia.ObjectDB [FK] (nullable)
@@ -8572,9 +8516,6 @@
   - npc_regard_events <- npc_services.NpcRegardEvent
   - petitions <- player_submissions.Petition
   - check_proposals <- player_submissions.CheckProposal
-  - relationshipupdate_set <- relationships.RelationshipUpdate
-  - relationshipdevelopment_set <- relationships.RelationshipDevelopment
-  - relationshipcapstone_set <- relationships.RelationshipCapstone
   - affection_shifts <- relationships.AffectionShift
   - clocks <- scenes.SceneClock
   - participations <- scenes.SceneParticipation
@@ -8780,7 +8721,6 @@
 **Foreign Keys:**
   - secret -> secrets.Secret [FK]
   - victim_sheet -> character_sheets.CharacterSheet [FK]
-  - capstone -> relationships.RelationshipCapstone [FK] (nullable)
 
 ### SecretKnowledge
 **Foreign Keys:**
@@ -8804,7 +8744,7 @@
 - `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' - The secrets a character has **learned about others** — held records (#1334).`
 - `mint_accusation(*, accuser_persona: 'Persona', subject_sheet: 'CharacterSheet', content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' - Mint a player-authored ACCUSATION — a false scandal about *someone else* (#1825).`
 - `mint_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet', founded_on: 'Secret') -> 'Leverage' - Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).`
-- `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' - A secret's victim registers a grievance against its subject (#1429).`
+- `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None) -> 'CharacterRelationship' - A secret's victim registers a grievance against its subject (#1429).`
 - `reveal_leveraged_secret(*, revealer_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' - Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).`
 - `reverse_secret_exposure(secret: 'Secret', *, numerator: 'int' = 1, denominator: 'int' = 1) -> 'None' - Apply compensating reputation bumps for a secret's prior exposure (#1825).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' - Whether this character already holds the fact of this secret (#1334).`
@@ -8922,7 +8862,7 @@
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' - Apply weekly rust to all untrained skills.`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
-- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int - Highest relationship tier character_a holds toward character_b (0 = none).`
+- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`

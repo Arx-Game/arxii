@@ -71,7 +71,9 @@ vi.mock('@/species/queries', () => ({
 // The other sections each own a tree of queries that are not what these tests are
 // about; stub them so a section switch renders a marker instead of a panel.
 vi.mock('@/character_sheets/components/sheet/panels', () => ({
-  TiesPanel: () => <div data-testid="ties-panel" />,
+  TiesPanel: ({ ties, tiesApThisWeek }: { ties: unknown[]; tiesApThisWeek: number | null }) => (
+    <div data-testid="ties-panel" data-tie-count={ties.length} data-ap={tiesApThisWeek ?? ''} />
+  ),
   DistinctionsPanel: () => <div data-testid="distinctions-panel" />,
   MagicPanel: () => <div data-testid="magic-panel" />,
   KnowledgePanel: () => <div data-testid="knowledge-panel" />,
@@ -89,9 +91,6 @@ vi.mock('@/narrative/components/MessagesSection', () => ({
 }));
 vi.mock('@/friends/components/FriendButton', () => ({
   FriendButton: () => <button type="button">Friend</button>,
-}));
-vi.mock('@/friends/components/RivalButton', () => ({
-  RivalButton: () => <button type="button">Rival</button>,
 }));
 vi.mock('@/character_sheets/components/OriginStoryEditorDialog', () => ({
   OriginStoryEditorDialog: () => <div data-testid="origin-story-editor" />,
@@ -187,6 +186,8 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     keyring: [],
     standing: { memberships: [], reputations: [] },
     covenants: [],
+    ties: [],
+    ties_ap_this_week: null,
     ...overrides,
   };
 }
@@ -391,7 +392,7 @@ describe('CharacterSheetPage', () => {
     expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'verdigris');
   });
 
-  it('offers the Journal door to a stranger, alongside the Friend/Rival buttons', () => {
+  it('offers the Journal door to a stranger, alongside the Friend button', () => {
     setEntry(ENTRY);
     setOwnership(false);
     mountSheet();
@@ -400,10 +401,11 @@ describe('CharacterSheetPage', () => {
       '/journals?writer=42'
     );
     expect(screen.getByRole('button', { name: 'Friend' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Rival' })).toBeInTheDocument();
+    // Rival went with #3957: an enemy is an IC label on a tie now, not an OOC opt-in.
+    expect(screen.queryByRole('button', { name: 'Rival' })).not.toBeInTheDocument();
   });
 
-  it('offers the owner the Journal door too, but never the Friend/Rival buttons', () => {
+  it('offers the owner the Journal door too, but never the Friend button', () => {
     setEntry(ENTRY);
     setOwnership(true);
     mountSheet();
@@ -412,7 +414,6 @@ describe('CharacterSheetPage', () => {
       '/journals?writer=42'
     );
     expect(screen.queryByRole('button', { name: 'Friend' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Rival' })).not.toBeInTheDocument();
   });
 
   it('falls back to the default ink before the payload arrives', () => {
@@ -422,5 +423,34 @@ describe('CharacterSheetPage', () => {
     } as unknown as ReturnType<typeof useCharacterSheetQuery>);
     const { container } = mountSheet();
     expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'ember');
+  });
+
+  it("hands the payload's cast and weekly AP to the Ties section (#3957)", async () => {
+    setEntry(ENTRY);
+    setOwnership(true);
+    mockUseCharacterSheetQuery.mockReturnValue({
+      data: makeSheet({
+        ties: [
+          {
+            relationship_id: 77,
+            other_name: 'Corvin Ashe',
+            other_sheet_id: 12,
+            other_entry_id: 34,
+            other_companion_id: null,
+            labels: [],
+            depth: 340,
+            tier: 2,
+            summary_line: '',
+            thread: null,
+          },
+        ],
+        ties_ap_this_week: 12,
+      }),
+    } as unknown as ReturnType<typeof useCharacterSheetQuery>);
+    mountSheet();
+    await userEvent.click(screen.getByRole('button', { name: 'Ties' }));
+    const panel = screen.getByTestId('ties-panel');
+    expect(panel).toHaveAttribute('data-tie-count', '1');
+    expect(panel).toHaveAttribute('data-ap', '12');
   });
 });

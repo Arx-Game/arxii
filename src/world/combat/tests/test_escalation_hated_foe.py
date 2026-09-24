@@ -16,13 +16,12 @@ from world.combat.services import add_opponent, join_encounter
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
-from world.relationships.constants import TrackSign
+from world.relationships.constants import TypeValence
 from world.relationships.factories import (
     CharacterRelationshipFactory,
-    RelationshipTrackFactory,
-    RelationshipTrackProgressFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
 )
-from world.relationships.models import CharacterRelationship
 from world.scenes.factories import PersonaFactory
 
 
@@ -39,17 +38,16 @@ class HatedFoeSpikeTests(TestCase):
         self.foe_sheet = CharacterSheetFactory()
         self.foe_persona = PersonaFactory(character_sheet=self.foe_sheet)
 
-    def _hate(self, *, points=0, sign=TrackSign.NEGATIVE, fuels=True):
-        track = RelationshipTrackFactory(sign=sign, fuels_escalation_spikes=fuels)
+    def _hate(self, *, points=0, valence=TypeValence.HOSTILE, fuels=True):
+        rel_type = RelationshipTypeFactory(valence=valence, fuels_escalation_spikes=fuels)
         relationship = CharacterRelationshipFactory(
             source=self.pc.character_sheet,
             target=self.foe_sheet,
             is_active=True,
-            is_pending=False,
         )
-        RelationshipTrackProgressFactory(
-            relationship=relationship, track=track, developed_points=points, capacity=max(points, 1)
-        )
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
+        relationship.invested_depth = points
+        relationship.save()
 
     def _intensity(self) -> int:
         return CharacterEngagement.objects.get(character=self.pc_char.sheet_data).intensity_modifier
@@ -92,8 +90,8 @@ class HatedFoeSpikeTests(TestCase):
 
         self.assertEqual(self._intensity(), self.curve.hated_foe_spike_intensity_amount)
 
-    def test_no_surge_on_positive_sign_track(self):
-        self._hate(sign=TrackSign.POSITIVE)
+    def test_no_surge_on_warm_label(self):
+        self._hate(valence=TypeValence.WARM)
 
         add_opponent(
             self.encounter,
@@ -136,7 +134,7 @@ class HatedFoeSpikeTests(TestCase):
         )
         self._hate()
         CharacterRelationshipFactory(
-            source=pc.character_sheet, target=self.foe_sheet, is_active=True, is_pending=False
+            source=pc.character_sheet, target=self.foe_sheet, is_active=True
         )
 
         opponent = CombatOpponentFactory(encounter=plain_encounter, persona=self.foe_persona)
@@ -157,16 +155,15 @@ class HatedFoeSpikeTests(TestCase):
         self._hate()
         CombatOpponentFactory(encounter=self.encounter, persona=self.foe_persona)
         latecomer_sheet = CharacterSheetFactory()
-        CharacterRelationshipFactory(
-            source=latecomer_sheet, target=self.foe_sheet, is_active=True, is_pending=False
+        relationship = CharacterRelationshipFactory(
+            source=latecomer_sheet, target=self.foe_sheet, is_active=True
         )
-        track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE, fuels_escalation_spikes=True)
-        relationship = CharacterRelationship.objects.get(
-            source=latecomer_sheet, target=self.foe_sheet
+        rel_type = RelationshipTypeFactory(
+            valence=TypeValence.HOSTILE, fuels_escalation_spikes=True
         )
-        RelationshipTrackProgressFactory(
-            relationship=relationship, track=track, developed_points=1, capacity=1
-        )
+        RelationshipLabelFactory(relationship=relationship, type=rel_type)
+        relationship.invested_depth = 1
+        relationship.save()
         self.encounter.status = "declaring"
         self.encounter.save(update_fields=["status"])
 

@@ -37,7 +37,6 @@ export interface SubmitGrievancePayload {
   viewer: number;
   option?: number;
   customPoints?: number;
-  customTrack?: number;
 }
 
 /** Register the active character's grievance against a secret's subject (#1429). */
@@ -49,7 +48,6 @@ export async function submitGrievance(payload: SubmitGrievancePayload): Promise<
       viewer: payload.viewer,
       option: payload.option ?? null,
       custom_points: payload.customPoints ?? null,
-      custom_track: payload.customTrack ?? null,
     }),
   });
   if (!res.ok) {

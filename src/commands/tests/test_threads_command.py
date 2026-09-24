@@ -82,6 +82,73 @@ class CmdThreadsListTests(TestCase):
         self.assertIn("no active threads", msg.lower())
 
 
+class CmdThreadsListRelationshipLabelQueryCountTests(TestCase):
+    """`threads list` prefetches RELATIONSHIP_TRACK anchor labels (#3957 review Important 4).
+
+    `_anchor_label_for` used to call `side.open_labels().first()` per thread — a fresh
+    filtered query per RELATIONSHIP_TRACK thread listed. Pins the query count flat
+    across N such threads.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.relationships.factories import RelationshipLabelFactory, RelationshipTypeFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.rel_type = RelationshipTypeFactory(name="Loyalty")
+        cls.threads = []
+        for _ in range(3):
+            thread = ThreadFactory(
+                owner=cls.sheet,
+                resonance=cls.resonance,
+                as_track_thread=True,
+                level=2,
+            )
+            RelationshipLabelFactory(relationship=thread.target_relationship, type=cls.rel_type)
+            cls.threads.append(thread)
+
+    def _run_list(self) -> str:
+        from commands.threads import CmdThreads
+
+        caller = MagicMock()
+        caller.sheet_data = self.sheet
+        caller.msg = MagicMock()
+        cmd = CmdThreads()
+        cmd.caller = caller
+        cmd.args = ""
+        cmd.func()
+        return caller.msg.call_args[0][0]
+
+    def test_query_count_flat_across_relationship_threads(self) -> None:
+        # Baseline with a single thread.
+        from world.magic.models import Thread
+
+        Thread.objects.filter(owner=self.sheet).exclude(pk=self.threads[0].pk).delete()
+        with self.assertNumQueries(2):
+            msg_one = self._run_list()
+        self.assertIn(self.rel_type.name, msg_one)
+
+        # Restore all three threads and confirm the query count doesn't scale with N.
+        Thread.objects.filter(owner=self.sheet).delete()
+        for _ in range(3):
+            from world.magic.factories import ThreadFactory
+            from world.relationships.factories import RelationshipLabelFactory
+
+            thread = ThreadFactory(
+                owner=self.sheet,
+                resonance=self.resonance,
+                as_track_thread=True,
+                level=2,
+            )
+            RelationshipLabelFactory(relationship=thread.target_relationship, type=self.rel_type)
+        with self.assertNumQueries(2):
+            msg_many = self._run_list()
+        self.assertEqual(msg_many.count(self.rel_type.name), 3)
+
+
 class CmdThreadsCrossingTests(TestCase):
     """threads crossing list / choose dispatches to the action."""
 

@@ -16,7 +16,7 @@ class PuppetActorMixin:
     def _resolve_actor(self, request):
         """Return the caller's selected character if they own its sheet.
 
-        Mirrors ``world.relationships.views.RelationshipUpdateViewSet._resolve_actor``.
+        Mirrors ``world.relationships.views.CharacterRelationshipViewSet._resolve_actor``.
         Returns the ObjectDB character (puppet) or ``None`` when resolution
         fails — caller should respond with HTTP 400.
         """
