@@ -4,8 +4,6 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
-from world.seeds.tests.content_stub import stub_content_root
-
 
 class TestGameSetupView(TestCase):
     @classmethod
@@ -21,14 +19,9 @@ class TestGameSetupView(TestCase):
         resp = self.client.get(reverse("admin_game_setup"))
         self.assertIn(resp.status_code, (403, 302))  # 302 = redirect-to-login also acceptable
 
-    @stub_content_root()
     def test_superuser_sees_hub_inventory_and_links(self) -> None:
-        """Superuser sees the welcome copy, the Big Button, and the per-cluster inventory."""
-        from world.seeds.database import seed_dev_database
-
+        """Superuser sees the setup links and inventory, even before seeding."""
         self.client.force_login(self.super)
-        # Seed a little so the inventory shows non-zero counts.
-        seed_dev_database()
         resp = self.client.get(reverse("admin_game_setup"))
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()

@@ -128,7 +128,9 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Eight shards balanced by MEASURED RUNTIME, not test count
+          # Ten shards balanced by measured runtime. Test counts and the old
+          # per-app estimates drifted substantially as these suites grew, so
+          # oversized apps are split below rather than left on one shard.
           # (rebalanced from 6 shards 2026-07-17; corrected same day from the
           # first 8-shard run's measured "Run tests" step seconds — run
           # 29547709130). Test count was the old metric and it lied:
@@ -230,15 +232,16 @@ jobs:
             apps: >-
               actions world.progression world.forms world.events world.currency
               world.clues world.species world.captivity world.military
-          # shard-6 (~344s): world.stories (118) + world.battles (106)
-          #   + world.character_creation (38) + web (30) + world.codex (17)
-          #   + world.companions (14) + world.ships (7) + world.achievements (6)
-          #   + world.dreams (3) + world.tidings (3) + behaviors (1)
+          # shard-6: the smaller half of world.stories + battles and the
+          # remaining small apps. web and character_creation move to shard-9
+          # so this shard no longer carries three oversized suites together.
           - name: shard-6
+            split_app: world.stories
+            split_part: 1
+            split_of: 2
             apps: >-
-              world.stories world.battles world.character_creation web world.codex
-              world.companions world.ships world.achievements world.dreams
-              world.tidings behaviors
+              world.battles world.codex world.companions world.ships
+              world.achievements world.dreams world.tidings behaviors
           # shard-7 (~344s): world.scenes (150) + world.areas (78) + flows (37)
           #   + world.buildings (30) + world.vitals (17) + core_management (10)
           #   + world.player_submissions (8) + world.staff_inbox (7)
@@ -257,6 +260,18 @@ jobs:
               commands world.missions world.relationships world.roster world.secrets
               world.goals world.agriculture world.journals world.tarot
               world.ceremonies world.worship
+          # shard-9: the second half of world.stories by itself.
+          # split_test_labels.py keeps the story halves complete and disjoint as
+          # test modules change.
+          - name: shard-9
+            split_app: world.stories
+            split_part: 2
+            split_of: 2
+            apps: ""
+          # shard-10: web and character_creation. Their old estimate was small,
+          # but both suites are now large enough to keep off the story shards.
+          - name: shard-10
+            apps: world.character_creation web
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
@@ -360,6 +375,8 @@ jobs:
           # Keep the same labels and assertions, but run this shard serially so
           # a runner serialization error cannot mask the test result.
           if [[ "${{ matrix.shard.name }}" == "shard-7" ]]; then
+            # Shard 7 contains a teardown path that is not safe under
+            # multiprocessing. Keep its tests and assertions unchanged.
             uv run arx test --keepdb $LABELS -- --durations 25
           else
             uv run arx test --keepdb --parallel $LABELS -- --durations 25
