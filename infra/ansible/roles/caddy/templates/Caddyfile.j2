@@ -50,9 +50,45 @@
 	# STATIC_ROOT doesn't itself contain a "static/" subdirectory (collect
 	# static populates it flat), so handle_path strips the /static prefix
 	# before file_server resolves it against caddy_static_root.
+	#
+	# Cache headers and lookup order (#4004). The deploy rebuilds the live
+	# tree in place, and Django serves the new dist/index.html as soon as
+	# `pnpm build` writes it, while its hashed assets reach STATIC_ROOT only
+	# when collectstatic finishes. So /static/dist/* is served from the Vite
+	# output first (caddy_frontend_static_root) and from STATIC_ROOT second:
+	# a new page finds its assets at once, and a page from the previous build
+	# still finds its own old hashes in STATIC_ROOT (collectstatic never
+	# deletes). Hashed assets never change under one name, so they are
+	# immutable. A miss is no-store: with no header, Cloudflare's Browser
+	# Cache TTL made browsers keep a deploy-window 404 for 4 hours.
+	# `route` keeps the order literal; the final handle's header replaces
+	# the immutable one on a miss.
 	handle_path /static/* {
-		root * {{ caddy_static_root }}
-		file_server
+		@hashed path /dist/assets/*
+		@built {
+			path /dist/*
+			file {
+				root {{ caddy_frontend_static_root }}
+			}
+		}
+		@collected file {
+			root {{ caddy_static_root }}
+		}
+		route {
+			header @hashed Cache-Control "public, max-age=31536000, immutable"
+			handle @built {
+				root * {{ caddy_frontend_static_root }}
+				file_server
+			}
+			handle @collected {
+				root * {{ caddy_static_root }}
+				file_server
+			}
+			handle {
+				header Cache-Control "no-store"
+				respond 404
+			}
+		}
 	}
 
 

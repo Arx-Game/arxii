@@ -49,6 +49,14 @@ resource "cloudflare_zone_settings_override" "this" {
     min_tls_version          = "1.2"
     tls_1_3                  = "on"
     automatic_https_rewrites = "on"
+
+    # 0 = "Respect Existing Headers". The dashboard default (14400, 4 hours)
+    # stamped `max-age=14400` onto every origin response that sent no
+    # Cache-Control, 404s included, so a deploy-window 404 for a hashed
+    # frontend asset kept the page blank in that browser for 4 hours (#4004).
+    # Caddy now sends the cache policy itself (immutable hashed assets,
+    # no-store misses); the edge passes it through unchanged.
+    browser_cache_ttl = 0
   }
 }
 
