@@ -1,17 +1,48 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Provider } from 'react-redux';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { store } from '@/store/store';
 import { addConsoleLine, resetGame, startSession } from '@/store/gameSlice';
 import { StaffConsole } from './StaffConsole';
 
+const sendConsole = vi.fn();
+
 function renderConsole(active = false) {
   return render(
     <Provider store={store}>
-      <StaffConsole character="Aria" active={active} />
+      <StaffConsole character="Aria" active={active} sendConsole={sendConsole} />
     </Provider>
   );
 }
+
+describe('StaffConsole restart (#4001)', () => {
+  beforeEach(() => {
+    store.dispatch(resetGame());
+    store.dispatch(startSession('Aria'));
+    sendConsole.mockReset();
+  });
+
+  it('asks before restarting, and Cancel sends nothing', () => {
+    renderConsole();
+    fireEvent.click(screen.getByRole('button', { name: 'Console' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restart game' }));
+    expect(screen.getByText(/come back/)).toBeInTheDocument();
+    expect(sendConsole).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText(/come back/)).not.toBeInTheDocument();
+    expect(sendConsole).not.toHaveBeenCalled();
+  });
+
+  it('sends @reboot through the console once confirmed', () => {
+    renderConsole();
+    fireEvent.click(screen.getByRole('button', { name: 'Console' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restart game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restart for everyone' }));
+    expect(sendConsole).toHaveBeenCalledTimes(1);
+    expect(sendConsole).toHaveBeenCalledWith('Aria', '@reboot');
+    expect(screen.queryByText(/come back/)).not.toBeInTheDocument();
+  });
+});
 
 describe('StaffConsole (#3857)', () => {
   beforeEach(() => {
