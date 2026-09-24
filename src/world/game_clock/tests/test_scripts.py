@@ -1,8 +1,9 @@
 """Tests for the GameTickScript."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from django.test import TestCase
+from twisted.internet.task import LoopingCall
 
 
 class GameTickRepeatTests(TestCase):
@@ -136,8 +137,10 @@ class MaintenanceLoopRearmTests(TestCase):
         from world.game_clock.scripts import GameTickScript
 
         mock_run.return_value = []
-        task = mock_evennia.EVENNIA_SERVER_SERVICE.maintenance_task
+        # Autospec so a drift on LoopingCall.start fails here, not in production.
+        task = create_autospec(LoopingCall, instance=True)
         task.running = False
+        mock_evennia.EVENNIA_SERVER_SERVICE.maintenance_task = task
 
         GameTickScript.at_repeat(MagicMock())
 
@@ -155,8 +158,9 @@ class MaintenanceLoopRearmTests(TestCase):
         from world.game_clock.scripts import GameTickScript
 
         mock_run.return_value = []
-        task = mock_evennia.EVENNIA_SERVER_SERVICE.maintenance_task
+        task = create_autospec(LoopingCall, instance=True)
         task.running = True
+        mock_evennia.EVENNIA_SERVER_SERVICE.maintenance_task = task
 
         GameTickScript.at_repeat(MagicMock())
 

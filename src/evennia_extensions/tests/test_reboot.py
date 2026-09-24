@@ -2,9 +2,21 @@
 
 from pathlib import Path
 import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from django.test import SimpleTestCase
+from evennia.server.sessionhandler import ServerSessionHandler
+
+
+def _handler(mock_evennia: MagicMock) -> MagicMock:
+    """Stand a signature-checked ServerSessionHandler in for the real one.
+
+    A bare MagicMock accepts any call shape, so a drift on ``announce_all`` or
+    ``portal_shutdown`` would stay green; an autospec fails it.
+    """
+    handler = create_autospec(ServerSessionHandler, instance=True)
+    mock_evennia.SESSION_HANDLER = handler
+    return handler
 
 
 class RequestRebootTests(SimpleTestCase):
@@ -30,7 +42,7 @@ class RequestRebootTests(SimpleTestCase):
 
     @patch("evennia_extensions.reboot.evennia")
     def test_writes_the_request_file_before_shutting_down(self, mock_evennia: MagicMock) -> None:
-        handler = mock_evennia.SESSION_HANDLER
+        handler = _handler(mock_evennia)
         seen_at_shutdown: list[bool] = []
         handler.portal_shutdown.side_effect = lambda: seen_at_shutdown.append(
             self.request_file.exists()
@@ -43,7 +55,7 @@ class RequestRebootTests(SimpleTestCase):
 
     @patch("evennia_extensions.reboot.evennia")
     def test_announces_to_everyone_naming_who_asked(self, mock_evennia: MagicMock) -> None:
-        handler = mock_evennia.SESSION_HANDLER
+        handler = _handler(mock_evennia)
 
         self._request(requested_by="Apostate")
 
@@ -57,7 +69,7 @@ class RequestRebootTests(SimpleTestCase):
         self, mock_evennia: MagicMock
     ) -> None:
         """No file means the watchdog would never start the game again."""
-        handler = mock_evennia.SESSION_HANDLER
+        handler = _handler(mock_evennia)
         # A file where the parent directory should be makes mkdir/write fail.
         self.request_file.parent.parent.mkdir(parents=True, exist_ok=True)
         self.request_file.parent.write_text("not a directory")

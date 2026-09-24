@@ -38,6 +38,8 @@ test.describe('staff console: Restart game asks first, then sends @reboot (#4001
     const sheet = page.getByRole('dialog', { name: 'Console' });
     await expect(sheet).toBeVisible();
     await expect(sheet.getByRole('button', { name: 'Restart game' })).toBeVisible();
+    // Let the sheet's slide-in finish so the capture shows it in place.
+    await page.waitForTimeout(500);
     await page.screenshot({ path: shot('console-restart-control-1280.png'), fullPage: true });
 
     // The control asks first; nothing goes to the server yet.
