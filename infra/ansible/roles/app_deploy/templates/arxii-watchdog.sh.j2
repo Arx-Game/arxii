@@ -44,6 +44,16 @@ SERVICE="{{ app_service }}.service"
 SERVER_PID="{{ app_pidfile }}"
 PORTAL_PID="{{ app_portal_pidfile }}"
 GRACE_PERIOD_S=120
+# Staff @reboot (#4001): the game writes this file, then shuts both daemons
+# down the way @shutdown does. The game user cannot touch systemd, and
+# Restart=always was rejected (it would turn every deliberate @shutdown into
+# a restart), so THIS is what brings the unit back: inactive unit + fresh
+# request file = start. The file is deleted before the start so a start that
+# fails cannot loop, and a request older than the bound is discarded (a
+# forgotten file must never start a game somebody stopped on purpose later).
+# Same path as src/evennia_extensions/reboot.py; acceptance.sh checks the two agree.
+REBOOT_REQUEST="{{ app_gamedir }}/server/reboot.requested"
+REBOOT_REQUEST_MAX_AGE_S=600
 
 log() { printf '[watchdog] %s\n' "$*"; }
 
@@ -82,6 +92,22 @@ if [ "${active_state}" != "active" ]; then
     fi
     exit 0
   fi
+  if [ "${active_state}" = "inactive" ] && [ -f "${REBOOT_REQUEST}" ]; then
+    now_s="$(date +%s)"
+    request_s="$(stat -c %Y "${REBOOT_REQUEST}" 2>/dev/null || echo 0)"
+    request_age_s=$(( now_s - request_s ))
+    rm -f "${REBOOT_REQUEST}"
+    if [ "${request_age_s}" -gt "${REBOOT_REQUEST_MAX_AGE_S}" ]; then
+      log "reboot request is ${request_age_s}s old (> ${REBOOT_REQUEST_MAX_AGE_S}s) — discarded, not starting"
+      exit 0
+    fi
+    log "reboot requested from inside the game ${request_age_s}s ago — starting ${SERVICE}"
+    systemctl start "${SERVICE}" || log "start failed; the deploy button or a human takes it from here"
+    if [ -x /usr/local/sbin/arxii-alert ]; then
+      /usr/local/sbin/arxii-alert "watchdog started ${SERVICE} after a staff @reboot request"
+    fi
+    exit 0
+  fi
   log "unit not active (${active_state}) — nothing to do"
   exit 0
 fi
@@ -91,8 +117,8 @@ fi
 # state" from "something is happening right now".
 sub_state="$(systemctl show -p SubState --value "${SERVICE}" 2>/dev/null || true)"
 case "${sub_state}" in
-  reload|activating|auto-restart|start*)
-    log "unit sub-state is '${sub_state}' — deploy/restart in flight, skipping this run"
+  reload|activating|auto-restart|start*|deactivating|stop*)
+    log "unit sub-state is '${sub_state}' — deploy/restart/stop in flight, skipping this run"
     exit 0
     ;;
 esac
