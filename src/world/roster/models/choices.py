@@ -56,6 +56,18 @@ class RosterType(models.TextChoices):
     NPC = "NPC", "NPC"  # Never claimable, never swept (#2728 §10)
 
 
+class SlotHolderKind(models.TextChoices):
+    """What occupies one of an account's character slots (#3996).
+
+    ``FROZEN`` is listed but not counted: the tenure is kept while the slot is free.
+    """
+
+    CHARACTER = "character", "Character"
+    FROZEN = "frozen", "Frozen character"
+    DRAFT = "draft", "Character-creation draft"
+    APPLICATION = "application", "Pending roster application"
+
+
 class ActivityRequirement(models.TextChoices):
     """Per-Roster activity bar for inactivity-detection (#671).
 

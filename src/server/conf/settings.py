@@ -338,9 +338,11 @@ OVERWORLD_MAX_HOPS = env.int("OVERWORLD_MAX_HOPS", default=20)
 # cost, not a Project-scale grind (issue #2222 Decision 4).
 PORTAL_ANCHOR_INSTALL_COST = env.int("PORTAL_ANCHOR_INSTALL_COST", default=5000)
 
-# Max number of characters (drafts + owned) a non-staff account may hold at
-# once, enforced by character_creation.services.can_create_character (#3046).
-CG_MAX_CHARACTERS = env.int("CG_MAX_CHARACTERS", default=3)
+# Character slots (#3996): how many characters a non-staff account may hold at
+# once before it must freeze or give one up. Baseline for every account; staff
+# grant more per account through PlayerData.extra_character_slots. Counted by
+# world.roster.services.slots, the only place that counts.
+CHARACTER_SLOTS_BASELINE = env.int("CHARACTER_SLOTS_BASELINE", default=4)
 
 # Web frontend base URL — the React app's origin. Referenced by allauth's
 # headless redirect config below, CSRF_TRUSTED_ORIGINS, and telnet-side
