@@ -12,6 +12,8 @@ issue=""
 body_file=""
 labels=""
 allow_legacy=0
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+LEGACY_ALLOWLIST="$SCRIPT_DIR/../references/legacy-approved-issues.txt"
 while (($#)); do
   case "$1" in
     --body-file)
@@ -61,6 +63,10 @@ has_label() {
   [[ ",$labels," == *"$wanted"* ]]
 }
 
+is_allowlisted_legacy_issue() {
+  [[ -f "$LEGACY_ALLOWLIST" ]] && grep -Eq "^${issue}[[:space:]]*\|" "$LEGACY_ALLOWLIST"
+}
+
 # The actual marker must be before spec:start. Examples inside the spec do not
 # count, because spec rewrites must not be able to change workflow state.
 prefix=$(awk '/<!-- spec:start -->/{exit} {print}' <<<"$body")
@@ -68,8 +74,12 @@ markers=$(grep -Eo '<!-- discovery:lane=(lightweight|standard|heavyweight);state
 marker_count=$(grep -c . <<<"$markers" || true)
 if [[ "$marker_count" -ne 1 ]]; then
   if [[ "$allow_legacy" == "1" && "$marker_count" == "0" ]] && has_label status:implementing && has_label spec:approved; then
-    printf 'discovery: legacy-approved issue=%s (marker migration pending)\n' "$issue"
-    exit 0
+    if is_allowlisted_legacy_issue; then
+      printf 'discovery: legacy-approved issue=%s (marker migration pending)\n' "$issue"
+      exit 0
+    fi
+    echo "discovery: issue $issue is not in the temporary legacy compatibility allowlist" >&2
+    exit 1
   fi
   echo "discovery: expected exactly one state marker before spec:start" >&2
   exit 1

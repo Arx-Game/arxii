@@ -188,8 +188,9 @@ standard/heavyweight even when the issue is labeled `docs` or `chore`.
 For clearly bounded work — an obvious bug or routine maintenance with an explicit
 outcome, an existing pattern, no meaningful fork, and low impact — write
 `<!-- discovery:lane=lightweight;state=complete -->` outside the spec markers.
-Run `scripts/validate-discovery.sh <N>`, then flip `status:spec-draft` to
-`status:implementing` and proceed without `spec:approved`. This reason must remain
+Run `scripts/validate-discovery.sh <N>`, then run
+`scripts/transition-issue-phase.sh <N> status:spec-draft status:implementing`
+and proceed without `spec:approved`. This reason must remain
 visible in the assessment. Do not use the lightweight lane merely because a label
 looks simple.
 
@@ -260,7 +261,9 @@ later gets closed as should-not-do (#1357/#1358).
 
 Then hand off for **spec review** and exit:
 
-1. `gh issue edit <N> --remove-label status:spec-draft --add-label status:spec-review`.
+1. Run `tools/skills/issue-to-merged-pr/scripts/transition-issue-phase.sh <N> status:spec-draft status:spec-review`.
+   The helper revalidates the exact issue snapshot after the label change and
+   fails closed if the body, discovery marker, labels, or claim changed.
 2. Post a comment that @-mentions the review target (default `@TehomCD`;
    configurable to a `@Arx-Game/<team>` handle) and links the spec section.
 3. **Exit.** Spec review is async and on a human. Do NOT proceed to plan or
@@ -276,9 +279,10 @@ section.
 ### 3. Implementation
 
 Entry condition: the issue carries `spec:approved` (a member approved the spec
-on the issue). On entry, flip the lane:
-`gh issue edit <N> --remove-label status:spec-review --add-label status:implementing`.
-Create the worktree (`superpowers:using-git-worktrees`) — but if you ran
+on the issue). On entry, run
+`tools/skills/issue-to-merged-pr/scripts/transition-issue-phase.sh <N> status:spec-review status:implementing`.
+The helper verifies that the member approval and claim remain unchanged after
+moving the label. Create the worktree (`superpowers:using-git-worktrees`) — but if you ran
 `start-work.sh` during Pickup, the worktree already exists; the
 `using-git-worktrees` skill's Step 0 will detect you're already isolated and
 skip creation. Then invoke `superpowers:writing-plans` to produce the

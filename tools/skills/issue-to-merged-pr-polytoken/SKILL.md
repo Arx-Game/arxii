@@ -142,9 +142,10 @@ labeled `docs` or `chore`.
 
 For clearly bounded work, write `<!-- discovery:lane=lightweight;state=complete -->`
 outside the spec markers. Run
-`tools/skills/issue-to-merged-pr/scripts/validate-discovery.sh <N>`, flip
-`status:spec-draft` to `status:implementing`, and proceed without `spec:approved`.
-Keep the reason visible. Do not use this lane merely because a label looks simple.
+`tools/skills/issue-to-merged-pr/scripts/validate-discovery.sh <N>`, then run
+`tools/skills/issue-to-merged-pr/scripts/transition-issue-phase.sh <N> status:spec-draft status:implementing`
+and proceed without `spec:approved`. Keep the reason visible. Do not use this
+lane merely because a label looks simple.
 
 For standard/heavyweight work, write the awaiting marker outside the spec markers
 and invoke the ported `brainstorming` skill. The root agent and stakeholder
@@ -184,7 +185,9 @@ The ported skill already bakes in:
 
 Then hand off for **spec review** and exit (the brainstorming skill's final
 step):
-1. `gh issue edit <N> --remove-label status:spec-draft --add-label status:spec-review`.
+1. Run `tools/skills/issue-to-merged-pr/scripts/transition-issue-phase.sh <N> status:spec-draft status:spec-review`.
+   The helper revalidates the exact issue snapshot after the label change and
+   fails closed if the body, discovery marker, labels, or claim changed.
 2. Post a comment that @-mentions the review target (default `@TehomCD`;
    configurable to a `@Arx-Game/<team>` handle) and links the spec section.
 3. **Exit.** Spec review is async and on a human. Do NOT proceed to plan or
@@ -199,9 +202,10 @@ Record the decision (ran vs. skipped) — it goes in the PR body's Notes section
 ### 3. Implementation
 
 Entry condition: the issue carries `spec:approved` (a member approved the spec on
-the issue). On entry, flip the lane:
-`gh issue edit <N> --remove-label status:spec-review --add-label status:implementing`.
-Create the worktree via the ported **`using-git-worktrees`** skill
+the issue). On entry, run
+`tools/skills/issue-to-merged-pr/scripts/transition-issue-phase.sh <N> status:spec-review status:implementing`.
+The helper verifies that the member approval and claim remain unchanged after
+moving the label. Create the worktree via the ported **`using-git-worktrees`** skill
 (`tools/skills/using-git-worktrees/`) — but if you ran `start-work.sh` during
 Pickup, the worktree already exists; the `using-git-worktrees` skill's Step 0
 will detect you're already isolated and skip creation. Then invoke the ported
