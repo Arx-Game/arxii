@@ -507,7 +507,17 @@ for cf in infra/ansible/roles/caddy/templates/Caddyfile.j2 \
   chk "${cf} carries the /static/* handle_path route" "grep -q 'handle_path /static/\\*' ${cf}"
   chk "${cf} references caddy_backend/caddy_ws_backend/caddy_static_root" \
     "grep -q 'caddy_backend' ${cf} && grep -q 'caddy_ws_backend' ${cf} && grep -q 'caddy_static_root' ${cf}"
+  # #4004: hashed assets from the Vite output first, immutable; a miss is
+  # never cached (a cached deploy-window 404 blanked the page for 4 hours).
+  chk "${cf} serves /static/dist/* from caddy_frontend_static_root first" \
+    "grep -q 'caddy_frontend_static_root' ${cf}"
+  chk "${cf} marks hashed /static/dist/assets/* immutable" \
+    "grep -q 'header @hashed Cache-Control \"public, max-age=31536000, immutable\"' ${cf}"
+  chk "${cf} sends no-store on a /static/* miss" \
+    "grep -q 'header Cache-Control \"no-store\"' ${cf}"
 done
+chk   "Cloudflare respects origin cache headers (browser_cache_ttl = 0, #4004)" \
+  "grep -qE '^\\s*browser_cache_ttl\\s*=\\s*0\\b' infra/terraform/modules/cloudflare_zone_security/main.tf"
 chk   "Caddyfile.rehearsal.j2 uses local_certs (no DNS-01, no Cloudflare cred)" \
   "grep -q 'local_certs' infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2"
 chkno "Caddyfile.rehearsal.j2 never uses acme_dns (would need a credential rehearsal doesn't have)" \

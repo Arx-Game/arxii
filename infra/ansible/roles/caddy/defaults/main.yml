@@ -31,6 +31,14 @@ caddy_ws_backend: "127.0.0.1:4002"
 # os.getcwd() when Django commands run from src/). app_deploy's collectstatic
 # populates this under the `current` symlink.
 caddy_static_root: "/opt/arxii/current/src/server/.static"
+# The parent of Vite's build output (frontend/vite.config.ts outDir =
+# src/web/static/dist), so /static/dist/* resolves here with the /static prefix
+# stripped. Caddy serves /static/dist/* from this tree first and falls back to
+# caddy_static_root. Django reads the new dist/index.html from this tree as soon
+# as `pnpm build` writes it, and its hashed assets reach caddy_static_root only
+# when collectstatic finishes, so serving from the build output closes that gap
+# (#4004).
+caddy_frontend_static_root: "/opt/arxii/current/src/web/static"
 # ACME behind Cloudflare proxy needs DNS-01 (HTTP-01 is intercepted by the
 # orange-cloud). DNS-01 requires Caddy BUILT WITH the caddy-dns/cloudflare
 # plugin (added idempotently by tasks/main.yml, which fetches the matching
