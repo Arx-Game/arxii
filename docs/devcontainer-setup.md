@@ -145,6 +145,23 @@ where you run Claude Code:
 claude --dangerously-skip-permissions
 ```
 
+**Refresh the dev database from production (optional, any time):**
+
+```bash
+just pull-prod yes
+```
+
+Drops the container's throwaway `arxiidev` and refills it from last night's
+production backup, then migrates it forward to the checkout's chain and proves
+the listing is clean. Every agent session in the container then reproduces bugs
+against real accounts, characters and codex entries instead of fixture data,
+and the migrate step catches data-dependent migration failures before the next
+deploy does. It never writes to production or the backup bucket (the key is
+read-only by construction). One-time setup on the host: `just dev-reader-env`
+(`infra/README.md` "Pull prod data down"). The MFA key `settings.py` needs is
+generated into `dev.env` by `sync-env.sh` on a fresh machine; an older `dev.env`
+without one needs a line added by hand (the pull script says how).
+
 ### Persistent sessions (zellij)
 
 A plain `dc-shell` rides on `docker exec`, which has **no reattach mechanism**: if

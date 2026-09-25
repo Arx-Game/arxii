@@ -108,6 +108,14 @@ BACKUPS_REGION="$(require ARXII_BACKUPS_REGION \
   "post-standup: cd infra/terraform/prod && tofu output -raw region — paste into src/.env")"
 DATABASE_URL_VAL="$(require DATABASE_URL \
   "src/.env is missing DATABASE_URL entirely — every local dev command needs this")"
+# settings.py reads MFA_SECRETS_KEY with no default, so without it the migrate
+# step below cannot even import settings - and Evennia's launcher exits 0 on
+# that failure, which is how a 2026-09-24 pull printed "pull complete" with
+# seventeen migrations unapplied. Check before touching the database. (The
+# value is only tested for presence; nothing here prints it.)
+require MFA_SECRETS_KEY \
+  "settings.py needs it to import at all; in the devcontainer it lives in .devcontainer/dev.env (sync-env.sh generates one on a fresh machine). Generate one with: head -c 32 /dev/urandom | base64 | tr '+/' '-_'" \
+  >/dev/null
 
 # Parse DATABASE_URL into its parts. Accepted form:
 # postgres[ql]://user[:pass]@host[:port]/dbname (no query string, no
@@ -254,8 +262,22 @@ createdb -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -O "${DB_USER}" "${DB_N
 gunzip -c "${tmp}/dump.sql.gz" \
   | psql -v ON_ERROR_STOP=1 -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" "${DB_NAME}"
 
+# Run from src/ through evennia directly, not `arx manage`: arx wraps any error
+# in a rich traceback that hides the cause, and Evennia's launcher exits 0 when
+# settings fail to import, so `set -e` cannot see that failure (2026-09-24: a
+# pull printed "pull complete" with seventeen migrations unapplied). The proof
+# is the listing afterwards: at least one applied migration, so settings
+# imported and the database answered, and none pending.
 log "running migrations (idempotent)…"
-(cd "${ROOT}" && uv run arx manage migrate --noinput)
+(cd "${ROOT}/src" && uv run evennia migrate --noinput)
+listing="$(cd "${ROOT}/src" && uv run evennia showmigrations 2>/dev/null)" || true
+grep -q '^ \[X\]' <<<"${listing}" \
+  || fail "migrate did not run: showmigrations lists no applied migration" \
+    "(settings import failed? check MFA_SECRETS_KEY and DATABASE_URL in ${ENV_FILE})"
+pending="$(grep -c '^ \[ \]' <<<"${listing}" || true)"
+[[ "${pending}" -eq 0 ]] \
+  || fail "${pending} migration(s) still unapplied after migrate;" \
+    "run 'uv run evennia migrate --noinput' from src/ to see the error"
 
 # Verify: same two-count-query + floor shape restore.sh's post-restore check
 # uses, now shared via lib.sh's verify_restored_db() (#2236 review) — this
