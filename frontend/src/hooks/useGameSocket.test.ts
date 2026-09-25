@@ -264,6 +264,29 @@ function readyDispatchCount(): number {
   }).length;
 }
 
+/** Delivers the protocol milestones required before a socket is application-ready. */
+function dispatchReadiness(socket: MockWebSocket, character: string): void {
+  socket.dispatch('message', {
+    data: JSON.stringify([
+      'puppet_changed',
+      [],
+      { session_id: 1, character_id: 42, character_name: character },
+    ]),
+  });
+  socket.dispatch('message', {
+    data: JSON.stringify([
+      'room_state',
+      [],
+      {
+        room: { dbref: '#1', name: 'The Room' },
+        characters: [],
+        objects: [],
+        exits: [],
+      },
+    ]),
+  });
+}
+
 describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -301,6 +324,7 @@ describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () =
     // is even asked to start.
     expect(socket.sent).toHaveLength(1);
     expect(JSON.parse(socket.sent[0])).toEqual(['puppet', [], { character }]);
+    dispatchReadiness(socket, character);
 
     // Reconcile: the lookup for the stranded draft has been dispatched...
     expect(mockFetchPoseSubmission).toHaveBeenCalledWith('req-1');
@@ -367,6 +391,7 @@ describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () =
     act(() => {
       freshSocket.dispatch('open');
     });
+    dispatchReadiness(freshSocket, character);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -429,10 +454,11 @@ describe('useGameSocket disconnect (#3818 "Leave the world")', () => {
     expect(bramSocket.closed).toBe(false);
     expect(mockDispatch).toHaveBeenCalledWith({ type: 'game/endSession', payload: 'Aria' });
 
-    // The server acknowledges with a normal close; Bram is still in the world,
-    // so nothing resets, and no reconnect timer ever resurrects Aria.
+    // Even an abnormal-looking close is local because disconnect() marked the
+    // socket before calling close(); Bram is still in the world, and Aria is
+    // never resurrected.
     act(() => {
-      ariaSocket.dispatch('close', { code: 1000 });
+      ariaSocket.dispatch('close', { code: 1006 });
     });
     expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'game/resetGame', payload: undefined });
     act(() => {
@@ -461,6 +487,132 @@ describe('useGameSocket disconnect (#3818 "Leave the world")', () => {
       vi.advanceTimersByTime(60_000);
     });
     expect(MockWebSocket.instances).toHaveLength(1);
+  });
+});
+
+describe('useGameSocket remote close recovery (#4007)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([1000, 1001, 1006])('reconnects a remote close code %s', async (code) => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = `Remote-${code}`;
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+
+    act(() => {
+      socket.dispatch('close', { code });
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    act(() => {
+      vi.advanceTimersByTime(999);
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(MockWebSocket.instances).toHaveLength(2);
+  });
+
+  it('stops retrying after a puppet refusal', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Refused';
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+    act(() => {
+      socket.dispatch('message', {
+        data: JSON.stringify(['command_error', [], { command: 'puppet', error: 'Refused.' }]),
+      });
+      socket.dispatch('close', { code: 1006 });
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'game/setSessionLifecycle',
+      payload: { character, lifecycleState: 'entry-error' },
+    });
+  });
+
+  it('does not reset retry accounting on open without readiness', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Not-Ready';
+    await act(async () => {
+      await result.current.connect(character);
+    });
+
+    // A transport open and completed backfill are not enough: the puppet and
+    // room-state milestones are intentionally absent.
+    act(() => {
+      MockWebSocket.instances[0].dispatch('open');
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(readyDispatchCount()).toBe(0);
+
+    act(() => {
+      MockWebSocket.instances[0].dispatch('close', { code: 1000 });
+      vi.advanceTimersByTime(1000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(2);
+
+    act(() => {
+      MockWebSocket.instances[1].dispatch('open');
+      MockWebSocket.instances[1].dispatch('close', { code: 1000 });
+    });
+    // The second close is attempt 2, not attempt 1 again.
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'game/setSessionLifecycle',
+      payload: { character, lifecycleState: 'reconnecting' },
+    });
+  });
+
+  it('caps retries and enters an actionable error after exhaustion', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Exhausted';
+    await act(async () => {
+      await result.current.connect(character);
+    });
+
+    const delays = [1000, 2000, 4000, 8000, 16000, 30000];
+    for (const delay of delays) {
+      const socket = MockWebSocket.instances.at(-1) as MockWebSocket;
+      act(() => {
+        socket.dispatch('close', { code: 1006 });
+        vi.advanceTimersByTime(delay);
+      });
+    }
+    expect(MockWebSocket.instances).toHaveLength(7);
+
+    act(() => {
+      MockWebSocket.instances.at(-1)?.dispatch('close', { code: 1006 });
+    });
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'game/setSessionLifecycle',
+      payload: { character, lifecycleState: 'entry-error' },
+    });
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(7);
   });
 });
 

@@ -75,6 +75,19 @@ const reconnectTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 const entryRecoveryTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 const ENTRY_RECOVERY_WAIT_MS = 5000;
 const MAX_RECONNECT_ATTEMPTS = 6;
+// CloseEvent.code does not identify who closed a socket. Keep that intent on
+// the socket itself so a deliberate close cannot be mistaken for a peer loss.
+const localCloseIntent = new WeakSet<WebSocket>();
+
+type ConnectionReadiness = {
+  socket: WebSocket;
+  generation: number;
+  puppetConfirmed: boolean;
+  roomStateAccepted: boolean;
+  reconciliationComplete: boolean;
+  ready: boolean;
+};
+const connectionReadiness: Record<string, ConnectionReadiness> = {};
 // Per-character monotonic connection generation (#3760): incremented on every
 // connection attempt, including automatic reconnects. Each connection's message
 // handler closes over the generation it was created with, so a message that
@@ -169,6 +182,7 @@ export function __resetGameSocketModuleStateForTests(): void {
   Object.keys(reconnectTimers).forEach((character) => delete reconnectTimers[character]);
   Object.values(entryRecoveryTimers).forEach((timer) => clearTimeout(timer));
   Object.keys(entryRecoveryTimers).forEach((character) => delete entryRecoveryTimers[character]);
+  Object.keys(connectionReadiness).forEach((character) => delete connectionReadiness[character]);
   Object.keys(connectionGenerations).forEach(
     (character) => delete connectionGenerations[character]
   );
@@ -179,8 +193,7 @@ export function __resetGameSocketModuleStateForTests(): void {
 /** Swallow reconnect failures so a transient socket error doesn't reject the timer. */
 const swallowReconnectError = (): void => {};
 
-function clearReconnect(character: string) {
-  reconnectAttempts[character] = 0;
+function cancelReconnectTimer(character: string): void {
   const timer = reconnectTimers[character];
   if (timer !== undefined) {
     clearTimeout(timer);
@@ -188,12 +201,52 @@ function clearReconnect(character: string) {
   }
 }
 
-function clearEntryRecovery(character: string) {
+function clearEntryRecovery(character: string): void {
   const timer = entryRecoveryTimers[character];
   if (timer !== undefined) {
     clearTimeout(timer);
     delete entryRecoveryTimers[character];
   }
+}
+
+/** Cancel pending work and reset the retry budget after an explicit action. */
+function clearReconnect(character: string): void {
+  cancelReconnectTimer(character);
+  reconnectAttempts[character] = 0;
+}
+
+function markConnectionReady(
+  character: MyRosterEntry['name'],
+  generation: number,
+  socket: WebSocket,
+  milestone: 'puppetConfirmed' | 'roomStateAccepted' | 'reconciliationComplete',
+  dispatch: AppDispatch
+): void {
+  const state = connectionReadiness[character];
+  if (!state || state.socket !== socket || state.generation !== generation) return;
+  state[milestone] = true;
+  if (
+    state.ready ||
+    !state.puppetConfirmed ||
+    !state.roomStateAccepted ||
+    !state.reconciliationComplete
+  ) {
+    return;
+  }
+  state.ready = true;
+  // A retry is successful only after the application is usable, not when the
+  // transport merely emits `open`.
+  reconnectAttempts[character] = 0;
+  dispatch(setSessionConnectionStatus({ character, status: true }));
+  queryClient.invalidateQueries({ queryKey: ['scene-interactions'] }).catch(() => {});
+}
+
+function markEntryFailure(character: MyRosterEntry['name'], dispatch: AppDispatch): void {
+  // A refusal is actionable, not a transient transport loss. Prevent a later
+  // close callback from spending the reconnect budget on the same refusal.
+  cancelReconnectTimer(character);
+  reconnectAttempts[character] = MAX_RECONNECT_ATTEMPTS;
+  dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
 }
 
 /** Narrows a parsed frame to the `[type, args, kwargs?]` wire shape. */
@@ -207,6 +260,8 @@ interface IncomingMessageContext {
   kwargs: Record<string, unknown> | undefined;
   dispatch: AppDispatch;
   navigate: NavigateFunction;
+  onPuppetConfirmed?: () => void;
+  onEntryFailure?: () => void;
 }
 
 type IncomingMessageHandler = (ctx: IncomingMessageContext) => boolean | void;
@@ -292,7 +347,7 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
         handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch);
 
     case WS_MESSAGE_TYPE.COMMAND_ERROR:
-      return ({ character, kwargs, dispatch }) => {
+      return ({ character, kwargs, dispatch, onEntryFailure }) => {
         const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
         if (typeof error === 'string' && command === WS_MESSAGE_TYPE.PUPPET) {
           clearEntryRecovery(character);
@@ -302,6 +357,7 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
           dispatch(setSessionEntryError({ character, error }));
         }
         toast.error(error, { description: command });
+        if (command === 'puppet') onEntryFailure?.();
       };
 
     case WS_MESSAGE_TYPE.KUDOS_RECEIVED:
@@ -357,9 +413,10 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
     // work adds. A puppet_changed for another character (a sibling tab on a
     // different character) is never this socket's confirmation and is ignored.
     case WS_MESSAGE_TYPE.PUPPET_CHANGED:
-      return ({ character, kwargs, dispatch }) => {
+      return ({ character, kwargs, dispatch, onPuppetConfirmed }) => {
         if (kwargs?.character_name === character) {
           dispatch(setSessionPuppetConfirmed({ character }));
+          onPuppetConfirmed?.();
         }
       };
 
@@ -484,7 +541,10 @@ function dispatchIncomingMessage(
   parsed: IncomingMessage,
   dispatch: AppDispatch,
   navigate: NavigateFunction,
-  generation: number
+  generation: number,
+  onPuppetConfirmed?: () => void,
+  onRoomStateAccepted?: () => void,
+  onEntryFailure?: () => void
 ): void {
   const [msgType, args, kwargs] = parsed;
   connectionDiagnostics.frame(msgType, 'parsed', generation);
@@ -494,8 +554,19 @@ function dispatchIncomingMessage(
     connectionDiagnostics.readiness('room_state_accepted', generation);
   const handler = handlerFor(msgType);
   if (handler) {
-    const accepted = handler({ character, args, kwargs, dispatch, navigate });
+    const accepted = handler({
+      character,
+      args,
+      kwargs,
+      dispatch,
+      navigate,
+      onPuppetConfirmed,
+      onEntryFailure,
+    });
     updateLifecycle(character, msgType, kwargs, accepted, dispatch);
+    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
+      onRoomStateAccepted?.();
+    }
     if (accepted === false) {
       dispatch(
         addSessionDiagnostic({
@@ -537,11 +608,13 @@ export function useGameSocket() {
 
   const disconnectAll = useCallback(() => {
     // Explicit disconnect: cancel any pending reconnects first so a closing
-    // socket doesn't immediately resurrect itself.
+    // socket doesn't immediately resurrect itself. The close code is not a
+    // reliable intent signal, so mark each socket before closing it.
     Object.keys(reconnectTimers).forEach(clearReconnect);
     Object.entries(sockets).forEach(([character, socket]) => {
       const generation = connectionGenerations[character] ?? 0;
       connectionDiagnostics.localClose(character, generation, 'disconnect_all');
+      localCloseIntent.add(socket);
       socket.close();
     });
   }, []);
@@ -564,6 +637,7 @@ export function useGameSocket() {
           connectionGenerations[character] ?? 0,
           'disconnect'
         );
+        localCloseIntent.add(socket);
         socket.close();
       }
       dispatch(endSession(character));
@@ -572,8 +646,12 @@ export function useGameSocket() {
   );
 
   const connect = useCallback(
-    async (character: MyRosterEntry['name']) => {
+    async (character: MyRosterEntry['name'], automaticReconnect = false) => {
       if (sockets[character] || connecting.has(character)) return;
+      cancelReconnectTimer(character);
+      // A manual entry/retry starts a fresh budget. Automatic retries carry the
+      // budget until the application reaches readiness.
+      if (!automaticReconnect) reconnectAttempts[character] = 0;
       connecting.add(character);
       dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
       const generation = nextGeneration(character);
@@ -624,12 +702,22 @@ export function useGameSocket() {
       }
       sockets[character] = socket;
       connectionDiagnostics.socketStarted(character, generation);
+      connectionReadiness[character] = {
+        socket,
+        generation,
+        puppetConfirmed: false,
+        roomStateAccepted: false,
+        reconciliationComplete: false,
+        ready: false,
+      };
       connecting.delete(character);
 
       socket.addEventListener('open', () => {
         connectionDiagnostics.record('socket_open', {}, undefined, generation);
         connectionDiagnostics.readiness('socket_open', generation);
-        clearReconnect(character);
+        // Opening the transport cancels a stale timer, but does not reset the
+        // retry budget until all application readiness milestones complete.
+        cancelReconnectTimer(character);
         // A new socket generation starts a fresh ordering baseline. Stale
         // callbacks from the previous generation are rejected by socket and
         // generation guards before they can reach Redux.
@@ -674,19 +762,10 @@ export function useGameSocket() {
             // (see reconcileStoredDrafts) - nothing further to do here.
           })
           .finally(() => {
-            // Step 3: only now flip ready / invalidate - but only if this
-            // connection is still the current one. Reconciliation is async;
-            // a newer reconnect may have already superseded this generation
-            // while the lookup(s) were in flight, in which case this
-            // connection's belated "ready" must be discarded exactly like
-            // the message listener discards a belated frame.
-            if (generation !== connectionGenerations[character]) return;
-            dispatch(setSessionConnectionStatus({ character, status: true }));
-            // Backfill anything that arrived while no socket was listening:
-            // the REST feed is the source of record and may still be
-            // "fresh" for up to staleTime, so force it stale on every
-            // (re)connect.
-            queryClient.invalidateQueries({ queryKey: ['scene-interactions'] }).catch(() => {});
+            // Reconciliation is only one of the readiness milestones. The
+            // retry budget remains active until the puppet confirmation and a
+            // valid room snapshot have also arrived.
+            markConnectionReady(character, generation, socket, 'reconciliationComplete', dispatch);
           });
       });
 
@@ -700,21 +779,25 @@ export function useGameSocket() {
         // Never let stale frames or stale closes mutate the current session.
         if (sockets[character] !== socket) return;
         clearEntryRecovery(character);
+        const wasLocalClose = localCloseIntent.has(socket);
         dispatch(setSessionConnectionStatus({ character, status: false }));
         finishGenerationResyncs(character, generation, dispatch);
         delete sockets[character];
-        if (event.code === 1000) {
+        delete connectionReadiness[character];
+        if (wasLocalClose) {
           clearReconnect(character);
-          // Only reset game state if this was the last active connection
+          // Only reset game state if this was the last active connection.
           const remainingConnections = Object.keys(sockets).length;
           if (remainingConnections === 0) {
             dispatch(resetGame());
           }
           return;
         }
-        // Abnormal close: reconnect with capped exponential backoff
-        // (1s, 2s, 4s, ... 30s). The open handler re-puppets and backfills.
+        // The peer/network owns the close outcome. Wire codes (including 1000,
+        // 1001, and 1006) do not prove local intent, so all remote closes use
+        // the same capped exponential backoff.
         const attempt = (reconnectAttempts[character] ?? 0) + 1;
+        reconnectAttempts[character] = attempt;
         dispatch(
           setSessionLifecycle({
             character,
@@ -725,7 +808,6 @@ export function useGameSocket() {
           connectionDiagnostics.reconnect('reconnect_exhausted', { attempt }, generation);
           return;
         }
-        reconnectAttempts[character] = attempt;
         const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
         connectionDiagnostics.reconnect(
           'reconnect_scheduled',
@@ -735,7 +817,7 @@ export function useGameSocket() {
         reconnectTimers[character] = setTimeout(() => {
           delete reconnectTimers[character];
           connectionDiagnostics.reconnect('reconnect_fired', { attempt }, generation);
-          connect(character).catch(swallowReconnectError);
+          connect(character, true).catch(swallowReconnectError);
         }, delay);
       });
 
@@ -777,7 +859,16 @@ export function useGameSocket() {
           return;
         }
 
-        dispatchIncomingMessage(character, parsed, dispatch, navigate, generation);
+        dispatchIncomingMessage(
+          character,
+          parsed,
+          dispatch,
+          navigate,
+          generation,
+          () => markConnectionReady(character, generation, socket, 'puppetConfirmed', dispatch),
+          () => markConnectionReady(character, generation, socket, 'roomStateAccepted', dispatch),
+          () => markEntryFailure(character, dispatch)
+        );
       });
     },
     [account, dispatch, navigate]
@@ -793,7 +884,7 @@ export function useGameSocket() {
    */
   const resume = useCallback(
     (character: MyRosterEntry['name']) => {
-      clearReconnect(character);
+      cancelReconnectTimer(character);
       const socket = sockets[character];
       if (socket) {
         delete sockets[character];
@@ -805,12 +896,16 @@ export function useGameSocket() {
           // 1001 is the browser's "going away" code. The close handler treats
           // it as recoverable; explicit disconnect still uses the normal 1000.
           connectionDiagnostics.localClose(character, generation, 'page_resume');
+          // This close is deliberate, but the replacement below is intentional
+          // recovery rather than a player leave. Mark it before close so its
+          // late callback cannot consume the replacement session.
+          localCloseIntent.add(socket);
           socket.close(1001, 'page-resume');
         } catch {
           // The replacement connection is still attempted below.
         }
       }
-      connect(character).catch(swallowReconnectError);
+      connect(character, true).catch(swallowReconnectError);
     },
     [connect, dispatch]
   );
