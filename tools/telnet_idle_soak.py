@@ -136,7 +136,7 @@ def revision() -> str:
 def config_id(config: dict[str, object]) -> str:
     """Hash non-secret probe configuration for report correlation."""
     encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()[:16]
+    return hashlib.blake2b(encoded, digest_size=8).hexdigest()
 
 
 def strip_ansi(data: bytes) -> str:
@@ -162,6 +162,7 @@ class IdleSoak:
             raw.settimeout(1.0)
             return raw
         context = ssl.create_default_context()
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         if self.args.insecure:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
