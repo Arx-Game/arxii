@@ -122,6 +122,11 @@ ignore = [
 external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET", "GETATTR_LITERAL", "OBJECTDB_PARAM"]
 
 [tool.ruff.lint.per-file-ignores]
+# Live liveness probe: subprocess git identity lookup and concise operator-facing CLI errors are intentional.
+"tools/telnet_idle_soak.py" = [
+    "E501", "EM101", "EM102", "PLR2004", "S603", "TRY003",
+]
+
 # Test files can be more lenient
 "**/test_*.py" = [
     "S101",    # asserts are expected in tests
