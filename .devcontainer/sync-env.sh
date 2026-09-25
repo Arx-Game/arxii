@@ -36,6 +36,7 @@ if [[ ! -f "$src_env" ]]; then
   cat > "$dev_env" <<EOF
 DEBUG=True
 SECRET_KEY=$(head -c 50 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 50)
+MFA_SECRETS_KEY=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_')
 DATABASE_URL=${db_url}
 # Set your git author identity here so post-create.sh wires it into the
 # container's ~/.gitconfig and your commits attribute correctly.
@@ -47,6 +48,21 @@ EOF
 fi
 
 cp "$src_env" "$dev_env"
+
+# A src/.env whose last line has no newline (a trailing comment is the usual
+# culprit) would turn the first append below into a continuation of that line,
+# and a commented-out DATABASE_URL fails in confusing ways. Terminate it first.
+if [[ -s "$dev_env" ]] && [[ "$(tail -c1 "$dev_env")" != "" ]]; then
+  printf '\n' >> "$dev_env"
+fi
+
+# settings.py reads MFA_SECRETS_KEY with no default, so a dev.env without one
+# cannot run any Django command in the main checkout (worktrees copy this file,
+# so they all decrypt the same dev data). A Fernet key is 32 random bytes in
+# urlsafe base64; generate one when the source file has none.
+if ! grep -q '^MFA_SECRETS_KEY=' "$dev_env"; then
+  printf 'MFA_SECRETS_KEY=%s\n' "$(head -c 32 /dev/urandom | base64 | tr '+/' '-_')" >> "$dev_env"
+fi
 
 if grep -q '^DATABASE_URL=' "$dev_env"; then
   sed -i "s|^DATABASE_URL=.*\$|DATABASE_URL=${db_url}|" "$dev_env"

@@ -305,6 +305,17 @@ repos:
         # passes CI, where the data operation touches no rows, and fails on the
         # production converge (0220_upbringings, 2026-09-04). Split them:
         # expand, migrate, contract. See ADR-0237.
+      - id: migration-constraint-on-new-column
+        name: No CHECK constraint pairing a column added in the same migration with an old one
+        entry: uv run python tools/lint_migration_constraint_on_new_column.py
+        language: system
+        pass_filenames: false
+        # AddField(null=True) leaves every existing row NULL; a CHECK that ties
+        # that column to one that already existed ("both null or both set") is
+        # violated by every row with the old column set, and PostgreSQL checks
+        # the whole table at ADD CONSTRAINT. Passes CI (no rows), failed the
+        # production converge (0149_partitioned_metadata_integrity, 2026-09-24).
+        # Expand, backfill, contract: column, data migration, then constraint.
       - id: check-partition-sql-drift
         name: Detect drift between Interaction model and partition SQL
         entry: uv run python tools/check_partition_sql_drift.py

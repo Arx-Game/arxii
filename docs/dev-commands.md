@@ -77,6 +77,19 @@ Loads/exports the private lore-repo content checkout (`CONTENT_REPO_PATH` in
 start` properly starts the Evennia portal and server processes; `runserver` is a
 Django-only command that doesn't fully initialize Evennia.
 
+### Production data, read-only
+
+- `just pull-prod yes` — Replace the local dev database with last night's
+  production backup, migrated forward to the checkout's chain (devcontainer:
+  the throwaway `arxiidev`). Never touches production or the bucket. A failing
+  migrate step here is a real finding: it is what the next deploy would hit.
+- `just dev-reader-env` — One-time setup for `pull-prod`: copies the read-only
+  bucket key and bucket address from the prod Terraform outputs into
+  `.devcontainer/dev.env` (else `src/.env`). Host only, needs `tofu` and
+  `$HOME/arxii-ops-key/tfstate.env`; see `infra/README.md` "Pull prod data down".
+- `just scan-prod-logs` — Recent production tracebacks through the gated
+  read-only `arxops` SSH account (`docs/operations/ops-access.md`).
+
 ## Linting and Formatting
 
 - `ruff check .` — Run Python linting (import sorting, flake8 rules, and more)
