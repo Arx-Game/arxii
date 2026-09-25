@@ -1,5 +1,6 @@
 """E2E tests for social/mental combat verbs (#2015)."""
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
@@ -8,6 +9,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.models import CheckType
 from world.combat.constants import (
     FALTER_MORALE_THRESHOLD,
+    RALLY_GREAT_SUCCESS_LEVEL,
+    RALLY_MORALE_PER_LEVEL,
+    CombatAllegiance,
     CombatManeuver,
 )
 from world.combat.factories import (
@@ -25,12 +29,15 @@ from world.combat.services import (
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
+    CovenantRoleActionScalingFactory,
     CovenantRoleFactory,
     VowSituationalPerkFactory,
     VowSituationalPerkSituationFactory,
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.covenants.perks.evaluators import FAVORABLY_DISPOSED_MIN_AFFECTION
+from world.covenants.services import set_engaged_membership
+from world.magic.constants import TargetKind
 from world.magic.factories import ThreadFactory
 from world.npc_services.factories import NPCStandingFactory
 from world.scenes.constants import RoundStatus
@@ -146,6 +153,48 @@ class ResolveSocialVerbTests(TestCase):
         ).first()
         self.assertIsNotNone(record, "Taunt must create/increment a ThreatRecord")
         self.assertEqual(record.threat_value, TAUNT_THREAT_PER_LEVEL)
+
+    def test_rally_scaling_increases_morale_restored(self) -> None:
+        """An engaged role's ``combat_rally`` scaling changes rally's outcome."""
+        ally_summon = CombatOpponentFactory(
+            encounter=self.encounter,
+            allegiance=CombatAllegiance.ALLY,
+            morale=0,
+            max_morale=100,
+        )
+        role = CovenantRoleFactory(crown_weight=1)
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=self.participant.character_sheet,
+            covenant=CovenantFactory(),
+            covenant_role=role,
+        )
+        set_engaged_membership(membership=membership)
+        CovenantRoleActionScalingFactory(
+            covenant_role=role,
+            action_key="combat_rally",
+            thread_level_multiplier=Decimal("0.1"),
+        )
+        ThreadFactory(
+            owner=self.participant.character_sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            target_trait=None,
+            level=10,
+        )
+        action = declare_rally(self.participant, self.ally)
+        great_success = CheckOutcomeFactory(
+            name="SocialRallyGreatSuccess",
+            success_level=RALLY_GREAT_SUCCESS_LEVEL,
+        )
+
+        from world.combat.services import _resolve_rally
+
+        with force_check_outcome(great_success):
+            _resolve_rally(self.participant, action)
+
+        ally_summon.refresh_from_db()
+        expected_restore = int(RALLY_GREAT_SUCCESS_LEVEL * RALLY_MORALE_PER_LEVEL * 2)
+        self.assertEqual(ally_summon.morale, expected_restore)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_social_combat_content gates on #2698
