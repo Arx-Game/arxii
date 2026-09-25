@@ -77,7 +77,26 @@ Two further traps this check catches:
   that has none — is authoring, not migrating. A missing must-exist content row
   gets a dashboard sentinel and a human author, never migration logic.
 
-## 3. Declare the data disposition for every destructive operation
+## 3. Check every new constraint against the rows already there
+
+An `AddConstraint` (check, unique or conditional unique), a foreign key in
+`RunSQL`, an `AlterField` to `unique=True` or `null=False`, and a non-null
+`AddField` with no default all validate **every existing row** when they run.
+For each one, name the rows that would violate it. A column added in the same
+migration or the same PR is null on every existing row, so a constraint that
+requires it to be set fails on all of them.
+
+`0149_partitioned_metadata_integrity` did this on 2026-09-24. It added a nullable
+`PoseSubmission.timestamp` and then a CHECK that `interaction_id` and `timestamp`
+are both null or both set. Every existing ledger row had an `interaction_id` and
+no `timestamp`, and the converge died with `CheckViolation: check constraint
+"pose_submission_interaction_timestamp_pair" ... is violated by some row`.
+
+The fix is a backfill (or a stated manual cleanup of play-state rows) that runs
+before the constraint, in its own migration (rule 1). "Only new code writes this
+column" is not evidence: existing rows never pass through that code.
+
+## 4. Declare the data disposition for every destructive operation
 
 Per ADR-0237, a `RemoveField`/`DeleteModel` on an **authored-content** table is
 exactly one of three things, stated in the PR body:
@@ -92,7 +111,7 @@ exactly one of three things, stated in the PR body:
 `RenameField` is not data loss. Alpha play-state tables (characters, sheets, XP,
 scenes, encounters) need none of this.
 
-## 4. Check `max_migration.txt` against main's tip before enqueueing
+## 5. Check `max_migration.txt` against main's tip before enqueueing
 
 Since #2906 there is exactly one sentinel repo-wide
 (`src/world/migrations/max_migration.txt`), so **any two migration-bearing PRs
@@ -117,7 +136,7 @@ If it is not an ancestor, press the button before enqueueing. If the deploy has
 already failed, recovery is two presses of the button's `ref` input
 (`infra/README.md`, "Recovering a guard-refused database").
 
-## 5. Prove it against real data
+## 6. Prove it against real data
 
 CI proves the migration runs on an empty database. That is the case that cannot
 fail. To prove the case that can, run it against a copy with rows in it:
@@ -164,7 +183,7 @@ with `MemoryError` and hung the parallel runner until the 4-hour cancel (#3998).
 was also doomed by design: ADR-0276 regenerates the chain from a deployed commit,
 which deletes the very nodes such a test names.
 
-Prove a backfill the way section 5 says, against a database with rows in it, and
+Prove a backfill the way section 6 says, against a database with rows in it, and
 keep any unit test on the backfill's own function: call `forwards(apps, editor)`
 with `django.apps.apps` and factory rows when the source models still exist, or
 skip the unit test when the same PR's contract migration removes them. A test
@@ -201,6 +220,7 @@ is closed.
 - [ ] No `RunPython`/`RunSQL` sharing a migration with a schema operation
 - [ ] No CHECK constraint pairing a column added nullable in this migration with an old one
 - [ ] Backfill (if any) carries real per-row information, verified against the dump
+- [ ] Every new constraint, FK, `unique=True` or `null=False` holds on the rows already in the table
 - [ ] No `create`/`get_or_create` of content rows
 - [ ] Every `RemoveField`/`DeleteModel` on authored content has a stated disposition
 - [ ] `max_migration.txt` matches main's tip
