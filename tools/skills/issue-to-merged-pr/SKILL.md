@@ -149,7 +149,11 @@ Await-approval, and Implementation.
   `git worktree add`. Using a native worktree tool on top of it recreates the
   two-branch/phantom-state trap (`references/arxii-worktree-traps.md` §2). The
   native-tool path in `using-git-worktrees` Step 1a is only for when you enter
-  that skill without having run `start-work.sh`.
+  that skill without having run `start-work.sh`. On the solo laptop (under
+  8 GiB visible memory, or `ARXII_BRANCH_IN_PLACE=1`; CLAUDE.md "Tool & Subagent
+  Sequencing") `start-work.sh` instead checks the branch out in the main
+  working tree and emits that tree as `worktree_path`: the `cd` is a no-op, there
+  is no worktree, and `post-merge-cleanup.sh` knows not to remove the main tree.
 
   ```bash
   START_JSON=$(scripts/start-work.sh <N>)

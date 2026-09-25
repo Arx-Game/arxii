@@ -49,6 +49,10 @@ development machine. Key points:
   (`.claude/worktrees/.uv-cache`), `uv` hardlinks from cache instead, so a fresh
   worktree's `uv sync` is under a second. Verify with `stat -c %h` on a sampled venv
   file showing links > 1. Worktrees are ephemeral, so wiping this volume is safe.
+  On the memory-capped solo laptop (under 8 GiB visible to the container) a single
+  sequential agent branches in the main checkout instead, whose `.venv` is a named
+  volume too; `start-work.sh` applies that test itself (CLAUDE.md "Tool & Subagent
+  Sequencing", `ARXII_BRANCH_IN_PLACE=1|0` to override).
   (One-time migration note: an existing worktree under `.claude/worktrees` is shadowed
   by the empty volume on the first rebuild after this lands — finish or remove it
   first; its files remain on the host disk underneath the mount.) See #1037.

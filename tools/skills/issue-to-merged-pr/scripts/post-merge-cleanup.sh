@@ -61,7 +61,11 @@ fi
 if [[ $DRY_RUN -eq 1 ]]; then
   echo "[dry-run] would:"
   echo "  1. git -C $MAIN_WT checkout main && git pull --ff-only"
-  echo "  2. git worktree remove --force ${BRANCH_WT:-<none>}"
+  if [[ -n "$BRANCH_WT" && "$BRANCH_WT" != "$MAIN_WT" ]]; then
+    echo "  2. git worktree remove --force $BRANCH_WT"
+  else
+    echo "  2. (no linked worktree to remove; branch is in the main tree or not checked out)"
+  fi
   echo "  3. git -C $MAIN_WT branch -d $BRANCH (fallback -D if PR confirmed merged)"
   echo "  4. emit JSON of linked-issue actions"
   exit 0
@@ -77,7 +81,11 @@ git -C "$MAIN_WT" pull --ff-only --quiet
 # worktree, and every later `gh` call runs git in the cwd, which fails with
 # "Unable to read current working directory" once that directory is gone (#3978).
 cd "$MAIN_WT"
-if [[ -n "$BRANCH_WT" ]]; then
+# On the solo machine the branch was checked out in the main tree itself
+# (start-work.sh's in-place mode, wt_branch_in_place): wt_for_branch then
+# resolves to MAIN_WT, which must never be removed. The checkout of main
+# above already released the branch there; only a linked worktree is removed.
+if [[ -n "$BRANCH_WT" && "$BRANCH_WT" != "$MAIN_WT" ]]; then
   git -C "$MAIN_WT" worktree remove --force "$BRANCH_WT"
 fi
 

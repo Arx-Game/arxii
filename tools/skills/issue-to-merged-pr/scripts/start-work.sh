@@ -54,22 +54,43 @@ if ! grep -qx "$CURRENT_USER" <<<"$ASSIGNEES"; then
   exit 3
 fi
 
-# 2. Create the worktree at .claude/worktrees/<branch>.
-#    Reuses the using-git-worktrees Step 1b pattern. The branch already exists
-#    (pickup created it unchecked-out), so check it out WITHOUT -b.
-LOCATION=".claude/worktrees"
-mkdir -p "$LOCATION"
-# Verify ignored (worktree skill mandates this). .claude is in .gitignore:87.
-git check-ignore -q "$LOCATION" || {
-  echo "ERROR: $LOCATION is not gitignored — refusing to create a worktree there." >&2
-  echo "Add it to .gitignore first." >&2
-  exit 1
-}
-WORKTREE_PATH="$LOCATION/$BRANCH"
-if [ -d "$WORKTREE_PATH" ]; then
-  echo "NOTE: worktree already exists at $WORKTREE_PATH (idempotent)." >&2
+# 2. Check the branch out. The branch already exists (pickup created it
+#    unchecked-out), so never -b.
+#    Workstation: a linked worktree at .claude/worktrees/<branch>
+#    (using-git-worktrees Step 1b).
+#    Solo machine (wt_branch_in_place: under 8 GiB of visible memory, or
+#    ARXII_BRANCH_IN_PLACE=1): the branch is checked out in the main working
+#    tree, which must be clean, and worktree_path IS that tree. CLAUDE.md
+#    "Tool & Subagent Sequencing" scopes the worktree rule by machine;
+#    post-merge-cleanup.sh knows not to remove the main tree afterwards.
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_wt-helpers.sh"
+if wt_branch_in_place; then
+  MAIN_WT=$(wt_main_path)
+  if ! git -C "$MAIN_WT" diff --quiet || ! git -C "$MAIN_WT" diff --cached --quiet; then
+    echo "ERROR: main working tree at $MAIN_WT has uncommitted changes; commit or discard them" >&2
+    echo "before checking out $BRANCH in place (solo-machine mode)." >&2
+    git -C "$MAIN_WT" status --short >&2
+    exit 1
+  fi
+  git -C "$MAIN_WT" checkout --quiet "$BRANCH"
+  WORKTREE_PATH="$MAIN_WT"
+  echo "NOTE: solo machine: checked out $BRANCH in the main working tree ($MAIN_WT); no worktree created." >&2
 else
-  git worktree add "$WORKTREE_PATH" "$BRANCH"
+  LOCATION=".claude/worktrees"
+  mkdir -p "$LOCATION"
+  # Verify ignored (worktree skill mandates this). .claude is in .gitignore:87.
+  git check-ignore -q "$LOCATION" || {
+    echo "ERROR: $LOCATION is not gitignored — refusing to create a worktree there." >&2
+    echo "Add it to .gitignore first." >&2
+    exit 1
+  }
+  WORKTREE_PATH="$LOCATION/$BRANCH"
+  if [ -d "$WORKTREE_PATH" ]; then
+    echo "NOTE: worktree already exists at $WORKTREE_PATH (idempotent)." >&2
+  else
+    git worktree add "$WORKTREE_PATH" "$BRANCH"
+  fi
 fi
 
 # 3. Emit JSON: pickup fields + worktree_path.

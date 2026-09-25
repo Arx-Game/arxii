@@ -34,8 +34,21 @@ esac
 """
 
 
+def _clean_env() -> dict[str, str]:
+    """The caller's environment minus git's own variables.
+
+    A pre-commit hook runs with GIT_INDEX_FILE, GIT_DIR and friends exported for the
+    commit in progress; a git subprocess in a temp repo inherits them and operates
+    on the wrong repository. The tools-tests hook runs this file on every commit
+    that touches tools/, so scrub them.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def _git(*args: str, cwd: Path) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", *args], cwd=cwd, env=_clean_env(), check=True, capture_output=True, text=True
+    )
 
 
 @unittest.skipIf(os.name == "nt", "Windows refuses to delete a process's cwd; CI runs Linux")
@@ -68,7 +81,7 @@ class PostMergeCleanupTests(unittest.TestCase):
             _git("push", "origin", "main", cwd=main)
             _git("worktree", "add", "-b", BRANCH, str(branch_wt), cwd=main)
 
-            env = dict(os.environ)
+            env = _clean_env()
             env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
             result = subprocess.run(
                 ["bash", str(CLEANUP), BRANCH, PR],

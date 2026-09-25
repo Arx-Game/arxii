@@ -29,3 +29,20 @@ wt_for_branch() {
     /^branch /{if ($2==t){print wt; exit}}
   '
 }
+
+# True when a branch should be checked out in the main working tree instead of
+# a linked worktree. CLAUDE.md ("Tool & Subagent Sequencing") scopes the
+# worktree rule by machine: under 8 GiB of visible memory (the capped laptop:
+# 6 GB VM, 4 GiB app container) one sequential agent works in place; at or
+# above (the workstation) worktrees and implementer waves apply as written.
+# ARXII_BRANCH_IN_PLACE=1|0 overrides the memory test either way. No
+# /proc/meminfo (macOS, Windows) means "worktree".
+wt_branch_in_place() {
+  case "${ARXII_BRANCH_IN_PLACE:-}" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  local kb
+  kb=$(awk '/^MemTotal:/{print $2}' /proc/meminfo 2>/dev/null || true)
+  [[ -n "${kb}" && "${kb}" -gt 0 && "${kb}" -lt 8388608 ]]
+}
