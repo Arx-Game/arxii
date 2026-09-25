@@ -22,6 +22,17 @@ describe('ExplorationReader', () => {
     expect(screen.getByTestId('exploration-reader')).not.toHaveTextContent('[');
   });
 
+  it('surfaces entry failure text before a room snapshot exists', () => {
+    render(
+      <ExplorationReader
+        room={null}
+        lifecycleState="entry-error"
+        entryError="Your location could not be confirmed."
+      />
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Your location could not be confirmed.');
+  });
+
   it('renders confirmed room facts and ambient poses as separate entries', () => {
     render(
       <ExplorationReader

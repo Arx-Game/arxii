@@ -16,6 +16,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import ObjectDBFactory
+from flows.types import RoomStateSendResult
 
 CHARACTER = "typeclasses.characters.Character"
 
@@ -51,6 +52,25 @@ class FirstSessionArrivesTests(TestCase):
 
         friends.assert_not_called()
         catch_up.assert_not_called()
+
+    def test_entry_marker_routes_state_to_the_initiating_session(self) -> None:
+        first, second = MagicMock(), MagicMock()
+        char = ObjectDBFactory(db_typeclass_path=CHARACTER)
+        char.sessions.all = MagicMock(return_value=[second, first])
+        char.ndb.puppet_entry_session = first
+        char.msg = MagicMock()
+        char.send_room_state = MagicMock()
+        char.execute_cmd = MagicMock()
+        with (
+            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
+            patch("world.scenes.friend_services.notify_friends_of_status"),
+            patch("world.stories.services.login.catch_up_character_stories"),
+        ):
+            char.at_post_puppet()
+
+        char.send_room_state.assert_called_once_with(session=first)
+        char.execute_cmd.assert_called_once_with("look", session=first)
 
     def test_the_joining_window_gets_its_own_look_and_room_state(self) -> None:
         first, second = MagicMock(), MagicMock()
@@ -127,6 +147,83 @@ class LifecycleOutputTests(TestCase):
         ):
             char.at_post_puppet()
         return char, joining, room, seen_options
+
+    def test_room_state_refusal_is_reported_to_the_initiating_session(self) -> None:
+        """A refusal must not be lost when another session is present."""
+        char = ObjectDBFactory(db_typeclass_path=CHARACTER)
+        first, second = MagicMock(), MagicMock()
+        char.sessions.all = MagicMock(return_value=[second, first])
+        char.ndb.puppet_entry_session = first
+        char.msg = MagicMock()
+        char.send_room_state = MagicMock(
+            return_value=RoomStateSendResult(sent=False, code="no_location")
+        )
+        char.execute_cmd = MagicMock()
+        with (
+            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
+            patch("world.scenes.friend_services.notify_friends_of_status"),
+            patch("world.stories.services.login.catch_up_character_stories"),
+        ):
+            char.at_post_puppet()
+
+        first.msg.assert_any_call(
+            command_error={
+                "error": "Your location could not be confirmed.",
+                "command": "puppet",
+                "code": "no_location",
+            }
+        )
+        self.assertFalse(any("command_error" in call.kwargs for call in second.msg.call_args_list))
+
+    def test_room_state_refusal_survives_command_serialization_failure(self) -> None:
+        """Later entry work cannot hide the initial room-state refusal."""
+        char = ObjectDBFactory(db_typeclass_path=CHARACTER)
+        joining = MagicMock()
+        char.sessions.all = MagicMock(return_value=[joining])
+        char.ndb.puppet_entry_session = joining
+        char.msg = MagicMock()
+        char.send_room_state = MagicMock(
+            return_value=RoomStateSendResult(sent=False, code="state_unavailable")
+        )
+        char.execute_cmd = MagicMock()
+        with (
+            patch("typeclasses.characters.serialize_cmdset", side_effect=RuntimeError("broken")),
+            patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
+            patch("world.scenes.friend_services.notify_friends_of_status"),
+            patch("world.stories.services.login.catch_up_character_stories"),
+        ):
+            char.at_post_puppet()
+
+        char.send_room_state.assert_called_once_with(session=joining)
+        joining.msg.assert_any_call(
+            command_error={
+                "error": "Your surroundings could not be loaded.",
+                "command": "puppet",
+                "code": "state_unavailable",
+            }
+        )
+        char.execute_cmd.assert_called_once_with("look", session=joining)
+
+    def test_arrival_failure_does_not_skip_room_state_or_entry_look(self) -> None:
+        char = ObjectDBFactory(db_typeclass_path=CHARACTER)
+        joining = MagicMock()
+        char.sessions.all = MagicMock(return_value=[joining])
+        char.ndb.puppet_entry_session = joining
+        char.msg = MagicMock()
+        char.send_room_state = MagicMock(return_value=RoomStateSendResult(sent=True))
+        char.execute_cmd = MagicMock()
+        with (
+            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch.object(char, "_announce_arrival", side_effect=RuntimeError("broken")),
+            patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
+            patch("world.scenes.friend_services.notify_friends_of_status"),
+            patch("world.stories.services.login.catch_up_character_stories"),
+        ):
+            char.at_post_puppet()
+
+        char.send_room_state.assert_called_once_with(session=joining)
+        char.execute_cmd.assert_called_once_with("look", session=joining)
 
     def test_you_become_is_a_lifecycle_frame_and_the_stock_look_is_gone(self) -> None:
         char, _joining, _room, _seen_options = self._puppet()

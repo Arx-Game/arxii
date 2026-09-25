@@ -496,6 +496,7 @@ function GameWindowFeed({
           ambientInteractions={ambientInteractions ?? session.ambientInteractions}
           notes={notes ?? session.notes}
           lifecycleState={effectiveLifecycle}
+          entryError={session.entryError}
           onRetry={() => {
             if (active) void connect(active);
           }}
