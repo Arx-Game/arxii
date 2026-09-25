@@ -157,6 +157,23 @@ WEBSOCKET_PROTOCOL_CLASS = "server.portal.secure_websocket.SecureWebSocketClient
 WEBSOCKET_AUTOPING_INTERVAL = 45
 WEBSOCKET_AUTOPING_TIMEOUT = 25
 
+# Portal transport diagnostics (#4009). The structured event window is bounded
+# in memory and in the log sink; registration carries no authority and is only
+# accepted when the browser supplies a fixed-format opaque run id. The channel
+# is explicit configuration, never inferred from the hostname. Alpha/rehearsal
+# default on; production/development default off unless explicitly overridden.
+DEPLOYMENT_CHANNEL = env("DEPLOYMENT_CHANNEL", default="production").strip().lower()
+PORTAL_DEPLOYMENT_CHANNEL = DEPLOYMENT_CHANNEL
+PORTAL_DIAGNOSTICS_ENABLED = env.bool(
+    "PORTAL_DIAGNOSTICS_ENABLED",
+    default=PORTAL_DEPLOYMENT_CHANNEL in {"alpha", "rehearsal"},
+)
+PORTAL_DIAGNOSTICS_MAX_EVENTS = env.int("PORTAL_DIAGNOSTICS_MAX_EVENTS", default=10_000)
+PORTAL_DIAGNOSTICS_MAX_AGE_SECONDS = env.int("PORTAL_DIAGNOSTICS_MAX_AGE_SECONDS", default=86_400)
+PORTAL_DIAGNOSTICS_MAX_REGISTRATION_ATTEMPTS = env.int(
+    "PORTAL_DIAGNOSTICS_MAX_REGISTRATION_ATTEMPTS", default=3
+)
+
 ######################################################################
 # Third-party integrations
 ######################################################################
