@@ -135,7 +135,18 @@ def revision() -> str:
 
 def config_id(config: dict[str, object]) -> str:
     """Hash non-secret probe configuration for report correlation."""
-    encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+    safe_keys = (
+        "host",
+        "port",
+        "tls",
+        "tls_verify",
+        "seconds",
+        "login_timeout",
+        "username_prompt",
+        "ready_pattern",
+    )
+    identity = {key: config[key] for key in safe_keys if key in config}
+    encoded = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.blake2b(encoded, digest_size=8).hexdigest()
 
 
