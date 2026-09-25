@@ -425,7 +425,13 @@ Installed once by the converge, then running unattended on the box:
   Portal as two separate processes; if the unit's supervised process (Server) stays up but
   the Portal alone dies, systemd sees the unit as "active" and does nothing while players
   can no longer connect. The watchdog checks both pidfiles, restarts the unit, and fires an
-  off-box alert when either is dead but the unit claims active.
+  off-box alert when either is dead but the unit claims active. It also honours a staff
+  `@reboot` (#4001): the game writes `<gamedir>/server/reboot.requested` and shuts both
+  daemons down; the watchdog starts the unit again when it finds it inactive with a request
+  younger than ten minutes, deleting the file first. A plain `@shutdown` writes no file and
+  stays down, which is the point of keeping the two verbs apart (see
+  `docs/operations/ops-access.md`, "Restarting the game without SSH"). The unit deliberately
+  stays `Restart=on-failure`, never `Restart=always`; `acceptance.sh` checks both halves.
 - **Memory alerting** (#3200, in the heartbeat). The game runs inside `arxii.slice`, capped
   at `base_game_memory_max` (1500 M), so a leak gets the SLICE OOM-killed instead of taking
   the box and Postgres down. That contains the damage but makes it **invisible**: the kernel
@@ -754,18 +760,39 @@ dies on a connect timeout. It is allowlisted there already; a different
 region needs the matching entry added and
 `sudo /usr/local/bin/arxii-firewall.sh` re-run.
 
-**One-time setup** — after a successful stand-up, get the dev_reader
-credentials and bucket config from Terraform outputs and add them to
-`src/.env`:
+**One-time setup** — after a successful stand-up, the dev_reader credentials
+and bucket config live only in the prod Terraform outputs, and Terraform has
+only ever run in the CI standup. `just dev-reader-env`
+(`infra/scripts/dev_reader_env.sh`) reads them from the remote state and
+appends the five `ARXII_*` lines to the env file the devcontainer actually
+reads - `.devcontainer/dev.env` when it exists, else `src/.env` - without
+printing a secret. Run it on the HOST (the container firewall blocks the tofu
+provider registry) with `tofu` on PATH (`mise use -g opentofu`) and a
+credentials file OUTSIDE the repo, `$HOME/arxii-ops-key/tfstate.env`, holding
+the six values the standup workflow reads from the gated `prod` environment
+(four Variables, two Secrets):
 
-```bash
-cd infra/terraform/prod
-tofu output -raw dev_reader_access_key    # -> ARXII_DEV_READER_ACCESS_KEY
-tofu output -raw dev_reader_secret_key    # -> ARXII_DEV_READER_SECRET_KEY
-tofu output -raw backups_bucket           # -> ARXII_BACKUPS_BUCKET
-tofu output -raw backups_s3_endpoint      # -> ARXII_BACKUPS_S3_ENDPOINT
-tofu output -raw region                   # -> ARXII_BACKUPS_REGION
 ```
+TF_STATE_BUCKET=            TF_STATE_KEY=
+TF_STATE_REGION=            TF_STATE_ENDPOINT=
+TF_STATE_S3_ACCESS_KEY=     TF_STATE_S3_SECRET_KEY=
+```
+
+The outputs it copies, should you ever need them by hand:
+`dev_reader_access_key` → `ARXII_DEV_READER_ACCESS_KEY`,
+`dev_reader_secret_key` → `ARXII_DEV_READER_SECRET_KEY`, `backups_bucket` →
+`ARXII_BACKUPS_BUCKET`, `backups_s3_endpoint` → `ARXII_BACKUPS_S3_ENDPOINT`,
+`region` → `ARXII_BACKUPS_REGION`. Do not paste them into `src/.env` on a
+devcontainer machine: `dev.env` is bind-mounted over it inside the container,
+and `sync-env.sh` never regenerates an existing `dev.env`.
+
+The pull ends by migrating the restored copy forward to the checkout's chain
+and then proving it: the migration listing must show applied migrations and
+none pending, or the script fails. That is the step that reproduces a
+migration failure production would hit on its next converge (the
+2026-09-24 `0149` constraint failure surfaced on the first pull), so a failing
+pull is a finding, not noise. `settings.py` needs `MFA_SECRETS_KEY` to import
+at all; the script checks for it up front.
 
 `DATABASE_URL` (already required for local dev) is the restore target.
 Accepted form: `postgres[ql]://user[:pass]@host[:port]/dbname` (no query

@@ -19,6 +19,7 @@ from evennia import default_cmds
 from commands.account.account_info import CmdAccount, CmdRoster
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
+from commands.account.reboot import CmdReboot
 from commands.account.sheet import CmdSheet
 from commands.account.staff_contact import CmdPetition
 from commands.agriculture import CmdHarvest
@@ -593,6 +594,9 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdRoster())
         # #2288 — staff-contact pointer (filing stays web-first).
         self.add(CmdPetition())
+        # #4001 — staff full reboot of both daemons; distinct from Evennia's
+        # @shutdown (stays down) and @reload/@restart (Server only).
+        self.add(CmdReboot())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):

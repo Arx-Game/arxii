@@ -43,6 +43,16 @@ Extends Evennia's functionality with additional models and data handlers while p
   the all-zero placeholder, run at `migrate`/`check` time so a bad key fails
   the converge, not a player's sign-in
 
+### `reboot.py`
+- `request_reboot(*, requested_by)` (#4001, ADR-0318) - the staff full reboot: writes
+  `REBOOT_REQUEST_FILE` (`<GAME_DIR>/server/reboot.requested`, the same path the root
+  watchdog template names), announces to every session, then
+  `SESSION_HANDLER.portal_shutdown()` exactly as `@shutdown` does. The file goes first
+  and an `OSError` writing it aborts before anything stops, because the watchdog's
+  "inactive unit + fresh request" branch is the only thing that brings the game back.
+  Telnet face `commands/account/reboot.py` (`@reboot`); web face the staff console's
+  "Restart game" control. Not `@restart`: that is Evennia's alias for `@reload`.
+
 ### `typeclass_hook_guard.py`
 - Guards Evennia's server reload/shutdown lifecycle hooks (`at_server_reload`,
   `at_server_shutdown`, `unpuppet_all`, `_pause_task`) against a cached `ObjectDB`,

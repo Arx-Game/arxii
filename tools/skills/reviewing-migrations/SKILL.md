@@ -190,10 +190,35 @@ skip the unit test when the same PR's contract migration removes them. A test
 that still needs historical models is a sign the expand/migrate/contract split
 put the contract too early.
 
+## 6. A constraint on a column added in the same migration
+
+`AddField(null=True)` leaves every existing row NULL. A CHECK constraint on that
+column alone can never fail - SQL treats a NULL check as satisfied - but a CHECK
+that ties it to a column that already existed ("both null or both set") is
+violated by every row that has the old column set, and PostgreSQL validates the
+whole table at `ADD CONSTRAINT`. `0149_partitioned_metadata_integrity` added
+`posesubmission.timestamp` and, in the same migration, a check pairing it with
+`interaction`; production had one submission with an interaction, and the
+2026-09-24 deploy died with:
+
+```
+IntegrityError: check constraint "pose_submission_interaction_timestamp_pair"
+of relation "arxii_posesubmission" is violated by some row
+```
+
+CI cannot see this (no rows). The fix is the same expand/backfill/contract
+sequence as section 1: the column in one migration, a data migration that fills
+it from the row it denormalizes, the constraint in a third. A column added with a
+`default` and `preserve_default=False` is filled on every row and needs none of
+this. `tools/lint_migration_constraint_on_new_column.py` (the
+`migration-constraint-on-new-column` hook) flags the shape; its grandfather list
+is closed.
+
 ## Checklist
 
 - [ ] Read every operation in the generated file
 - [ ] No `RunPython`/`RunSQL` sharing a migration with a schema operation
+- [ ] No CHECK constraint pairing a column added nullable in this migration with an old one
 - [ ] Backfill (if any) carries real per-row information, verified against the dump
 - [ ] Every new constraint, FK, `unique=True` or `null=False` holds on the rows already in the table
 - [ ] No `create`/`get_or_create` of content rows

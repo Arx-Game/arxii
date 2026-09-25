@@ -20,9 +20,10 @@ generated operations and reason about the rows that exist in production.
 1. The migration files in the diff, in full, every operation.
 2. `git show origin/main:src/world/migrations/max_migration.txt` for collisions.
 3. The production data, when a data operation or a destructive operation is
-   involved. `arxiidev` on host `db` is a dump of production:
-   `PGPASSWORD=arxii psql -h db -U arxii -d arxiidev -c "..."`. Read-only. Never
-   write to it, and never touch production.
+   involved. `arxiidev` on host `db` is a dump of production, refreshed with
+   `just pull-prod yes` (last night's backup; check its age before trusting a
+   row count): `PGPASSWORD=arxii psql -h db -U arxii -d arxiidev -c "..."`.
+   Read-only. Never write to it, and never touch production.
 
 ## Findings to hunt, in priority order
 
@@ -86,6 +87,29 @@ never hand-renumbering.
 **7. Old code against new schema.** Deploy migrates before it swaps the release, so
 a dropped or narrowed column breaks the still-running old code. Flag anything the
 previous release still reads.
+
+**7. A CHECK constraint that pairs a column added in this migration with one that
+already existed.** This broke the production deploy on 2026-09-24
+(`0149_partitioned_metadata_integrity`). `AddField(null=True)` leaves every
+existing row NULL; a check on that column alone can never fail, because SQL
+treats a NULL check as satisfied. But a check that ties it to an old column -
+"both null or both set" - is violated by every row that has the old column set,
+and PostgreSQL validates the whole table at `ADD CONSTRAINT`:
+
+```
+django.db.utils.IntegrityError: check constraint
+"pose_submission_interaction_timestamp_pair" of relation "arxii_posesubmission"
+is violated by some row
+```
+
+Report it whenever an `AddConstraint(CheckConstraint)` references a column the
+same migration adds nullable together with any column it does not add. Query the
+dump for rows with the old column set: one is enough. The fix is
+expand/backfill/contract: the column in one migration, a data migration that
+fills it, the constraint in a third. A column added with a `default`
+(`preserve_default=False`) is filled on every row and is fine.
+`tools/lint_migration_constraint_on_new_column.py` flags the shape mechanically;
+its grandfather list is closed.
 
 ## Reporting
 

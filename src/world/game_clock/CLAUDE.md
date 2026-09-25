@@ -43,7 +43,17 @@ Per-task tracking of last run time. Tasks are auto-created on first scheduler ti
 
 ### GameTickScript (Evennia Script)
 Persistent script that ticks every 5 minutes, calling `run_due_tasks()`.
-Created automatically in `at_server_start()`.
+Created automatically in `at_server_start()`, and **re-armed there too** (#4001):
+`ensure_game_tick_script` checks `time_until_next_repeat()` and calls `start()` when
+the row exists without a live timer. Evennia only restores a persistent script's
+timer at boot from a `_paused_time` the previous graceful stop stored, so after any
+hard kill the row stayed `db_is_active=True` with no timer, forever; production ran
+that way from the 2026-08-23 SIGKILL recovery until #3993. The tick's first two
+lines are its own safeguards: `close_old_connections()` (#3327, heals a dead
+reactor-thread connection after a Postgres restart) and `rearm_maintenance_loop()`
+(restarts Evennia's once-a-minute `server_maintenance` LoopingCall, which dies for
+good when its runtime save raises). Neither runs unless the timer does, which is
+what the boot-time re-arm guarantees; see `tools/agents/unarmed-safeguard-reviewer.md`.
 
 ### Task Registry
 Tasks registered in `tasks.py` via `register_all_tasks()`, called at server startup.

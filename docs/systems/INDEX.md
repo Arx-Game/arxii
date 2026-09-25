@@ -9161,6 +9161,11 @@ Extensions to Evennia models for additional data storage.
   file before the service call; `MediaViewSet.create` validates through it and
   maps the service's quota `ValidationError` to a 400 with its fixed message.
 - **Pattern:** Extend Evennia models without modifying library code
+- **Staff reboot (#4001):** `evennia_extensions.reboot.request_reboot(*, requested_by)`
+  writes `<GAME_DIR>/server/reboot.requested`, announces, and calls
+  `SESSION_HANDLER.portal_shutdown()`; the root watchdog starts the unit again on a
+  fresh request (ADR-0318). Telnet face `@reboot` (`commands/account/reboot.py`), web
+  face the staff console's "Restart game" control. `@shutdown` stays a real shutdown.
 - **`PrunedCachedProperty`** (`evennia_extensions.cached_property`) — the sanctioned
   `to_attr` target for `Prefetch(to_attr=...)` onto an identity-mapped
   (`SharedMemoryModel`) model; see `evennia_extensions/CACHED_PROPERTY_STANDARD.md`

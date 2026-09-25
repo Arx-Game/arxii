@@ -363,6 +363,15 @@ verify-regeneration tag="":
 scan-prod-logs:
     python3 infra/scripts/scan_prod_logs.py
 
+# One-time setup for pull-prod: read the dev_reader key + backups bucket
+# settings from the prod Terraform outputs into the devcontainer's env file
+# (.devcontainer/dev.env, else src/.env). Run on the HOST with tofu on PATH
+# (the container firewall blocks the tofu registry); needs the six TF_STATE_*
+# values in $HOME/arxii-ops-key/tfstate.env. Never prints a secret.
+#   just dev-reader-env
+dev-reader-env *args:
+    bash infra/scripts/dev_reader_env.sh {{args}}
+
 pull-prod confirm="no":
     #!/usr/bin/env bash
     set -euo pipefail

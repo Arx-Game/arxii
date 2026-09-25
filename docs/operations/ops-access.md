@@ -78,6 +78,36 @@ For a stronger revoke (e.g. you suspect the key leaked), also clear the
 an empty `authorized_keys` and the key is dead everywhere; re-mint a fresh
 pair before the next session.
 
+## Restarting the game without SSH
+
+Three verbs exist inside the game, all Developer-locked, and they are not
+interchangeable (#4001):
+
+| Verb | What stops | Comes back | Use it for |
+| --- | --- | --- | --- |
+| `@reload` (Evennia; `@restart` is its alias) | Server only; players stay connected through the Portal | at once, by the Portal | code-only changes, a wedged Server that still takes commands |
+| `@reboot` (ours; the staff console's "Restart game" control, after an inline confirm) | both daemons, everyone drops | within about a minute, by the box's watchdog | Portal-side changes, a clean start of the whole process |
+| `@shutdown` (Evennia) | both daemons | **no**, on purpose | taking the game down to work on it |
+
+`@reboot` works without any privilege on the game user: it writes
+`<gamedir>/server/reboot.requested`, announces to everyone, and shuts both daemons
+down the way `@shutdown` does. `arxii-watchdog.timer` (root, every minute) starts
+the unit again when it finds the unit inactive and the request file younger than
+ten minutes, deleting the file first so a start that fails cannot loop. A
+`Restart=always` on the unit was rejected because it would turn every deliberate
+`@shutdown` into a restart, and a sudo grant for the game user was rejected as a
+privilege the process does not otherwise need.
+
+None of the three can recover a Server whose reactor-thread database connection
+has died (a Postgres restart under it): Evennia's shutdown routine writes to the
+database on its first line, and in that state nobody can log in to type anything.
+Since #4001 that state heals itself within one game tick (the tick script's
+`close_old_connections()` from #3327, now actually armed at boot, plus a re-arm of
+Evennia's maintenance loop). If it ever does not, "Stand up infra" recovers it:
+the deploy's reload fails after five minutes and the role falls back to a full
+restart, or press it with `full_restart` to skip the wait. Over the gate, the
+equivalent is `ssh arxii-prod sudo systemctl restart arxii`.
+
 ## Two-factor authentication lockout resets
 
 A player or administrator locked out of two-factor authentication (2FA, #3591)
