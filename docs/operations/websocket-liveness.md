@@ -92,3 +92,31 @@ guessing a smaller value.
 - ADR-0291 — websocket liveness is a server-side auto-ping
 - #3745 — the 127-second reconnect; #3743 — the login exception it multiplied
 - #3742 — connected-but-locationless sessions with no recovery path
+
+## Portal correlation diagnostics (#4009)
+
+`SecureWebSocketClient` assigns each transport a random `v1-<UUIDv4>` connection
+id at transport open. An alpha diagnostic recorder may send the reserved,
+post-open frame `portal_diagnostic_register` with a validated `v1-<UUIDv4>` run
+id. Portal intercepts that frame before Evennia parsing and replies with
+`portal_diagnostic_ack` containing only `connection_id`; invalid and duplicate
+frames are consumed and never become game commands. Registration is limited to
+three attempts per connection by default.
+
+Portal records a bounded, redacted structured event window. Events include
+transport/websocket open, auth milestone, auto-ping, pong, ping timeout, close
+frame send/receive, local disconnect, protocol failure, and `connectionLost`.
+They contain dual timestamps, protocol family, opaque ids, numeric close code,
+and clean/transport-loss categories. Cookies, credentials, player content, raw
+payloads, and close reasons are never recorded. Retention is controlled by
+`PORTAL_DIAGNOSTICS_MAX_EVENTS` and `PORTAL_DIAGNOSTICS_MAX_AGE_SECONDS`; the
+feature can be disabled with `PORTAL_DIAGNOSTICS_ENABLED`. Its default is on only
+for the explicit `DEPLOYMENT_CHANNEL=alpha` or `rehearsal` settings and off for
+production/development. The store has no public read endpoint: operators use the Portal process/log sink's existing
+access controls, and diagnostic exports remain private incident evidence.
+
+Browser JavaScript cannot observe WebSocket protocol ping/pong. Portal logs are
+the source for those events; browser exports contain application-frame metadata
+only. Caddy access logging and packet-level attribution are not implemented by
+this seam, so a Caddy or peer-initiated TCP-close claim needs separate,
+privately retained evidence.

@@ -9,11 +9,25 @@ This implementation provides better security than the default approach by:
 See src/web/WEBCLIENT_METADATA.md for future expansion ideas.
 """
 
+import json
+
 from django.conf import settings
 from evennia.server.portal.webclient import CLOSE_NORMAL, WebSocketClient
 from evennia.utils import logger, mod_import
 
+from server.portal.diagnostics import (
+    new_opaque_id,
+    portal_diagnostics,
+    valid_opaque_id,
+)
+
 DEFAULT_BROWSER_TYPE = "other"
+DIAGNOSTIC_REGISTER = "portal_diagnostic_register"
+DIAGNOSTIC_ACK = "portal_diagnostic_ack"
+_DIAGNOSTIC_REGISTER_ALIASES = frozenset({DIAGNOSTIC_REGISTER, "diagnostic_register"})
+_DEFAULT_REGISTRATION_LIMIT = 3
+_CONTROL_FRAME_LENGTH = 3
+_DATA_IN_VALUE_LENGTH = 2
 
 
 class SecureWebSocketClient(WebSocketClient):
@@ -40,6 +54,234 @@ class SecureWebSocketClient(WebSocketClient):
     # spellings, so renaming them to snake_case turns the keepalive off.
     autoPingInterval = settings.WEBSOCKET_AUTOPING_INTERVAL  # noqa: N815
     autoPingTimeout = settings.WEBSOCKET_AUTOPING_TIMEOUT  # noqa: N815
+
+    def __init__(self, *args, **kwargs):
+        """Initialize protocol state used by the Portal diagnostics seam."""
+        super().__init__(*args, **kwargs)
+        self.portal_connection_id = None
+        self.portal_diagnostic_run_id = None
+        self._diagnostic_registration_attempts = 0
+        self._portal_local_cause = None
+        self._portal_last_ping_payload = None
+
+    @property
+    def connection_id(self):
+        """Return the opaque id assigned to this transport."""
+        return self.portal_connection_id
+
+    def _emit_portal_event(self, event, **fields):
+        """Emit a privacy-safe structured event for this connection."""
+        return portal_diagnostics.emit(
+            event,
+            connection_id=self.portal_connection_id,
+            run_id=self.portal_diagnostic_run_id,
+            **fields,
+        )
+
+    def _connectionMade(self):  # noqa: N802
+        """Assign the opaque id at transport open, before the handshake callback."""
+        self.portal_connection_id = new_opaque_id()
+        super()._connectionMade()
+        self._emit_portal_event("transport_open")
+
+    def _registration_limit(self):
+        """Return the configured registration-attempt limit."""
+        value = settings.PORTAL_DIAGNOSTICS_MAX_REGISTRATION_ATTEMPTS
+        return max(1, value) if isinstance(value, int) else _DEFAULT_REGISTRATION_LIMIT
+
+    def _registration_from_frame(self, frame):
+        """Extract a registration run id, or return ``None`` for an invalid frame."""
+        if isinstance(frame, dict):
+            frame_type = frame.get("type")
+            if (
+                set(frame) != {"type", "run_id"}
+                or not isinstance(frame_type, str)
+                or frame_type not in _DIAGNOSTIC_REGISTER_ALIASES
+            ):
+                return None
+            return frame.get("run_id")
+        if (
+            not isinstance(frame, list)
+            or len(frame) != _CONTROL_FRAME_LENGTH
+            or frame[0] not in _DIAGNOSTIC_REGISTER_ALIASES
+        ):
+            return None
+        args, kwargs = frame[1], frame[2]
+        if isinstance(kwargs, dict) and set(kwargs) == {"run_id"} and args == []:
+            return kwargs["run_id"]
+        if isinstance(args, list) and len(args) == 1 and kwargs == {}:
+            return args[0]
+        return None
+
+    def _is_registration_frame(self, frame):
+        """Return whether a parsed frame targets the reserved Portal control."""
+        if isinstance(frame, dict):
+            frame_type = frame.get("type")
+            return isinstance(frame_type, str) and frame_type in _DIAGNOSTIC_REGISTER_ALIASES
+        return (
+            isinstance(frame, list)
+            and bool(frame)
+            and isinstance(frame[0], str)
+            and frame[0] in _DIAGNOSTIC_REGISTER_ALIASES
+        )
+
+    def _handle_diagnostic_registration(self, frame):
+        """Validate and acknowledge one post-open registration frame.
+
+        Invalid, duplicate, and rate-limited controls are consumed here and are
+        never handed to ``ServerSessionHandler.data_in``.
+        """
+        self._diagnostic_registration_attempts += 1
+        attempt = self._diagnostic_registration_attempts
+        if attempt > self._registration_limit():
+            self._emit_portal_event(
+                "diagnostic_registration",
+                cause="registration_rate_limited",
+                registration_attempt=attempt,
+            )
+            return
+        if self.portal_diagnostic_run_id is not None:
+            self._emit_portal_event(
+                "diagnostic_registration",
+                cause="duplicate_registration",
+                registration_attempt=attempt,
+            )
+            return
+        run_id = self._registration_from_frame(frame)
+        if not valid_opaque_id(run_id):
+            self._emit_portal_event(
+                "diagnostic_registration",
+                cause="invalid_registration",
+                registration_attempt=attempt,
+            )
+            return
+        self.portal_diagnostic_run_id = run_id
+        self._emit_portal_event(
+            "diagnostic_registration",
+            cause="registration_accepted",
+            registration_attempt=attempt,
+        )
+        # The acknowledgement contains only the Portal id. In particular, it
+        # does not echo the run id or any handshake/session data.
+        self.sendLine(
+            json.dumps([DIAGNOSTIC_ACK, [], {"connection_id": self.portal_connection_id}])
+        )
+
+    def onMessage(self, payload, isBinary):  # noqa: N802, N803
+        """Intercept the reserved Portal registration before Evennia parsing."""
+        try:
+            frame = json.loads(payload.decode("utf-8"))
+        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+            return super().onMessage(payload, isBinary)
+        if self._is_registration_frame(frame):
+            self._handle_diagnostic_registration(frame)
+            return None
+        return super().onMessage(payload, isBinary)
+
+    def data_in(self, **kwargs):
+        """Defensively consume a direct-call registration before Server parsing."""
+        for name in _DIAGNOSTIC_REGISTER_ALIASES:
+            if name in kwargs:
+                value = kwargs[name]
+                frame = (
+                    [name, value[0], value[1]]
+                    if isinstance(value, list) and len(value) == _DATA_IN_VALUE_LENGTH
+                    else {"type": name}
+                )
+                self._handle_diagnostic_registration(frame)
+                return None
+        return super().data_in(**kwargs)
+
+    def onOpen(self):  # noqa: N802
+        """Log websocket-open before the normal Evennia session setup."""
+        self._emit_portal_event("websocket_open")
+        super().onOpen()
+
+    def onPing(self, payload):  # noqa: N802
+        """Record a received protocol ping without retaining its payload."""
+        self._emit_portal_event("ping_received")
+        return super().onPing(payload)
+
+    def onPong(self, payload):  # noqa: N802
+        """Record a protocol pong; browser JavaScript cannot observe this."""
+        matched = (
+            self._portal_last_ping_payload is not None and payload == self._portal_last_ping_payload
+        )
+        self._emit_portal_event("auto_pong_accepted" if matched else "pong_received")
+        if matched:
+            self._portal_last_ping_payload = None
+        return super().onPong(payload)
+
+    def _sendAutoPing(self):  # noqa: N802
+        """Record an Autobahn keepalive ping before it is sent."""
+        self._emit_portal_event("auto_ping_sent")
+        result = super()._sendAutoPing()
+        self._portal_last_ping_payload = self.autoPingPending
+        return result
+
+    def onAutoPingTimeout(self):  # noqa: N802
+        """Record keepalive timeout before Autobahn aborts the transport."""
+        self._emit_portal_event("ping_timeout", category="ping_timeout", cause="abort")
+        return super().onAutoPingTimeout()
+
+    def sendClose(self, code=None, reason=None):  # noqa: N802
+        """Record a local close request without recording its reason text."""
+        self._portal_local_cause = self._portal_local_cause or "send_close"
+        return super().sendClose(code, reason)
+
+    def sendCloseFrame(self, code=None, reasonUtf8=None, isReply=False):  # noqa: N802, N803
+        """Record a close frame sent by this protocol, redacting its reason."""
+        self._emit_portal_event(
+            "close_frame_sent",
+            close_code=code,
+            clean=code in (CLOSE_NORMAL, 1001),
+            category="clean" if code in (CLOSE_NORMAL, 1001) else "transport_loss",
+            cause="close_reply" if isReply else (self._portal_local_cause or "send_close"),
+        )
+        return super().sendCloseFrame(code, reasonUtf8, isReply)
+
+    def onClose(self, wasClean, code=None, reason=None):  # noqa: N802, N803
+        """Record the terminal close status without retaining its reason text."""
+        self._emit_portal_event(
+            "close_callback",
+            close_code=code,
+            clean=wasClean,
+            category="clean" if wasClean else "transport_loss",
+            cause="peer_close" if wasClean else "connection_lost",
+        )
+        return super().onClose(wasClean, code, reason)
+
+    def onCloseFrame(self, code, reasonRaw):  # noqa: N802, N803
+        """Record a peer close frame without retaining the raw reason."""
+        self._emit_portal_event(
+            "close_frame_received",
+            close_code=code,
+            clean=code in (CLOSE_NORMAL, 1001),
+            category="clean" if code in (CLOSE_NORMAL, 1001) else "transport_loss",
+            cause="peer_close",
+        )
+        return super().onCloseFrame(code, reasonRaw)
+
+    def _fail_connection(self, code=1001, reason="going away"):  # noqa: ARG002
+        """Record a protocol failure without logging Autobahn's reason string."""
+        self._emit_portal_event(
+            "protocol_fail", close_code=code, category="protocol_error", cause="fail"
+        )
+        return super()._fail_connection(code, "protocol failure")
+
+    def dropConnection(self, abort=False):  # noqa: N802
+        """Record a local transport drop without peer details."""
+        self._emit_portal_event(
+            "transport_drop", category="transport_loss", cause="abort" if abort else "send_close"
+        )
+        return super().dropConnection(abort)
+
+    def connectionLost(self, reason):  # noqa: N802
+        """Record transport loss; Twisted reason text is intentionally discarded."""
+        self._emit_portal_event(
+            "connection_lost", category="transport_loss", cause="connection_lost"
+        )
+        return super().connectionLost(reason)
 
     def get_client_session(self):
         """
@@ -107,12 +349,15 @@ class SecureWebSocketClient(WebSocketClient):
             self.nonce = nonce + 1
             csession["webclient_authenticated_nonce"] = self.nonce
             csession.save()
+        self._emit_portal_event("authenticated")
 
     def disconnect(self, reason=None):
         """
         Override disconnect to handle session cleanup properly.
         Only clear the webclient session if this is the last session for the account.
         """
+        self._portal_local_cause = "disconnect"
+        self._emit_portal_event("local_disconnect", category="clean", cause="disconnect")
         csession = self.get_client_session()
 
         if csession:
