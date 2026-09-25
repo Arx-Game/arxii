@@ -7883,7 +7883,17 @@ def _resolve_rally(
 
             # Great success: restore morale to ally-side summon opponents.
             if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
-                restore = success_level * RALLY_MORALE_PER_LEVEL
+                from world.covenants.services import (  # noqa: PLC0415
+                    covenant_role_action_scaling_bonus,
+                )
+
+                # A rally scaling bonus increases the morale restored by the
+                # success level, matching the additive effect scaling used by
+                # other universal combat actions such as interpose.
+                bonus = covenant_role_action_scaling_bonus(
+                    participant.character_sheet.character, "combat_rally"
+                )
+                restore = int(success_level * RALLY_MORALE_PER_LEVEL * (1 + bonus))
                 ally_summons = CombatOpponent.objects.filter(
                     encounter=participant.encounter,
                     status=OpponentStatus.ACTIVE,
