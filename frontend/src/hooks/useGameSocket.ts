@@ -56,6 +56,7 @@ import { fetchAccount } from '@/evennia_replacements/api';
 import { queryClient } from '@/queryClient';
 import { reconcileStoredDrafts } from '@/game/useDraftStore';
 import { fetchPoseSubmission } from '@/scenes/queries';
+import { connectionDiagnostics } from '@/diagnostics/connectionDiagnostics';
 
 const sockets: Record<string, WebSocket> = {};
 // Names with a connect() in flight (pre-socket-creation await window) — the
@@ -458,6 +459,11 @@ function dispatchIncomingMessage(
   generation: number
 ): void {
   const [msgType, args, kwargs] = parsed;
+  connectionDiagnostics.frame(msgType, 'parsed', generation);
+  if (msgType === WS_MESSAGE_TYPE.PUPPET_CHANGED)
+    connectionDiagnostics.readiness('puppet_confirmed', generation);
+  if (msgType === WS_MESSAGE_TYPE.ROOM_STATE)
+    connectionDiagnostics.readiness('room_state_accepted', generation);
   const handler = handlerFor(msgType);
   if (handler) {
     const accepted = handler({ character, args, kwargs, dispatch, navigate });
@@ -502,7 +508,11 @@ export function useGameSocket() {
     // Explicit disconnect: cancel any pending reconnects first so a closing
     // socket doesn't immediately resurrect itself.
     Object.keys(reconnectTimers).forEach(clearReconnect);
-    Object.values(sockets).forEach((socket) => socket.close());
+    Object.entries(sockets).forEach(([character, socket]) => {
+      const generation = connectionGenerations[character] ?? 0;
+      connectionDiagnostics.localClose(character, generation, 'disconnect_all');
+      socket.close();
+    });
   }, []);
 
   /**
@@ -517,7 +527,14 @@ export function useGameSocket() {
     (character: MyRosterEntry['name']) => {
       clearReconnect(character);
       const socket = sockets[character];
-      if (socket) socket.close();
+      if (socket) {
+        connectionDiagnostics.localClose(
+          character,
+          connectionGenerations[character] ?? 0,
+          'disconnect'
+        );
+        socket.close();
+      }
       dispatch(endSession(character));
     },
     [dispatch]
@@ -529,6 +546,12 @@ export function useGameSocket() {
       connecting.add(character);
       dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
       const generation = nextGeneration(character);
+      connectionDiagnostics.record(
+        'socket_attempt',
+        { attempt: (reconnectAttempts[character] ?? 0) + 1, outcome: 'started' },
+        undefined,
+        generation
+      );
 
       let currentAccount = account;
       if (!currentAccount) {
@@ -537,12 +560,14 @@ export function useGameSocket() {
           if (currentAccount) {
             dispatch(setAccount(currentAccount));
           } else {
+            connectionDiagnostics.readiness('account_fetch_failed', generation);
             connecting.delete(character);
             dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
             navigate('/login');
             return;
           }
         } catch {
+          connectionDiagnostics.readiness('account_fetch_failed', generation);
           connecting.delete(character);
           dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
           navigate('/login');
@@ -552,11 +577,27 @@ export function useGameSocket() {
 
       // Clean websocket URL - middleware will inject session auth from cookies
       const url = getWebSocketUrl(window.location);
-      const socket = new WebSocket(url);
+      let socket: WebSocket;
+      try {
+        socket = new WebSocket(url);
+      } catch {
+        connectionDiagnostics.record(
+          'socket_attempt',
+          { attempt: (reconnectAttempts[character] ?? 0) + 1, outcome: 'constructor_failed' },
+          undefined,
+          generation
+        );
+        connecting.delete(character);
+        dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
+        return;
+      }
       sockets[character] = socket;
+      connectionDiagnostics.socketStarted(character, generation);
       connecting.delete(character);
 
       socket.addEventListener('open', () => {
+        connectionDiagnostics.record('socket_open', {}, undefined, generation);
+        connectionDiagnostics.readiness('socket_open', generation);
         clearReconnect(character);
         // A new socket generation starts a fresh ordering baseline. Stale
         // callbacks from the previous generation are rejected by socket and
@@ -575,6 +616,7 @@ export function useGameSocket() {
         // dispatched here — see Step 3 below, which fires it only after
         // reconciliation, not on the raw socket 'open' event.
         const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.PUPPET, [], { character }];
+        connectionDiagnostics.readiness('puppet_requested', generation);
         socket.send(JSON.stringify(puppet));
 
         // Step 2: reconcile (#3760 Task 12). A reconnect means any send
@@ -611,7 +653,12 @@ export function useGameSocket() {
           });
       });
 
+      socket.addEventListener('error', () => {
+        connectionDiagnostics.record('socket_error', {}, undefined, generation);
+      });
+
       socket.addEventListener('close', (event) => {
+        connectionDiagnostics.socketClosed(character, generation, event.code, event.wasClean);
         // A reconnect can replace this socket before its close event arrives.
         // Never let stale frames or stale closes mutate the current session.
         if (sockets[character] !== socket) return;
@@ -636,11 +683,20 @@ export function useGameSocket() {
             lifecycleState: attempt > MAX_RECONNECT_ATTEMPTS ? 'entry-error' : 'reconnecting',
           })
         );
-        if (attempt > MAX_RECONNECT_ATTEMPTS) return;
+        if (attempt > MAX_RECONNECT_ATTEMPTS) {
+          connectionDiagnostics.reconnect('reconnect_exhausted', { attempt }, generation);
+          return;
+        }
         reconnectAttempts[character] = attempt;
         const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
+        connectionDiagnostics.reconnect(
+          'reconnect_scheduled',
+          { attempt, delayMs: delay },
+          generation
+        );
         reconnectTimers[character] = setTimeout(() => {
           delete reconnectTimers[character];
+          connectionDiagnostics.reconnect('reconnect_fired', { attempt }, generation);
           connect(character).catch(swallowReconnectError);
         }, delay);
       });
@@ -660,6 +716,7 @@ export function useGameSocket() {
         try {
           parsed = JSON.parse(event.data);
         } catch {
+          connectionDiagnostics.frame('unknown', 'malformed_json', generation);
           // Bad JSON is a diagnostic, not story content.
           dispatch(
             addSessionDiagnostic({
@@ -671,6 +728,7 @@ export function useGameSocket() {
         }
 
         if (!isIncomingMessage(parsed)) {
+          connectionDiagnostics.frame('unknown', 'unexpected_shape', generation);
           // Unexpected structure is a diagnostic, not story content.
           dispatch(
             addSessionDiagnostic({
@@ -708,6 +766,7 @@ export function useGameSocket() {
         try {
           // 1001 is the browser's "going away" code. The close handler treats
           // it as recoverable; explicit disconnect still uses the normal 1000.
+          connectionDiagnostics.localClose(character, generation, 'page_resume');
           socket.close(1001, 'page-resume');
         } catch {
           // The replacement connection is still attempted below.

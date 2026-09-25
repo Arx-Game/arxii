@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useSetAppearOffline, useVisibilitySettings } from '@/roster/visibility';
+import { ConnectionDiagnosticsSettings } from '@/diagnostics/ConnectionDiagnosticsSettings';
 
 function VisibilityPreferences() {
   const { data, isLoading, isError } = useVisibilitySettings();
@@ -71,6 +72,7 @@ export function SettingsPage() {
     <div className="mt-4 space-y-6">
       <VisibilityPreferences />
       <ThemePreferences />
+      <ConnectionDiagnosticsSettings />
     </div>
   );
 }
