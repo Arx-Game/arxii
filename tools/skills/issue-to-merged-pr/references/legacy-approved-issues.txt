@@ -1,0 +1,9 @@
+# Temporary compatibility for issues approved before discovery markers existed.
+# Retire this file after 2026-10-31, after each issue has a real discovery
+# assessment and marker. New transitions must not add entries here.
+# Format: issue-number | current workflow lane | migration note
+2540 | status:implementing | approved in-flight umbrella spec
+3055 | status:implementing | approved in-flight beta reset design
+3289 | status:implementing | approved in-flight IC messaging design
+3299 | status:spec-review | approved spec awaiting implementation
+3933 | status:implementing | approved in-flight production defect

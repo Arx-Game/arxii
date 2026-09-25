@@ -77,7 +77,7 @@ class DiscoveryValidatorTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     str(SCRIPT),
-                    "3956",
+                    "3933",
                     "--body-file",
                     handle.name,
                     "--labels",
@@ -91,6 +91,29 @@ class DiscoveryValidatorTests(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("legacy-approved", result.stdout)
+
+    def test_unlisted_approved_legacy_issue_is_rejected(self) -> None:
+        body = "Issue without a discovery marker.\n<!-- spec:start -->\nSpec.\n<!-- spec:end -->\n"
+        with tempfile.NamedTemporaryFile("w", suffix=".md") as handle:
+            handle.write(body)
+            handle.flush()
+            result = subprocess.run(
+                [
+                    str(SCRIPT),
+                    "3956",
+                    "--body-file",
+                    handle.name,
+                    "--labels",
+                    "status:implementing,spec:approved",
+                    "--allow-approved-legacy",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not in the temporary legacy compatibility allowlist", result.stderr)
 
     def test_standard_lane_can_wait_for_stakeholder(self) -> None:
         result = self.run_validator(STANDARD, "status:spec-draft")
