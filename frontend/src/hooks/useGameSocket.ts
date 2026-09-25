@@ -9,6 +9,7 @@ import {
   setSessionConnectionStatus,
   setSessionPuppetConfirmed,
   setSessionLifecycle,
+  setSessionEntryError,
   resetSessionRoomRevision,
   setRoomStateResyncStatus,
 } from '@/store/gameSlice';
@@ -68,6 +69,11 @@ const connecting = new Set<string>();
 // froze the feed until the user manually re-clicked their character tab.
 const reconnectAttempts: Record<string, number> = {};
 const reconnectTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+// A successful websocket is not entry-ready until a room snapshot arrives.
+// Give the normal puppet/entry path a bounded window, then make one explicit
+// same-connection resync request before exposing recovery UI.
+const entryRecoveryTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+const ENTRY_RECOVERY_WAIT_MS = 5000;
 const MAX_RECONNECT_ATTEMPTS = 6;
 // Per-character monotonic connection generation (#3760): incremented on every
 // connection attempt, including automatic reconnects. Each connection's message
@@ -161,6 +167,8 @@ export function __resetGameSocketModuleStateForTests(): void {
   Object.keys(reconnectAttempts).forEach((character) => delete reconnectAttempts[character]);
   Object.values(reconnectTimers).forEach((timer) => clearTimeout(timer));
   Object.keys(reconnectTimers).forEach((character) => delete reconnectTimers[character]);
+  Object.values(entryRecoveryTimers).forEach((timer) => clearTimeout(timer));
+  Object.keys(entryRecoveryTimers).forEach((character) => delete entryRecoveryTimers[character]);
   Object.keys(connectionGenerations).forEach(
     (character) => delete connectionGenerations[character]
   );
@@ -177,6 +185,14 @@ function clearReconnect(character: string) {
   if (timer !== undefined) {
     clearTimeout(timer);
     delete reconnectTimers[character];
+  }
+}
+
+function clearEntryRecovery(character: string) {
+  const timer = entryRecoveryTimers[character];
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    delete entryRecoveryTimers[character];
   }
 }
 
@@ -263,6 +279,7 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
         const pending = pendingResync.get(kwargs.client_request_id);
         if (!pending || pending.character !== character) return false;
         finishResync(pending, dispatch, 'failure', 'Room state refresh failed. Retry.');
+        dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
         return true;
       };
 
@@ -275,8 +292,15 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
         handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch);
 
     case WS_MESSAGE_TYPE.COMMAND_ERROR:
-      return ({ kwargs }) => {
+      return ({ character, kwargs, dispatch }) => {
         const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
+        if (typeof error === 'string' && command === WS_MESSAGE_TYPE.PUPPET) {
+          clearEntryRecovery(character);
+          // Keep the server's refusal visible in the entry placeholder as well
+          // as the toast. The lifecycle transition below is intentionally
+          // limited to the puppet handshake, not ordinary command failures.
+          dispatch(setSessionEntryError({ character, error }));
+        }
         toast.error(error, { description: command });
       };
 
@@ -380,6 +404,10 @@ function updateLifecycle(
     );
     return;
   }
+  if (msgType === WS_MESSAGE_TYPE.COMMAND_ERROR && kwargs?.command === WS_MESSAGE_TYPE.PUPPET) {
+    dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
+    return;
+  }
   if (msgType !== WS_MESSAGE_TYPE.SCENE) return;
   const scenePayload = kwargs as { action?: unknown } | undefined;
   if (scenePayload?.action === 'end') {
@@ -475,6 +503,9 @@ function dispatchIncomingMessage(
           message: 'A connection message was malformed or out of sequence. Try again.',
         })
       );
+    }
+    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
+      clearEntryRecovery(character);
     }
     if (
       msgType === WS_MESSAGE_TYPE.ROOM_STATE &&
@@ -618,6 +649,12 @@ export function useGameSocket() {
         const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.PUPPET, [], { character }];
         connectionDiagnostics.readiness('puppet_requested', generation);
         socket.send(JSON.stringify(puppet));
+        clearEntryRecovery(character);
+        entryRecoveryTimers[character] = setTimeout(() => {
+          delete entryRecoveryTimers[character];
+          if (generation !== connectionGenerations[character]) return;
+          requestRoomState(character);
+        }, ENTRY_RECOVERY_WAIT_MS);
 
         // Step 2: reconcile (#3760 Task 12). A reconnect means any send
         // dispatched on the now-superseded connection may never have gotten
@@ -662,6 +699,7 @@ export function useGameSocket() {
         // A reconnect can replace this socket before its close event arrives.
         // Never let stale frames or stale closes mutate the current session.
         if (sockets[character] !== socket) return;
+        clearEntryRecovery(character);
         dispatch(setSessionConnectionStatus({ character, status: false }));
         finishGenerationResyncs(character, generation, dispatch);
         delete sockets[character];
@@ -862,6 +900,9 @@ export function useGameSocket() {
             ? 'Room state refreshed, but confirmation was lost.'
             : 'Room state refresh failed. Retry.'
         );
+        if (!pending.snapshotAccepted) {
+          dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
+        }
       }, 6000);
       pendingResync.set(requestId, {
         character,

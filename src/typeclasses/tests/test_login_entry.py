@@ -15,6 +15,7 @@ from unittest.mock import Mock, create_autospec, patch
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
+from evennia.accounts.accounts import DefaultAccount
 from evennia.server.serversession import ServerSession
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
@@ -170,6 +171,18 @@ class PuppetCharacterInSessionTests(LoginEntryTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._puppet_patcher.stop()
+
+    def test_refused_evennia_puppet_is_not_reported_as_success(self) -> None:
+        """A non-raising Evennia refusal must reach the caller as failure."""
+        session = self.session
+        with (
+            patch.object(type(self.account), "can_puppet_character", return_value=(True, "")),
+            patch.object(DefaultAccount, "puppet_object"),
+        ):
+            ok, message = self.account.puppet_character_in_session(self.char_b, session)
+
+        self.assertFalse(ok)
+        self.assertIn("Unable to control Bianca", message)
 
     def test_switching_puppets_sends_a_lifecycle_frame(self) -> None:
         self.session.puppet = self.char_a

@@ -16,6 +16,8 @@ interface ExplorationReaderProps {
   /** Typed text lines for this character (#3856), shown among the ambient poses by time. */
   notes?: FeedNote[];
   onRetry?: () => void;
+  /** Server refusal or untyped entry output, shown before a room exists. */
+  entryError?: string;
 }
 
 /**
@@ -28,11 +30,16 @@ export function ExplorationReader({
   lifecycleState,
   notes = [],
   onRetry,
+  entryError,
 }: ExplorationReaderProps) {
   const awaitingSnapshot = lifecycleState === 'entering' && Boolean(room);
   const isStale =
     lifecycleState === 'reconnecting' || lifecycleState === 'entry-error' || awaitingSnapshot;
   const isAftermath = lifecycleState === 'aftermath';
+  const visibleEntryError =
+    lifecycleState === 'entering' || lifecycleState === 'entry-error'
+      ? (entryError ?? notes.at(-1)?.content)
+      : undefined;
   // One column (#3856): the room's structured poses and the character's own
   // notes (a look, an error, an arrival) in the order they happened, never a
   // section of notes below a section of poses.
@@ -105,9 +112,10 @@ export function ExplorationReader({
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               <span className="sr-only">No messages yet. </span>
-              {lifecycleState === 'entry-error'
-                ? 'The world did not confirm this character. Check your connection and try again.'
-                : 'Your confirmed surroundings will appear here when entry completes.'}
+              {visibleEntryError ??
+                (lifecycleState === 'entry-error'
+                  ? 'The world did not confirm this character. Check your connection and try again.'
+                  : 'Your confirmed surroundings will appear here when entry completes.')}
             </p>
             {lifecycleState === 'entry-error' && onRetry && (
               <button

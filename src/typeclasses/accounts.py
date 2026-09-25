@@ -22,6 +22,8 @@ several more options for customizing the Guest account system.
 
 """
 
+import contextlib
+
 from django.conf import settings
 from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
@@ -436,9 +438,20 @@ class Account(DefaultAccount):
 
         Evennia's puppet_object can early-return without puppeting (permission
         denied, already-puppeted-by-other-account, max-puppets). We check
-        session.puppet to confirm success before broadcasting.
+        session.puppet to confirm success before broadcasting. The temporary
+        marker lets ``Character.at_post_puppet`` address the session that
+        actually initiated this hook; Evennia does not pass it to the hook.
         """
-        super().puppet_object(session, obj)
+        # Evennia calls at_post_puppet() without its session argument. Keep the
+        # initiating session on the object only for the duration of that call;
+        # this avoids treating arbitrary sessions.all() ordering as a routing
+        # contract when multisession mode is enabled.
+        obj.ndb.puppet_entry_session = session
+        try:
+            super().puppet_object(session, obj)
+        finally:
+            with contextlib.suppress(AttributeError):
+                del obj.ndb.puppet_entry_session
         if session.puppet is obj:
             self._broadcast_puppet_changed(session, obj)
             self._record_selection(obj)
@@ -501,8 +514,12 @@ class Account(DefaultAccount):
             )
             self.unpuppet_object(session)
 
-        # Puppet the new character — broadcast handled by puppet_object override
+        # Puppet the new character — broadcast handled by puppet_object override.
+        # Evennia can refuse without raising (for example a lock race or puppet
+        # limit), so the session is the only trustworthy success signal.
         self.puppet_object(session, character)
+        if session.puppet is not character:
+            return False, f"Unable to control {character.name}."
         return True, f"Now controlling {character.name}."
 
     def unpuppet_object(self, session) -> None:

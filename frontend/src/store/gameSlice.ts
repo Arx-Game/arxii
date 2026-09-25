@@ -105,6 +105,8 @@ export interface Session {
   stateSequence?: number;
   /** Character-scoped same-connection room-state recovery status. */
   roomStateResyncStatus?: RoomStateResyncStatus;
+  /** Entry failure text shown in the no-room placeholder, not only as a toast. */
+  entryError?: string;
   roomStateResyncError?: string;
   /**
    * Set when `puppet_changed` names this session's character after the
@@ -270,7 +272,23 @@ export const gameSlice = createSlice({
       }>
     ) => {
       const session = state.sessions[action.payload.character];
-      if (session) session.lifecycleState = action.payload.lifecycleState;
+      if (session) {
+        session.lifecycleState = action.payload.lifecycleState;
+        if (
+          action.payload.lifecycleState === 'entering' ||
+          action.payload.lifecycleState === 'ready-no-scene' ||
+          action.payload.lifecycleState === 'ready-scene'
+        ) {
+          session.entryError = undefined;
+        }
+      }
+    },
+    setSessionEntryError: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; error: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) session.entryError = action.payload.error;
     },
     resetSessionRoomRevision: (
       state,
@@ -715,6 +733,7 @@ export const {
   setSessionConnectionStatus,
   setSessionPuppetConfirmed,
   setSessionLifecycle,
+  setSessionEntryError,
   resetSessionRoomRevision,
   setRoomStateResyncStatus,
   addSessionMessage,

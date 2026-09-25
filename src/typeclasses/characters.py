@@ -507,83 +507,127 @@ class Character(ObjectParent, DefaultCharacter):
                 self.home = fallback
         super().at_pre_puppet(account, session=session, **kwargs)
 
-    def at_post_puppet(self, **kwargs):  # noqa: ARG002 -- Evennia's hook contract requires it
+    def _entry_error(self, session, code: str) -> None:
+        """Tell the joining client why entry did not become ready."""
+        if session is None:
+            return
+        messages = {
+            "no_location": "Your location could not be confirmed.",
+            "dreamspace_unavailable": "Your surroundings could not be loaded.",
+            "state_unavailable": "Your surroundings could not be loaded.",
+            "session_rebound": "This connection changed before entry completed.",
+            "not_authenticated": "This connection is no longer authenticated.",
+            "serialization_failed": "Your surroundings could not be loaded.",
+        }
+        session.msg(
+            command_error={
+                "error": messages.get(code, "Entry could not be completed."),
+                "command": "puppet",
+                "code": code,
+            }
+        )
+
+    def _run_entry_step(self, name: str, callback, session) -> None:
+        """Run one non-essential entry step without stranding the session."""
+        try:
+            callback()
+        except (AttributeError, ObjectDoesNotExist, RuntimeError, TypeError, ValueError):
+            logger.exception("Character %s entry step %s failed", self, name)
+            self._entry_error(session, "entry_step_failed")
+
+    def _entry_session(self, sessions, kwargs):
+        """Resolve the session that initiated this puppet hook.
+
+        Evennia invokes ``at_post_puppet`` without the session argument. The
+        account override records the initiating session briefly on ``ndb``;
+        direct hook calls retain the single-session/legacy fallback for tests
+        and typeclass callers that have no initiating-session context.
+        """
+        candidate = kwargs.get("session")
+        if candidate is None:
+            try:
+                candidate = self.ndb.puppet_entry_session
+            except AttributeError:
+                candidate = None
+        if candidate is not None and any(candidate is session for session in sessions):
+            return candidate
+        if len(sessions) == 1:
+            return sessions[0]
+        # There is no reliable answer for a direct, context-free invocation;
+        # preserve the historical behaviour while real puppet calls use the
+        # marker above.
+        return sessions[-1] if sessions else None
+
+    def at_post_puppet(self, **kwargs):  # noqa: C901 -- the guarded entry pipeline is intentionally explicit
         """Handle actions after a session puppets this character.
 
-        Sessions share a character (#3812): a second window opening is not the
-        character coming online. The roster stamp and the cmdset payload go
-        out on every puppet; the friends alert and the offline story catch-up
-        fire only when the FIRST session arrives; the joining window gets its
-        own ``look`` and room state rather than every window getting them again.
-        Evennia adds the session before calling this hook, so the newest one is
-        last in ``sessions.all()`` (a session-less call, as in tests, counts as
-        the first).
-
-        Evennia's own ``at_post_puppet`` is not called: its "You become", stock
-        look and room line are all untaggable, so ``_announce_become`` and
-        ``_announce_arrival`` send the same information tagged instead (#3933).
-        The "You become" line is per window (the new window has not seen it);
-        the room arrival is a came-online announcement, so it fires on the
-        first session only.
-
-        Args:
-            **kwargs: Arbitrary, optional arguments passed by Evennia.
+        The room snapshot is the entry readiness signal, so it is attempted
+        first and any refusal is sent to the initiating session. All other
+        entry work is best effort: a story catch-up, command serialization, or
+        room announcement failure must not prevent the snapshot or strand the
+        newly puppeted session.
         """
-        self._announce_become()
         sessions = list(self.sessions.all())
-        first_session = len(sessions) <= 1
-        joining = sessions[-1] if sessions else None
+        joining = self._entry_session(sessions, kwargs)
         try:
-            entry = self.sheet_data.roster_entry
-        except (RosterEntry.DoesNotExist, ObjectDoesNotExist):
-            entry = None
-        if entry:
-            entry.last_puppeted = timezone.now()
-            entry.save(update_fields=["last_puppeted"])
-            # Event-driven promotion (#2728 §6). Puppeting IS the activity signal,
-            # so clear INACTIVE here rather than leaving a returning player waiting
-            # up to a week for the weekly sweep to notice.
-            from world.roster.services.activity import mark_character_active
+            result = self.send_room_state(session=joining)
+        except (AttributeError, ObjectDoesNotExist, RuntimeError, TypeError, ValueError):
+            logger.exception("Character %s entry room-state send failed", self)
+            result = RoomStateSendResult(sent=False, code="serialization_failed")
+        if isinstance(result, RoomStateSendResult) and not result.sent:
+            self._entry_error(joining, result.code or "state_unavailable")
 
-            mark_character_active(self.sheet_data)
-        payload = serialize_cmdset(self)
-        for session in sessions:
-            session.msg(commands=(payload, {}))
+        self._run_entry_step("become", self._announce_become, joining)
 
+        def update_roster():
+            try:
+                entry = self.sheet_data.roster_entry
+            except (RosterEntry.DoesNotExist, ObjectDoesNotExist):
+                entry = None
+            if entry:
+                entry.last_puppeted = timezone.now()
+                entry.save(update_fields=["last_puppeted"])
+                from world.roster.services.activity import mark_character_active
+
+                mark_character_active(self.sheet_data)
+
+        self._run_entry_step("roster", update_roster, joining)
+
+        def send_commands():
+            payload = serialize_cmdset(self)
+            for session in sessions:
+                session.msg(commands=(payload, {}))
+
+        self._run_entry_step("commands", send_commands, joining)
+
+        first_session = len(sessions) <= 1
         if first_session:
-            self._announce_arrival()
+            self._run_entry_step("arrival", self._announce_arrival, joining)
 
-            # Stories login catch-up: re-evaluate active stories and deliver
-            # any queued narrative messages that accumulated while offline.
             from world.stories.services.login import catch_up_character_stories
 
-            catch_up_character_stories(self)
+            self._run_entry_step("story_catchup", lambda: catch_up_character_stories(self), joining)
 
-            # Friends watch list (#1727): alert online players who friended this character.
             from world.scenes.friend_services import notify_friends_of_status
 
-            notify_friends_of_status(self, online=True)
+            self._run_entry_step(
+                "friends", lambda: notify_friends_of_status(self, online=True), joining
+            )
 
-        # Look now returns prose only. Confirm structured presence independently
-        # so web entry does not depend on moving rooms or having an active scene.
-        self.send_room_state(session=joining)
-        # The joining session's look is tagged on_entry so a client that already
-        # shows the room (the web room panel) can drop it (#3933). The slot has
-        # more than one writer (the console inputfunc is the other), so the
-        # previous value is restored rather than cleared.
-        previous = joining.ndb.text_frame_options if joining is not None else None
-        if joining is not None:
-            # Merged, not replaced: a console-mode ``@ic`` keeps its ``console``
-            # tag on the entry look. The ``finally`` still restores ``previous``.
-            joining.ndb.text_frame_options = {
-                **(previous or {}),
-                TextFrameOption.ON_ENTRY.value: True,
-            }
-        try:
-            self.execute_cmd("look", session=joining)
-        finally:
+        def send_entry_look():
+            previous = joining.ndb.text_frame_options if joining is not None else None
             if joining is not None:
-                joining.ndb.text_frame_options = previous
+                joining.ndb.text_frame_options = {
+                    **(previous or {}),
+                    TextFrameOption.ON_ENTRY.value: True,
+                }
+            try:
+                self.execute_cmd("look", session=joining)
+            finally:
+                if joining is not None:
+                    joining.ndb.text_frame_options = previous
+
+        self._run_entry_step("look", send_entry_look, joining)
 
     def _announce_become(self) -> None:
         """The per-window ``You become`` line, tagged ``lifecycle`` (#3933).
