@@ -1,6 +1,6 @@
 ---
 name: mock-fidelity-reviewer
-description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, and when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator. Catches the call that is green in every test and raises TypeError on every real request.
+description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator, and when frontend tests hand-write a double of a browser API (WebSocket, observers, storage). Catches the call that is green in every test and raises on every real request.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -78,6 +78,24 @@ rule in a file is not a gate; you are the gate.
 - **An assertion that only proves the call happened** (`assert_called`,
   `assert_called_once`) where the interesting question is what was passed. Say
   what the assertion would need to check to have caught the defect.
+- **A hand-written frontend double of a browser API** (`WebSocket`,
+  `IntersectionObserver`, `localStorage`, `fetch`, ...) that accepts arguments the
+  browser rejects. The TypeScript types do not save you: `close(code?: number)`
+  types every number, but a browser throws `InvalidAccessError` for any code other
+  than 1000 or 3000-4999. `useGameSocket.ts`'s wake resume called
+  `socket.close(1001, ...)`, the mock's `close(..._args)` accepted it, and in
+  production every resume leaked a live websocket session that the server's
+  auto-ping kept alive (#4026). Read the API's spec or MDN page for what it
+  throws, and check the double throws the same. The mock in
+  `useGameSocket.test.ts` now does; a new double of the same API should reuse it
+  rather than write a looser one.
+- **A `try/catch` around a cleanup call** (`close`, `disconnect`, `unsubscribe`,
+  `removeEventListener`, `delete`) whose `catch` does nothing. It turns "the
+  resource was not released" into silence, and the code after it goes on as if
+  the release worked. In #4026 the socket had already been removed from its
+  tracking map, so once `close()` threw nothing could reach it again. Ask what
+  state the code is in when the call throws, and whether a test exercises that
+  path with a double that can throw.
 
 ## How to report
 
