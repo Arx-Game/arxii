@@ -29,6 +29,17 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   character sets `session.puppetConfirmed`, a `puppet_changed` for another
   character (a sibling tab switching) is ignored, and a refusal arrives as
   `command_error` and is toasted. Readiness still gates on `room_state`.
+- **Wake resume** (#3992, #4026): `resume(character)` replaces a socket that a
+  frozen page may have left looking OPEN. It removes the socket from `sockets`,
+  marks it in `localCloseIntent`, closes it with `PAGE_RESUME_CLOSE_CODE` (4000)
+  and connects again. **The close code must be 1000 or 3000-4999**: a browser
+  throws `InvalidAccessError` for anything else, and a socket that was already
+  removed from `sockets` then stays open for good (the server's auto-ping keeps
+  it alive). That is what 1001 did, one leaked session per resume. The caller is
+  `game/hooks/useWakeResume.ts`, which resumes only on evidence of a freeze: the
+  Page Lifecycle `resume` event, or a heartbeat timer that went silent for
+  `FROZEN_GAP_MS`. Time spent in another window is not evidence and must never
+  trigger it. The test mock rejects illegal close codes the way a browser does.
 - **Three tags drop a `text` frame** (#3933, ADR-0306). `dispatchLegacyText` adds no
   note when the frame's kwargs carry `interaction_echo: true` (the structured
   Interaction pushed alongside it is the render), `type: 'lifecycle'` (a puppet

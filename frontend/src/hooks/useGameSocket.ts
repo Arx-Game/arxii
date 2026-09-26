@@ -78,6 +78,9 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 // CloseEvent.code does not identify who closed a socket. Keep that intent on
 // the socket itself so a deliberate close cannot be mistaken for a peer loss.
 const localCloseIntent = new WeakSet<WebSocket>();
+// The close code a wake resume sends for the socket it replaces. It must be a
+// code WebSocket.close() accepts, 1000 or 3000-4999; see resume() (#4026).
+export const PAGE_RESUME_CLOSE_CODE = 4000;
 
 type ConnectionReadiness = {
   socket: WebSocket;
@@ -893,14 +896,17 @@ export function useGameSocket() {
         dispatch(setSessionConnectionStatus({ character, status: false }));
         dispatch(setSessionLifecycle({ character, lifecycleState: 'reconnecting' }));
         try {
-          // 1001 is the browser's "going away" code. The close handler treats
-          // it as recoverable; explicit disconnect still uses the normal 1000.
+          // A browser accepts only 1000 or 3000-4999 in close(); anything else
+          // throws InvalidAccessError, and the socket stays open with nothing
+          // tracking it. This used 1001, so every resume leaked a live session
+          // that the server's auto-ping then kept alive (#4026).
+          // PAGE_RESUME_CLOSE_CODE is ours, from the 4000-4999 app range.
           connectionDiagnostics.localClose(character, generation, 'page_resume');
           // This close is deliberate, but the replacement below is intentional
           // recovery rather than a player leave. Mark it before close so its
           // late callback cannot consume the replacement session.
           localCloseIntent.add(socket);
-          socket.close(1001, 'page-resume');
+          socket.close(PAGE_RESUME_CLOSE_CODE, 'page-resume');
         } catch {
           // The replacement connection is still attempted below.
         }

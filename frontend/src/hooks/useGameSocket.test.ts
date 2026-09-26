@@ -53,7 +53,11 @@ vi.mock('sonner', () => ({
   toast: mockToast,
 }));
 
-import { useGameSocket, __resetGameSocketModuleStateForTests } from './useGameSocket';
+import {
+  PAGE_RESUME_CLOSE_CODE,
+  useGameSocket,
+  __resetGameSocketModuleStateForTests,
+} from './useGameSocket';
 import { queryClient } from '@/queryClient';
 import { draftStorageKey, type Draft } from '@/game/useDraftStore';
 import { recordedUnknownFrames, __resetUnknownFramesForTests } from './unknownFrames';
@@ -88,10 +92,24 @@ class MockWebSocket {
   }
 
   /** Records the caller's intent only; a test dispatches the resulting
-   * `close` event itself, the way a real socket fires it asynchronously. */
+   * `close` event itself, the way a real socket fires it asynchronously.
+   *
+   * Rejects a close code the way a browser does: anything other than 1000 or
+   * 3000-4999 throws `InvalidAccessError` and leaves the socket open. A mock
+   * that accepted any code hid #4026, where `close(1001)` threw inside a
+   * try/catch and every wake resume leaked a live socket. */
   closed = false;
-  close(..._args: unknown[]): void {
+  closeCode: number | undefined;
+  close(code?: number, _reason?: string): void {
+    if (code !== undefined && code !== 1000 && (code < 3000 || code > 4999)) {
+      throw new DOMException(
+        `Failed to execute 'close' on 'WebSocket': The close code must be either 1000, ` +
+          `or between 3000 and 4999. ${code} is neither.`,
+        'InvalidAccessError'
+      );
+    }
     this.closed = true;
+    this.closeCode = code;
   }
 
   dispatch(type: string, event: unknown = {}): void {
@@ -224,8 +242,12 @@ describe('useGameSocket wake resume (#3933)', () => {
       result.current.resume(character);
     });
 
+    // The replaced socket really closes (#4026): with a code the browser
+    // rejects, close() throws and the socket stays open behind the new one.
     expect(staleSocket.closed).toBe(true);
+    expect(staleSocket.closeCode).toBe(PAGE_RESUME_CLOSE_CODE);
     expect(MockWebSocket.instances).toHaveLength(2);
+    expect(MockWebSocket.instances.filter((socket) => !socket.closed)).toHaveLength(1);
     expect(mockDispatch).toHaveBeenCalledWith({
       type: 'game/setSessionConnectionStatus',
       payload: { character, status: false },
@@ -236,7 +258,7 @@ describe('useGameSocket wake resume (#3933)', () => {
     });
 
     act(() => {
-      staleSocket.dispatch('close', { code: 1001 });
+      staleSocket.dispatch('close', { code: PAGE_RESUME_CLOSE_CODE });
     });
     expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'game/resetGame', payload: undefined });
   });
