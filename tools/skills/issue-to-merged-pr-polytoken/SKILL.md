@@ -119,7 +119,11 @@ table above.
   Do NOT run `git worktree add` or invoke `using-git-worktrees` Step 1a/1b again
   — `start-work.sh` already created the git worktree. The `using-git-worktrees`
   skill's Step 0 will detect you're already isolated and skip creation; that's
-  the expected path on re-entry.
+  the expected path on re-entry. On the solo laptop (under 8 GiB visible memory,
+  or `ARXII_BRANCH_IN_PLACE=1`; CLAUDE.md "Tool & Subagent Sequencing")
+  `start-work.sh` checks the branch out in the main working tree instead and
+  emits that tree as `worktree_path`; the `pushd` is a no-op, there is no
+  worktree, and `post-merge-cleanup.sh` knows not to remove the main tree.
 
 - **Model selection.** Read the `model` and `complexity` fields from the emitted
   JSON. `pickup-issue.sh` derives the model from the `complexity:*` label, with

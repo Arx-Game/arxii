@@ -1,5 +1,12 @@
 # Skill: friction-audit redesign + takeaway-capture step
 
+> **Status (2026-09-25): the `workflow-friction-audit` half is retired.** In four
+> months its log never received an entry: agents do not volunteer to log friction
+> mid-task, and the permission-prompt trigger it replaced does not exist inside the
+> container. The skill directory is deleted; friction now goes straight into
+> `docs/agent-harness-notes.md` or a memory note at the moment it is fixed. The
+> takeaway-capture step in `issue-to-merged-pr` stands. Kept as the design record.
+
 **Date:** 2026-05-26
 **Closes:** #500, #504
 **Related:** #505 (deferred login persistence), #501/#503 (issue-to-merged-pr origin)

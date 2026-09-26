@@ -19,16 +19,22 @@ step." — not "Does the skill expect a reviewer dispatch step?"). When in doubt
 subagents) run strictly sequentially — one per message, verify the result
 before the next.** Parallelism is only for read-only fan-out (greps, reads,
 Explore/research agents), plus up to three implementers sharing a worktree under
-the conditions in the first bullet below. Concrete failure modes motivate this:
+the conditions in the first bullet below. The incidents behind every rule here
+live in `docs/agent-harness-notes.md`; read that when a rule seems arbitrary.
+
+**Which machine you are on decides how much of this applies.** Check
+`grep MemTotal /proc/meminfo` once per session. Under 8 GiB (the solo laptop:
+6 GB VM, 4 GiB app container) it is one agent, strictly sequential: no
+implementer waves, no subagent runs a suite, typecheck or build, and work
+happens on a branch in the main checkout (`start-work.sh` does this itself;
+`ARXII_BRANCH_IN_PLACE=1|0` overrides the memory test). At or above 8 GiB (the
+workstation) the wave rules below apply as written.
 
 - **Implementers sharing a worktree: the commit hook is the control, not
-  serialisation (#3814, ADR-0296).** pre-commit's own hook runs
-  `git checkout -- .` over the whole worktree while a commit's hooks run, so a
-  sibling's uncommitted edits vanish for about 50 seconds and anything it writes
-  then can be lost; a failed auto-fix then invites `git add -A`, which sweeps the
-  sibling's files into the commit. The installed hook (`tools/githooks/pre-commit`,
-  via `just install-git-hooks`) checks staged files without clearing anything.
-  Up to three implementers may share one worktree when:
+  serialisation (#3814, ADR-0296).** The installed hook
+  (`tools/githooks/pre-commit`, via `just install-git-hooks`) checks staged files
+  without clearing the worktree; pre-commit's own hook does not. Up to three
+  implementers may share one worktree when:
   - their plan tasks' `**Files:**` lists do not intersect. Tasks that share a
     file, or need another task's output, stay serial;
   - each dispatch names the sibling agents and their file lists, and an agent
@@ -37,20 +43,14 @@ the conditions in the first bullet below. Concrete failure modes motivate this:
   - each commits only its own files with a pathspec commit,
     `git commit -m <msg> -- <files>` (after `git add -- <file>` for a file git does
     not track yet); never a plain `git commit`, `git add -A`, `git add .` or
-    `commit -a`, and never `git stash` (`refs/stash` is shared by every worktree),
-    `git checkout <path>`, `git restore` or `git reset`. The index is shared too:
-    a pathspec commit holds `index.lock` while its hooks run, so a sibling's
-    `git add` or commit in that window fails with "index.lock: File exists". Wait
-    and retry; never delete `index.lock`. If the hook says an auto-fixer changed a
-    file, re-run the same commit;
-  - each commits with `SKIP=ty,typescript` and runs no test suite or build (both
-    check the whole project on every commit, and `tsc` alone reaches ~1.3 GB on a
-    4 GiB container, #3707). The
+    `commit -a`, and never `git stash`, `git checkout <path>`, `git restore` or
+    `git reset`. If a sibling's commit holds `index.lock`, wait and retry; never
+    delete it. If the hook says an auto-fixer changed a file, re-run the same
+    commit;
+  - each commits with `SKIP=ty,typescript` and runs no test suite or build. The
     coordinator runs `uv run pre-commit run ty --all-files` and
     `uv run pre-commit run typescript --all-files` once before pushing, then the
-    scoped fast tier one branch at a time. `check-type-annotations` stays on: it
-    is the only annotation check (a no-op under CI's `--all-files`), and a
-    failure it raises on a sibling's staged file clears on a rerun.
+    scoped fast tier one branch at a time. `check-type-annotations` stays on.
 
   Serial dispatch still verifies each commit landed (`git log -1`) before the
   next; a concurrent wave verifies that every implementer's commit landed and names
@@ -58,48 +58,28 @@ the conditions in the first bullet below. Concrete failure modes motivate this:
 - **Batched mutating tool calls cascade-cancel**: when one call in a parallel
   batch errors or hits an approval prompt, the harness cancels every sibling
   in that batch, and most of the intended work silently doesn't run.
-- **Order every implementer dispatch "commit, THEN test" — do not rely on the
-  foreground instruction holding.** Background completion notifications re-invoke
-  the main loop only, so a subagent that backgrounds a command and ends its turn
-  "waiting for the notification" dies silently. Telling it not to has failed
-  across three sessions (2 stalls in #1909, 6+ on 2026-07-06/07, 6 of 7 agents in
-  #2698 *despite* a capitalised block naming `run_in_background`, `&`, `Monitor`
-  and poll-a-file by name); agents route around the instruction creatively, so
-  keep it but do not treat it as the control. **#3652 found the mechanism:**
-  the Bash tool's default timeout is 120 seconds and the harness
-  auto-backgrounds anything that exceeds it, so an agent running a long suite
-  in the foreground gets it backgrounded out from under it and then waits on
-  a notification that only ever wakes the main loop - it never chose to
-  background the command, so telling it not to cannot prevent this. Two of
-  nine implementers on that plan stalled this way despite dispatches naming
-  `run_in_background`, `&`, `Monitor` and poll-a-file explicitly; once
-  dispatches carried an explicit `timeout` (e.g. `600000`) on the long test
-  call, the remaining implementers ran a 4.5-5 minute suite to completion in
-  the foreground with no stalls. Pass that explicit `timeout` on any
-  long-running test call in the dispatch - it is the concrete preventive
-  alongside the ordering rule below. **The control is ordering.** Put
-  this in every implementer/fix dispatch:
+- **Order every implementer dispatch "commit, THEN test", and pass an explicit
+  `timeout` (e.g. `600000`) on any long test call.** The Bash tool
+  auto-backgrounds anything past its 120-second default, and a background
+  completion only ever wakes the main loop, so a subagent running a long suite
+  dies silently waiting for a notification it never chose to wait for (#3652,
+  after three sessions of stalls in #1909 and #2698). Telling it not to
+  background does nothing; ordering is the control. Put this in every
+  implementer/fix dispatch:
 
   > Commit as soon as the code change is complete and the fast oracle passes,
   > BEFORE running the long app suites. Commit any test fixes as follow-ups.
 
-  In #2698 the agents dispatched before that line stranded 21, 68 and 72
-  uncommitted files when they stalled; the ones dispatched after it stalled just
-  the same but had already committed, so recovery was reading `git log` and
-  moving on. The stall was never the cost — the unrecoverable work was.
   Recovery when it still matters: **resume it with a message** ordering it to
   re-run the checks in the foreground and commit before ending its turn.
-
   Corollary: a subagent usually should not run a whole-app suite at all. CI is
   the regression gate, so have it prove the change with the narrowest fast
   oracle, commit, and let CI do the sweep.
 - **Subagent dispatch prompts must anchor the worktree.** A subagent's FIRST
   action must be `cd <worktree>` then `pwd` + `git status --short`, verifying
   branch and tree before any edit; every path it edits and every test it runs
-  must live inside the worktree. An absolute worktree path in the prompt is not
-  enough — a subagent that skips the anchor step drifts into the shared main
-  checkout, where concurrent sessions clobber its uncommitted work (near-miss
-  on #2029).
+  must live inside the worktree. An absolute path in the prompt is not enough
+  (near-miss on #2029).
 
 Destructive or approval-gated git operations (`reset --hard`, force-push) go
 alone in their own message. Never cite an issue/PR number that wasn't read
@@ -142,16 +122,20 @@ back from the creating command's own stdout.
   that same file, so this collision is more likely, not less; the fix is the
   same either way (see ADR-0195).
 - **No `cd &&` compound commands.** Use `git -C /path <command>` for git, or
-  absolute paths / a tool's own directory flag otherwise. (Claude Code on Windows
-  flags every `cd && <command>` for manual approval as a bare-repo-attack
-  mitigation, which blocks automation — a workaround for a CC permission behavior,
-  mid-2026. Relax if future releases stop flagging it.)
-- **Worktrees are mandatory** — always work in a git worktree under
-  `.claude/worktrees/` (the `arxii-worktrees` named volume in the devcontainer),
-  never in the main checkout. Other paths land on the slow 9p bind mount, where
-  a worktree's `uv sync` takes ~10 min instead of <1 s via hardlinks from the
-  colocated `UV_CACHE_DIR`. The `using-git-worktrees` skill makes this mandatory
-  (no opt-out) and creates the worktree automatically; see
+  absolute paths / a tool's own directory flag otherwise. (A Windows-host
+  permission quirk; dated entry in `docs/agent-harness-notes.md`.)
+- **Worktrees on the workstation; a branch in the main checkout on the solo
+  laptop** (the machine test is in "Tool & Subagent Sequencing"). On the
+  workstation always work in a git worktree under `.claude/worktrees/` (the
+  `arxii-worktrees` named volume in the devcontainer), never in the main
+  checkout; the `using-git-worktrees` skill creates it automatically, and
+  `start-work.sh` does the same. Never put a worktree anywhere else: other paths
+  land on the slow 9p bind mount, where a worktree's `uv sync` takes ~10 min
+  instead of <1 s via hardlinks from the colocated `UV_CACHE_DIR`. On the laptop
+  one sequential agent gains nothing from isolation and the main checkout's
+  `.venv` is a named volume too, so `start-work.sh` checks the branch out in
+  place; reserve a laptop worktree for a genuine second checkout (a regen PR).
+  Never work directly on `main` on either machine; see
   `docs/devcontainer-setup.md`.
 - **`gh` discipline** (see the `github-operations` skill): take new issue/PR
   numbers from the URL the create command returns — never compute `N+1` (issues and

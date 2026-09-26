@@ -47,13 +47,20 @@ Report with branch state:
 **If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo
 checkout.
 
-**Worktrees are mandatory in this repo, not optional.** The devcontainer
-bind-mounts the workspace over a slow 9p filesystem; only `.claude/worktrees/`
-(the `arxii-worktrees` named volume) gives `uv` a Linux-native filesystem where
-it can hardlink venvs from the colocated `UV_CACHE_DIR`. Working in the main
-checkout wastes ~10 min per `uv sync` and risks committing to `main` (which is
-merge-queue-only — see AGENTS.md). **Do not ask for consent and do not work in
-place.** Proceed directly to Step 1 to create a worktree.
+**Worktrees are mandatory on the workstation; the solo laptop branches in
+place.** Check the machine first: `grep MemTotal /proc/meminfo`. Under 8 GiB
+(or `ARXII_BRANCH_IN_PLACE=1`) one sequential agent works on a branch in the
+main checkout, whose `.venv` is already a named volume, so there is nothing to
+isolate from and nothing to gain; do `git checkout -b <branch>` in the main
+checkout, never work on `main` itself, and stop here. (`start-work.sh` applies
+the same test, so if you ran it you are already on the branch.) At or above
+8 GiB the devcontainer's 9p bind mount makes worktrees mandatory: only
+`.claude/worktrees/` (the `arxii-worktrees` named volume) gives `uv` a
+Linux-native filesystem where it can hardlink venvs from the colocated
+`UV_CACHE_DIR`, and working in the main checkout there risks colliding with a
+sibling agent. **On the workstation do not ask for consent and do not work in
+place.** Proceed directly to Step 1 to create a worktree. CLAUDE.md "Tool &
+Subagent Sequencing" carries the rule.
 
 ## Step 1: Create Isolated Workspace
 
