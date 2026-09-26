@@ -80,9 +80,9 @@ describe('GiftSelector', () => {
     });
     renderSelector(draft);
 
-    // Click the "Choose" door: the entry name is plain text, and the gift's
+    // Click the foot door: the entry name is plain text, and the gift's
     // codex link is a separate "Codex: ..." line in the entry body.
-    await user.click(screen.getByRole('button', { name: 'Choose Whispers of Shadow' }));
+    await user.click(screen.getAllByRole('button', { name: 'Select Whispers of Shadow' }).at(-1)!);
 
     await waitFor(() => {
       expect(updateDraftMock).toHaveBeenCalledWith(

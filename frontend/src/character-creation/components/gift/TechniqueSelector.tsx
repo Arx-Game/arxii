@@ -142,6 +142,8 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
                   chosen={isSelected}
                   closed={closed}
                   open={isSelected}
+                  onChoose={() => toggle(technique.id)}
+                  onSetAside={() => toggle(technique.id)}
                 >
                   <p>{technique.description}</p>
                   <TechniqueEffectSummaryDisplay
@@ -154,7 +156,7 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
                       silently refuses is worse than no button. */}
                   {!closed && (
                     <EntryDoors
-                      chooseLabel={`Choose ${technique.name}`}
+                      chooseLabel={`Select ${technique.name}`}
                       onChoose={() => toggle(technique.id)}
                       chosen={isSelected}
                       onSetAside={() => toggle(technique.id)}

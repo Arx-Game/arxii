@@ -95,9 +95,9 @@ describe('TechniqueSelector', () => {
     });
     renderSelector(draft);
 
-    // The name sits in <summary> (toggles the entry open/closed); the
-    // "Choose" door is the actual selection control.
-    await user.click(screen.getByRole('button', { name: 'Choose Shadow Strike' }));
+    // The name sits in <summary> (toggles the entry open/closed); the foot
+    // door is the selection control this test exercises.
+    await user.click(screen.getAllByRole('button', { name: 'Select Shadow Strike' }).at(-1)!);
 
     await waitFor(() => {
       expect(updateDraftMock).toHaveBeenCalledWith(
@@ -119,9 +119,9 @@ describe('TechniqueSelector', () => {
     });
     renderSelector(draft);
 
-    // The "Choose" door toggles: clicking it again on an already-chosen
-    // technique deselects it (same handler as EntryDoors' "Clear").
-    await user.click(screen.getByRole('button', { name: 'Choose Shadow Strike' }));
+    // The Selected mark in the name row toggles: pressing it on an
+    // already-chosen technique deselects it (same handler as the foot's Clear).
+    await user.click(screen.getByRole('button', { name: 'Selected Shadow Strike' }));
 
     await waitFor(() => {
       expect(updateDraftMock).toHaveBeenCalledWith(
@@ -143,10 +143,10 @@ describe('TechniqueSelector', () => {
     renderSelector(draft);
 
     // Already at budget (1 of 1). The unchosen technique stays readable and
-    // tagged, but carries no "Choose" door at all (matching Heritage) rather
-    // than a door that silently refuses.
-    expect(screen.queryByRole('button', { name: 'Choose Umbral Wall' })).not.toBeInTheDocument();
+    // tagged, but carries no Select mark or door at all (matching Heritage)
+    // rather than a control that silently refuses.
+    expect(screen.queryByRole('button', { name: 'Select Umbral Wall' })).not.toBeInTheDocument();
     expect(screen.getAllByText('Budget reached').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'Choose Shadow Strike' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Selected Shadow Strike' })).toBeInTheDocument();
   });
 });

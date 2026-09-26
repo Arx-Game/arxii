@@ -1,7 +1,7 @@
 /**
  * The contents rail (#3540): progress as a table of contents, never a stepper.
  * The ten stages with complete / current / not-yet-started state, the
- * validation reason as an "n.b." note, and the restart door beneath. Free
+ * validation reason after a hyphen (#4022), and the restart door beneath. Free
  * navigation is preserved (every stage is a link). Replaces StageStepper.
  */
 
@@ -98,9 +98,7 @@ export function ContentsRail({
                   <span className="toc-label">{STAGE_LABELS[stage]}</span>
                   <span className="vh">{STATE_SR[state]}</span>
                   {state !== 'done' && errors.length > 0 && (
-                    <span className="toc-note">
-                      <span className="nb">n.b.</span> {errors[0]}
-                    </span>
+                    <span className="toc-note">- {errors[0]}</span>
                   )}
                 </a>
               </li>

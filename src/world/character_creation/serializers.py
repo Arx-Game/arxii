@@ -1025,7 +1025,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     )
     selected_gender = GenderSerializer(read_only=True)
     selected_gender_id = serializers.PrimaryKeyRelatedField(
-        queryset=Gender.objects.all(),
+        queryset=Gender.objects.filter(is_cg_selectable=True),
         source="selected_gender",
         write_only=True,
         required=False,

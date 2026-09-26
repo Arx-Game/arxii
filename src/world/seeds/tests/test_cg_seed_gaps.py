@@ -195,15 +195,18 @@ class PronounsSeedTests(TestCase):
         self.assertTrue(Pronouns.objects.filter(key="they_them").exists())
 
     def test_genders_created(self):
-        """Seed creates male, female, non_binary, and unspecified."""
+        """Seed creates the three CG genders and nothing else (#4022).
+
+        "Unspecified" is gone: null on the sheet is the unknown gender, and a
+        row staff keep for NPCs or disguises is authored with
+        ``is_cg_selectable=False`` rather than seeded.
+        """
         seed_character_creation_dev()
-        self.assertTrue(Gender.objects.filter(key="male").exists())
-        self.assertTrue(Gender.objects.filter(key="female").exists())
-        self.assertTrue(Gender.objects.filter(key="non_binary").exists())
-        self.assertTrue(Gender.objects.filter(key="unspecified").exists())
-        # unspecified is the default
-        default = Gender.objects.get(key="unspecified")
-        self.assertTrue(default.is_default)
+        self.assertEqual(
+            set(Gender.objects.values_list("key", flat=True)), {"male", "female", "non_binary"}
+        )
+        self.assertEqual(Gender.objects.get(key="non_binary").display_name, "Non-Binary")
+        self.assertTrue(all(Gender.objects.values_list("is_cg_selectable", flat=True)))
 
     def test_pronoun_fields(self):
         """Pronoun fields are populated correctly."""

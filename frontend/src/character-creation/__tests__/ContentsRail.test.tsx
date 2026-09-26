@@ -29,7 +29,7 @@ describe('ContentsRail', () => {
     expect(screen.getByText('Origin').closest('li')).toHaveClass('toc-done');
   });
 
-  it('renders a validation reason as an n.b. note on an incomplete chapter', () => {
+  it('renders a validation reason after a hyphen, in plain text, on an incomplete chapter (#4022)', () => {
     render(
       <ContentsRail
         currentStage={Stage.REVIEW}
@@ -38,7 +38,10 @@ describe('ContentsRail', () => {
         onStageSelect={vi.fn()}
       />
     );
-    expect(screen.getByText('No goal set down.')).toBeInTheDocument();
+    const note = screen.getByText(/No goal set down\./).closest('.toc-note')!;
+    expect(note).toHaveTextContent(/^- No goal set down\.$/);
+    expect(note.querySelector('.nb')).toBeNull();
+    expect(screen.queryByText('n.b.')).not.toBeInTheDocument();
   });
 
   it('navigates when a chapter is chosen', async () => {

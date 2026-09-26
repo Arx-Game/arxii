@@ -244,18 +244,12 @@
 }
 .interview .toc-note {
   grid-column: 3;
-  font-style: italic;
   font-size: 0.875rem;
   letter-spacing: normal;
   text-transform: none;
   color: var(--cg-muted);
   line-height: 1.35;
   padding-bottom: 0.15rem;
-}
-.interview .toc-note .nb {
-  color: var(--cg-accent);
-  font-style: normal;
-  font-size: 0.8125rem;
 }
 .interview .toc-restart {
   margin: 1.5rem 0 0;
@@ -558,15 +552,52 @@
   text-transform: uppercase;
   color: var(--cg-label);
 }
-.interview .chosen-tag {
-  display: none;
+/* The Select mark in the name row (#4022): a square that fills with a check
+   once chosen, so the choosing control is where the eye lands first. */
+.interview .entry-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font: inherit;
+  color: var(--cg-label);
+  background: transparent;
+  border: 0;
+  padding: 0.1rem 0.2rem;
+  cursor: pointer;
   white-space: nowrap;
 }
-.interview .chosen-tag .orn {
-  color: var(--cg-orn);
+.interview .entry-mark .mark-box {
+  display: inline-grid;
+  place-items: center;
+  width: 1.05em;
+  height: 1.05em;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  font-size: 0.9em;
+  line-height: 1;
 }
-.interview li.chosen .chosen-tag {
-  display: inline;
+.interview .entry-mark:hover,
+.interview .entry-mark:focus-visible {
+  color: var(--cg-accent);
+}
+.interview .entry-mark[aria-pressed='true'] {
+  color: var(--cg-accent);
+}
+.interview .entry-mark[aria-pressed='true'] .mark-box {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+  color: var(--cg-bg);
+}
+.interview .entry-mark:disabled {
+  cursor: default;
+}
+/* A chosen entry is tinted in the realm accent, its name in accent too. */
+.interview .entry-list > li.chosen {
+  background: color-mix(in srgb, var(--cg-accent) 9%, transparent);
+  box-shadow: inset 3px 0 0 var(--cg-accent);
+}
+.interview li.chosen .entry-name {
+  color: var(--cg-accent);
 }
 .interview li.closed .entry-name {
   color: var(--cg-muted);

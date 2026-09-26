@@ -283,7 +283,8 @@ class GenderViewSet(viewsets.ReadOnlyModelViewSet):
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
-    queryset = Gender.objects.all()
+    # Only the rows offered in CG (#4022); NPC-only rows stay in the admin.
+    queryset = Gender.objects.filter(is_cg_selectable=True)
     serializer_class = GenderSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]

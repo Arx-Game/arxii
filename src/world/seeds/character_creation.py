@@ -154,7 +154,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Species carries its own stat leanings and how other characters read your "
         "character on sight; pick the one whose instincts suit your concept."
     ),
-    "heritage_gender_heading": "Gender & Pronouns",
+    "heritage_gender_heading": "Gender",
     # No longer rendered by the Lineage step (#3617): the orphan-or-noble menu these
     # two describe is gone, and the step reads upbringing_heading/_intro below. Kept
     # as authored content for other surfaces, and because retargeting a key would
@@ -1297,14 +1297,11 @@ def seed_character_creation_dev() -> None:
     )
     if settings.SEED_SAMPLE_CONTENT:
         _seed_sample_cg_world(species, species_khati)
-    authored_or_sample(Gender, {"display_name": "Male", "is_default": False}, key="male")
-    authored_or_sample(Gender, {"display_name": "Female", "is_default": False}, key="female")
-    authored_or_sample(
-        Gender, {"display_name": "Non-Binary", "is_default": False}, key="non_binary"
-    )
-    authored_or_sample(
-        Gender, {"display_name": "Unspecified", "is_default": True}, key="unspecified"
-    )
+    # The three CG genders (#4022). No "Unspecified": null on the sheet is the
+    # unknown gender, and an NPC-only row is authored with is_cg_selectable off.
+    authored_or_sample(Gender, {"display_name": "Male"}, key="male")
+    authored_or_sample(Gender, {"display_name": "Female"}, key="female")
+    authored_or_sample(Gender, {"display_name": "Non-Binary"}, key="non_binary")
     authored_or_sample(
         HeightBand,
         {

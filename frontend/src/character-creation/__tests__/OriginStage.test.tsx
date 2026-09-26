@@ -65,7 +65,7 @@ describe('OriginStage', () => {
     await userEvent.hover(await screen.findByText(first.name));
     expect(mutate).not.toHaveBeenCalled();
     await userEvent.click(
-      screen.getByRole('button', { name: new RegExp(`choose ${first.name}`, 'i') })
+      screen.getAllByRole('button', { name: new RegExp(`select ${first.name}`, 'i') }).at(-1)!
     );
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -86,11 +86,34 @@ describe('OriginStage', () => {
     expect(screen.getByText(/choose a starting realm to continue/i)).toBeInTheDocument();
   });
 
+  it('changes a chosen realm without asking when nothing depends on it yet (#4022)', async () => {
+    renderOrigin({
+      ...mockDraftWithArea,
+      selected_beginnings: null,
+      selected_species: null,
+      family: null,
+    });
+    const other = mockStartingAreas.find((a) => a.id !== mockDraftWithArea.selected_area!.id)!;
+    await userEvent.click(
+      (await screen.findAllByRole('button', { name: new RegExp(`select ${other.name}`, 'i') })).at(
+        -1
+      )!
+    );
+    expect(
+      screen.queryByRole('heading', { name: /change starting realm/i })
+    ).not.toBeInTheDocument();
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ selected_area_id: other.id }) })
+    );
+  });
+
   it('asks before changing a chosen realm', async () => {
     renderOrigin(mockDraftWithArea);
     const other = mockStartingAreas.find((a) => a.id !== mockDraftWithArea.selected_area!.id)!;
     await userEvent.click(
-      await screen.findByRole('button', { name: new RegExp(`choose ${other.name}`, 'i') })
+      (await screen.findAllByRole('button', { name: new RegExp(`select ${other.name}`, 'i') })).at(
+        -1
+      )!
     );
     expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByRole('heading', { name: /change starting realm/i })).toBeInTheDocument();
@@ -104,7 +127,8 @@ describe('OriginStage', () => {
     for (const area of mockStartingAreas) {
       const item = within(list).getByText(area.name).closest('li')!;
       expect(item).not.toHaveClass('closed');
-      expect(within(item).getByRole('button', { name: /choose/i })).toBeInTheDocument();
+      // The Select mark in the name row and the door at the foot (#4022).
+      expect(within(item).getAllByRole('button', { name: /select/i })).toHaveLength(2);
     }
   });
 

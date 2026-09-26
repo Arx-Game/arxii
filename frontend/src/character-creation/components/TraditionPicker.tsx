@@ -80,6 +80,8 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
             tag={tagFor(tradition)}
             chosen={isChosen}
             open={isChosen}
+            onChoose={() => handleSelect(tradition.id)}
+            onSetAside={handleClear}
           >
             <Paragraphs text={tradition.description} />
             {isChosen && perspectives && perspectives.length > 0 && (
@@ -102,7 +104,7 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
             )}
             <CodexLine entryId={tradition.codex_entry_ids?.[0]} name={tradition.name} />
             <EntryDoors
-              chooseLabel={`Choose ${tradition.name}`}
+              chooseLabel={`Select ${tradition.name}`}
               onChoose={() => handleSelect(tradition.id)}
               chosen={isChosen}
               onSetAside={handleClear}
