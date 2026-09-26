@@ -29,18 +29,29 @@ describe('PathStage (folio)', () => {
     expect(within(list).getByText('Cunning')).toBeInTheDocument();
   });
 
-  it('writes the chosen path and marks it selected', async () => {
+  it('writes the chosen path from the foot door', async () => {
+    const user = userEvent.setup();
+    renderWithCharacterCreationProviders(
+      <PathStage draft={createMockDraft({ selected_path: null })} />
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Select Whisper' }).at(-1)!);
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { selected_path_id: 99 } })
+    );
+  });
+
+  it('marks the chosen path Selected in its name row and offers Clear (#4022)', async () => {
     const user = userEvent.setup();
     renderWithCharacterCreationProviders(
       <PathStage draft={createMockDraft({ selected_path: mockPath })} />
     );
-    await user.click(screen.getByRole('button', { name: 'Choose Whisper' }));
-    expect(mutate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { selected_path_id: 99 } })
-    );
-    expect(screen.getByRole('button', { name: `Choose ${mockPath.name}` })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: `Selected ${mockPath.name}` })).toHaveAttribute(
       'aria-pressed',
       'true'
+    );
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { selected_path_id: null } })
     );
   });
 });

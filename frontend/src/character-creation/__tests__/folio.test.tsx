@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { codexKeys } from '@/codex/queries';
@@ -53,14 +53,20 @@ describe('RecordRail', () => {
 });
 
 describe('Entry', () => {
-  it('keeps every control out of the summary and reports the chosen state on the door', async () => {
+  it('offers a Select mark in the name row that chooses without opening the entry (#4022)', async () => {
     const onChoose = vi.fn();
     render(
       <EntryList label="Starting realms">
-        <Entry name="Perdition" tag="The Grand Principality of Inferna" chosen={false}>
+        <Entry
+          name="Perdition"
+          tag="The Grand Principality of Inferna"
+          chosen={false}
+          onChoose={onChoose}
+          onSetAside={vi.fn()}
+        >
           <p>prose</p>
           <EntryDoors
-            chooseLabel="Begin in Perdition"
+            chooseLabel="Select Perdition"
             onChoose={onChoose}
             chosen={false}
             onSetAside={vi.fn()}
@@ -69,13 +75,65 @@ describe('Entry', () => {
       </EntryList>
     );
     const summary = screen.getByText('Perdition').closest('summary')!;
-    expect(summary.querySelectorAll('button, a')).toHaveLength(0);
-    await userEvent.click(screen.getByRole('button', { name: /begin in perdition/i }));
-    expect(onChoose).toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: /begin in perdition/i })).toHaveAttribute(
-      'aria-pressed',
-      'false'
+    const mark = within(summary).getByRole('button', { name: 'Select Perdition' });
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(mark);
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    expect(summary.closest('details')).not.toHaveAttribute('open');
+    // The foot keeps one door to select from the end of the reading.
+    const doors = screen.getAllByRole('button', { name: 'Select Perdition', hidden: true });
+    await userEvent.click(doors.find((door) => !summary.contains(door))!);
+    expect(onChoose).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads Selected on the mark when chosen, tints the row, and clears on a second press (#4022)', async () => {
+    const onSetAside = vi.fn();
+    render(
+      <EntryList label="Starting realms">
+        <Entry
+          name="Perdition"
+          tag="The Grand Principality of Inferna"
+          chosen
+          open
+          onChoose={vi.fn()}
+          onSetAside={onSetAside}
+        >
+          <p>prose</p>
+          <EntryDoors
+            chooseLabel="Select Perdition"
+            onChoose={vi.fn()}
+            chosen
+            onSetAside={onSetAside}
+          />
+        </Entry>
+      </EntryList>
     );
+    const summary = screen.getByText('Perdition').closest('summary')!;
+    const mark = within(summary).getByRole('button', { name: 'Selected Perdition' });
+    expect(mark).toHaveAttribute('aria-pressed', 'true');
+    expect(summary.closest('li')).toHaveClass('chosen');
+    expect(screen.queryByText('Selected.')).not.toBeInTheDocument();
+    await userEvent.click(mark);
+    expect(onSetAside).toHaveBeenCalledTimes(1);
+    // The foot door now reads Clear.
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(onSetAside).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a non-clearing mark when the choice cannot be set aside (#4022)', () => {
+    render(
+      <EntryList label="Traditions">
+        <Entry name="The Hollow Choir" tag="Available" chosen open onChoose={vi.fn()}>
+          <p>prose</p>
+          <EntryDoors chooseLabel="Select The Hollow Choir" onChoose={vi.fn()} chosen />
+        </Entry>
+      </EntryList>
+    );
+    const summary = screen.getByText('The Hollow Choir').closest('summary')!;
+    expect(
+      within(summary).getByRole('button', { name: 'Selected The Hollow Choir' })
+    ).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
   });
 });
 

@@ -167,12 +167,14 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         chosen={isChosen}
         closed={overBudget}
         open={isChosen}
+        onChoose={() => chooseSpecies(s.id)}
+        onSetAside={clearSpecies}
       >
         <Paragraphs text={s.description} />
         <CodexLine entryId={s.codex_entry_id} name={s.name} />
         {!overBudget && (
           <EntryDoors
-            chooseLabel={`Choose ${s.name}`}
+            chooseLabel={`Select ${s.name}`}
             onChoose={() => chooseSpecies(s.id)}
             chosen={isChosen}
             onSetAside={clearSpecies}
@@ -255,13 +257,15 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
               tag={costTag(b.cg_point_cost)}
               chosen={isChosen}
               open={isChosen}
+              onChoose={() => chooseBeginning(b)}
+              onSetAside={clearBeginning}
             >
               {/* Decorative: the entry name beside it is the text. */}
               {b.art_image && <img className="entry-art" src={b.art_image} alt="" />}
               <Paragraphs text={b.description} />
               <CodexLine entryId={b.codex_entry_ids?.[0]} name={b.name} />
               <EntryDoors
-                chooseLabel={`Choose ${b.name}`}
+                chooseLabel={`Select ${b.name}`}
                 onChoose={() => chooseBeginning(b)}
                 chosen={isChosen}
                 onSetAside={clearBeginning}

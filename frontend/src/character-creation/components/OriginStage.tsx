@@ -4,8 +4,8 @@
  * One question, then the starting realms as index entries (each the capital
  * of its realm, prose verbatim from the StartingArea row). Reading is free;
  * the realm enters when the player chooses (never on hover, Decision 6), and
- * choosing a different realm asks first because it clears the stages that
- * depended on it. The record rail lists the choice; it says nothing else
+ * choosing a different realm asks first when it would clear a stage that
+ * depended on it (#4022: no dependent choice, no question). The record rail lists the choice; it says nothing else
  * (Decision 8).
  */
 
@@ -72,8 +72,14 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
     });
   };
 
+  // Beginnings, species and family depend on the realm; the confirm exists to
+  // protect those, so it appears only when one of them is set (#4022).
+  const hasDependents = Boolean(
+    draft.selected_beginnings || draft.selected_species || draft.family
+  );
+
   const choose = (area: StartingArea) => {
-    if (chosen && chosen.id !== area.id) {
+    if (chosen && chosen.id !== area.id && hasDependents) {
       setPending(area);
       return;
     }
@@ -119,6 +125,8 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
                 tag={realmName}
                 chosen={isChosen}
                 open={isChosen}
+                onChoose={() => choose(area)}
+                onSetAside={() => apply(null)}
               >
                 <Paragraphs text={area.description} />
                 {area.realm_slug && (
@@ -129,7 +137,7 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
                   </p>
                 )}
                 <EntryDoors
-                  chooseLabel={`Choose ${area.name}`}
+                  chooseLabel={`Select ${area.name}`}
                   onChoose={() => choose(area)}
                   chosen={isChosen}
                   onSetAside={() => apply(null)}

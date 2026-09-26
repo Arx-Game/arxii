@@ -348,11 +348,12 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
                   tag={resonance.resonance_affinity ?? 'Resonance'}
                   chosen={isSelected}
                   open={isSelected}
+                  onChoose={() => handleSelectResonance(resonance.id)}
                 >
                   {resonance.description && <p>{resonance.description}</p>}
                   <CodexLine entryId={resonance.codex_entry_id} name={resonance.name} />
                   <EntryDoors
-                    chooseLabel={`Choose ${resonance.name}`}
+                    chooseLabel={`Select ${resonance.name}`}
                     onChoose={() => handleSelectResonance(resonance.id)}
                     chosen={isSelected}
                   />

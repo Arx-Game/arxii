@@ -89,11 +89,12 @@ export function GiftSelector({ draft }: GiftSelectorProps) {
             tag={gift.kind}
             chosen={isSelected}
             open={isSelected}
+            onChoose={() => handleSelect(gift.id)}
           >
             <p>{gift.description}</p>
             <CodexLine entryId={gift.codex_entry_id} name={gift.name} />
             <EntryDoors
-              chooseLabel={`Choose ${gift.name}`}
+              chooseLabel={`Select ${gift.name}`}
               onChoose={() => handleSelect(gift.id)}
               chosen={isSelected}
             />

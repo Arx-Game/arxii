@@ -594,6 +594,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
               }
               chosen={chosen}
               open={chosen}
+              onChoose={() => chooseOffer(offer)}
+              onSetAside={() => setEnemy(null)}
             >
               <EntryDoors
                 chooseLabel="Name them"
@@ -610,6 +612,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
           tag="Free-written · priced at review"
           chosen={writtenOwn}
           open={writtenOwn}
+          onChoose={writeOwn}
+          onSetAside={() => setEnemy(null)}
         >
           <EntryDoors
             chooseLabel="Write your own"

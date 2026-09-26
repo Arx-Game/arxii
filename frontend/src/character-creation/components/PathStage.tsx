@@ -127,6 +127,8 @@ export function PathStage({ draft }: PathStageProps) {
               tag={p.aspects.join(' · ') || 'Path'}
               chosen={isChosen}
               open={isChosen}
+              onChoose={() => choose(p)}
+              onSetAside={() => choose(null)}
             >
               <Paragraphs text={p.description} />
               {p.skill_suggestions && p.skill_suggestions.length > 0 && (
@@ -136,7 +138,7 @@ export function PathStage({ draft }: PathStageProps) {
               )}
               <CodexLine entryId={p.codex_entry_ids?.[0]} name={p.name} />
               <EntryDoors
-                chooseLabel={`Choose ${p.name}`}
+                chooseLabel={`Select ${p.name}`}
                 onChoose={() => choose(p)}
                 chosen={isChosen}
                 onSetAside={() => choose(null)}
