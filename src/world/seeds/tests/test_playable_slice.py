@@ -123,7 +123,7 @@ class TestSeededCharacterCreation(TestCase):
             name="Human"
         )
         gender = CharacterDraft._meta.get_field("selected_gender").related_model.objects.get(
-            key="unspecified"
+            key="non_binary"
         )
         # "The Wanderer" (the generic fallback path) has no starter Gift options —
         # the CG-selectable magic pipeline lives on the 5 style-linked PROSPECT

@@ -175,7 +175,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
             name="Human"
         )
         gender = CharacterDraft._meta.get_field("selected_gender").related_model.objects.get(
-            key="unspecified"
+            key="non_binary"
         )
         path = CharacterDraft._meta.get_field("selected_path").related_model.objects.get(
             name="Path of Steel"
