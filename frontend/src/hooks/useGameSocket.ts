@@ -907,8 +907,11 @@ export function useGameSocket() {
           // late callback cannot consume the replacement session.
           localCloseIntent.add(socket);
           socket.close(PAGE_RESUME_CLOSE_CODE, 'page-resume');
-        } catch {
-          // The replacement connection is still attempted below.
+        } catch (error) {
+          // The replacement connection is still attempted below. A throw here
+          // means the old socket is still open and nothing tracks it any more:
+          // that is the #4026 leak, so say so rather than hide it.
+          console.warn('[socket] wake resume could not close the replaced socket', error);
         }
       }
       connect(character, true).catch(swallowReconnectError);

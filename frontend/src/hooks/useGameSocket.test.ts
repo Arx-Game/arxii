@@ -97,16 +97,29 @@ class MockWebSocket {
    * Rejects a close code the way a browser does: anything other than 1000 or
    * 3000-4999 throws `InvalidAccessError` and leaves the socket open. A mock
    * that accepted any code hid #4026, where `close(1001)` threw inside a
-   * try/catch and every wake resume leaked a live socket. */
+   * try/catch and every wake resume leaked a live socket. A reason longer
+   * than 123 UTF-8 bytes throws `SyntaxError`, as it does in a browser.
+   * `failClose` makes a test's socket throw on close whatever it is given. */
   closed = false;
   closeCode: number | undefined;
-  close(code?: number, _reason?: string): void {
+  failClose = false;
+  close(code?: number, reason?: string): void {
     if (code !== undefined && code !== 1000 && (code < 3000 || code > 4999)) {
       throw new DOMException(
         `Failed to execute 'close' on 'WebSocket': The close code must be either 1000, ` +
           `or between 3000 and 4999. ${code} is neither.`,
         'InvalidAccessError'
       );
+    }
+    if (reason !== undefined && new TextEncoder().encode(reason).length > 123) {
+      throw new DOMException(
+        "Failed to execute 'close' on 'WebSocket': The close reason must not be greater " +
+          'than 123 UTF-8 bytes.',
+        'SyntaxError'
+      );
+    }
+    if (this.failClose) {
+      throw new DOMException('close failed', 'InvalidStateError');
     }
     this.closed = true;
     this.closeCode = code;
@@ -261,6 +274,29 @@ describe('useGameSocket wake resume (#3933)', () => {
       staleSocket.dispatch('close', { code: PAGE_RESUME_CLOSE_CODE });
     });
     expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'game/resetGame', payload: undefined });
+  });
+
+  it('still replaces the socket, and reports it, when close() throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Wake-Resume-Throw';
+
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const staleSocket = MockWebSocket.instances[0];
+    staleSocket.failClose = true;
+
+    act(() => {
+      result.current.resume(character);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(warn).toHaveBeenCalledWith(
+      '[socket] wake resume could not close the replaced socket',
+      expect.any(DOMException)
+    );
+    warn.mockRestore();
   });
 });
 
