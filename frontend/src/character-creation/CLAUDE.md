@@ -20,7 +20,11 @@ character-creation/
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
 │   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame
 │   ├── RecordRail.tsx       # Marginalia: record-so-far rows + a Note aside
-│   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries
+│   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries. Since
+│   │                        #   #4022 the name row carries a square Select mark (Selected
+│   │                        #   once chosen, a second press clears; never toggles the
+│   │                        #   disclosure) and a chosen row is tinted in the realm accent;
+│   │                        #   the foot keeps one door, Select before and Clear after
 │   ├── InstrumentFrame.tsx  # InstrumentGroup/StatRow: labeled stat instruments
 │   ├── ChoiceRow.tsx        # Segmented choice: a few named options, one pressed (#3630)
 │   ├── Field.tsx            # Inscription label over a serif control on a hairline (#3630)
@@ -140,7 +144,7 @@ character-creation/
   `SkillsSection`, mounted inside AttributesStage's frame, still uses the shadcn Accordion for
   its per-skill specialization panels. The Distinctions stage is retired (#3675): every
   chapter now offers its own distinctions through `ChapterOffers` instead.
-- Interface chrome is OOC and plain (stages, Next/Back, Selected); in-character text is confined to
+- Interface chrome is OOC and plain (stages, Next/Back, Select/Selected); in-character text is confined to
   realm/codex prose and the player's own words; the game never speaks for the player (#3540)
 - **Staff-only features**: "Add to Roster" button visible only to staff
 - **Player-GM direct-to-roster (#3268)**: a non-staff account that owns at least one active

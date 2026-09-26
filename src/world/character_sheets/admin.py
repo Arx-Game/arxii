@@ -155,7 +155,8 @@ class ProfileTextVersionAdmin(admin.ModelAdmin):
 class GenderAdmin(admin.ModelAdmin):
     """Admin for Gender options."""
 
-    list_display = ["key", "display_name", "is_default"]
+    list_display = ["key", "display_name", "is_cg_selectable"]
+    list_filter = ["is_cg_selectable"]
     search_fields = ["key", "display_name"]
     ordering = ["display_name"]
 

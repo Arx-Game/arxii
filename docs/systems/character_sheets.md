@@ -292,7 +292,7 @@ from world.character_sheets.types import Gender as GenderChoices
 |-------|---------|------------|
 | `CharacterEnemy` | Who wants the character to fail, priced (#3621, ADR-0279) | `character`, `kind` (`EnemyKind`), `organization` / `family` / `figure_name`, `power_tier` (`EnemyPowerTier`), `reach` (`societies.EnemyReach`), `degree` (`EnemyDegree`), `price`, `why`, `public_line`, `secret`, `reason` (FK `EnemyReason`, #3709) (nullable), `status` (`EnemyStatus`: placed / pending). Written at CG finalize; `CharacterEnemyAdmin` recomputes the price when staff place a free-written one |
 | `Heritage` | Origin story types (Sleeper, Misbegotten, Normal) | `name`, `description`, `is_special`, `family_known`, `family_display`, `first_appeared_ic` (#3663 — nullable IC date the first of the heritage were born; CG caps age at the whole IC years since, floor 18, via `character_creation.services.age_bounds`; Misbegotten = 980-01-01; set on production through `HeritageAdmin`), `chronological_age_unknown` (#2756 — Sleepers: CG leaves `ic_birth_year` null; everyone, the player included, sees "Unknown") |
-| `Gender` | Canonical gender identities | `key`, `display_name`, `is_default` |
+| `Gender` | Canonical gender identities | `key`, `display_name`, `is_cg_selectable` (#4022: off for rows staff keep for NPCs or disguises; CG lists and accepts only rows with it on; a sheet with no gender is the unknown case, and the old unread `is_default` flag is gone) |
 | `Pronouns` | Canonical pronoun sets (decoupled from gender) | `key`, `display_name`, `subject`, `object`, `possessive`, `is_default` |
 | `MoodOption` | Curated declared-mood states (#2994) | `name`, `description`, `sort_order`, `is_active` |
 

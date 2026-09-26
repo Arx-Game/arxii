@@ -46,7 +46,6 @@ class GenderFactory(factory_django.DjangoModelFactory):
 
     key = factory.Sequence(lambda n: f"gender_{n}")
     display_name = factory.LazyAttribute(lambda obj: obj.key.replace("_", " ").title())
-    is_default = False
 
 
 class PronounsFactory(factory_django.DjangoModelFactory):

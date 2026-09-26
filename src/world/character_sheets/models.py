@@ -1532,9 +1532,13 @@ class Gender(NaturalKeyMixin, SharedMemoryModel):
     key = models.CharField(max_length=50, unique=True, help_text="Internal key (e.g., 'male')")
     display_name = models.CharField(max_length=100, help_text="Display label (e.g., 'Male')")
 
-    is_default = models.BooleanField(
-        default=False,
-        help_text="Whether this is the default option when none selected",
+    # Character generation offers only these; a row staff keep for NPCs or
+    # disguises (an "Indeterminable", when that slice lands) is authored with
+    # this off and never reaches the picker (#4022). A sheet with no gender at
+    # all is the unknown case; the old unread ``is_default`` flag is gone.
+    is_cg_selectable = models.BooleanField(
+        default=True,
+        help_text="Offered in character generation. Off for rows staff use for NPCs or disguises.",
     )
 
     objects = NaturalKeyManager()
