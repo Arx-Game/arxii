@@ -13,6 +13,7 @@ from world.character_sheets.models import Gender
 from world.roster.constants import MembershipBasis, ParentageKind
 from world.roster.factories import FamilyFactory
 from world.roster.models import FamilyMembership, Kinsperson, ParentageEdge
+from world.species.factories import SpeciesFactory
 
 
 class UpbringingParentageCleanTests(TestCase):
@@ -166,3 +167,29 @@ class ParentageFinalizeTests(FinalizationTestMixin, TestCase):
         self.assertEqual({edge.kind for edge in edges}, {ParentageKind.BIOLOGICAL})
         membership = FamilyMembership.objects.get(kinsperson=node, family=family)
         self.assertEqual(membership.basis, MembershipBasis.BORN)
+
+
+class AdoptiveHeredityTests(TestCase):
+    """Adoptive parents pass nothing by blood (#4024): no heredity lines."""
+
+    def test_adoptive_draft_has_no_parent_lines_even_with_a_cross_species_parent(self):
+        from world.character_creation.factories import CharacterDraftFactory
+        from world.character_creation.validators import get_draft_parent_lines
+
+        upbringing = OriginTemplateFactory(
+            parentage=Parentage.ADOPTIVE, allows_claim_family=True, allows_name_family=True
+        )
+        draft = CharacterDraftFactory(
+            selected_origin_template=upbringing, second_parent_species=SpeciesFactory()
+        )
+        self.assertEqual(get_draft_parent_lines(draft), [])
+
+    def test_known_draft_keeps_its_cross_species_line(self):
+        from world.character_creation.factories import CharacterDraftFactory
+        from world.character_creation.validators import get_draft_parent_lines
+
+        upbringing = OriginTemplateFactory(allows_name_family=True)
+        draft = CharacterDraftFactory(
+            selected_origin_template=upbringing, second_parent_species=SpeciesFactory()
+        )
+        self.assertEqual(len(get_draft_parent_lines(draft)), 2)

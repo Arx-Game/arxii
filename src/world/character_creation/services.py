@@ -913,6 +913,9 @@ def _pin_heredity_back_inference(draft: CharacterDraft, child_node: Kinsperson) 
     who acquires it as a pinned trait value. get_or_create never clobbers an
     existing pin — earlier siblings' definitions win.
     """
+    if _draft_parentage(draft) != Parentage.KNOWN:
+        # Adoptive parents pass nothing by blood; no known parents, no one to pin to (#4024).
+        return
     from world.forms.models import FormTraitOption  # noqa: PLC0415
     from world.forms.services import get_cg_form_options  # noqa: PLC0415
     from world.roster.models import KinspersonTraitValue  # noqa: PLC0415

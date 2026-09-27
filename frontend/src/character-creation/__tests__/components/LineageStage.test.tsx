@@ -372,6 +372,12 @@ describe('LineageStage', () => {
       expect(screen.getByRole('heading', { name: 'Your adoptive family' })).toBeInTheDocument();
       expect(screen.getByText('Your adoptive parents')).toBeInTheDocument();
       expect(screen.queryByText(/Tree of Souls/)).not.toBeInTheDocument();
+      // Adoptive parents pass nothing by blood: no species line, no heredity picker.
+      expect(screen.queryByText(/your species/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/opens that line/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('combobox', { name: /other parent species/i })
+      ).not.toBeInTheDocument();
     });
 
     it('known parents: no note, the ordinary heading and parents', async () => {
