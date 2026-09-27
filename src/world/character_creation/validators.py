@@ -17,6 +17,7 @@ from world.character_creation.constants import (
     STAT_MIN_VALUE,
     AnchorSource,
     FamilyPath,
+    Parentage,
     QuestionKind,
     Stage,
 )
@@ -94,6 +95,7 @@ def get_heritage_errors(draft: CharacterDraft) -> list[str]:
 def get_draft_parent_lines(draft: CharacterDraft) -> list:
     """Heredity ParentLines for a draft's parents (#2815).
 
+    Only an Upbringing with known parents has lines (#4024).
     Claimed kin slot: derive from the slot node's authored true edges.
     Invented parents: the dominant line is implicit (the child's species, per
     back-inference) and only a declared cross-species other parent
@@ -101,6 +103,11 @@ def get_draft_parent_lines(draft: CharacterDraft) -> list:
     """
     from world.roster.services.heredity import ParentLine, derive_lines_for_child  # noqa: PLC0415
 
+    template = draft.selected_origin_template
+    if template is not None and template.parentage != Parentage.KNOWN:
+        # No known parents have no lines; adoptive parents pass nothing by blood,
+        # even a claimed kin slot's authored ones (#4024).
+        return []
     if draft.claimed_kin_slot is not None:
         return derive_lines_for_child(draft.claimed_kin_slot)
     if draft.second_parent_species is not None:

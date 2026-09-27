@@ -34,6 +34,8 @@ class UpbringingForm(forms.ModelForm):
             "allows_claim_family",
             "allows_name_family",
             "allows_no_family",
+            "parentage",
+            "parentage_note",
             "claimable_kinds",
             "family_templates",
             "closed_distinctions",
@@ -43,6 +45,7 @@ class UpbringingForm(forms.ModelForm):
         ]
         labels = {
             "frame_narrative": "Card text",
+            "parentage_note": "About their parents",
             "cg_point_cost": "Point cost",
             "closed_distinctions": "Distinctions",
             "closed_reason": "The player reads",
@@ -159,6 +162,9 @@ class AnswerForm(forms.ModelForm):
 UPBRINGING_FIELDSETS = (
     (None, {"fields": ("beginning", "name", "frame_narrative")}),
     ("Cost", {"fields": ("cg_point_cost",)}),
+    # Who raised them decides which family paths make sense (#4024): no known
+    # parents offers only no family; adoptive offers a family, framed as adoptive.
+    ("Parentage", {"fields": ("parentage", "parentage_note")}),
     (
         "Family paths",
         {

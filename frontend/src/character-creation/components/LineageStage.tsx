@@ -36,7 +36,7 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { Input } from '@/components/ui/input';
-import { ChapterLeaf } from '../folio';
+import { ChapterLeaf, Paragraphs } from '../folio';
 import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
 import { UpbringingPicker } from './lineage/UpbringingPicker';
@@ -146,6 +146,11 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               copy={copy}
               scope="any"
             />
+            {template.parentage_note && (
+              <div className="space-y-3 text-sm">
+                <Paragraphs text={template.parentage_note} />
+              </div>
+            )}
             <FamilyPathSection
               draft={draft}
               template={template}
@@ -175,7 +180,14 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
 // their line's colors in the Appearance stage (#2815)
 // =============================================================================
 
-export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
+export function InventedParentsCard({
+  draft,
+  adoptive = false,
+}: {
+  draft: CharacterDraft;
+  /** An adoptive Upbringing (#4024): these are adoptive parents, not by blood. */
+  adoptive?: boolean;
+}) {
   const updateDraft = useUpdateDraft();
   const { data: genders } = useGenders();
   const { data: species } = useSpecies();
@@ -204,11 +216,16 @@ export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
 
   return (
     <div className="space-y-2">
-      <Label className="text-sm font-medium text-muted-foreground">Your Parents</Label>
+      <Label className="text-sm font-medium text-muted-foreground">
+        {adoptive ? 'Your adoptive parents' : 'Your Parents'}
+      </Label>
       <p className="text-xs text-muted-foreground">
-        Optional: name them and they become part of your family record. A parent of another species
-        opens that line&apos;s features for your appearance.
-        {sameGender && (
+        Optional: name them and they become part of your family record.
+        {/* Adoptive parents pass nothing by blood, so no species or features line (#4024). */}
+        {!adoptive && (
+          <> A parent of another species opens that line&apos;s features for your appearance.</>
+        )}
+        {sameGender && !adoptive && (
           <span>
             {' '}
             Two parents of the same gender bore you through the Tree of Souls; the first parent
@@ -219,7 +236,7 @@ export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="line-parent-name" className="text-xs">
-            Line parent (your species)
+            {adoptive ? 'First parent' : 'Line parent (your species)'}
           </Label>
           <Input
             id="line-parent-name"
@@ -274,35 +291,37 @@ export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
               ))}
             </SelectContent>
           </Select>
-          <Select
-            value={
-              draft.second_parent_species !== null && draft.second_parent_species !== undefined
-                ? String(draft.second_parent_species)
-                : ''
-            }
-            onValueChange={(value) =>
-              updateDraft.mutate({
-                draftId: draft.id,
-                data: {
-                  second_parent_species_id: value === 'same' ? null : parseInt(value, 10),
-                },
-              })
-            }
-          >
-            <SelectTrigger aria-label="Other parent species">
-              <SelectValue placeholder="Species (same as yours)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="same">Same as yours</SelectItem>
-              {(species ?? [])
-                .filter((entry) => entry.id !== draft.selected_species?.id)
-                .map((entry) => (
-                  <SelectItem key={entry.id} value={String(entry.id)}>
-                    {entry.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+          {!adoptive && (
+            <Select
+              value={
+                draft.second_parent_species !== null && draft.second_parent_species !== undefined
+                  ? String(draft.second_parent_species)
+                  : ''
+              }
+              onValueChange={(value) =>
+                updateDraft.mutate({
+                  draftId: draft.id,
+                  data: {
+                    second_parent_species_id: value === 'same' ? null : parseInt(value, 10),
+                  },
+                })
+              }
+            >
+              <SelectTrigger aria-label="Other parent species">
+                <SelectValue placeholder="Species (same as yours)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="same">Same as yours</SelectItem>
+                {(species ?? [])
+                  .filter((entry) => entry.id !== draft.selected_species?.id)
+                  .map((entry) => (
+                    <SelectItem key={entry.id} value={String(entry.id)}>
+                      {entry.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
     </div>

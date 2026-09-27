@@ -174,11 +174,12 @@ class OriginTemplateAdmin(admin.ModelAdmin):
         "allows_claim_family",
         "allows_name_family",
         "allows_no_family",
+        "parentage",
         "is_active",
         "sort_order",
     ]
-    list_filter = ["is_active", "beginning__starting_area"]
-    search_fields = ["name", "frame_narrative"]
+    list_filter = ["is_active", "parentage", "beginning__starting_area"]
+    search_fields = ["name", "frame_narrative", "parentage_note"]
     ordering = ["beginning", "sort_order", "name"]
     filter_horizontal = ["claimable_kinds", "family_templates"]
     inlines = [OriginTemplateSlotInline]

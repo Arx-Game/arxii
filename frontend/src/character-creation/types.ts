@@ -1154,6 +1154,14 @@ export interface OriginTemplate {
   allows_claim_family: boolean;
   allows_name_family: boolean;
   allows_no_family: boolean;
+  /**
+   * Who raised a character with this Upbringing (#4024): known parents (today's
+   * behaviour), no known parents (no family, the tarot surname), or adoptive
+   * (the family and parents are framed as adoptive).
+   */
+  parentage: Parentage;
+  /** What a new player reads about their parents here; blank shows nothing. */
+  parentage_note: string;
   claimable_kind_ids: number[];
   /** Family Templates offered on the name path (#3648; replaces named_family_kind). */
   family_templates: FamilyTemplate[];
@@ -1170,6 +1178,9 @@ export interface OriginTemplate {
 }
 
 /** The family paths this Upbringing allows, in claim/name/none order. */
+/** An Upbringing's parentage (#4024), mirroring `world.character_creation.constants.Parentage`. */
+export type Parentage = 'known' | 'unknown' | 'adoptive';
+
 export function allowedFamilyPaths(t: OriginTemplate): FamilyPath[] {
   const paths: FamilyPath[] = [];
   if (t.allows_claim_family) paths.push('claimed');
@@ -1181,14 +1192,19 @@ export function allowedFamilyPaths(t: OriginTemplate): FamilyPath[] {
 /**
  * The family path in effect for the draft's chosen Upbringing: the single
  * allowed path when there is only one, the draft's stored pick when it is
- * still one of the allowed paths, or '' when nothing is resolved yet.
+ * still one of the allowed paths, 'named' when an established family and your own are
+ * both offered and nothing is chosen (#4024), else '' when nothing is resolved yet.
  */
 export function resolveFamilyPath(draft: CharacterDraft): FamilyPath | '' {
   const t = draft.selected_origin_template;
   if (!t) return '';
   const allowed = allowedFamilyPaths(t);
   if (allowed.length === 1) return allowed[0];
-  return allowed.includes(draft.family_path as FamilyPath) ? (draft.family_path as FamilyPath) : '';
+  if (allowed.includes(draft.family_path as FamilyPath)) return draft.family_path as FamilyPath;
+  // An established family and the player's own both offered and nothing chosen:
+  // creating your own is where the page starts (#4024). Mirrors the draft model.
+  if (allowed.includes('claimed') && allowed.includes('named')) return 'named';
+  return '';
 }
 
 /** The Family Template in effect on the name path: the only one, else the stored pick. */

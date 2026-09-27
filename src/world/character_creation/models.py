@@ -49,6 +49,7 @@ from world.character_creation.constants import (
     LifeStage,
     OfferArrival,
     OfferChapter,
+    Parentage,
     QuestionKind,
     Stage,
     StartingAreaAccessLevel,
@@ -717,6 +718,19 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
     allows_no_family = models.BooleanField(
         default=False, help_text="Player has no family; the tarot surname ritual applies (#3617)."
     )
+    parentage = models.CharField(
+        max_length=10,
+        choices=Parentage.choices,
+        default=Parentage.KNOWN,
+        help_text=(
+            "Who raised a character with this Upbringing (#4024). No known parents: no "
+            "family, the tarot surname. Adoptive: the family is framed as adoptive."
+        ),
+    )
+    parentage_note = models.TextField(
+        blank=True,
+        help_text="What a new player reads about their parents here. Blank shows nothing.",
+    )
     max_claim_tier = models.CharField(
         max_length=20,
         choices=TitleTier.choices,
@@ -772,6 +786,27 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        """Parentage must agree with the family paths offered (#4024).
+
+        No known parents means no family at all, so only the no-family path; an
+        adoptive Upbringing exists to bring a family in, so it needs claim or name
+        and no familyless route beside them.
+        """
+        super().clean()
+        family_routes = self.allows_claim_family or self.allows_name_family
+        if self.parentage == Parentage.UNKNOWN and (family_routes or not self.allows_no_family):
+            raise ValidationError({"parentage": "No known parents offers only the no-family path."})
+        if self.parentage == Parentage.ADOPTIVE and (self.allows_no_family or not family_routes):
+            raise ValidationError(
+                {
+                    "parentage": (
+                        "Adoptive parents needs an established family or the player's own, "
+                        "and no no-family path."
+                    )
+                }
+            )
 
     def allowed_family_paths(self) -> list[str]:
         """The family paths this Upbringing permits, in display order (#3617)."""
@@ -1431,14 +1466,24 @@ class CharacterDraft(SharedMemoryModel):
         return self.updated_at < expiry_threshold
 
     def resolve_family_path(self) -> str:
-        """The effective family path: the single allowed one, else the chosen one, else ''."""
+        """The effective family path: the single allowed one, else the chosen one, else your own.
+
+        "Your own" (NAMED) is the default only when an established family and your own
+        are both offered (#4024); otherwise nothing chosen resolves to ''.
+        """
         template = self.selected_origin_template
         if template is None:
             return ""
         allowed = template.allowed_family_paths()
         if len(allowed) == 1:
             return allowed[0]
-        return self.family_path if self.family_path in allowed else ""
+        if self.family_path in allowed:
+            return self.family_path
+        # An established family and the player's own both offered and nothing
+        # chosen: creating your own is where the page starts (#4024).
+        if FamilyPath.CLAIMED in allowed and FamilyPath.NAMED in allowed:
+            return FamilyPath.NAMED
+        return ""
 
     def resolve_family_template(self) -> HouseTemplate | None:
         """The Family Template the name path builds from (#3648): the only one, else the pick."""
