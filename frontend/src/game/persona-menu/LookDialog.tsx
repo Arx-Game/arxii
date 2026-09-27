@@ -77,7 +77,13 @@ export function LookDialog({
             </Dialog.Close>
           </div>
           <div className="px-3 py-3 text-sm">
-            {isLoading ? 'Looking…' : <FormattedContent content={text} />}
+            {isLoading ? (
+              'Looking…'
+            ) : (
+              // Status / Wearing / Markings lines break like every other
+              // prose reader (ExplorationReader.tsx:138, ObjectsList.tsx:118).
+              <FormattedContent content={text} className="whitespace-pre-wrap" />
+            )}
           </div>
           <div className="flex justify-end border-t px-3 py-2">
             <Button variant="outline" size="sm" onClick={onViewSheet}>

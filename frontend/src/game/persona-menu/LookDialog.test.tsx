@@ -25,6 +25,16 @@ describe('LookDialog', () => {
     expect(screen.getByText(/ink-stained fingers/)).toBeInTheDocument();
   });
 
+  it('breaks the look text on its own lines (Status / Wearing / Markings, #4030)', () => {
+    renderDialog({ text: 'Status: Healthy\nWearing: A grey cloak\nMarkings: None' });
+    // FormattedContent (Task 4030's LookDialog body) wraps every segment's
+    // text in its own inner <span>; the whitespace-pre-wrap class lives on
+    // FormattedContent's own outer span, one level up.
+    const wrapper = screen.getByText(/Status: Healthy/).closest('.whitespace-pre-wrap');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper).toHaveTextContent(/Wearing: A grey cloak/);
+  });
+
   it('closes on Escape', async () => {
     const props = renderDialog();
     await userEvent.keyboard('{Escape}');

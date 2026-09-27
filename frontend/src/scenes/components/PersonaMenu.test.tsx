@@ -257,6 +257,29 @@ describe('PersonaMenu', () => {
     expect(within(menu).getByText(SCENE_EMPTY)).toBeInTheDocument();
   });
 
+  it("renders every group's empty_state as a trailing footer after ALL groups, not inline mid-menu", async () => {
+    mockMenu({
+      items: [item('look'), item('challenge')],
+      groups: groups({ scene: SCENE_EMPTY, social: 'No one to socialize with.' }),
+      notice: 'Closing notice line.',
+    });
+    renderMenu();
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    const menu = await screen.findByRole('menu');
+    const menuText = menu.textContent ?? '';
+    const challengeIdx = menuText.indexOf('Challenge to a duel');
+    const sceneEmptyIdx = menuText.indexOf(SCENE_EMPTY);
+    const socialEmptyIdx = menuText.indexOf('No one to socialize with.');
+    const noticeIdx = menuText.indexOf('Closing notice line.');
+    // Both empty_state lines land after the last real item, in server group
+    // order, and before the closing notice — never sandwiched between two
+    // groups' own items the way an inline per-group render would place them.
+    expect(challengeIdx).toBeGreaterThan(-1);
+    expect(sceneEmptyIdx).toBeGreaterThan(challengeIdx);
+    expect(socialEmptyIdx).toBeGreaterThan(sceneEmptyIdx);
+    expect(noticeIdx).toBeGreaterThan(socialEmptyIdx);
+  });
+
   it('renders with no scene: no sceneId prop exists and nothing reads the scene cache', async () => {
     mockMenu({ scene_id: null, items: [item('look')], groups: groups() });
     const queryClient = renderMenu();
@@ -493,7 +516,7 @@ describe('PersonaMenu', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 
-  it('self menu shows the notice and no action groups', async () => {
+  it('self menu shows the notice, the "how others see you" Look hint, and no action groups', async () => {
     mockMenu({
       is_self: true,
       notice: 'This is your own face.',
@@ -504,10 +527,19 @@ describe('PersonaMenu', () => {
     fireEvent.contextMenu(screen.getByText('Cassia Vell'));
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByText('This is your own face.')).toBeInTheDocument();
+    expect(within(menu).getByText('how others see you')).toBeInTheDocument();
     const labels = within(menu)
       .getAllByRole('menuitem')
       .map((el) => el.textContent);
-    expect(labels).toEqual(['Look', 'View sheet']);
+    expect(labels).toEqual(['Lookhow others see you', 'View sheet']);
+  });
+
+  it('does not show the "how others see you" hint on a non-self menu', async () => {
+    mockMenu({ is_self: false, items: [item('look')] });
+    renderMenu();
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByText('how others see you')).not.toBeInTheDocument();
   });
 
   it('shows a muted loading line while the menu data is loading', async () => {

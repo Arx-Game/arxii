@@ -566,8 +566,14 @@ export function PersonaMenu({
         >
           <Eye className="mr-2 h-4 w-4 shrink-0" />
           <span className="flex-1">{lookItem?.label ?? 'Look'}</span>
-          {!lookAvailable && lookReason && (
+          {!lookAvailable && lookReason ? (
             <span className="ml-2 text-xs text-muted-foreground">{lookReason}</span>
+          ) : (
+            // Self menu (demo Screen 1b): a muted reminder that Look, here,
+            // previews what everyone else already sees of you.
+            data?.is_self && (
+              <span className="ml-2 text-xs text-muted-foreground">how others see you</span>
+            )
           )}
         </kit.Item>
         <kit.Item key="view-sheet" onClick={handleViewSheet}>
@@ -585,12 +591,19 @@ export function PersonaMenu({
                 {itemsForGroup(group.key).map((item) => renderMenuItem(kit, item))}
                 {group.key === 'scene' && renderSceneActionSubmenus(kit)}
                 {group.key === 'scene' && renderAttachToPose(kit)}
-                {group.empty_state && (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    {group.empty_state}
-                  </div>
-                )}
               </Fragment>
+            ))}
+        {/* Every group's empty_state is a trailing footer line, after ALL
+            groups (the demo's closing line) — never inline mid-menu, where
+            it would read as belonging only to whichever group happened to
+            render it last. */}
+        {!isLoading &&
+          groups
+            .filter((group) => group.empty_state)
+            .map((group) => (
+              <div key={`empty-${group.key}`} className="px-2 py-1.5 text-xs text-muted-foreground">
+                {group.empty_state}
+              </div>
             ))}
         {!isLoading && data?.notice && (
           <div className="px-2 py-1.5 text-xs text-muted-foreground">{data.notice}</div>
@@ -611,14 +624,32 @@ export function PersonaMenu({
                     {children}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>{renderItems(dropdownKit)}</DropdownMenuContent>
+                {/* onCloseAutoFocus: several items open a Dialog (Look, Block,
+                    Treat, Give mission, the whisper picker) as this menu
+                    closes. Radix's default close behavior returns focus to
+                    the trigger, which lands outside the just-opened Dialog;
+                    the (non-modal, for Look) Dialog's DismissableLayer reads
+                    that as an outside interaction and dismisses it right
+                    back — reproduces only in a real browser (#4030 demo
+                    review), never in jsdom, since jsdom has no async focus
+                    timing for the two layers to race on. Suppressing the
+                    menu's own auto-focus, the documented Radix fix for
+                    "open a Dialog from a menu item," removes the race
+                    instead of papering over its timing with a setTimeout. */}
+                <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                  {renderItems(dropdownKit)}
+                </DropdownMenuContent>
               </DropdownMenu>
             </span>
           ) : (
             <span className="inline-flex">{children}</span>
           )}
         </ContextMenuTrigger>
-        <ContextMenuContent>{renderItems(contextKit)}</ContextMenuContent>
+        {/* See the matching DropdownMenuContent comment above — the same
+            close-focus race applies to the right-click menu. */}
+        <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+          {renderItems(contextKit)}
+        </ContextMenuContent>
       </ContextMenu>
       <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
         <DialogContent>
