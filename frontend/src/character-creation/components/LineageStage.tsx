@@ -36,7 +36,7 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { Input } from '@/components/ui/input';
-import { ChapterLeaf } from '../folio';
+import { ChapterLeaf, Paragraphs } from '../folio';
 import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
 import { UpbringingPicker } from './lineage/UpbringingPicker';
@@ -146,6 +146,11 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               copy={copy}
               scope="any"
             />
+            {template.parentage_note && (
+              <div className="space-y-3 text-sm">
+                <Paragraphs text={template.parentage_note} />
+              </div>
+            )}
             <FamilyPathSection
               draft={draft}
               template={template}
@@ -175,7 +180,14 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
 // their line's colors in the Appearance stage (#2815)
 // =============================================================================
 
-export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
+export function InventedParentsCard({
+  draft,
+  adoptive = false,
+}: {
+  draft: CharacterDraft;
+  /** An adoptive Upbringing (#4024): these are adoptive parents, not by blood. */
+  adoptive?: boolean;
+}) {
   const updateDraft = useUpdateDraft();
   const { data: genders } = useGenders();
   const { data: species } = useSpecies();
@@ -204,11 +216,13 @@ export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
 
   return (
     <div className="space-y-2">
-      <Label className="text-sm font-medium text-muted-foreground">Your Parents</Label>
+      <Label className="text-sm font-medium text-muted-foreground">
+        {adoptive ? 'Your adoptive parents' : 'Your Parents'}
+      </Label>
       <p className="text-xs text-muted-foreground">
         Optional: name them and they become part of your family record. A parent of another species
         opens that line&apos;s features for your appearance.
-        {sameGender && (
+        {sameGender && !adoptive && (
           <span>
             {' '}
             Two parents of the same gender bore you through the Tree of Souls; the first parent

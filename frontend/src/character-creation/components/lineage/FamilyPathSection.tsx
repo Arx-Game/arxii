@@ -50,9 +50,11 @@ interface FamilyPathSectionProps {
   copy: CGExplanations | undefined;
 }
 
+// Plain choices for a new player (#4024): an established family, or one they
+// create; creating their own is where the page starts when both are offered.
 const PATH_LABELS: Record<FamilyPath, string> = {
-  claimed: 'Claim a family',
-  named: 'Name a new family',
+  claimed: 'An established family',
+  named: 'Your own family',
   none: 'No family',
 };
 
@@ -87,11 +89,31 @@ export function FamilyPathSection({
     !draft.claimed_kin_pool &&
     !draft.defer_parents;
 
+  const adoptive = template.parentage === 'adoptive';
+
+  // No known parents (#4024): no family to choose and no parents to name; the
+  // tarot gives the surname, introduced as what is done for such children.
+  if (template.parentage === 'unknown') {
+    return (
+      <section className="space-y-6">
+        {copy?.tarot_no_parents_intro && (
+          <p className="text-sm text-muted-foreground">{copy.tarot_no_parents_intro}</p>
+        )}
+        <TarotNamingRitual draft={draft} />
+        {!kinVacancyChosen && (
+          <ServicePanel draft={draft} heading={copy?.service_heading ?? 'Service'} />
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-6">
       <div>
         <h3 className="theme-heading text-lg font-semibold">
-          {copy?.family_path_heading ?? 'Your Family'}
+          {adoptive
+            ? (copy?.adoptive_family_heading ?? 'Your adoptive family')
+            : (copy?.family_path_heading ?? 'Your Family')}
         </h3>
       </div>
 
@@ -128,7 +150,7 @@ export function FamilyPathSection({
         <ServicePanel draft={draft} heading={copy?.service_heading ?? 'Service'} />
       )}
 
-      {showInventedParents && <InventedParentsCard draft={draft} />}
+      {showInventedParents && <InventedParentsCard draft={draft} adoptive={adoptive} />}
     </section>
   );
 }

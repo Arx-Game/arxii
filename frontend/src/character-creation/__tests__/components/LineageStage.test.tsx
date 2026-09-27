@@ -39,6 +39,7 @@ import {
 } from '../testUtils';
 import { characterCreationKeys } from '../../queries';
 import { Stage } from '../../types';
+import type { FamilyPath } from '../../types';
 
 // Mock the API module
 vi.mock('../../api', () => ({
@@ -291,10 +292,92 @@ describe('LineageStage', () => {
         queryClient,
       });
 
-      const namedRadio = await screen.findByRole('radio', { name: /name a new family/i });
+      const namedRadio = await screen.findByRole('radio', { name: 'Your own family' });
       await userEvent.click(namedRadio);
 
       expect(api.updateDraft).toHaveBeenCalledWith(draft.id, { family_path: 'named' });
+    });
+
+    it('offers an established family or your own, with your own open by default (#4024)', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingMultiPath,
+        family_path: '',
+      });
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient: createTestQueryClient(),
+      });
+
+      expect(await screen.findByRole('radio', { name: 'Your own family' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'An established family' })).not.toBeChecked();
+      expect(screen.getByLabelText('Family name')).toBeInTheDocument();
+    });
+  });
+
+  describe('Parentage (#4024)', () => {
+    const noParents = {
+      ...mockUpbringingUnknown,
+      id: 190,
+      name: 'Raised in the Cradle',
+      parentage: 'unknown' as const,
+      parentage_note: 'The Tree leaves no mother and no father.',
+    };
+    const adoptive = {
+      ...mockUpbringingMultiPath,
+      id: 191,
+      name: 'Taken In',
+      parentage: 'adoptive' as const,
+      parentage_note: 'A family took you from the Cradle and made you theirs.',
+    };
+
+    function renderWith(
+      template: typeof noParents | typeof adoptive,
+      family_path: FamilyPath | '' = ''
+    ) {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: template,
+        family_path,
+      });
+      const queryClient = createTestQueryClient();
+      seedQueryData(queryClient, characterCreationKeys.tarotCards(), []);
+      seedQueryData(queryClient, characterCreationKeys.namingRitualConfig(), {
+        flavor_text: '',
+        codex_entry_id: null,
+      });
+      seedQueryData(queryClient, characterCreationKeys.explanations(), {
+        ...mockCGExplanations,
+        tarot_no_parents_intro: 'With no known parents, the tarot gives you a name.',
+        adoptive_family_heading: 'Your adoptive family',
+      });
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+    }
+
+    it('no known parents: the note and the explained tarot ritual, and no family or parents', async () => {
+      renderWith(noParents);
+      expect(await screen.findByText(noParents.parentage_note)).toBeInTheDocument();
+      expect(
+        screen.getByText('With no known parents, the tarot gives you a name.')
+      ).toBeInTheDocument();
+      expect(screen.getByText('Naming Ritual')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: /your family/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/your parents/i)).not.toBeInTheDocument();
+    });
+
+    it('adoptive: the note, the adoptive heading, and adoptive parents', async () => {
+      renderWith(adoptive);
+      expect(await screen.findByText(adoptive.parentage_note)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Your adoptive family' })).toBeInTheDocument();
+      expect(screen.getByText('Your adoptive parents')).toBeInTheDocument();
+      expect(screen.queryByText(/Tree of Souls/)).not.toBeInTheDocument();
+    });
+
+    it('known parents: no note, the ordinary heading and parents', async () => {
+      renderWith({ ...adoptive, parentage: 'known' as never, parentage_note: '' } as never);
+      expect(await screen.findByRole('heading', { name: /your family/i })).toBeInTheDocument();
+      expect(screen.getByText('Your Parents')).toBeInTheDocument();
     });
   });
 
