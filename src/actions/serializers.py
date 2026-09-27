@@ -32,10 +32,10 @@ from typing import Any
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from actions.constants import ActionBackend, ActionCategory
+from actions.constants import ActionBackend, ActionCategory, PersonaMenuGroupKey
 from actions.errors import ActionDispatchError
 from actions.result_extraction import extract_dispatch_message_data
-from actions.types import ActionRef, ActionResult, DispatchResult, PlayerAction
+from actions.types import ActionRef, ActionResult, DispatchResult, PersonaMenu, PlayerAction
 
 
 class CheckTypeMinimalSerializer(serializers.Serializer):
@@ -189,6 +189,40 @@ class PlayerActionSerializer(serializers.Serializer):
         if obj.action_template is None:
             return None
         return ActionTemplateMinimalSerializer(obj.action_template).data
+
+
+class PersonaMenuItemSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    group = serializers.ChoiceField(choices=PersonaMenuGroupKey.choices)
+    available = serializers.BooleanField()
+    reason = serializers.CharField(allow_blank=True)
+
+
+class PersonaMenuGroupSerializer(serializers.Serializer):
+    key = serializers.ChoiceField(choices=PersonaMenuGroupKey.choices)
+    empty_state = serializers.CharField(allow_blank=True)
+
+
+class PersonaMenuSerializer(serializers.Serializer):
+    """The persona menu for one viewer and one target persona (#4030)."""
+
+    persona_id = serializers.IntegerField(source="persona.pk")
+    is_self = serializers.BooleanField()
+    scene_id = serializers.SerializerMethodField()
+    viewer_persona_id = serializers.SerializerMethodField()
+    notice = serializers.CharField(allow_blank=True)
+    items = PersonaMenuItemSerializer(many=True)
+    groups = PersonaMenuGroupSerializer(many=True)
+    scene_actions = PlayerActionSerializer(many=True)
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_scene_id(self, obj: PersonaMenu) -> int | None:
+        return obj.scene.pk if obj.scene is not None else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_viewer_persona_id(self, obj: PersonaMenu) -> int | None:
+        return obj.viewer_persona.pk if obj.viewer_persona is not None else None
 
 
 # ---------------------------------------------------------------------------
