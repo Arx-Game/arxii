@@ -666,7 +666,7 @@ and the model for any later per-target menu (items, room objects, exits).
   always the same text a failed dispatch would return.
 - **One check, two callers.** Any inline check an `execute()` used to run before this feature
   moves into a `Prerequisite` the day that action joins the menu (see `ChallengeTargetPrerequisite`
-  and `GuardAllyPrerequisite` above). This is the load-bearing rule behind ADR-0319: a menu is
+  and `GuardAllyPrerequisite` above). This is the load-bearing rule behind ADR-4030: a menu is
   composed from prerequisites, never a parallel gate that can drift from `run()`.
 - **`target_resolution.py`**: `resolve_persona_pk_to_character(persona_id)`, the one
   persona-to-character hop, since every web surface names a persona (which may be a mask) while

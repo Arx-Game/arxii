@@ -1,4 +1,4 @@
-# ADR-0319: Target menus are composed server-side from each action's own prerequisites
+# ADR-4030: Target menus are composed server-side from each action's own prerequisites
 
 **Status:** Accepted (2026-09-27, #4030).
 

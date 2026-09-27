@@ -3,7 +3,7 @@
 Composed server-side from each action's own prerequisites (``Action.check_availability``)
 so the menu and ``run()`` share one check and the menu never offers what the action then
 refuses. Replaces the unfinished 2025 per-entity command list (``BaseState.dispatcher_tags``
-and the room-state ``commands`` field). See the ADR added with #4030.
+and the room-state ``commands`` field). See ADR-4030.
 
 Privacy: every reason is the action's own refusal text, which never names a masked
 target's real key; Look's reason is the same for an absent and a concealed target.
