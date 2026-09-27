@@ -28,13 +28,11 @@ describe('handleRoomStatePayload', () => {
   const createRoomStateObject = (
     dbref: string,
     name: string,
-    thumbnail_url: string | null = null,
-    commands: string[] = []
+    thumbnail_url: string | null = null
   ): RoomStateObject => ({
     dbref,
     name,
     thumbnail_url,
-    commands,
   });
 
   const createSceneSummary = (
@@ -486,7 +484,6 @@ describe('handleRoomStatePayload', () => {
           dbref: '#500',
           name: 'Grand Hall',
           thumbnail_url: '/images/grand_hall.jpg',
-          commands: ['look', 'examine'],
         },
         characters: [],
         objects: [],
@@ -519,9 +516,9 @@ describe('handleRoomStatePayload', () => {
 
     it('passes objects array through correctly', () => {
       const objects: RoomStateObject[] = [
-        createRoomStateObject('#200', 'Sword', '/images/sword.png', ['take', 'examine']),
-        createRoomStateObject('#201', 'Shield', null, ['take']),
-        createRoomStateObject('#202', 'Potion', '/images/potion.png', []),
+        createRoomStateObject('#200', 'Sword', '/images/sword.png'),
+        createRoomStateObject('#201', 'Shield', null),
+        createRoomStateObject('#202', 'Potion', '/images/potion.png'),
       ];
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
@@ -543,9 +540,9 @@ describe('handleRoomStatePayload', () => {
 
     it('passes exits array through correctly', () => {
       const exits: RoomStateObject[] = [
-        createRoomStateObject('#300', 'North', null, ['go']),
-        createRoomStateObject('#301', 'South', null, ['go']),
-        createRoomStateObject('#302', 'Secret Door', '/images/door.png', ['open', 'go']),
+        createRoomStateObject('#300', 'North', null),
+        createRoomStateObject('#301', 'South', null),
+        createRoomStateObject('#302', 'Secret Door', '/images/door.png'),
       ];
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
@@ -656,14 +653,12 @@ describe('handleRoomStatePayload', () => {
         dbref: '#777',
         name: 'Castle Throne Room',
         thumbnail_url: '/images/throne.jpg',
-        commands: ['look', 'bow'],
       };
       const objects: RoomStateObject[] = [
         {
           dbref: '#888',
           name: 'Golden Throne',
           thumbnail_url: '/images/throne_item.jpg',
-          commands: ['examine', 'sit'],
         },
       ];
       const exits: RoomStateObject[] = [
@@ -671,7 +666,6 @@ describe('handleRoomStatePayload', () => {
           dbref: '#999',
           name: 'Exit to Courtyard',
           thumbnail_url: null,
-          commands: ['go'],
         },
       ];
       const scene: SceneSummary = {

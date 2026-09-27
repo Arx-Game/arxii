@@ -16,7 +16,7 @@ import type { ReactNode } from 'react';
 import { Routes, Route, MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, vi, beforeEach, expect } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import { render, fireEvent, within } from '@testing-library/react';
+import { render, fireEvent, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -344,11 +344,35 @@ vi.mock('../../components/SceneHeader', () => ({
   SceneHeader: () => <div data-testid="scene-header">SceneHeader</div>,
 }));
 
-vi.mock('../../components/SceneInteractionPanel', () => ({
-  SceneInteractionPanel: () => (
-    <div data-testid="scene-interaction-panel">SceneInteractionPanel</div>
-  ),
-}));
+// #4030 fix round 1: the stub also reads `usePersonaCard()` and exposes a test
+// button that calls it exactly the way PersonaMenu's "View sheet" item does —
+// this is what proves SceneDetailPage's PersonaCardContext.Provider actually
+// reaches a descendant, without pulling in the whole PoseUnit/PersonaMenu tree.
+vi.mock('../../components/SceneInteractionPanel', async () => {
+  const { usePersonaCard } = await import('@/game/persona-menu/PersonaCardContext');
+  return {
+    SceneInteractionPanel: () => {
+      const personaCard = usePersonaCard();
+      return (
+        <div data-testid="scene-interaction-panel">
+          SceneInteractionPanel
+          <button
+            type="button"
+            onClick={() =>
+              personaCard?.openCharacterCard({
+                id: 10,
+                name: 'Cassia Vell',
+                thumbnail_url: null,
+              })
+            }
+          >
+            Open persona card (test)
+          </button>
+        </div>
+      );
+    },
+  };
+});
 
 // #3565 - ScenarioCard is self-fetching (useSceneScenarioQuery); this smoke
 // test's generic useQuery mock invokes any enabled queryFn for real, which
@@ -476,6 +500,26 @@ describe('SceneDetailPage', () => {
     );
 
     expect(container.firstChild).not.toBeNull();
+  });
+
+  // #4030 fix round 1: PersonaMenu's "View sheet" calls `usePersonaCard()`
+  // from anywhere it renders (here, inside SceneInteractionPanel via PoseUnit).
+  // Before this fix SceneDetailPage never provided PersonaCardContext, so the
+  // call silently no-opped. Proven here via the SceneInteractionPanel stub's
+  // test button rather than the full PoseUnit tree (see its mock above).
+  it('View sheet (via PersonaCardContext) opens the character-card drawer', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Open persona card (test)' }));
+
+    expect(await screen.findByText('Cassia Vell')).toBeInTheDocument();
+    expect(screen.getByText("This face isn't on the public roster.")).toBeInTheDocument();
   });
 
   it('queries pending sineating offers (SineatingInbox is mounted)', () => {

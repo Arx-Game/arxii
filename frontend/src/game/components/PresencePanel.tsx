@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { toast } from 'sonner';
 import { FormattedContent } from '@/components/FormattedContent';
+import { PersonaMenu } from '@/scenes/components/PersonaMenu';
 import { usePresence } from '@/presence/queries';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -64,7 +65,9 @@ export function PresencePanel() {
           <ul className="space-y-0.5">
             {data.who.map((entry, i) => (
               <li key={`${entry.name}-${i}`} className="flex items-center justify-between gap-2">
-                <span>{entry.name}</span>
+                <PersonaMenu personaId={entry.persona_id} personaName={entry.name} leftClick>
+                  <span>{entry.name}</span>
+                </PersonaMenu>
                 {entry.idle && <span className="text-xs text-muted-foreground">{entry.idle}</span>}
               </li>
             ))}

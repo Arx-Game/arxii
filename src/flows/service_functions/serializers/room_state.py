@@ -24,7 +24,7 @@ class ObjectStateSerializer(serializers.Serializer):
     dbref = serializers.CharField()
     name = serializers.CharField()
     thumbnail_url = serializers.URLField(allow_null=True)
-    commands = serializers.ListField(child=serializers.CharField())
+    persona_id = serializers.IntegerField(allow_null=True)
     is_mission_board = serializers.BooleanField()
     place_id = serializers.IntegerField(allow_null=True)
     in_scene = serializers.BooleanField(allow_null=True)
@@ -38,11 +38,6 @@ class ObjectStateSerializer(serializers.Serializer):
             )
 
         looker = self.context.get("looker") if self.context else None
-        command_keys = self._collect_command_keys(looker)
-        try:
-            dispatcher_tags = instance.dispatcher_tags
-        except AttributeError:
-            dispatcher_tags = []
 
         board_target_ids = (self.context or {}).get("board_target_ids") or frozenset()
 
@@ -50,7 +45,13 @@ class ObjectStateSerializer(serializers.Serializer):
             "dbref": instance.obj.dbref,
             "name": instance.get_display_name(looker=looker),
             "thumbnail_url": self._resolve_thumbnail_for_viewer(instance, looker),
-            "commands": [key for key in command_keys if key in dispatcher_tags],
+            # #4030 — the presented persona (a mask's own pk when masked), so a room-list
+            # row can open the persona menu. Never the primary persona behind a mask.
+            "persona_id": (
+                instance._resolved_persona.pk  # noqa: SLF001 — BaseState seam, set in __init__
+                if instance._resolved_persona is not None  # noqa: SLF001
+                else None
+            ),
             # #3044 — lets the web room-objects panel offer a "View Board"
             # affordance without string-matching object names. A board is a
             # plain examinable Object with an active BOARD-kind MissionGiver
@@ -93,18 +94,6 @@ class ObjectStateSerializer(serializers.Serializer):
             persona=instance._resolved_persona,  # noqa: SLF001 — BaseState seam, set in __init__
             viewer_can_see_hidden=viewer_can_see_hidden,
         )
-
-    def _collect_command_keys(self, caller: BaseState | None) -> list[str]:
-        """Return command keys available to caller."""
-        if caller is None:
-            return []
-        try:
-            cmdset = caller.obj.cmdset.current
-        except AttributeError:
-            return []
-        if not cmdset:
-            return []
-        return [cmd.key for cmd in cmdset.commands]
 
 
 class SceneDataSerializer(serializers.Serializer):

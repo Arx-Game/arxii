@@ -5,7 +5,7 @@ import { useFocusStack, type FocusEntry } from '../useFocusStack';
 
 const ROOM_ENTRY: FocusEntry = {
   kind: 'room',
-  room: { dbref: '#42', name: 'Test Room', thumbnail_url: null, commands: [], description: '' },
+  room: { dbref: '#42', name: 'Test Room', thumbnail_url: null, description: '' },
   sceneSummary: null,
 };
 

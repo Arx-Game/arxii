@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
+from actions.prerequisites import Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
@@ -50,46 +51,81 @@ def _active_round_for_room(room: ObjectDB) -> SceneRound | None:
 
 
 def _resolve_guard_and_ally(
-    actor: ObjectDB, ally_name: str | None, *, no_ally_message: str
-) -> tuple[SceneRoundParticipant, SceneRoundParticipant] | ActionResult:
-    """Resolve the caller's active participant + a named ally's active participant.
+    actor: ObjectDB,
+    *,
+    ally_name: str | None,
+    ally_persona_id: object,
+    no_ally_message: str,
+) -> tuple[SceneRoundParticipant, SceneRoundParticipant] | str:
+    """The caller's and the ally's ACTIVE participants, or the refusal text (#1744, #4030).
 
-    Shared guard chain for ``SuccorSceneAction``/``InterposeSceneAction``: resolve the
-    actor's room, the room's active round, the actor's ``CharacterSheet``, the actor's
-    own ACTIVE ``SceneRoundParticipant``, a non-empty ``ally_name``, and the named
-    ally's ACTIVE ``SceneRoundParticipant`` in that round — in that order, each a
-    distinct failure message (the multiple early returns are intentional — each names
-    a specific unmet precondition). Returns the ``(participant, ally)`` pair on
-    success, or a failure ``ActionResult`` the caller should return directly.
-    ``no_ally_message`` is the action-specific text for a missing ``ally_name``
-    (Succor vs Interpose wording).
+    Shared by ``GuardAllyPrerequisite`` (so ``run()`` and the persona menu agree) and by
+    the two ``execute()``s, which need the resolved pair. The ally is found by persona
+    (``ally_persona_id``, the web menu's shape, which works under a mask) or, for telnet,
+    by character key (``ally_name``).
     """
     room = actor.db_location
     if room is None:
-        return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
+        return NOT_IN_A_ROOM_MESSAGE
     scene_round = _active_round_for_room(room)
     if scene_round is None:
-        return ActionResult(success=False, message=NO_ACTIVE_ROUND_MESSAGE)
+        return NO_ACTIVE_ROUND_MESSAGE
     sheet = _sheet(actor)
     if sheet is None:
-        return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
+        return NO_CHARACTER_SHEET_MESSAGE
     participant = SceneRoundParticipant.objects.filter(
         scene_round=scene_round,
         character_sheet=sheet,
         status=SceneRoundParticipantStatus.ACTIVE,
     ).first()
     if participant is None:
-        return ActionResult(success=False, message="You are not an active participant here.")
+        return "You are not an active participant here."
+    active_allies = SceneRoundParticipant.objects.filter(
+        scene_round=scene_round, status=SceneRoundParticipantStatus.ACTIVE
+    )
+    if ally_persona_id is not None:
+        from actions.target_resolution import resolve_persona_pk_to_character  # noqa: PLC0415
+
+        ally_character = resolve_persona_pk_to_character(ally_persona_id)
+        ally = (
+            active_allies.filter(character_sheet__character=ally_character).first()
+            if ally_character is not None
+            else None
+        )
+        if ally is None:
+            return "They aren't an active participant here."
+        return participant, ally
     if not ally_name:
-        return ActionResult(success=False, message=no_ally_message)
-    ally = SceneRoundParticipant.objects.filter(
-        scene_round=scene_round,
-        status=SceneRoundParticipantStatus.ACTIVE,
-        character_sheet__character__db_key__iexact=ally_name,
-    ).first()
+        return no_ally_message
+    ally = active_allies.filter(character_sheet__character__db_key__iexact=ally_name).first()
     if ally is None:
-        return ActionResult(success=False, message=f"No active ally named '{ally_name}' here.")
+        return f"No active ally named '{ally_name}' here."
     return participant, ally
+
+
+@dataclass
+class GuardAllyPrerequisite(Prerequisite):
+    """The guard and the named ally must both be ACTIVE in the room's round."""
+
+    no_ally_message: str = ""
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        del target
+        kwargs = (context or {}).get("kwargs", {})
+        resolved = _resolve_guard_and_ally(
+            actor,
+            ally_name=kwargs.get("ally_name"),
+            ally_persona_id=kwargs.get("target_persona_id"),
+            no_ally_message=self.no_ally_message,
+        )
+        if isinstance(resolved, str):
+            return False, resolved
+        return True, ""
 
 
 @dataclass
@@ -492,6 +528,10 @@ class ForceResolveRoundAction(Action):
         return ActionResult(success=True, message="You force the round to resolve.")
 
 
+SUCCOR_NO_ALLY_MESSAGE = "Succor requires an ally to shelter."
+INTERPOSE_NO_ALLY_MESSAGE = "Interpose requires an ally to guard."
+
+
 @dataclass
 class SuccorSceneAction(Action):
     """Shelter a specific ally from environmental hazards in a non-combat scene round.
@@ -506,6 +546,9 @@ class SuccorSceneAction(Action):
     category: str = "scene"
     target_type: TargetType = TargetType.SINGLE
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [GuardAllyPrerequisite(no_ally_message=SUCCOR_NO_ALLY_MESSAGE)]
+
     def execute(
         self,
         actor: ObjectDB,
@@ -516,10 +559,13 @@ class SuccorSceneAction(Action):
         from world.scenes.round_services import declare_succor_scene  # noqa: PLC0415
 
         resolved = _resolve_guard_and_ally(
-            actor, ally_name, no_ally_message="Succor requires an ally to shelter."
+            actor,
+            ally_name=ally_name,
+            ally_persona_id=kwargs.get("target_persona_id"),
+            no_ally_message=SUCCOR_NO_ALLY_MESSAGE,
         )
-        if isinstance(resolved, ActionResult):
-            return resolved
+        if isinstance(resolved, str):
+            return ActionResult(success=False, message=resolved)
         participant, ally = resolved
         try:
             declare_succor_scene(participant, ally)
@@ -543,6 +589,9 @@ class InterposeSceneAction(Action):
     category: str = "scene"
     target_type: TargetType = TargetType.SINGLE
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [GuardAllyPrerequisite(no_ally_message=INTERPOSE_NO_ALLY_MESSAGE)]
+
     def execute(
         self,
         actor: ObjectDB,
@@ -553,10 +602,13 @@ class InterposeSceneAction(Action):
         from world.scenes.round_services import declare_interpose_scene  # noqa: PLC0415
 
         resolved = _resolve_guard_and_ally(
-            actor, ally_name, no_ally_message="Interpose requires an ally to guard."
+            actor,
+            ally_name=ally_name,
+            ally_persona_id=kwargs.get("target_persona_id"),
+            no_ally_message=INTERPOSE_NO_ALLY_MESSAGE,
         )
-        if isinstance(resolved, ActionResult):
-            return resolved
+        if isinstance(resolved, str):
+            return ActionResult(success=False, message=resolved)
         participant, ally = resolved
         try:
             declare_interpose_scene(participant, ally)

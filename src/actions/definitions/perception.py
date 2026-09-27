@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
+from actions.target_resolution import resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 
@@ -16,24 +17,46 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
 
 _LOOK_AT_WHAT_MESSAGE = "Look at what?"
+LOOK_NOT_VISIBLE_MESSAGE = "You can't see them from here."
+
+
+def look_target_visible(actor: ObjectDB, target: ObjectDB) -> bool:
+    """Whether *actor* may look at *target* right now (#4030).
+
+    True for the actor's own location (the bare-``look`` case) and for looking at
+    themself — ``can_perceive``'s co-location check assumes an occupant/held item,
+    not the room container, and a looker always perceives themselves regardless of
+    their own concealment (mirrors ``get_display_characters``). Otherwise delegates
+    to the real perception/concealment seam, ``can_perceive`` (#1225).
+
+    The single source of the Look visibility rule — ``LookAction.execute()`` and
+    the persona menu (``actions.persona_menu``) both call this so the two never
+    drift (#4030 review: the persona menu had hand-copied a near-identical but
+    not-quite-identical condition).
+    """
+    if target in (actor.location, actor):
+        return True
+    from world.conditions.services import can_perceive  # noqa: PLC0415
+
+    return can_perceive(actor, target)
 
 
 def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
-    """Resolve the look target from either dispatch shape (#3044).
+    """Resolve the look target from any dispatch shape (#3044, #4030).
 
-    Telnet passes an already-resolved ``target`` ``ObjectDB`` directly. The
-    web room-objects panel's examine-on-click affordance sends a raw ``target``
-    kwarg holding the object's pk (an ``int``) — REST dispatch
-    (``dispatch_player_action`` -> ``_dispatch_registry``) does no ``ObjectDB``
-    resolution of its own; ``objectdb_target_kwargs`` only helps the *websocket*
-    inputfunc. Resolve defensively here so both dispatch shapes work, mirroring
-    ``_resolve_identify_target`` (``actions/definitions/identification.py``) and
-    ``_resolve_room`` (``actions/definitions/locations.py``).
+    - Telnet passes an already-resolved ``target`` ``ObjectDB``.
+    - The web room-objects panel sends ``target`` as an object pk (an ``int``).
+    - The web persona menu sends ``target_persona_id`` (a ``Persona`` pk); it resolves
+      to the character underneath through ``actions.target_resolution``. The perception
+      gate and masked-name rendering in ``execute()`` still apply unchanged.
+    REST dispatch does no ``ObjectDB`` resolution of its own, so resolve here.
     """
     target = kwargs.get("target")
-    if target is None or isinstance(target, ObjectDB):
+    if isinstance(target, ObjectDB):
         return target
-    return ObjectDB.objects.filter(pk=target).first()
+    if target is not None:
+        return ObjectDB.objects.filter(pk=target).first()
+    return resolve_persona_pk_to_character(kwargs.get("target_persona_id"))
 
 
 @dataclass
@@ -58,19 +81,28 @@ class LookAction(Action):
         if target is None:
             return ActionResult(success=False, message=_LOOK_AT_WHAT_MESSAGE)
 
+        # #4030: a ``target_persona_id`` dispatch (the persona menu) never had a real
+        # ObjectDB/pk on the wire, only the persona the viewer sees — which may be a
+        # mask. Telnet and the pk-based ``target`` shape already resolved a genuine
+        # ObjectDB the caller could see, so their refusal text is safe to keep as-is.
+        via_persona_id = kwargs.get("target") is None
+
         # #1225: gate direct look-at-target on the real perception/concealment seam.
         # The bare-``look`` case (target is the room itself) and looking at oneself
         # are exempt — ``can_perceive``'s co-location check assumes an occupant/held
         # item, not the room container, and a looker always perceives themselves
         # regardless of their own concealment (mirrors ``get_display_characters``).
-        if target not in (actor.location, actor):
-            from world.conditions.services import can_perceive  # noqa: PLC0415
-
-            if not can_perceive(actor, target):
-                # Deliberately the same not-found idiom ``CmdLook`` uses for a failed
-                # search (``f"Could not find '{args}'."``) — a concealed-and-undetected
-                # target must be indistinguishable from a genuinely absent one.
-                return ActionResult(success=False, message=f"Could not find '{target.key}'.")
+        if not look_target_visible(actor, target):
+            if via_persona_id:
+                # #4030: never name the real character key behind a mask —
+                # a persona-id look can target someone concealed, or simply
+                # not co-located, and either way the real identity must stay
+                # hidden, not just indistinguishable-from-absent.
+                return ActionResult(success=False, message=LOOK_NOT_VISIBLE_MESSAGE)
+            # Deliberately the same not-found idiom ``CmdLook`` uses for a failed
+            # search (``f"Could not find '{args}'."``) — a concealed-and-undetected
+            # target must be indistinguishable from a genuinely absent one.
+            return ActionResult(success=False, message=f"Could not find '{target.key}'.")
 
         # #2287: an unconscious looker's perception is dreamside — looking at
         # "the room" shows the dream space, not the waking one.

@@ -21,13 +21,15 @@ class SerializedObjectState(TypedDict):
     dbref: str
     name: str
     thumbnail_url: str | None
-    commands: list[str]
     # Populated by `ObjectStateSerializer.to_representation`; the older,
     # minimal `flows.helpers.payloads.serialize_state` path (test-only) does
     # not set either, so both stay optional here rather than forcing that
     # path to fabricate values it has no batched lookup for.
     is_mission_board: NotRequired[bool]
     place_id: NotRequired[int | None]
+    # #4030 — the presented persona (a mask's own pk when masked), so a room-list
+    # row can open the persona menu. None for non-characters.
+    persona_id: NotRequired[int | None]
 
 
 class SceneInfo(TypedDict):

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.mechanics.types import ChallengeResolutionResult
     from world.scenes.action_availability import AvailableEnhancement
+    from world.scenes.models import Persona, Scene
     from world.traits.models import CheckOutcome
 
 
@@ -98,6 +99,39 @@ class ActionAvailability:
     action_key: str
     available: bool
     reasons: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PersonaMenuItem:
+    """One persona-menu entry: can the viewer use it on this persona now, and if not, why."""
+
+    key: str
+    label: str
+    group: str  # PersonaMenuGroupKey
+    available: bool
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class PersonaMenuGroup:
+    """A persona-menu group and, when it has nothing to offer, the line saying why."""
+
+    key: str  # PersonaMenuGroupKey
+    empty_state: str = ""
+
+
+@dataclass(frozen=True)
+class PersonaMenu:
+    """Everything the persona menu shows for one viewer and one target persona (#4030)."""
+
+    persona: Persona
+    is_self: bool
+    scene: Scene | None
+    viewer_persona: Persona | None
+    items: list[PersonaMenuItem]
+    groups: list[PersonaMenuGroup]
+    scene_actions: list[PlayerAction]
+    notice: str = ""
 
 
 @dataclass(frozen=True)

@@ -6,14 +6,12 @@ const serel: RoomStateObject = {
   dbref: '#2',
   name: 'Serel',
   thumbnail_url: null,
-  commands: [],
   place_id: 5,
 };
 const vayne: RoomStateObject = {
   dbref: '#3',
   name: 'Vayne',
   thumbnail_url: null,
-  commands: [],
   place_id: null,
 };
 const room = [serel, vayne];
@@ -21,7 +19,6 @@ const newcomer: RoomStateObject = {
   dbref: '#4',
   name: 'Nyx',
   thumbnail_url: null,
-  commands: [],
   place_id: null,
   in_scene: false,
 };

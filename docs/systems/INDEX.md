@@ -1079,14 +1079,23 @@ true-form/natural baseline compose into what a viewer sees — plus the per-pers
 descriptor overlay, cosmetic editing, and shapeshift slots.
 
 - **Spans:** forms (body), scenes (Persona), character_sheets (anchor), npc_services
-  (Functionary botch picker), actions (`IdentifyAction`)
+  (Functionary botch picker), actions (`IdentifyAction`, `build_persona_menu`)
 - **Key ideas:** four-question model; `(Persona × FormTrait)` descriptor; single
   render composition (viewer-gated); real-vs-fake truth ledger; cosmetic vs disguise;
   PC-to-PC identification loop (familiarity-staged intellect+Investigation check vs.
   the illusion-piercing contest, kept distinct)
 - **Status:** design (slices 1-4); **slice 5 (PC-to-PC identification loop) BUILT,
-  #1107** — `identify` registry action + telnet `CmdIdentify` + `PersonaContextMenu`
-  web dispatch; depends on #1044
+  #1107** — `identify` registry action + telnet `CmdIdentify` + `PersonaMenu`
+  web dispatch; depends on #1044. **Look now gated the same way as the sheet (#4030,
+  supersedes the "not wired" note that used to sit against the render-composition row):**
+  `identity_revealed_to_viewer` (`world.scenes.persona_display`) is the one reveal rule
+  the character sheet's `_build_appearance` and `LookAction`/`CharacterState.get_display_desc`
+  both call, so a masked persona's real description no longer leaks through `look` for a
+  viewer who hasn't seen through the mask (self, staff, and a discoverer still see it, exactly
+  as the sheet already did). `GET /api/actions/characters/<id>/personas/<pid>/menu/`
+  (`actions.persona_menu.build_persona_menu`) is the server-composed list behind the
+  right-click persona menu (Look, Identify, Challenge, and the scene-only actions), reusing
+  each action's own `check_availability()` rather than a second gate.
 - **Details:** [appearance_and_identity.md](appearance_and_identity.md)
 ### Classes (Paths)
 Character paths with evolution hierarchy through stages of power; also owns the

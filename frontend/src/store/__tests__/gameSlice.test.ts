@@ -139,13 +139,11 @@ const createRoomData = (
 const createRoomStateObject = (
   dbref: string,
   name: string,
-  thumbnail_url: string | null = null,
-  commands: string[] = []
+  thumbnail_url: string | null = null
 ): RoomStateObject => ({
   dbref,
   name,
   thumbnail_url,
-  commands,
 });
 
 const createSceneSummary = (
@@ -1184,12 +1182,12 @@ describe('gameSlice', () => {
       it('preserves all room fields including objects and exits', () => {
         const initialState = createStateWithSession('TestCharacter', {});
         const objects = [
-          createRoomStateObject('#200', 'Sword', '/images/sword.png', ['take', 'examine']),
-          createRoomStateObject('#201', 'Shield', null, ['take']),
+          createRoomStateObject('#200', 'Sword', '/images/sword.png'),
+          createRoomStateObject('#201', 'Shield', null),
         ];
         const exits = [
-          createRoomStateObject('#300', 'North', null, ['go']),
-          createRoomStateObject('#301', 'South', '/images/south.png', ['go', 'look']),
+          createRoomStateObject('#300', 'North', null),
+          createRoomStateObject('#301', 'South', '/images/south.png'),
         ];
         const room = createRoomData(100, 'Armory', '/images/armory.jpg', objects, exits);
 

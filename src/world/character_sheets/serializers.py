@@ -560,6 +560,7 @@ def _resolve_presented_identity(
     for the PRIMARY public face, and to a viewer who has discovered an anonymous face's link. A
     named alt (hidden link) or an undiscovered mask keeps the character's primary identity hidden.
     The discovery lookup happens only in the anonymous-and-non-privileged branch (one query).
+    The reveal rule itself is ``identity_revealed_to_viewer``, shared with ``look`` (#4030).
     """
     if active is None:
         return sheet.character.db_key, True
@@ -574,10 +575,14 @@ def _resolve_presented_identity(
             if primary is not None and primary.pk != active.pk:
                 return f"{active.name} ({primary.name})", True
         return active.name, True
+    from world.scenes.persona_display import identity_revealed_to_viewer  # noqa: PLC0415
+
     if not active.is_fake_name:
         # Named face: render its own name; reveal the character bio only for the PRIMARY (the
         # main public identity). A named ESTABLISHED alt keeps its link to the primary hidden.
-        return active.name, active.persona_type == PersonaType.PRIMARY
+        return active.name, identity_revealed_to_viewer(
+            active, viewer_persona_ids=set(), viewer_sheet_ids=set()
+        )
 
     from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415

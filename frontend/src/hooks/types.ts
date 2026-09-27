@@ -161,8 +161,9 @@ export interface RoomStateObject {
   dbref: string;
   name: string;
   thumbnail_url: string | null;
-  commands: string[];
   description?: string;
+  /** The occupant's persona pk, for the persona menu (#4030). Only ever set on `characters` entries. */
+  persona_id?: number | null;
   /** Whether the viewing character's active persona owns this room (#1470). */
   is_owner?: boolean;
   /** Whether the room is publicly listed (the editor's privacy toggle state). */

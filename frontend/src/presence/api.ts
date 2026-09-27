@@ -5,6 +5,8 @@ export interface WhoEntry {
   name: string;
   /** "" (active), "idle", or "away" — deliberately coarse (never exact minutes). */
   idle: string;
+  /** The active persona's pk, for the persona menu (#4030). */
+  persona_id: number;
 }
 
 /** A `where` row: a present character + its Evennia-colour-coded room path. */

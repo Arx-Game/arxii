@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -7,6 +7,13 @@ import { getPresence } from '@/presence/api';
 import { PresencePanel } from './PresencePanel';
 
 vi.mock('@/presence/api', () => ({ getPresence: vi.fn() }));
+
+// PersonaMenu (#4030) wraps every Who row; its own data fetch is mocked the
+// same way Task 8's PersonaMenu.test.tsx does — the hardcoded Look/View sheet
+// items don't depend on this data, so a bare stub is enough here.
+vi.mock('@/game/persona-menu/personaMenuApi', () => ({
+  usePersonaMenuQuery: () => ({ data: undefined, isLoading: false }),
+}));
 
 vi.mock('sonner', () => ({
   toast: {
@@ -52,7 +59,7 @@ import { toast } from 'sonner';
 describe('PresencePanel', () => {
   it('renders the online roster with a coarse idle marker', async () => {
     vi.mocked(getPresence).mockResolvedValue({
-      who: [{ name: 'Bram', idle: 'idle' }],
+      who: [{ name: 'Bram', idle: 'idle', persona_id: 11 }],
       where: [],
     });
     renderWithProviders(<PresencePanel />);
@@ -146,5 +153,36 @@ describe('PresencePanel — Go there button (#2163)', () => {
     options.onSuccess({ success: false, message: 'No path there.' });
 
     expect(toast.error).toHaveBeenCalledWith('No path there.');
+  });
+});
+
+describe('PresencePanel — Who row persona menu (#4030)', () => {
+  it('right-click on a Who name opens the menu with Look and View sheet', async () => {
+    vi.mocked(getPresence).mockResolvedValue({
+      who: [{ name: 'Bram', idle: '', persona_id: 11 }],
+      where: [],
+    });
+
+    renderWithProviders(<PresencePanel />);
+    fireEvent.contextMenu(await screen.findByText('Bram'));
+
+    const menu = await screen.findByRole('menu');
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent);
+    expect(labels).toEqual(['Look', 'View sheet']);
+  });
+
+  it('left-click on a Who name also opens the menu (leftClick)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getPresence).mockResolvedValue({
+      who: [{ name: 'Bram', idle: '', persona_id: 11 }],
+      where: [],
+    });
+
+    renderWithProviders(<PresencePanel />);
+    await user.click(await screen.findByRole('button', { name: 'Bram' }));
+
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
   });
 });

@@ -516,7 +516,7 @@ describe('WardrobePage', () => {
             name: 'A Room',
             description: '',
             thumbnail_url: null,
-            characters: [{ dbref: '#55', name: 'Bystander', thumbnail_url: null, commands: [] }],
+            characters: [{ dbref: '#55', name: 'Bystander', thumbnail_url: null }],
             objects: [],
             exits: [],
             is_owner: false,

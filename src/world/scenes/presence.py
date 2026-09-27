@@ -30,6 +30,9 @@ class WhoEntry:
 
     name: str
     idle: str  # "" (active), "idle", or "away"
+    # #4030 — the active persona's pk, the face this row shows, so the Who panel can
+    # open the persona menu.
+    persona_id: int
 
 
 def idle_bucket(idle_seconds: float) -> str:
@@ -175,4 +178,4 @@ def _who_entry_for_puppet(
         return None
     persona = active_persona_for_sheet(sheet)
     idle_value = IDLE_AWAY if puppet.ndb.appear_afk else idle_bucket(idle)
-    return WhoEntry(name=persona.display_ic(), idle=idle_value)
+    return WhoEntry(name=persona.display_ic(), idle=idle_value, persona_id=persona.pk)

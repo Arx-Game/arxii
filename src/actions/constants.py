@@ -199,6 +199,15 @@ class PlayerDecision(StrEnum):
     REROLL = "reroll"
 
 
+class PersonaMenuGroupKey(models.TextChoices):
+    """Groups of the persona menu (#4030), in display order."""
+
+    PERCEPTION = "perception", "Perception"
+    CONFLICT = "conflict", "Conflict"
+    SCENE = "scene", "Scene"
+    SOCIAL = "social", "Social"
+
+
 class ResolutionPhase(StrEnum):
     """Phase of the action resolution state machine.
 

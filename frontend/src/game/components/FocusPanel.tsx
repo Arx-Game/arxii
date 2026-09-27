@@ -111,7 +111,6 @@ export function FocusPanel({
         dbref: `#${roomData.id}`,
         name: roomData.name,
         thumbnail_url: roomData.thumbnail_url,
-        commands: [],
         description: roomData.description,
       },
       sceneSummary: sceneData,

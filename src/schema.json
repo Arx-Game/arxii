@@ -613,6 +613,36 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/actions/characters/{character_id}/personas/{persona_id}/menu/:
+    get:
+      operationId: actions_characters_personas_menu_retrieve
+      description: |-
+        The persona menu (#4030): what this character can do to one persona, and why not.
+
+        A single bounded read that wraps no model's CRUD, so it is an ``APIView``; the
+        ViewSet filter/pagination rules have no queryset to apply to.
+      parameters:
+      - in: path
+        name: character_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: persona_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - actions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonaMenu'
+          description: ''
   /api/aggregate-beat-contributions/:
     get:
       operationId: aggregate_beat_contributions_list
@@ -54843,6 +54873,18 @@ components:
       - options
       - phase
       - track
+    GroupEnum:
+      enum:
+      - perception
+      - conflict
+      - scene
+      - social
+      type: string
+      description: |-
+        * `perception` - Perception
+        * `conflict` - Conflict
+        * `scene` - Scene
+        * `social` - Social
     GroupPickRequestRequest:
       type: object
       description: 'POST body for the #1036 group-pick endpoint.'
@@ -57511,6 +57553,18 @@ components:
       - summary
       - tale
       - template_name
+    KeyEnum:
+      enum:
+      - perception
+      - conflict
+      - scene
+      - social
+      type: string
+      description: |-
+        * `perception` - Perception
+        * `conflict` - Conflict
+        * `scene` - Scene
+        * `social` - Social
     KinRelationship:
       type: object
       description: |-
@@ -72796,6 +72850,74 @@ components:
       - society_name
       - tier
       - tier_label
+    PersonaMenu:
+      type: object
+      description: The persona menu for one viewer and one target persona (#4030).
+      properties:
+        persona_id:
+          type: integer
+        is_self:
+          type: boolean
+        scene_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        viewer_persona_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        notice:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaMenuItem'
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaMenuGroup'
+        scene_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerAction'
+      required:
+      - groups
+      - is_self
+      - items
+      - notice
+      - persona_id
+      - scene_actions
+      - scene_id
+      - viewer_persona_id
+    PersonaMenuGroup:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/KeyEnum'
+        empty_state:
+          type: string
+      required:
+      - empty_state
+      - key
+    PersonaMenuItem:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        group:
+          $ref: '#/components/schemas/GroupEnum'
+        available:
+          type: boolean
+        reason:
+          type: string
+      required:
+      - available
+      - group
+      - key
+      - label
+      - reason
     PersonaPosition:
       type: object
       description: A scene persona and the Position it currently occupies (or null).

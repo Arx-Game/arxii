@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
+from world.scenes.constants import PersonaType
 from world.scenes.models import Persona, PersonaDiscovery
 
 if TYPE_CHECKING:
@@ -188,6 +189,32 @@ def resolve_display_for_viewer(
             )
             return f"{persona.name} ({linked.name})", True
     return compose_sdesc(persona), False
+
+
+def identity_revealed_to_viewer(
+    persona: Persona,
+    *,
+    viewer_persona_ids: set[int],
+    viewer_sheet_ids: set[int],
+    is_staff: bool = False,
+) -> bool:
+    """Whether this viewer may see the real character behind ``persona`` (#1325, #4030).
+
+    The one rule for identity-linked prose (the free-text description on the sheet and in
+    ``look``): the viewer's own face, staff, the PRIMARY public face, and a discovered mask
+    reveal; a named alt (its link to the primary stays hidden) and an undiscovered mask do
+    not. One discovery query, only for an anonymous face the viewer doesn't own.
+    """
+    if persona.pk in viewer_persona_ids or is_staff:
+        return True
+    if not persona.is_fake_name:
+        return persona.persona_type == PersonaType.PRIMARY
+    _name, is_discovered = resolve_display_for_viewer(
+        persona,
+        viewer_persona_ids=viewer_persona_ids,
+        viewer_sheet_ids=viewer_sheet_ids,
+    )
+    return is_discovered
 
 
 def viewer_context_for_account(account: AccountDB) -> tuple[set[int], set[int]]:

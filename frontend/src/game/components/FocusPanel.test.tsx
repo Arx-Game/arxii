@@ -66,8 +66,8 @@ function makeRoomData(): RoomData {
     description: 'Vast and imposing.',
     thumbnail_url: null,
     characters: [
-      { dbref: '#100', name: 'Alice', thumbnail_url: null, commands: [] },
-      { dbref: '#101', name: 'Bob', thumbnail_url: null, commands: [] },
+      { dbref: '#100', name: 'Alice', thumbnail_url: null },
+      { dbref: '#101', name: 'Bob', thumbnail_url: null },
     ],
     objects: [],
     exits: [],

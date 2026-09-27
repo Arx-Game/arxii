@@ -61,6 +61,20 @@ if (!window.Element.prototype.scrollIntoView) {
   window.Element.prototype.scrollIntoView = () => {};
 }
 
+// Polyfill PointerEvent — jsdom has no PointerEvent (longstanding gap —
+// https://github.com/jsdom/jsdom/issues/2527), so `fireEvent.pointerDown/Move/Up`
+// deliver events with no clientX/clientY/button at all without this. Any test that
+// drives a pointer-drag interaction (e.g. LookDialog.test.tsx's title-bar drag) needs it.
+if (typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+    }
+  }
+  // @ts-expect-error jsdom doesn't implement PointerEvent
+  window.PointerEvent = PointerEventPolyfill;
+}
+
 // Mock framer-motion to disable animations in tests
 vi.mock('framer-motion', async () => {
   const actual = await vi.importActual('framer-motion');

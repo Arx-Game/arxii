@@ -22,7 +22,14 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
 - **`ActionPanel.tsx`**: Scene action request panel
 - **`ActionResult.tsx`**: Action result display
 - **`ConsentPrompt.tsx`**: Consent prompt for scene actions
-- **`PersonaContextMenu.tsx`**: Context menu for persona interactions
+- **`PersonaMenu.tsx`** (#4030): The one action menu for a persona — right-click
+  (Radix `ContextMenu`) anywhere, plus an optional left-click `DropdownMenu`
+  trigger (`leftClick` prop, today's name-click). Fed only a persona id; its
+  content (Look, View sheet, and every other item/group) is composed entirely
+  by `GET /api/actions/characters/<characterId>/personas/<personaId>/menu/`
+  (`frontend/src/game/persona-menu/personaMenuApi.ts`) — no client-side `canX`
+  gating and no scene cache read for availability. Replaces the scene-bound
+  `PersonaContextMenu` and the never-wired `EntityContextMenu`.
 - **`PlaceBar.tsx`**: Place bar for sub-location display
 
 ### `pages/`

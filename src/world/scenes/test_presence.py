@@ -10,6 +10,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerAllowList
+from world.areas.serializers import WhoEntrySerializer
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -32,6 +33,7 @@ from world.scenes.presence import (
     idle_bucket,
     who_listing,
 )
+from world.scenes.services import active_persona_for_sheet
 
 
 def _make_character(*, appear_offline: bool = False):
@@ -64,6 +66,16 @@ class WhoListingTests(TestCase):
         assert len(entries) == 1
         assert entries[0].name == sheet.primary_persona.display_ic()
         assert entries[0].idle == IDLE_IDLE  # coarse bucket, never an exact duration
+        # ty types the factory call as the factory, not CharacterSheet; see the force_authenticate
+        # call below for the same known stub mismatch.
+        assert (
+            entries[0].persona_id
+            == active_persona_for_sheet(
+                sheet  # ty: ignore[invalid-argument-type]
+            ).pk
+        )
+        # #4030 — the serializer carries persona_id through to the who payload row.
+        assert WhoEntrySerializer(entries[0]).data["persona_id"] == entries[0].persona_id
 
     def test_uses_minimum_idle_across_a_characters_sessions(self) -> None:
         sheet = CharacterSheetFactory()

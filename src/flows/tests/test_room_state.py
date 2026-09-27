@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -51,23 +50,8 @@ class RoomStateTests(TestCase):
         self.item_state = self.context.initialize_state_for_object(self.item)
         self.exit_state = self.context.initialize_state_for_object(self.exit)
 
-        self.room_state.dispatcher_tags = ["look"]
-        self.item_state.dispatcher_tags = ["look", "get"]
-        self.exit_state.dispatcher_tags = ["north"]
-
-        look_cmd = SimpleNamespace(key="look")
-        get_cmd = SimpleNamespace(key="get")
-        say_cmd = SimpleNamespace(key="say")
-        north_cmd = SimpleNamespace(key="north")
-        self.caller.cmdset.current = SimpleNamespace(
-            commands=[look_cmd, get_cmd, say_cmd, north_cmd],
-        )
-
     def test_build_room_state_payload(self):
         payload = build_room_state_payload(self.char_state, self.room_state)
-        assert payload["room"]["commands"] == ["look"]
-        assert payload["objects"][0]["commands"] == ["look", "get"]
-        assert payload["exits"][0]["commands"] == ["north"]
         assert payload["scene"] is None
 
     def test_build_room_state_payload_uses_cached_scene(self):
@@ -86,9 +70,6 @@ class RoomStateTests(TestCase):
             call_kwargs = mock_msg.call_args.kwargs
             assert "room_state" in call_kwargs
             payload = call_kwargs["room_state"][1]  # Second element of the ((), payload) tuple
-            assert payload["room"]["commands"] == ["look"]
-            assert payload["objects"][0]["commands"] == ["look", "get"]
-            assert payload["exits"][0]["commands"] == ["north"]
             assert payload["scene"] is None
 
 

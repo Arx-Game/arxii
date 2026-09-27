@@ -20,7 +20,7 @@ import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
 import { Badge } from '@/components/ui/badge';
 import { NominateButton } from '@/components/NominateButton';
-import { PersonaContextMenu } from './PersonaContextMenu';
+import { PersonaMenu } from './PersonaMenu';
 import { ActionResult } from './ActionResult';
 import { ActorLine } from './ActorLine';
 import { ReactionStrip } from './ReactionStrip';
@@ -69,9 +69,10 @@ interface PoseUnitAvatarProps {
 }
 
 /**
- * Avatar thumbnail in the bubble header. Identity click surface (#2156) — the
- * name stays the PersonaContextMenu action surface; the avatar itself opens
- * the character card. Renders as a plain (non-interactive) avatar when
+ * Avatar thumbnail in the bubble header. Identity click surface (#2156) — a
+ * left click opens the character card; since #4030 the avatar is also
+ * wrapped in `PersonaMenu` so a right-click reaches the same action menu the
+ * name offers. Renders as a plain (non-interactive) avatar when
  * `onAvatarClick` isn't provided.
  */
 function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
@@ -91,7 +92,7 @@ function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
     return avatar;
   }
 
-  return (
+  const button = (
     <button
       type="button"
       aria-label={`View ${interaction.persona.name}`}
@@ -106,6 +107,16 @@ function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
     >
       {avatar}
     </button>
+  );
+
+  return (
+    <PersonaMenu
+      personaId={interaction.persona.id}
+      personaName={interaction.persona.name}
+      thumbnailUrl={interaction.persona.thumbnail_url}
+    >
+      {button}
+    </PersonaMenu>
   );
 }
 
@@ -273,7 +284,7 @@ export interface PoseUnitProps {
    * Avatar-click identity affordance (#2156): fired with the interaction's
    * persona when the avatar thumbnail is clicked. The avatar renders as a
    * plain (non-interactive) image when this prop is absent — the name's
-   * PersonaContextMenu remains the action surface either way.
+   * PersonaMenu remains the action surface either way.
    */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   /** Historical readers must not mount mutation controls. */
@@ -342,10 +353,10 @@ export function PoseUnit({
       >
         <div className="flex items-center gap-2">
           <PoseUnitAvatar interaction={interaction} onAvatarClick={onAvatarClick} />
-          <PersonaContextMenu
+          <PersonaMenu
             personaId={interaction.persona.id}
             personaName={interaction.persona.name}
-            sceneId={sceneId}
+            leftClick
             onAttachAction={onAttachAction}
           >
             <span
@@ -355,7 +366,7 @@ export function PoseUnit({
             >
               {interaction.persona.name}
             </span>
-          </PersonaContextMenu>
+          </PersonaMenu>
           <span className="text-xs text-muted-foreground">
             {new Date(interaction.timestamp).toLocaleString()}
           </span>
@@ -427,14 +438,14 @@ export function PoseUnit({
         {readOnly ? (
           <PoseUnitActorLabel interaction={interaction} />
         ) : (
-          <PersonaContextMenu
+          <PersonaMenu
             personaId={interaction.persona.id}
             personaName={interaction.persona.name}
-            sceneId={sceneId}
+            leftClick
             onAttachAction={onAttachAction}
           >
             <PoseUnitActorLabel interaction={interaction} onAddTarget={onAddTarget} />
-          </PersonaContextMenu>
+          </PersonaMenu>
         )}
         <span className="text-xs text-muted-foreground">
           {new Date(interaction.timestamp).toLocaleString()}

@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from django.utils.functional import cached_property
 from evennia.utils.utils import iter_to_str
 
 from flows.object_states.base_state import BaseState
@@ -28,6 +29,22 @@ class CharacterState(BaseState):
     def get_categories(self) -> dict:
         # For now, no extra character-specific categories.
         return {}
+
+    @cached_property
+    def description(self) -> str:
+        """The character's live physical description (#4030).
+
+        ``BaseState.description`` reads ``item_data.desc``, an attribute that has
+        never existed on ``CharacterItemDataHandler`` (dead since the project's
+        initial setup) — every character look silently fell through to the
+        generic fallback. The real read is ``get_display_description()`` (the
+        event-disguise overlay, else the sheet's ``additional_desc``), the same
+        source ``CharacterSerializer`` uses.
+        """
+        try:
+            return self.obj.item_data.get_display_description() or "You see nothing of note."
+        except AttributeError:
+            return "You see nothing of note."
 
     # ------------------------------------------------------------------
     # Identity rendering (#1109) — the look / room-contents / examine name
@@ -96,6 +113,52 @@ class CharacterState(BaseState):
         """Whether the looker's account is staff (#1279 — universal identity-sight)."""
         account = self.obj.db_account
         return bool(account and account.is_staff)
+
+    def get_display_desc(
+        self,
+        mode: str = "look",
+        looker: "BaseState | object | None" = None,
+        **kwargs: "Kwargs",
+    ) -> str:
+        """The description, or nothing when the looker hasn't seen through the face (#4030).
+
+        A mask must not leak prose that names height, scars or hair; the character sheet
+        has hidden it since #1325 and ``look`` now follows the same rule
+        (``identity_revealed_to_viewer``). ``looker`` is typed like the sibling
+        ``get_display_worn``/``get_display_markings`` display components — it arrives via
+        ``return_appearance``'s ``**kwargs`` and isn't always a ``BaseState``.
+        """
+        if not self._identity_revealed_to(looker):
+            return ""
+        return super().get_display_desc(mode=mode, **kwargs)
+
+    def _identity_revealed_to(self, looker: "BaseState | object | None") -> bool:
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.scenes.persona_display import identity_revealed_to_viewer  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        if looker is not None and hasattr(looker, "obj") and looker.obj == self.obj:
+            return True
+        sheet = self.obj.character_sheet
+        if sheet is None:
+            return True
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            # A sheet with no persona at all has no mask to protect -- reveal, matching
+            # ``_presented_persona_name`` above, which falls back the same way (#4030 review).
+            return True
+        if isinstance(looker, CharacterState):
+            viewer_persona_ids, viewer_sheet_ids = looker._viewer_persona_context()  # noqa: SLF001
+            is_staff = looker._viewer_is_staff()  # noqa: SLF001
+        else:
+            viewer_persona_ids, viewer_sheet_ids, is_staff = set(), set(), False
+        return identity_revealed_to_viewer(
+            persona,
+            viewer_persona_ids=viewer_persona_ids,
+            viewer_sheet_ids=viewer_sheet_ids,
+            is_staff=is_staff,
+        )
 
     # ------------------------------------------------------------------
     # Permission helpers

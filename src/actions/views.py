@@ -1,6 +1,7 @@
 """Views for the actions API."""
 
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.generics import ListAPIView
@@ -11,10 +12,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from actions.errors import ActionDispatchError
+from actions.persona_menu import build_persona_menu
 from actions.player_interface import dispatch_player_action, get_player_actions
 from actions.serializers import (
     DispatchActionSerializer,
     DispatchResultSerializer,
+    PersonaMenuSerializer,
     PlayerActionSerializer,
 )
 from actions.types import PlayerAction
@@ -43,6 +46,26 @@ class AvailableActionsView(ListAPIView):
     def get_queryset(self) -> list[PlayerAction]:
         character = get_object_or_404(ObjectDB, pk=self.kwargs["character_id"])
         return get_player_actions(character)
+
+
+class PersonaMenuView(APIView):
+    """The persona menu (#4030): what this character can do to one persona, and why not.
+
+    A single bounded read that wraps no model's CRUD, so it is an ``APIView``; the
+    ViewSet filter/pagination rules have no queryset to apply to.
+    """
+
+    permission_classes = [IsAuthenticated, IsCharacterOwner]
+
+    @extend_schema(responses={200: PersonaMenuSerializer})
+    def get(self, request: Request, character_id: int, persona_id: int) -> Response:
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        character = get_object_or_404(ObjectDB, pk=character_id)
+        persona = get_object_or_404(
+            Persona.objects.select_related("character_sheet__character"), pk=persona_id
+        )
+        return Response(PersonaMenuSerializer(build_persona_menu(character, persona)).data)
 
 
 class DispatchActionView(APIView):

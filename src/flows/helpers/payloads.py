@@ -15,39 +15,16 @@ def serialize_state(
 
     Args:
         state: State to serialize.
-        looker: Optional state used to resolve display names and available
-            commands.
+        looker: Optional state used to resolve display names.
 
     Returns:
-        Dict with dbref, name, thumbnail URL, and matching command keys.
+        Dict with dbref, name, thumbnail URL.
     """
-    command_keys = _collect_command_keys(looker)
     return {
         "dbref": state.obj.dbref,
         "name": state.get_display_name(looker=looker),
         "thumbnail_url": state.thumbnail_url,
-        "commands": [key for key in command_keys if key in state.dispatcher_tags],
     }
-
-
-def _collect_command_keys(caller: BaseState | None) -> list[str]:
-    """Return command keys available to ``caller``.
-
-    Args:
-        caller: State whose commandset should be inspected.
-
-    Returns:
-        List of available command keys or an empty list if unavailable.
-    """
-    if caller is None:
-        return []
-    try:
-        cmdset = caller.obj.cmdset.current
-    except AttributeError:
-        return []
-    if not cmdset:
-        return []
-    return [cmd.key for cmd in cmdset.commands]
 
 
 def build_room_state_payload(caller: BaseState, room: BaseState) -> SimpleRoomPayload:

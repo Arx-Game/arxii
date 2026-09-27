@@ -311,7 +311,7 @@ path copies a descriptor from a sibling persona.
 | Natural baseline + change log | **BUILT (#1120)** | `CharacterFormValue.natural_option` + `AppearanceChangeLog` (`world/forms/models.py:300+`, #1120); `change_appearance` writes both |
 | Item-declared cosmetic scope | **BUILT & WIRED (#1126)** | `ItemTemplateAppearanceEffect` sidecar (`world/items/models.py`); `use_item` calls `change_appearance` per declared effect (`world/items/services/usage.py`); admin inline + seed data |
 | Two-slot active state (`current_real_form` + `active_fake_overlay`) | **BUILT (#1110)** | `forms.CharacterFormState.active_form` (real) + `active_fake_overlay` + `overlay_kind` (`DisguiseKind`); `apply_disguise`/`remove_disguise`; `get_presented_appearance(pierced=)` swaps the overlay in unless pierced (the pierce *contest* stays the senior dev's) |
-| Single render composition (gated by viewer) | **PARTLY WIRED (#1325)** | scalar fields ARE viewer-gated: `_build_appearance` exposes exact `height_inches` only to owner/staff (others get the coarse `height_band` label via `get_height_band`) and shows the free-text `description` only when `reveal_identity`; form-trait *overlay* selection still reads the TRUE form (ignores `active_fake_overlay`) — that part remains not wired |
+| Single render composition (gated by viewer) | **PARTLY WIRED (#1325, #4030)** | scalar fields ARE viewer-gated: `_build_appearance` exposes exact `height_inches` only to owner/staff (others get the coarse `height_band` label via `get_height_band`) and shows the free-text `description` only when `reveal_identity`; `look` now applies the same rule (`identity_revealed_to_viewer`, shared by both call sites, #4030), so `CharacterState.get_display_desc` returns nothing for an undiscovered mask instead of leaking the real description; form-trait *overlay* selection still reads the TRUE form (ignores `active_fake_overlay`), that part remains not wired |
 
 **Consolidation to ratify:** retire the legacy `Characteristic` path for skin/eye/hair
 so `FormTrait` is the single home (kills the telnet-vs-web duplication).
@@ -462,8 +462,11 @@ kit instance) are unaffected (baseline unchanged). The Manipulation-folding
 (`random_active_functionary`); `actions/definitions/identification.py` (`IdentifyAction`,
 registry key `identify`); `commands/identification.py` (`CmdIdentify`, telnet
 `identify <target>[=<guess>]`); web reachability via a dedicated "Identify" item on
-`PersonaContextMenu.tsx` dispatching REGISTRY REST directly (`useDispatchPlayerAction`)
-— deliberately **not** surfaced through `get_player_actions`/`ActionPanel.tsx`'s
+`PersonaMenu.tsx` (#4030 renamed it from `PersonaContextMenu.tsx`) still dispatching
+REGISTRY REST directly (`useDispatchPlayerAction`), but now greyed out with the
+persona-menu endpoint's own `check_availability()` reason instead of always showing
+enabled, deliberately **not** surfaced through
+`get_player_actions`/`ActionPanel.tsx`'s
 consent (`createActionRequest`) pipeline, since identify is a no-consent private
 perception roll (ADR-0024) with no `ActionTemplate` to resolve a consent accept
 against.

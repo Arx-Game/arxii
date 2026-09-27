@@ -93,6 +93,31 @@ your change is the thing that is wrong. This is how #3463 nearly deleted
    `RoomFeatureKindOwnerType` — correct it here, per CLAUDE.md "Docs Are Directives."
    A stale "this is handled" claim is worse than no claim.
 
+## Default recommendation: a stub points at a missing feature
+
+A stub, an unwired component or a field that is always empty is usually the first half
+of a feature somebody wanted. So the question the trace answers is **"what feature
+was this the start of, and should we build it?"**, not "can we prune it?"
+
+- **Recommend building the feature it points at.** When the verdict is UNFINISHED or
+  UNDESIGNED, the recommendation you put to the human is to implement (or fold in) that
+  feature, stated in user terms: what a player or staff member would get.
+- **Removal only ever reads "replaced by X."** The stub goes in the same PR that ships
+  the real implementation, and the PR says what replaced it. Plain removal is for a
+  SUPERSEDED or ABANDONED verdict only, with the replacement or decision cited.
+- **Never offer "remove it" before the trace**, not even as one option among several.
+  An early "probably fine to delete" gets agreed to and becomes the decision.
+
+Worked case, #4030 (2026-09-27). `EntityContextMenu` looked like an unused component
+whose guide wrongly called it a right-click menu, and the first recommendation was to
+delete it. Tehom: "look into -why- it existed first. Make sure it's replaced, not
+stubbed. If it's stubbed, that suggests something we may be missing." The trace
+(#104, #117) showed it was the 2025 start of a server-sent list of the actions usable
+on each entity: `BaseState.dispatcher_tags`, set only in tests, and a room-state
+`commands` field that was always empty. That missing list was the real cause of the
+"few actions, and no idea why" complaint the issue opened with, and building it became
+the issue's scope.
+
 ## The authoring convention (proactive — writing new code)
 
 When a new class, function, or model's caller isn't self-evident, its docstring
@@ -125,6 +150,7 @@ the sentence now.
 |---|---|
 | "No caller anywhere, so it's a speculative stub." | Two greps (git log + issue search) tell you whether that's true. Check before writing it off. |
 | "This looks unfinished, I'll just delete it." | Unfinished ≠ abandoned. If a spec called for it, deleting it un-does real, already-approved scope. |
+| "It's probably fine to remove; I'll list that as an option." | Before the trace, that option becomes the decision. Ask what feature it was the start of, and recommend building that. |
 | "I can't find a reason for this, so there isn't one." | Absence of a *documented* reason is itself the finding — file it as `needs-design`, don't silently prune the idea. |
 | "Nothing will call it once my change lands, so it's dead." | Circular — your change created the absence. What did it mean before? |
 | "It's a vestigial knob, I'll note it and move on." | "Vestigial" is a claim requiring the full trace. Name what breaks if it goes, or you haven't finished. |

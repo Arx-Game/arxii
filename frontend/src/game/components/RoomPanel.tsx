@@ -296,8 +296,7 @@ export function RoomPanel({
   }
 
   const handleExit = (exit: RoomStateObject) => {
-    const cmd = exit.commands[0] ?? exit.name;
-    send(character, cmd);
+    send(character, exit.name);
   };
 
   return (

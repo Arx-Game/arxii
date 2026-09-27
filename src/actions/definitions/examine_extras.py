@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
+
 
 @dataclass
 class ExamineExtras:
@@ -71,7 +73,7 @@ def gather_examine_extras(observer: ObjectDB, target: ObjectDB) -> ExamineExtras
     ranking = _maybe_render_ranking_display(target, observer)
     if ranking is not None:
         sections.append(ranking)
-    captivity = _maybe_render_captivity_status(target)
+    captivity = _maybe_render_captivity_status(target, observer)
     if captivity is not None:
         sections.append(captivity)
     board = _maybe_render_board_postings(target, observer)
@@ -285,12 +287,39 @@ def _maybe_render_ranking_display(obj, looker) -> str | None:
     return render_ranking_display(display, viewer_persona)
 
 
-def _maybe_render_captivity_status(obj) -> str | None:
+def _presented_captive_name(observer: ObjectDB, captive_sheet: CharacterSheet) -> str:
+    """The captive's presented face for this observer, never the real key under a mask (#4030)."""
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.persona_display import (  # noqa: PLC0415
+        resolve_display_for_viewer,
+        viewer_context_for_account,
+    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    try:
+        persona = active_persona_for_sheet(captive_sheet)
+    except Persona.DoesNotExist:
+        return captive_sheet.character.key
+    account = observer.db_account
+    viewer_persona_ids, viewer_sheet_ids = (
+        viewer_context_for_account(account) if account is not None else (set(), set())
+    )
+    name, _discovered = resolve_display_for_viewer(
+        persona,
+        viewer_persona_ids=viewer_persona_ids,
+        viewer_sheet_ids=viewer_sheet_ids,
+        is_staff=bool(account and account.is_staff),
+    )
+    return name
+
+
+def _maybe_render_captivity_status(obj, observer: ObjectDB) -> str | None:
     """Render the red OOC captive-status banner for a holding cell (#1500).
 
     When ``obj`` is a room holding one or more HELD captives, return a red,
-    OOC-styled line per captive — naming them and, where a crowdfundable RANSOM
-    project stands in the cell, its funding progress plus the project id to
+    OOC-styled line per captive — naming them by their presented face (never the
+    real key under a mask, #4030) — and, where a crowdfundable RANSOM project
+    stands in the cell, its funding progress plus the project id to
     ``project/donate`` toward. Returns None for anything that is not a holding
     cell (the common case); gated on rooms (``location is None``) so examining a
     character or item runs no query.
@@ -316,7 +345,7 @@ def _maybe_render_captivity_status(obj) -> str | None:
 
     lines: list[str] = []
     for cap in held:
-        name = cap.captive.character.key
+        name = _presented_captive_name(observer, cap.captive)
         project = cap.ransom_project
         if project is not None and project.threshold_target:
             lines.append(

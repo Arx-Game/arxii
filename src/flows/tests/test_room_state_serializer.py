@@ -1,6 +1,5 @@
 """Tests for the room state serializer enrichment (characters + description)."""
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -8,7 +7,11 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from evennia_extensions.models import ObjectDisplayData
 from flows.factories import SceneDataManagerFactory
-from flows.service_functions.serializers.room_state import build_room_state_payload
+from flows.scene_data_manager import SceneDataManager
+from flows.service_functions.serializers.room_state import (
+    ObjectStateSerializer,
+    build_room_state_payload,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -18,6 +21,7 @@ from world.conditions.factories import (
 from world.conditions.services import register_detection
 from world.roster.factories import MediaFactory, RosterEntryFactory
 from world.scenes.factories import PersonaFactory, PlaceFactory, PlacePresenceFactory
+from world.scenes.services import active_persona_for_sheet, create_mask
 
 
 class RoomStateSerializerCharacterSplitTests(TestCase):
@@ -53,6 +57,9 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
             media = MediaFactory()
             ObjectDisplayData.objects.create(object=obj, thumbnail=media)
 
+        # #4030 — a sheet so other_char has a resolvable presented persona.
+        CharacterSheetFactory(character=self.other_char)
+
         # Initialize scene data manager and states
         self.context = SceneDataManagerFactory()
         self.room_state = self.context.initialize_state_for_object(self.room)
@@ -60,20 +67,6 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         self.other_char_state = self.context.initialize_state_for_object(self.other_char)
         self.item_state = self.context.initialize_state_for_object(self.item)
         self.exit_state = self.context.initialize_state_for_object(self.exit)
-
-        # Set up dispatcher tags
-        self.room_state.dispatcher_tags = ["look"]
-        self.other_char_state.dispatcher_tags = ["look"]
-        self.item_state.dispatcher_tags = ["look", "get"]
-        self.exit_state.dispatcher_tags = ["north"]
-
-        # Set up caller's command set
-        look_cmd = SimpleNamespace(key="look")
-        get_cmd = SimpleNamespace(key="get")
-        north_cmd = SimpleNamespace(key="north")
-        self.caller.cmdset.current = SimpleNamespace(
-            commands=[look_cmd, get_cmd, north_cmd],
-        )
 
         # Mock sessions.all() on the underlying Evennia objects.
         # We patch the .all method on the existing sessions handler rather than
@@ -133,6 +126,24 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         """Room data in payload should include the 'description' field."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert "description" in payload["room"]
+
+    def test_character_row_carries_its_presented_persona_id(self) -> None:
+        data = ObjectStateSerializer(
+            self.other_char_state, context={"looker": self.caller_state}
+        ).data
+        sheet = self.other_char_state.obj.sheet_data
+        assert data["persona_id"] == active_persona_for_sheet(sheet).pk
+        assert "commands" not in data
+
+    def test_masked_character_row_carries_the_mask_pk(self) -> None:
+        mask = create_mask(self.other_char_state.obj.sheet_data, name="stag mask")
+        state = SceneDataManager().initialize_state_for_object(self.other_char_state.obj)
+        data = ObjectStateSerializer(state, context={"looker": self.caller_state}).data
+        assert data["persona_id"] == mask.pk
+
+    def test_item_row_has_null_persona_id(self) -> None:
+        data = ObjectStateSerializer(self.item_state, context={"looker": self.caller_state}).data
+        assert data["persona_id"] is None
 
     def test_room_data_includes_is_owner_false_for_non_owner(self):
         """Room payload carries an is_owner flag (#1470); False without ownership."""
@@ -207,8 +218,6 @@ class RoomStateSerializerDecorAndComfortTests(TestCase):
         self.context = SceneDataManagerFactory()
         self.room_state = self.context.initialize_state_for_object(self.room)
         self.caller_state = self.context.initialize_state_for_object(self.caller)
-        self.room_state.dispatcher_tags = ["look"]
-        self.caller.cmdset.current = SimpleNamespace(commands=[])
 
     def test_placed_decorations_appear_ordered_by_placement(self):
         from world.buildings.factories import DecorationKindFactory
@@ -426,7 +435,6 @@ class RoomStatePlaceAssignmentTests(TestCase):
         self.tablemate_state = self.context.initialize_state_for_object(self.tablemate)
         self.elsewhere_state = self.context.initialize_state_for_object(self.elsewhere)
 
-        self.room_state.dispatcher_tags = ["look"]
         self._session_patches = []
         for obj in (self.caller, self.tablemate, self.elsewhere):
             p = patch.object(obj.sessions, "all", return_value=[MagicMock()])

@@ -1,11 +1,26 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { Provider } from 'react-redux';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { store } from '@/store/store';
 import { CharactersList } from './CharactersList';
 
 const others = [
-  { dbref: '#100', name: 'Alice', thumbnail_url: null, commands: [] },
-  { dbref: '#101', name: 'Bob', thumbnail_url: null, commands: [] },
+  { dbref: '#100', name: 'Alice', thumbnail_url: null },
+  { dbref: '#101', name: 'Bob', thumbnail_url: null },
 ];
+
+// PersonaMenu (#4030) needs a Redux store (useAppSelector) and a query client
+// (useQuery/useMutation) above it; only the tests below render a row with a
+// persona id set (the only condition that mounts it).
+function Wrapper({ children }: { children: React.ReactNode }) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <Provider store={store}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </Provider>
+  );
+}
 
 describe('the threshold mark (#3867)', () => {
   it('marks a present character who has not entered the scene, and the viewer likewise', () => {
@@ -85,5 +100,82 @@ describe('CharactersList "you" row (#3856)', () => {
 
     expect(screen.getByText('Characters (2)')).toBeInTheDocument();
     expect(screen.queryByText('you')).not.toBeInTheDocument();
+  });
+});
+
+describe('CharactersList persona menu (#4030)', () => {
+  it('right-click on a character row with a persona_id opens the menu with Look and View sheet', async () => {
+    render(
+      <Wrapper>
+        <CharactersList
+          characters={[{ ...others[0], persona_id: 10 }, others[1]]}
+          onCharacterClick={vi.fn()}
+        />
+      </Wrapper>
+    );
+
+    fireEvent.contextMenu(screen.getByText('Alice'));
+    const menu = await screen.findByRole('menu');
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent);
+    expect(labels).toEqual(['Look', 'View sheet']);
+  });
+
+  it('left-click on a character row with a persona_id still calls onCharacterClick', () => {
+    const onCharacterClick = vi.fn();
+    render(
+      <Wrapper>
+        <CharactersList
+          characters={[{ ...others[0], persona_id: 10 }]}
+          onCharacterClick={onCharacterClick}
+        />
+      </Wrapper>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /alice/i }));
+
+    expect(onCharacterClick).toHaveBeenCalledWith(
+      expect.objectContaining({ dbref: '#100', persona_id: 10 })
+    );
+  });
+
+  it('a row with no persona_id renders with no menu, as today', () => {
+    render(<CharactersList characters={others} onCharacterClick={vi.fn()} />);
+
+    fireEvent.contextMenu(screen.getByText('Alice'));
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it("right-click on the viewer's you row opens the menu when viewerPersonaId is set", async () => {
+    render(
+      <Wrapper>
+        <CharactersList
+          characters={others}
+          viewer={{ name: 'Hero', thumbnailUrl: null }}
+          viewerPersonaId={7}
+          onViewerClick={vi.fn()}
+        />
+      </Wrapper>
+    );
+
+    fireEvent.contextMenu(screen.getByText('Hero'));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Look' })).toBeInTheDocument();
+  });
+
+  it('the you row renders with no menu when viewerPersonaId is absent, as today', () => {
+    render(
+      <CharactersList
+        characters={others}
+        viewer={{ name: 'Hero', thumbnailUrl: null }}
+        onViewerClick={vi.fn()}
+      />
+    );
+
+    fireEvent.contextMenu(screen.getByText('Hero'));
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
