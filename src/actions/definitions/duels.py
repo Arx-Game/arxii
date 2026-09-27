@@ -19,6 +19,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
+from actions.prerequisites import Prerequisite
 from actions.target_resolution import resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetFilters, TargetType
 
@@ -80,6 +81,67 @@ def _consent_blocked(target_sheet: CharacterSheet, actor_sheet: CharacterSheet) 
     return _tenure_blocks_actor(target_tenure, actor_tenure, category=None)
 
 
+def _presented_name(actor: ObjectDB, target: ObjectDB) -> str:
+    """The face ``actor`` sees on ``target``: a mask's sdesc, never the real key (#4030)."""
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+
+    sdm = SceneDataManager()
+    looker = sdm.initialize_state_for_object(actor)
+    return sdm.initialize_state_for_object(target).get_display_name(looker=looker)
+
+
+def challenge_refusal(actor: ObjectDB, target: ObjectDB | None) -> str | None:
+    """Why ``actor`` can't challenge ``target`` right now, or ``None`` if they can.
+
+    One check for two callers (#4030): ``ChallengeTargetPrerequisite`` (so ``run()`` and
+    the persona menu agree) and nothing else. Order and wording match the pre-#4030
+    inline checks, except that no message names the target's real key.
+    """
+    actor_sheet = _sheet(actor)
+    if actor_sheet is None:
+        return "You must be a real character to issue a duel challenge."
+    if target is None:
+        return "Challenge whom?"
+    if target.pk == actor.pk:
+        return "You cannot challenge yourself to a duel."
+    actor_room = actor.db_location
+    target_room = target.db_location
+    if actor_room is None or target_room is None or actor_room.pk != target_room.pk:
+        return "You can only challenge someone in the same room."
+    target_sheet = _sheet(target)
+    if target_sheet is None:
+        return "You can only challenge a real character to a duel."
+    if _consent_blocked(target_sheet, actor_sheet):
+        # Deliberately nameless (#4030): unlike the room/block refusals below, this one
+        # must hold even for an unmasked target — naming them here would tie "opted out
+        # of social targeting" to a specific identity, exactly what the preference guards.
+        return "They have opted out of social targeting and cannot be challenged."
+    from world.scenes.block_services import sheet_blocked_for_viewer  # noqa: PLC0415
+
+    actor_account = actor.account
+    if actor_account is not None and sheet_blocked_for_viewer(
+        viewer_account=actor_account, sheet=target_sheet
+    ):
+        return f"You cannot challenge {_presented_name(actor, target)} to a duel."
+    return None
+
+
+@dataclass
+class ChallengeTargetPrerequisite(Prerequisite):
+    """The challenge target must be a consenting, unblocked PC in the actor's room."""
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        del target  # the raw kwarg may be a persona pk; resolve it the dispatch way
+        kwargs = (context or {}).get("kwargs", {})
+        refusal = challenge_refusal(actor, _resolve_challenge_target(kwargs.get("target")))
+        return refusal is None, refusal or ""
+
+
 def create_challenge(
     challenger_sheet: CharacterSheet,
     challenged_sheet: CharacterSheet,
@@ -121,78 +183,28 @@ class ChallengeAction(Action):
     target_kind: TargetKind = TargetKind.CHARACTER
     target_filters: TargetFilters = field(default=_CHALLENGE_TARGET_FILTERS)
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [ChallengeTargetPrerequisite()]
+
     def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        # Resolve the target: ObjectDB (telnet/test) or a Persona pk (web dispatch).
-        target: ObjectDB | None = _resolve_challenge_target(kwargs.get("target"))
-
-        # --- resolve actor sheet ---
+        # ``run()`` has already enforced ChallengeTargetPrerequisite — this only resolves
+        # and creates. The re-check below is a defensive fallback for a direct
+        # ``.execute()`` call (bypassing ``run()``, as some tests do).
+        target = _resolve_challenge_target(kwargs.get("target"))
         actor_sheet = _sheet(actor)
-        if actor_sheet is None:
-            return ActionResult(
-                success=False,
-                message="You must be a real character to issue a duel challenge.",
-            )
-
-        # --- target required ---
-        if target is None:
-            return ActionResult(success=False, message="Challenge whom?")
-
-        # --- no self-challenge ---
-        if target.pk == actor.pk:
-            return ActionResult(success=False, message="You cannot challenge yourself to a duel.")
-
-        # --- same room ---
-        actor_room = actor.db_location
-        target_room = target.db_location
-        if actor_room is None or target_room is None or actor_room.pk != target_room.pk:
-            return ActionResult(
-                success=False,
-                message="You can only challenge someone in the same room.",
-            )
-
-        # --- target must have a character sheet (is a real PC) ---
-        target_sheet = _sheet(target)
-        if target_sheet is None:
-            return ActionResult(
-                success=False,
-                message="You can only challenge a real character to a duel.",
-            )
-
-        # --- social-consent gate: target opted out of social targeting ---
-        if _consent_blocked(target_sheet, actor_sheet):
-            return ActionResult(
-                success=False,
-                message=(
-                    f"{target.db_key} has opted out of social targeting and cannot be challenged."
-                ),
-            )
-
-        # --- block gate: a block in either direction bars the challenge (#1698) ---
-        # The only PvP-consent case we enforce — you cannot start a duel with someone you
-        # have blocked, or who has blocked you. Message stays vague (never reveals the block
-        # or its direction — the anti-derivation invariant).
-        from world.scenes.block_services import sheet_blocked_for_viewer  # noqa: PLC0415
-
-        actor_account = actor.account
-        if actor_account is not None and sheet_blocked_for_viewer(
-            viewer_account=actor_account, sheet=target_sheet
-        ):
-            return ActionResult(
-                success=False,
-                message=f"You cannot challenge {target.db_key} to a duel.",
-            )
-
-        # --- create the PENDING challenge ---
-        challenge = create_challenge(actor_sheet, target_sheet, actor_room)
-
+        target_sheet = _sheet(target) if target is not None else None
+        if actor_sheet is None or target is None or target_sheet is None:
+            refusal = challenge_refusal(actor, target) or "Challenge whom?"
+            return ActionResult(success=False, message=refusal)
+        challenge = create_challenge(actor_sheet, target_sheet, actor.db_location)
         return ActionResult(
             success=True,
-            message=f"You issue a duel challenge to {target.db_key}.",
+            message=f"You issue a duel challenge to {_presented_name(actor, target)}.",
             data={"challenge_id": challenge.pk},
         )
 
