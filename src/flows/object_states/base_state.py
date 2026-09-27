@@ -80,7 +80,6 @@ class BaseState:
             persona = None
         self._resolved_persona = persona
         self.thumbnail_url = resolve_thumbnail(self.obj, persona=persona)
-        self.dispatcher_tags: list[str] = []
 
     # ------------------------------------------------------------------
     # Attribute access helpers

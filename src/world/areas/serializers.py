@@ -16,6 +16,7 @@ class WhoEntrySerializer(serializers.Serializer):
 
     name = serializers.CharField(read_only=True)
     idle = serializers.CharField(read_only=True, allow_blank=True)
+    persona_id = serializers.IntegerField(read_only=True)
 
 
 class AreaBreadcrumbSerializer(serializers.Serializer):
