@@ -16,6 +16,7 @@ import {
   dismissFeedItem,
   minimizeFeedItem,
   restoreFeedItem,
+  restoreDismissedFeed,
   setActiveSession,
   setBrowsingIdentity,
 } from '@/store/gameSlice';
@@ -343,6 +344,8 @@ type GameWindowFeedProps = Pick<
   feedScrollRef: RefObject<HTMLDivElement>;
   /** The chip strip above the column (#3856); absent in a reference view. */
   chipStrip?: ReactNode;
+  /** Live-only recovery action below the chips and above conversation tabs. */
+  showHidden?: ReactNode;
   /** True while the All switch is off: the column shows one line instead of a reader. */
   allOff?: boolean;
   onFeedScroll: () => void;
@@ -366,6 +369,7 @@ function GameWindowFeed({
   feedScrollRef,
   onFeedScroll,
   chipStrip,
+  showHidden,
   allOff = false,
   session,
   room,
@@ -387,6 +391,7 @@ function GameWindowFeed({
     return (
       <>
         {chipStrip}
+        {showHidden}
         {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
         <div
           className="min-h-0 flex-1 overflow-y-auto px-6 py-8 text-sm italic text-muted-foreground"
@@ -401,6 +406,7 @@ function GameWindowFeed({
   return (
     <>
       {chipStrip}
+      {showHidden}
       {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
       {sceneFeed ? (
         <>
@@ -568,6 +574,7 @@ export function GameWindow({
   // switch, and stick to bottom while the reader is already at the bottom
   // (adapted from ChatWindow's autoScroll pattern).
   const feedScrollRef = useRef<HTMLDivElement>(null);
+  const allChipRef = useRef<HTMLButtonElement>(null);
   const scrollPositionsRef = useRef(new Map<string, number>());
   const pinnedRef = useRef(true);
   const activeConvKey = conversationTabs?.activeKey ?? 'room';
@@ -818,7 +825,27 @@ export function GameWindow({
                   updateChipPreferences({ feedChips: next.chips, feedAll: next.all })
                 }
                 newCounts={newCounts}
+                allButtonRef={allChipRef}
               />
+            )
+          }
+          showHidden={
+            !reference &&
+            active &&
+            dismissedKeys.size > 0 && (
+              <div className="flex shrink-0 justify-end border-b px-3 py-1.5">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    if (!active) return;
+                    dispatch(restoreDismissedFeed(active));
+                    allChipRef.current?.focus();
+                  }}
+                >
+                  <span aria-hidden="true">↶</span> Show hidden
+                </button>
+              </div>
             )
           }
           allOff={!reference && !chipState.all}
