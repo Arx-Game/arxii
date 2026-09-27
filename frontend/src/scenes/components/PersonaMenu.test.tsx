@@ -100,6 +100,29 @@ const ITEM_LABELS: Record<string, string> = {
   block: 'Block',
 };
 
+/** A single scene_action fixture (server PlayerAction shape) shared by the
+ * delivery-submenu / Attach-to-Pose / unmet-prerequisite tests below. */
+const BASE_INTIMIDATE_ACTION = {
+  backend: 'template',
+  display_name: 'Intimidate',
+  description: '',
+  difficulty: null,
+  prerequisite_met: true,
+  prerequisite_reasons: [],
+  check_type: { id: 1, name: 'Standard' },
+  action_template: { id: 1, name: 'Intimidate', default_delivery: 'pose' },
+  ref: {
+    backend: 'template',
+    challenge_instance_id: null,
+    approach_id: null,
+    technique_id: null,
+    registry_key: null,
+  },
+  target_spec: null,
+  enhancements: [],
+  strain: null,
+};
+
 function item(key: string, overrides: Partial<PersonaMenuItemData> = {}): PersonaMenuItemData {
   return {
     key,
@@ -150,9 +173,12 @@ function renderMenu(
     leftClick: boolean;
     onAttachAction: (a: unknown) => void;
   }> = {},
-  cardContext: { openCharacterCard: (p: unknown) => void } | null = null
+  cardContext: { openCharacterCard: (p: unknown) => void } | null = null,
+  existingQueryClient?: QueryClient
 ) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const queryClient =
+    existingQueryClient ??
+    new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   render(
     <PersonaCardContext.Provider value={cardContext}>
       <QueryClientProvider client={queryClient}>
@@ -169,6 +195,31 @@ function renderMenu(
     </PersonaCardContext.Provider>
   );
   return queryClient;
+}
+
+/**
+ * Opens the scene_actions delivery submenu for a single "Intimidate" action
+ * (#903). Radix submenu interaction is keyboard-driven in jsdom (hover
+ * grace-area math needs real pointer coordinates): ArrowDown three times
+ * reaches the SubTrigger (past Look, View sheet), ArrowRight opens it with
+ * "Default" focused. `sceneActionOverrides` lets a caller mutate the single
+ * scene_action fixture (e.g. `prerequisite_met: false`).
+ */
+async function openIntimidateSubmenu(sceneActionOverrides: Record<string, unknown> = {}) {
+  const user = userEvent.setup();
+  mockMenu({
+    scene_id: 7,
+    items: [item('look')],
+    scene_actions: [
+      { ...BASE_INTIMIDATE_ACTION, ...sceneActionOverrides },
+    ] as unknown as PersonaMenuData['scene_actions'],
+  });
+  const queryClient = renderMenu({ personaId: 10 });
+  fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+  await screen.findByRole('menu');
+  await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowRight}');
+  await screen.findByText(/^Default/);
+  return { user, queryClient };
 }
 
 describe('PersonaMenu', () => {
@@ -554,6 +605,126 @@ describe('PersonaMenu', () => {
         targetPersonaId: 10,
       })
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Delivery submenu options (#903) — ported from the pre-#4030
+  // PersonaContextMenu suite onto the server-composed scene_actions fixture.
+  // ---------------------------------------------------------------------------
+
+  it('fires the action with whisper delivery from the submenu (#903)', async () => {
+    const { user } = await openIntimidateSubmenu();
+    await user.click(screen.getByText('Subtly (target only)'));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '7',
+        expect.objectContaining({
+          action_key: 'intimidate',
+          target_persona_id: 10,
+          delivery: 'whisper',
+        })
+      );
+    });
+  });
+
+  it('fires "Openly (whole room)" with pose delivery (#903)', async () => {
+    const { user } = await openIntimidateSubmenu();
+    await user.click(screen.getByText('Openly (whole room)'));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '7',
+        expect.objectContaining({ action_key: 'intimidate', delivery: 'pose' })
+      );
+    });
+  });
+
+  it('fires "At your table" with table_talk delivery (#903)', async () => {
+    const { user } = await openIntimidateSubmenu();
+    await user.click(screen.getByText('At your table'));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '7',
+        expect.objectContaining({ action_key: 'intimidate', delivery: 'table_talk' })
+      );
+    });
+  });
+
+  it('fires the default entry with no delivery so the backend resolves it (#903)', async () => {
+    const { user } = await openIntimidateSubmenu();
+    await user.click(screen.getByText(/^Default/));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '7',
+        expect.objectContaining({ action_key: 'intimidate', delivery: undefined })
+      );
+    });
+  });
+
+  it('hides "Subtly (choose listeners…)" when no other personas are present (#907)', async () => {
+    await openIntimidateSubmenu();
+    expect(screen.queryByText('Subtly (choose listeners…)')).not.toBeInTheDocument();
+  });
+
+  it('shows "Subtly (choose listeners…)" when the scene has other personas, and opens the picker (#907)', async () => {
+    // The scene cache is a plain synchronous queryClient.getQueryData() read
+    // inside PersonaMenu's render body, not a subscribed useQuery — it must
+    // be populated BEFORE the component first renders the submenu, since
+    // setting it afterward on an unsubscribed key triggers no re-render.
+    // gcTime stays at its default here (unlike every other test's client):
+    // a manually `setQueryData`-seeded key with no `useQuery` observer and
+    // `gcTime: 0` is garbage-collected on the very next tick, and this test's
+    // several `await` steps between seeding and reading are enough ticks for
+    // that GC to fire and empty the cache out from under it.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(['scene', '7'], {
+      id: 7,
+      personas: [
+        { id: 10, name: 'Cassia Vell' },
+        { id: 22, name: 'Bystander' },
+      ],
+    });
+    const user = userEvent.setup();
+    mockMenu({
+      scene_id: 7,
+      items: [item('look')],
+      scene_actions: [BASE_INTIMIDATE_ACTION] as unknown as PersonaMenuData['scene_actions'],
+    });
+    renderMenu({ personaId: 10 }, null, queryClient);
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    await screen.findByRole('menu');
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowRight}');
+    await screen.findByText(/^Default/);
+
+    const chooseListeners = await screen.findByText('Subtly (choose listeners…)');
+    await user.click(chooseListeners);
+
+    expect(await screen.findByText('Whisper to…')).toBeInTheDocument();
+    expect(screen.getByText('Bystander')).toBeInTheDocument();
+  });
+
+  it('shows an unmet-prerequisite scene action disabled with its reason, not omitted (#2158)', async () => {
+    mockMenu({
+      scene_id: 7,
+      items: [item('look')],
+      scene_actions: [
+        {
+          ...BASE_INTIMIDATE_ACTION,
+          prerequisite_met: false,
+          prerequisite_reasons: ['Must be in combat'],
+        },
+      ] as unknown as PersonaMenuData['scene_actions'],
+    });
+    renderMenu({ personaId: 10 });
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    const menu = await screen.findByRole('menu');
+
+    const actionItem = within(menu).getByText('Intimidate').closest('[role="menuitem"], button');
+    expect(actionItem).toHaveAttribute('title', expect.stringContaining('Must be in combat'));
+    expect(actionItem).toBeDisabled();
   });
 
   it('renders with a null PersonaCardContext (View sheet becomes a no-op)', () => {
