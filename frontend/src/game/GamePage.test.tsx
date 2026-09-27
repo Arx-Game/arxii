@@ -13,11 +13,13 @@ import { setAccount } from '@/store/authSlice';
 import { mockAccount } from '@/test/mocks/account';
 import {
   startSession,
+  dismissFeedItem,
   setActiveSession,
   setSessionConnectionStatus,
   setSessionRoom,
   setSessionScene,
   addSceneInteraction,
+  addAmbientInteraction,
   addFeedNote,
   addSessionMessage,
   setSceneBaseline,
@@ -982,6 +984,387 @@ describe('GamePage', () => {
       expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
       // Nothing was deleted: the interaction is still in the session and on the server.
       expect(store.getState().game.sessions[ACTIVE_NAME].sceneInteractions).toHaveLength(1);
+    });
+  });
+
+  describe('Show hidden recovery (#4029)', () => {
+    it('restores dismissed pose and note together in their prior order, then focuses All', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(
+        addFeedNote({
+          character: ACTIVE_NAME,
+          note: {
+            kind: 'look',
+            content: 'Rain rests on the stones.',
+            timestamp: '2026-01-01T00:00:30.000Z',
+          },
+        })
+      );
+      renderWithProviders(<GamePage />);
+      const pose = await screen.findByText('stretches languidly.');
+      const note = screen.getByText('Rain rests on the stones.');
+      const poseBlock = pose.closest('[data-feed-block]') as HTMLElement;
+      expect(
+        poseBlock.compareDocumentPosition(note.closest('[data-feed-block]') as HTMLElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      fireEvent.click(within(poseBlock).getByRole('button', { name: 'Dismiss' }));
+      fireEvent.click(
+        within(
+          screen.getByText('Rain rests on the stones.').closest('[data-feed-block]') as HTMLElement
+        ).getByRole('button', { name: 'Dismiss' })
+      );
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.queryByText('Rain rests on the stones.')).not.toBeInTheDocument();
+      expect(store.getState().game.sessions[ACTIVE_NAME].dismissedFeed).toHaveLength(2);
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(screen.queryByRole('button', { name: 'Show hidden' })).not.toBeInTheDocument();
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('Rain rests on the stones.')).toBeInTheDocument();
+      expect(
+        (
+          screen.getByText('stretches languidly.').closest('[data-feed-block]') as HTMLElement
+        ).compareDocumentPosition(screen.getByText('Rain rests on the stones.')) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(
+        within(screen.getByRole('toolbar', { name: 'Feed filters' })).getByRole('button', {
+          name: 'All',
+        })
+      ).toHaveFocus();
+      expect(store.getState().game.sessions[ACTIVE_NAME].dismissedFeed).toEqual([]);
+    });
+
+    it('remains available with All off, and respects All and chip filters when restoring', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />);
+      const pose = await screen.findByText('stretches languidly.');
+      fireEvent.click(
+        within(pose.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
+          name: 'Dismiss',
+        })
+      );
+      const all = within(screen.getByRole('toolbar', { name: 'Feed filters' })).getByRole(
+        'button',
+        { name: 'All' }
+      );
+      fireEvent.click(all);
+      expect(screen.getByTestId('feed-all-off')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(all).toHaveFocus();
+      expect(all).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      fireEvent.click(all);
+      const restored = screen.getByText('stretches languidly.');
+      fireEvent.click(
+        within(restored.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
+          name: 'Dismiss',
+        })
+      );
+      const roleplay = within(screen.getByRole('toolbar', { name: 'Feed filters' })).getByRole(
+        'button',
+        { name: 'Roleplay' }
+      );
+      fireEvent.click(roleplay);
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(roleplay).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      fireEvent.click(roleplay);
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+    });
+
+    it('recovers from the keyboard with Enter and Space and returns focus to All', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      const all = within(screen.getByRole('toolbar', { name: 'Feed filters' })).getByRole(
+        'button',
+        { name: 'All' }
+      );
+      for (const key of ['{Enter}', ' ']) {
+        const pose = await screen.findByText('stretches languidly.');
+        const dismiss = within(pose.closest('[data-feed-block]') as HTMLElement).getByRole(
+          'button',
+          { name: 'Dismiss' }
+        );
+        dismiss.focus();
+        await user.keyboard('{Enter}');
+        expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+        const showHidden = screen.getByRole('button', { name: 'Show hidden' });
+        showHidden.focus();
+        expect(showHidden).toHaveFocus();
+        await user.keyboard(key);
+        expect(screen.queryByRole('button', { name: 'Show hidden' })).not.toBeInTheDocument();
+        expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+        expect(all).toHaveFocus();
+      }
+    });
+
+    it('restores a quiet-room ambient interaction without a scene', async () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(startSession(ACTIVE_NAME));
+      store.dispatch(
+        setSessionRoom({
+          character: ACTIVE_NAME,
+          room: {
+            id: 55,
+            name: 'Quiet courtyard',
+            description: '',
+            thumbnail_url: null,
+            characters: [],
+            objects: [],
+            exits: [],
+            is_owner: false,
+            is_public: true,
+            hub: null,
+            viewer_place_id: null,
+          },
+        })
+      );
+      store.dispatch(
+        addAmbientInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 87,
+            persona: { id: 99, name: 'Visitor', thumbnail_url: '' },
+            content: 'quietly crosses the courtyard.',
+            mode: 'pose',
+            timestamp: new Date().toISOString(),
+            scene_id: null,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [],
+            target_persona_ids: [],
+          },
+        })
+      );
+      renderWithProviders(<GamePage />);
+      const ambient = await screen.findByText('quietly crosses the courtyard.');
+      fireEvent.click(
+        within(ambient.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
+          name: 'Dismiss',
+        })
+      );
+      expect(screen.queryByText('quietly crosses the courtyard.')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(screen.getByText('quietly crosses the courtyard.')).toBeInTheDocument();
+    });
+
+    it('recovers a dismissed minimised stub as an expanded block', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />);
+      const pose = await screen.findByText('stretches languidly.');
+      fireEvent.click(
+        within(pose.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
+          name: 'Minimise',
+        })
+      );
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      fireEvent.click(
+        within(document.querySelector('[data-feed-stub="i:1"]') as HTMLElement).getByRole(
+          'button',
+          { name: 'Dismiss' }
+        )
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(document.querySelector('[data-feed-stub="i:1"]')).toBeNull();
+    });
+
+    it('keeps Show hidden between chips and conversation tabs after a tab changes', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+      renderWithProviders(<GamePage />);
+      const sidebar = await screen.findByLabelText('Thread sidebar');
+      fireEvent.click(
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement
+      );
+      const whisper = screen.getByText('meet me by the fountain at midnight.');
+      fireEvent.click(
+        within(whisper.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
+          name: 'Dismiss',
+        })
+      );
+      const toolbar = screen.getByRole('toolbar', { name: 'Feed filters' });
+      const showHidden = screen.getByRole('button', { name: 'Show hidden' });
+      const tabs = screen.getByRole('tablist', { name: 'Conversations' });
+      expect(
+        toolbar.compareDocumentPosition(showHidden) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(
+        showHidden.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      fireEvent.click(showHidden);
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+    });
+
+    it('does not show live restore inside historical reference', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:1' }));
+      renderWithProviders(<GamePage />, {
+        initialEntries: ['/game?referenceKind=scene&referenceKey=scene:100'],
+      });
+      expect(await screen.findByText(/reading history/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Show hidden' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('toolbar', { name: 'Feed filters' })).not.toBeInTheDocument();
+      expect(store.getState().game.sessions[ACTIVE_NAME].dismissedFeed).toEqual(['i:1']);
+      fireEvent.click(screen.getByRole('button', { name: 'Return to live' }));
+      expect(screen.getByRole('button', { name: 'Show hidden' })).toBeInTheDocument();
+    });
+
+    it('does not widen a restored whisper to another character outside its audience', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 90,
+            persona: { id: 99, name: 'Visitor', thumbnail_url: '' },
+            content: 'a secret only Aria hears.',
+            mode: 'whisper',
+            timestamp: '2026-01-01T00:01:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [7],
+            target_persona_ids: [],
+          },
+        })
+      );
+      store.dispatch(startSession(SECOND_NAME));
+      store.dispatch(
+        setSessionScene({
+          character: SECOND_NAME,
+          scene: {
+            id: 100,
+            name: 'The Grand Ballroom',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+      // Even an identical key on the other puppet's session must not fetch
+      // or expose Aria's whisper; audience 7 does not include Bianca (8).
+      store.dispatch(dismissFeedItem({ character: SECOND_NAME, key: 'i:90' }));
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+      renderWithProviders(<GamePage />);
+      const whisper = await screen.findByText('a secret only Aria hears.');
+      fireEvent.click(
+        within(whisper.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
+          name: 'Dismiss',
+        })
+      );
+      fireEvent.click(screen.getByRole('button', { name: SECOND_NAME }));
+      expect(screen.getByRole('button', { name: 'Show hidden' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(store.getState().game.sessions[SECOND_NAME].dismissedFeed).toEqual([]);
+      expect(screen.queryByText('a secret only Aria hears.')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: ACTIVE_NAME }));
+      expect(screen.queryByText('a secret only Aria hears.')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(screen.getByText('a secret only Aria hears.')).toBeInTheDocument();
+    });
+
+    it('keeps a dismissed key across a real room transition, then clears it without phantom content', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />);
+      const oldPose = await screen.findByText('stretches languidly.');
+      fireEvent.click(
+        within(oldPose.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
+          name: 'Dismiss',
+        })
+      );
+      act(() => {
+        store.dispatch(
+          setSessionRoom({
+            character: ACTIVE_NAME,
+            room: {
+              id: 56,
+              name: 'The Garden',
+              description: '',
+              thumbnail_url: null,
+              characters: [],
+              objects: [],
+              exits: [],
+              is_owner: false,
+              is_public: true,
+              hub: null,
+              viewer_place_id: null,
+            },
+            scene: {
+              id: 200,
+              name: 'The Garden',
+              description: '',
+              is_owner: false,
+              has_unseen_observer: false,
+            },
+            revision: { epoch: 'garden-visit', sequence: 1 },
+          })
+        );
+        store.dispatch(
+          addSceneInteraction({
+            character: ACTIVE_NAME,
+            interaction: {
+              id: 88,
+              persona: { id: 7, name: ACTIVE_NAME, thumbnail_url: '' },
+              content: 'wanders through the roses.',
+              mode: 'pose',
+              timestamp: '2026-01-01T00:05:00Z',
+              scene_id: 200,
+              place_id: null,
+              place_name: null,
+              receiver_persona_ids: [],
+              target_persona_ids: [],
+            },
+          })
+        );
+      });
+      expect(await screen.findByText('wanders through the roses.')).toBeInTheDocument();
+      expect(store.getState().game.sessions[ACTIVE_NAME].dismissedFeed).toEqual(['i:1']);
+      const showHidden = screen.getByRole('button', { name: 'Show hidden' });
+      expect(showHidden).toBeInTheDocument();
+      fireEvent.click(showHidden);
+      expect(store.getState().game.sessions[ACTIVE_NAME].dismissedFeed).toEqual([]);
+      expect(screen.getByText('wanders through the roses.')).toBeInTheDocument();
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Show hidden' })).not.toBeInTheDocument();
+    });
+
+    it('clears only the active character, including stale keys', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(startSession(SECOND_NAME));
+      store.dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:1' }));
+      store.dispatch(dismissFeedItem({ character: ACTIVE_NAME, key: 'i:old-room' }));
+      store.dispatch(dismissFeedItem({ character: SECOND_NAME, key: 'i:other' }));
+      renderWithProviders(<GamePage />);
+      expect(screen.getByRole('button', { name: 'Show hidden' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: SECOND_NAME }));
+      expect(screen.getByRole('button', { name: 'Show hidden' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(store.getState().game.sessions[SECOND_NAME].dismissedFeed).toEqual([]);
+      expect(store.getState().game.sessions[ACTIVE_NAME].dismissedFeed).toEqual([
+        'i:1',
+        'i:old-room',
+      ]);
+      fireEvent.click(screen.getByRole('button', { name: ACTIVE_NAME }));
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show hidden' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(store.getState().game.sessions[ACTIVE_NAME].dismissedFeed).toEqual([]);
     });
   });
 

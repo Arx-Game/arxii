@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type Ref } from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { PopoverContent } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,8 @@ interface FeedChipStripProps {
   onChange: (next: FeedChipState) => void;
   /** Unseen waking items per chip id (`chipUnread`); a chip with a count shows a "new" pill. */
   newCounts?: Record<string, number>;
+  /** Focus destination when the separate Show hidden action disappears. */
+  allButtonRef?: Ref<HTMLButtonElement>;
 }
 
 // A pressed chip is filled with the primary token and an unpressed one is an
@@ -42,7 +44,12 @@ const chipClass =
  * chip (or, with All off, brings back only that chip); a right-click opens the
  * chip's editor. Nothing on the strip explains itself, by ruling.
  */
-export function FeedChipStrip({ state, onChange, newCounts = {} }: FeedChipStripProps) {
+export function FeedChipStrip({
+  state,
+  onChange,
+  newCounts = {},
+  allButtonRef,
+}: FeedChipStripProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectName, setSelectName] = useState(false);
   const customCount = state.chips.filter((chip) => chip.custom).length;
@@ -116,6 +123,7 @@ export function FeedChipStrip({ state, onChange, newCounts = {} }: FeedChipStrip
         </button>
       )}
       <button
+        ref={allButtonRef}
         type="button"
         className={cn(chipClass, 'ml-auto font-semibold')}
         aria-pressed={state.all}

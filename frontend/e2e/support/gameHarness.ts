@@ -196,7 +196,7 @@ export async function reachReadySession(page: Page): Promise<Connection[]> {
   await page.goto('/game');
   const editor = page.getByRole('textbox');
   await expect(editor).toBeEnabled();
-  await expect(page.getByText('Waiting for location', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Finding your place' })).toBeVisible();
 
   const initialRoomState = JSON.stringify([
     'room_state',

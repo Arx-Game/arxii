@@ -1286,8 +1286,14 @@ kinds, a press shows or hides them, All is the master switch, a right-click edit
 the chip (name, kinds, wake, delete), up to three custom chips; a kind no chip owns
 still shows unless All is off. Showing and waking are separate: only kinds under a
 chip set to wake badge the top bar and puppet tabs. Any block minimises to a stub or
-leaves the viewer's own view (`FeedBlockFrame`); nothing is deleted for others. The
-layout persists per account, per browser, in `PlayPreferences`. This restyle also
+leaves the viewer's own view (`FeedBlockFrame`); nothing is deleted for others. In the
+live column, `Show hidden` below the chips clears the active character's dismissed
+blocks in one action, without a reload or socket reconnect. Retained blocks return
+in their original order, subject to chip and conversation-tab filters; historical
+reference views have no dismissal or recovery controls. Dismissal state is local
+to the character's current browser-tab session and resets on reload. The chip
+layout persists separately per account, per browser, in `PlayPreferences`. This
+restyle also
 closes the markdown-rendering gap the #2155 audit flagged: the feed now renders
 `FormattedContent`, so `RichTextInput`'s markdown output actually displays as
 formatted prose instead of raw text.
