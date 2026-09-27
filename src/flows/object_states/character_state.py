@@ -117,25 +117,27 @@ class CharacterState(BaseState):
     def get_display_desc(
         self,
         mode: str = "look",
-        looker: "BaseState | None" = None,
+        looker: "BaseState | object | None" = None,
         **kwargs: "Kwargs",
     ) -> str:
         """The description, or nothing when the looker hasn't seen through the face (#4030).
 
         A mask must not leak prose that names height, scars or hair; the character sheet
         has hidden it since #1325 and ``look`` now follows the same rule
-        (``identity_revealed_to_viewer``).
+        (``identity_revealed_to_viewer``). ``looker`` is typed like the sibling
+        ``get_display_worn``/``get_display_markings`` display components — it arrives via
+        ``return_appearance``'s ``**kwargs`` and isn't always a ``BaseState``.
         """
         if not self._identity_revealed_to(looker):
             return ""
         return super().get_display_desc(mode=mode, **kwargs)
 
-    def _identity_revealed_to(self, looker_state: "BaseState | None") -> bool:
+    def _identity_revealed_to(self, looker: "BaseState | object | None") -> bool:
         from world.scenes.models import Persona  # noqa: PLC0415
         from world.scenes.persona_display import identity_revealed_to_viewer  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        if looker_state is not None and looker_state.obj == self.obj:
+        if looker is not None and hasattr(looker, "obj") and looker.obj == self.obj:
             return True
         sheet = self.obj.character_sheet
         if sheet is None:
@@ -144,9 +146,9 @@ class CharacterState(BaseState):
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
             return True
-        if isinstance(looker_state, CharacterState):
-            viewer_persona_ids, viewer_sheet_ids = looker_state._viewer_persona_context()  # noqa: SLF001
-            is_staff = looker_state._viewer_is_staff()  # noqa: SLF001
+        if isinstance(looker, CharacterState):
+            viewer_persona_ids, viewer_sheet_ids = looker._viewer_persona_context()  # noqa: SLF001
+            is_staff = looker._viewer_is_staff()  # noqa: SLF001
         else:
             viewer_persona_ids, viewer_sheet_ids, is_staff = set(), set(), False
         return identity_revealed_to_viewer(
