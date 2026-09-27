@@ -20,6 +20,7 @@ import {
   minimizeFeedItem,
   restoreFeedItem,
   dismissFeedItem,
+  restoreDismissedFeed,
   setSessionCommands,
   setSessionRoom,
   setSessionScene,
@@ -919,6 +920,49 @@ describe('gameSlice', () => {
       const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
       const result = reducer(initialState, dismissFeedItem({ character: 'Nobody', key: 'i:1' }));
       expect(result).toEqual(initialState);
+    });
+  });
+
+  describe('restoreDismissedFeed (#4029)', () => {
+    it('clears only the named character’s dismissed keys and leaves minimized keys intact', () => {
+      const initialState = createStateWithMultipleSessions(
+        {
+          CharacterA: { dismissedFeed: ['i:1', 'n:n2'], minimizedFeed: ['i:3'] },
+          CharacterB: { dismissedFeed: ['i:4'], minimizedFeed: ['n:n5'] },
+        },
+        'CharacterA'
+      );
+
+      const result = reducer(initialState, restoreDismissedFeed('CharacterA'));
+
+      expect(result.sessions.CharacterA.dismissedFeed).toEqual([]);
+      expect(result.sessions.CharacterA.minimizedFeed).toEqual(['i:3']);
+      expect(result.sessions.CharacterB).toEqual(initialState.sessions.CharacterB);
+      expect(initialState.sessions.CharacterA.dismissedFeed).toEqual(['i:1', 'n:n2']);
+    });
+
+    it('does nothing when the named session does not exist', () => {
+      const initialState = createStateWithSession('CharacterA', {
+        dismissedFeed: ['i:1'],
+      });
+
+      const result = reducer(initialState, restoreDismissedFeed('Nobody'));
+
+      expect(result).toBe(initialState);
+    });
+
+    it('can restore an empty list and repeat the action without changing state', () => {
+      const initialState = createStateWithSession('CharacterA', {
+        dismissedFeed: ['i:1'],
+        minimizedFeed: ['i:2'],
+      });
+      const restored = reducer(initialState, restoreDismissedFeed('CharacterA'));
+      const repeated = reducer(restored, restoreDismissedFeed('CharacterA'));
+      const alreadyEmpty = createStateWithSession('CharacterB');
+
+      expect(repeated).toBe(restored);
+      expect(repeated.sessions.CharacterA.minimizedFeed).toEqual(['i:2']);
+      expect(reducer(alreadyEmpty, restoreDismissedFeed('CharacterB'))).toBe(alreadyEmpty);
     });
   });
 

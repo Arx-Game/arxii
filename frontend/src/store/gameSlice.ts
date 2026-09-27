@@ -425,6 +425,12 @@ export const gameSlice = createSlice({
         session.dismissedFeed.push(action.payload.key);
       }
     },
+    restoreDismissedFeed: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session && session.dismissedFeed.length > 0) {
+        session.dismissedFeed = [];
+      }
+    },
     addSessionDiagnostic: (
       state,
       action: PayloadAction<{ character: MyRosterEntry['name']; message: string }>
@@ -751,6 +757,7 @@ export const {
   minimizeFeedItem,
   restoreFeedItem,
   dismissFeedItem,
+  restoreDismissedFeed,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,
