@@ -468,7 +468,13 @@ They do not use the command system, dispatchers, or handlers.
 
   `perception.py` — `LookAction` (key `"look"`) and `LookAtItemAction` (key
   `"look_at_item"`) are the shared examine seam for telnet `CmdLook` and the web
-  examine-on-click dispatch. After `target_state.return_appearance(...)` (the
+  examine-on-click dispatch. `LookAction` accepts a `target_persona_id` kwarg
+  alongside its existing `target` (an ObjectDB pk, used by the room-objects panel),
+  resolved via `target_resolution.resolve_persona_pk_to_character` (#4030): the
+  persona menu's Look item dispatches this way, so it works on a masked persona
+  the same as on a plain character. An invisible or absent target (the two are
+  worded identically, so the menu never confirms a concealed persona's presence)
+  refuses with `LOOK_NOT_VISIBLE_MESSAGE`. After `target_state.return_appearance(...)` (the
   flows-layer base description, post concealment gate, post dreamside swap),
   `LookAction.execute()` makes one call to
   `actions.definitions.examine_extras.gather_examine_extras(actor, target)` —
@@ -630,6 +636,44 @@ coupled to the action's kwarg names by the base class.
   kwargs-via-context convention, resolves its `ItemInstance`, and delegates to
   `flows.service_functions.inventory.steal_permitted` (visibility = eligibility;
   the `steal` service re-checks the same predicate at execution time).
+- **`ChallengeTargetPrerequisite`** (#4030, `definitions/duels.py`), delegates to
+  `challenge_refusal(actor, target)`, the one check `ChallengeAction.execute()` used to
+  run inline; now both the prerequisite and the persona menu call it, so a challenge
+  item never shows as available when `run()` would refuse it.
+- **`GuardAllyPrerequisite`** (#4030, `definitions/rounds.py`), delegates to
+  `_resolve_guard_and_ally(actor, ally_name=..., ally_persona_id=..., no_ally_message=...)`,
+  shared by `SuccorAction`/`InterposeAction`'s `execute()` and their prerequisite. Resolves
+  the ally by `ally_persona_id` (the persona menu's shape, which still works under a mask)
+  or, for telnet, by character key via `ally_name`.
+
+## Persona Menu (#4030)
+
+`GET /api/actions/characters/<character_id>/personas/<persona_id>/menu/`
+(`actions:persona-menu`, `PersonaMenuView` in `views.py`, `IsCharacterOwner`-gated) answers
+"what can this character do to that persona right now, and if not, why": the server-side
+source for the frontend's right-click persona menu (`frontend/src/scenes/components/PersonaMenu.tsx`),
+and the model for any later per-target menu (items, room objects, exits).
+
+- **`persona_menu.py`**: `build_persona_menu(actor, persona) -> PersonaMenu` composes the
+  menu in four groups (`PersonaMenuGroupKey` in `constants.py`: perception, conflict, scene,
+  social). A self-target gets only Look plus a notice that nothing here targets yourself; an
+  empty group carries its own `empty_state` line (e.g. "Scene actions ... show here once a scene
+  is running") instead of vanishing silently.
+- **`types.py`**: frozen dataclasses `PersonaMenu`/`PersonaMenuGroup`/`PersonaMenuItem`, next to
+  `ActionAvailability`. Each item's `available`/`reason` **is** the result of calling the
+  underlying action's `check_availability()` (via `get_action(key).check_availability(...)`,
+  see `_registry_item`): the menu never re-derives its own yes/no rule, and a shown reason is
+  always the same text a failed dispatch would return.
+- **One check, two callers.** Any inline check an `execute()` used to run before this feature
+  moves into a `Prerequisite` the day that action joins the menu (see `ChallengeTargetPrerequisite`
+  and `GuardAllyPrerequisite` above). This is the load-bearing rule behind ADR-0319: a menu is
+  composed from prerequisites, never a parallel gate that can drift from `run()`.
+- **`target_resolution.py`**: `resolve_persona_pk_to_character(persona_id)`, the one
+  persona-to-character hop, since every web surface names a persona (which may be a mask) while
+  registry actions act on the character underneath. Shared by Look (`target_persona_id`),
+  Identify, Challenge (`target`) and the scene guard actions (`target_persona_id`); each caller
+  still runs its own perception/consent/presence checks afterward, so resolving never grants
+  anything by itself.
 
 ## Adding a New Action
 
@@ -811,6 +855,8 @@ premature generalization for a slice that only needed the lifecycle-state
 question.
 
 ### On-Demand Action Availability
-WebSocket endpoint for the frontend to request available actions for a
-specific actor/target pair. Evaluates prerequisites on demand rather than
-pre-computing for every entity.
+Built (#4030), as a REST read rather than a websocket message: the persona menu
+endpoint (`GET /api/actions/characters/<id>/personas/<persona_id>/menu/`, see
+"Persona Menu" above) evaluates each action's prerequisites on demand for one
+actor/persona pair, not pre-computed for every entity. A per-target endpoint for
+items, room objects and exits is the natural next slice, not yet built.

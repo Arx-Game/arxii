@@ -368,10 +368,31 @@ scene"`, no explainer. Lists the
 - **`CommandSelectField.tsx`**: Command parameter selection
 - **`CommandTextField.tsx`**: Command text input fields
 
-### Game Components (`components/`)
+### Persona Menu (`persona-menu/`, #4030)
 
-- **`EntityContextMenu.tsx`**: Right-click context menus for game entities
-- **`QuickAction.tsx`**: Quick action button component
+The one right-click menu for a persona lives in `frontend/src/scenes/components/PersonaMenu.tsx`
+(see `frontend/src/scenes/CLAUDE.md`); this directory holds its shared, scene-independent pieces,
+used by every persona surface (pose name and avatar, the quiet-room reader, the room character
+list, the Who panel):
+
+- **`personaMenuApi.ts`**: `fetchPersonaMenu`/`usePersonaMenuQuery`, the React Query wrapper over
+  `GET /api/actions/characters/<characterId>/personas/<personaId>/menu/`. This is the only source
+  for what the menu shows and why an item is greyed out; nothing in the frontend re-derives
+  availability from a scene cache or a hardcoded item list.
+- **`LookDialog.tsx`**: the Look result, in a draggable dialog built directly on
+  `@radix-ui/react-dialog` (not `components/ui/dialog.tsx`, whose `DialogContent` always renders
+  the dimming overlay). Closes on Esc, the close button, or an outside click; carries a View sheet
+  button.
+- **`useDraggable.ts`**: the pointer-drag hook `LookDialog` uses to move by its title bar. Local to
+  this one dialog; no drag library exists in the frontend and one dialog does not justify adding
+  one.
+- **`PersonaCardContext.tsx`**: lets any persona surface (room list, Who panel, the quiet-room
+  reader) call the `openCharacterCard` handler `GamePage` owns, so View sheet opens the existing
+  `CharacterCardDrawer` from anywhere the persona menu renders, not only from `PoseUnit`.
+
+This replaces `EntityContextMenu.tsx`/`QuickAction.tsx` (the 2025 left-click quick-action row that
+never got a caller outside its own test) and the `BaseState.dispatcher_tags` per-object command
+list (never populated in production): the server-composed persona menu is that feature, built.
 
 ### Helpers (`helpers/`)
 
