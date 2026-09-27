@@ -276,30 +276,24 @@ export function PersonaMenu({
   });
 
   function handleLook() {
-    // Deferred a tick, same as the dialog-opening item handlers below: opening
-    // a Dialog synchronously inside this menu item's click handler races the
-    // still-in-flight click against the freshly-mounted (non-modal) Dialog's
-    // own outside-click dismissal, closing it right back (#4030).
-    setTimeout(() => {
-      setLookOpen(true);
-      setLookLoading(true);
-      dispatchLook({
-        ref: { backend: 'registry', registry_key: 'look' },
-        kwargs: { target_persona_id: personaId },
-      })
-        .then((result) => {
-          if (isDispatchFailure(result)) {
-            setLookOpen(false);
-            toast.error(result.message ?? "You can't see them from here.");
-            return;
-          }
-          setLookText(result.message ?? '');
-        })
-        .catch(() => {
+    setLookOpen(true);
+    setLookLoading(true);
+    dispatchLook({
+      ref: { backend: 'registry', registry_key: 'look' },
+      kwargs: { target_persona_id: personaId },
+    })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
           setLookOpen(false);
-        })
-        .finally(() => setLookLoading(false));
-    }, 0);
+          toast.error(result.message ?? "You can't see them from here.");
+          return;
+        }
+        setLookText(result.message ?? '');
+      })
+      .catch(() => {
+        setLookOpen(false);
+      })
+      .finally(() => setLookLoading(false));
   }
 
   function handleViewSheet() {
@@ -404,17 +398,13 @@ export function PersonaMenu({
       case 'scene_interpose':
         return () => handleGuard('scene_interpose');
       case 'treat':
-        // Deferred a tick: opening a Dialog synchronously while this menu's
-        // own FocusScope is still unwinding races two focus traps for the
-        // same node (jsdom has no async focus debounce to break the cycle;
-        // #4030).
-        return () => setTimeout(() => setTreatDialogOpen(true), 0);
+        return () => setTreatDialogOpen(true);
       case 'give_mission':
-        return () => setTimeout(() => setGiveMissionOpen(true), 0);
+        return () => setGiveMissionOpen(true);
       case 'mute':
         return handleMute;
       case 'block':
-        return () => setTimeout(() => setBlockDialogOpen(true), 0);
+        return () => setBlockDialogOpen(true);
       default:
         return undefined;
     }
@@ -610,23 +600,14 @@ export function PersonaMenu({
                     {children}
                   </button>
                 </DropdownMenuTrigger>
-                {/* onCloseAutoFocus: several items open a Dialog (Block/Treat/Give
-                    mission) as this menu closes — without suppressing the
-                    default close-return-focus, the two Radix FocusScopes
-                    fight over the same tick and recurse (jsdom has no async
-                    focus debounce to break the cycle; #4030). */}
-                <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
-                  {renderItems(dropdownKit)}
-                </DropdownMenuContent>
+                <DropdownMenuContent>{renderItems(dropdownKit)}</DropdownMenuContent>
               </DropdownMenu>
             </span>
           ) : (
             <span className="inline-flex">{children}</span>
           )}
         </ContextMenuTrigger>
-        <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
-          {renderItems(contextKit)}
-        </ContextMenuContent>
+        <ContextMenuContent>{renderItems(contextKit)}</ContextMenuContent>
       </ContextMenu>
       <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
         <DialogContent>
