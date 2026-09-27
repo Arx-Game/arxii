@@ -393,6 +393,7 @@ class BrigHoldingRoomCaptureTests(TestCase):
     def test_brig_room_shows_captive_status_banner(self) -> None:
         """A Brig room with a HELD captive renders the OOC captive line."""
         from actions.definitions.examine_extras import _maybe_render_captivity_status
+        from evennia_extensions.factories import CharacterFactory
 
         captive = CharacterSheetFactory()
         capture_character(
@@ -400,13 +401,16 @@ class BrigHoldingRoomCaptureTests(TestCase):
             holding_room=self.brig_room,
             return_location=self.return_room,
         )
-        result = _maybe_render_captivity_status(self.brig_room.objectdb)
+        observer = CharacterFactory()
+        result = _maybe_render_captivity_status(self.brig_room.objectdb, observer)
         assert result is not None
         assert "held captive here" in result
 
     def test_empty_brig_room_shows_no_banner(self) -> None:
         """A Brig room with no captives renders nothing."""
         from actions.definitions.examine_extras import _maybe_render_captivity_status
+        from evennia_extensions.factories import CharacterFactory
 
-        result = _maybe_render_captivity_status(self.brig_room.objectdb)
+        observer = CharacterFactory()
+        result = _maybe_render_captivity_status(self.brig_room.objectdb, observer)
         assert result is None

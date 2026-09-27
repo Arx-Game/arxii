@@ -164,10 +164,13 @@ class ResolveRansomProjectHandlerTests(TestCase):
 
 class CaptiveStatusInCellDescTests(TestCase):
     def test_cell_shows_a_red_ooc_ransom_banner(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+
         captivity = _held_captivity()
         project = demand_ransom_project(captivity, amount=10_000)
+        observer = CharacterFactory()
 
-        rendered = _maybe_render_captivity_status(captivity.cell.room.objectdb)
+        rendered = _maybe_render_captivity_status(captivity.cell.room.objectdb, observer)
 
         assert rendered is not None
         assert "held captive here" in rendered
@@ -175,8 +178,11 @@ class CaptiveStatusInCellDescTests(TestCase):
         assert f"project/donate {project.pk}" in rendered
 
     def test_a_room_with_no_captive_renders_nothing(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+
         empty_room = InstancedRoomFactory().room.objectdb
-        assert _maybe_render_captivity_status(empty_room) is None
+        observer = CharacterFactory()
+        assert _maybe_render_captivity_status(empty_room, observer) is None
 
     def test_look_at_cell_shows_ransom_banner(self) -> None:
         """New coverage (#3084): the banner reaches real play via the live
