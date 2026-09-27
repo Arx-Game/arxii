@@ -10,7 +10,14 @@
  * on its trigger (`leftClick`, today's name-click affordance). It replaces
  * the scene-bound `PersonaContextMenu` and the never-wired `EntityContextMenu`.
  */
-import { type ComponentType, type ReactNode, Fragment, useMemo, useState } from 'react';
+import {
+  type ComponentType,
+  type MouseEventHandler,
+  type ReactNode,
+  Fragment,
+  useMemo,
+  useState,
+} from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ContextMenu,
@@ -113,7 +120,11 @@ function disabledActionItem(action: PlayerAction, key: string) {
 interface MenuItemProps {
   children?: ReactNode;
   disabled?: boolean;
-  onClick?: () => void;
+  // Radix's ContextMenuItem/DropdownMenuItem both pass an onClick through to
+  // an underlying <div>, so the handler receives a MouseEvent<HTMLDivElement>
+  // — every caller here ignores it (all pass a plain `() => void`), which is
+  // a valid narrower value for this wider handler type.
+  onClick?: MouseEventHandler<HTMLDivElement>;
   className?: string;
   title?: string;
 }
