@@ -528,18 +528,22 @@ describe('PersonaMenu', () => {
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByText('This is your own face.')).toBeInTheDocument();
     expect(within(menu).getByText('how others see you')).toBeInTheDocument();
+    // Demo Screen 1b: the popup menu's own header reads "<name> (you)".
+    expect(within(menu).getByText('Cassia Vell (you)')).toBeInTheDocument();
     const labels = within(menu)
       .getAllByRole('menuitem')
       .map((el) => el.textContent);
     expect(labels).toEqual(['Lookhow others see you', 'View sheet']);
   });
 
-  it('does not show the "how others see you" hint on a non-self menu', async () => {
+  it('does not show the "how others see you" hint or the "(you)" header suffix on a non-self menu', async () => {
     mockMenu({ is_self: false, items: [item('look')] });
     renderMenu();
     fireEvent.contextMenu(screen.getByText('Cassia Vell'));
     const menu = await screen.findByRole('menu');
     expect(within(menu).queryByText('how others see you')).not.toBeInTheDocument();
+    expect(within(menu).queryByText('Cassia Vell (you)')).not.toBeInTheDocument();
+    expect(within(menu).getByText('Cassia Vell')).toBeInTheDocument();
   });
 
   it('shows a muted loading line while the menu data is loading', async () => {

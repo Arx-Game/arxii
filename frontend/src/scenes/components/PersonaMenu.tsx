@@ -556,7 +556,13 @@ export function PersonaMenu({
       <>
         <kit.Label className="flex items-center gap-2 px-2 py-1.5 text-sm font-semibold">
           <PersonaAvatar source={{ name: personaName, thumbnailUrl }} size="sm" />
-          <span className="truncate">{personaName}</span>
+          <span className="truncate">
+            {personaName}
+            {/* Demo Screen 1b ("Ysolde (you)") -- the room-sidebar row has its
+                own separate "you" tag (CharactersList.tsx); this popup menu's
+                header needs its own, since it's a different component. */}
+            {data?.is_self && ' (you)'}
+          </span>
         </kit.Label>
         <kit.Item
           key="look"
@@ -624,19 +630,47 @@ export function PersonaMenu({
                     {children}
                   </button>
                 </DropdownMenuTrigger>
-                {/* onCloseAutoFocus: several items open a Dialog (Look, Block,
-                    Treat, Give mission, the whisper picker) as this menu
-                    closes. Radix's default close behavior returns focus to
-                    the trigger, which lands outside the just-opened Dialog;
-                    the (non-modal, for Look) Dialog's DismissableLayer reads
-                    that as an outside interaction and dismisses it right
-                    back — reproduces only in a real browser (#4030 demo
-                    review), never in jsdom, since jsdom has no async focus
-                    timing for the two layers to race on. Suppressing the
-                    menu's own auto-focus, the documented Radix fix for
-                    "open a Dialog from a menu item," removes the race
-                    instead of papering over its timing with a setTimeout. */}
-                <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                {/* Two independent fixes for opening a Dialog (Look, Block,
+                    Treat, Give mission, the whisper picker) from a menu item,
+                    both real browser-only (jsdom's synchronous DOM never
+                    reproduces either): (1) onCloseAutoFocus -- Radix's
+                    default close behavior returns focus to the trigger,
+                    landing outside the just-opened Dialog, which the
+                    (non-modal, for Look) Dialog's DismissableLayer reads as
+                    an outside interaction and dismisses right back. (2) the
+                    `!animate-none` override -- Radix's Presence keeps a
+                    closing menu's DOM mounted for its whole CSS exit
+                    transition (`data-[state=closed]:animate-out`, ~150-200ms:
+                    confirmed directly via getComputedStyle in a throwaway
+                    Playwright probe -- animationName stays "exit" and the
+                    node stays attached from the click until just before
+                    250ms) before @radix-ui/react-presence actually unmounts
+                    it (it checks getComputedStyle(node).animationName and
+                    only unmounts immediately when that reads "none"); the
+                    LOOK ITEM ALONE never needed that long a menu (short, one
+                    item), so this never mattered until a non-empty group
+                    `empty_state` footer (#4030 demo review, round 2 --
+                    Screen 1's own "quiet room, no scene" condition, the
+                    demo's OWN primary walkthrough) makes the menu tall
+                    enough that the still-mounted, still-animating sibling
+                    portal interferes with the freshly-opened Dialog's own
+                    dismiss detection. A `style` override does NOT work here
+                    (tried first, confirmed dead by the same probe):
+                    @radix-ui/react-popper's own Content unconditionally
+                    resets `style.animation` to `undefined` once positioned
+                    (react-popper/dist/index.mjs, PopperContent -- `animation:
+                    !isPositioned ? "none" : void 0`), clobbering any inline
+                    override every consumer passes. The `!` (Tailwind
+                    important) on a CLASS survives that reset, since it never
+                    touches the inline `style` object at all. Forcing the
+                    exit animation off makes Presence unmount the closing
+                    menu SYNCHRONOUSLY instead of ~150-200ms later, removing
+                    the coexistence window entirely -- not a guess, and not a
+                    timer. */}
+                <DropdownMenuContent
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                  className="data-[state=closed]:!animate-none"
+                >
                   {renderItems(dropdownKit)}
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -645,9 +679,12 @@ export function PersonaMenu({
             <span className="inline-flex">{children}</span>
           )}
         </ContextMenuTrigger>
-        {/* See the matching DropdownMenuContent comment above — the same
-            close-focus race applies to the right-click menu. */}
-        <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+        {/* See the matching DropdownMenuContent comment above -- both fixes
+            apply identically to the right-click menu. */}
+        <ContextMenuContent
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          className="data-[state=closed]:!animate-none"
+        >
           {renderItems(contextKit)}
         </ContextMenuContent>
       </ContextMenu>

@@ -41,6 +41,43 @@ const PERSONA_MENU_FIXTURE = {
   scene_actions: [],
 };
 
+// The real no-scene, look-available, non-self menu shape
+// (src/actions/persona_menu.py:73-131, `scene is None` branch) — the demo's
+// own Screen-1 (quiet room) -> Screen-2 (Look) walkthrough condition. Copied
+// verbatim from that function's item/group order and the exact
+// SCENE_EMPTY_STATE text, not guessed.
+const QUIET_ROOM_MENU_FIXTURE = {
+  persona_id: NYX_PERSONA_ID,
+  is_self: false,
+  scene_id: null,
+  viewer_persona_id: 7,
+  notice: '',
+  items: [
+    { key: 'look', label: 'Look', group: 'perception', available: true, reason: '' },
+    {
+      key: 'challenge',
+      label: 'Challenge to a duel',
+      group: 'conflict',
+      available: true,
+      reason: '',
+    },
+    { key: 'identify', label: 'Identify', group: 'conflict', available: true, reason: '' },
+    { key: 'mute', label: 'Mute', group: 'social', available: true, reason: '' },
+    { key: 'block', label: 'Block…', group: 'social', available: true, reason: '' },
+  ],
+  groups: [
+    { key: 'perception', empty_state: '' },
+    { key: 'conflict', empty_state: '' },
+    {
+      key: 'scene',
+      empty_state:
+        'Scene actions (Treat, Succor, Interpose, techniques) show here once a scene is running.',
+    },
+    { key: 'social', empty_state: '' },
+  ],
+  scene_actions: [],
+};
+
 const LOOK_RESULT = {
   backend: 'registry',
   deferred: false,
@@ -48,19 +85,44 @@ const LOOK_RESULT = {
   message: 'A weary traveler, cloak still damp from the rain.',
 };
 
-async function mockPersonaMenuRoutes(page: Page): Promise<void> {
+async function mockPersonaMenuRoutes(
+  page: Page,
+  fixture: typeof PERSONA_MENU_FIXTURE = PERSONA_MENU_FIXTURE
+): Promise<void> {
   // Registered AFTER mockRestRoutes's catch-all `**/api/**`, so these two
   // more specific routes take priority (Playwright runs the most recently
   // registered matching route first).
   await page.route(
     `**/api/actions/characters/${CHARACTER_ID}/personas/${NYX_PERSONA_ID}/menu/`,
     async (route) => {
-      await route.fulfill({ json: PERSONA_MENU_FIXTURE });
+      await route.fulfill({ json: fixture });
     }
   );
   await page.route(`**/api/actions/characters/${CHARACTER_ID}/dispatch/`, async (route) => {
     await route.fulfill({ json: LOOK_RESULT });
   });
+}
+
+/**
+ * Samples `locator.isVisible()` every 20ms for `totalMs`, asserting it never
+ * reads `false` in between. A single before/after check (visible now, wait
+ * 1s, visible again) can miss a dialog that opens, closes mid-window, and
+ * (for a real look-visibility bug) never comes back -- but for THIS bug, the
+ * relevant risk is closing and NOT reopening, so a blind before/after check
+ * genuinely can pass right through a real regression if it resamples too
+ * coarsely to land inside the closed window. Fine sampling is what actually
+ * proved the round-2 self-close (the Radix Presence exit-animation window is
+ * ~150-200ms) and is what proves its absence here.
+ */
+async function assertStaysVisibleThroughout(
+  dialog: import('@playwright/test').Locator,
+  totalMs = 1000,
+  stepMs = 20
+): Promise<void> {
+  for (let elapsed = 0; elapsed <= totalMs; elapsed += stepMs) {
+    expect(await dialog.isVisible(), `dialog closed at t=${elapsed}ms`).toBe(true);
+    await dialog.page().waitForTimeout(stepMs);
+  }
 }
 
 test.describe('PersonaMenu -> Look dialog (#4030)', () => {
@@ -134,6 +196,80 @@ test.describe('PersonaMenu -> Look dialog (#4030)', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText(LOOK_RESULT.message);
 
+    await page.waitForTimeout(1000);
+    await expect(dialog).toBeVisible();
+  });
+
+  // #4030 demo-fidelity review, round 2: the first fix's regression spec
+  // (the two tests above) used a single-group, footer-less menu, which never
+  // reproduced the self-close. The demo's own Screen-1 -> Screen-2 walkthrough
+  // opens Look from a QUIET-ROOM menu -- no shared scene, so the server's
+  // `scene` group carries a non-empty `empty_state` footer line
+  // (src/actions/persona_menu.py:126-130) -- and that shape self-closes the
+  // dialog 10/10 in the second review pass. These two tests use that exact
+  // shape (`QUIET_ROOM_MENU_FIXTURE`, copied verbatim from the server).
+  test('right-click opens Look from a quiet-room (footer) menu; the dialog stays open', async ({
+    page,
+  }) => {
+    await mockRestRoutes(page);
+    await mockPersonaMenuRoutes(page, QUIET_ROOM_MENU_FIXTURE);
+    const [connection] = await reachReadySession(page);
+    pushForeignPose(connection);
+
+    const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
+    await expect(pose).toBeVisible();
+    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+
+    await nameButton.click({ button: 'right' });
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByText(QUIET_ROOM_MENU_FIXTURE.groups[2].empty_state)).toBeVisible();
+    await menu.getByRole('menuitem', { name: 'Look', exact: true }).click();
+
+    const dialog = page.getByRole('dialog', { name: NYX.name });
+    await expect(dialog).toBeVisible();
+    await assertStaysVisibleThroughout(dialog);
+  });
+
+  test('left-click opens Look from a quiet-room (footer) menu; the dialog stays open', async ({
+    page,
+  }) => {
+    await mockRestRoutes(page);
+    await mockPersonaMenuRoutes(page, QUIET_ROOM_MENU_FIXTURE);
+    const [connection] = await reachReadySession(page);
+    pushForeignPose(connection);
+
+    const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
+    await expect(pose).toBeVisible();
+    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+
+    await nameButton.click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await menu.getByRole('menuitem', { name: 'Look', exact: true }).click();
+
+    const dialog = page.getByRole('dialog', { name: NYX.name });
+    await expect(dialog).toBeVisible();
+    await assertStaysVisibleThroughout(dialog);
+  });
+
+  test('Block still opens from a quiet-room (footer) menu and stays open', async ({ page }) => {
+    await mockRestRoutes(page);
+    await mockPersonaMenuRoutes(page, QUIET_ROOM_MENU_FIXTURE);
+    const [connection] = await reachReadySession(page);
+    pushForeignPose(connection);
+
+    const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
+    await expect(pose).toBeVisible();
+    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+
+    await nameButton.click({ button: 'right' });
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await menu.getByRole('menuitem', { name: 'Block…', exact: true }).click();
+
+    const dialog = page.getByRole('dialog', { name: `Block ${NYX.name}?` });
+    await expect(dialog).toBeVisible();
     await page.waitForTimeout(1000);
     await expect(dialog).toBeVisible();
   });
