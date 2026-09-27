@@ -26373,6 +26373,16 @@ export interface components {
       /** @description Player has no family; the tarot surname ritual applies (#3617). */
       readonly allows_no_family: boolean;
       /**
+       * @description Who raised a character with this Upbringing (#4024). No known parents: no family, the tarot surname. Adoptive: the family is framed as adoptive.
+       *
+       *     * `known` - Known parents
+       *     * `unknown` - No known parents
+       *     * `adoptive` - Adoptive parents
+       */
+      readonly parentage: components['schemas']['ParentageEnum'];
+      /** @description What a new player reads about their parents here. Blank shows nothing. */
+      readonly parentage_note: string;
+      /**
        * @description Highest seat tier a founder raised here may define (#3983); blank = any.
        *
        *     * `empire` - Empire
@@ -39230,6 +39240,13 @@ export interface components {
       is_true: boolean;
       via_secret: boolean;
     };
+    /**
+     * @description * `known` - Known parents
+     *     * `unknown` - No known parents
+     *     * `adoptive` - Adoptive parents
+     * @enum {string}
+     */
+    ParentageEnum: 'known' | 'unknown' | 'adoptive';
     /**
      * @description Read serializer for combat participants.
      *

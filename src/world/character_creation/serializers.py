@@ -854,6 +854,8 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             "allows_claim_family",
             "allows_name_family",
             "allows_no_family",
+            "parentage",
+            "parentage_note",
             "max_claim_tier",
             "claimable_kind_ids",
             "family_templates",

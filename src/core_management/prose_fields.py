@@ -55,6 +55,7 @@ PROSE_FIELD_NAMES = frozenset(
         "cg_hint",
         "closed_reason",
         "own_wording",
+        "parentage_note",
         "instance_description",
         "legend_description_template",
         "lore_content",

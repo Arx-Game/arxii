@@ -35,6 +35,7 @@ from world.character_creation.constants import (
     CommentType,
     FamilyPath,
     OriginStoryState,
+    Parentage,
     QuestionKind,
     StartingAreaAccessLevel,
 )
@@ -48,8 +49,14 @@ from world.character_creation.models import (
 from world.character_creation.offers import opened_feature_traits, reconcile_offer_picks
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
-from world.roster.constants import ParentageKind
-from world.roster.models import Roster, RosterEntry, RosterTenure
+from world.roster.constants import MembershipBasis, ParentageKind
+from world.roster.models import (
+    FamilyMembership,
+    ParentageEdge,
+    Roster,
+    RosterEntry,
+    RosterTenure,
+)
 from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType
 
 if TYPE_CHECKING:
@@ -792,11 +799,13 @@ def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     try:
         if draft.claimed_kin_slot is not None:
             node = claim_appable_node(node=draft.claimed_kin_slot, sheet=sheet)
+            _mark_adoption(draft, node)
             _pin_heredity_back_inference(draft, node)
             return
         if draft.claimed_kin_pool is not None:
             node = mint_from_pool(draft.claimed_kin_pool, created_by=draft.account)
             claim_appable_node(node=node, sheet=sheet)
+            _mark_adoption(draft, node)
             _pin_heredity_back_inference(draft, node)
             return
     except KinshipServiceError:
@@ -806,7 +815,37 @@ def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         )
     node = ensure_node_for_sheet(sheet, family=draft.family)
     _bind_invented_parents(draft, node)
+    _mark_adoption(draft, node)
     _pin_heredity_back_inference(draft, node)
+
+
+def _draft_parentage(draft: CharacterDraft) -> str:
+    """The chosen Upbringing's parentage; known when no Upbringing is chosen (#4024)."""
+    template = draft.selected_origin_template
+    return template.parentage if template is not None else Parentage.KNOWN
+
+
+def _mark_adoption(draft: CharacterDraft, node: Kinsperson) -> None:
+    """Record an adoptive Upbringing's family as adoptive (#4024).
+
+    Every path that lands the PC in a family writes a BORN membership and, where
+    parents exist, blood or Tree edges (``create_person``, a claimed kin slot's
+    authored parents, a pool mint). For an adoptive Upbringing the PC entered the
+    family by adoption, so the open BORN membership becomes ADOPTED (the name
+    display then wears the family's taken-in particle, #3261) and every parent
+    edge becomes ADOPTIVE. Runs before the finalize-time name alias sync.
+    """
+    if _draft_parentage(draft) != Parentage.ADOPTIVE:
+        return
+    for membership in FamilyMembership.objects.filter(
+        kinsperson=node, ended_at__isnull=True, basis=MembershipBasis.BORN
+    ):
+        membership.basis = MembershipBasis.ADOPTED
+        membership.save(update_fields=["basis"])
+    for edge in ParentageEdge.objects.filter(child=node):
+        edge.kind = ParentageKind.ADOPTIVE
+        edge.is_ritual_invoker = False
+        edge.save(update_fields=["kind", "is_ritual_invoker"])
 
 
 def _resolve_draft_gender(gender_id: object) -> Gender | None:
@@ -828,6 +867,10 @@ def _bind_invented_parents(draft: CharacterDraft, child_node: Kinsperson) -> Non
     """
     from world.roster.services.kinship import create_person, record_parentage  # noqa: PLC0415
 
+    if _draft_parentage(draft) == Parentage.UNKNOWN:
+        # No known parents (#4024): any names left in the draft from an earlier
+        # Upbringing are not parents of this character.
+        return
     line_name = str(draft.draft_data.get("line_parent_name", "")).strip()
     other_name = str(draft.draft_data.get("other_parent_name", "")).strip()
     if not line_name and not other_name:

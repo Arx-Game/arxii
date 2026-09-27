@@ -155,6 +155,8 @@ class BuilderSaveTest(BuilderTestCase):
             "frame_narrative": "You stood through dinners.",
             "cg_point_cost": "0",
             "allows_no_family": "on",
+            "parentage": "known",
+            "parentage_note": "",
             "is_active": "on",
             "sort_order": "1",
             # question formset: one existing question
@@ -210,6 +212,36 @@ class BuilderSaveTest(BuilderTestCase):
         assert choice.cg_point_cost == 5
         assert choice.written_by == self.writer
         assert OriginTemplateSlot.objects.get(pk=self.q1.pk).written_by == self.writer
+
+    def test_save_no_known_parents_with_its_note(self):
+        """#4024: a no-family Upbringing can say its characters have no known parents."""
+        self.client.force_login(self.author)
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(
+                parentage="unknown", parentage_note="The Tree leaves no mother and no father."
+            ),
+        )
+        assert resp.status_code == 302
+        self.template.refresh_from_db()
+        assert self.template.parentage == "unknown"
+        assert self.template.parentage_note == "The Tree leaves no mother and no father."
+
+    def test_adoptive_with_only_no_family_is_refused_on_the_parentage_field(self):
+        """#4024: adoptive parents needs a family route; the builder says so in place."""
+        self.client.force_login(self.author)
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(parentage="adoptive"),
+        )
+        assert resp.status_code == 200
+        assert "parentage" in resp.context["form"].errors
+        # Read the column, not the instance: the refused form mutated the
+        # identity-mapped instance in memory before validation failed.
+        stored = OriginTemplate.objects.filter(pk=self.template.pk).values_list(
+            "parentage", flat=True
+        )
+        assert list(stored) == ["known"]
 
     def test_save_with_a_text_question_succeeds(self):
         """Ruling G: a TEXT/PERSON question has no answers formset to bind."""

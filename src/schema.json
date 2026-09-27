@@ -43667,6 +43667,21 @@ components:
           type: boolean
           readOnly: true
           description: Player has no family; the tarot surname ritual applies (#3617).
+        parentage:
+          allOf:
+          - $ref: '#/components/schemas/ParentageEnum'
+          readOnly: true
+          description: |-
+            Who raised a character with this Upbringing (#4024). No known parents: no family, the tarot surname. Adoptive: the family is framed as adoptive.
+
+            * `known` - Known parents
+            * `unknown` - No known parents
+            * `adoptive` - Adoptive parents
+        parentage_note:
+          type: string
+          readOnly: true
+          description: What a new player reads about their parents here. Blank shows
+            nothing.
         max_claim_tier:
           allOf:
           - $ref: '#/components/schemas/MaxClaimTierEnum'
@@ -43708,6 +43723,8 @@ components:
       - is_active
       - max_claim_tier
       - name
+      - parentage
+      - parentage_note
       - slots
       - sort_order
     CGPointBudget:
@@ -68646,6 +68663,16 @@ components:
       - kind
       - parent_id
       - via_secret
+    ParentageEnum:
+      enum:
+      - known
+      - unknown
+      - adoptive
+      type: string
+      description: |-
+        * `known` - Known parents
+        * `unknown` - No known parents
+        * `adoptive` - Adoptive parents
     Participant:
       type: object
       description: |-
