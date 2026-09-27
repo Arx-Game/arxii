@@ -76,16 +76,53 @@ class PersonaMenuServiceTests(django.test.TestCase):
         assert item.reason == "Their face is their own; there is no mask to see through."
 
     def test_look_unavailable_elsewhere_uses_the_neutral_reason(self) -> None:
+        # The Who-panel case: a target genuinely elsewhere gets the absent shape --
+        # the same shape a concealed-but-co-located target gets below.
         self.target.move_to(RoomProfileFactory().objectdb, quiet=True)
-        item = self._item("look")
-        assert not item.available
-        assert item.reason == LOOK_UNAVAILABLE
+        menu = build_persona_menu(self.viewer, self.persona)
+        assert not menu.is_self
+        assert [i.key for i in menu.items] == ["look", "mute", "block"]
+        look_item = menu.items[0]
+        assert not look_item.available
+        assert look_item.reason == LOOK_UNAVAILABLE
+        assert [g.key for g in menu.groups] == [
+            PersonaMenuGroupKey.PERCEPTION,
+            PersonaMenuGroupKey.SOCIAL,
+        ]
+        assert menu.scene is None
+        assert menu.scene_actions == []
 
     def test_concealed_target_reads_exactly_like_an_absent_one(self) -> None:
         category = ConditionCategoryFactory(conceals_from_perception=True)
         template = ConditionTemplateFactory(category=category)
         ConditionInstanceFactory(target=self.target, condition=template)
-        assert self._item("look").reason == LOOK_UNAVAILABLE
+        concealed_menu = build_persona_menu(self.viewer, self.persona)
+
+        # The concealed-but-co-located target's WHOLE menu must be indistinguishable
+        # from the same persona genuinely elsewhere (the condition is left in place --
+        # it must not matter once co-location alone already fails).
+        self.target.move_to(RoomProfileFactory().objectdb, quiet=True)
+        elsewhere_menu = build_persona_menu(self.viewer, self.persona)
+
+        assert concealed_menu == elsewhere_menu
+        assert [i.key for i in concealed_menu.items] == ["look", "mute", "block"]
+        assert concealed_menu.items[0].reason == LOOK_UNAVAILABLE
+        assert concealed_menu.scene is None
+        assert concealed_menu.scene_actions == []
+
+    def test_concealed_target_menu_ignores_an_active_scene_in_the_room(self) -> None:
+        # A concealed target's own room having an active scene must not surface it --
+        # identify/challenge/scene items would leak "someone is here" through their
+        # own room-equality checks even though Look itself refuses.
+        category = ConditionCategoryFactory(conceals_from_perception=True)
+        template = ConditionTemplateFactory(category=category)
+        ConditionInstanceFactory(target=self.target, condition=template)
+        SceneFactory(location=self.room, is_active=True)
+
+        menu = build_persona_menu(self.viewer, self.persona)
+        assert [i.key for i in menu.items] == ["look", "mute", "block"]
+        assert menu.scene is None
+        assert menu.scene_actions == []
 
     def test_shared_scene_adds_scene_items_and_clears_the_empty_state(self) -> None:
         SceneFactory(location=self.room, is_active=True)

@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ObjectDoesNotExist
 
 from actions.constants import PersonaMenuGroupKey
-from actions.definitions.perception import LOOK_NOT_VISIBLE_MESSAGE
+from actions.definitions.perception import LOOK_NOT_VISIBLE_MESSAGE, look_target_visible
 from actions.registry import get_action
 from actions.types import PersonaMenu, PersonaMenuGroup, PersonaMenuItem
 
@@ -50,6 +50,26 @@ def build_persona_menu(actor: ObjectDB, persona: Persona) -> PersonaMenu:
             groups=[PersonaMenuGroup(key=PersonaMenuGroupKey.PERCEPTION)],
             scene_actions=[],
             notice=SELF_NOTICE,
+        )
+
+    if not look.available:
+        # #4030 fix wave (controller ruling): an unseen target — concealed or simply
+        # not co-located, worded identically — must be indistinguishable from an
+        # absent one. Every other item's own prerequisite checks room equality, not
+        # perception, so composing them here would leak "this persona pk exists and
+        # is nearby" through Challenge/Identify/scene availability even when Look
+        # itself refuses. Return the same shape a genuinely-elsewhere target gets.
+        return PersonaMenu(
+            persona=persona,
+            is_self=False,
+            scene=None,
+            viewer_persona=viewer_persona,
+            items=[look, *_social_items(viewer_persona)],
+            groups=[
+                PersonaMenuGroup(key=PersonaMenuGroupKey.PERCEPTION),
+                PersonaMenuGroup(key=PersonaMenuGroupKey.SOCIAL),
+            ],
+            scene_actions=[],
         )
 
     scene = _shared_scene(actor, target)
@@ -99,16 +119,7 @@ def build_persona_menu(actor: ObjectDB, persona: Persona) -> PersonaMenu:
                 )
             )
         scene_actions = _targeted_scene_actions(actor)
-    items += [
-        PersonaMenuItem(key="mute", label="Mute", group=PersonaMenuGroupKey.SOCIAL, available=True),
-        PersonaMenuItem(
-            key="block",
-            label="Block…",
-            group=PersonaMenuGroupKey.SOCIAL,
-            available=viewer_persona is not None,
-            reason="" if viewer_persona is not None else BLOCK_UNAVAILABLE,
-        ),
-    ]
+    items += _social_items(viewer_persona)
     groups = [
         PersonaMenuGroup(key=PersonaMenuGroupKey.PERCEPTION),
         PersonaMenuGroup(key=PersonaMenuGroupKey.CONFLICT),
@@ -143,13 +154,7 @@ def _registry_item(
 
 
 def _look_item(actor: ObjectDB, target: ObjectDB) -> PersonaMenuItem:
-    from world.conditions.services import can_perceive  # noqa: PLC0415
-
-    visible = target.pk == actor.pk or (
-        target.db_location is not None
-        and target.db_location == actor.db_location
-        and can_perceive(actor, target)
-    )
+    visible = look_target_visible(actor, target)
     return PersonaMenuItem(
         key="look",
         label="Look",
@@ -157,6 +162,20 @@ def _look_item(actor: ObjectDB, target: ObjectDB) -> PersonaMenuItem:
         available=visible,
         reason="" if visible else LOOK_UNAVAILABLE,
     )
+
+
+def _social_items(viewer_persona: Persona | None) -> list[PersonaMenuItem]:
+    """``mute``/``block`` — always offered on a visible-or-absent-alike target."""
+    return [
+        PersonaMenuItem(key="mute", label="Mute", group=PersonaMenuGroupKey.SOCIAL, available=True),
+        PersonaMenuItem(
+            key="block",
+            label="Block…",
+            group=PersonaMenuGroupKey.SOCIAL,
+            available=viewer_persona is not None,
+            reason="" if viewer_persona is not None else BLOCK_UNAVAILABLE,
+        ),
+    ]
 
 
 def _shared_scene(actor: ObjectDB, target: ObjectDB) -> Scene | None:
