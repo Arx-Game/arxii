@@ -45,14 +45,12 @@ const barrel: RoomStateObject = {
   dbref: '#100',
   name: 'a wooden barrel',
   thumbnail_url: null,
-  commands: [],
 };
 
 const board: RoomStateObject = {
   dbref: '#200',
   name: 'a notice board',
   thumbnail_url: null,
-  commands: [],
   is_mission_board: true,
 };
 

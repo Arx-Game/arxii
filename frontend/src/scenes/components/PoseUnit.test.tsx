@@ -3,7 +3,7 @@
  * Phase 9, Task 9.2.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -488,6 +488,35 @@ describe('PoseUnit', () => {
     );
 
     expect(screen.queryByRole('button', { name: 'View Alice' })).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Right-click on the avatar opens the persona menu (#4030) — left-click keeps
+  // opening the character card (covered above); a right-click reaches the same
+  // action menu the name already offers.
+  // ---------------------------------------------------------------------------
+
+  it('right-clicking the avatar opens the persona menu with Look and View sheet', async () => {
+    const onAvatarClick = vi.fn();
+    const interaction = makeInteraction({
+      mode: 'pose',
+      persona: { id: 10, name: 'Alice', thumbnail_url: '/alice.png' },
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" onAvatarClick={onAvatarClick} />
+      </Wrapper>
+    );
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'View Alice' }));
+    const menu = await screen.findByRole('menu');
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent);
+    expect(labels).toEqual(['Look', 'View sheet']);
+    // The right-click never fires the left-click card-open handler.
+    expect(onAvatarClick).not.toHaveBeenCalled();
   });
 
   it('POSE branch still exposes data-testid="pose-unit" as a chat bubble', () => {

@@ -69,9 +69,10 @@ interface PoseUnitAvatarProps {
 }
 
 /**
- * Avatar thumbnail in the bubble header. Identity click surface (#2156) — the
- * name stays the PersonaMenu action surface; the avatar itself opens
- * the character card. Renders as a plain (non-interactive) avatar when
+ * Avatar thumbnail in the bubble header. Identity click surface (#2156) — a
+ * left click opens the character card; since #4030 the avatar is also
+ * wrapped in `PersonaMenu` so a right-click reaches the same action menu the
+ * name offers. Renders as a plain (non-interactive) avatar when
  * `onAvatarClick` isn't provided.
  */
 function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
@@ -91,7 +92,7 @@ function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
     return avatar;
   }
 
-  return (
+  const button = (
     <button
       type="button"
       aria-label={`View ${interaction.persona.name}`}
@@ -106,6 +107,16 @@ function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
     >
       {avatar}
     </button>
+  );
+
+  return (
+    <PersonaMenu
+      personaId={interaction.persona.id}
+      personaName={interaction.persona.name}
+      thumbnailUrl={interaction.persona.thumbnail_url}
+    >
+      {button}
+    </PersonaMenu>
   );
 }
 

@@ -62,6 +62,7 @@ import { AttachedActionSubmissionGuard } from '@/scenes/actionSubmissionGuard';
 import { useDetachedActionIds } from '@/scenes/useDetachedActionIds';
 import type { Interaction, SceneDetail } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
+import { PersonaCardContext } from './persona-menu/PersonaCardContext';
 import type { ComposerMode } from './components/CommandInput';
 import type { ConversationTabStripProps } from './components/ConversationTabStrip';
 
@@ -637,6 +638,10 @@ export function GamePage() {
   // SceneDetailPage) since the drawer opens "in place" over whichever surface
   // the avatar was clicked on, not as a route navigation.
   const [cardPersona, setCardPersona] = useState<PoseUnitAvatarClickPersona | null>(null);
+  // #4030: lets every persona-menu surface (room list, Who panel, the
+  // quiet-room reader, pose names/avatars) open the same character-card
+  // drawer GamePage already owns, not just PoseUnit's own avatar click.
+  const cardContextValue = useMemo(() => ({ openCharacterCard: setCardPersona }), []);
   const [replyTarget, setReplyTarget] = useState<Interaction | null>(null);
   const [reference, setReference] = useState<{
     kind: string;
@@ -1008,7 +1013,7 @@ export function GamePage() {
   };
 
   return (
-    <>
+    <PersonaCardContext.Provider value={cardContextValue}>
       <GameLayout
         accountId={account?.id}
         topBar={
@@ -1067,6 +1072,6 @@ export function GamePage() {
         viewerEntryId={viewerEntryId}
         onWhisper={handleWhisper}
       />
-    </>
+    </PersonaCardContext.Provider>
   );
 }

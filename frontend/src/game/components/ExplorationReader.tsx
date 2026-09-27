@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import type { GameLifecycleState } from '@/store/gameSlice';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
+import { PersonaMenu } from '@/scenes/components/PersonaMenu';
 import { ActorLine } from '@/scenes/components/ActorLine';
 import { FeedNoteBlock } from './FeedNoteBlock';
 import { FeedBlockFrame } from './FeedBlockFrame';
@@ -171,16 +172,25 @@ export function ExplorationReader({
                       >
                         <article className="border-b pb-3 last:border-b-0">
                           <header className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                            <PersonaAvatar
-                              source={{
-                                name: row.item.persona.name,
-                                thumbnailUrl: row.item.persona.thumbnail_url,
-                              }}
-                              size="sm"
-                            />
-                            <span className="font-medium text-foreground">
-                              {row.item.persona.name}
-                            </span>
+                            <PersonaMenu
+                              personaId={row.item.persona.id}
+                              personaName={row.item.persona.name}
+                              thumbnailUrl={row.item.persona.thumbnail_url}
+                              leftClick
+                            >
+                              <span className="flex items-center gap-2">
+                                <PersonaAvatar
+                                  source={{
+                                    name: row.item.persona.name,
+                                    thumbnailUrl: row.item.persona.thumbnail_url,
+                                  }}
+                                  size="sm"
+                                />
+                                <span className="font-medium text-foreground">
+                                  {row.item.persona.name}
+                                </span>
+                              </span>
+                            </PersonaMenu>
                             <time dateTime={row.item.timestamp}>
                               {new Date(row.item.timestamp).toLocaleTimeString([], {
                                 hour: 'numeric',

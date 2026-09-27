@@ -2,6 +2,7 @@ import { Users } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import type { RoomStateObject } from '@/hooks/types';
+import { PersonaMenu } from '@/scenes/components/PersonaMenu';
 import { UnseenPresenceRow } from './UnseenPresenceRow';
 
 interface CharactersListProps {
@@ -52,9 +53,9 @@ export function CharactersList({
         <Users className="h-3 w-3" />
         Characters ({characters.length + (viewer ? 1 : 0)})
       </div>
-      {viewer && (
-        <ul className="mb-1 space-y-1">
-          <li>
+      {viewer &&
+        (() => {
+          const viewerButton = (
             <button
               type="button"
               onClick={onViewerClick}
@@ -79,9 +80,25 @@ export function CharactersList({
                 you
               </span>
             </button>
-          </li>
-        </ul>
-      )}
+          );
+          return (
+            <ul className="mb-1 space-y-1">
+              <li>
+                {viewerPersonaId != null ? (
+                  <PersonaMenu
+                    personaId={viewerPersonaId}
+                    personaName={viewer.name}
+                    thumbnailUrl={viewer.thumbnailUrl}
+                  >
+                    {viewerButton}
+                  </PersonaMenu>
+                ) : (
+                  viewerButton
+                )}
+              </li>
+            </ul>
+          );
+        })()}
       {hasUnseenPresence && (
         <ul className="mb-1 space-y-1">
           <UnseenPresenceRow viewerPersonaId={viewerPersonaId} />
@@ -105,22 +122,34 @@ export function CharactersList({
               </>
             );
 
+            const row = onCharacterClick ? (
+              <button
+                type="button"
+                onClick={() => onCharacterClick(char)}
+                className={cn(
+                  'flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left',
+                  'transition-colors hover:bg-accent focus-visible:outline-none',
+                  'focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+              >
+                {content}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">{content}</div>
+            );
+
             return (
               <li key={char.dbref}>
-                {onCharacterClick ? (
-                  <button
-                    type="button"
-                    onClick={() => onCharacterClick(char)}
-                    className={cn(
-                      'flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left',
-                      'transition-colors hover:bg-accent focus-visible:outline-none',
-                      'focus-visible:ring-2 focus-visible:ring-ring'
-                    )}
+                {char.persona_id != null ? (
+                  <PersonaMenu
+                    personaId={char.persona_id}
+                    personaName={char.name}
+                    thumbnailUrl={char.thumbnail_url}
                   >
-                    {content}
-                  </button>
+                    {row}
+                  </PersonaMenu>
                 ) : (
-                  <div className="flex items-center gap-2">{content}</div>
+                  row
                 )}
               </li>
             );
