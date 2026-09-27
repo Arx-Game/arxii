@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
 
 _LOOK_AT_WHAT_MESSAGE = "Look at what?"
+LOOK_NOT_VISIBLE_MESSAGE = "You can't see them from here."
 
 
 def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
@@ -59,6 +60,12 @@ class LookAction(Action):
         if target is None:
             return ActionResult(success=False, message=_LOOK_AT_WHAT_MESSAGE)
 
+        # #4030: a ``target_persona_id`` dispatch (the persona menu) never had a real
+        # ObjectDB/pk on the wire, only the persona the viewer sees — which may be a
+        # mask. Telnet and the pk-based ``target`` shape already resolved a genuine
+        # ObjectDB the caller could see, so their refusal text is safe to keep as-is.
+        via_persona_id = kwargs.get("target") is None
+
         # #1225: gate direct look-at-target on the real perception/concealment seam.
         # The bare-``look`` case (target is the room itself) and looking at oneself
         # are exempt — ``can_perceive``'s co-location check assumes an occupant/held
@@ -68,6 +75,12 @@ class LookAction(Action):
             from world.conditions.services import can_perceive  # noqa: PLC0415
 
             if not can_perceive(actor, target):
+                if via_persona_id:
+                    # #4030: never name the real character key behind a mask —
+                    # a persona-id look can target someone concealed, or simply
+                    # not co-located, and either way the real identity must stay
+                    # hidden, not just indistinguishable-from-absent.
+                    return ActionResult(success=False, message=LOOK_NOT_VISIBLE_MESSAGE)
                 # Deliberately the same not-found idiom ``CmdLook`` uses for a failed
                 # search (``f"Could not find '{args}'."``) — a concealed-and-undetected
                 # target must be indistinguishable from a genuinely absent one.
