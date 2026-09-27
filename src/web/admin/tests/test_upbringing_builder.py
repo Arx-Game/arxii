@@ -1025,3 +1025,46 @@ class BuilderFieldWidthTest(BuilderStylingTest):
             f"no width rule reaches the page for: {missing}; those fields render at "
             f"admin's default width in this page's much wider column."
         )
+
+
+class AdminReachesTheBuilderTest(BuilderTestCase):
+    """The plain admin reaches the Upbringing builder (#4037).
+
+    Walks the path a staffer takes: the Upbringing's admin page, the builder link
+    on it, and the builder page it opens; and the bare builder URL, which used to
+    404 for a signed-in staffer.
+    """
+
+    def test_change_page_links_to_the_builder_and_the_link_opens_it(self):
+        self.client.force_login(self.author)
+        change_url = reverse("admin:arxii_origintemplate_change", args=[self.template.pk])
+        page = self.client.get(change_url)
+        assert page.status_code == 200
+        builder = reverse("admin_upbringing_builder", args=[self.template.pk])
+        assert f'href="{builder}"' in page.content.decode()
+        assert self.client.get(builder).status_code == 200
+
+    def test_changelist_links_each_upbringing_to_its_builder(self):
+        self.client.force_login(self.author)
+        page = self.client.get(reverse("admin:arxii_origintemplate_changelist"))
+        assert page.status_code == 200
+        builder = reverse("admin_upbringing_builder", args=[self.template.pk])
+        assert f'href="{builder}"' in page.content.decode()
+
+    def test_question_table_shows_each_question_kind(self):
+        self.client.force_login(self.author)
+        page = self.client.get(
+            reverse("admin:arxii_origintemplate_change", args=[self.template.pk])
+        )
+        content = page.content.decode()
+        assert "field-kind" in content
+        assert QuestionKind(self.q1.kind).label in content
+
+    def test_bare_builder_url_leads_to_the_builders_panel(self):
+        self.client.force_login(self.author)
+        response = self.client.get("/admin/_upbringing_builder/")
+        assert response.status_code == 302
+        assert response["Location"].startswith(reverse("admin_authoring"))
+        dashboard = self.client.get(response["Location"])
+        assert dashboard.status_code == 200
+        assert "Upbringing Builder" in dashboard.content.decode()

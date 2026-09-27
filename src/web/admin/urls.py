@@ -1,6 +1,7 @@
 """Admin URL configuration."""
 
 from django.urls import path
+from django.views.generic import RedirectView
 
 from web.admin import arx_admin_site
 from web.admin.authoring.views import (
@@ -188,6 +189,13 @@ urlpatterns = [
     path("_authoring/related/", authoring_related_fragment, name="admin_authoring_related"),
     path("_authoring/mentions/", authoring_mentions_fragment, name="admin_authoring_mentions"),
     path("_authoring/reference/", authoring_reference, name="admin_authoring_reference"),
+    # The bare address has no page of its own; send it to the Builders panel,
+    # which picks an Upbringing, rather than the admin catch-all 404 (#4037).
+    path(
+        "_upbringing_builder/",
+        RedirectView.as_view(pattern_name="admin_authoring", permanent=False),
+        name="admin_upbringing_builder_index",
+    ),
     path("_upbringing_builder/new/", upbringing_builder, name="admin_upbringing_builder_new"),
     path(
         "_upbringing_builder/pick/",
