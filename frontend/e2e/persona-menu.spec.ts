@@ -1,10 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
   mockRestRoutes,
+  reachReadySession,
   pushForeignPose,
   CHARACTER,
   NYX,
-  type Connection,
 } from './support/gameHarness';
 
 /**
@@ -22,69 +22,10 @@ import {
  *
  * FIXTURE-BACKED: REST is mocked via `page.route()` (both the game-entry
  * surface, via `mockRestRoutes`, and the two persona-menu-specific endpoints
- * this spec adds) and the game WebSocket via `page.routeWebSocket()`, the
- * same pattern every other spec in this directory uses.
- *
- * `reachReadyGameSession` below is a LOCAL stand-in for
- * `gameHarness.ts`'s own `reachReadySession()`, not that function reused:
- * `reachReadySession` asserts an intermediate "Waiting for location" state
- * between the socket opening and `room_state` landing, but
- * `useGameSocket.ts`'s readiness gating (`markConnectionReady`, since
- * #4007/#4015/#4028) now requires `room_state` itself
- * (`roomStateAccepted`) before `isConnected` ever flips true — so that
- * intermediate state no longer occurs, and `reachReadySession` times out
- * before ever sending `room_state`. This reproduces on every existing spec
- * that calls it (confirmed against the unmodified `feed-sentences.spec.ts`
- * in this same environment), so it is a pre-existing mismatch between the
- * shared fixture and current app behavior, not a #4030 regression and not
- * fixed here — `gameHarness.ts` is shared infra outside this task's file
- * scope (flagged for the coordinator / a follow-up). This local helper
- * reaches the identical "In world" ready state by sending `room_state`
- * immediately once the composer is enabled, skipping the assertion that no
- * longer holds; everything else (`mockRestRoutes`, `pushForeignPose`,
- * `CHARACTER`, `NYX`, the `Connection` shape) is reused as-is.
+ * this spec adds) and the game WebSocket via `gameHarness`'s
+ * `reachReadySession`/`pushForeignPose`, the same pattern every other spec
+ * in this directory uses.
  */
-async function reachReadyGameSession(page: Page): Promise<Connection[]> {
-  const connections: Connection[] = [];
-  await page.routeWebSocket('**', (route) => {
-    const connection: Connection = { route, sent: [] };
-    connections.push(connection);
-    route.onMessage((message) => connection.sent.push(String(message)));
-  });
-
-  await page.goto('/game');
-  const editor = page.getByRole('textbox');
-  await expect(editor).toBeEnabled();
-
-  connections[0].route.send(
-    JSON.stringify([
-      'room_state',
-      [],
-      {
-        room: { dbref: '#2', name: 'Quiet courtyard', description: 'Rain rests on the stones.' },
-        characters: [NYX],
-        objects: [],
-        exits: [],
-        scene: {
-          id: 1,
-          name: 'Evening in the courtyard',
-          description: '',
-          is_owner: false,
-          has_unseen_observer: false,
-        },
-      },
-    ])
-  );
-  connections[0].route.send(
-    JSON.stringify([
-      'puppet_changed',
-      [],
-      { session_id: 162, character_id: CHARACTER.character_id, character_name: CHARACTER.name },
-    ])
-  );
-  await expect(page.getByText('In world', { exact: true })).toBeVisible();
-  return connections;
-}
 
 const CHARACTER_ID = CHARACTER.character_id;
 const NYX_PERSONA_ID = 99; // The persona id gameHarness's pushForeignPose sends Nyx's poses as.
@@ -132,7 +73,7 @@ test.describe('PersonaMenu -> Look dialog (#4030)', () => {
   }) => {
     await mockRestRoutes(page);
     await mockPersonaMenuRoutes(page);
-    const [connection] = await reachReadyGameSession(page);
+    const [connection] = await reachReadySession(page);
     pushForeignPose(connection);
 
     const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
@@ -177,7 +118,7 @@ test.describe('PersonaMenu -> Look dialog (#4030)', () => {
   }) => {
     await mockRestRoutes(page);
     await mockPersonaMenuRoutes(page);
-    const [connection] = await reachReadyGameSession(page);
+    const [connection] = await reachReadySession(page);
     pushForeignPose(connection);
 
     const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });

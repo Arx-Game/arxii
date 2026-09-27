@@ -197,6 +197,15 @@ export async function reachReadySession(page: Page): Promise<Connection[]> {
   const editor = page.getByRole('textbox');
   await expect(editor).toBeEnabled();
   await expect(page.getByRole('heading', { name: 'Finding your place' })).toBeVisible();
+  // No intermediate "Waiting for location" assertion here (#4030 demo-
+  // fidelity review): useGameSocket.ts's readiness gating (markConnectionReady,
+  // since #4007/#4015/#4028) requires ALL THREE milestones -- puppetConfirmed,
+  // roomStateAccepted, reconciliationComplete -- before isConnected ever
+  // flips true, and roomStateAccepted only fires once a `room_state` frame
+  // has actually arrived. So "Waiting for location" (which needs isConnected
+  // true) cannot render before `room_state` is sent below; asserting it here
+  // used to time out waiting for a state the app can no longer reach at this
+  // point in the sequence.
 
   const initialRoomState = JSON.stringify([
     'room_state',
