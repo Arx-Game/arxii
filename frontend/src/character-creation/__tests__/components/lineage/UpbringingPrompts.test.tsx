@@ -45,6 +45,8 @@ const template: OriginTemplate = {
   allows_claim_family: false,
   allows_name_family: false,
   allows_no_family: true,
+  parentage: 'known',
+  parentage_note: '',
   claimable_kind_ids: [],
   family_templates: [],
   max_claim_tier: '',

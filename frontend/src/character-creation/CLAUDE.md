@@ -120,7 +120,15 @@ character-creation/
         │                         #   FamilyTemplateForm (name path), VacancyPicker
         │                         #   (claim path's kin Vacancies), ServicePanel (any
         │                         #   path's retainer Vacancies), InheritedFactsPanel
-        │                         #   (claim path)
+        │                         #   (claim path). Reads the Upbringing's `parentage`
+        │                         #   (#4024): `unknown` renders only the tarot ritual
+        │                         #   (under copy `tarot_no_parents_intro`) and Service,
+        │                         #   no family heading or parents card; `adoptive`
+        │                         #   heads the section `adoptive_family_heading` and
+        │                         #   titles the parents card "Your adoptive parents".
+        │                         #   Path labels are "An established family" / "Your
+        │                         #   own family" / "No family"; with the first two
+        │                         #   offered and none chosen, your own is open by default
         ├── FamilyTemplateForm.tsx # Aspect-pick + features form for a Family Template,
         │                         #   used by the name path (#3648); the claim path's
         │                         #   own charter form is

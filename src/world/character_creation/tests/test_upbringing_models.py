@@ -43,15 +43,27 @@ class UpbringingFieldsTest(TestCase):
         assert draft.resolve_family_path() == FamilyPath.NONE
 
     def test_resolve_family_path_needs_a_choice_when_several_are_allowed(self):
-        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=True)
+        template = OriginTemplateFactory(
+            allows_claim_family=True, allows_name_family=False, allows_no_family=True
+        )
         draft = CharacterDraftFactory(
             selected_beginnings=template.beginning, selected_origin_template=template
         )
         assert draft.resolve_family_path() == ""
-        draft.family_path = FamilyPath.NAMED
-        assert draft.resolve_family_path() == FamilyPath.NAMED
-        draft.family_path = FamilyPath.NONE  # not allowed by this template
+        draft.family_path = FamilyPath.CLAIMED
+        assert draft.resolve_family_path() == FamilyPath.CLAIMED
+        draft.family_path = FamilyPath.NAMED  # not allowed by this template
         assert draft.resolve_family_path() == ""
+
+    def test_established_or_own_defaults_to_your_own_family(self):
+        """#4024: with both offered, creating your own is where the page starts."""
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=True)
+        draft = CharacterDraftFactory(
+            selected_beginnings=template.beginning, selected_origin_template=template
+        )
+        assert draft.resolve_family_path() == FamilyPath.NAMED
+        draft.family_path = FamilyPath.CLAIMED
+        assert draft.resolve_family_path() == FamilyPath.CLAIMED
 
     def test_choice_rows_hang_off_a_prompt(self):
         slot = OriginTemplateSlotFactory(allows_text=False)

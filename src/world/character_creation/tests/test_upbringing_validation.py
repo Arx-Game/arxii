@@ -40,9 +40,19 @@ class LineagePathValidationTest(TestCase):
         assert get_lineage_errors(draft) == ["Choose your upbringing"]
 
     def test_several_paths_require_a_choice(self):
-        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=True)
+        template = OriginTemplateFactory(
+            allows_claim_family=True, allows_name_family=False, allows_no_family=True
+        )
         draft = _draft_for(template)
         assert "Choose how your family fits your upbringing" in get_lineage_errors(draft)
+
+    def test_established_or_own_needs_no_path_choice(self):
+        """#4024: your own family is the default, so only its own requirements show."""
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=True)
+        draft = _draft_for(template)
+        errors = get_lineage_errors(draft)
+        assert "Choose how your family fits your upbringing" not in errors
+        assert "Name your family" in errors
 
     def test_named_path_needs_a_name(self):
         draft = _draft_for(OriginTemplateFactory())  # name-only path

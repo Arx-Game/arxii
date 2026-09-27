@@ -277,6 +277,8 @@ function buildDraft() {
       allows_claim_family: true,
       allows_name_family: false,
       allows_no_family: false,
+      parentage: 'known',
+      parentage_note: '',
       claimable_kind_ids: [] as number[],
       family_templates: [] as unknown[],
       slots: [] as unknown[],

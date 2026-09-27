@@ -209,6 +209,20 @@ class FamilyPath(models.TextChoices):
     NONE = "none", "No family"
 
 
+class Parentage(models.TextChoices):
+    """Who raised a character with this Upbringing, and how CG frames it (#4024).
+
+    ``UNKNOWN`` (the Misbegotten raised in the Cradle) offers no family and records
+    no parents; the tarot ritual gives the surname. ``ADOPTIVE`` offers a family
+    framed as adoptive: parent links are ADOPTIVE and the membership is ADOPTED, so
+    the name display wears the family's taken-in particle (#3261).
+    """
+
+    KNOWN = "known", "Known parents"
+    UNKNOWN = "unknown", "No known parents"
+    ADOPTIVE = "adoptive", "Adoptive parents"
+
+
 class QuestionKind(models.TextChoices):
     """What kind of thing an Upbringing prompt asks for (#3660).
 

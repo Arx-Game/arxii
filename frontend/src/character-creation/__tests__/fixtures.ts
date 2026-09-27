@@ -187,6 +187,8 @@ export const mockUpbringingNamed: OriginTemplate = {
   allows_claim_family: false,
   allows_name_family: true,
   allows_no_family: false,
+  parentage: 'known',
+  parentage_note: '',
   claimable_kind_ids: [],
   family_templates: [],
   slots: [
@@ -223,6 +225,8 @@ export const mockUpbringingClaim: OriginTemplate = {
   allows_claim_family: true,
   allows_name_family: false,
   allows_no_family: false,
+  parentage: 'known',
+  parentage_note: '',
   claimable_kind_ids: [2],
   family_templates: [],
   slots: [
@@ -278,6 +282,8 @@ export const mockUpbringingUnknown: OriginTemplate = {
   allows_claim_family: false,
   allows_name_family: false,
   allows_no_family: true,
+  parentage: 'known',
+  parentage_note: '',
   claimable_kind_ids: [],
   family_templates: [],
   slots: [],
@@ -295,6 +301,8 @@ export const mockUpbringingMultiPath: OriginTemplate = {
   allows_claim_family: true,
   allows_name_family: true,
   allows_no_family: false,
+  parentage: 'known',
+  parentage_note: '',
   claimable_kind_ids: [2],
   family_templates: [],
   slots: [
@@ -356,6 +364,8 @@ export const mockUpbringingConnections: OriginTemplate = {
   allows_claim_family: false,
   allows_name_family: false,
   allows_no_family: true,
+  parentage: 'known',
+  parentage_note: '',
   claimable_kind_ids: [],
   family_templates: [],
   slots: [
@@ -490,6 +500,8 @@ export const mockUpbringingOwnFamilyGroup: OriginTemplate = {
   allows_claim_family: true,
   allows_name_family: false,
   allows_no_family: false,
+  parentage: 'known',
+  parentage_note: '',
   claimable_kind_ids: [],
   family_templates: [],
   slots: [
