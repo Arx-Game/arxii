@@ -19,6 +19,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
+from actions.target_resolution import resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetFilters, TargetType
 
 _CHALLENGE_TARGET_FILTERS = TargetFilters(in_same_scene=True, exclude_self=True)
@@ -49,12 +50,7 @@ def _resolve_challenge_target(target: object) -> ObjectDB | None:
 
     if target is None or isinstance(target, ObjectDB):
         return target
-    from world.scenes.models import Persona  # noqa: PLC0415
-
-    persona = Persona.objects.filter(pk=target).select_related("character_sheet__character").first()
-    if persona is None:
-        return None
-    return persona.character_sheet.character
+    return resolve_persona_pk_to_character(target)
 
 
 def _active_tenure(sheet: CharacterSheet) -> object | None:

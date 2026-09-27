@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
 from actions.prerequisites import Prerequisite, resolve_actor_sheet
+from actions.target_resolution import resolve_persona_pk_to_character
 from actions.types import ActionResult, TargetFilters, TargetType
 
 if TYPE_CHECKING:
@@ -51,16 +52,6 @@ if TYPE_CHECKING:
 _NO_TARGET_MESSAGE = "Identify whom?"
 _NOT_PRESENT_MESSAGE = "They aren't here."
 _NOTHING_TO_SEE_MESSAGE = "Their face is their own; there is no mask to see through."
-
-
-def _resolve_persona_pk_to_character(persona_id: Any) -> ObjectDB | None:
-    """Resolve a ``Persona`` pk to its owning character ``ObjectDB``, or ``None``."""
-    from world.scenes.models import Persona  # noqa: PLC0415
-
-    persona = Persona.objects.filter(pk=persona_id).select_related("character_sheet").first()
-    if persona is None:
-        return None
-    return persona.character_sheet.character
 
 
 def _resolve_identify_target(kwargs: dict[str, Any]) -> ObjectDB | None:
@@ -81,7 +72,8 @@ def _resolve_identify_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     REST dispatch (``dispatch_player_action`` -> ``_dispatch_registry``) does no ``ObjectDB``
     resolution of its own; ``objectdb_target_kwargs`` only helps the *websocket* inputfunc, and
     only for wire keys it's told about. Resolve defensively here so every dispatch shape works,
-    shared by the prerequisite gate and ``execute()``.
+    shared by the prerequisite gate and ``execute()``. Persona resolution is
+    ``actions.target_resolution``, shared with Look and Challenge.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
@@ -89,12 +81,12 @@ def _resolve_identify_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     if isinstance(target, ObjectDB):
         return target
     if target is not None:
-        return _resolve_persona_pk_to_character(target)
+        return resolve_persona_pk_to_character(target)
 
     persona_id = kwargs.get("target_persona_id")
     if persona_id is None:
         return None
-    return _resolve_persona_pk_to_character(persona_id)
+    return resolve_persona_pk_to_character(persona_id)
 
 
 def _presented_fake_persona(target_obj: ObjectDB) -> Persona | None:

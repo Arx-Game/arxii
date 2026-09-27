@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
+from actions.target_resolution import resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 
@@ -19,21 +20,21 @@ _LOOK_AT_WHAT_MESSAGE = "Look at what?"
 
 
 def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
-    """Resolve the look target from either dispatch shape (#3044).
+    """Resolve the look target from any dispatch shape (#3044, #4030).
 
-    Telnet passes an already-resolved ``target`` ``ObjectDB`` directly. The
-    web room-objects panel's examine-on-click affordance sends a raw ``target``
-    kwarg holding the object's pk (an ``int``) — REST dispatch
-    (``dispatch_player_action`` -> ``_dispatch_registry``) does no ``ObjectDB``
-    resolution of its own; ``objectdb_target_kwargs`` only helps the *websocket*
-    inputfunc. Resolve defensively here so both dispatch shapes work, mirroring
-    ``_resolve_identify_target`` (``actions/definitions/identification.py``) and
-    ``_resolve_room`` (``actions/definitions/locations.py``).
+    - Telnet passes an already-resolved ``target`` ``ObjectDB``.
+    - The web room-objects panel sends ``target`` as an object pk (an ``int``).
+    - The web persona menu sends ``target_persona_id`` (a ``Persona`` pk); it resolves
+      to the character underneath through ``actions.target_resolution``. The perception
+      gate and masked-name rendering in ``execute()`` still apply unchanged.
+    REST dispatch does no ``ObjectDB`` resolution of its own, so resolve here.
     """
     target = kwargs.get("target")
-    if target is None or isinstance(target, ObjectDB):
+    if isinstance(target, ObjectDB):
         return target
-    return ObjectDB.objects.filter(pk=target).first()
+    if target is not None:
+        return ObjectDB.objects.filter(pk=target).first()
+    return resolve_persona_pk_to_character(kwargs.get("target_persona_id"))
 
 
 @dataclass
