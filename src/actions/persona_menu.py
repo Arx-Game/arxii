@@ -75,19 +75,22 @@ def build_persona_menu(actor: ObjectDB, persona: Persona) -> PersonaMenu:
     scene = _shared_scene(actor, target)
     items = [
         look,
-        _registry_item(
-            actor,
-            "identify",
-            "Identify",
-            PersonaMenuGroupKey.PERCEPTION,
-            {"target_persona_id": persona.pk},
-        ),
+        # #4030 fix wave (demo-order controller ruling): Identify sits with Challenge
+        # in the conflict group, right after it -- Look | Challenge, Identify | scene
+        # items | Mute, Block. Its own availability/reason is unchanged.
         _registry_item(
             actor,
             "challenge",
             "Challenge to a duel",
             PersonaMenuGroupKey.CONFLICT,
             {"target": persona.pk},
+        ),
+        _registry_item(
+            actor,
+            "identify",
+            "Identify",
+            PersonaMenuGroupKey.CONFLICT,
+            {"target_persona_id": persona.pk},
         ),
     ]
     scene_actions = []

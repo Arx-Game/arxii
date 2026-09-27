@@ -145,6 +145,8 @@ class CharacterState(BaseState):
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
+            # A sheet with no persona at all has no mask to protect -- reveal, matching
+            # ``_presented_persona_name`` above, which falls back the same way (#4030 review).
             return True
         if isinstance(looker, CharacterState):
             viewer_persona_ids, viewer_sheet_ids = looker._viewer_persona_context()  # noqa: SLF001

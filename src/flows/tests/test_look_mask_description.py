@@ -9,8 +9,9 @@ from actions.registry import get_action
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from evennia_extensions.models import PlayerData
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
-from world.scenes.factories import PersonaDiscoveryFactory
-from world.scenes.services import create_mask
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaDiscoveryFactory, PersonaFactory
+from world.scenes.services import create_mask, set_active_persona
 
 REAL_DESC = "A tall woman with a crescent scar across her left cheek."
 
@@ -70,3 +71,69 @@ class LookMaskDescriptionTests(django.test.TestCase):
         self.viewer.db_account = staff
         self.viewer.save()
         assert REAL_DESC in self._look().message
+
+    def test_established_active_persona_hides_description_from_a_stranger(self) -> None:
+        # A named (non-fake-name) ESTABLISHED persona still hides the link to the
+        # real character from a stranger -- ``identity_revealed_to_viewer`` only
+        # reveals a non-fake-name persona when it is PRIMARY (#4030 review).
+        established = PersonaFactory(
+            character_sheet=self.target_sheet,
+            persona_type=PersonaType.ESTABLISHED,
+            is_fake_name=False,
+        )
+        set_active_persona(self.target_sheet, established)
+        assert REAL_DESC not in self._look().message
+
+    def test_established_active_persona_shows_description_to_owner_and_staff(self) -> None:
+        established = PersonaFactory(
+            character_sheet=self.target_sheet,
+            persona_type=PersonaType.ESTABLISHED,
+            is_fake_name=False,
+        )
+        set_active_persona(self.target_sheet, established)
+        result = get_action("look").run(self.target, target=self.target)
+        assert REAL_DESC in result.message
+
+        staff = AccountFactory(is_staff=True)
+        self.viewer.db_account = staff
+        self.viewer.save()
+        assert REAL_DESC in self._look().message
+
+    def test_alternate_active_persona_hides_description_from_a_stranger(self) -> None:
+        alternate = PersonaFactory(
+            character_sheet=self.target_sheet,
+            persona_type=PersonaType.ALTERNATE,
+            is_fake_name=False,
+        )
+        set_active_persona(self.target_sheet, alternate)
+        assert REAL_DESC not in self._look().message
+
+    def test_alternate_active_persona_shows_description_to_owner_and_staff(self) -> None:
+        alternate = PersonaFactory(
+            character_sheet=self.target_sheet,
+            persona_type=PersonaType.ALTERNATE,
+            is_fake_name=False,
+        )
+        set_active_persona(self.target_sheet, alternate)
+        result = get_action("look").run(self.target, target=self.target)
+        assert REAL_DESC in result.message
+
+        staff = AccountFactory(is_staff=True)
+        self.viewer.db_account = staff
+        self.viewer.save()
+        assert REAL_DESC in self._look().message
+
+    def test_sheet_with_no_persona_shows_description_without_raising(self) -> None:
+        # ``CharacterState._identity_revealed_to``'s ``except Persona.DoesNotExist:
+        # return True`` branch (#4030 review, controller ruling: keep behaviour) --
+        # a sheet with no persona at all has no mask to protect, matching
+        # ``_presented_persona_name``/``_resolve_presented_identity``.
+        no_persona_roster = RosterEntryFactory(character_sheet__primary_persona=False)
+        no_persona_sheet = no_persona_roster.character_sheet
+        no_persona_target = no_persona_sheet.character
+        no_persona_target.move_to(self.viewer.location, quiet=True)
+        no_persona_sheet.additional_desc = REAL_DESC
+        no_persona_sheet.save(update_fields=["additional_desc"])
+
+        result = get_action("look").run(self.viewer, target=no_persona_target)
+        assert REAL_DESC in result.message

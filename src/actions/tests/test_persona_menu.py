@@ -60,11 +60,13 @@ class PersonaMenuServiceTests(django.test.TestCase):
         assert menu.notice == SELF_NOTICE
         assert [g.key for g in menu.groups] == [PersonaMenuGroupKey.PERCEPTION]
 
-    def test_quiet_room_lists_look_identify_challenge_mute_block_and_scene_empty_state(
+    def test_quiet_room_lists_look_challenge_identify_mute_block_and_scene_empty_state(
         self,
     ) -> None:
+        # Demo order (#4030 fix wave): Identify sits with Challenge in the conflict
+        # group, right after it.
         menu = build_persona_menu(self.viewer, self.persona)
-        assert [i.key for i in menu.items] == ["look", "identify", "challenge", "mute", "block"]
+        assert [i.key for i in menu.items] == ["look", "challenge", "identify", "mute", "block"]
         scene_group = next(g for g in menu.groups if g.key == PersonaMenuGroupKey.SCENE)
         assert scene_group.empty_state == SCENE_EMPTY_STATE
         assert menu.scene is None
@@ -127,7 +129,7 @@ class PersonaMenuServiceTests(django.test.TestCase):
     def test_shared_scene_adds_scene_items_and_clears_the_empty_state(self) -> None:
         SceneFactory(location=self.room, is_active=True)
         keys = [i.key for i in build_persona_menu(self.viewer, self.persona).items]
-        assert keys[:3] == ["look", "identify", "challenge"]
+        assert keys[:3] == ["look", "challenge", "identify"]
         assert {"scene_succor", "scene_interpose", "treat"} <= set(keys)
         assert "give_mission" not in keys
 

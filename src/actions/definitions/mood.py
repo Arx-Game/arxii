@@ -30,6 +30,7 @@ from actions.prerequisites import (
     Prerequisite,
     resolve_actor_sheet,
 )
+from actions.target_resolution import resolve_persona_pk_to_character
 from actions.types import ActionResult, TargetFilters, TargetType
 
 if TYPE_CHECKING:
@@ -111,21 +112,9 @@ def _resolve_mood_sense_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     if isinstance(target, ObjectDB):
         return target
     if target is not None:
-        return _resolve_persona_pk_to_character(target)
+        return resolve_persona_pk_to_character(target)
 
-    persona_id = kwargs.get("target_persona_id")
-    if persona_id is None:
-        return None
-    return _resolve_persona_pk_to_character(persona_id)
-
-
-def _resolve_persona_pk_to_character(persona_id: Any) -> ObjectDB | None:
-    from world.scenes.models import Persona  # noqa: PLC0415
-
-    persona = Persona.objects.filter(pk=persona_id).select_related("character_sheet").first()
-    if persona is None:
-        return None
-    return persona.character_sheet.character
+    return resolve_persona_pk_to_character(kwargs.get("target_persona_id"))
 
 
 @dataclass
