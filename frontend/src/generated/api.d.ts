@@ -398,6 +398,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/actions/characters/{character_id}/personas/{persona_id}/menu/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The persona menu (#4030): what this character can do to one persona, and why not.
+     *
+     *     A single bounded read that wraps no model's CRUD, so it is an ``APIView``; the
+     *     ViewSet filter/pagination rules have no queryset to apply to.
+     */
+    get: operations['actions_characters_personas_menu_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/aggregate-beat-contributions/': {
     parameters: {
       query?: never;
@@ -31579,6 +31601,14 @@ export interface components {
       is_paused: boolean;
       track: components['schemas']['TrackView'] | null;
     };
+    /**
+     * @description * `perception` - Perception
+     *     * `conflict` - Conflict
+     *     * `scene` - Scene
+     *     * `social` - Social
+     * @enum {string}
+     */
+    GroupEnum: 'perception' | 'conflict' | 'scene' | 'social';
     /** @description POST body for the #1036 group-pick endpoint. */
     GroupPickRequestRequest: {
       option_id: number;
@@ -32880,6 +32910,14 @@ export interface components {
       can_tell_tale: boolean;
       readonly last_unseen_count: number;
     };
+    /**
+     * @description * `perception` - Perception
+     *     * `conflict` - Conflict
+     *     * `scene` - Scene
+     *     * `social` - Social
+     * @enum {string}
+     */
+    KeyEnum: 'perception' | 'conflict' | 'scene' | 'social';
     /**
      * @description Response for GET /api/roster/kin/relationship/ (#3003).
      *
@@ -41627,6 +41665,28 @@ export interface components {
       readonly tier_label: string;
       readonly alleged_deeds: string[];
     };
+    /** @description The persona menu for one viewer and one target persona (#4030). */
+    PersonaMenu: {
+      persona_id: number;
+      is_self: boolean;
+      readonly scene_id: number | null;
+      readonly viewer_persona_id: number | null;
+      notice: string;
+      items: components['schemas']['PersonaMenuItem'][];
+      groups: components['schemas']['PersonaMenuGroup'][];
+      scene_actions: components['schemas']['PlayerAction'][];
+    };
+    PersonaMenuGroup: {
+      key: components['schemas']['KeyEnum'];
+      empty_state: string;
+    };
+    PersonaMenuItem: {
+      key: string;
+      label: string;
+      group: components['schemas']['GroupEnum'];
+      available: boolean;
+      reason: string;
+    };
     /** @description A scene persona and the Position it currently occupies (or null). */
     PersonaPosition: {
       readonly persona_id: number;
@@ -49084,6 +49144,28 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  actions_characters_personas_menu_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+        persona_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PersonaMenu'];
+        };
       };
     };
   };
