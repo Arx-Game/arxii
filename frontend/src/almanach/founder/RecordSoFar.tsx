@@ -60,102 +60,89 @@ export interface RecordSoFarProps {
   estateText?: string;
 }
 
-export function RecordSoFar({
-  draft,
-  seatName,
-  swornTo,
-  quiddityName,
-  features,
-  youName,
-  step,
-  landText,
-  estateText,
-}: RecordSoFarProps) {
-  const entries: { q: string; text: string }[] = [];
-  const todos: string[] = [];
+type RecordEntry = { q: string; text: string };
+type RecordSummary = { entries: RecordEntry[]; todos: string[] };
 
+function addSeatAndHouse(summary: RecordSummary, props: RecordSoFarProps): void {
+  const { draft, seatName, swornTo, quiddityName, step } = props;
   if (seatName !== '') {
-    entries.push({
+    summary.entries.push({
       q: 'seat',
       text: swornTo !== '' ? `${seatName} · sworn to ${swornTo}` : seatName,
     });
-  } else {
-    todos.push('the seat');
-  }
+  } else summary.todos.push('the seat');
 
-  // Plate F-II (the House step itself) keeps "house"/"quiddity" as two
-  // rows; plate F-III on combines them into one settled "Candela · the
-  // Veiled" line (see the module doc comment).
-  const combineHouseAndQuiddity = step != null && step !== 'seat' && step !== 'house';
+  const combine = step != null && step !== 'seat' && step !== 'house';
   if (draft.house_name !== '') {
-    entries.push({
+    summary.entries.push({
       q: 'house',
       text:
-        combineHouseAndQuiddity && quiddityName != null
+        combine && quiddityName != null
           ? `${draft.house_name} · ${quiddityName}`
           : draft.house_name,
     });
-  } else {
-    todos.push('the house');
-  }
-
-  if (quiddityName != null && !combineHouseAndQuiddity) {
-    entries.push({ q: 'quiddity', text: quiddityName });
-  }
-
+  } else summary.todos.push('the house');
+  if (quiddityName != null && !combine) summary.entries.push({ q: 'quiddity', text: quiddityName });
   if (
     draft.house_name !== '' &&
     (draft.words === '' || draft.colors === '' || draft.sigil_description === '')
   ) {
-    todos.push('words, colors, sigil');
+    summary.todos.push('words, colors, sigil');
   }
+}
 
+function addFamilySummary(summary: RecordSummary, props: RecordSoFarProps): void {
+  const { draft, youName } = props;
   const head = draft.kin.find((kin) => kin.relation === 'head');
-  if (head) {
-    entries.push({ q: 'head', text: head.name });
-  } else {
-    todos.push('the family');
-  }
+  if (head) summary.entries.push({ q: 'head', text: head.name });
+  else summary.todos.push('the family');
+  if (youName == null) return;
+  let place = draft.founder_is_heir ? 'heir' : 'younger';
+  if (draft.founder_relation === 'head') place = 'head of house';
+  summary.entries.push({ q: 'you', text: `${youName} · ${place}` });
+}
 
-  if (youName != null) {
-    let place = draft.founder_is_heir ? 'heir' : 'younger';
-    if (draft.founder_relation === 'head') {
-      place = 'head of house';
-    }
-    entries.push({ q: 'you', text: `${youName} · ${place}` });
-  }
-
-  if (landText != null) {
-    entries.push({ q: 'the land', text: landText });
-  } else {
-    const landCount = Object.keys(draft.lands).length;
-    if (landCount > 0) {
-      entries.push({
+function addLandAndEstateSummary(summary: RecordSummary, props: RecordSoFarProps): void {
+  const { draft, landText, estateText } = props;
+  if (landText != null) summary.entries.push({ q: 'the land', text: landText });
+  else {
+    const count = Object.keys(draft.lands).length;
+    if (count > 0)
+      summary.entries.push({
         q: 'the land',
-        text: `${landCount} ${landCount === 1 ? 'holding' : 'holdings'}`,
+        text: `${count} ${count === 1 ? 'holding' : 'holdings'}`,
       });
-    } else {
-      todos.push('the land');
-    }
+    else summary.todos.push('the land');
   }
+  if (estateText != null) summary.entries.push({ q: 'the estate', text: estateText });
+  else if (draft.estate_name !== '')
+    summary.entries.push({ q: 'the estate', text: draft.estate_name });
+  else summary.todos.push('the estate');
+}
 
-  if (estateText != null) {
-    entries.push({ q: 'the estate', text: estateText });
-  } else if (draft.estate_name !== '') {
-    entries.push({ q: 'the estate', text: draft.estate_name });
-  } else {
-    todos.push('the estate');
-  }
-
-  // Plate F-III's "linked houses" `<dl>` — every kin born into a house
-  // other than the one being founded, grouped by that house's name.
-  const linkedHouses = new Map<string, string[]>();
+function linkedHousesOf(draft: FounderDraft): Map<string, string[]> {
+  const linked = new Map<string, string[]>();
   for (const kin of draft.kin) {
     if (kin.born_into_name === '') continue;
-    const list = linkedHouses.get(kin.born_into_name) ?? [];
-    list.push(kin.name);
-    linkedHouses.set(kin.born_into_name, list);
+    const names = linked.get(kin.born_into_name) ?? [];
+    names.push(kin.name);
+    linked.set(kin.born_into_name, names);
   }
+  return linked;
+}
+
+function summaryOf(props: RecordSoFarProps): RecordSummary {
+  const summary: RecordSummary = { entries: [], todos: [] };
+  addSeatAndHouse(summary, props);
+  addFamilySummary(summary, props);
+  addLandAndEstateSummary(summary, props);
+  return summary;
+}
+
+export function RecordSoFar(props: RecordSoFarProps) {
+  const { draft, features } = props;
+  const { entries, todos } = summaryOf(props);
+  const linkedHouses = linkedHousesOf(draft);
 
   return (
     <aside className="record">

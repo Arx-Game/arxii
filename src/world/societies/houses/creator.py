@@ -262,7 +262,7 @@ def _validate_stylings(*, words: str, colors: str, sigil_description: str) -> No
 _FOUNDER_NEEDS_HEAD = (ClaimKinRelation.CHILD, ClaimKinRelation.SIBLING, ClaimKinRelation.SPOUSE)
 
 
-def _validate_kin_and_lands(  # noqa: C901, PLR0912, PLR0913 — one gate per rule, keyword-only
+def _validate_kin_and_lands(  # noqa: PLR0913 — one gate per rule, keyword-only
     *,
     draft: CharacterDraft,
     title: Title,
@@ -286,10 +286,13 @@ def _validate_kin_and_lands(  # noqa: C901, PLR0912, PLR0913 — one gate per ru
     if founder_relation == ClaimKinRelation.POSITION:
         msg = "founder placed as a household position"
         raise HousesServiceError(msg, user_message="A position is a post, not a person.")
-    # A household row titles its own Vacancy, and ``Vacancy`` is unique on
-    # (organization, name): an unnamed ward or post has nothing to title it
-    # with, and a second one would silently take the first's row (#3983
-    # ruling I2). Family rows may stay nameless — those are app-in slots.
+    _validate_household_rows(kin)
+    _validate_claim_granted_lands(title=title, lands=lands)
+    _validate_estate_realm(draft=draft, estate_name=estate_name)
+
+
+def _validate_household_rows(kin: list[ClaimKinDraft]) -> None:
+    """Require titles for household rows and a parent before grandparents."""
     for row in kin:
         if row.relation in (ClaimKinRelation.WARD, ClaimKinRelation.POSITION) and not row.name:
             msg = f"household row of relation {row.relation} has no name"
@@ -302,26 +305,35 @@ def _validate_kin_and_lands(  # noqa: C901, PLR0912, PLR0913 — one gate per ru
     if any(row.relation == ClaimKinRelation.GRANDPARENT for row in kin) and not has_parent:
         msg = "grandparent row without a mother or father row"
         raise HousesServiceError(msg, user_message="A grandparent needs a parent written in first.")
-    if lands:
-        if title.seat_domain_id is None:
-            msg = f"lands given for landless title {title.pk}"
-            raise HousesServiceError(msg, user_message="That title has no land to describe.")
-        grants_by_pk = {t.pk: t for t in claim_grants(title)}
-        named: set[str] = set()
-        for land in lands:
-            granted = grants_by_pk.get(land.title_id)
-            if granted is None:
-                msg = f"land row for title {land.title_id} is not part of this claim's grant"
-                raise HousesServiceError(msg, user_message="That land is not part of this claim.")
-            if not granted.name and not land.land_name:
-                msg = f"undefined title {granted.pk} needs a land_name"
-                raise HousesServiceError(msg, user_message="Name that land before describing it.")
-            effective_name = land.land_name or granted.name
-            if land.hall_name and land.hall_name.strip().lower() == effective_name.strip().lower():
-                msg = f"hall name repeats land name for title {granted.pk}"
-                raise HousesServiceError(msg, user_message="The hall needs a name of its own.")
-            if land.land_name and not granted.name:
-                _refuse_taken_land_name(land.land_name, already_named=named)
+
+
+def _validate_claim_granted_lands(*, title: Title, lands: list[ClaimLandDraft]) -> None:
+    """Check land writing against the title's grant and existing names."""
+    if not lands:
+        return
+    if title.seat_domain_id is None:
+        msg = f"lands given for landless title {title.pk}"
+        raise HousesServiceError(msg, user_message="That title has no land to describe.")
+    grants_by_pk = {t.pk: t for t in claim_grants(title)}
+    named: set[str] = set()
+    for land in lands:
+        granted = grants_by_pk.get(land.title_id)
+        if granted is None:
+            msg = f"land row for title {land.title_id} is not part of this claim's grant"
+            raise HousesServiceError(msg, user_message="That land is not part of this claim.")
+        if not granted.name and not land.land_name:
+            msg = f"undefined title {granted.pk} needs a land_name"
+            raise HousesServiceError(msg, user_message="Name that land before describing it.")
+        effective_name = land.land_name or granted.name
+        if land.hall_name and land.hall_name.strip().lower() == effective_name.strip().lower():
+            msg = f"hall name repeats land name for title {granted.pk}"
+            raise HousesServiceError(msg, user_message="The hall needs a name of its own.")
+        if land.land_name and not granted.name:
+            _refuse_taken_land_name(land.land_name, already_named=named)
+
+
+def _validate_estate_realm(*, draft: CharacterDraft, estate_name: str) -> None:
+    """Require a capital in the draft's realm before accepting an estate."""
     if estate_name:
         realm = draft.selected_area.realm if draft.selected_area_id else None
         if realm is None or not Area.objects.filter(realm=realm, is_capital=True).exists():
@@ -582,6 +594,139 @@ def _place_claim_row(*, org: Organization, row: HouseClaimKin, **kin_kwargs) -> 
     return node
 
 
+def _materialize_claim_kin(
+    *, claim: HouseClaim, org: Organization, sheet: CharacterSheet, marriage_kind: UnionKind | None
+) -> Kinsperson:
+    """Place claim-authored relatives and founder around the house head."""
+    from world.roster.services.kinship import ensure_node_for_sheet  # noqa: PLC0415
+
+    rows = list(claim.kin.select_related("gender", "born_into"))
+    by_relation: dict[str, list[HouseClaimKin]] = {}
+    for row in rows:
+        by_relation.setdefault(row.relation, []).append(row)
+    founder = ensure_node_for_sheet(sheet, family=None)
+    head_row = next(iter(by_relation.get(ClaimKinRelation.HEAD, ())), None)
+    if claim.founder_relation == ClaimKinRelation.HEAD:
+        head_node, _vacancy = record_kin(
+            house=org, name="", relation=ClaimKinRelation.HEAD, node=founder
+        )
+    else:
+        head_node = _place_claim_row(org=org, row=head_row)
+    relatives = _place_claim_relatives(
+        org=org, by_relation=by_relation, head_node=head_node, marriage_kind=marriage_kind
+    )
+    _place_claim_founder(
+        claim=claim,
+        org=org,
+        founder=founder,
+        head_node=head_node,
+        head_parents=relatives["head_parents"],
+        spouse_node=relatives["spouse_node"],
+        mother_node=relatives["mother_node"],
+        father_node=relatives["father_node"],
+        marriage_kind=marriage_kind,
+    )
+    return head_node
+
+
+def _place_claim_relatives(*, org, by_relation, head_node, marriage_kind):
+    """Place the non-founder relatives attached to a claim's house head."""
+    mother_node = father_node = None
+    for row in by_relation.get(ClaimKinRelation.MOTHER, ()):
+        mother_node = _place_claim_row(org=org, row=row, child=head_node)
+    for row in by_relation.get(ClaimKinRelation.FATHER, ()):
+        father_node = _place_claim_row(org=org, row=row, child=head_node)
+    for row in by_relation.get(ClaimKinRelation.GRANDPARENT, ()):
+        _place_claim_row(org=org, row=row, child=mother_node or father_node)
+    spouse_node = None
+    for row in by_relation.get(ClaimKinRelation.SPOUSE, ()):
+        spouse_node = _place_claim_row(
+            org=org, row=row, spouse=head_node, marriage_kind=marriage_kind
+        )
+    head_parents = [p for p in (mother_node, father_node) if p is not None]
+    for row in by_relation.get(ClaimKinRelation.SIBLING, ()):
+        _place_claim_row(org=org, row=row, parents=head_parents)
+    for row in by_relation.get(ClaimKinRelation.CHILD, ()):
+        _place_claim_row(
+            org=org, row=row, parent=head_node, parents=[spouse_node] if spouse_node else ()
+        )
+    for row in by_relation.get(ClaimKinRelation.WARD, ()):
+        _place_claim_row(org=org, row=row)
+    for row in by_relation.get(ClaimKinRelation.POSITION, ()):
+        open_household_position(house=org, position=row.name)
+    return {
+        "mother_node": mother_node,
+        "father_node": father_node,
+        "spouse_node": spouse_node,
+        "head_parents": head_parents,
+    }
+
+
+def _place_claim_founder(  # noqa: PLR0913 — kin context fields
+    *,
+    claim,
+    org,
+    founder,
+    head_node,
+    head_parents,
+    spouse_node,
+    mother_node,
+    father_node,
+    marriage_kind,
+):
+    """Connect and record the founder using the relation chosen in the claim."""
+    if claim.founder_relation == ClaimKinRelation.CHILD:
+        record_kin(
+            house=org,
+            name="",
+            relation=ClaimKinRelation.CHILD,
+            node=founder,
+            parent=head_node,
+            parents=[spouse_node] if spouse_node else (),
+            basis=MembershipBasis.BORN,
+        )
+    elif claim.founder_relation == ClaimKinRelation.SIBLING:
+        record_kin(
+            house=org,
+            name="",
+            relation=ClaimKinRelation.SIBLING,
+            node=founder,
+            parents=head_parents,
+            basis=MembershipBasis.BORN,
+        )
+    elif claim.founder_relation == ClaimKinRelation.SPOUSE:
+        record_kin(
+            house=org,
+            name="",
+            relation=ClaimKinRelation.SPOUSE,
+            node=founder,
+            spouse=head_node,
+            marriage_kind=marriage_kind,
+        )
+    elif claim.founder_relation in (ClaimKinRelation.MOTHER, ClaimKinRelation.FATHER):
+        record_kin(
+            house=org,
+            name="",
+            relation=claim.founder_relation,
+            node=founder,
+            child=head_node,
+            basis=MembershipBasis.BORN,
+        )
+    elif claim.founder_relation == ClaimKinRelation.GRANDPARENT:
+        record_kin(
+            house=org,
+            name="",
+            relation=ClaimKinRelation.GRANDPARENT,
+            node=founder,
+            child=mother_node or father_node,
+            basis=MembershipBasis.BORN,
+        )
+    elif claim.founder_relation == ClaimKinRelation.WARD:
+        record_kin(
+            house=org, name="", relation=ClaimKinRelation.WARD, node=founder, is_household=True
+        )
+
+
 @transaction.atomic
 def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-line finalize sequence
     claim: HouseClaim, *, sheet: CharacterSheet
@@ -601,8 +746,6 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
     law-level concept), so nothing here writes it anywhere (#3983 Plan B
     ruling).
     """
-    from world.roster.services.kinship import ensure_node_for_sheet  # noqa: PLC0415
-
     if claim.status != HouseClaimStatus.APPROVED:
         msg = f"claim {claim.pk} is not approved"
         raise HousesServiceError(msg, user_message="That house is not approved.")
@@ -710,116 +853,9 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
     top.is_claimable = False
     top.save(update_fields=["house", "is_claimable"])
 
-    # Kin, relative to the head of house (#3983 Plan B). ``family=None``:
-    # the founder's own membership is written by whichever placement below
-    # actually applies (HEAD/CHILD/etc.) — pre-seeding it here would make
-    # the family non-empty before the head-of-house row is even placed
-    # (wrong FOUNDING/BORN call) and would pre-set the founder's own
-    # ``family`` FK, which makes the CHILD-relation fallback
-    # (``acknowledge_into_family``) refuse outright.
-    rows = list(claim.kin.select_related("gender", "born_into"))
-    by_relation: dict[str, list[HouseClaimKin]] = {}
-    for row in rows:
-        by_relation.setdefault(row.relation, []).append(row)
-    founder = ensure_node_for_sheet(sheet, family=None)
-
-    # The founder_relation != HEAD case is guaranteed a head_row by the gate
-    # at the top of this function (before the first mutation).
-    head_row = next(iter(by_relation.get(ClaimKinRelation.HEAD, ())), None)
-    if claim.founder_relation == ClaimKinRelation.HEAD:
-        head_node, _vacancy = record_kin(
-            house=org, name="", relation=ClaimKinRelation.HEAD, node=founder
-        )
-    else:
-        head_node = _place_claim_row(org=org, row=head_row)
-
-    mother_node = father_node = None
-    for row in by_relation.get(ClaimKinRelation.MOTHER, ()):
-        mother_node = _place_claim_row(org=org, row=row, child=head_node)
-    for row in by_relation.get(ClaimKinRelation.FATHER, ()):
-        father_node = _place_claim_row(org=org, row=row, child=head_node)
-    for row in by_relation.get(ClaimKinRelation.GRANDPARENT, ()):
-        _place_claim_row(org=org, row=row, child=mother_node or father_node)
-
-    spouse_node = None
-    for row in by_relation.get(ClaimKinRelation.SPOUSE, ()):
-        spouse_node = _place_claim_row(
-            org=org, row=row, spouse=head_node, marriage_kind=marriage_kind
-        )
-
-    head_parents = [p for p in (mother_node, father_node) if p is not None]
-    for row in by_relation.get(ClaimKinRelation.SIBLING, ()):
-        _place_claim_row(org=org, row=row, parents=head_parents)
-    for row in by_relation.get(ClaimKinRelation.CHILD, ()):
-        _place_claim_row(
-            org=org, row=row, parent=head_node, parents=[spouse_node] if spouse_node else ()
-        )
-    for row in by_relation.get(ClaimKinRelation.WARD, ()):
-        _place_claim_row(org=org, row=row)
-    for row in by_relation.get(ClaimKinRelation.POSITION, ()):
-        # A titled post with nobody in it yet, never a phantom NPC named
-        # after the job (#3983 ruling I2): the founder writes "Master-at-arms"
-        # and the household reads "Master-at-arms · position · open".
-        open_household_position(house=org, position=row.name)
-
-    if claim.founder_relation == ClaimKinRelation.CHILD:
-        # BORN explicitly, exactly like the SIBLING/MOTHER/FATHER/GRANDPARENT
-        # branches below and like every founder-written CHILD row (#3983
-        # ruling I1). Without it ``record_kin``'s realm-recognition walk
-        # runs, and it cannot match here — the head's own ``Title.holder``
-        # is written further down, after this — so it fell through to
-        # ``acknowledge_into_family`` and stamped the founder LEGITIMIZED,
-        # which then styles their own name with the taken-in particle.
-        record_kin(
-            house=org,
-            name="",
-            relation=ClaimKinRelation.CHILD,
-            node=founder,
-            parent=head_node,
-            parents=[spouse_node] if spouse_node else (),
-            basis=MembershipBasis.BORN,
-        )
-    elif claim.founder_relation == ClaimKinRelation.SIBLING:
-        record_kin(
-            house=org,
-            name="",
-            relation=ClaimKinRelation.SIBLING,
-            node=founder,
-            parents=head_parents,
-            basis=MembershipBasis.BORN,
-        )
-    elif claim.founder_relation == ClaimKinRelation.SPOUSE:
-        record_kin(
-            house=org,
-            name="",
-            relation=ClaimKinRelation.SPOUSE,
-            node=founder,
-            spouse=head_node,
-            marriage_kind=marriage_kind,
-        )
-    elif claim.founder_relation in (ClaimKinRelation.MOTHER, ClaimKinRelation.FATHER):
-        record_kin(
-            house=org,
-            name="",
-            relation=claim.founder_relation,
-            node=founder,
-            child=head_node,
-            basis=MembershipBasis.BORN,
-        )
-    elif claim.founder_relation == ClaimKinRelation.GRANDPARENT:
-        record_kin(
-            house=org,
-            name="",
-            relation=ClaimKinRelation.GRANDPARENT,
-            node=founder,
-            child=mother_node or father_node,
-            basis=MembershipBasis.BORN,
-        )
-    elif claim.founder_relation == ClaimKinRelation.WARD:
-        record_kin(
-            house=org, name="", relation=ClaimKinRelation.WARD, node=founder, is_household=True
-        )
-    # else: founder_relation == HEAD, already placed as head_node above.
+    head_node = _materialize_claim_kin(
+        claim=claim, org=org, sheet=sheet, marriage_kind=marriage_kind
+    )
 
     top.holder = head_node
     top.save(update_fields=["holder"])

@@ -208,6 +208,68 @@ class AlmanachNameRungAction(_AlmanachAction):
         )
 
 
+def _prepare_house_edit(*, org, kwargs):
+    """Resolve requested house fields and replacement collections before writes."""
+    from world.societies.houses.constants import HouseState  # noqa: PLC0415
+    from world.societies.houses.models import SuccessionLaw  # noqa: PLC0415
+
+    update_fields = []
+    for field in ("name", "words", "colors", "sigil_description", "description"):
+        if kwargs.get(field) is not None:
+            setattr(org, field, kwargs[field])
+            update_fields.append(field)
+    house_state = kwargs.get("house_state")
+    if house_state is not None:
+        if house_state not in HouseState.values:
+            options = ", ".join(HouseState.values)
+            return ActionResult(
+                success=False, message=f"No '{house_state}' house state. Options: {options}."
+            )
+        org.house_state = house_state
+        update_fields.append("house_state")
+    if "default_succession_law_id" in kwargs:  # noqa: STRING_LITERAL
+        law_id = kwargs["default_succession_law_id"]
+        law = None
+        if law_id:
+            law = SuccessionLaw.objects.filter(pk=law_id).first()
+            if law is None:
+                return ActionResult(success=False, message="No such succession law.")
+        org.default_succession_law = law
+        update_fields.append("default_succession_law")
+
+    aspect_options = _resolve_house_aspects(kwargs.get("aspect_option_ids"))
+    if isinstance(aspect_options, ActionResult):
+        return aspect_options
+    features = _resolve_house_features(kwargs.get("feature_ids"))
+    if isinstance(features, ActionResult):
+        return features
+    return update_fields, aspect_options, features
+
+
+def _resolve_house_aspects(aspect_option_ids):
+    """Resolve requested aspect IDs or return their validation refusal."""
+    from world.societies.houses.models import HouseAspectOption  # noqa: PLC0415
+
+    if aspect_option_ids is None:
+        return None
+    aspect_options = list(HouseAspectOption.objects.filter(pk__in=aspect_option_ids))
+    if len(aspect_options) != len(set(aspect_option_ids)):
+        return ActionResult(success=False, message="One of those house aspects doesn't exist.")
+    return aspect_options
+
+
+def _resolve_house_features(feature_ids):
+    """Resolve requested feature IDs or return their validation refusal."""
+    from world.societies.houses.models import HouseFeature  # noqa: PLC0415
+
+    if feature_ids is None:
+        return None
+    features = list(HouseFeature.objects.filter(pk__in=feature_ids))
+    if len(features) != len(set(feature_ids)):
+        return ActionResult(success=False, message="One of those house features doesn't exist.")
+    return features
+
+
 @dataclass
 class AlmanachEditHouseAction(_AlmanachAction):
     """Edit a house's charter record and identity facets.
@@ -225,7 +287,7 @@ class AlmanachEditHouseAction(_AlmanachAction):
     name: str = "Edit House"
     icon: str = "shield"
 
-    def execute(  # noqa: C901, PLR0912 — one straight-line field-by-field editor
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -233,13 +295,9 @@ class AlmanachEditHouseAction(_AlmanachAction):
     ) -> ActionResult:
         from django.db import transaction  # noqa: PLC0415
 
-        from world.societies.houses.constants import HouseState  # noqa: PLC0415
         from world.societies.houses.models import (  # noqa: PLC0415
-            HouseAspectOption,
-            HouseFeature,
             OrganizationAspect,
             OrganizationFeature,
-            SuccessionLaw,
         )
         from world.societies.models import Organization  # noqa: PLC0415
 
@@ -251,47 +309,10 @@ class AlmanachEditHouseAction(_AlmanachAction):
         # bare ``return`` inside ``transaction.atomic()`` does not roll it
         # back (only a propagating exception does), so a validation failure
         # discovered after a write would silently commit a partial edit.
-        update_fields = []
-        for field in ("name", "words", "colors", "sigil_description", "description"):
-            if kwargs.get(field) is not None:
-                setattr(org, field, kwargs[field])
-                update_fields.append(field)
-        house_state = kwargs.get("house_state")
-        if house_state is not None:
-            if house_state not in HouseState.values:
-                options = ", ".join(HouseState.values)
-                return ActionResult(
-                    success=False, message=f"No '{house_state}' house state. Options: {options}."
-                )
-            org.house_state = house_state
-            update_fields.append("house_state")
-        if "default_succession_law_id" in kwargs:  # noqa: STRING_LITERAL
-            law_id = kwargs["default_succession_law_id"]
-            law = None
-            if law_id:
-                law = SuccessionLaw.objects.filter(pk=law_id).first()
-                if law is None:
-                    return ActionResult(success=False, message="No such succession law.")
-            org.default_succession_law = law
-            update_fields.append("default_succession_law")
-
-        aspect_options = None
-        aspect_option_ids = kwargs.get("aspect_option_ids")
-        if aspect_option_ids is not None:
-            aspect_options = list(HouseAspectOption.objects.filter(pk__in=aspect_option_ids))
-            if len(aspect_options) != len(set(aspect_option_ids)):
-                return ActionResult(
-                    success=False, message="One of those house aspects doesn't exist."
-                )
-
-        features = None
-        feature_ids = kwargs.get("feature_ids")
-        if feature_ids is not None:
-            features = list(HouseFeature.objects.filter(pk__in=feature_ids))
-            if len(features) != len(set(feature_ids)):
-                return ActionResult(
-                    success=False, message="One of those house features doesn't exist."
-                )
+        prepared = _prepare_house_edit(org=org, kwargs=kwargs)
+        if isinstance(prepared, ActionResult):
+            return prepared
+        update_fields, aspect_options, features = prepared
 
         with transaction.atomic():
             if update_fields:
@@ -520,6 +541,222 @@ def _anchored_relations() -> tuple[str, ...]:
     )
 
 
+def _prepare_existing_kin_fields(node, kwargs: dict[str, Any]):
+    """Resolve gender and age edits before writing an existing kinsperson."""
+    from world.character_sheets.models import Gender  # noqa: PLC0415
+
+    gender = node.gender
+    if "gender_id" in kwargs:  # noqa: STRING_LITERAL
+        gender = None
+        if kwargs["gender_id"]:
+            gender = Gender.objects.filter(pk=kwargs["gender_id"]).first()
+            if gender is None:
+                return ActionResult(success=False, message="No such gender.")
+    age = node.age
+    if "age" in kwargs:  # noqa: STRING_LITERAL
+        age = kwargs["age"]
+        if age is not None:
+            try:
+                age = int(age)
+            except (TypeError, ValueError):
+                return ActionResult(success=False, message="Age must be a number.")
+    return gender, age
+
+
+def _apply_existing_kin_fields(node, kwargs, gender, age) -> None:
+    """Write requested plain fields and public-belief changes atomically."""
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.societies.houses.almanach import record_public_belief  # noqa: PLC0415
+
+    update_fields: list[str] = []
+    with transaction.atomic():
+        if "name" in kwargs:  # noqa: STRING_LITERAL
+            node.name = (kwargs.get("name") or "").strip()
+            update_fields.append("name")
+        if "gender_id" in kwargs:  # noqa: STRING_LITERAL
+            node.gender = gender
+            update_fields.append("gender")
+        if "age" in kwargs:  # noqa: STRING_LITERAL
+            node.age = age
+            update_fields.append("age")
+        if "is_deceased" in kwargs:  # noqa: STRING_LITERAL
+            node.is_deceased = bool(kwargs["is_deceased"])
+            update_fields.append("is_deceased")
+        if update_fields:
+            node.save(update_fields=update_fields)
+        if "believed_deceased" in kwargs:  # noqa: STRING_LITERAL
+            record_public_belief(node, believed_deceased=bool(kwargs["believed_deceased"]))
+
+
+def _edit_existing_kin(house, kwargs: dict[str, Any]) -> ActionResult:
+    """Update the plain fields of an existing house kinsperson."""
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+
+    if any(kwargs.get(field) for field in _KIN_RELATION_ONLY_KWARGS):
+        return ActionResult(success=False, message=_KIN_UPDATE_ONLY_MESSAGE)
+    node = Kinsperson.objects.filter(pk=kwargs.get("kinsperson_id")).first()
+    if node is None:
+        return ActionResult(success=False, message="No such kinsperson.")
+    if node.family_id != house.family_id:
+        return ActionResult(
+            success=False, message="That kinsperson isn't part of this house's family."
+        )
+    prepared = _prepare_existing_kin_fields(node, kwargs)
+    if isinstance(prepared, ActionResult):
+        return prepared
+    new_gender, new_age = prepared
+
+    _apply_existing_kin_fields(node, kwargs, new_gender, new_age)
+    return ActionResult(
+        success=True,
+        message=f"{node.name or 'The kinsperson'} updated.",
+        data={"kinsperson_id": node.pk, "org_id": house.pk},
+    )
+
+
+def _resolve_anchored_kin(relation: str, kwargs: dict[str, Any]) -> dict[str, Any] | ActionResult:
+    """Resolve a relative-based relation and its kinship edges."""
+    from world.roster.models import Kinsperson, ParentageEdge  # noqa: PLC0415
+    from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
+
+    relative_id = kwargs.get("relative_kinsperson_id")
+    relative = Kinsperson.objects.filter(pk=relative_id).first() if relative_id else None
+    if relative is None:
+        label = dict(ClaimKinRelation.choices)[relation].lower()
+        return ActionResult(success=False, message=f"Pick whose {label} this is.")
+    if relation == ClaimKinRelation.SIBLING:
+        parents = [edge.parent for edge in ParentageEdge.objects.filter(child=relative)]
+        if not parents:
+            return ActionResult(success=False, message="Write that person's parents in first.")
+        child = None
+    elif relation == ClaimKinRelation.GRANDPARENT:
+        if not ParentageEdge.objects.filter(parent=relative).exists():
+            return ActionResult(
+                success=False, message="A grandparent is a parent's parent: pick a parent."
+            )
+        child = relative
+        parents = []
+    else:
+        child = relative
+        parents = []
+    from world.roster.constants import MembershipBasis  # noqa: PLC0415
+
+    return {"parents": parents, "child": child, "basis": MembershipBasis.BORN}
+
+
+def _resolve_kin_relation(relation: str, kwargs: dict[str, Any]) -> dict[str, Any] | ActionResult:
+    """Resolve relation-specific objects before creating any kin rows."""
+    from world.roster.models import Family, Kinsperson, UnionKind  # noqa: PLC0415
+    from world.seeds.kinship import MARRIAGE_KIND_NAME  # noqa: PLC0415
+    from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
+
+    values: dict[str, Any] = {
+        "parent": None,
+        "parents": [],
+        "child": None,
+        "spouse": None,
+        "marriage_kind": None,
+        "basis": "",
+        "born_into": None,
+    }
+    if relation == ClaimKinRelation.CHILD:
+        parent_id = kwargs.get("parent_kinsperson_id")
+        values["parent"] = Kinsperson.objects.filter(pk=parent_id).first() if parent_id else None
+        if values["parent"] is None:
+            return ActionResult(success=False, message="Pick the child's parent.")
+    elif relation == ClaimKinRelation.SPOUSE:
+        spouse_id = kwargs.get("spouse_kinsperson_id")
+        values["spouse"] = Kinsperson.objects.filter(pk=spouse_id).first() if spouse_id else None
+        if values["spouse"] is None:
+            return ActionResult(success=False, message="Pick the spouse.")
+        values["marriage_kind"] = UnionKind.objects.filter(name=MARRIAGE_KIND_NAME).first()
+        if values["marriage_kind"] is None:
+            return ActionResult(success=False, message="Marriage is not configured for this realm.")
+    elif relation in _anchored_relations():
+        anchored = _resolve_anchored_kin(relation, kwargs)
+        if isinstance(anchored, ActionResult):
+            return anchored
+        values.update(anchored)
+    family_id = kwargs.get("born_into_family_id")
+    if family_id:
+        values["born_into"] = Family.objects.filter(pk=family_id).first()
+        if values["born_into"] is None:
+            return ActionResult(success=False, message="No such family.")
+    return values
+
+
+def _resolve_new_kin_fields(kwargs: dict[str, Any]):
+    """Resolve optional gender and age values for a new kinsperson."""
+    from world.character_sheets.models import Gender  # noqa: PLC0415
+
+    gender = None
+    if kwargs.get("gender_id"):
+        gender = Gender.objects.filter(pk=kwargs["gender_id"]).first()
+        if gender is None:
+            return ActionResult(success=False, message="No such gender.")
+    age = kwargs.get("age")
+    if age is not None:
+        try:
+            age = int(age)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Age must be a number.")
+    return gender, age
+
+
+def _record_new_kin(house, kwargs: dict[str, Any]) -> ActionResult:
+    """Validate and record a new kinsperson or household vacancy."""
+    from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
+    from world.societies.houses.almanach import open_household_position, record_kin  # noqa: PLC0415
+    from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+    name = (kwargs.get("name") or "").strip()
+    relation = (kwargs.get("relation") or "").strip()
+    if relation == ClaimKinRelation.POSITION:
+        try:
+            vacancy = open_household_position(house=house, position=name)
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{vacancy.name} posted.",
+            data={"vacancy_id": vacancy.pk, "org_id": house.pk},
+        )
+
+    if kwargs.get("is_household") and not name:
+        label = dict(ClaimKinRelation.choices).get(relation, "household row").lower()
+        return ActionResult(success=False, message=f"Name the {label}.")
+    fields = _resolve_new_kin_fields(kwargs)
+    if isinstance(fields, ActionResult):
+        return fields
+    gender, age = fields
+
+    relation_values = _resolve_kin_relation(relation, kwargs)
+    if isinstance(relation_values, ActionResult):
+        return relation_values
+    try:
+        node, vacancy = record_kin(
+            house=house,
+            name=name,
+            relation=relation,
+            gender=gender,
+            age=age,
+            is_deceased=bool(kwargs.get("is_deceased")),
+            believed_deceased=bool(kwargs.get("believed_deceased")),
+            is_household=bool(kwargs.get("is_household")),
+            **relation_values,
+        )
+    except (HousesServiceError, KinshipServiceError) as exc:
+        return ActionResult(success=False, message=exc.user_message)
+    data: dict[str, Any] = {"kinsperson_id": node.pk, "org_id": house.pk}
+    if vacancy is not None:
+        data["vacancy_id"] = vacancy.pk
+    return ActionResult(
+        success=True, message=f"{node.name or 'The kinsperson'} recorded.", data=data
+    )
+
+
 @dataclass
 class AlmanachEditKinAction(_AlmanachAction):
     """Author a new node of a house's family tree, or update an existing one.
@@ -568,31 +805,12 @@ class AlmanachEditKinAction(_AlmanachAction):
     name: str = "Edit Kin"
     icon: str = "family"
 
-    def execute(  # noqa: C901, PLR0912, PLR0915 — one straight-line relation dispatch
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from django.db import transaction  # noqa: PLC0415
-
-        from world.character_sheets.models import Gender  # noqa: PLC0415
-        from world.roster.constants import MembershipBasis  # noqa: PLC0415
-        from world.roster.models import (  # noqa: PLC0415
-            Family,
-            Kinsperson,
-            ParentageEdge,
-            UnionKind,
-        )
-        from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
-        from world.seeds.kinship import MARRIAGE_KIND_NAME  # noqa: PLC0415
-        from world.societies.houses.almanach import (  # noqa: PLC0415
-            open_household_position,
-            record_kin,
-            record_public_belief,
-        )
-        from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
-        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
         from world.societies.models import Organization  # noqa: PLC0415
 
         house = Organization.objects.filter(pk=kwargs.get("org_id")).first()
@@ -600,183 +818,9 @@ class AlmanachEditKinAction(_AlmanachAction):
             return ActionResult(success=False, message=_NO_SUCH_HOUSE)
         if house.family_id is None:
             return ActionResult(success=False, message="That house has no family on record.")
-
-        kinsperson_id = kwargs.get("kinsperson_id")
-        if kinsperson_id:
-            if any(kwargs.get(field) for field in _KIN_RELATION_ONLY_KWARGS):
-                return ActionResult(success=False, message=_KIN_UPDATE_ONLY_MESSAGE)
-            node = Kinsperson.objects.filter(pk=kinsperson_id).first()
-            if node is None:
-                return ActionResult(success=False, message="No such kinsperson.")
-            if node.family_id != house.family_id:
-                return ActionResult(
-                    success=False, message="That kinsperson isn't part of this house's family."
-                )
-            # Resolve and validate EVERYTHING before the first write below —
-            # each plain field changes ONLY when its kwarg was actually
-            # passed (an absent kwarg is a no-op; a falsy ``gender_id`` that
-            # WAS passed still clears the gender, #3983 Task 10 fold-in).
-            new_gender = node.gender
-            if "gender_id" in kwargs:  # noqa: STRING_LITERAL
-                new_gender_id = kwargs["gender_id"]
-                new_gender = None
-                if new_gender_id:
-                    new_gender = Gender.objects.filter(pk=new_gender_id).first()
-                    if new_gender is None:
-                        return ActionResult(success=False, message="No such gender.")
-            new_age = node.age
-            if "age" in kwargs:  # noqa: STRING_LITERAL
-                new_age = kwargs["age"]
-                if new_age is not None:
-                    try:
-                        new_age = int(new_age)
-                    except (TypeError, ValueError):
-                        return ActionResult(success=False, message="Age must be a number.")
-            update_fields: list[str] = []
-            with transaction.atomic():
-                if "name" in kwargs:  # noqa: STRING_LITERAL
-                    node.name = (kwargs.get("name") or "").strip()
-                    update_fields.append("name")
-                if "gender_id" in kwargs:  # noqa: STRING_LITERAL
-                    node.gender = new_gender
-                    update_fields.append("gender")
-                if "age" in kwargs:  # noqa: STRING_LITERAL
-                    node.age = new_age
-                    update_fields.append("age")
-                if "is_deceased" in kwargs:  # noqa: STRING_LITERAL
-                    node.is_deceased = bool(kwargs["is_deceased"])
-                    update_fields.append("is_deceased")
-                if update_fields:
-                    node.save(update_fields=update_fields)
-                if "believed_deceased" in kwargs:  # noqa: STRING_LITERAL
-                    record_public_belief(node, believed_deceased=bool(kwargs["believed_deceased"]))
-            return ActionResult(
-                success=True,
-                message=f"{node.name or 'The kinsperson'} updated.",
-                data={"kinsperson_id": node.pk, "org_id": house.pk},
-            )
-
-        kin_name = (kwargs.get("name") or "").strip()
-        gender_id = kwargs.get("gender_id")
-        gender = None
-        if gender_id:
-            gender = Gender.objects.filter(pk=gender_id).first()
-            if gender is None:
-                return ActionResult(success=False, message="No such gender.")
-        age = kwargs.get("age")
-        if age is not None:
-            try:
-                age = int(age)
-            except (TypeError, ValueError):
-                return ActionResult(success=False, message="Age must be a number.")
-        is_deceased = bool(kwargs.get("is_deceased"))
-        believed_deceased = bool(kwargs.get("believed_deceased"))
-
-        relation = (kwargs.get("relation") or "").strip()
-
-        # Resolve and validate EVERYTHING before the ``record_kin`` call below
-        # — a bare ``return`` inside its own ``transaction.atomic()`` does
-        # not roll it back (only a propagating exception does), so any check
-        # found only mid-write would risk committing a partial write (e.g.
-        # an orphan Kinsperson) alongside a reported failure.
-        if relation == ClaimKinRelation.POSITION:
-            # A post, not a person (#3983 ruling I2): an open household
-            # Vacancy titled by the name, with nobody in it.
-            try:
-                vacancy = open_household_position(house=house, position=kin_name)
-            except HousesServiceError as exc:
-                return ActionResult(success=False, message=exc.user_message)
-            return ActionResult(
-                success=True,
-                message=f"{vacancy.name} posted.",
-                data={"vacancy_id": vacancy.pk, "org_id": house.pk},
-            )
-
-        is_household = bool(kwargs.get("is_household"))
-        if is_household and not kin_name:
-            # A household row keys its own Vacancy, and Vacancy is unique on
-            # (organization, name): an unnamed one would take another ward's
-            # row (#3983 review I2). Named by the relation the caller sent,
-            # so the sentence says which row it means — a POSITION never
-            # reaches here (it returned above with
-            # ``open_household_position``'s own "Name the position.").
-            label = dict(ClaimKinRelation.choices).get(relation, "household row").lower()
-            return ActionResult(success=False, message=f"Name the {label}.")
-
-        parent = spouse = marriage_kind = born_into_family = None
-        child = None
-        parents: list[Kinsperson] = []
-        basis = ""
-        if relation == ClaimKinRelation.CHILD:
-            parent_id = kwargs.get("parent_kinsperson_id")
-            parent = Kinsperson.objects.filter(pk=parent_id).first() if parent_id else None
-            if parent is None:
-                return ActionResult(success=False, message="Pick the child's parent.")
-        elif relation == ClaimKinRelation.SPOUSE:
-            spouse_id = kwargs.get("spouse_kinsperson_id")
-            spouse = Kinsperson.objects.filter(pk=spouse_id).first() if spouse_id else None
-            if spouse is None:
-                return ActionResult(success=False, message="Pick the spouse.")
-            marriage_kind = UnionKind.objects.filter(name=MARRIAGE_KIND_NAME).first()
-            if marriage_kind is None:
-                return ActionResult(
-                    success=False, message="Marriage is not configured for this realm."
-                )
-        elif relation in _anchored_relations():
-            relative_id = kwargs.get("relative_kinsperson_id")
-            relative = Kinsperson.objects.filter(pk=relative_id).first() if relative_id else None
-            if relative is None:
-                label = dict(ClaimKinRelation.choices)[relation].lower()
-                return ActionResult(success=False, message=f"Pick whose {label} this is.")
-            if relation == ClaimKinRelation.SIBLING:
-                parents = [edge.parent for edge in ParentageEdge.objects.filter(child=relative)]
-                if not parents:
-                    return ActionResult(
-                        success=False, message="Write that person's parents in first."
-                    )
-            elif relation == ClaimKinRelation.GRANDPARENT:
-                if not ParentageEdge.objects.filter(parent=relative).exists():
-                    return ActionResult(
-                        success=False,
-                        message="A grandparent is a parent's parent: pick a parent.",
-                    )
-                child = relative
-            else:
-                child = relative
-            basis = MembershipBasis.BORN
-        born_into_family_id = kwargs.get("born_into_family_id")
-        if born_into_family_id:
-            born_into_family = Family.objects.filter(pk=born_into_family_id).first()
-            if born_into_family is None:
-                return ActionResult(success=False, message="No such family.")
-
-        try:
-            node, vacancy = record_kin(
-                house=house,
-                name=kin_name,
-                relation=relation,
-                gender=gender,
-                age=age,
-                is_deceased=is_deceased,
-                believed_deceased=believed_deceased,
-                parent=parent,
-                parents=parents,
-                child=child,
-                spouse=spouse,
-                marriage_kind=marriage_kind,
-                born_into=born_into_family,
-                basis=basis,
-                is_household=is_household,
-            )
-        except (HousesServiceError, KinshipServiceError) as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        data: dict[str, Any] = {"kinsperson_id": node.pk, "org_id": house.pk}
-        if vacancy is not None:
-            data["vacancy_id"] = vacancy.pk
-        return ActionResult(
-            success=True, message=f"{node.name or 'The kinsperson'} recorded.", data=data
-        )
+        if kwargs.get("kinsperson_id"):
+            return _edit_existing_kin(house, kwargs)
+        return _record_new_kin(house, kwargs)
 
 
 @dataclass

@@ -339,127 +339,130 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
     return <div className="almanach" />;
   }
 
-  let chapter: ReactNode;
-  if (step === 'seat') {
-    chapter = (
-      <main className="chapter">
-        <SeatPicker
-          realmId={effectiveRealmId}
-          permittedRank={rank}
-          selectedTitleId={selectedRow?.title_id ?? null}
-          onSelectRow={handleSelectRow}
-          onSelectRealm={handleSelectRealm}
-          onClaim={handleClaim}
-        />
-      </main>
-    );
-  } else if (!template) {
-    // The claimed title/template are still resolving (`useClaimableTitles`
-    // hasn't returned yet, or the claim was made before it loaded) — every
-    // chapter past the Seat requires a real template, so this is a brief
-    // loading gap, never a stuck state once the query settles.
-    chapter = (
-      <main className="chapter">
-        <p className="meta">Loading…</p>
-      </main>
-    );
-  } else if (step === 'house') {
-    chapter = (
-      <FounderHouseChapter
-        draft={fd}
-        set={set}
-        template={template}
-        seatName={seatRow?.name ?? ''}
-        seatTier={seatRow?.tier ?? ''}
-        realmId={effectiveRealmId}
-        youName={YOU_NAME}
-        onNext={() => setStep('family')}
-      />
-    );
-  } else if (step === 'family') {
-    chapter = (
-      <FounderFamilyChapter
-        draft={fd}
-        set={set}
-        addKin={addKin}
-        updateKin={updateKin}
-        removeKin={removeKin}
-        template={template}
-        youName={YOU_NAME}
-        onNext={() => setStep('land')}
-      />
-    );
-  } else if (step === 'land') {
-    chapter = (
-      <FounderLandsLeaf
-        draft={fd}
-        setLand={setLand}
-        rows={rows}
-        produces={produces}
-        openTitleId={openBaronyId}
-        onOpenTitleId={setOpenBaronyId}
-        onNext={() => setStep('estate')}
-      />
-    );
-  } else if (step === 'estate') {
-    chapter = (
-      <FounderEstateLeaf
-        draft={fd}
-        set={set}
-        realmId={effectiveRealmId}
-        onNext={() => setStep('record')}
-      />
-    );
-  } else {
-    chapter = (
-      <FounderRecord
-        draft={fd}
-        characterDraftId={draft.id}
-        template={template}
-        quiddityName={quiddityName}
-        seatName={seatRow?.name ?? ''}
-        seatTier={seatRow?.tier ?? ''}
-        swornTo={seatRow?.sworn_to ?? ''}
-        landLine={landLineFull}
-        estateLine={estateLine}
-        realmId={effectiveRealmId}
-        youName={YOU_NAME}
-        reset={reset}
-        onBack={() => setStep('estate')}
-        onSubmitted={(result) => setJustSubmitted(result)}
-      />
-    );
-  }
+  const chapter = ((): ReactNode => {
+    if (step === 'seat') {
+      return (
+        <main className="chapter">
+          <SeatPicker
+            realmId={effectiveRealmId}
+            permittedRank={rank}
+            selectedTitleId={selectedRow?.title_id ?? null}
+            onSelectRow={handleSelectRow}
+            onSelectRealm={handleSelectRealm}
+            onClaim={handleClaim}
+          />
+        </main>
+      );
+    }
+    if (!template) {
+      return (
+        <main className="chapter">
+          <p className="meta">Loading…</p>
+        </main>
+      );
+    }
+    switch (step) {
+      case 'house':
+        return (
+          <FounderHouseChapter
+            draft={fd}
+            set={set}
+            template={template}
+            seatName={seatRow?.name ?? ''}
+            seatTier={seatRow?.tier ?? ''}
+            realmId={effectiveRealmId}
+            youName={YOU_NAME}
+            onNext={() => setStep('family')}
+          />
+        );
+      case 'family':
+        return (
+          <FounderFamilyChapter
+            draft={fd}
+            set={set}
+            addKin={addKin}
+            updateKin={updateKin}
+            removeKin={removeKin}
+            template={template}
+            youName={YOU_NAME}
+            onNext={() => setStep('land')}
+          />
+        );
+      case 'land':
+        return (
+          <FounderLandsLeaf
+            draft={fd}
+            setLand={setLand}
+            rows={rows}
+            produces={produces}
+            openTitleId={openBaronyId}
+            onOpenTitleId={setOpenBaronyId}
+            onNext={() => setStep('estate')}
+          />
+        );
+      case 'estate':
+        return (
+          <FounderEstateLeaf
+            draft={fd}
+            set={set}
+            realmId={effectiveRealmId}
+            onNext={() => setStep('record')}
+          />
+        );
+      case 'record':
+        return (
+          <FounderRecord
+            draft={fd}
+            characterDraftId={draft.id}
+            template={template}
+            quiddityName={quiddityName}
+            seatName={seatRow?.name ?? ''}
+            seatTier={seatRow?.tier ?? ''}
+            swornTo={seatRow?.sworn_to ?? ''}
+            landLine={landLineFull}
+            estateLine={estateLine}
+            realmId={effectiveRealmId}
+            youName={YOU_NAME}
+            reset={reset}
+            onBack={() => setStep('estate')}
+            onSubmitted={(result) => setJustSubmitted(result)}
+          />
+        );
+    }
+  })();
 
   // The Seat step keeps its own liege/realm rail; the Record step drops the
   // third column entirely (plate F-VI's own 2-column `.almanac` grid,
   // reflected in the `gridTemplateColumns` override above); every other
   // step shows the running `RecordSoFar` summary.
-  let aside: ReactNode = null;
-  if (step === 'seat') {
-    aside = (
-      <LiegeRealmAside
-        realmId={effectiveRealmId}
-        rows={rows}
-        unclaimedByTier={unclaimedByTier}
-        selectedRow={selectedRow}
-      />
-    );
-  } else if (step !== 'record') {
-    aside = (
-      <RecordSoFar
-        draft={fd}
-        seatName={seatRow?.name ?? ''}
-        swornTo={seatRow?.sworn_to ?? ''}
-        step={step}
-        quiddityName={quiddityName !== '' ? quiddityName : undefined}
-        features={features.length > 0 ? features : undefined}
-        youName={atOrPast(step, 'family') ? YOU_NAME : undefined}
-        landText={atOrPast(step, 'land') ? landLineShort : undefined}
-        estateText={atOrPast(step, 'estate') ? estateLine : undefined}
-      />
-    );
-  }
+  const aside = ((): ReactNode => {
+    let aside: ReactNode = null;
+    if (step === 'seat') {
+      aside = (
+        <LiegeRealmAside
+          realmId={effectiveRealmId}
+          rows={rows}
+          unclaimedByTier={unclaimedByTier}
+          selectedRow={selectedRow}
+        />
+      );
+    } else if (step !== 'record') {
+      aside = (
+        <RecordSoFar
+          draft={fd}
+          seatName={seatRow?.name ?? ''}
+          swornTo={seatRow?.sworn_to ?? ''}
+          step={step}
+          quiddityName={quiddityName !== '' ? quiddityName : undefined}
+          features={features.length > 0 ? features : undefined}
+          youName={atOrPast(step, 'family') ? YOU_NAME : undefined}
+          landText={atOrPast(step, 'land') ? landLineShort : undefined}
+          estateText={atOrPast(step, 'estate') ? estateLine : undefined}
+        />
+      );
+    }
+    return aside;
+  })();
 
   return (
     <div className="almanach">

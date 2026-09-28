@@ -358,7 +358,84 @@ def _queryset(
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
 
 
-def _paged_rows(  # noqa: C901, PLR0912
+def _apply_page_cursor(
+    request: Request,
+    queryset: QuerySet,
+    decoded: dict[str, Any] | None,
+) -> tuple[QuerySet, tuple[str, int], bool]:
+    """Apply a validated page cursor and snapshot to an interaction queryset."""
+    if decoded and not decoded.get("legacy"):
+        expected_direction = "before" if request.query_params.get("before") else "after"
+        if decoded.get("direction") != expected_direction:
+            raise PlayCursorError(
+                "This history cursor points in a different direction. Reload and try again."
+            )
+        raw_snapshot = decoded["snapshot"]
+        snapshot = (str(raw_snapshot[0]), int(raw_snapshot[1]))
+        snap_dt = _datetime_param(snapshot[0], "snapshot")
+        if snap_dt is None:
+            raise PlayCursorError
+        queryset = queryset.filter(timestamp__lte=snap_dt)
+    else:
+        snapshot = (timezone.now().isoformat(), 2**63 - 1)
+        snap_dt = _datetime_param(snapshot[0], "snapshot")
+        queryset = queryset.filter(timestamp__lte=snap_dt)
+    if not decoded:
+        return queryset.order_by("timestamp", "id"), snapshot, True
+
+    key = decoded["key"]
+    boundary_dt = _datetime_param(key[0], "cursor")
+    if boundary_dt is None:
+        raise PlayCursorError
+    boundary_id = int(key[1])
+    if not queryset.filter(pk=boundary_id, timestamp=boundary_dt).exists():
+        raise PlayCursorError("This history cursor is stale. Reload and try again.")
+    after = bool(request.query_params.get("after"))
+    if after:
+        queryset = queryset.filter(
+            Q(timestamp__gt=boundary_dt) | Q(timestamp=boundary_dt, id__gt=boundary_id)
+        ).order_by("timestamp", "id")
+    else:
+        queryset = queryset.filter(
+            Q(timestamp__lt=boundary_dt) | Q(timestamp=boundary_dt, id__lt=boundary_id)
+        ).order_by("-timestamp", "-id")
+    return queryset, snapshot, after
+
+
+def _page_cursor_links(
+    request: Request,
+    rows: list[dict[str, Any]],
+    snapshot: tuple[str, int],
+    *,
+    has_more: bool,
+    decoded: dict[str, Any] | None,
+) -> dict[str, str | None]:
+    """Build the next and previous cursor links for a serialized page."""
+    if not rows:
+        return {"before": None, "after": None, "snapshot": _iso_snapshot(snapshot)}
+    keys = [_row_key(row) for row in rows]
+    has_before = bool(decoded) or not request.query_params.get("before")
+    links = {}
+    for direction, key, available in (
+        ("before", keys[0], has_before),
+        ("after", keys[-1], has_more),
+    ):
+        links[direction] = (
+            _encode_cursor(
+                request=request,
+                query_params=request.query_params,
+                key=key,
+                snapshot=snapshot,
+                direction=direction,
+            )
+            if available
+            else None
+        )
+    links["snapshot"] = _iso_snapshot(snapshot)
+    return links
+
+
+def _paged_rows(
     request: Request, *, limit: int, params: Mapping[str, str] | None = None
 ) -> tuple[list[dict[str, Any]], dict[str, str | None]]:
     """Fetch and enrich only one database-bounded keyset page.
@@ -373,48 +450,7 @@ def _paged_rows(  # noqa: C901, PLR0912
     decoded = (
         _decode_cursor(token, request=request, query_params=request.query_params) if token else None
     )
-    if decoded and not decoded.get("legacy"):
-        expected_direction = "before" if request.query_params.get("before") else "after"
-        if decoded.get("direction") != expected_direction:
-            raise PlayCursorError(
-                "This history cursor points in a different direction. Reload and try again."
-            )
-        raw_snapshot = decoded["snapshot"]
-        snapshot = (str(raw_snapshot[0]), int(raw_snapshot[1]))
-        snap_dt = _datetime_param(snapshot[0], "snapshot")
-        if snap_dt is None:
-            raise PlayCursorError
-        queryset = queryset.filter(timestamp__lte=snap_dt)
-    else:
-        # `now` is a stable upper bound for this request and avoids a second
-        # unbounded aggregate query. The id tie-breaker is deliberately maxed
-        # so equal-timestamp rows remain eligible while the timestamp snapshot
-        # excludes concurrent arrivals after this request began.
-        snapshot = (timezone.now().isoformat(), 2**63 - 1)
-        snap_dt = _datetime_param(snapshot[0], "snapshot")
-        queryset = queryset.filter(timestamp__lte=snap_dt)
-    if decoded:
-        key = decoded["key"]
-        boundary_dt = _datetime_param(key[0], "cursor")
-        if boundary_dt is None:
-            raise PlayCursorError
-        boundary_id = int(key[1])
-        if not queryset.filter(pk=boundary_id, timestamp=boundary_dt).exists():
-            raise PlayCursorError("This history cursor is stale. Reload and try again.")
-        after = bool(request.query_params.get("after"))
-        if after:
-            queryset = queryset.filter(
-                Q(timestamp__gt=boundary_dt) | Q(timestamp=boundary_dt, id__gt=boundary_id)
-            )
-            queryset = queryset.order_by("timestamp", "id")
-        else:
-            queryset = queryset.filter(
-                Q(timestamp__lt=boundary_dt) | Q(timestamp=boundary_dt, id__lt=boundary_id)
-            )
-            queryset = queryset.order_by("-timestamp", "-id")
-    else:
-        after = True
-        queryset = queryset.order_by("timestamp", "id")
+    queryset, snapshot, after = _apply_page_cursor(request, queryset, decoded)
     rows = list(queryset[: limit + 1])
     has_more = len(rows) > limit
     if has_more:
@@ -422,41 +458,9 @@ def _paged_rows(  # noqa: C901, PLR0912
     if not after:
         rows.reverse()
     serialized = list(InteractionListSerializer(rows, many=True, context=context).data)
-    keys = [_row_key(row) for row in serialized]
-    if not keys:
-        return [], {"before": None, "after": None, "snapshot": _iso_snapshot(snapshot)}
-    # The page probe (`limit + 1`) tells us whether a forward page exists.
-    # A prior cursor implies an older page exists; on the initial page we expose
-    # a backward control conservatively and stale resolution keeps it safe.
-    has_after = has_more
-    has_before = bool(decoded) or not request.query_params.get("before")
-    before_cursor = (
-        _encode_cursor(
-            request=request,
-            query_params=request.query_params,
-            key=keys[0],
-            snapshot=snapshot,
-            direction="before",
-        )
-        if has_before
-        else None
+    return serialized, _page_cursor_links(
+        request, serialized, snapshot, has_more=has_more, decoded=decoded
     )
-    after_cursor = (
-        _encode_cursor(
-            request=request,
-            query_params=request.query_params,
-            key=keys[-1],
-            snapshot=snapshot,
-            direction="after",
-        )
-        if has_after
-        else None
-    )
-    return serialized, {
-        "before": before_cursor,
-        "after": after_cursor,
-        "snapshot": _iso_snapshot(snapshot),
-    }
 
 
 def _iso_snapshot(snapshot: tuple[str, int]) -> str:
@@ -714,12 +718,131 @@ class PlayPosesView(APIView):
         return Response({"results": rows, **page})
 
 
+def _context_from_cursor(
+    request: Request,
+    queryset: QuerySet[Interaction],
+    decoded: dict[str, Any],
+) -> tuple[list[Interaction], tuple[str, int], QuerySet[Interaction]]:
+    """Fetch the bounded side of a context window around a cursor."""
+    boundary = decoded["key"]
+    boundary_dt = _datetime_param(str(boundary[0]), "cursor")
+    if boundary_dt is None:
+        raise PlayCursorError
+    boundary_id = int(boundary[1])
+    if not queryset.filter(pk=boundary_id, timestamp=boundary_dt).exists():
+        raise PlayCursorError("This context cursor is stale. Reload and try again.")
+    raw_snapshot = decoded.get("snapshot")
+    snapshot = (
+        (str(raw_snapshot[0]), int(raw_snapshot[1]))
+        if raw_snapshot
+        else (timezone.now().isoformat(), 2**63 - 1)
+    )
+    snap_dt = _datetime_param(snapshot[0], "snapshot")
+    if snap_dt is None:
+        raise PlayCursorError
+    queryset = queryset.filter(timestamp__lte=snap_dt)
+    if request.query_params.get("before"):
+        rows = list(
+            queryset.filter(
+                Q(timestamp__lt=boundary_dt) | Q(timestamp=boundary_dt, id__lt=boundary_id)
+            ).order_by("-timestamp", "-id")[:26]
+        )
+        rows.reverse()
+        return rows, snapshot, queryset
+    rows = list(
+        queryset.filter(
+            Q(timestamp__gt=boundary_dt) | Q(timestamp=boundary_dt, id__gt=boundary_id)
+        ).order_by("timestamp", "id")[:26]
+    )
+    return rows, snapshot, queryset
+
+
+def _context_around_target(
+    queryset: QuerySet[Interaction], target: Interaction
+) -> tuple[list[Interaction], tuple[str, int], QuerySet[Interaction]]:
+    """Fetch up to 25 interactions on either side of the target pose."""
+    snapshot = (timezone.now().isoformat(), 2**63 - 1)
+    snap_dt = _datetime_param(snapshot[0], "snapshot")
+    if snap_dt is None:
+        raise PlayCursorError
+    queryset = queryset.filter(timestamp__lte=snap_dt)
+    older = list(
+        queryset.filter(
+            Q(timestamp__lt=target.timestamp) | Q(timestamp=target.timestamp, id__lt=target.pk)
+        ).order_by("-timestamp", "-id")[:25]
+    )
+    newer = list(
+        queryset.filter(
+            Q(timestamp__gt=target.timestamp) | Q(timestamp=target.timestamp, id__gt=target.pk)
+        ).order_by("timestamp", "id")[:25]
+    )
+    return [*reversed(older), target, *newer], snapshot, queryset
+
+
+def _context_response(
+    request: Request,
+    target: Interaction,
+    query_context: tuple[QuerySet[Interaction], dict[str, Any]],
+    interactions: list[Interaction],
+    snapshot: tuple[str, int],
+) -> Response:
+    """Serialize a context window and attach cursors when more rows exist."""
+    queryset, context = query_context
+    rows = list(InteractionListSerializer(interactions, many=True, context=context).data)
+    if not rows:
+        return Response(
+            {
+                "results": [],
+                "threadId": None,
+                "before": None,
+                "after": None,
+                "snapshot": snapshot[0],
+            }
+        )
+    first_key, last_key = _row_key(rows[0]), _row_key(rows[-1])
+    first_dt = _datetime_param(first_key[0], "cursor")
+    last_dt = _datetime_param(last_key[0], "cursor")
+    if first_dt is None or last_dt is None:
+        raise PlayCursorError
+    has_older = queryset.filter(
+        Q(timestamp__lt=first_dt) | Q(timestamp=first_dt, id__lt=first_key[1])
+    ).exists()
+    has_newer = queryset.filter(
+        Q(timestamp__gt=last_dt) | Q(timestamp=last_dt, id__gt=last_key[1])
+    ).exists()
+    cursors = {
+        direction: (
+            _encode_cursor(
+                request=request,
+                query_params=request.query_params,
+                key=key,
+                snapshot=snapshot,
+                direction=direction,
+            )
+            if available
+            else None
+        )
+        for direction, key, available in (
+            ("before", first_key, has_older),
+            ("after", last_key, has_newer),
+        )
+    }
+    return Response(
+        {
+            "results": rows,
+            "threadId": str(target.thread_id) if target.thread_id else None,
+            **cursors,
+            "snapshot": snapshot[0],
+        }
+    )
+
+
 class PlayContextView(APIView):
     """GET a bounded authorized neighborhood around one retained pose."""
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request) -> Response:  # noqa: C901, PLR0912, PLR0915
+    def get(self, request: Request) -> Response:
         pose_id = request.query_params.get("id")  # noqa: USE_FILTERSET
         pose_timestamp = request.query_params.get("timestamp")  # noqa: USE_FILTERSET
         if not pose_id:
@@ -742,103 +865,13 @@ class PlayContextView(APIView):
                 if token
                 else None
             )
-            if decoded:
-                boundary = decoded["key"]
-                boundary_dt = _datetime_param(str(boundary[0]), "cursor")
-                if boundary_dt is None:
-                    raise PlayCursorError
-                if not queryset.filter(pk=int(boundary[1]), timestamp=boundary_dt).exists():
-                    raise PlayCursorError("This context cursor is stale. Reload and try again.")
-                raw_snapshot = decoded.get("snapshot")
-                snapshot = (
-                    (str(raw_snapshot[0]), int(raw_snapshot[1]))
-                    if raw_snapshot
-                    else (timezone.now().isoformat(), 2**63 - 1)
-                )
-                snap_dt = _datetime_param(snapshot[0], "snapshot")
-                if snap_dt is None:
-                    raise PlayCursorError
-                queryset = queryset.filter(timestamp__lte=snap_dt)
-                if request.query_params.get("before"):  # noqa: USE_FILTERSET
-                    interactions = list(
-                        queryset.filter(
-                            Q(timestamp__lt=boundary_dt)
-                            | Q(timestamp=boundary_dt, id__lt=int(boundary[1]))
-                        ).order_by("-timestamp", "-id")[:26]
-                    )
-                    interactions.reverse()
-                else:
-                    interactions = list(
-                        queryset.filter(
-                            Q(timestamp__gt=boundary_dt)
-                            | Q(timestamp=boundary_dt, id__gt=int(boundary[1]))
-                        ).order_by("timestamp", "id")[:26]
-                    )
-            else:
-                snapshot = (timezone.now().isoformat(), 2**63 - 1)
-                snap_dt = _datetime_param(snapshot[0], "snapshot")
-                if snap_dt is None:
-                    raise PlayCursorError
-                queryset = queryset.filter(timestamp__lte=snap_dt)
-                older = list(
-                    queryset.filter(
-                        Q(timestamp__lt=target.timestamp)
-                        | Q(timestamp=target.timestamp, id__lt=target.pk)
-                    ).order_by("-timestamp", "-id")[:25]
-                )
-                newer = list(
-                    queryset.filter(
-                        Q(timestamp__gt=target.timestamp)
-                        | Q(timestamp=target.timestamp, id__gt=target.pk)
-                    ).order_by("timestamp", "id")[:25]
-                )
-                interactions = [*reversed(older), target, *newer]
-            rows = list(InteractionListSerializer(interactions, many=True, context=context).data)
-            if not rows:
-                return Response(
-                    {
-                        "results": [],
-                        "threadId": None,
-                        "before": None,
-                        "after": None,
-                        "snapshot": snapshot[0],
-                    }
-                )
-            first_key, last_key = _row_key(rows[0]), _row_key(rows[-1])
-            first_dt = _datetime_param(first_key[0], "cursor")
-            last_dt = _datetime_param(last_key[0], "cursor")
-            if first_dt is None or last_dt is None:
-                raise PlayCursorError
-            has_older = queryset.filter(
-                Q(timestamp__lt=first_dt) | Q(timestamp=first_dt, id__lt=first_key[1])
-            ).exists()
-            has_newer = queryset.filter(
-                Q(timestamp__gt=last_dt) | Q(timestamp=last_dt, id__gt=last_key[1])
-            ).exists()
-            return Response(
-                {
-                    "results": rows,
-                    "threadId": str(target.thread_id) if target.thread_id else None,
-                    "before": _encode_cursor(
-                        request=request,
-                        query_params=request.query_params,
-                        key=first_key,
-                        snapshot=snapshot,
-                        direction="before",
-                    )
-                    if has_older
-                    else None,
-                    "after": _encode_cursor(
-                        request=request,
-                        query_params=request.query_params,
-                        key=last_key,
-                        snapshot=snapshot,
-                        direction="after",
-                    )
-                    if has_newer
-                    else None,
-                    "snapshot": snapshot[0],
-                }
+            interactions, snapshot, context_queryset = (
+                _context_from_cursor(request, queryset, decoded)
+                if decoded
+                else _context_around_target(queryset, target)
+            )
+            return _context_response(
+                request, target, (context_queryset, context), interactions, snapshot
             )
         except PlayDateError as exc:
             return Response(
@@ -950,6 +983,82 @@ class PlaySearchView(APIView):
         return Response({"results": results, **page})
 
 
+def _thread_summaries(
+    rows: list[dict[str, Any]],
+    request: Request,
+    read_pairs: set[tuple[int, datetime]],
+    page: dict[str, str | None] | None,
+) -> Response:
+    """Group visible interactions into paginated conversation exchanges."""
+    persona_ids = set(get_account_personas(request))
+    # An exchange is the whole nesting tree, not one thread (#3787): answering an
+    # unanswered reply moves it into a child thread, so one back-and-forth spans
+    # several threads that share a root. Grouping by that root is also what keeps
+    # a thread's display whole - see `_exchange_keys`.
+    exchange_of = _exchange_keys(rows)
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        # An interaction carries a thread only when it is an explicit reply
+        # (`interaction_services.create_interaction`), so ordinary narration,
+        # the common case, belongs to no thread. This view is an index of
+        # reply threads for one conversation, not a second pose feed: emitting
+        # a single-pose group per unreplied pose made a 47-pose scene with 3
+        # reply chains report 47 threads across 3 server-paged pages, which a
+        # client cannot filter because the paging is server side (#3772).
+        # `ThreadedNarrativeReader` draws the same line client side for its own
+        # collapse seeding, where it excludes `legacy:`-keyed groups.
+        key = row.get("thread_id")
+        if not key:
+            continue
+        exchange = exchange_of.get(str(key))
+        if exchange is None:
+            continue
+        grouped.setdefault(exchange, []).append(row)
+    results = []
+    for key, members in grouped.items():
+        # The answered pose is a real MEMBER of its thread now (#3787), so it is
+        # already in `members` and opens the exchange on its own - no row has to
+        # be fetched from outside the group and spliced in, which is what used to
+        # risk counting one pose in two groups. `rows` is ordered by (timestamp,
+        # id), so `members[0]` is the earliest pose of the exchange the viewer
+        # can see, which is exactly what `root`/`firstVisible` mean.
+        root, latest = members[0], members[-1]
+        unread, direct_unread = _unread_counts(members, read_pairs, persona_ids)
+        results.append(
+            {
+                "id": key,
+                "conversation": _conversation(root),
+                "root": _ref(root),
+                "firstVisible": _ref(root),
+                "latestVisible": _ref(latest),
+                "opening": root.get("content") or "",
+                "visiblePoseCount": len(members),
+                "unread": unread,
+                "directUnread": direct_unread,
+            }
+        )
+        # `_page()`'s `_row_key()` fallback (`latestVisiblePose` or `pose` or the row
+        # itself) needs one of those keys to resolve a boundary. Alias it to
+        # `firstVisible`, NOT `latestVisible`: roots are sorted (and paged) by
+        # creation time (see the sort below), and for a genuine multi-pose thread
+        # `latestVisible` (the newest reply) can diverge sharply from that sort key,
+        # desynchronizing `_page()`'s cursor-boundary search from the actual order.
+        # (`_row_key`'s fallback chain only checks the key name, not its semantics.)
+        results[-1]["latestVisiblePose"] = results[-1]["firstVisible"]
+    results.sort(
+        key=lambda item: (
+            item["firstVisible"]["timestamp"],
+            int(item["firstVisible"]["id"]),
+        )
+    )
+    return (
+        _page(results, 20, request)
+        if page is None
+        else _summary_page(results, limit=20, request=request, page=page)
+    )
+
+
 class PlayThreadsView(APIView):
     """GET server-grouped, paginated thread summaries for one conversation."""
 
@@ -983,73 +1092,7 @@ class PlayThreadsView(APIView):
                 account=request.user,  # type: ignore[invalid-argument-type]
                 poses=list(_read_pairs_for_rows(rows)),
             )
-        persona_ids = set(get_account_personas(request))
-        # An exchange is the whole nesting tree, not one thread (#3787): answering an
-        # unanswered reply moves it into a child thread, so one back-and-forth spans
-        # several threads that share a root. Grouping by that root is also what keeps
-        # a thread's display whole - see `_exchange_keys`.
-        exchange_of = _exchange_keys(rows)
-
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for row in rows:
-            # An interaction carries a thread only when it is an explicit reply
-            # (`interaction_services.create_interaction`), so ordinary narration,
-            # the common case, belongs to no thread. This view is an index of
-            # reply threads for one conversation, not a second pose feed: emitting
-            # a single-pose group per unreplied pose made a 47-pose scene with 3
-            # reply chains report 47 threads across 3 server-paged pages, which a
-            # client cannot filter because the paging is server side (#3772).
-            # `ThreadedNarrativeReader` draws the same line client side for its own
-            # collapse seeding, where it excludes `legacy:`-keyed groups.
-            key = row.get("thread_id")
-            if not key:
-                continue
-            exchange = exchange_of.get(str(key))
-            if exchange is None:
-                continue
-            grouped.setdefault(exchange, []).append(row)
-        results = []
-        for key, members in grouped.items():
-            # The answered pose is a real MEMBER of its thread now (#3787), so it is
-            # already in `members` and opens the exchange on its own - no row has to
-            # be fetched from outside the group and spliced in, which is what used to
-            # risk counting one pose in two groups. `rows` is ordered by (timestamp,
-            # id), so `members[0]` is the earliest pose of the exchange the viewer
-            # can see, which is exactly what `root`/`firstVisible` mean.
-            root, latest = members[0], members[-1]
-            unread, direct_unread = _unread_counts(members, read_pairs, persona_ids)
-            results.append(
-                {
-                    "id": key,
-                    "conversation": _conversation(root),
-                    "root": _ref(root),
-                    "firstVisible": _ref(root),
-                    "latestVisible": _ref(latest),
-                    "opening": root.get("content") or "",
-                    "visiblePoseCount": len(members),
-                    "unread": unread,
-                    "directUnread": direct_unread,
-                }
-            )
-            # `_page()`'s `_row_key()` fallback (`latestVisiblePose` or `pose` or the row
-            # itself) needs one of those keys to resolve a boundary. Alias it to
-            # `firstVisible`, NOT `latestVisible`: roots are sorted (and paged) by
-            # creation time (see the sort below), and for a genuine multi-pose thread
-            # `latestVisible` (the newest reply) can diverge sharply from that sort key,
-            # desynchronizing `_page()`'s cursor-boundary search from the actual order.
-            # (`_row_key`'s fallback chain only checks the key name, not its semantics.)
-            results[-1]["latestVisiblePose"] = results[-1]["firstVisible"]
-        results.sort(
-            key=lambda item: (
-                item["firstVisible"]["timestamp"],
-                int(item["firstVisible"]["id"]),
-            )
-        )
-        return (
-            _page(results, 20, request)
-            if page is None
-            else _summary_page(results, limit=20, request=request, page=page)
-        )
+        return _thread_summaries(rows, request, read_pairs, page)
 
 
 class PlayReadView(APIView):

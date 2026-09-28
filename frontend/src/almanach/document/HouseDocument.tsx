@@ -64,39 +64,28 @@ function Dash() {
   return <abbr title="none">—</abbr>;
 }
 
-export function HouseDocument({ houseId }: { houseId: number }) {
-  const { data: doc } = useHouseDocument(houseId);
-  const [leaf, setLeaf] = useState<Leaf>('house');
+type HouseDoc = NonNullable<ReturnType<typeof useHouseDocument>['data']>;
+interface LeafActions {
+  onSaveHouse: (fields: EditHouseFields) => void;
+  onEditKin: (fields: PersonPanelSaveFields) => void;
+  onCreateKin: (fields: CreateKinFields) => void;
+  onSwear: (fields: SwearFields) => void;
+  onDescribeDemesne: (domainId: number, fields: DescribeDemesneFields) => void;
+  onPlanEstate: (fields: PlanEstateFields) => void;
+  onPublish: (next: boolean) => void;
+}
 
-  const editHouse = useAlmanachMutation('almanach_edit_house');
-  const editKin = useAlmanachMutation('almanach_edit_kin');
-  const swear = useAlmanachMutation('almanach_swear');
-  const describeDemesne = useAlmanachMutation('almanach_describe_demesne');
-  const planEstate = useAlmanachMutation('almanach_plan_estate');
-  const publish = useAlmanachMutation('almanach_publish');
-
-  if (!doc) {
-    return (
-      <div className="almanach">
-        <div className="wrap p-6 text-sm text-muted-foreground">Loading the house…</div>
-      </div>
-    );
-  }
-
+function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: LeafActions) {
   const { house, family, household, realm, lands, estate } = doc;
-  const published = house.published_at != null;
-
-  const onSaveHouse = (fields: EditHouseFields) => editHouse.mutate({ org_id: houseId, ...fields });
-  const onEditKin = (fields: PersonPanelSaveFields) =>
-    editKin.mutate({ org_id: houseId, ...fields });
-  const onCreateKin = (fields: CreateKinFields) => editKin.mutate({ ...fields });
-  const onSwear = (fields: SwearFields) => swear.mutate({ ...fields });
-  const onDescribeDemesne = (domainId: number, fields: DescribeDemesneFields) =>
-    describeDemesne.mutate({ domain_id: domainId, ...fields });
-  const onPlanEstate = (fields: PlanEstateFields) =>
-    planEstate.mutate({ org_id: houseId, ...fields });
-  const onPublish = (next: boolean) => publish.mutate({ org_id: houseId, publish: next });
-
+  const {
+    onSaveHouse,
+    onEditKin,
+    onCreateKin,
+    onSwear,
+    onDescribeDemesne,
+    onPlanEstate,
+    onPublish,
+  } = actions;
   let chapter: ReactNode = null;
   let recordRows: RecordRailRow[] = [];
   let recordExtraSection: RecordRailSection | undefined;
@@ -188,6 +177,57 @@ export function HouseDocument({ houseId }: { houseId: number }) {
       );
       break;
   }
+
+  return { chapter, recordRows, recordExtraSection, recordDoors };
+}
+
+export function HouseDocument({ houseId }: { houseId: number }) {
+  const { data: doc } = useHouseDocument(houseId);
+  const [leaf, setLeaf] = useState<Leaf>('house');
+
+  const editHouse = useAlmanachMutation('almanach_edit_house');
+  const editKin = useAlmanachMutation('almanach_edit_kin');
+  const swear = useAlmanachMutation('almanach_swear');
+  const describeDemesne = useAlmanachMutation('almanach_describe_demesne');
+  const planEstate = useAlmanachMutation('almanach_plan_estate');
+  const publish = useAlmanachMutation('almanach_publish');
+
+  if (!doc) {
+    return (
+      <div className="almanach">
+        <div className="wrap p-6 text-sm text-muted-foreground">Loading the house…</div>
+      </div>
+    );
+  }
+
+  const { house, lands } = doc;
+  const published = house.published_at != null;
+
+  const onSaveHouse = (fields: EditHouseFields) => editHouse.mutate({ org_id: houseId, ...fields });
+  const onEditKin = (fields: PersonPanelSaveFields) =>
+    editKin.mutate({ org_id: houseId, ...fields });
+  const onCreateKin = (fields: CreateKinFields) => editKin.mutate({ ...fields });
+  const onSwear = (fields: SwearFields) => swear.mutate({ ...fields });
+  const onDescribeDemesne = (domainId: number, fields: DescribeDemesneFields) =>
+    describeDemesne.mutate({ domain_id: domainId, ...fields });
+  const onPlanEstate = (fields: PlanEstateFields) =>
+    planEstate.mutate({ org_id: houseId, ...fields });
+  const onPublish = (next: boolean) => publish.mutate({ org_id: houseId, publish: next });
+
+  const { chapter, recordRows, recordExtraSection, recordDoors } = leafPresentation(
+    leaf,
+    houseId,
+    doc,
+    {
+      onSaveHouse,
+      onEditKin,
+      onCreateKin,
+      onSwear,
+      onDescribeDemesne,
+      onPlanEstate,
+      onPublish,
+    }
+  );
 
   return (
     <div className="almanach">

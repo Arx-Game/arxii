@@ -364,6 +364,22 @@ def _open_labels_by_relationship_id(
     }
 
 
+def _relationship_track_label_for(
+    thread: Thread,
+    open_label_by_relationship_id: dict[int, RelationshipLabel] | None,
+) -> str | None:
+    """Return a label for a relationship-track anchor, if it still exists."""
+    side = thread.target_relationship
+    if side is None:
+        return None
+    if open_label_by_relationship_id is not None:
+        label = open_label_by_relationship_id.get(side.pk)
+    else:
+        label = side.open_labels().first()
+    label_desc = label.type.name if label is not None else "unlabeled"
+    return f"bond with {side.target_name} ({label_desc})"
+
+
 def _anchor_label_for(
     thread: Thread,
     open_label_by_relationship_id: dict[int, RelationshipLabel] | None = None,
@@ -396,20 +412,11 @@ def _anchor_label_for(
     if kind == TargetKind.FACET and thread.target_facet is not None:
         return thread.target_facet.name
     if kind == TargetKind.RELATIONSHIP_TRACK:
-        side = thread.target_relationship
-        if side is not None:
-            partner_name = side.target_name
-            if open_label_by_relationship_id is not None:
-                label = open_label_by_relationship_id.get(side.pk)
-            else:
-                label = side.open_labels().first()
-            label_desc = label.type.name if label is not None else "unlabeled"
-            return f"bond with {partner_name} ({label_desc})"
+        return _relationship_track_label_for(thread, open_label_by_relationship_id) or fallback
     if kind == TargetKind.RELATIONSHIP_CAPSTONE:
         cap = thread.target_capstone
         if cap is not None:
-            partner_name = cap.relationship.target_name
-            return f"capstone '{cap.title}' with {partner_name}"
+            return f"capstone '{cap.title}' with {cap.relationship.target_name}"
     if kind == TargetKind.MANTLE and thread.target_mantle is not None:
         return thread.target_mantle.name
     if kind == TargetKind.SANCTUM and thread.target_sanctum_details is not None:

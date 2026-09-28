@@ -532,6 +532,88 @@ def _technique_pool_scan_response(request: HttpRequest) -> HttpResponse | None:
     )
 
 
+def _technique_kit_post(
+    request: HttpRequest,
+    cached_panel: technique_analytics.TechniquePanelData | None,
+) -> tuple[
+    forms.Form,
+    forms.Form,
+    technique_analytics.TechniquePanelData | None,
+    technique_analytics.StartingKitReport | None,
+]:
+    """Resolve the starting-kit POST while preserving the cached panel."""
+    form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
+    kit_form = StartingKitForm(request.POST)
+    kit_report = None
+    if kit_form.is_valid():
+        kit_report = technique_analytics.build_starting_kit_report(
+            kit_form.to_params(),
+            anchor_params=cached_panel.params if cached_panel is not None else None,
+        )
+    return form, kit_form, cached_panel, kit_report
+
+
+def _technique_evaluate_post(
+    request: HttpRequest,
+    intent: str,
+) -> tuple[
+    forms.Form,
+    forms.Form,
+    technique_analytics.TechniquePanelData | None,
+    technique_analytics.StartingKitReport | None,
+]:
+    """Resolve an evaluate or refresh POST."""
+    form = TechniqueAnalyticsForm(request.POST)
+    kit_form = StartingKitForm()
+    panel = None
+    if form.is_valid():
+        params = technique_analytics.TechniqueAnalyticsParams(
+            **{
+                field: form.cleaned_data[field]
+                for field in (
+                    "level",
+                    "thread_level",
+                    "roller_points",
+                    "target_difficulty",
+                    "roll_modifier",
+                    "sort",
+                )
+            }
+        )
+        if intent == INTENT_REFRESH:
+            technique_analytics.clear_corpus_cache(params)
+            cache.delete(_technique_cache_key(params))
+        panel = technique_analytics.build_technique_panel(params)
+        _cache_technique_panel(params, panel)
+    return form, kit_form, panel, None
+
+
+def _technique_get_forms_and_panel(
+    request: HttpRequest,
+    cached_panel: technique_analytics.TechniquePanelData | None,
+) -> tuple[
+    forms.Form,
+    forms.Form,
+    technique_analytics.TechniquePanelData | None,
+    technique_analytics.StartingKitReport | None,
+]:
+    """Resolve the GET forms and requested or cached panel."""
+    form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
+    kit_form = StartingKitForm(
+        initial={"path": request.GET.get("kit_path"), "gift": request.GET.get("kit_gift")}
+    )
+    panel = cached_panel
+    if cached_panel is not None:
+        requested_sort = technique_analytics.resolve_sort_key(
+            request.GET.get("sort", cached_panel.params.sort)
+        )
+        if requested_sort != cached_panel.params.sort:
+            params = replace(cached_panel.params, sort=requested_sort)
+            panel = technique_analytics.build_technique_panel(params)
+            _cache_technique_panel(params, panel)
+    return form, kit_form, panel, None
+
+
 def _technique_forms_and_panel(
     request: HttpRequest,
     cached_panel: technique_analytics.TechniquePanelData | None,
@@ -542,57 +624,12 @@ def _technique_forms_and_panel(
     technique_analytics.StartingKitReport | None,
 ]:
     """Resolve forms, panel, and optional kit report for the fragment."""
-    panel = None
-    kit_report = None
-    intent = request.POST.get("intent", INTENT_EVALUATE)
-    if request.method == "POST" and intent == INTENT_KIT:
-        form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
-        kit_form = StartingKitForm(request.POST)
-        panel = cached_panel
-        if kit_form.is_valid():
-            kit_report = technique_analytics.build_starting_kit_report(
-                kit_form.to_params(),
-                anchor_params=cached_panel.params if cached_panel is not None else None,
-            )
-        return form, kit_form, panel, kit_report
     if request.method == "POST":
-        form = TechniqueAnalyticsForm(request.POST)
-        kit_form = StartingKitForm()
-        if form.is_valid():
-            params = technique_analytics.TechniqueAnalyticsParams(
-                **{
-                    field: form.cleaned_data[field]
-                    for field in (
-                        "level",
-                        "thread_level",
-                        "roller_points",
-                        "target_difficulty",
-                        "roll_modifier",
-                        "sort",
-                    )
-                }
-            )
-            if intent == INTENT_REFRESH:
-                technique_analytics.clear_corpus_cache(params)
-                cache.delete(_technique_cache_key(params))
-            panel = technique_analytics.build_technique_panel(params)
-            _cache_technique_panel(params, panel)
-        return form, kit_form, panel, kit_report
-    form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
-    kit_form = StartingKitForm(
-        initial={"path": request.GET.get("kit_path"), "gift": request.GET.get("kit_gift")}
-    )
-    if cached_panel is not None:
-        requested_sort = technique_analytics.resolve_sort_key(
-            request.GET.get("sort", cached_panel.params.sort)
-        )
-        if requested_sort != cached_panel.params.sort:
-            params = replace(cached_panel.params, sort=requested_sort)
-            panel = technique_analytics.build_technique_panel(params)
-            _cache_technique_panel(params, panel)
-        else:
-            panel = cached_panel
-    return form, kit_form, panel, kit_report
+        intent = request.POST.get("intent", INTENT_EVALUATE)
+        if intent == INTENT_KIT:
+            return _technique_kit_post(request, cached_panel)
+        return _technique_evaluate_post(request, intent)
+    return _technique_get_forms_and_panel(request, cached_panel)
 
 
 @superuser_required

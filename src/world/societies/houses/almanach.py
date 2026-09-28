@@ -631,8 +631,45 @@ def record_public_belief(kinsperson: Kinsperson, *, believed_deceased: bool) -> 
     return kinsperson
 
 
+def _record_kin_edges(  # noqa: PLR0913 — mirrors record_kin edge inputs
+    *, node, parent, parents, child, spouse, marriage_kind
+) -> None:
+    """Write the kinship edges requested for one house-tree node."""
+    for parent_node in (parent, *parents):
+        if parent_node is not None:
+            record_parentage(child=node, parent=parent_node)
+    if child is not None:
+        record_parentage(child=child, parent=node)
+    if spouse is not None:
+        record_union(kind=marriage_kind, members=[node, spouse])
+
+
+def _record_kin_memberships(*, house, node, relation, basis, born_into) -> None:
+    """Apply relation-based memberships for one house-tree node."""
+    if relation == ClaimKinRelation.HEAD:
+        has_members = (
+            FamilyMembership.objects.filter(family=house.family, ended_at__isnull=True)
+            .exclude(kinsperson=node)
+            .exists()
+        )
+        head_basis = MembershipBasis.BORN if has_members else MembershipBasis.FOUNDING
+        add_membership(kinsperson=node, family=house.family, basis=head_basis)
+    elif relation == ClaimKinRelation.SPOUSE:
+        add_membership(kinsperson=node, family=house.family, basis=MembershipBasis.MARRIED_IN)
+    elif relation == ClaimKinRelation.CHILD and not basis:
+        if recognize_birth(node) is None:
+            acknowledge_into_family(node, house.family)
+    elif basis:
+        add_membership(kinsperson=node, family=house.family, basis=basis)
+
+    if born_into is not None:
+        add_membership(
+            kinsperson=node, family=born_into, basis=MembershipBasis.BORN, is_primary=False
+        )
+
+
 @transaction.atomic
-def record_kin(  # noqa: C901, PLR0912, PLR0913 — straight-line relation dispatch, keyword-only
+def record_kin(  # noqa: PLR0913 — keyword-only public service API
     *,
     house: Organization,
     name: str,
@@ -696,34 +733,17 @@ def record_kin(  # noqa: C901, PLR0912, PLR0913 — straight-line relation dispa
             is_appable=not name,
         )
 
-    for parent_node in (parent, *parents):
-        if parent_node is not None:
-            record_parentage(child=node, parent=parent_node)
-    if child is not None:
-        record_parentage(child=child, parent=node)
-    if spouse is not None:
-        record_union(kind=marriage_kind, members=[node, spouse])
-
-    if relation == ClaimKinRelation.HEAD:
-        has_members = (
-            FamilyMembership.objects.filter(family=house.family, ended_at__isnull=True)
-            .exclude(kinsperson=node)
-            .exists()
-        )
-        head_basis = MembershipBasis.BORN if has_members else MembershipBasis.FOUNDING
-        add_membership(kinsperson=node, family=house.family, basis=head_basis)
-    elif relation == ClaimKinRelation.SPOUSE:
-        add_membership(kinsperson=node, family=house.family, basis=MembershipBasis.MARRIED_IN)
-    elif relation == ClaimKinRelation.CHILD and not basis:
-        if recognize_birth(node) is None:
-            acknowledge_into_family(node, house.family)
-    elif basis:
-        add_membership(kinsperson=node, family=house.family, basis=basis)
-
-    if born_into is not None:
-        add_membership(
-            kinsperson=node, family=born_into, basis=MembershipBasis.BORN, is_primary=False
-        )
+    _record_kin_edges(
+        node=node,
+        parent=parent,
+        parents=parents,
+        child=child,
+        spouse=spouse,
+        marriage_kind=marriage_kind,
+    )
+    _record_kin_memberships(
+        house=house, node=node, relation=relation, basis=basis, born_into=born_into
+    )
 
     vacancy = None
     if is_household:

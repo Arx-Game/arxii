@@ -237,6 +237,52 @@ function eventBytes(event: DiagnosticEvent): number {
   return JSON.stringify(event).length;
 }
 
+const ALLOWED_DETAILS: Record<DiagnosticKind, readonly string[]> = {
+  page_start: [],
+  visibility_change: ['visibility'],
+  online_change: ['online'],
+  timer_gap: ['gapMs'],
+  pagehide: [],
+  capture_enabled: [],
+  user_marker: [],
+  storage_failure: ['code'],
+  socket_attempt: ['attempt', 'outcome'],
+  socket_constructed: [],
+  socket_open: [],
+  socket_error: [],
+  socket_close: ['code', 'wasClean', 'reason'],
+  frame_received: ['direction', 'messageType', 'parseOutcome'],
+  readiness: ['readiness'],
+  reconnect_scheduled: ['attempt', 'delayMs'],
+  reconnect_fired: ['attempt'],
+  reconnect_cancelled: [],
+  reconnect_exhausted: ['attempt'],
+  local_close_intent: ['reason'],
+  dropped_events: ['count'],
+};
+
+function sanitizeDiagnosticDetail(
+  key: string,
+  value: Primitive | undefined
+): Primitive | undefined {
+  if (key === 'messageType')
+    return typeof value === 'string' && SAFE_FRAME_TYPES.has(value) ? value : 'unknown';
+  if (
+    key === 'visibility' ||
+    key === 'direction' ||
+    key === 'parseOutcome' ||
+    key === 'reason' ||
+    key === 'readiness'
+  )
+    return typeof value === 'string' && SAFE_ENUMS[key]?.has(value) ? value : 'unknown';
+  if (typeof value === 'number' && Number.isFinite(value))
+    return Math.max(-2147483648, Math.min(2147483647, Math.round(value)));
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string' && value.length <= 32 && /^[a-z0-9_.-]+$/i.test(value))
+    return value;
+  return undefined;
+}
+
 /** A module-level recorder. React components only control this object. */
 export class ConnectionDiagnostics {
   private readonly tabId: string;
@@ -256,6 +302,7 @@ export class ConnectionDiagnostics {
   private snapshotCache: DiagnosticSnapshot | null = null;
   private sockets = new Map<string, { alias: string; generation: number; localIntent?: string }>();
   private nextSocketNumber = 1;
+  private restoration: Promise<void> | null = null;
 
   constructor() {
     const session = typeof sessionStorage === 'undefined' ? undefined : sessionStorage;
@@ -272,7 +319,6 @@ export class ConnectionDiagnostics {
     const channel = safeChannel(import.meta.env.VITE_DEPLOYMENT_CHANNEL);
     this.enabled = preference === null ? channel === 'alpha' : preference === 'true';
     if (this.enabled && !this.runId) this.createRunId();
-    void this.restore();
     this.record('page_start');
     if (typeof document !== 'undefined')
       document.addEventListener('visibilitychange', () =>
@@ -315,8 +361,12 @@ export class ConnectionDiagnostics {
     }
     return this.snapshotCache;
   }
+  start(): void {
+    this.restoration ??= this.restore();
+  }
   async ready(): Promise<void> {
-    while (!this.restored) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    this.start();
+    await this.restoration;
   }
 
   setEnabled(enabled: boolean): void {
@@ -529,50 +579,14 @@ export class ConnectionDiagnostics {
     kind: DiagnosticKind,
     details: Record<string, Primitive>
   ): Record<string, Primitive> {
-    const allowed: Record<DiagnosticKind, string[]> = {
-      page_start: [],
-      visibility_change: ['visibility'],
-      online_change: ['online'],
-      timer_gap: ['gapMs'],
-      pagehide: [],
-      capture_enabled: [],
-      user_marker: [],
-      storage_failure: ['code'],
-      socket_attempt: ['attempt', 'outcome'],
-      socket_constructed: [],
-      socket_open: [],
-      socket_error: [],
-      socket_close: ['code', 'wasClean', 'reason'],
-      frame_received: ['direction', 'messageType', 'parseOutcome'],
-      readiness: ['readiness'],
-      reconnect_scheduled: ['attempt', 'delayMs'],
-      reconnect_fired: ['attempt'],
-      reconnect_cancelled: [],
-      reconnect_exhausted: ['attempt'],
-      local_close_intent: ['reason'],
-      dropped_events: ['count'],
-    };
     const out: Record<string, Primitive> = {};
-    for (const key of allowed[kind]) {
-      const value = details[key];
-      if (key === 'messageType')
-        out[key] = typeof value === 'string' && SAFE_FRAME_TYPES.has(value) ? value : 'unknown';
-      else if (
-        key === 'visibility' ||
-        key === 'direction' ||
-        key === 'parseOutcome' ||
-        key === 'reason' ||
-        key === 'readiness'
-      )
-        out[key] = typeof value === 'string' && SAFE_ENUMS[key]?.has(value) ? value : 'unknown';
-      else if (typeof value === 'number' && Number.isFinite(value))
-        out[key] = Math.max(-2147483648, Math.min(2147483647, Math.round(value)));
-      else if (typeof value === 'boolean') out[key] = value;
-      else if (typeof value === 'string' && value.length <= 32 && /^[a-z0-9_.-]+$/i.test(value))
-        out[key] = value;
+    for (const key of ALLOWED_DETAILS[kind]) {
+      const value = sanitizeDiagnosticDetail(key, details[key]);
+      if (value !== undefined) out[key] = value;
     }
     return out;
   }
+
   private append(kind: DiagnosticKind, details: Record<string, Primitive>): void {
     this.record(kind, details);
   }
@@ -607,6 +621,8 @@ export class ConnectionDiagnostics {
   }
   private async restore(): Promise<void> {
     if (!this.enabled || !this.runId || !this.storageAvailable) {
+      this.events.push(...this.pending);
+      this.pending = [];
       this.restored = true;
       return;
     }
@@ -690,6 +706,7 @@ export class ConnectionDiagnostics {
 }
 
 export const connectionDiagnostics = new ConnectionDiagnostics();
+connectionDiagnostics.start();
 export const diagnosticPreferenceKey = PREFERENCE_KEY;
 export const diagnosticLimits = {
   maxEvents: MAX_EVENTS,
