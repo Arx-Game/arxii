@@ -3,6 +3,7 @@ Character Creation admin configuration.
 """
 
 from django.contrib import admin
+from django.utils.html import format_html
 
 from world.character_creation.models import (
     AppearanceSection,
@@ -160,7 +161,10 @@ class OriginTemplateSlotInline(admin.TabularInline):
     extra = 1
     ordering = ["sort_order"]
     show_change_link = True
-    fields = ["name", "prompt", "applies_to", "allows_text", "is_required", "sort_order"]
+    # The kind is shown, not edited, here: a pick, group or person question
+    # carries answers and anchors that only the Upbringing builder edits (#4037).
+    fields = ["name", "kind", "prompt", "applies_to", "allows_text", "is_required", "sort_order"]
+    readonly_fields = ["kind"]
 
 
 @admin.register(OriginTemplate)
@@ -177,12 +181,21 @@ class OriginTemplateAdmin(admin.ModelAdmin):
         "parentage",
         "is_active",
         "sort_order",
+        "builder_link",
     ]
     list_filter = ["is_active", "parentage", "beginning__starting_area"]
     search_fields = ["name", "frame_narrative", "parentage_note"]
     ordering = ["beginning", "sort_order", "name"]
     filter_horizontal = ["claimable_kinds", "family_templates"]
     inlines = [OriginTemplateSlotInline]
+
+    @admin.display(description="Builder")
+    def builder_link(self, obj: OriginTemplate) -> str:
+        """Each row's way into the Upbringing builder, where question kinds,
+        answers and their distinction offers are edited (#4037)."""
+        from web.admin.authoring.links import builder_url  # noqa: PLC0415
+
+        return format_html('<a href="{}">Open in builder</a>', builder_url(obj))
 
 
 class OriginTemplateSlotChoiceInline(admin.TabularInline):

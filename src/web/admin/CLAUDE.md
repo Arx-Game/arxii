@@ -573,6 +573,14 @@ off it) on one admin page, in one transaction, rather than the stock admin's sep
 change forms and inlines for each. Pattern mirrors the Authoring Workbench above:
 `superuser_required`, the contributor gate, plain Django forms, `base_site.html`.
 
+**Ways in (#4037):** the Builders panel on `/admin/_authoring/` (pick an Upbringing),
+the "Open in Upbringing Builder" object-tool button on an Upbringing's admin change
+page, and the "Open in builder" column on the Upbringings list. The bare
+`/admin/_upbringing_builder/` redirects to the Builders panel; `_upbringing_builder/pick/`
+is only that panel's `?pk=` redirect target. The stock admin's questions inline shows
+each question's `kind` read-only; answers and their distinction offers are edited only
+in the builder.
+
 - **Files** - `web/admin/upbringing_builder/`: `views.py` (`upbringing_builder`,
   `upbringing_builder_preview`, `upbringing_builder_review`), `forms.py`
   (`UpbringingForm` - now also carrying `closed_distinctions`
