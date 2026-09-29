@@ -3016,6 +3016,55 @@ class Crown(SharedMemoryModel):
         return f"{self.organization} crowned in {self.city}"
 
 
+class CrewSlot(SharedMemoryModel):
+    """An authored corner under a gang that a new crew may claim (#4061 slice 3).
+
+    The crime ladder's barony: staff mark which outdoor rooms under a gang's
+    neighborhood are crew turf rather than the gang's own, and a player takes
+    one at character creation by naming a crew from a crew template. The claim
+    creates the crew's Turf on the rooms and its fealty to the gang, so the
+    slot's gang is the liege and no open-liege choice exists. A claimed slot
+    is closed; when a crew dies its rooms revert to a slot (staff clear
+    ``claimed_by``).
+    """
+
+    gang = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="crew_slots")
+    name = models.CharField(max_length=120, help_text="The Saltside corner, Wharf Row.")
+    rooms = models.ManyToManyField(
+        "arxii.RoomProfile",
+        related_name="crew_slots",
+        help_text="The outdoor rooms the crew holds; never a building or indoor room.",
+    )
+    is_active = models.BooleanField(default=True)
+    claimed_by = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_crew_slots",
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["gang", "name"]
+
+    @property
+    def is_open(self) -> bool:
+        return self.is_active and self.claimed_by_id is None
+
+    def clean(self) -> None:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        super().clean()
+        if self.pk and self.rooms.filter(is_outdoor=False).exists():
+            msg = "A crew's corner is outdoor ground; indoor rooms are never territory."
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        state = "open" if self.is_open else "claimed"
+        return f"{self.name} under {self.gang} ({state})"
+
+
 class GangTurfDetails(SharedMemoryModel):
     """Per-(GANG_TURF Project) details payload (#1891).
 

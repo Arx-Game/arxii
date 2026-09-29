@@ -61,6 +61,7 @@ if TYPE_CHECKING:
 
     from world.character_creation.models import CharacterDraft, OriginTemplate
     from world.character_sheets.models import CharacterSheet
+    from world.societies.models import CrewSlot
 
 _PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "power")
 # HouseClaim stores the status axis as ``status_principle`` (``status`` is the
@@ -515,6 +516,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     influence: int = 0,
     home_domain: Domain | None = None,
     standing: int | None = None,
+    crew_slot: CrewSlot | None = None,
 ) -> tuple[Family, Organization]:
     """Family + org + rank ladder + fealty + aspects + features, from a Family Template.
 
@@ -556,9 +558,16 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
         default_succession_law=template.default_succession_law,
     )
     ensure_default_rank_ladder(org)
-    liege = served_house or template.liege
-    if liege is not None:
-        swear_fealty(vassal=org, liege=liege)
+    if crew_slot is not None:
+        # A crew takes its corner (#4061): the slot's gang is the liege, chosen by
+        # the slot, so the template's liege and the served house do not apply.
+        from world.societies.crew_slots import claim_crew_slot  # noqa: PLC0415
+
+        claim_crew_slot(crew_slot, org)
+    else:
+        liege = served_house or template.liege
+        if liege is not None:
+            swear_fealty(vassal=org, liege=liege)
     for definition_id, option_ids in (aspect_picks or {}).items():
         for option_id in option_ids:
             OrganizationAspect.objects.create(

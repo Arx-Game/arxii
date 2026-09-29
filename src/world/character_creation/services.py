@@ -1176,6 +1176,7 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
         for definition_id, option_ids in (draft.draft_data.get("family_aspect_picks") or {}).items()
     }
     from world.character_creation.questionnaire import picked_family_standing  # noqa: PLC0415
+    from world.character_creation.validators import _draft_crew_slot  # noqa: PLC0415
 
     family, _org = build_family_org(
         template,
@@ -1187,6 +1188,7 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
         influence=0,
         home_domain=_home_domain(draft),
         standing=picked_family_standing(draft),
+        crew_slot=_draft_crew_slot(draft) if template.founds_a_crew else None,
     )
     draft.family = family
     draft.save(update_fields=["family"])

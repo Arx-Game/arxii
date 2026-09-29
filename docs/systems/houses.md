@@ -91,6 +91,9 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   home_domain=, standing=)` materializes a landless family's template holdings
   there at CG; `standings_for_families` / `family_standing` read how a family is
   doing (its domains' mean prosperity, else its businesses' mean standing).
+  **`HouseTemplate.founds_a_crew` (#4061):** the template names a crew that claims a
+  `societies.CrewSlot` at CG; `build_family_org(crew_slot=)` claims it and swears to the
+  slot's gang instead of the template's liege.
 - **`DomainImprovementDetails`** — per-kind details for `DOMAIN_IMPROVEMENT`
   projects.
 - **`DomainCrisisType`** / **`DomainCrisisTypeOption`** (#2238) — the authored

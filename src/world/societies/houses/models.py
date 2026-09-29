@@ -1223,6 +1223,13 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "empty = the question is not offered. Installation-specific: excluded from export."
         ),
     )
+    founds_a_crew = models.BooleanField(
+        default=False,
+        help_text=(
+            "A crew template (#4061): the family the player names claims an authored CrewSlot, "
+            "a corner under a gang, and swears to that gang; no liege choice is offered."
+        ),
+    )
     liege = models.ForeignKey(
         _ORG_FK,
         on_delete=models.PROTECT,

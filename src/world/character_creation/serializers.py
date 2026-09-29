@@ -2093,7 +2093,31 @@ class FamilyTemplateSerializer(HouseTemplateOptionSerializer):
     served_house_choices = serializers.SerializerMethodField()
 
     class Meta(HouseTemplateOptionSerializer.Meta):
-        fields = [*HouseTemplateOptionSerializer.Meta.fields, "org_type", "served_house_choices"]
+        fields = [
+            *HouseTemplateOptionSerializer.Meta.fields,
+            "org_type",
+            "served_house_choices",
+            "founds_a_crew",
+            "crew_slots",
+        ]
+
+    crew_slots = serializers.SerializerMethodField()
+
+    def get_crew_slots(self, obj) -> list[dict]:
+        """The open corners a crew template may claim in its realm (#4061)."""
+        if not obj.founds_a_crew:
+            return []
+        from world.societies.crew_slots import open_crew_slots  # noqa: PLC0415
+
+        return [
+            {
+                "id": slot.pk,
+                "name": slot.name,
+                "gang": slot.gang.name,
+                "rooms": [room.objectdb.key for room in slot.rooms.all()],
+            }
+            for slot in open_crew_slots(realm=obj.realm)
+        ]
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_served_house_choices(self, obj) -> list[dict]:

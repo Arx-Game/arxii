@@ -15,6 +15,7 @@ from world.codex.services import apply_organization_codex_grants
 from world.contributors.admin import CREDIT_FIELDSET
 from world.societies.models import (
     CovenantLegendCredit,
+    CrewSlot,
     CrimeVoteWeight,
     Crown,
     CrownBid,
@@ -1284,6 +1285,18 @@ class HouseClaimAdmin(admin.ModelAdmin):
         for claim in queryset:
             reject_house_claim(claim, reviewer=request.user)
         self.message_user(request, f"Rejected {queryset.count()} claim(s).")
+
+
+@admin.register(CrewSlot)
+class CrewSlotAdmin(admin.ModelAdmin):
+    """An authored corner a new crew may claim (#4061 slice 3)."""
+
+    list_display = ["name", "gang", "is_active", "claimed_by", "claimed_at"]
+    list_filter = ["is_active"]
+    search_fields = ["name", "gang__name"]
+    raw_id_fields = ["gang", "claimed_by"]
+    autocomplete_fields = ["rooms"]  # rooms are searched, never scrolled
+    readonly_fields = ["claimed_at"]
 
 
 @admin.register(CrimeVoteWeight)

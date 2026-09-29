@@ -576,6 +576,8 @@ export const mockFamilyTemplate: FamilyTemplate = {
     },
   ],
   served_house_choices: [{ id: 501, name: 'House Regency' }],
+  founds_a_crew: false,
+  crew_slots: [],
 };
 
 export const mockUpbringingNamedWithTemplate: OriginTemplate = {

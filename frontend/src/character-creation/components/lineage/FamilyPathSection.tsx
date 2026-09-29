@@ -197,6 +197,23 @@ function NamedFamilyPath({
 
   return (
     <div className="max-w-xl space-y-4">
+      {familyTemplate?.founds_a_crew && (
+        <ChoiceRow
+          label={copy?.crew_slot_heading ?? 'Your corner'}
+          options={familyTemplate.crew_slots.map((slot) => ({
+            value: slot.id,
+            label: `${slot.name} (${slot.gang}: ${slot.rooms.join(', ')})`,
+          }))}
+          value={draft.draft_data.crew_slot_id ?? null}
+          clearable
+          onChange={(value) =>
+            updateDraft.mutate({
+              draftId: draft.id,
+              data: { draft_data: { crew_slot_id: value } },
+            })
+          }
+        />
+      )}
       {offered.length > 1 && (
         <ChoiceRow
           label={copy?.family_template_heading ?? 'Family template'}

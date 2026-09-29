@@ -102,6 +102,8 @@ const TAKEN_IN = {
       aspect_definitions: [],
       features: [],
       served_house_choices: [],
+      founds_a_crew: false,
+      crew_slots: [],
     },
   ],
 };

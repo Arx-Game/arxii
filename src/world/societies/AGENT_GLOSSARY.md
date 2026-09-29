@@ -249,6 +249,10 @@ _Avoid_: gang level, criminal title (a title is the noble ladder's), org size.
 A city's recognized Crime King or Queen: a recognition on a crime family, won by a weighted vote of every sheeted underworld character (weight = the highest seat personally held), called by whoever holds a majority of the city's criminal wards, open a real month, tallied at close; a term is three IC years and a later majority may oust. While it stands, every other family in the city is the crown's vassal at the crown rate and the family holds the city's Turf.
 _Avoid_: kingpin (the maintainer's ruling: Crime King / Queen), boss of bosses, city turf (that is the consequence, not the recognition).
 
+**Crew slot** (`CrewSlot`, `societies.crew_slots`, #4061):
+An authored corner under a gang that a new crew may claim at character creation: its outdoor rooms, open until claimed. The crime ladder's barony: the claim creates the crew's Turf on the rooms and its fealty to the gang, so the gang is the liege and no open-liege choice exists.
+_Avoid_: vacancy (that is a seat in an existing organization), turf slot, gang opening.
+
 **Family standing** (#4060 slice 4, ADR-0322):
 How a family is doing, 0-100 with 50 neutral: the mean prosperity of the domains its organization owns, else the mean `standing` of the businesses it owns (`DomainHolding.owner_org`), else nothing. Set for a family a player names by the Upbringing answer they picked (`OriginTemplateSlotChoice.family_standing`), read for an established family from its books (`standings_for_families`), shown on the CG family card as a bare bar.
 _Avoid_: wealth, influence (that is the CG pricing number on `Family`), reputation (that is others' opinion).
