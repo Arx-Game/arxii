@@ -30,18 +30,6 @@ import { Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, StartingArea } from '../types';
 import { getRealmTheme } from '../utils';
 
-// PLACEHOLDER: a serializer field is the right home later; realm_theme is
-// currently a theme key, not a display name.
-const REALM_NAMES: Record<string, string> = {
-  arx: 'Arx',
-  umbros: 'The Umbral Empire',
-  luxen: 'The Holy Republic of Luxen',
-  inferna: 'The Grand Principality of Inferna',
-  ariwn: 'The Kingdoms of Ariwn',
-  aythirmok: 'The Northlands',
-  default: '',
-};
-
 interface OriginStageProps {
   draft: CharacterDraft;
   onStageSelect: (stage: Stage) => void;
@@ -117,7 +105,8 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         <EntryList label="Starting realms">
           {areas?.map((area) => {
             const isChosen = chosen?.id === area.id;
-            const realmName = REALM_NAMES[area.realm_theme] ?? REALM_NAMES.default;
+            // The realm's formal name as staff wrote it; its plain name when they wrote none.
+            const realmName = area.realm_formal_name || area.realm_name || '';
             return (
               <Entry
                 key={area.id}

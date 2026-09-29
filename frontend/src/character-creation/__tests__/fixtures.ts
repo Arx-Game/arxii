@@ -74,6 +74,7 @@ export const mockStartingArea: StartingArea = {
   realm_theme: 'arx',
   realm_slug: 'arx',
   realm_name: 'Arx',
+  realm_formal_name: 'The Necropolis',
 };
 
 export const mockStartingAreaNoHeritages: StartingArea = {
@@ -84,6 +85,7 @@ export const mockStartingAreaNoHeritages: StartingArea = {
   realm_theme: 'default',
   realm_slug: 'default',
   realm_name: 'Default',
+  realm_formal_name: '',
 };
 
 export const mockStartingAreaStaffOnly: StartingArea = {
@@ -94,6 +96,7 @@ export const mockStartingAreaStaffOnly: StartingArea = {
   realm_theme: 'default',
   realm_slug: 'default',
   realm_name: 'Default',
+  realm_formal_name: '',
 };
 
 // Every area a player is served is one they may pick — a staff-only area is

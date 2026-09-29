@@ -12,6 +12,7 @@ function makeArea(realm_theme: string): StartingArea {
     realm_theme,
     realm_slug: realm_theme,
     realm_name: realm_theme,
+    realm_formal_name: '',
   };
 }
 

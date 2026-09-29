@@ -68,7 +68,9 @@ The slug is derived (`Realm.slug`, slugified name), resolved over the rows by
 backs the roster read's `?realm=<slug>` filter (`RosterEntryFilterSet.realm`, on the
 sheet's true profile `origin_realm`) and `StartingAreaSerializer.realm_slug` /
 `realm_name`, which the front page's realm row and the Origin index entry use for their
-link to the realm page.
+link to the realm page. `StartingAreaSerializer.realm_formal_name` (#4078) carries
+`Realm.formal_name` for the tag beside each area on the Origin stage; the stage shows
+`realm_name` when the formal name is blank. No realm name is hard-coded in the frontend.
 
 The landing page still reads its realm pitch content off the starting-area read
 (ADR-0227); that read stays. ADR-0227's rejection of a realms API is amended by
