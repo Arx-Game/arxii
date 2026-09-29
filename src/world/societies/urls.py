@@ -3,6 +3,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from world.societies.crown_views import CrownView
 from world.societies.ranking_views import RankingDisplayViewSet
 from world.societies.views import (
     DeedViewSet,
@@ -45,5 +46,6 @@ router.register(r"deeds", DeedViewSet, basename="deed")
 router.register(r"events", LegendEventViewSet, basename="legend-event")
 
 urlpatterns = [
+    path("crown/<int:city_id>/", CrownView.as_view(), name="crown-page"),
     path("", include(router.urls)),
 ]

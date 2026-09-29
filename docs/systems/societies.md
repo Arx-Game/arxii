@@ -509,6 +509,7 @@ Read-only endpoints under `/api/societies/`:
 | `/reputations/` | `OrganizationReputationViewSet` | The requester's active persona's org reputations (standing) — `{id, persona, organization, organization_name, tier}`, tier only, self-scoped (#1446) |
 | `/standing-declarations/` | `StandingDeclarationViewSet` | Public favor/disfavor declaration history (#3290) — `{id, organization, organization_name, target_persona, target_persona_name, declared_by_persona, declared_by_persona_name, direction, citation, created_at}`; **public** (unlike `/reputations/`), no `delta_applied` (mirrors the reputation viewset's "tier only, never the raw value" convention); writes go through `declare_standing_action`, never a POST here |
 | `/appeals/` | `OrgAppealViewSet` | Appeals to organizations (#3293) — list/retrieve is members + own appeals; `create` lodges, `signon`/`resolve`/`withdraw` detail actions dispatch through the matching Action |
+| `/crown/<city_id>/` | `CrownView` (#4061) | The city's crown, the open bid (tally hidden until close), the last closed bid's tally, the viewer's own vote and weight, `may_call` |
 | `/deeds/` | `DeedViewSet` (#3466) | Public read of every active `LegendEntry` — any authenticated player, including deeds belonging to a persona they don't play (legend is public, like proclamations); `honor` detail action — `POST /deeds/{id}/honor/` `{journal_title, journal_body}` amplifies this deed. Payload includes `ceiling`/`headroom` (against the anchoring event) and `can_honor` (eligibility preview scoped to the requester's own active persona) |
 | `/events/` | `LegendEventViewSet` (#3466) | Public read of `LegendEvent` rows; `establish` detail action — `POST /events/{id}/establish/` `{honoree_persona, deed_title, journal_title, journal_body}` mints a fresh deed under that event. Both actions dispatch through `PerformRitualAction` against the seeded "Rite of Honors" ritual, never `honor_deed` directly — mirroring `world.magic.views.RitualPerformView`, so telnet and web converge on one action |
 
@@ -656,6 +657,28 @@ deposed family included and every family the old crown held only as crown, to th
 `CROWN_TITHE_PCT` (`swear_fealty`; a gang or crew genuinely sworn to a family keeps its
 liege, so the crown's cut reaches it through the ladder). The winner's own oath to the old
 crown is released first. Magnitudes PLACEHOLDER.
+
+**Surfaces (slice 2).** Actions `call_crown_vote` (kwargs `organization_id`, `city_id`;
+leadership-gated by `is_org_leader`) and `cast_crown_vote` (`bid_id`, `in_favor`; a staffer
+puppeting an NPC casts the NPC's vote) in `actions/definitions/crown.py`; the telnet `crown`
+command (`crown` status, `crown bid <family>`, `crown vote for|against`; the city is the
+CITY ancestor of the caller's room); the read API `GET /api/societies/crown/<city_id>/`
+(`CrownView`, `crown_views.py`): the sitting crown, the OPEN bid *without* its tally, the
+last closed bid with its tally, the viewer's own vote and weight (the viewer is the
+account's selected roster entry's sheet), and `may_call` (the viewer leads an organization
+that holds the majority). Refusals are `crown.CrownError` with a `user_message`.
+
+**Crew slots (slice 3).** The crime ladder's barony: a `CrewSlot` is an authored corner
+under a gang (`gang`, `name`, outdoor `rooms`, `is_active`, `claimed_by`/`claimed_at`;
+`clean` refuses indoor rooms). Staff author them; a player takes one at character creation
+by naming a crew from a Family Template with `founds_a_crew`: the CG template payload lists
+the open slots in the realm (`FamilyTemplateSerializer.crew_slots`, `crew_slots.open_crew_slots`),
+the Lineage page offers them as "Your corner", the draft stores `crew_slot_id`, the name-path
+validator requires one, and `build_family_org(crew_slot=)` runs `claim_crew_slot`: Turf on
+each room held by the new crew (`CREW_START_GRIP`), fealty to the slot's gang at the gang's
+default tithe, the slot closed. The slot's gang is the liege, so no open-liege choice exists.
+A claimed or inactive slot refuses (`CrewSlotError`). Authored in the admin (Crew Slots;
+rooms are searched).
 
 **Levies (#4060 slice 3, ADR-0321).** Every controller above a business takes its cut,
 and it is never either/or: a tavern in a contested neighborhood pays the Lord Mayor's
