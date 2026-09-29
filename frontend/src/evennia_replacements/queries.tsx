@@ -25,6 +25,79 @@ import { useNavigate } from 'react-router-dom';
 import { clearAccountPlayStorage } from '@/game/playStorage';
 import { clearNarrativeBodyCache } from '@/game/narrativeRetention';
 
+function restoreStoredIdentity(
+  account: AccountData | null,
+  dispatch: ReturnType<typeof useAppDispatch>,
+  store: ReturnType<typeof useStore<RootState>>
+): boolean {
+  const stored = readTabIdentity();
+
+  if (stored !== null) {
+    // "Owned" here means "appears in the account's ACTIVE roster today"
+    // (`available_characters` -- same list the Hall picker docks avatars
+    // from), not literal FK ownership: a retired/archived entry drops out
+    // of this list even though the account row still technically exists.
+    // That is exactly the case this branch's fallthrough (clear + reseed)
+    // is for.
+    const ownedIds = account?.available_characters.map((c) => c.id) ?? [];
+    if (ownedIds.includes(stored.entryId)) {
+      // This tab already has a browsing identity it still owns. Gate the
+      // dispatch on REDUX's own state, not on storage presence alone
+      // (#3479 review round 1): after a hard reload, sessionStorage
+      // survives but Redux starts cold (`browsingEntryId`/`active` both
+      // null), so a bare early return here would leave the tab showing no
+      // selection at all despite a perfectly valid stored identity. Only
+      // when Redux is already in sync do we truly no-op -- that's what
+      // keeps a later refetch carrying a DIFFERENT account default from
+      // overwriting an already-hydrated tab (never tears down a live
+      // session either way; selection isn't presence).
+      if (store.getState().game.browsingEntryId !== stored.entryId) {
+        const ownedEntry = account?.available_characters.find((c) => c.id === stored.entryId);
+        dispatch(setBrowsingIdentity(stored.entryId));
+        if (ownedEntry) {
+          dispatch(hydrateActiveCharacter({ name: ownedEntry.name, entryId: stored.entryId }));
+        }
+      }
+      return true;
+    }
+    // The stored entry is no longer among this account's entries (e.g. the
+    // character was retired) -- treat this tab as fresh and reseed below.
+    clearTabIdentity();
+  }
+
+  return false;
+}
+
+function syncAccountState(
+  account: AccountData | null,
+  previousAccountId: { current: number | null },
+  dispatch: ReturnType<typeof useAppDispatch>,
+  store: ReturnType<typeof useStore<RootState>>
+): void {
+  const nextAccountId = account?.id ?? null;
+  const previousId = previousAccountId.current;
+  if (previousId !== null && previousId !== nextAccountId) {
+    clearAccountPlayStorage(previousId);
+    clearNarrativeBodyCache();
+  }
+  if (nextAccountId === null && previousId !== null) {
+    clearAccountPlayStorage();
+    clearNarrativeBodyCache();
+  }
+  previousAccountId.current = nextAccountId;
+  dispatch(setAccount(account));
+  if (restoreStoredIdentity(account, dispatch, store)) return;
+
+  const entry = account?.selected_entry ?? null;
+  if (entry) {
+    writeTabIdentity(entry.id);
+    dispatch(setBrowsingIdentity(entry.id));
+  } else {
+    dispatch(clearBrowsingIdentity());
+  }
+  dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
+}
+
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
   // The store handle, NOT a selector: the effect below reads Redux's own idea
@@ -45,86 +118,8 @@ export function useAccountQuery() {
   });
 
   useEffect(() => {
-    // `undefined` means the query hasn't resolved yet (still pending) —
-    // don't touch either slice until there's a real payload (which may
-    // itself be `null`, meaning "no account": see fetchAccount's empty-body
-    // case). `result.data` resolving to `null` also runs the hydrate branch
-    // below, correctly clearing gameSlice — useLogout separately dispatches
-    // resetGame() for the explicit-logout path, so this is belt-and-suspenders
-    // for any other route that lands `data: null` (e.g. a stale/expired session).
-    if (result.data === undefined) {
-      return;
-    }
-    const account = result.data;
-    const nextAccountId = account?.id ?? null;
-    if (previousAccountId.current !== null && previousAccountId.current !== nextAccountId) {
-      clearAccountPlayStorage(previousAccountId.current);
-      clearNarrativeBodyCache();
-    }
-    if (nextAccountId === null && previousAccountId.current !== null) {
-      clearAccountPlayStorage();
-      clearNarrativeBodyCache();
-    }
-    previousAccountId.current = nextAccountId;
-    dispatch(setAccount(account));
-    // Reload survival (#3412) + per-tab browsing identity (#3479): mirror the
-    // durable server-side selection into gameSlice, but only SEED this tab's
-    // identity -- never overwrite it once this tab has one. Before #3479
-    // this ran unconditionally on every account refetch, which is exactly
-    // the cross-tab stomp bug: Tab A puppeting character X would have its
-    // `active` silently rewritten the moment Tab B's (or the Hall's)
-    // selection change invalidated the shared `['account']` query and Tab
-    // A's own refetch (e.g. on window focus) mirrored it in. `entry` is
-    // hoisted out (rather than narrowing `account.selected_entry` inline) so
-    // the `account === null` case (logged out/no account) falls through the
-    // same `?? null` path instead of needing its own branch.
-    const entry = account?.selected_entry ?? null;
-    const stored = readTabIdentity();
-
-    if (stored !== null) {
-      // "Owned" here means "appears in the account's ACTIVE roster today"
-      // (`available_characters` -- same list the Hall picker docks avatars
-      // from), not literal FK ownership: a retired/archived entry drops out
-      // of this list even though the account row still technically exists.
-      // That is exactly the case this branch's fallthrough (clear + reseed)
-      // is for.
-      const ownedIds = account?.available_characters.map((c) => c.id) ?? [];
-      if (ownedIds.includes(stored.entryId)) {
-        // This tab already has a browsing identity it still owns. Gate the
-        // dispatch on REDUX's own state, not on storage presence alone
-        // (#3479 review round 1): after a hard reload, sessionStorage
-        // survives but Redux starts cold (`browsingEntryId`/`active` both
-        // null), so a bare early return here would leave the tab showing no
-        // selection at all despite a perfectly valid stored identity. Only
-        // when Redux is already in sync do we truly no-op -- that's what
-        // keeps a later refetch carrying a DIFFERENT account default from
-        // overwriting an already-hydrated tab (never tears down a live
-        // session either way; selection isn't presence).
-        if (store.getState().game.browsingEntryId !== stored.entryId) {
-          const ownedEntry = account?.available_characters.find((c) => c.id === stored.entryId);
-          dispatch(setBrowsingIdentity(stored.entryId));
-          if (ownedEntry) {
-            dispatch(hydrateActiveCharacter({ name: ownedEntry.name, entryId: stored.entryId }));
-          }
-        }
-        return;
-      }
-      // The stored entry is no longer among this account's entries (e.g. the
-      // character was retired) -- treat this tab as fresh and reseed below.
-      clearTabIdentity();
-    }
-
-    // First hydration of this tab (or a stale identity just cleared above):
-    // seed from the account's durable default, same full-overwrite hydration
-    // this always did before #3479, plus writing this tab's own store so a
-    // later refetch in THIS tab hits the early return above instead.
-    if (entry) {
-      writeTabIdentity(entry.id);
-      dispatch(setBrowsingIdentity(entry.id));
-    } else {
-      dispatch(clearBrowsingIdentity());
-    }
-    dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
+    if (result.data === undefined) return;
+    syncAccountState(result.data, previousAccountId, dispatch, store);
   }, [result.data, dispatch, store]);
 
   return result;

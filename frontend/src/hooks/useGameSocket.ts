@@ -539,6 +539,52 @@ function dispatchLegacyText(
 }
 
 /** Routes one parsed incoming websocket frame to its handler, or renders it as a plain game message. */
+function dispatchKnownMessage(
+  character: MyRosterEntry['name'],
+  msgType: SocketMessageType,
+  args: IncomingMessage[1],
+  kwargs: IncomingMessage[2],
+  handler: IncomingMessageHandler,
+  dispatch: AppDispatch,
+  navigate: NavigateFunction,
+  generation: number,
+  onPuppetConfirmed?: () => void,
+  onRoomStateAccepted?: () => void,
+  onEntryFailure?: () => void
+): void {
+  const accepted = handler({
+    character,
+    args,
+    kwargs,
+    dispatch,
+    navigate,
+    onPuppetConfirmed,
+    onEntryFailure,
+  });
+  updateLifecycle(character, msgType, kwargs, accepted, dispatch);
+  if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
+    onRoomStateAccepted?.();
+    clearEntryRecovery(character);
+    if (typeof kwargs?.resync_request_id === 'string') {
+      markResyncSnapshot(
+        character,
+        generation,
+        kwargs.resync_request_id,
+        kwargs as Record<string, unknown>,
+        dispatch
+      );
+    }
+  }
+  if (accepted === false) {
+    dispatch(
+      addSessionDiagnostic({
+        character,
+        message: 'A connection message was malformed or out of sequence. Try again.',
+      })
+    );
+  }
+}
+
 function dispatchIncomingMessage(
   character: MyRosterEntry['name'],
   parsed: IncomingMessage,
@@ -557,43 +603,19 @@ function dispatchIncomingMessage(
     connectionDiagnostics.readiness('room_state_accepted', generation);
   const handler = handlerFor(msgType);
   if (handler) {
-    const accepted = handler({
+    dispatchKnownMessage(
       character,
+      msgType,
       args,
       kwargs,
+      handler,
       dispatch,
       navigate,
+      generation,
       onPuppetConfirmed,
-      onEntryFailure,
-    });
-    updateLifecycle(character, msgType, kwargs, accepted, dispatch);
-    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
-      onRoomStateAccepted?.();
-    }
-    if (accepted === false) {
-      dispatch(
-        addSessionDiagnostic({
-          character,
-          message: 'A connection message was malformed or out of sequence. Try again.',
-        })
-      );
-    }
-    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
-      clearEntryRecovery(character);
-    }
-    if (
-      msgType === WS_MESSAGE_TYPE.ROOM_STATE &&
-      accepted !== false &&
-      typeof kwargs?.resync_request_id === 'string'
-    ) {
-      markResyncSnapshot(
-        character,
-        generation,
-        kwargs.resync_request_id,
-        kwargs as Record<string, unknown>,
-        dispatch
-      );
-    }
+      onRoomStateAccepted,
+      onEntryFailure
+    );
     return;
   }
   if (dispatchLegacyText(character, parsed, msgType, kwargs, dispatch)) return;

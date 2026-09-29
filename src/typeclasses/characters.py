@@ -558,7 +558,7 @@ class Character(ObjectParent, DefaultCharacter):
         # marker above.
         return sessions[-1] if sessions else None
 
-    def at_post_puppet(self, **kwargs):  # noqa: C901 -- the guarded entry pipeline is intentionally explicit
+    def at_post_puppet(self, **kwargs):
         """Handle actions after a session puppets this character.
 
         The room snapshot is the entry readiness signal, so it is attempted
@@ -569,13 +569,7 @@ class Character(ObjectParent, DefaultCharacter):
         """
         sessions = list(self.sessions.all())
         joining = self._entry_session(sessions, kwargs)
-        try:
-            result = self.send_room_state(session=joining)
-        except (AttributeError, ObjectDoesNotExist, RuntimeError, TypeError, ValueError):
-            logger.exception("Character %s entry room-state send failed", self)
-            result = RoomStateSendResult(sent=False, code="serialization_failed")
-        if isinstance(result, RoomStateSendResult) and not result.sent:
-            self._entry_error(joining, result.code or "state_unavailable")
+        self._send_entry_room_state(joining)
 
         self._run_entry_step("become", self._announce_become, joining)
 
@@ -600,19 +594,8 @@ class Character(ObjectParent, DefaultCharacter):
 
         self._run_entry_step("commands", send_commands, joining)
 
-        first_session = len(sessions) <= 1
-        if first_session:
-            self._run_entry_step("arrival", self._announce_arrival, joining)
-
-            from world.stories.services.login import catch_up_character_stories
-
-            self._run_entry_step("story_catchup", lambda: catch_up_character_stories(self), joining)
-
-            from world.scenes.friend_services import notify_friends_of_status
-
-            self._run_entry_step(
-                "friends", lambda: notify_friends_of_status(self, online=True), joining
-            )
+        if len(sessions) <= 1:
+            self._run_first_session_entry(joining)
 
         def send_entry_look():
             previous = joining.ndb.text_frame_options if joining is not None else None
@@ -628,6 +611,30 @@ class Character(ObjectParent, DefaultCharacter):
                     joining.ndb.text_frame_options = previous
 
         self._run_entry_step("look", send_entry_look, joining)
+
+    def _send_entry_room_state(self, joining) -> None:
+        """Send the required room snapshot and report a refusal to the joining session."""
+        try:
+            result = self.send_room_state(session=joining)
+        except (AttributeError, ObjectDoesNotExist, RuntimeError, TypeError, ValueError):
+            logger.exception("Character %s entry room-state send failed", self)
+            result = RoomStateSendResult(sent=False, code="serialization_failed")
+        if isinstance(result, RoomStateSendResult) and not result.sent:
+            self._entry_error(joining, result.code or "state_unavailable")
+
+    def _run_first_session_entry(self, joining) -> None:
+        """Run best-effort work that applies only to the first session."""
+        self._run_entry_step("arrival", self._announce_arrival, joining)
+
+        from world.stories.services.login import catch_up_character_stories
+
+        self._run_entry_step("story_catchup", lambda: catch_up_character_stories(self), joining)
+
+        from world.scenes.friend_services import notify_friends_of_status
+
+        self._run_entry_step(
+            "friends", lambda: notify_friends_of_status(self, online=True), joining
+        )
 
     def _announce_become(self) -> None:
         """The per-window ``You become`` line, tagged ``lifecycle`` (#3933).

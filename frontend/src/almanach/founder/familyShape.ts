@@ -128,16 +128,115 @@ export interface FounderFamilyShape {
  * Builds the founder's family tree + household band from the draft, and the
  * founder's own node (named `youName`, tier `pc`).
  */
+function householdMember(id: number, kin: FounderKin): AlmanachHouseholdMember {
+  if (kin.relation === 'ward') {
+    return {
+      vacancy_id: id,
+      position: 'ward',
+      holder_id: id,
+      holder_name: kin.name,
+      is_open: false,
+      count_remaining: 0,
+      is_deceased: kin.is_deceased,
+      believed_deceased: false,
+    };
+  }
+  return {
+    vacancy_id: id,
+    position: kin.name,
+    holder_id: null,
+    holder_name: '',
+    is_open: true,
+    count_remaining: 1,
+    is_deceased: false,
+    believed_deceased: false,
+  };
+}
+
+function addKinRelations(
+  kin: FounderKin,
+  id: number,
+  effectiveHeadId: number | null,
+  mother: { id: number; kin: FounderKin } | null,
+  father: { id: number; kin: FounderKin } | null,
+  spouse: { id: number; kin: FounderKin } | null,
+  parentage: ParentageEdge[],
+  unions: UnionEdge[]
+): void {
+  switch (kin.relation) {
+    case 'mother':
+    case 'father':
+      if (effectiveHeadId != null) parentage.push(parentEdge(effectiveHeadId, id));
+      return;
+    case 'spouse':
+      if (effectiveHeadId != null) unions.push(unionEdge(id, [effectiveHeadId, id]));
+      return;
+    case 'sibling':
+      if (mother) parentage.push(parentEdge(id, mother.id));
+      if (father) parentage.push(parentEdge(id, father.id));
+      return;
+    case 'child':
+      if (effectiveHeadId != null) parentage.push(parentEdge(id, effectiveHeadId));
+      if (spouse) parentage.push(parentEdge(id, spouse.id));
+      return;
+    case 'grandparent': {
+      const attachTo = mother ?? father;
+      if (attachTo) parentage.push(parentEdge(attachTo.id, id));
+      return;
+    }
+    case 'head':
+    case 'ward':
+    case 'position':
+      return;
+  }
+}
+
+function addFounderRelations(
+  relation: FounderDraft['founder_relation'],
+  head: { id: number; kin: FounderKin } | null,
+  mother: { id: number; kin: FounderKin } | null,
+  father: { id: number; kin: FounderKin } | null,
+  spouse: { id: number; kin: FounderKin } | null,
+  parentage: ParentageEdge[],
+  unions: UnionEdge[]
+): void {
+  switch (relation) {
+    case 'mother':
+    case 'father':
+      if (head) parentage.push(parentEdge(head.id, FOUNDER_NODE_ID));
+      return;
+    case 'spouse':
+      if (head) unions.push(unionEdge(FOUNDER_NODE_ID, [head.id, FOUNDER_NODE_ID]));
+      return;
+    case 'sibling':
+      if (mother) parentage.push(parentEdge(FOUNDER_NODE_ID, mother.id));
+      if (father) parentage.push(parentEdge(FOUNDER_NODE_ID, father.id));
+      return;
+    case 'child':
+      if (head) parentage.push(parentEdge(FOUNDER_NODE_ID, head.id));
+      if (spouse) parentage.push(parentEdge(FOUNDER_NODE_ID, spouse.id));
+      return;
+    case 'grandparent': {
+      const attachTo = mother ?? father;
+      if (attachTo) parentage.push(parentEdge(attachTo.id, FOUNDER_NODE_ID));
+      return;
+    }
+    case 'head':
+    default:
+      return;
+  }
+}
+
+/**
+ * Builds the founder's family tree + household band from the draft, and the
+ * founder's own node (named `youName`, tier `pc`).
+ */
 export function founderFamilyShape(draft: FounderDraft, youName: string): FounderFamilyShape {
   const nodes: AlmanachFamilyNode[] = [];
   const parentage: ParentageEdge[] = [];
   const unions: UnionEdge[] = [];
   const household: AlmanachHouseholdMember[] = [];
   const keyByNodeId: Record<number, string> = {};
-
-  // Assign every kin row's synthetic id up front, in draft order, so the
-  // edge-building pass below can look any of them up regardless of which
-  // came first in the array.
   const idByKey = new Map<string, number>();
   let nextId = -3;
   for (const kin of draft.kin) {
@@ -145,85 +244,27 @@ export function founderFamilyShape(draft: FounderDraft, youName: string): Founde
     idByKey.set(kin.key, id);
     keyByNodeId[id] = kin.key;
   }
-
-  const firstOf = (relation: FounderKin['relation']): { id: number; kin: FounderKin } | null => {
-    const kin = draft.kin.find((k) => k.relation === relation);
+  const firstOf = (relation: FounderKin['relation']) => {
+    const kin = draft.kin.find((candidate) => candidate.relation === relation);
     if (!kin) return null;
     const id = idByKey.get(kin.key);
     return id == null ? null : { id, kin };
   };
-
   const head = firstOf('head');
   const mother = firstOf('mother');
   const father = firstOf('father');
   const spouse = firstOf('spouse');
-
-  // Whoever the "head-relative" relations actually attach to: a separate
-  // head kin row when one is on record, else the founder herself when she
-  // occupies the head position outright.
   const effectiveHeadId = head?.id ?? (draft.founder_relation === 'head' ? FOUNDER_NODE_ID : null);
 
   for (const kin of draft.kin) {
     const id = idByKey.get(kin.key);
     if (id == null) continue;
-
     if (kin.is_household) {
-      household.push(
-        kin.relation === 'ward'
-          ? {
-              vacancy_id: id,
-              position: 'ward',
-              holder_id: id,
-              holder_name: kin.name,
-              is_open: false,
-              count_remaining: 0,
-              is_deceased: kin.is_deceased,
-              believed_deceased: false,
-            }
-          : {
-              // A `position` row is an open slot the founder titled but
-              // hasn't (yet) named a holder for — plate F-III's "a captain
-              // of the guard" door.
-              vacancy_id: id,
-              position: kin.name,
-              holder_id: null,
-              holder_name: '',
-              is_open: true,
-              count_remaining: 1,
-              is_deceased: false,
-              believed_deceased: false,
-            }
-      );
+      household.push(householdMember(id, kin));
       continue;
     }
-
     nodes.push(kinNode(id, kin));
-
-    switch (kin.relation) {
-      case 'mother':
-      case 'father':
-        if (effectiveHeadId != null) parentage.push(parentEdge(effectiveHeadId, id));
-        break;
-      case 'spouse':
-        if (effectiveHeadId != null) unions.push(unionEdge(id, [effectiveHeadId, id]));
-        break;
-      case 'sibling':
-        if (mother) parentage.push(parentEdge(id, mother.id));
-        if (father) parentage.push(parentEdge(id, father.id));
-        break;
-      case 'child':
-        if (effectiveHeadId != null) parentage.push(parentEdge(id, effectiveHeadId));
-        if (spouse) parentage.push(parentEdge(id, spouse.id));
-        break;
-      case 'grandparent': {
-        const attachTo = mother ?? father;
-        if (attachTo) parentage.push(parentEdge(attachTo.id, id));
-        break;
-      }
-      case 'head':
-      default:
-        break;
-    }
+    addKinRelations(kin, id, effectiveHeadId, mother, father, spouse, parentage, unions);
   }
 
   nodes.push({
@@ -239,35 +280,6 @@ export function founderFamilyShape(draft: FounderDraft, youName: string): Founde
     description: '',
     believed_deceased: false,
   });
-
-  switch (draft.founder_relation) {
-    case 'mother':
-    case 'father':
-      if (head) parentage.push(parentEdge(head.id, FOUNDER_NODE_ID));
-      break;
-    case 'spouse':
-      if (head) unions.push(unionEdge(FOUNDER_NODE_ID, [head.id, FOUNDER_NODE_ID]));
-      break;
-    case 'sibling':
-      if (mother) parentage.push(parentEdge(FOUNDER_NODE_ID, mother.id));
-      if (father) parentage.push(parentEdge(FOUNDER_NODE_ID, father.id));
-      break;
-    case 'child':
-      if (head) parentage.push(parentEdge(FOUNDER_NODE_ID, head.id));
-      if (spouse) parentage.push(parentEdge(FOUNDER_NODE_ID, spouse.id));
-      break;
-    case 'grandparent': {
-      const attachTo = mother ?? father;
-      if (attachTo) parentage.push(parentEdge(attachTo.id, FOUNDER_NODE_ID));
-      break;
-    }
-    case 'head':
-    default:
-      // The founder occupies the head position herself — every head-
-      // relative kin row above already attached to `FOUNDER_NODE_ID`
-      // through `effectiveHeadId`; nothing further to link.
-      break;
-  }
-
+  addFounderRelations(draft.founder_relation, head, mother, father, spouse, parentage, unions);
   return { family: { nodes, parentage, unions }, household, keyByNodeId };
 }

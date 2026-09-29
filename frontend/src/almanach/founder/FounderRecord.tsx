@@ -59,6 +59,45 @@ function styledName(name: string, particle: string, houseName: string): string {
  * the same reason `FounderFamilyChapter`'s tree omits "daughter of": no
  * title/rank field exists on `FounderKin`, and no gender-name lookup reaches
  * these components (see that chapter's own report finding). */
+function appendFounderEntry(
+  entries: string[],
+  draft: FounderDraft,
+  relation: ClaimKinRelation,
+  youName: string,
+  born: string,
+  takenIn: string
+): void {
+  if (draft.founder_relation !== relation) return;
+  const particle = relation === 'spouse' ? takenIn : born;
+  const status = draft.founder_is_heir ? 'heir' : 'younger';
+  entries.push(`${styledName(youName, particle, draft.house_name)}, ${status}`);
+}
+
+function appendKinEntries(
+  entries: string[],
+  kinRows: FounderDraft['kin'],
+  relation: ClaimKinRelation,
+  draft: FounderDraft,
+  born: string,
+  takenIn: string
+): void {
+  for (const kin of kinRows) {
+    if (kin.relation !== relation) continue;
+    const word = RELATION_WORDS[relation];
+    if (kin.name === '') {
+      entries.push(`a ${word}, to be defined`);
+      continue;
+    }
+    const particle = relation === 'spouse' ? takenIn : born;
+    entries.push(`${styledName(kin.name, particle, draft.house_name)}, ${word}`);
+  }
+}
+
+/** "the family" line (plate F-VI): every kin quoted by name, styled with
+ * the charter particle (`taken_in` for a spouse — married in — `born` for
+ * everyone else, including the head), and a trailing descriptor — the head
+ * gets none (implicit, first in the line); everyone else gets
+ * `RELATION_WORDS`; a nameless kin renders as a `to be defined` entry. */
 function familyLine(
   draft: FounderDraft,
   youName: string,
@@ -68,35 +107,15 @@ function familyLine(
   const takenIn = particle?.taken_in ?? '';
   const namedKin = draft.kin.filter((kin) => !kin.is_household);
   const entries: string[] = [];
-
   const headKin = namedKin.find((kin) => kin.relation === 'head');
-  if (headKin) {
-    entries.push(styledName(headKin.name, born, draft.house_name));
-  } else if (draft.founder_relation === 'head') {
+  if (headKin) entries.push(styledName(headKin.name, born, draft.house_name));
+  else if (draft.founder_relation === 'head')
     entries.push(styledName(youName, born, draft.house_name));
-  }
 
   for (const relation of GENERATION_ORDER) {
-    if (draft.founder_relation === relation) {
-      const particleWord = relation === 'spouse' ? takenIn : born;
-      entries.push(
-        `${styledName(youName, particleWord, draft.house_name)}, ${
-          draft.founder_is_heir ? 'heir' : 'younger'
-        }`
-      );
-    }
-    for (const kin of namedKin) {
-      if (kin.relation !== relation) continue;
-      const word = RELATION_WORDS[relation];
-      if (kin.name === '') {
-        entries.push(`a ${word}, to be defined`);
-        continue;
-      }
-      const particleWord = relation === 'spouse' ? takenIn : born;
-      entries.push(`${styledName(kin.name, particleWord, draft.house_name)}, ${word}`);
-    }
+    appendFounderEntry(entries, draft, relation, youName, born, takenIn);
+    appendKinEntries(entries, namedKin, relation, draft, born, takenIn);
   }
-
   return entries.join(' · ');
 }
 
