@@ -468,6 +468,8 @@
   - rooms <- evennia_extensions.RoomProfile
   - turf <- societies.Turf
   - levies <- societies.Levy
+  - crown_bids <- societies.CrownBid
+  - crowns <- societies.Crown
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
   - hall_of <- societies.Domain
@@ -1591,6 +1593,7 @@
   - legend_contributions <- societies.LegendContribution
   - legend_recognition_evidence <- societies.LegendRecognitionEvidence
   - protected_by_recognition_evidence <- societies.LegendRecognitionEvidence
+  - crown_votes <- societies.CrownVote
   - org_obligations <- societies.OrganizationObligation
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
@@ -8916,10 +8919,33 @@
 **Foreign Keys:**
   - covenant -> covenants.Covenant [OneToOne]
 
+### CrimeVoteWeight
+
 ### CrisisIntel
 **Foreign Keys:**
   - crisis -> societies.DomainCrisis [FK]
   - org -> societies.Organization [FK]
+
+### Crown
+**Foreign Keys:**
+  - city -> areas.Area [FK]
+  - organization -> societies.Organization [FK]
+  - bid -> societies.CrownBid [OneToOne] (nullable)
+
+### CrownBid
+**Foreign Keys:**
+  - city -> areas.Area [FK]
+  - bidder -> societies.Organization [FK]
+  - called_by -> scenes.Persona [FK] (nullable)
+**Pointed to by:**
+  - votes <- societies.CrownVote
+  - crown <- societies.Crown
+
+### CrownVote
+**Foreign Keys:**
+  - bid -> societies.CrownBid [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - persona -> scenes.Persona [FK] (nullable)
 
 ### Domain
 **Foreign Keys:**
@@ -9298,6 +9324,8 @@
   - standing_declarations <- societies.StandingDeclaration
   - proclamations <- societies.Proclamation
   - held_turf <- societies.Turf
+  - crown_bids <- societies.CrownBid
+  - crowns <- societies.Crown
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge

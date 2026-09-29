@@ -489,3 +489,26 @@ class LevyKind(models.TextChoices):
 
     TAX = "tax", "Tax"
     PROTECTION = "protection", "Protection"
+
+
+class CrimeTier(models.TextChoices):
+    """The underworld's ranks, derived from what an organization holds (#4061).
+
+    The noble ladder continued downward from Barony, one rung of the area ladder
+    each: a crew holds an outdoor room, a gang a neighborhood, a crime family a
+    ward, and the Criminal Empire is the city's crown, a recognition won by
+    vote rather than ground taken. Never authored: ``crown.crime_tier`` reads it
+    off ``Turf`` and ``Crown`` rows, so a gang that takes a ward is a family and
+    one that loses its last neighborhood falls back to a crew.
+    """
+
+    CREW = "crew", "Crew"
+    GANG = "gang", "Gang"
+    FAMILY = "family", "Crime Family"
+    EMPIRE = "empire", "Criminal Empire"
+
+
+class CrownBidStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    PASSED = "passed", "Passed"
+    FAILED = "failed", "Failed"

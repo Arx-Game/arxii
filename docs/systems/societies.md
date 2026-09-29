@@ -621,6 +621,42 @@ ships included, no units), or ABSTRACT (the pre-#4060 shape). A farm
 there and pays coin here. Yield scales by `level × standing / 50` on top of prosperity;
 a holding of a sited kind that stands nowhere yet yields nothing. See houses.md.
 
+## The crime ladder (#4061, ADR-0323)
+
+The noble ladder continued downward from Barony, derived from what an organization holds
+(`societies.constants.CrimeTier`, `crown.crime_tier(org)`): a **crew** holds an outdoor
+room, a **gang** a neighborhood, a **crime family** a ward, and the **Criminal Empire** is a
+city's crown, a recognition on a family won by vote rather than ground taken. Never
+authored: a gang that takes a ward reads as a family, one that loses its last neighborhood
+falls back to a crew. Names of the heads (Crimelord, Crime King / Queen) are the org types'
+rank titles, data.
+
+**The vote (`societies.crown`).** `criminal_wards(city)` are the WARD areas under the city
+somebody criminal holds; lawful (Mayor-held) wards are excluded from the count. The head of
+an organization holding a strict majority of them, own plus vassals (`may_call_vote`,
+`wards_held` walks `vassals_of` recursively), may `call_crown_vote`, during a sitting term
+too (the ouster). A `CrownBid` stays OPEN for a real month (`CROWN_VOTE_DAYS`) and is
+tallied only when it closes (`close_crown_bids`, the daily
+`societies.crown_bids_close` cron). Every sheeted underworld character votes at the weight
+of the highest seat they personally hold (`vote_weight`: over the sheet's personas' active
+memberships, the best `CrimeVoteWeight` for (the org's tier, the rank rung); an associate
+rung in a bigger organization is worth 0 and adds nothing; 0 may not vote); NPCs vote only
+when a staffer puppets them. `cast_crown_vote` records one `CrownVote` per character sheet
+at that weight, through whichever persona cast it (the paper trail an unmasking reads;
+voting twice through an alternate persona is IC cheating, punished by staff: deleting the
+vote in the admin is the invalidation), replaceable until the close; the tally is hidden
+until then. Weights are seed data (`societies.seeds.seed_crime_vote_weights`, the
+`underworld` cluster): family 20/3/3/0/0, gang 5/2/2/2/2, crew 2/1/1/1/1, empire as family.
+
+**The crown.** A bid passes when weight for exceeds weight against. `recognize_crown`
+deposes the sitting `Crown` (`deposed_at`), creates the new one (`term_ends_at` = a real
+year, three IC years at 3:1), makes the family hold the city's `Turf` (grip at least
+`CROWN_START_GRIP`), and swears every liege-less family holding a ward in the city, the
+deposed family included and every family the old crown held only as crown, to the winner at
+`CROWN_TITHE_PCT` (`swear_fealty`; a gang or crew genuinely sworn to a family keeps its
+liege, so the crown's cut reaches it through the ladder). The winner's own oath to the old
+crown is released first. Magnitudes PLACEHOLDER.
+
 **Levies (#4060 slice 3, ADR-0321).** Every controller above a business takes its cut,
 and it is never either/or: a tavern in a contested neighborhood pays the Lord Mayor's
 **tax** (`LevyKind.TAX`, taken by whoever owns the Domain on that rung) and the gang's

@@ -898,7 +898,7 @@ def register_all_tasks() -> None:
 
     _register_room_ward_upkeep_task()
 
-    _register_agriculture_tasks()
+    _register_daily_world_tasks()
 
     # Unified weekly rollover — orchestrates all weekly systems in sequence.
     # Advances the GameWeek, then processes votes, random scenes, skills,
@@ -1133,6 +1133,30 @@ def _register_room_ward_upkeep_task() -> None:
                 "level * 5; lapse the ward (stops reacting, not dissolved) "
                 "when depleted. #2177."
             ),
+        )
+    )
+
+
+def _register_daily_world_tasks() -> None:
+    """The daily world tasks: agriculture and roster (#1864, #671), the crown vote (#4061).
+
+    One call from ``register_all_tasks`` keeps that function under the ruff
+    PLR0915 statement limit.
+    """
+    _register_agriculture_tasks()
+    _register_crown_tasks()
+
+
+def _register_crown_tasks() -> None:
+    """The underworld crown vote closes on its own clock, daily (#4061)."""
+    from world.societies.crown import close_crown_bids
+
+    register_task(
+        CronDefinition(
+            task_key="societies.crown_bids_close",
+            callable=close_crown_bids,
+            interval=timedelta(hours=24),
+            description="Daily: tally crown bids past their close; a passed one crowns the family.",
         )
     )
 

@@ -126,8 +126,10 @@ def _seed_weather() -> None:
 
 def _seed_underworld() -> None:
     from world.seeds.underworld import seed_underworld_demo  # noqa: PLC0415
+    from world.societies.seeds import seed_crime_vote_weights  # noqa: PLC0415
 
     seed_underworld_demo()
+    seed_crime_vote_weights()
 
 
 def _seed_provisioning() -> None:
@@ -885,6 +887,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         Title,
     )
     from world.societies.models import (  # noqa: PLC0415
+        CrimeVoteWeight,
         LegendSettlementConfig,
         PropagandaCampaignTier,
         RenownMagnitudeAward,
@@ -928,7 +931,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "justice_laws": [AreaLaw],
         # Area elevation (#696 gap 3): the one seeded threshold row (NEIGHBORHOOD).
         "area_elevation": [AreaElevationRequirement],
-        "underworld": [Turf],
+        "underworld": [Turf, CrimeVoteWeight],
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).
         "investigation": [],

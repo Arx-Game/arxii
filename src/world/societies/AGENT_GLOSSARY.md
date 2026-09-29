@@ -241,6 +241,14 @@ _Avoid_: garrison unit (the unit is a `MilitaryUnit`; the post is the link row),
 The physical, income-generating thing a family possesses: a `DomainHolding` standing on the site its `HoldingKind.site_kind` names, LAND (an outdoor room under the domain, occupying `units_required` land units), BUILDING (a `Building` or ship, no units) or ABSTRACT (pre-#4060, no place). A **farm** is a LAND holding whose kind `requires_field`: it sits on agriculture's FIELD feature, grows food there and pays coin here. `level` and `standing` (0-100, 50 neutral) scale the yield; an unsited holding of a sited kind yields nothing until `site_holding` places it.
 _Avoid_: business (the character-owned `currency.Business` venture is a different thing), asset (an `NPCAsset` is a person), holding (bare, when the site matters).
 
+**Crime tier** (`CrimeTier`, `crown.crime_tier`, #4061, ADR-0323):
+The underworld's rank, derived from what an organization holds: a crew holds an outdoor room, a gang a neighborhood, a crime family a ward; the Criminal Empire is a city's crown. Never authored.
+_Avoid_: gang level, criminal title (a title is the noble ladder's), org size.
+
+**Crown** (`Crown`, `CrownBid`, `CrownVote`, `CrimeVoteWeight`; `societies.crown`, #4061, ADR-0323):
+A city's recognized Crime King or Queen: a recognition on a crime family, won by a weighted vote of every sheeted underworld character (weight = the highest seat personally held), called by whoever holds a majority of the city's criminal wards, open a real month, tallied at close; a term is three IC years and a later majority may oust. While it stands, every other family in the city is the crown's vassal at the crown rate and the family holds the city's Turf.
+_Avoid_: kingpin (the maintainer's ruling: Crime King / Queen), boss of bosses, city turf (that is the consequence, not the recognition).
+
 **Family standing** (#4060 slice 4, ADR-0322):
 How a family is doing, 0-100 with 50 neutral: the mean prosperity of the domains its organization owns, else the mean `standing` of the businesses it owns (`DomainHolding.owner_org`), else nothing. Set for a family a player names by the Upbringing answer they picked (`OriginTemplateSlotChoice.family_standing`), read for an established family from its books (`standings_for_families`), shown on the CG family card as a bare bar.
 _Avoid_: wealth, influence (that is the CG pricing number on `Family`), reputation (that is others' opinion).
