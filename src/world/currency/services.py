@@ -71,6 +71,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.currency.models import DistinctionPurseDrain
+    from world.distinctions.models import CharacterDistinction
     from world.items.models import ItemInstance, MaterialCategory
     from world.scenes.models import Persona
     from world.societies.models import Organization
@@ -1881,6 +1882,29 @@ def fund_fame_display(persona: Persona, *, amount: int) -> int:
 # --- Somehow Always Broke: weekly purse drain (#2613) ---
 
 PURSE_DRAIN_REASON = "Somehow Always Broke weekly drain"
+
+
+def apply_starting_grant(char_dist: CharacterDistinction) -> CurrencyTransfer | None:
+    """Pay a distinction's authored inheritance into its holder's purse (#4062).
+
+    Called once per picked distinction by character creation's finalize
+    (``_create_distinction_modifiers_bulk``). Deliberately not a ``reconcile_*``:
+    an inheritance is paid exactly once, so this must never run from a path that
+    can repeat (a staff grant in play, a re-sync). Returns the audited transfer,
+    or ``None`` when the distinction carries no ``DistinctionStartingGrant``.
+    """
+    from world.currency.models import DistinctionStartingGrant  # noqa: PLC0415
+
+    try:
+        grant = char_dist.distinction.starting_grant
+    except DistinctionStartingGrant.DoesNotExist:
+        return None
+    purse = get_or_create_purse(char_dist.character)
+    return transfer(
+        amount=grant.coppers,
+        reason=f"inheritance: {char_dist.distinction.name}",
+        to_purse=purse,
+    )
 
 
 def snapshot_purse_drains() -> int:
