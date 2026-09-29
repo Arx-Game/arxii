@@ -63,6 +63,16 @@ class PublicCGReadsTest(TestCase):
         self.assertEqual(row["realm_formal_name"], "")
         self.assertEqual(row["realm_name"], "Arx")
 
+    def test_starting_area_with_no_realm_carries_no_realm_names(self) -> None:
+        StartingAreaFactory(name="Nowhere Yet", realm=None, is_active=True)
+        row = next(
+            r
+            for r in self.client.get("/api/character-creation/starting-areas/").json()
+            if r["name"] == "Nowhere Yet"
+        )
+        self.assertIsNone(row["realm_formal_name"])
+        self.assertIsNone(row["realm_name"])
+
     def test_anonymous_lists_active_beginnings_only(self) -> None:
         resp = self.client.get(f"/api/character-creation/beginnings/?starting_area={self.area.pk}")
         self.assertEqual(resp.status_code, 200)
