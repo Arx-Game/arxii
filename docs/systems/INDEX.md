@@ -5004,7 +5004,9 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `OrgIncomeStream` (`uncollected_pool`, optional `area` FK — authored anchor for a future
   local order/crime difficulty modifier), `IncomeDeclaration` (actual-vs-declared),
   `OrgEconomicsProfile` (`graft_pct`), `OrgObligation`, `DebtInstrument`, `Contract`,
-  `Business`, `CharacterEmployment`, `DistinctionPurseDrain` (#2613 — per-distinction weekly
+  `Business`, `CharacterEmployment`, `DistinctionStartingGrant` (#4062 - per-distinction
+  inheritance: `coppers` paid into the purse once at CG finalize by `apply_starting_grant`),
+  `DistinctionPurseDrain` (#2613 — per-distinction weekly
   purse-drain config: `drain_percent`/`floor_coppers`; the "Somehow Always Broke" sidecar,
   in `currency` not `distinctions` per ADR-0010), `PurseDrainWeek` (#2613 — per-holder
   per-week baseline persisted between the `SNAPSHOT` and `DRAIN` cron bands + drain audit row)

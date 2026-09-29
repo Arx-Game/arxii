@@ -3471,6 +3471,10 @@
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [OneToOne]
 
+### DistinctionStartingGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+
 ### FavorTokenDetails
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [OneToOne]
@@ -3528,6 +3532,7 @@
 ### Service Functions
 - `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' - One weekly cycle: the gross amasses in the uncollected pool (#930).`
 - `accrue_monthly_interest(organization: 'Organization') -> 'int' - One month's interest lands in arrears (#927). Returns total accrued.`
+- `apply_starting_grant(char_dist: 'CharacterDistinction') -> 'CurrencyTransfer | None' - Pay a distinction's authored inheritance into its holder's purse (#4062).`
 - `auto_sell_excess_materials(*, organization: 'Organization') -> 'int' - Liquidate any ``OrgMaterialStock`` row over ``MATERIAL_AUTO_SELL_THRESHOLD`` (#2540 slice 2).`
 - `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' - Spend authority: an active membership at tier <= spend_rank_max.`
 - `collect_and_distribute(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
@@ -3614,6 +3619,7 @@
   - resonance_grants <- magic.DistinctionResonanceGrant
   - resonance_rank_thresholds <- magic.DistinctionResonanceRankThreshold
   - purse_drain <- currency.DistinctionPurseDrain
+  - starting_grant <- currency.DistinctionStartingGrant
   - variants <- distinctions.Distinction
   - effects <- distinctions.DistinctionEffect
   - character_grants <- distinctions.CharacterDistinction
@@ -7793,11 +7799,13 @@
 - `process_weekly_relationship_allocations() -> 'int' - The weekly turn: every allocation the pool can pay becomes depth (#3957).`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None) -> 'CharacterRelationship' - A wronged character's one-sided grievance: Conflict added on their side (#1429, #3957).`
 - `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' - Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
-- `set_allocation(*, side: 'CharacterRelationship', ap_amount: 'int') -> 'RelationshipAllocation'`
+- `set_allocation(*, side: 'CharacterRelationship', ap_amount: 'int') -> 'RelationshipAllocation' - Set this week's standing AP on one side, against the whole weekly budget (#3957).`
 - `set_summary(*, side: 'CharacterRelationship', summary: 'str') -> 'CharacterRelationship'`
 - `shift_label(*, label: 'RelationshipLabel', new_type: 'RelationshipType', note: 'str' = '') -> 'RelationshipLabel' - Change one label into another: the old row ends, the new one remembers it.`
 - `soul_tether_active(a_sheet: 'CharacterSheet', b_sheet: 'CharacterSheet') -> 'bool' - Check whether two characters have an active Soul Tether bond.`
 - `spend_xp_for_character(sheet: 'CharacterSheet', amount: 'int', description: 'str', *, reason: 'str' = ProgressionReason.XP_PURCHASE, gm: 'AccountDB | None' = None) -> 'XPTransaction | None' - Debit the account's pool for something bought for ``sheet``, and attribute it.`
+- `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
+- `standing_weekly_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has already promised for the week: ties + training (#3957).`
 
 
 ## world.room_features
@@ -8859,7 +8867,7 @@
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' - Apply weekly rust to all untrained skills.`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
-- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
+- `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
@@ -8868,6 +8876,8 @@
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' - Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' - Run the full weekly skill development cycle.`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
+- `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
+- `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`
 
 

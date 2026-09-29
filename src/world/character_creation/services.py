@@ -1900,6 +1900,7 @@ def _create_distinction_modifiers_bulk(
     from world.assets.services import (  # noqa: PLC0415
         reconcile_distinction_asset_grants,
     )
+    from world.currency.services import apply_starting_grant  # noqa: PLC0415
     from world.magic.services.distinction_resonance import (  # noqa: PLC0415
         reconcile_distinction_resonance_grants,
     )
@@ -1943,6 +1944,9 @@ def _create_distinction_modifiers_bulk(
             char_dist, display_name=(asset_names or {}).get(char_dist.distinction_id)
         )
         reconcile_distinction_regard_seeds(char_dist)
+        # An inheritance (#4062) is paid here and nowhere else: finalize runs once
+        # per draft, so the grant cannot double up the way a reconcile could.
+        apply_starting_grant(char_dist)
 
 
 def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> dict[int, Any]:
