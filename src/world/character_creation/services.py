@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from world.distinctions.types import DraftDistinctionEntry
     from world.roster.models import Kinsperson
     from world.scenes.models import Persona
+    from world.societies.houses.models import Domain
     from world.societies.models import Organization
     from world.species.models import Species
     from world.stories.models import Story
@@ -1174,6 +1175,8 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
         int(definition_id): [int(option_id) for option_id in option_ids]
         for definition_id, option_ids in (draft.draft_data.get("family_aspect_picks") or {}).items()
     }
+    from world.character_creation.questionnaire import picked_family_standing  # noqa: PLC0415
+
     family, _org = build_family_org(
         template,
         name,
@@ -1182,9 +1185,48 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
         created_by=draft.account,
         origin_realm=draft.selected_area.realm if draft.selected_area else None,
         influence=0,
+        home_domain=_home_domain(draft),
+        standing=picked_family_standing(draft),
     )
     draft.family = family
     draft.save(update_fields=["family"])
+
+
+def _home_domain(draft: CharacterDraft) -> Domain | None:
+    """The land a new landless family's businesses stand on (#4060 slice 4).
+
+    The first owned Domain up the starting room's area chain (a city, its
+    Lord Mayor's), else the realm's capital city's Domain; ``None`` when the
+    realm has no such land yet, in which case the family gets no businesses.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.areas.models import Area  # noqa: PLC0415
+    from world.societies.houses.models import Domain  # noqa: PLC0415
+
+    starting_area = draft.selected_area
+    if starting_area is None:
+        return None
+    chain: list[int] = []
+    try:
+        node = starting_area.default_starting_room.room_profile.area
+    except (AttributeError, ObjectDoesNotExist):
+        node = None
+    while node is not None and len(chain) < 10:  # noqa: PLR2004 - defensive walk cap
+        chain.append(node.pk)
+        node = node.parent
+    if chain:
+        domain = (
+            Domain.objects.filter(area_id__in=chain, owner_org__isnull=False)
+            .order_by("area__level")
+            .first()
+        )
+        if domain is not None:
+            return domain
+    capital = Area.objects.filter(realm=starting_area.realm, is_capital=True).first()
+    if capital is None:
+        return None
+    return Domain.objects.filter(area=capital, owner_org__isnull=False).first()
 
 
 def _derive_ic_birth_year(draft: CharacterDraft) -> int | None:

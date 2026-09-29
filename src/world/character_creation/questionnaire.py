@@ -409,3 +409,25 @@ def _derived_anchor_payload(org: Organization | None) -> DerivedAnchor | None:
         name=org.name,
         influence=org.family.influence if org.family_id else None,
     )
+
+
+def picked_family_standing(draft: CharacterDraft) -> int | None:
+    """The ``family_standing`` of the draft's picked answer that carries one (#4060 slice 4).
+
+    An Upbringing asks at most one question whose answers set how the new family
+    starts; the first visible picked answer with a value wins. ``None`` when no
+    picked answer says anything about it, so the family keeps the default.
+    """
+    from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+
+    picks = DraftAnswers.from_draft(draft).picks
+    if not picks:
+        return None
+    choice = (
+        OriginTemplateSlotChoice.objects.filter(
+            pk__in=list(picks.values()), family_standing__isnull=False
+        )
+        .order_by("slot__sort_order", "sort_order")
+        .first()
+    )
+    return choice.family_standing if choice is not None else None

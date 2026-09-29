@@ -1630,6 +1630,12 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   unsited yields nothing; accrual × `level × standing / 50`; sited LAND units come out
   of the domain's TERRITORY base yield. One farm: "Farmland PLACEHOLDER" is a farm
   (`requires_field`, data migration 0164), agriculture's FIELD is its food half.
+  **Slice 4 (ADR-0322):** `DomainHolding.owner_org` (a family's business on another's
+  land; blank = the domain's owner), `add_holding(owner_org=, standing=)`;
+  `build_family_org(home_domain=, standing=)` gives a CG-named family its template's
+  businesses on the home city's domain at the standing the Upbringing answer set
+  (`OriginTemplateSlotChoice.family_standing`, `questionnaire.picked_family_standing`);
+  `standings_for_families` feeds `FamilySerializer.standing` for the CG family list.
 - **Levies (#4060 slice 3, ADR-0321):** `Levy` (rung: area or outdoor room; `kind` TAX
   taken by the Domain owner / PROTECTION taken by the Turf holder; `rate_pct`; own `LEVY`
   stream on the current controller). `societies.levies`: `set_levy`, `levies_over`,

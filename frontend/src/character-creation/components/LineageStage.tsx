@@ -783,6 +783,23 @@ interface FamilyCardProps {
   onSelect: () => void;
 }
 
+/** How a family is doing, as a bar (#4060): no label, no number; the length is the read. */
+function StandingBar({ standing }: { standing: number }) {
+  const width = Math.max(0, Math.min(100, standing));
+  return (
+    <div
+      role="meter"
+      aria-label="standing"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={width}
+      className="mt-2 h-1 w-full rounded bg-muted"
+    >
+      <div className="h-1 rounded bg-primary" style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
 export function FamilyCard({ family, isSelected, onSelect }: FamilyCardProps) {
   return (
     <Card
@@ -795,6 +812,9 @@ export function FamilyCard({ family, isSelected, onSelect }: FamilyCardProps) {
     >
       <CardHeader className="p-3">
         <CardTitle className="text-sm">{family.name}</CardTitle>
+        {family.standing !== null && family.standing !== undefined && (
+          <StandingBar standing={family.standing} />
+        )}
       </CardHeader>
       {family.description && (
         <CardContent className="px-3 pb-3 pt-0">

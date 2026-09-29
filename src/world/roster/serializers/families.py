@@ -23,6 +23,10 @@ class FamilyKindSerializer(serializers.ModelSerializer):
 
 
 class FamilySerializer(serializers.ModelSerializer):
+    # How the family is doing (#4060 slice 4): its domains' prosperity, else its
+    # businesses' standing, else null; batched by the list view (``standing_by_family``).
+    standing = serializers.SerializerMethodField()
+
     """Serializer for family selection and display."""
 
     kind = FamilyKindSerializer(read_only=True)
@@ -49,6 +53,7 @@ class FamilySerializer(serializers.ModelSerializer):
             "born_particle",
             "taken_in_particle",
             "inherited",
+            "standing",
         ]
         read_only_fields = ["id"]
 
@@ -121,6 +126,14 @@ class FamilySerializer(serializers.ModelSerializer):
             ],
             "liege_name": liege.liege.name if liege is not None else "",
         }
+
+    def get_standing(self, obj) -> int | None:
+        by_family = self.context.get("standing_by_family")
+        if by_family is not None:
+            return by_family.get(obj.pk)
+        from world.societies.houses.services import family_standing  # noqa: PLC0415
+
+        return family_standing(obj)
 
 
 class KinspersonNodeSerializer(serializers.Serializer):

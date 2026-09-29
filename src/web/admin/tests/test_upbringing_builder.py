@@ -213,6 +213,19 @@ class BuilderSaveTest(BuilderTestCase):
         assert choice.written_by == self.writer
         assert OriginTemplateSlot.objects.get(pk=self.q1.pk).written_by == self.writer
 
+    def test_save_how_a_new_family_starts_on_an_answer(self):
+        """An answer may set how the family a player names starts out (#4060 slice 4)."""
+        self.client.force_login(self.author)
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(**{f"a{self.q1.pk}-0-family_standing": "70"}),
+        )
+        assert resp.status_code == 302
+        saved = OriginTemplateSlotChoice.objects.filter(pk=self.livery.pk).values_list(
+            "family_standing", flat=True
+        )
+        assert list(saved) == [70]
+
     def test_save_no_known_parents_with_its_note(self):
         """#4024: a no-family Upbringing can say its characters have no known parents."""
         self.client.force_login(self.author)

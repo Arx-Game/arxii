@@ -513,8 +513,16 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     created_by: AccountDB | None = None,
     origin_realm=None,
     influence: int = 0,
+    home_domain: Domain | None = None,
+    standing: int | None = None,
 ) -> tuple[Family, Organization]:
     """Family + org + rank ladder + fealty + aspects + features, from a Family Template.
+
+    ``home_domain`` (#4060 slice 4): the land the new family's businesses stand
+    on when the family has no seat of its own, the city's domain for a commoner
+    household. The template's ``holdings`` are materialized there unsited, owned
+    by the new org (so the domain's owner levies them), at ``standing`` (0-100;
+    the Upbringing answer the player picked, else the default).
 
     Shared by the noble title claim (which then seats the title, domain and
     holdings) and the CG name path (which adds nothing more). ``aspect_picks``
@@ -564,6 +572,11 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
             description=f"Kin of {org_name} (CG-defined)",
             count_remaining=template.starting_kin_slots,
         )
+    if home_domain is not None:
+        for kind in template.holdings.all():
+            add_holding(
+                domain=home_domain, kind=kind, owner_org=org, unsited=True, standing=standing
+            )
     return family, org
 
 
@@ -842,6 +855,17 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
         # ``reference_idmapper_rollback_staleness.md``), so ``top``'s own
         # cached ``seat_domain`` attribute never picked up the write.
         seat_domain = Domain.objects.get(pk=top.seat_domain_id)
+        # How the house starts out (#4060 slice 4): the Upbringing answer the
+        # founder picked sets the seat's prosperity; no answer keeps the default.
+        if claim.draft_id is not None:
+            from world.character_creation.questionnaire import (  # noqa: PLC0415
+                picked_family_standing,
+            )
+
+            standing = picked_family_standing(claim.draft)
+            if standing is not None:
+                seat_domain.prosperity = standing
+                seat_domain.save(update_fields=["prosperity"])
         for kind in template.holdings.all():
             # A template's holdings stand nowhere yet (#4060): the founder places
             # each one on the seat's ground in play, and it yields nothing until then.

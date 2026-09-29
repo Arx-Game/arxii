@@ -541,6 +541,18 @@ class DomainHolding(SharedMemoryModel):
         related_name="domain_holding",
         help_text="The materialized stream feeding the owner org's books.",
     )
+    # Whose books this business feeds (#4060 slice 4). Blank: the domain's owner, the
+    # pre-#4060 shape (a baron's own farms). Set: a family whose business stands on
+    # someone else's land (a commoner tavern in the Lord Mayor's city), so the
+    # stream is the family's and the domain's owner levies it like anyone else.
+    owner_org = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_holdings",
+        help_text="The organization this holding pays; blank = the domain's owner.",
+    )
     # The site (#4060 slice 2): where this development physically stands. Which of
     # these a holding needs is its kind's ``site_kind``; ``site_holding`` validates.
     room_profile = models.ForeignKey(
@@ -580,6 +592,11 @@ class DomainHolding(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.domain.name})"
+
+    @property
+    def owner(self):
+        """The organization whose books this holding feeds."""
+        return self.owner_org if self.owner_org_id is not None else self.domain.owner_org
 
     @property
     def is_sited(self) -> bool:

@@ -83,7 +83,14 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   "Farmland PLACEHOLDER" kind is a farm (`requires_field`, data migration 0164)
   and agriculture's FIELD feature is its food half. Actions
   (`add_domain_holding`, `almanach_add_holding`) take `room_id` / `building_id` /
-  `field_id` and resolve them through `resolve_holding_site`.
+  `field_id` and resolve them through `resolve_holding_site`. **A business on
+  someone else's land (#4060 slice 4, ADR-0322):** `DomainHolding.owner_org`
+  (blank = the domain's owner) names the organization the holding pays when it
+  is not the landholder, a commoner family's tavern in the Lord Mayor's city;
+  `add_holding(owner_org=, standing=)`, `DomainHolding.owner`. `build_family_org(
+  home_domain=, standing=)` materializes a landless family's template holdings
+  there at CG; `standings_for_families` / `family_standing` read how a family is
+  doing (its domains' mean prosperity, else its businesses' mean standing).
 - **`DomainImprovementDetails`** — per-kind details for `DOMAIN_IMPROVEMENT`
   projects.
 - **`DomainCrisisType`** / **`DomainCrisisTypeOption`** (#2238) — the authored

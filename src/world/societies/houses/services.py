@@ -958,8 +958,14 @@ def add_holding(  # noqa: PLR0913 - the site is three optional anchors, one per 
     building=None,
     field=None,
     unsited: bool = False,
+    owner_org: Organization | None = None,
+    standing: int | None = None,
 ) -> DomainHolding:
     """Attach a working holding (a development, #4060) and materialize its income stream.
+
+    ``owner_org`` (#4060 slice 4) is the organization whose books the holding
+    feeds when it is not the domain's owner: a family's business on the city's
+    land. ``standing`` seeds how the business is doing (0-100, 50 neutral).
 
     The stream is the existing ``OrgIncomeStream`` spine — collection,
     graft, and settlement all reuse the audited currency pipeline untouched.
@@ -985,15 +991,17 @@ def add_holding(  # noqa: PLR0913 - the site is three optional anchors, one per 
         if placing
         else {}
     )
+    owner = owner_org or domain.owner_org
     base_name = name or f"{domain.name}: {kind.name}"
     stream_name = base_name
     suffix = 2
-    while OrgIncomeStream.objects.filter(organization=domain.owner_org, name=stream_name).exists():
+    while OrgIncomeStream.objects.filter(organization=owner, name=stream_name).exists():
         stream_name = f"{base_name} ({suffix})"[:100]
         suffix += 1
+    extra = {} if standing is None else {"standing": standing}
     with transaction.atomic():
         stream = OrgIncomeStream.objects.create(
-            organization=domain.owner_org,
+            organization=owner,
             name=stream_name,
             kind=kind.stream_kind,
             gross_amount=kind.base_gross,
@@ -1004,7 +1012,9 @@ def add_holding(  # noqa: PLR0913 - the site is three optional anchors, one per 
             kind=kind,
             name=stream_name,
             income_stream=stream,
+            owner_org=owner_org,
             **site,
+            **extra,
         )
 
 
@@ -1326,3 +1336,40 @@ def maybe_open_unrest_crisis(domain: Domain, *, roll: float | None = None) -> Do
         origin=CrisisOrigin.UNREST,
         description="PLACEHOLDER — simmering unrest boiled over into a crisis.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Family standing (#4060 slice 4): how a family is doing, read from its books
+# ---------------------------------------------------------------------------
+
+
+def standings_for_families(families) -> dict[int, int | None]:
+    """One number per family, batched: the mean prosperity of the domains its
+    organization owns, else the mean standing of the businesses it owns, else None.
+
+    Two grouped queries for the whole list (the CG family picker), never one per row.
+    """
+    from django.db.models import Avg  # noqa: PLC0415
+
+    ids = [family.pk for family in families]
+    result: dict[int, int | None] = dict.fromkeys(ids)
+    holdings = (
+        DomainHolding.objects.filter(owner_org__family_id__in=ids)
+        .values("owner_org__family_id")
+        .annotate(mean=Avg("standing"))
+    )
+    for row in holdings:
+        result[row["owner_org__family_id"]] = round(row["mean"])
+    domains = (
+        Domain.objects.filter(owner_org__family_id__in=ids)
+        .values("owner_org__family_id")
+        .annotate(mean=Avg("prosperity"))
+    )
+    for row in domains:
+        result[row["owner_org__family_id"]] = round(row["mean"])
+    return result
+
+
+def family_standing(family) -> int | None:
+    """``standings_for_families`` for one family (the detail view)."""
+    return standings_for_families([family]).get(family.pk)

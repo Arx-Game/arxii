@@ -241,6 +241,10 @@ _Avoid_: garrison unit (the unit is a `MilitaryUnit`; the post is the link row),
 The physical, income-generating thing a family possesses: a `DomainHolding` standing on the site its `HoldingKind.site_kind` names, LAND (an outdoor room under the domain, occupying `units_required` land units), BUILDING (a `Building` or ship, no units) or ABSTRACT (pre-#4060, no place). A **farm** is a LAND holding whose kind `requires_field`: it sits on agriculture's FIELD feature, grows food there and pays coin here. `level` and `standing` (0-100, 50 neutral) scale the yield; an unsited holding of a sited kind yields nothing until `site_holding` places it.
 _Avoid_: business (the character-owned `currency.Business` venture is a different thing), asset (an `NPCAsset` is a person), holding (bare, when the site matters).
 
+**Family standing** (#4060 slice 4, ADR-0322):
+How a family is doing, 0-100 with 50 neutral: the mean prosperity of the domains its organization owns, else the mean `standing` of the businesses it owns (`DomainHolding.owner_org`), else nothing. Set for a family a player names by the Upbringing answer they picked (`OriginTemplateSlotChoice.family_standing`), read for an established family from its books (`standings_for_families`), shown on the CG family card as a bare bar.
+_Avoid_: wealth, influence (that is the CG pricing number on `Family`), reputation (that is others' opinion).
+
 **Levy** (`Levy` + `societies.levies`, #4060 slice 3, ADR-0321):
 A controller's cut of every business on the rungs below it: a **tax** (`LevyKind.TAX`, whoever owns the Domain on that rung) or **protection** (`LevyKind.PROTECTION`, whoever holds the Turf there, a crew's corner included). Names the rung and the rate, never the taker, so the take follows control. A business under both pays both; a controller never levies its own holdings; the takes together never exceed the gross. Each pools in its own `LEVY` income stream.
 _Avoid_: tithe (that is fealty's obligation between organizations), tribute, rent.

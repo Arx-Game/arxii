@@ -1066,6 +1066,16 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
         default=0,
         help_text="Starting opinion of the anchor toward the character, -1000 to 1000 (#3660).",
     )
+    family_standing = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "How a NEW family the player names starts out, 0-100 (50 is neutral): a noble "
+            "claim's seat prosperity, or the standing of a commoner family's businesses (#4060). "
+            "Blank means this answer says nothing about it."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
 

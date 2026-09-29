@@ -8982,6 +8982,7 @@
   - domain -> societies.Domain [FK]
   - kind -> societies.HoldingKind [FK]
   - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
+  - owner_org -> societies.Organization [FK] (nullable)
   - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
   - building -> buildings.Building [FK] (nullable)
   - field -> agriculture.FieldDetails [OneToOne] (nullable)
@@ -9304,6 +9305,7 @@
   - titles <- societies.Title
   - claimed_titles <- societies.Title
   - domains <- societies.Domain
+  - owned_holdings <- societies.DomainHolding
   - org_crises <- societies.DomainCrisis
   - crisis_intel <- societies.CrisisIntel
   - pacts_as_senior <- societies.MarriagePact

@@ -52447,7 +52447,6 @@ components:
       - success_level
     Family:
       type: object
-      description: Serializer for family selection and display.
       properties:
         id:
           type: integer
@@ -52493,12 +52492,17 @@ components:
           readOnly: true
           description: Aspects/features/liege a house materialized on this family
             carries (#3648).
+        standing:
+          type: integer
+          nullable: true
+          readOnly: true
       required:
       - born_particle
       - id
       - inherited
       - kind
       - name
+      - standing
       - taken_in_particle
     FamilyEnum:
       enum:
@@ -52547,7 +52551,6 @@ components:
         * `none` - No family
     FamilyRequest:
       type: object
-      description: Serializer for family selection and display.
       properties:
         name:
           type: string

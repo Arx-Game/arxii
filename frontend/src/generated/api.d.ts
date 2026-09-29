@@ -30437,7 +30437,6 @@ export interface components {
       } | null;
       consequence_label: string | null;
     };
-    /** @description Serializer for family selection and display. */
     Family: {
       readonly id: number;
       /** @description Family/house name */
@@ -30459,6 +30458,7 @@ export interface components {
       readonly inherited: {
         [key: string]: unknown;
       };
+      readonly standing: number | null;
     };
     /**
      * @description * `heart` - Heart
@@ -30484,7 +30484,6 @@ export interface components {
      * @enum {string}
      */
     FamilyPathEnum: 'any' | 'claimed' | 'named' | 'none';
-    /** @description Serializer for family selection and display. */
     FamilyRequest: {
       /** @description Family/house name */
       name: string;

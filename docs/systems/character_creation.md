@@ -41,7 +41,7 @@ from world.character_creation.types import (
 | `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
 | `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `parentage` (`Parentage`: known/unknown/adoptive, #4024; `clean()` ties it to the family flags: unknown offers only no family, adoptive needs claim or name and no no-family path; finalize writes no parents for unknown, and for adoptive turns the PC's BORN membership into ADOPTED and every parent edge into ADOPTIVE, so the #3261 name display wears the taken-in particle), `parentage_note` (prose the player reads about their parents; blank shows nothing), `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
 | `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
-| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
+| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) and, optionally, how a new family starts (`family_standing`, #4060) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
 
 **Content vs seeds:** the real, authored `Beginnings` rows (e.g. the Arx trio —
 Caretaker/Sleeper/Misbegotten) are **lore-repo content fixtures**
@@ -661,6 +661,20 @@ family-path switch has followed since #3617.
 question only, an `OriginTemplateSlotChoice` may set `reputation_seed` (-1000 to 1000;
 seeds `OrganizationReputation` toward the resolved anchor via
 `societies.renown.bump_organization_reputation` at finalize).
+
+**Family standing (#4060 slice 4).** Any answer may set `family_standing` (0-100, 50
+neutral; blank says nothing): how the family the player *names* starts out. Finalize
+reads the first visible picked answer that carries one (`questionnaire.picked_family_standing`)
+and hands it to `build_family_org` as `standing`, with the **home domain**
+(`services._home_domain`: the first owned Domain up the starting room's area chain, else the
+realm's capital city's Domain): the Family Template's `holdings` are materialized there
+unsited, owned by the new family's organization (`DomainHolding.owner_org`, so the Lord
+Mayor levies them like anyone else) at that standing. A noble claim's seat prosperity is set
+the same way from `claim.draft` (`creator.materialize_house_claim`). Established families
+show `standing` on the CG family list (`FamilySerializer`, batched by
+`standings_for_families`: the family's domains' mean prosperity, else its businesses' mean
+standing, else null), rendered as a bare bar on the family card. Authored in the Upbringing
+builder's answers table ("New family starts at").
 
 **Plain word to code word (the Upbringing Builder's labels):**
 
