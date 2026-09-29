@@ -63,7 +63,27 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   and settlement reuse the audited currency pipeline unchanged. `HoldingKind`
   carries `NaturalKeyMixin` (`name`) + `CreditedContent` and is registered in
   `CONTENT_MODELS` (#2875); `DomainHolding` (the per-domain instance row)
-  stays play state, not content.
+  stays play state, not content. **Since #4060 slice 2 a holding is a
+  development, the physical income-generating thing a family possesses
+  (ADR-0320):** `HoldingKind.site_kind` (`HoldingSiteKind`: ABSTRACT for the
+  pre-#4060 shape, LAND, BUILDING), `units_required` (land units a LAND kind
+  occupies) and `requires_field` (a farm); `DomainHolding.room_profile` /
+  `building` / `field` (the site), `level` and `standing` (0-100, 50 neutral),
+  `is_sited`, `units`, `yield_multiplier`. `add_holding(domain=, kind=, name=,
+  room_profile=, building=, field=, unsited=)` validates the site *before*
+  writing (`_validate_site`: a farm needs a FIELD feature under the domain and
+  takes its room; LAND needs an outdoor room under the domain and free land
+  units; BUILDING needs a Building under the domain and takes no units) and
+  numbers a repeated kind's stream name; `site_holding(holding, ...)` places one
+  created `unsited=True` (a template's holdings at a house claim, the seeds). An
+  unsited holding of a sited kind yields nothing until placed. Accrual scales the
+  kind's `base_gross` by the domain's prosperity, the edict, and `level ×
+  standing / 50`; a sited LAND holding's units come out of the domain's base
+  territory yield (`territory.free_units`). One farm, not two: the seeded
+  "Farmland PLACEHOLDER" kind is a farm (`requires_field`, data migration 0164)
+  and agriculture's FIELD feature is its food half. Actions
+  (`add_domain_holding`, `almanach_add_holding`) take `room_id` / `building_id` /
+  `field_id` and resolve them through `resolve_holding_site`.
 - **`DomainImprovementDetails`** — per-kind details for `DOMAIN_IMPROVEMENT`
   projects.
 - **`DomainCrisisType`** / **`DomainCrisisTypeOption`** (#2238) — the authored

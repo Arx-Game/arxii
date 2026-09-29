@@ -207,6 +207,7 @@
   - clue_triggers <- clues.ClueTrigger
   - desc_variants <- evennia_extensions.RoomDescVariant
   - turf <- societies.Turf
+  - holdings <- societies.DomainHolding
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
@@ -408,6 +409,8 @@
 **Foreign Keys:**
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
   - crop_type -> agriculture.CropType [FK]
+**Pointed to by:**
+  - holding <- societies.DomainHolding
 
 ### FoodConfig
 
@@ -987,6 +990,7 @@
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
   - mothballed_room_states <- buildings.MothballedRoomState
+  - holdings <- societies.DomainHolding
   - bequests <- estates.Bequest
   - ship_details <- ships.ShipDetails
   - temple_dedications <- worship.TempleDedication
@@ -8975,6 +8979,9 @@
   - domain -> societies.Domain [FK]
   - kind -> societies.HoldingKind [FK]
   - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - building -> buildings.Building [FK] (nullable)
+  - field -> agriculture.FieldDetails [OneToOne] (nullable)
 **Pointed to by:**
   - material_sources <- societies.HoldingMaterialSource
   - improvement_details <- societies.DomainImprovementDetails

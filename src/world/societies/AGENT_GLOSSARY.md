@@ -237,6 +237,10 @@ count, not as demesne).
 One `MilitaryUnit` posted to garrison a `Domain` (one post per unit, a `OneToOneField`). `effective_defenses(domain)` reads `Domain.defenses` plus `garrison_term(domain)`, a seam that returns 0 until the military side computes a real bonus off a domain's posts. `assign_garrison`/`relieve_garrison` gate on `can_administer_domain` and require the unit's `owner_org` to match the domain's.
 _Avoid_: garrison unit (the unit is a `MilitaryUnit`; the post is the link row), defense post.
 
+**Development** (`DomainHolding` on a site, #4060 slice 2, ADR-0320):
+The physical, income-generating thing a family possesses: a `DomainHolding` standing on the site its `HoldingKind.site_kind` names, LAND (an outdoor room under the domain, occupying `units_required` land units), BUILDING (a `Building` or ship, no units) or ABSTRACT (pre-#4060, no place). A **farm** is a LAND holding whose kind `requires_field`: it sits on agriculture's FIELD feature, grows food there and pays coin here. `level` and `standing` (0-100, 50 neutral) scale the yield; an unsited holding of a sited kind yields nothing until `site_holding` places it.
+_Avoid_: business (the character-owned `currency.Business` venture is a different thing), asset (an `NPCAsset` is a person), holding (bare, when the site matters).
+
 **Material Source** (`HoldingMaterialSource`, #2540 slice 2):
 One material-producing row on a `DomainHolding` — `material_category` + `quality` + `source_kind` (`MaterialSourceKind.BULK`/`GEM_MINE`, `world.items.constants`). Replaces the old flat `DomainHolding.mine_quality`/`common_gem_tier` fields so one holding can carry more than one production source, and so a non-gem bulk yield (farm, quarry) shares the exact same shape a gem mine used to hard-code. `GEM_MINE` sources still roll rare finds (`gems.mining.roll_gem_haul`); `BULK` sources produce flat value only. The weekly cycle (`items.materials_production.accrue_holding_materials`) iterates every source a holding carries, crediting the holding's `OrgIncomeStream` per category.
 _Avoid_: mine (gem-only, superseded — a Material Source need not be a mine), production slot, yield row.

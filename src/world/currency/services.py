@@ -550,7 +550,9 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     # ``domain_holding`` is the reverse OneToOne — absent for non-domain streams.
     holding = stream.domain_holding_or_none
     if holding is not None:
-        gross = int(gross * holding.domain.income_multiplier)
+        # ...and a development's level and standing (#4060 slice 2); a holding of
+        # a sited kind that stands nowhere yet yields nothing until it is placed.
+        gross = int(gross * holding.domain.income_multiplier * holding.yield_multiplier)
         # A standing edict adjusts the take (#2842) — Squeeze the Taxes
         # collects more this cycle; Bread and Circuses less.
         from world.societies.proclamations import active_edict  # noqa: PLC0415

@@ -843,7 +843,9 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
         # cached ``seat_domain`` attribute never picked up the write.
         seat_domain = Domain.objects.get(pk=top.seat_domain_id)
         for kind in template.holdings.all():
-            add_holding(domain=seat_domain, kind=kind)
+            # A template's holdings stand nowhere yet (#4060): the founder places
+            # each one on the seat's ground in play, and it yields nothing until then.
+            add_holding(domain=seat_domain, kind=kind, unsited=True)
     # For a landed title, ``assign_holder`` above already wrote ``house``/
     # ``is_claimable`` to the DB through its own fetched instance; this
     # mirrors it directly onto ``top`` too — the exact object the caller

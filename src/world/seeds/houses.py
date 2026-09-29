@@ -286,12 +286,16 @@ def seed_houses_demo() -> None:
             "description": "PLACEHOLDER: grain terraces and tenant farms.",
             "stream_kind": "domain_tax",
             "base_gross": 1000,
+            # One farm, not two (#4060): the holding pays coin, its FIELD grows food.
+            "site_kind": "land",
+            "requires_field": True,
         },
         name="Farmland PLACEHOLDER",
     )
     if farmland is None:
         return
-    add_holding(domain=domain, kind=farmland)
+    # The demo domain has no field to stand a farm on; it is placed in play.
+    add_holding(domain=domain, kind=farmland, unsited=True)
     _seed_material_holdings(
         domain=domain, HoldingKind=HoldingKind, source_model=HoldingMaterialSource
     )
@@ -393,7 +397,9 @@ def _seed_material_holdings(*, domain, HoldingKind, source_model) -> None:  # no
         )
         if kind is None:
             continue
-        holding = domain.holdings.filter(kind=kind).first() or add_holding(domain=domain, kind=kind)
+        holding = domain.holdings.filter(kind=kind).first() or add_holding(
+            domain=domain, kind=kind, unsited=True
+        )
         if category is None:
             continue
         source_model.objects.get_or_create(
@@ -428,6 +434,8 @@ def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
             "description": "PLACEHOLDER: grain terraces and tenant farms.",
             "stream_kind": "domain_tax",
             "base_gross": 1000,
+            "site_kind": "land",
+            "requires_field": True,
         },
         name="Farmland PLACEHOLDER",
     )

@@ -82,8 +82,10 @@ class AddDomainHoldingAction(Action):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         from world.societies.houses.models import HoldingKind  # noqa: PLC0415
         from world.societies.houses.services import (  # noqa: PLC0415
+            HousesServiceError,
             add_holding,
             can_administer_domain,
+            resolve_holding_site,
         )
 
         persona = _resolve_active_persona(actor)
@@ -98,7 +100,21 @@ class AddDomainHoldingAction(Action):
         if kind is None:
             return ActionResult(success=False, message=_MSG_NO_HOLDING_KIND)
 
-        holding = add_holding(domain=domain, kind=kind, name=kwargs.get("name", ""))
+        # The site (#4060): a LAND kind needs ``room_id``, a farm ``field_id``, a
+        # BUILDING kind ``building_id``; the service says what is missing.
+        try:
+            holding = add_holding(
+                domain=domain,
+                kind=kind,
+                name=kwargs.get("name", ""),
+                **resolve_holding_site(
+                    room_id=kwargs.get("room_id"),
+                    building_id=kwargs.get("building_id"),
+                    field_id=kwargs.get("field_id"),
+                ),
+            )
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
             message=f"{domain.name} gains a new holding: {holding.name}.",

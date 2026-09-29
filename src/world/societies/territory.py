@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
     from world.currency.models import OrgIncomeStream
-    from world.societies.houses.models import Domain
+    from world.societies.houses.models import Domain, DomainHolding
     from world.societies.models import Turf
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,20 @@ def territory_units(site: Area | RoomProfile, kind: str) -> int:
     if not isinstance(site, Area):
         return 1 if site.is_outdoor else 0
     return len(outdoor_room_ids_under(site) - _lower_rung_room_ids(site, kind))
+
+
+def occupied_units(domain: Domain, *, exclude_holding: DomainHolding | None = None) -> int:
+    """Land units the domain's sited LAND holdings already occupy (#4060 slice 2)."""
+    holdings = domain.holdings.select_related("kind").exclude(room_profile__isnull=True)
+    if exclude_holding is not None and exclude_holding.pk is not None:
+        holdings = holdings.exclude(pk=exclude_holding.pk)
+    return sum(holding.units for holding in holdings)
+
+
+def free_units(domain: Domain, *, exclude_holding: DomainHolding | None = None) -> int:
+    """Units left for a new development: the domain's land minus what stands on it."""
+    total = territory_units(domain.area, ControlKind.LEGITIMATE)
+    return max(0, total - occupied_units(domain, exclude_holding=exclude_holding))
 
 
 def _stream_name(site_name: str) -> str:
@@ -169,8 +183,9 @@ def territory_gross(stream: OrgIncomeStream) -> int:
 
     domain = stream.territory_domain_or_none
     if domain is not None:
-        units = territory_units(domain.area, ControlKind.LEGITIMATE)
-        return int(units * TERRITORY_BASE_PER_UNIT * domain.income_multiplier)
+        # Developments use up the land they stand on (#4060 slice 2): a farm's
+        # units pay through the farm's own stream, not the base rate as well.
+        return int(free_units(domain) * TERRITORY_BASE_PER_UNIT * domain.income_multiplier)
     turf = stream.turf_or_none
     if turf is not None:
         units = territory_units(turf.site, ControlKind.CRIMINAL)

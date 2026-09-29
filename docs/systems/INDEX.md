@@ -1620,6 +1620,16 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
+- **Developments (#4060 slice 2, ADR-0320):** a `DomainHolding` is the physical
+  income-generating thing a family possesses: `HoldingKind.site_kind`
+  (ABSTRACT/LAND/BUILDING), `units_required`, `requires_field` (a farm);
+  `DomainHolding.room_profile`/`building`/`field`, `level`, `standing`. `add_holding`
+  validates the site before writing (a farm on a FIELD feature under the domain, LAND
+  on an outdoor room with free land units, BUILDING on a Building, no units);
+  `site_holding` places one created `unsited=True` (house-claim templates, seeds);
+  unsited yields nothing; accrual × `level × standing / 50`; sited LAND units come out
+  of the domain's TERRITORY base yield. One farm: "Farmland PLACEHOLDER" is a farm
+  (`requires_field`, data migration 0164), agriculture's FIELD is its food half.
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
   `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes

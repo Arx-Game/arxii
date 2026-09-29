@@ -611,6 +611,16 @@ multiplier a Domain's `income_multiplier` (prosperity / 50, crisis-scaled) or a 
 is collected like every other stream (ADR-0081); nothing here lands money.
 `TERRITORY_BASE_PER_UNIT` (`currency/constants.py`) is a PLACEHOLDER.
 
+**Developments (#4060 slice 2, ADR-0320).** A `DomainHolding` is the physical,
+income-generating thing a family possesses (a farm, a quarry, an inn, a ship, a
+tollhouse), standing on a site its kind names: LAND (an outdoor room under the domain,
+occupying `units_required` of the domain's land units, which then pay through the
+holding's own stream instead of the base rate), BUILDING (a `Building` under the domain,
+ships included, no units), or ABSTRACT (the pre-#4060 shape). A farm
+(`HoldingKind.requires_field`) sits on agriculture's FIELD feature: one farm grows food
+there and pays coin here. Yield scales by `level × standing / 50` on top of prosperity;
+a holding of a sited kind that stands nowhere yet yields nothing. See houses.md.
+
 Gangs are ordinary `Organization` rows of the `gang` `OrganizationType`; an "NPC
 gang" is simply one with no player members, not a separate model. Pushes are fed
 by the GANG_TURF project machinery (`complete_gang_turf` tier completions ×
