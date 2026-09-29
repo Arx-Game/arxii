@@ -60,6 +60,7 @@ const mockStartingArea: StartingArea = {
   realm_theme: 'default',
   realm_slug: 'arx',
   realm_name: 'Arx',
+  realm_formal_name: 'The Necropolis',
 };
 
 const mockBeginnings: Beginnings = {
