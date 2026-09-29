@@ -534,6 +534,10 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     if not stream.active:
         msg = "This income stream is inactive."
         raise ValidationError(msg)
+    if stream.kind == IncomeStreamKind.LEVY:
+        # A levy accrues nothing of its own (#4060 slice 3): the businesses under
+        # it feed its pool as they accrue, through ``apply_levies`` below.
+        return stream.uncollected_pool
     fields = ["uncollected_pool"]
     gross = stream.gross_amount
     if stream.kind == IncomeStreamKind.TERRITORY:
@@ -567,6 +571,12 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     )
 
     gross = int(gross * org_crisis_income_factor(stream.organization))
+    if holding is not None:
+        # Every controller above the business takes its cut before it pools (#4060
+        # slice 3): the Lord Mayor's tax and the gang's protection, both.
+        from world.societies.levies import apply_levies  # noqa: PLC0415
+
+        gross = apply_levies(stream, gross)
     stream.uncollected_pool = stream.uncollected_pool + gross
     stream.save(update_fields=fields)
     return stream.uncollected_pool
@@ -1761,9 +1771,10 @@ def _weekly_interest_accrual() -> int:
 
 def _weekly_territory_streams() -> int:
     """Every held rung has its TERRITORY stream before income accrues (#4060)."""
+    from world.societies.levies import ensure_levy_streams  # noqa: PLC0415
     from world.societies.territory import ensure_territory_streams  # noqa: PLC0415
 
-    return ensure_territory_streams()
+    return ensure_territory_streams() + ensure_levy_streams()
 
 
 def _weekly_income_streams() -> int:

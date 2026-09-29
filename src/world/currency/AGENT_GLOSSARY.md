@@ -32,6 +32,10 @@ _Avoid_: allowance (that's the automatic split), withdrawal (ambiguous with a pe
 A held rung's base land value: one per owned `Domain` (`Domain.territory_stream`) or held `Turf` (`Turf.income_stream`), gross recomputed at every accrual as land units × `TERRITORY_BASE_PER_UNIT` × the rung's multiplier (prosperity / 50 or grip / 100), never authored. Pools and collects like every stream (ADR-0081).
 _Avoid_: land tax (a levy is #4060 slice 3), rent, passive income.
 
+**Levy Stream** (`OrgIncomeStream.kind == LEVY`, #4060 slice 3):
+A `Levy`'s take, pooled on the rung's current controller. Accrues nothing of its own: the businesses under the levy feed it as they accrue (`apply_levies`); `gross_amount` is the running cycle total, zeroed by `ensure_levy_streams` each week.
+_Avoid_: tax stream (a levy may be protection), fee.
+
 **Materials Allowance** ("the crafting draw", #2540 slice 2):
 The non-discretionary materials analogue of the coin **Allowance**: `distribute_material_allowance` auto-splits a PLACEHOLDER share of what a collection just landed, per `MaterialCategory`, across the same active-piloted population (`_active_allowance_sheets`, shared with the coin leg) into each member's `MaterialBucket` — the head cannot withhold it, and nobody has to manually spend down `OrgMaterialStock` to reach it. Rides `collect_and_distribute` right after the coin `Allowance`; the un-shared remainder stays in `OrgMaterialStock` for discretionary crafting spend.
 _Avoid_: material withdrawal, stock draw, bucket allowance

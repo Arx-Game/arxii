@@ -621,6 +621,21 @@ ships included, no units), or ABSTRACT (the pre-#4060 shape). A farm
 there and pays coin here. Yield scales by `level × standing / 50` on top of prosperity;
 a holding of a sited kind that stands nowhere yet yields nothing. See houses.md.
 
+**Levies (#4060 slice 3, ADR-0321).** Every controller above a business takes its cut,
+and it is never either/or: a tavern in a contested neighborhood pays the Lord Mayor's
+**tax** (`LevyKind.TAX`, taken by whoever owns the Domain on that rung) and the gang's
+**protection** (`LevyKind.PROTECTION`, taken by whoever holds the Turf on that rung, an
+outdoor room included). A `Levy` names a rung and a `rate_pct`, never the taker, so the
+take follows control the way kick-up does; `set_levy(site, kind, rate_pct)` sets one (0
+switches it off). At accrual a holding stream's gross loses each applicable levy
+(`levies.apply_levies`: the room's, then every rung up the parent chain; a contested rung
+or the payer's own rung takes nothing; over 100 percent the takes scale down so the payer
+never goes negative), and each take pools in the levy's own `LEVY` `OrgIncomeStream` on the
+current controller, collected like any other (ADR-0081). A LEVY stream accrues nothing of
+its own; `ensure_levy_streams()` (in the weekly `territory` phase) retargets streams to the
+current controllers and zeroes their display total for the new cycle. A turf flip carries
+PROTECTION levy streams (pool included) to the new holder; TAX streams never follow.
+
 Gangs are ordinary `Organization` rows of the `gang` `OrganizationType`; an "NPC
 gang" is simply one with no player members, not a separate model. Pushes are fed
 by the GANG_TURF project machinery (`complete_gang_turf` tier completions ×

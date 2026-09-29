@@ -104,6 +104,9 @@ class IncomeStreamKind(models.TextChoices):
     # rung (a Domain or a Turf). Its gross is recomputed at accrual from the
     # rung's land units, never authored; see ``world.societies.territory``.
     TERRITORY = "territory", "Territory"
+    # Levy (#4060 slice 3): a controller's cut of every business on the rungs below
+    # it. It accrues nothing of its own; the payers' accruals feed it.
+    LEVY = "levy", "Levy"
 
 
 # Graft never reaches zero — some leak always survives (#923 doctrine).

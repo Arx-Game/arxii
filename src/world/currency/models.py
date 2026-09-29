@@ -284,6 +284,7 @@ class OrgIncomeStream(SharedMemoryModel):
     # The territory sidecars (#4060): the Turf or Domain whose land this stream is.
     turf_or_none = ReverseOneToOneOrNone("turf")
     territory_domain_or_none = ReverseOneToOneOrNone("territory_domain")
+    levy_or_none = ReverseOneToOneOrNone("levy")
 
     organization = models.ForeignKey(
         ORGANIZATION_MODEL,

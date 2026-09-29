@@ -1630,6 +1630,12 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   unsited yields nothing; accrual × `level × standing / 50`; sited LAND units come out
   of the domain's TERRITORY base yield. One farm: "Farmland PLACEHOLDER" is a farm
   (`requires_field`, data migration 0164), agriculture's FIELD is its food half.
+- **Levies (#4060 slice 3, ADR-0321):** `Levy` (rung: area or outdoor room; `kind` TAX
+  taken by the Domain owner / PROTECTION taken by the Turf holder; `rate_pct`; own `LEVY`
+  stream on the current controller). `societies.levies`: `set_levy`, `levies_over`,
+  `apply_levies` (off a holding stream's gross at accrual, never either/or, never the
+  payer's own rung, capped at the gross), `ensure_levy_streams` (weekly). Protection
+  streams follow a turf flip; tax streams never do.
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
   `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes

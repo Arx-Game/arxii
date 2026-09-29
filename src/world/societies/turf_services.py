@@ -113,18 +113,26 @@ def retarget_territory_streams(turf: Turf) -> None:
     """The site's crime kick-up and its territory stream flow to whoever holds it."""
     from world.currency.constants import IncomeStreamKind  # noqa: PLC0415
     from world.currency.models import OrgIncomeStream  # noqa: PLC0415
+    from world.societies.constants import LevyKind  # noqa: PLC0415
 
     if turf.controlling_org_id is None:
         return
     streams = OrgIncomeStream.objects.filter(
         area=turf.area,
         room_profile=turf.room_profile,
-        kind__in=(IncomeStreamKind.CRIME_KICKUP, IncomeStreamKind.TERRITORY),
+        kind__in=(
+            IncomeStreamKind.CRIME_KICKUP,
+            IncomeStreamKind.TERRITORY,
+            IncomeStreamKind.LEVY,
+        ),
     ).exclude(organization_id=turf.controlling_org_id)
-    # The domain's own TERRITORY stream on the same area belongs to the
-    # legitimate ladder and never follows a turf flip.
+    # The legitimate ladder's streams on the same rung (a domain's own TERRITORY
+    # stream, a TAX levy) never follow a turf flip.
     for stream in streams:
         if stream.territory_domain_or_none is not None:
+            continue
+        levy = stream.levy_or_none
+        if levy is not None and levy.kind != LevyKind.PROTECTION:
             continue
         stream.organization = turf.controlling_org
         stream.save(update_fields=["organization"])

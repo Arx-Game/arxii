@@ -207,6 +207,7 @@
   - clue_triggers <- clues.ClueTrigger
   - desc_variants <- evennia_extensions.RoomDescVariant
   - turf <- societies.Turf
+  - levies <- societies.Levy
   - holdings <- societies.DomainHolding
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
@@ -466,6 +467,7 @@
   - construction_projects <- buildings.BuildingConstructionDetails
   - rooms <- evennia_extensions.RoomProfile
   - turf <- societies.Turf
+  - levies <- societies.Levy
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
   - hall_of <- societies.Domain
@@ -3500,6 +3502,7 @@
   - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
   - turf <- societies.Turf
+  - levy <- societies.Levy
   - territory_domain <- societies.Domain
   - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
@@ -9217,6 +9220,12 @@
   - skill -> skills.Skill [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - societies_reached -> societies.Society [M2M]
+
+### Levy
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
 
 ### MarriagePact
 **Foreign Keys:**

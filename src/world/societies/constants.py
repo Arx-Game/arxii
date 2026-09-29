@@ -476,3 +476,16 @@ class ControlKind(models.TextChoices):
 
     LEGITIMATE = "legitimate", "Legitimate"
     CRIMINAL = "criminal", "Criminal"
+
+
+class LevyKind(models.TextChoices):
+    """The two cuts a business pays to the controllers above it (#4060 slice 3).
+
+    TAX is the legitimate ladder's: whoever owns the Domain on that rung takes it.
+    PROTECTION is the criminal ladder's: whoever holds the Turf on that rung takes
+    it. A business under both pays both; it is never either/or (maintainer ruling,
+    2026-09-28).
+    """
+
+    TAX = "tax", "Tax"
+    PROTECTION = "protection", "Protection"

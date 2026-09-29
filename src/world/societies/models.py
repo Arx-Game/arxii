@@ -36,6 +36,7 @@ from world.societies.constants import (
     VACANCY_BASIS_RETAINER,
     DeedKnowledgeSource,
     EnemyReach,
+    LevyKind,
     ObligationOrigin,
     ObligationState,
     OrgAppealState,
@@ -2788,6 +2789,104 @@ class Turf(SharedMemoryModel):
     def __str__(self) -> str:
         holder = self.controlling_org or "contested"
         return f"{self.site_name} turf ({holder}, grip {self.grip})"
+
+
+class Levy(SharedMemoryModel):
+    """A controller's cut of every business on the rungs below it (#4060 slice 3).
+
+    One row per site and kind: a TAX on an area is taken by whoever owns the
+    Domain there, a PROTECTION levy on an area or an outdoor room by whoever
+    holds the Turf there. The row names the rung and the rate, never the
+    taker, so the take follows control the way kick-up does. A business under
+    both a Lord Mayor's tax and a gang's protection pays both (never
+    either/or); a controller never levies its own holdings; the takes together
+    never exceed the gross. Each levy's take pools in its own LEVY income
+    stream on the current controller (``world.societies.levies``), and is
+    collected like any other pool (ADR-0081).
+    """
+
+    area = models.ForeignKey(
+        "arxii.Area",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="levies",
+        help_text="The rung this levy applies at; every business under it pays.",
+    )
+    room_profile = models.ForeignKey(
+        "arxii.RoomProfile",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="levies",
+        help_text="A crew's corner (PROTECTION only): the business on this room pays.",
+    )
+    kind = models.CharField(max_length=12, choices=LevyKind.choices)
+    rate_pct = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Percent of a business's gross taken each cycle. 0 switches the levy off.",
+    )
+    active = models.BooleanField(default=True)
+    income_stream = models.OneToOneField(
+        "arxii.OrgIncomeStream",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="levy",
+        help_text="The LEVY stream the take pools in, on the rung's current controller.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Levy"
+        verbose_name_plural = "Levies"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(area__isnull=False, room_profile__isnull=True)
+                    | models.Q(area__isnull=True, room_profile__isnull=False)
+                ),
+                name="societies_levy_exactly_one_site",
+            ),
+            models.UniqueConstraint(
+                fields=["area", "kind"],
+                condition=models.Q(area__isnull=False),
+                name="societies_levy_one_per_area_kind",
+            ),
+            models.UniqueConstraint(
+                fields=["room_profile", "kind"],
+                condition=models.Q(room_profile__isnull=False),
+                name="societies_levy_one_per_room_kind",
+            ),
+        ]
+
+    @property
+    def site(self):
+        return self.area if self.area_id is not None else self.room_profile
+
+    @property
+    def site_name(self) -> str:
+        if self.area_id is not None:
+            return self.area.name
+        room = self.room_profile
+        return room.objectdb.key if room is not None else "nowhere"
+
+    @property
+    def controller(self) -> Organization | None:
+        """Who takes this levy right now: the rung's Domain owner or Turf holder."""
+        if self.kind == LevyKind.TAX:
+            from world.societies.houses.models import Domain  # noqa: PLC0415
+
+            if self.area_id is None:
+                return None
+            domain = Domain.objects.filter(area_id=self.area_id).select_related("owner_org").first()
+            return domain.owner_org if domain is not None else None
+        turf = Turf.objects.filter(area=self.area, room_profile=self.room_profile).first()
+        return turf.controlling_org if turf is not None else None
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} {self.rate_pct}% on {self.site_name}"
 
 
 class GangTurfDetails(SharedMemoryModel):

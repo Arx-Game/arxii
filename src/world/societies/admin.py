@@ -29,6 +29,7 @@ from world.societies.models import (
     LegendSettlementConfig,
     LegendSourceType,
     LegendSpread,
+    Levy,
     Organization,
     OrganizationGiftGrant,
     OrganizationMembership,
@@ -1279,6 +1280,17 @@ class HouseClaimAdmin(admin.ModelAdmin):
         for claim in queryset:
             reject_house_claim(claim, reviewer=request.user)
         self.message_user(request, f"Rejected {queryset.count()} claim(s).")
+
+
+@admin.register(Levy)
+class LevyAdmin(admin.ModelAdmin):
+    """A controller's cut of the businesses below a rung (#4060 slice 3)."""
+
+    list_display = ["site_name", "kind", "rate_pct", "active", "controller", "updated_at"]
+    list_filter = ["kind", "active"]
+    search_fields = ["area__name", "room_profile__objectdb__db_key"]
+    raw_id_fields = ["area", "room_profile", "income_stream"]
+    readonly_fields = ["updated_at"]
 
 
 @admin.register(Turf)
