@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from world.areas.constants import AreaLevel
 from world.areas.models import Area
-from world.societies.models import NeighborhoodTurf, Organization, OrganizationType
+from world.societies.models import Organization, OrganizationType, Turf
 from world.societies.turf_services import FLIP_START_GRIP, apply_turf_push
 
 
@@ -33,7 +33,7 @@ class TurfPushTest(TestCase):
         self.assertEqual(turf.grip, 60)
 
     def test_rival_pushes_erode_and_provoke(self):
-        NeighborhoodTurf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=50)
+        Turf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=50)
         with patch("world.societies.turf_services._open_retaliation") as retaliation:
             turf = apply_turf_push(self.crew, self.area, 20)
         self.assertEqual(turf.controlling_org, self.ashfingers)
@@ -41,7 +41,7 @@ class TurfPushTest(TestCase):
         retaliation.assert_called_once()
 
     def test_grip_breaking_flips_control(self):
-        NeighborhoodTurf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=15)
+        Turf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=15)
         with patch("world.societies.turf_services._open_retaliation") as retaliation:
             turf = apply_turf_push(self.crew, self.area, 20)
         self.assertEqual(turf.controlling_org, self.crew)
@@ -67,7 +67,7 @@ class TurfPushTest(TestCase):
             gross_amount=1000,
             area=self.area,
         )
-        NeighborhoodTurf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=10)
+        Turf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=10)
         with patch("world.societies.turf_services._open_retaliation"):
             apply_turf_push(self.crew, self.area, 20)
         stream.refresh_from_db()
@@ -78,7 +78,7 @@ class TurfPushTest(TestCase):
         from world.societies.houses.models import DomainCrisis
 
         _seed_retaliation_crisis_type()
-        NeighborhoodTurf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=50)
+        Turf.objects.create(area=self.area, controlling_org=self.ashfingers, grip=50)
         apply_turf_push(self.crew, self.area, 10)
         crisis = DomainCrisis.objects.get()
         self.assertEqual(crisis.org, self.crew)

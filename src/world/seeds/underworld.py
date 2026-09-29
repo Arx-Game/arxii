@@ -31,9 +31,9 @@ def _seed_gang_and_turf() -> None:
     from world.currency.constants import IncomeStreamKind  # noqa: PLC0415
     from world.currency.models import OrgIncomeStream  # noqa: PLC0415
     from world.societies.models import (  # noqa: PLC0415
-        NeighborhoodTurf,
         Organization,
         OrganizationType,
+        Turf,
     )
 
     org_type, _created = OrganizationType.objects.get_or_create(name=GANG_ORG_TYPE_NAME)
@@ -51,7 +51,7 @@ def _seed_gang_and_turf() -> None:
         name=CRIME_NEIGHBORHOOD_NAME,
         defaults={"level": AreaLevel.NEIGHBORHOOD},
     )
-    turf, turf_created = NeighborhoodTurf.objects.get_or_create(
+    turf, turf_created = Turf.objects.get_or_create(
         area=area,
         defaults={"controlling_org": gang, "grip": NPC_GANG_STARTING_GRIP},
     )

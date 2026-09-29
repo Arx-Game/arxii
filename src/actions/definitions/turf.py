@@ -2,7 +2,7 @@
 
 `start_gang_turf` finally wires the orphaned `start_gang_turf_project`
 machinery (#2418): a leader-rank member of a criminal org opens the
-TIERED_PERIOD project whose graded completion pushes `NeighborhoodTurf`
+TIERED_PERIOD project whose graded completion pushes `Turf`
 grip — missions feed the same project through PROJECT reward lines.
 """
 

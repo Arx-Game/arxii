@@ -28,6 +28,10 @@ _Avoid_: org bank, org wallet
 A member's discretionary, player-initiated draw from the org treasury into their own purse (`withdraw_from_treasury`, `TreasuryWithdrawAction`, key `treasury_withdraw`) — gated by `can_spend_treasury` (active membership at rank tier <= `spend_rank_max`) and, since #2540, by the same **BANK** room-feature access surface as the org vault's item actions. Action-driven and therefore inherently piloted-only; distinct from the non-discretionary **Allowance** (`distribute_allowance`), which auto-splits treasury surplus to every active piloted member without a per-draw decision.
 _Avoid_: allowance (that's the automatic split), withdrawal (ambiguous with a personal-purse `withdraw_coins`)
 
+**Territory Stream** (`OrgIncomeStream.kind == TERRITORY`, #4060):
+A held rung's base land value: one per owned `Domain` (`Domain.territory_stream`) or held `Turf` (`Turf.income_stream`), gross recomputed at every accrual as land units × `TERRITORY_BASE_PER_UNIT` × the rung's multiplier (prosperity / 50 or grip / 100), never authored. Pools and collects like every stream (ADR-0081).
+_Avoid_: land tax (a levy is #4060 slice 3), rent, passive income.
+
 **Materials Allowance** ("the crafting draw", #2540 slice 2):
 The non-discretionary materials analogue of the coin **Allowance**: `distribute_material_allowance` auto-splits a PLACEHOLDER share of what a collection just landed, per `MaterialCategory`, across the same active-piloted population (`_active_allowance_sheets`, shared with the coin leg) into each member's `MaterialBucket` — the head cannot withhold it, and nobody has to manually spend down `OrgMaterialStock` to reach it. Rides `collect_and_distribute` right after the coin `Allowance`; the un-shared remainder stays in `OrgMaterialStock` for discretionary crafting spend.
 _Avoid_: material withdrawal, stock draw, bucket allowance

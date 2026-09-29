@@ -29,7 +29,6 @@ from world.societies.models import (
     LegendSettlementConfig,
     LegendSourceType,
     LegendSpread,
-    NeighborhoodTurf,
     Organization,
     OrganizationGiftGrant,
     OrganizationMembership,
@@ -50,6 +49,7 @@ from world.societies.models import (
     SpreadingConfig,
     StanceArchetype,
     StandingDeclaration,
+    Turf,
     Vacancy,
 )
 
@@ -1281,13 +1281,13 @@ class HouseClaimAdmin(admin.ModelAdmin):
         self.message_user(request, f"Rejected {queryset.count()} claim(s).")
 
 
-@admin.register(NeighborhoodTurf)
-class NeighborhoodTurfAdmin(admin.ModelAdmin):
-    """Who holds a crime neighborhood, and how firmly (#2862)."""
+@admin.register(Turf)
+class TurfAdmin(admin.ModelAdmin):
+    """Who holds a piece of criminal ground, and how firmly (#2862, every rung #4060)."""
 
-    list_display = ["area", "controlling_org", "grip", "updated_at"]
-    search_fields = ["area__name", "controlling_org__name"]
-    raw_id_fields = ["area", "controlling_org"]
+    list_display = ["site_name", "controlling_org", "grip", "updated_at"]
+    search_fields = ["area__name", "room_profile__objectdb__db_key", "controlling_org__name"]
+    raw_id_fields = ["area", "room_profile", "controlling_org", "income_stream"]
     readonly_fields = ["updated_at"]
 
 

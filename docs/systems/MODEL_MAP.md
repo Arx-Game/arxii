@@ -206,9 +206,11 @@
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
   - desc_variants <- evennia_extensions.RoomDescVariant
+  - turf <- societies.Turf
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
+  - income_streams <- currency.OrgIncomeStream
   - dream_reflection <- dreams.DreamReflection
   - reflection_of <- dreams.DreamReflection
   - descent_source <- dreams.DreamReflection
@@ -460,7 +462,7 @@
   - building_permits_valid_in <- buildings.BuildingPermitDetails
   - construction_projects <- buildings.BuildingConstructionDetails
   - rooms <- evennia_extensions.RoomProfile
-  - turf <- societies.NeighborhoodTurf
+  - turf <- societies.Turf
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
   - hall_of <- societies.Domain
@@ -3491,7 +3493,10 @@
 **Foreign Keys:**
   - organization -> societies.Organization [FK]
   - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
+  - turf <- societies.Turf
+  - territory_domain <- societies.Domain
   - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
   - garnishing_contracts <- currency.Contract
@@ -7793,11 +7798,13 @@
 - `process_weekly_relationship_allocations() -> 'int' - The weekly turn: every allocation the pool can pay becomes depth (#3957).`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None) -> 'CharacterRelationship' - A wronged character's one-sided grievance: Conflict added on their side (#1429, #3957).`
 - `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' - Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
-- `set_allocation(*, side: 'CharacterRelationship', ap_amount: 'int') -> 'RelationshipAllocation'`
+- `set_allocation(*, side: 'CharacterRelationship', ap_amount: 'int') -> 'RelationshipAllocation' - Set this week's standing AP on one side, against the whole weekly budget (#3957).`
 - `set_summary(*, side: 'CharacterRelationship', summary: 'str') -> 'CharacterRelationship'`
 - `shift_label(*, label: 'RelationshipLabel', new_type: 'RelationshipType', note: 'str' = '') -> 'RelationshipLabel' - Change one label into another: the old row ends, the new one remembers it.`
 - `soul_tether_active(a_sheet: 'CharacterSheet', b_sheet: 'CharacterSheet') -> 'bool' - Check whether two characters have an active Soul Tether bond.`
 - `spend_xp_for_character(sheet: 'CharacterSheet', amount: 'int', description: 'str', *, reason: 'str' = ProgressionReason.XP_PURCHASE, gm: 'AccountDB | None' = None) -> 'XPTransaction | None' - Debit the account's pool for something bought for ``sheet``, and attribute it.`
+- `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
+- `standing_weekly_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has already promised for the week: ties + training (#3957).`
 
 
 ## world.room_features
@@ -8859,7 +8866,7 @@
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' - Apply weekly rust to all untrained skills.`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
-- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
+- `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
@@ -8868,6 +8875,8 @@
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' - Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' - Run the full weekly skill development cycle.`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
+- `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
+- `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`
 
 
@@ -8910,6 +8919,7 @@
   - area -> areas.Area [OneToOne]
   - owner_org -> societies.Organization [FK] (nullable)
   - hall -> areas.Area [FK] (nullable)
+  - territory_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
   - land_shapes -> societies.LandShape [M2M]
 **Pointed to by:**
   - food_stockpile <- agriculture.FoodStockpile
@@ -9209,11 +9219,6 @@
 **Pointed to by:**
   - commitments <- societies.PactCommitment
 
-### NeighborhoodTurf
-**Foreign Keys:**
-  - area -> areas.Area [OneToOne]
-  - controlling_org -> societies.Organization [FK] (nullable)
-
 ### NobiliaryParticle
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
@@ -9275,7 +9280,7 @@
   - reputations <- societies.OrganizationReputation
   - standing_declarations <- societies.StandingDeclaration
   - proclamations <- societies.Proclamation
-  - held_turf <- societies.NeighborhoodTurf
+  - held_turf <- societies.Turf
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge
@@ -9551,6 +9556,13 @@
   - coronation_ceremonies <- ceremonies.Ceremony
   - coronations <- ceremonies.Coronation
   - claims <- societies.HouseClaim
+
+### Turf
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [OneToOne] (nullable)
+  - controlling_org -> societies.Organization [FK] (nullable)
+  - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
 
 ### Vacancy
 **Foreign Keys:**

@@ -395,6 +395,17 @@ class Domain(SharedMemoryModel):
     prosperity = models.PositiveSmallIntegerField(default=50, help_text="0-100 PLACEHOLDER.")
     unrest = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
     defenses = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
+    territory_stream = models.OneToOneField(
+        "arxii.OrgIncomeStream",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="territory_domain",
+        help_text=(
+            "The TERRITORY stream that is this land's base value (#4060): its gross is "
+            "recomputed each cycle from the domain's land units and prosperity."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]

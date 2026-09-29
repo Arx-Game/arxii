@@ -18,10 +18,10 @@ class UnderworldSeedTest(TestCase):
         seed_underworld_demo()
 
     def test_gang_turf_stage_is_set(self):
-        from world.societies.models import NeighborhoodTurf, Organization
+        from world.societies.models import Organization, Turf
 
         gang = Organization.objects.get(name__startswith="The Ashfingers")
-        turf = NeighborhoodTurf.objects.get()
+        turf = Turf.objects.get()
         self.assertEqual(turf.controlling_org, gang)
         self.assertEqual(turf.grip, 60)
 

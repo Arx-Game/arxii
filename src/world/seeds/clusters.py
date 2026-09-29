@@ -886,10 +886,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     )
     from world.societies.models import (  # noqa: PLC0415
         LegendSettlementConfig,
-        NeighborhoodTurf,
         PropagandaCampaignTier,
         RenownMagnitudeAward,
         StanceArchetype,
+        Turf,
     )
     from world.species.models import Species  # noqa: PLC0415
     from world.stories.models import RiskCalibration  # noqa: PLC0415
@@ -928,7 +928,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "justice_laws": [AreaLaw],
         # Area elevation (#696 gap 3): the one seeded threshold row (NEIGHBORHOOD).
         "area_elevation": [AreaElevationRequirement],
-        "underworld": [NeighborhoodTurf],
+        "underworld": [Turf],
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).
         "investigation": [],

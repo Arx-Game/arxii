@@ -5002,7 +5002,8 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
 
 - **Models:** `CharacterPurse`, `OrganizationTreasury`, `CurrencyTransfer` (audit),
   `OrgIncomeStream` (`uncollected_pool`, optional `area` FK — authored anchor for a future
-  local order/crime difficulty modifier), `IncomeDeclaration` (actual-vs-declared),
+  local order/crime difficulty modifier; optional `room_profile` FK and kind `TERRITORY`
+  since #4060 — a held rung's base land value, gross recomputed at accrual), `IncomeDeclaration` (actual-vs-declared),
   `OrgEconomicsProfile` (`graft_pct`), `OrgObligation`, `DebtInstrument`, `Contract`,
   `Business`, `CharacterEmployment`, `DistinctionPurseDrain` (#2613 — per-distinction weekly
   purse-drain config: `drain_percent`/`floor_coppers`; the "Somehow Always Broke" sidecar,
@@ -6331,7 +6332,7 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   (encumbrance was invisible before), the `weather` and `justice_laws` seed clusters
   (`world/seeds/weather_content.py`, `world/seeds/justice_laws.py` — the latter is
   what makes crime mint heat at all), the Shade anchor + daily-drain production seed,
-  and admin for `MarketStall` (where a fence gets placed), `NeighborhoodTurf`,
+  and admin for `MarketStall` (where a fence gets placed), `Turf`,
   `CarriedBody`, `AppetiteUpkeep`(+receipts), `FeedingRecord`, `HazardResponseState`.
 - **The underworld (#2862, ADR-0185):** the fence (`MarketStall.stall_kind=FENCE`,
   `sell_to_fence` — the first sell-to-NPC path; first consumer of `ItemTemplate.value`;
@@ -6339,9 +6340,13 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   weighted); Dust/Haze intoxicant ladders (`condition_template` override on INTOXICATE —
   Dusted's pass-out reaches the dream realm via the built Unconscious rule; Hazed cannot
   drop anyone); `CraftingRecipe.required_feature_kind` (LAB hardcode generalized — drug
-  refinement gates on the Workshop of Iniquity); `NeighborhoodTurf` + `turf_services`
-  (grip/flip; writes `StatKey.CRIME`, re-targets CRIME_KICKUP, provokes Retaliation
-  crises; the orphaned gang-turf project machinery finally moves state via
+  refinement gates on the Workshop of Iniquity); `Turf` (was `NeighborhoodTurf`; since
+  #4060 one row per site: an outdoor room, a NEIGHBORHOOD, WARD or CITY area) +
+  `turf_services` (grip/flip; writes the site's `StatKey.CRIME`, re-targets CRIME_KICKUP
+  and the site's TERRITORY stream, provokes Retaliation crises); **territory (#4060):**
+  `societies.territory` — land units are outdoor rooms, yield at the lowest controlled
+  rung per `ControlKind`, one `TERRITORY` `OrgIncomeStream` per held `Domain`/`Turf`
+  recomputed at accrual (ADR-0319); the orphaned gang-turf project machinery finally moves state via
   `complete_gang_turf` + `start_gang_turf` action); guard pressure scales with area
   CRIME (`area_stat_total` in locations services); 7 RESTRICTED criminal missions on a
   covert board + first `MissionCategory` rows + the standing smuggling route

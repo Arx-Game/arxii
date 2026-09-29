@@ -35,6 +35,7 @@ from world.currency.constants import (
     NOTARY_FEE_COPPERS,
     ContractFormality,
     ContractStatus,
+    IncomeStreamKind,
     format_coppers,
 )
 from world.currency.models import (
@@ -533,7 +534,17 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     if not stream.active:
         msg = "This income stream is inactive."
         raise ValidationError(msg)
+    fields = ["uncollected_pool"]
     gross = stream.gross_amount
+    if stream.kind == IncomeStreamKind.TERRITORY:
+        # Held ground (#4060): the gross is the rung's land units times the base
+        # rate times its multiplier, recomputed every cycle; the stored value is
+        # only last cycle's figure for display.
+        from world.societies.territory import territory_gross  # noqa: PLC0415
+
+        gross = territory_gross(stream)
+        stream.gross_amount = gross
+        fields.append("gross_amount")
     # A domain holding's yield rides its domain's prosperity (#2238): a thriving
     # domain amasses more per cycle, a collapsed one (prosperity 0) nothing.
     # ``domain_holding`` is the reverse OneToOne — absent for non-domain streams.
@@ -555,7 +566,7 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
 
     gross = int(gross * org_crisis_income_factor(stream.organization))
     stream.uncollected_pool = stream.uncollected_pool + gross
-    stream.save(update_fields=["uncollected_pool"])
+    stream.save(update_fields=fields)
     return stream.uncollected_pool
 
 
@@ -1668,6 +1679,7 @@ def run_weekly_economy() -> dict[str, int]:
     """
     return {
         "interest": _weekly_interest_accrual(),
+        "territory": _weekly_territory_streams(),
         "income": _weekly_income_streams(),
         "materials": _weekly_mine_accrual(),
         "assets": _weekly_asset_income(),
@@ -1743,6 +1755,13 @@ def _weekly_interest_accrual() -> int:
         except Exception:
             logger.exception("weekly economy: interest accrual failed for debt %s", debt.pk)
     return count
+
+
+def _weekly_territory_streams() -> int:
+    """Every held rung has its TERRITORY stream before income accrues (#4060)."""
+    from world.societies.territory import ensure_territory_streams  # noqa: PLC0415
+
+    return ensure_territory_streams()
 
 
 def _weekly_income_streams() -> int:

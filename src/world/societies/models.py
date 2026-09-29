@@ -2681,22 +2681,38 @@ class Proclamation(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class NeighborhoodTurf(SharedMemoryModel):
-    """Who holds a crime neighborhood, and how hard (#2862).
+class Turf(SharedMemoryModel):
+    """Who holds a piece of criminal ground, and how hard (#2862, every rung #4060).
 
-    The control state the gang-turf project machinery finally moves: one row
-    per NEIGHBORHOOD-level Area worth fighting over. ``grip`` is the
-    controller's hold (0-100); pushes from rivals erode it and control flips
-    when it breaks. Control is consequential: the area's ``StatKey.CRIME``
-    modifier tracks grip (guard pressure scales off it), and the area's
-    CRIME_KICKUP income streams re-target to the controller.
+    The control state the gang-turf project machinery moves: one row per site
+    worth fighting over. A site is an outdoor room (a crew's corner) or an Area
+    at NEIGHBORHOOD, WARD or CITY level (a gang's, a crime family's, a criminal
+    empire's) - never a building or an indoor room, since player-built rooms
+    would otherwise mint territory out of nothing (maintainer ruling,
+    2026-09-29). ``grip`` is the controller's hold (0-100); pushes from rivals
+    erode it and control flips when it breaks. Control is consequential: the
+    site's ``StatKey.CRIME`` modifier tracks grip (guard pressure scales off
+    it, and the area rollup sums every rung above a room), the site's
+    CRIME_KICKUP streams re-target to the controller, and the site's
+    ``income_stream`` (kind TERRITORY) is the base value of the ground itself,
+    accrued from its land units (``world.societies.territory``).
     """
 
     area = models.OneToOneField(
         "arxii.Area",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="turf",
-        help_text="The contested neighborhood (NEIGHBORHOOD level, clean()-enforced).",
+        help_text="The contested area: NEIGHBORHOOD, WARD or CITY level (clean()-enforced).",
+    )
+    room_profile = models.OneToOneField(
+        "arxii.RoomProfile",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="turf",
+        help_text="The contested corner: one outdoor room, a crew's ground (clean()-enforced).",
     )
     controlling_org = models.ForeignKey(
         Organization,
@@ -2710,25 +2726,68 @@ class NeighborhoodTurf(SharedMemoryModel):
         default=0,
         help_text="The controller's hold, 0-100. Rival pushes erode it; control flips at 0.",
     )
+    income_stream = models.OneToOneField(
+        "arxii.OrgIncomeStream",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="turf",
+        help_text="The TERRITORY stream that is this ground's base value (#4060).",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Neighborhood Turf"
-        verbose_name_plural = "Neighborhood Turf"
+        verbose_name = "Turf"
+        verbose_name_plural = "Turf"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(area__isnull=False, room_profile__isnull=True)
+                    | models.Q(area__isnull=True, room_profile__isnull=False)
+                ),
+                name="societies_turf_exactly_one_site",
+            ),
+        ]
 
     def clean(self) -> None:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
         from world.areas.constants import AreaLevel  # noqa: PLC0415
 
         super().clean()
-        if self.area_id and self.area.level != AreaLevel.NEIGHBORHOOD:
-            from django.core.exceptions import ValidationError  # noqa: PLC0415
-
-            msg = "Turf exists only at NEIGHBORHOOD-level areas."
+        if (self.area_id is None) == (self.room_profile_id is None):
+            msg = "Turf sits on exactly one site: an area or an outdoor room."
             raise ValidationError(msg)
+        allowed = (AreaLevel.NEIGHBORHOOD, AreaLevel.WARD, AreaLevel.CITY)
+        if self.area_id and self.area.level not in allowed:
+            msg = "Turf exists only at NEIGHBORHOOD, WARD or CITY level areas."
+            raise ValidationError(msg)
+        if self.room_profile_id and not self.room_profile.is_outdoor:
+            msg = "Turf on a room needs an outdoor room; indoor ground is never territory."
+            raise ValidationError(msg)
+
+    @property
+    def site(self):
+        """The Area or RoomProfile this turf sits on."""
+        return self.area if self.area_id is not None else self.room_profile
+
+    @property
+    def site_name(self) -> str:
+        if self.area_id is not None:
+            return self.area.name
+        room = self.room_profile
+        return room.objectdb.key if room is not None else "nowhere"
+
+    @property
+    def rung_area(self):
+        """The Area this turf reads its rung from: itself, or a room's area."""
+        if self.area_id is not None:
+            return self.area
+        return self.room_profile.area if self.room_profile_id is not None else None
 
     def __str__(self) -> str:
         holder = self.controlling_org or "contested"
-        return f"{self.area} turf ({holder}, grip {self.grip})"
+        return f"{self.site_name} turf ({holder}, grip {self.grip})"
 
 
 class GangTurfDetails(SharedMemoryModel):
