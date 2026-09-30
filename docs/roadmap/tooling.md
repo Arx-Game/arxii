@@ -14,7 +14,10 @@ plot-then-realize planning squares, right-click carving/voids, edge growth,
 drag-to-swap arranging (`staff_move_room`'s first dispatch), placing an unplaced
 room by naming it on a planned square (rooms mode's `AddDialog` matches the
 area's rooms with no grid position and dispatches `staff_place_room` instead of
-a dig; 2026-09-09, the Wanderer's Rest could not be placed before this), a map view
+a dig; 2026-09-09, the Wanderer's Rest could not be placed before this), the same
+for an unplaced child area (areas mode matches child areas with no position and
+dispatches `edit_area` with the square, #4084; areas made in the admin, or moved
+under a parent by an insert, had no tile and no way to get one), a map view
 (2026-09-09, the reviewer building Arx: the wheel zooms around the cursor between 25%
 and 150%, dragging the ground pans, − / + / fit in the tools row, zoom and pan
 remembered per area, kind labels hidden zoomed out; pressing a tile is still the swap

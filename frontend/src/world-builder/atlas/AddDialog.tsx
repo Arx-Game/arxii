@@ -89,12 +89,24 @@ export interface AddDialogLevelOption {
   label: string;
 }
 
+/** A child area of this map with no grid position yet (#4084). */
+export interface AddDialogAreaOption {
+  id: number;
+  name: string;
+  levelLabel: string;
+}
+
 export type AddDialogRealizePayload =
   | {
       kind: 'area';
       name: string;
       /** The chosen level; absent when the caller offered no `areaLevelOptions` (its default applies). */
       level?: number;
+      /**
+       * Set when `name` exactly (case-insensitively) matched an `unplacedAreaOptions` entry
+       * (#4084): place that child area on this square instead of creating another.
+       */
+      matchedAreaId: number | null;
       entrance: AddDialogAreaEntrance | null;
     }
   | {
@@ -160,6 +172,11 @@ export interface AddDialogProps {
   areaLevelOptions?: AddDialogLevelOption[];
   /** Rooms mode: this area's rooms with no grid position yet — a name match places one instead of digging. */
   unplacedOptions?: AddDialogRoomOption[];
+  /**
+   * Areas mode: this area's child areas with no grid position yet (made in the admin, or
+   * moved by an insert) — a name match places one instead of creating another (#4084).
+   */
+  unplacedAreaOptions?: AddDialogAreaOption[];
   /** Rooms mode only — the plotted cell's one adjacent realized room, if any. */
   defaultNeighbor?: AddDialogNeighbor | null;
   /** Exit mode only — fires as "Leads to" changes, so the caller can live-search room names. */
@@ -184,14 +201,13 @@ function exitNote(
     : 'dug as a placeholder for the writing pass — you stay here';
 }
 
-/** Exit mode forks on whether the destination already exists; a room square on an unplaced match; areas just add. */
+/** Exit mode forks on whether the destination already exists; a square on an unplaced match places; else add. */
 function submitLabel(
   mode: AddDialogProps['mode'],
   matched: AddDialogRoomOption | null,
-  matchedUnplaced: AddDialogRoomOption | null = null
+  matchedUnplaced: AddDialogRoomOption | AddDialogAreaOption | null = null
 ): string {
-  if (mode === 'rooms') return matchedUnplaced ? 'Place' : 'Add';
-  if (mode !== 'exit') return 'Add';
+  if (mode === 'rooms' || mode === 'areas') return matchedUnplaced ? 'Place' : 'Add';
   return matched ? 'Link it' : 'Dig it';
 }
 
@@ -219,6 +235,7 @@ interface SubmitDialogArgs {
   chosenLevel: number | null;
   matched: AddDialogRoomOption | null;
   matchedUnplaced: AddDialogRoomOption | null;
+  matchedUnplacedArea: AddDialogAreaOption | null;
   entrance: RowState;
   exit: RowState;
   exitThere: string;
@@ -239,6 +256,7 @@ function submitDialog({
   chosenLevel,
   matched,
   matchedUnplaced,
+  matchedUnplacedArea,
   entrance,
   exit,
   exitThere,
@@ -248,6 +266,16 @@ function submitDialog({
 }: SubmitDialogArgs): void {
   const trimmedName = name.trim();
   if (mode === 'areas' && !roomShape) {
+    if (matchedUnplacedArea) {
+      // Placing keeps the area's own level and opens no door; it already exists.
+      onConfirm({
+        kind: 'area',
+        name: trimmedName,
+        matchedAreaId: matchedUnplacedArea.id,
+        entrance: null,
+      });
+      return;
+    }
     const entranceFrom =
       areaEntranceOffered && !areaEntrance.removed && areaEntrance.roomId != null
         ? {
@@ -261,6 +289,7 @@ function submitDialog({
       kind: 'area',
       name: trimmedName,
       ...(chosenLevel != null ? { level: chosenLevel } : {}),
+      matchedAreaId: null,
       entrance: entranceFrom,
     });
     return;
@@ -296,6 +325,7 @@ export function AddDialog({
   onConfirm,
   roomOptions = [],
   unplacedOptions = [],
+  unplacedAreaOptions = [],
   childLevelLabel,
   areaLevelOptions = [],
   defaultNeighbor = null,
@@ -389,6 +419,20 @@ export function AddDialog({
           .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
           .slice(0, 4)
       : [];
+  // Areas mode's twin (#4084): a name that exactly matches a child area with no position
+  // means "place that area here," anything else means "create a new one."
+  const areaShape = mode === 'areas' && !roomShape;
+  const matchedUnplacedArea = areaShape
+    ? (unplacedAreaOptions.find(
+        (option) => option.name.toLowerCase() === trimmedDestination.toLowerCase()
+      ) ?? null)
+    : null;
+  const unplacedAreaSuggestions =
+    areaShape && trimmedDestination !== ''
+      ? unplacedAreaOptions
+          .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
+          .slice(0, 4)
+      : [];
 
   const submit = () => {
     submitDialog({
@@ -402,6 +446,7 @@ export function AddDialog({
       chosenLevel,
       matched,
       matchedUnplaced,
+      matchedUnplacedArea,
       entrance,
       exit,
       exitThere,
@@ -428,7 +473,7 @@ export function AddDialog({
       <DialogContent className="max-w-md">
         <DialogTitle className="sr-only">{copy.title}</DialogTitle>
         <div className="flex flex-col gap-3">
-          {offersFork && (
+          {offersFork && !matchedUnplacedArea && (
             <div className="flex items-baseline gap-2" data-testid="add-dialog-becomes-row">
               <Label className="min-w-[6.5rem] shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
                 This square is
@@ -535,7 +580,34 @@ export function AddDialog({
             </>
           )}
 
-          {areaEntranceOffered && (
+          {areaShape && unplacedAreaSuggestions.length > 0 && (
+            <div className="grid gap-1" data-testid="add-dialog-place-area-suggestions">
+              {unplacedAreaSuggestions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="text-left text-sm text-muted-foreground hover:text-primary"
+                  onClick={() => setName(option.name)}
+                  data-testid="add-dialog-place-area-suggestion"
+                >
+                  ⌖ place {option.name} ({option.levelLabel.toLowerCase()}) here
+                </button>
+              ))}
+            </div>
+          )}
+
+          {matchedUnplacedArea && (
+            <p
+              className="font-body text-xs italic text-muted-foreground"
+              data-testid="add-dialog-place-area-note"
+            >
+              {matchedUnplacedArea.name} already exists here as a{' '}
+              {matchedUnplacedArea.levelLabel.toLowerCase()} without a place on the map; Add puts it
+              on this square instead of creating another
+            </p>
+          )}
+
+          {areaEntranceOffered && !matchedUnplacedArea && (
             <>
               <ConnectionRow
                 label="Entrance from"
@@ -639,7 +711,7 @@ export function AddDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSubmit} data-testid="add-dialog-submit">
-            {submitLabel(mode, matched, matchedUnplaced)}
+            {submitLabel(mode, matched, matchedUnplaced ?? matchedUnplacedArea)}
           </Button>
         </DialogFooter>
       </DialogContent>
