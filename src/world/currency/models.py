@@ -818,6 +818,39 @@ class DistinctionPurseDrain(SharedMemoryModel):
         return f"PurseDrain({self.distinction_id}: {self.drain_percent}%)"
 
 
+class DistinctionStartingGrant(SharedMemoryModel):
+    """Config: a distinction that pays a flat sum into its holder's purse at finalize (#4062).
+
+    An inheritance: "your grandmother's savings, left to you". The distinction's own
+    ``description`` says what was inherited and the player's pick ``notes`` say what it
+    means to them; this sidecar holds only the sum. It is tied to nothing else - no
+    organization, no income stream - by the maintainer's ruling: the simple half of
+    "starts with money". A family whose books pay an allowance is #4060.
+
+    Same sidecar pattern as ``DistinctionPurseDrain`` (ADR-0010: the consumer holds the
+    FK pointing at the primitive). Paid once, by character creation's finalize, through
+    the audited ``transfer`` faucet; a distinction added in play grants nothing, since an
+    inheritance is where a character started, not something staff hand out later.
+    """
+
+    distinction = models.OneToOneField(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="starting_grant",
+        help_text="The distinction whose new holders start with this sum.",
+    )
+    coppers = models.PositiveBigIntegerField(
+        help_text="Coppers paid into the purse when the character is finalized. PLACEHOLDER.",
+    )
+
+    class Meta:
+        verbose_name = "Distinction Starting Grant"
+        verbose_name_plural = "Distinction Starting Grants"
+
+    def __str__(self) -> str:
+        return f"StartingGrant({self.distinction_id}: {self.coppers}c)"
+
+
 class PurseDrainWeek(SharedMemoryModel):
     """One holder's drain week: the opening baseline, and what came of it (#2613).
 

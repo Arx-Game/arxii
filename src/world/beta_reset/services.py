@@ -66,6 +66,8 @@ numbers on a *kept* character's sheet consistent again.
   config, not play-state.
 - ``DistinctionPurseDrain`` — a distinction's authored drain-rate rule, not a per-character
   ledger row.
+- ``DistinctionStartingGrant`` — a distinction's authored inheritance sum (#4062); the coin it
+  paid is play-state in the purse and resets with it.
 - ``OrganizationTreasury`` / org economics (``OrgEconomicsProfile``, ``OrgIncomeStream``,
   ``IncomeDeclaration``, ``OrgObligation``, ``ContributionRecord``) — org-scoped books.
   Organizations themselves survive the reset, so their accumulated treasury/economics

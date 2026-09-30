@@ -78,6 +78,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
         """Return active distinctions with prefetched relations, ordered by cost descending."""
         return (
             Distinction.objects.filter(is_active=True)
+            .select_related("starting_grant")
             .prefetch_related(
                 Prefetch(
                     "effects",

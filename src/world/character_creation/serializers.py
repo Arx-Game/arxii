@@ -198,6 +198,11 @@ class StartingAreaSerializer(serializers.ModelSerializer):
     realm_name = serializers.CharField(
         source="realm.name", read_only=True, allow_null=True, default=None
     )
+    # The Origin stage's tag beside the area (#4078); blank when staff wrote none, and
+    # the stage then shows realm_name.
+    realm_formal_name = serializers.CharField(
+        source="realm.formal_name", read_only=True, allow_null=True, default=None
+    )
     # The founder ladder defaults to the starting realm (#3983 Plan B).
     realm_id = serializers.IntegerField(read_only=True, allow_null=True)
     crest_image = serializers.SerializerMethodField()
@@ -212,6 +217,7 @@ class StartingAreaSerializer(serializers.ModelSerializer):
             "realm_theme",
             "realm_slug",
             "realm_name",
+            "realm_formal_name",
             "realm_id",
         ]
 

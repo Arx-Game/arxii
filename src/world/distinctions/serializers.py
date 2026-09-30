@@ -155,6 +155,15 @@ class DistinctionListSerializer(serializers.ModelSerializer):
                 text = _generate_effect_text(effect)
 
             result.append({"text": text})
+        # An inheritance (#4062) is the one non-modifier effect a player must see
+        # priced: what the character starts with. ``starting_grant`` is the
+        # ``currency.DistinctionStartingGrant`` sidecar's reverse one-to-one,
+        # select_related by the list viewset so this is no extra query per row.
+        grant = obj.starting_grant_or_none
+        if grant is not None:
+            from world.currency.constants import format_coppers  # noqa: PLC0415
+
+            result.append({"text": f"Starts with {format_coppers(grant.coppers)}"})
         return result
 
     def get_codex_entry_ids(self, obj: Distinction) -> list[int]:

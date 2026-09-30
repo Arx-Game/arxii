@@ -45370,6 +45370,7 @@ export interface components {
       readonly realm_theme: string;
       readonly realm_slug: string | null;
       readonly realm_name: string | null;
+      readonly realm_formal_name: string | null;
       readonly realm_id: number | null;
     };
     /**

@@ -25,6 +25,8 @@ export interface StartingArea {
   /** The realm page's route key and name (#3725); null when the area has no realm. */
   realm_slug: string | null;
   realm_name: string | null;
+  /** The name staff wrote on the realm, shown beside the area (#4078); blank when none. */
+  realm_formal_name: string | null;
   /**
    * The Almanach realm id the area's ladder lives under (#3983 Plan B),
    * once Task 3 adds it to the API — optional so a draft fetched before

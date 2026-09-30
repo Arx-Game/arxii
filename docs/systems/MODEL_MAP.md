@@ -3482,6 +3482,10 @@
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [OneToOne]
 
+### DistinctionStartingGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+
 ### FavorTokenDetails
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [OneToOne]
@@ -3543,6 +3547,7 @@
 ### Service Functions
 - `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' - One weekly cycle: the gross amasses in the uncollected pool (#930).`
 - `accrue_monthly_interest(organization: 'Organization') -> 'int' - One month's interest lands in arrears (#927). Returns total accrued.`
+- `apply_starting_grant(char_dist: 'CharacterDistinction') -> 'CurrencyTransfer | None' - Pay a distinction's authored inheritance into its holder's purse (#4062).`
 - `auto_sell_excess_materials(*, organization: 'Organization') -> 'int' - Liquidate any ``OrgMaterialStock`` row over ``MATERIAL_AUTO_SELL_THRESHOLD`` (#2540 slice 2).`
 - `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' - Spend authority: an active membership at tier <= spend_rank_max.`
 - `collect_and_distribute(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
@@ -3629,6 +3634,7 @@
   - resonance_grants <- magic.DistinctionResonanceGrant
   - resonance_rank_thresholds <- magic.DistinctionResonanceRankThreshold
   - purse_drain <- currency.DistinctionPurseDrain
+  - starting_grant <- currency.DistinctionStartingGrant
   - variants <- distinctions.Distinction
   - effects <- distinctions.DistinctionEffect
   - character_grants <- distinctions.CharacterDistinction

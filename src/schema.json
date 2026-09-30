@@ -80601,6 +80601,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        realm_formal_name:
+          type: string
+          readOnly: true
+          nullable: true
         realm_id:
           type: integer
           readOnly: true
@@ -80610,6 +80614,7 @@ components:
       - description
       - id
       - name
+      - realm_formal_name
       - realm_id
       - realm_name
       - realm_slug
