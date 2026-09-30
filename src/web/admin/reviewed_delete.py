@@ -81,6 +81,11 @@ class BlockingRow:
     round: int
 
     @property
+    def link_names(self) -> tuple[str, ...]:
+        """The links as the admin names them, for the page."""
+        return tuple(str(self.obj._meta.get_field(name).verbose_name) for name in self.links)
+
+    @property
     def decided(self) -> bool:
         return self.forced or self.choice in (DETACH, DELETE)
 

@@ -16,7 +16,9 @@ which change_form.html links and this page has to link itself (#3667).
   .reviewed-delete .blocking .undecided { color: var(--error-fg); font-weight: 600; }
   .reviewed-delete .blocking .note { color: var(--body-quiet-color); font-size: 12px; }
   .reviewed-delete .kept ul { margin: 0 0 0 1.5em; }
-  .reviewed-delete .confirm-row { margin-top: 1em; }
+  .reviewed-delete .submit-row .button { margin-right: 0.5em; }
+  .reviewed-delete .submit-row .button.default { float: right; }
+  .reviewed-delete .submit-row .button[disabled] { opacity: 0.5; cursor: not-allowed; }
 </style>
 {% endblock %}
 
@@ -36,7 +38,7 @@ which change_form.html links and this page has to link itself (#3667).
       <h2>{% translate "Kept, with the link cleared" %}</h2>
       <ul id="detached-objects">
         {% for row in detached %}
-        <li>{{ row.kind }}: {% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %} ({{ row.links|join:", " }})</li>
+        <li>{{ row.kind }}: {% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %} ({{ row.link_names|join:", " }})</li>
         {% endfor %}
       </ul>
     </fieldset>
@@ -61,7 +63,7 @@ which change_form.html links and this page has to link itself (#3667).
               {% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}
               {% if row.written_by %}<div class="note">{% translate "written by" %} {{ row.written_by }}</div>{% endif %}
             </td>
-            <td>{{ row.links|join:", " }}</td>
+            <td>{{ row.link_names|join:", " }}</td>
             <td>
               {% if row.forced %}
                 <span class="note">{% translate "Removed by the cascade above." %}</span>
@@ -82,11 +84,20 @@ which change_form.html links and this page has to link itself (#3667).
       </table>
     </fieldset>
 
-    <div class="submit-row confirm-row">
-      <button type="submit" name="{{ review_field }}" value="{{ review_update }}" class="button" id="review-update">{% translate "Update" %}</button>
-      <label for="typed_name">{% translate "Type the name to confirm:" %} <code>{{ confirm_name }}</code></label>
-      <input type="text" id="typed_name" name="{{ typed_name_field }}" size="40" autocomplete="off">
-      <button type="submit" name="{{ review_field }}" value="{{ review_confirm }}" class="button deletelink" id="review-confirm"{% if undecided %} disabled{% endif %}>{% translate "Delete" %}</button>
+    <fieldset class="module aligned">
+      <h2>{% translate "Confirm" %}</h2>
+      <div class="form-row">
+        <div>
+          <label for="typed_name" class="required">{% translate "Type the name" %}</label>
+          <input type="text" id="typed_name" name="{{ typed_name_field }}" class="vTextField" autocomplete="off">
+          <div class="help">{% translate "Type it exactly:" %} <code>{{ confirm_name }}</code></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="submit-row">
+      <button type="submit" name="{{ review_field }}" value="{{ review_confirm }}" id="review-confirm" class="button default"{% if undecided %} disabled{% endif %}>{% translate "Delete" %}</button>
+      <button type="submit" name="{{ review_field }}" value="{{ review_update }}" id="review-update" class="button">{% translate "Update the plan" %}</button>
       <a href="{% url opts|admin_urlname:'change' object.pk|admin_urlquote %}" class="button cancel-link">{% translate "No, take me back" %}</a>
     </div>
   </form>
