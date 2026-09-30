@@ -64,7 +64,62 @@ describe('AddDialog — areas mode', () => {
     await userEvent.type(screen.getByTestId('add-dialog-name'), 'Central Ward');
     await userEvent.click(screen.getByTestId('add-dialog-submit'));
 
-    expect(onConfirm).toHaveBeenCalledWith({ kind: 'area', name: 'Central Ward', entrance: null });
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'area',
+      name: 'Central Ward',
+      matchedAreaId: null,
+      entrance: null,
+    });
+  });
+
+  it('names a child area with no position to place it: no level fork, no door, matchedAreaId (#4084)', async () => {
+    const { onConfirm } = renderDialog({
+      mode: 'areas',
+      childLevelLabel: 'Ward',
+      areaLevelOptions: [
+        { value: 30, label: 'Ward' },
+        { value: 20, label: 'Neighborhood' },
+      ],
+      roomOptions: [{ id: 5, name: 'The City Center' }],
+      unplacedAreaOptions: [{ id: 9, name: 'Dockside Warrens', levelLabel: 'Neighborhood' }],
+    });
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'dock');
+    expect(screen.getByTestId('add-dialog-place-area-suggestion')).toHaveTextContent(
+      'place Dockside Warrens (neighborhood) here'
+    );
+    await userEvent.click(screen.getByTestId('add-dialog-place-area-suggestion'));
+    expect(screen.getByTestId('add-dialog-name')).toHaveValue('Dockside Warrens');
+    expect(screen.getByTestId('add-dialog-place-area-note')).toBeInTheDocument();
+    expect(screen.getByLabelText('Neighborhood name')).toBeInTheDocument();
+    expect(screen.queryByTestId('add-dialog-becomes-row')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Entrance from/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Place');
+
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'area',
+      name: 'Dockside Warrens',
+      matchedAreaId: 9,
+      entrance: null,
+    });
+  });
+
+  it('a name that only resembles an unplaced area still creates a new one', async () => {
+    const { onConfirm } = renderDialog({
+      mode: 'areas',
+      unplacedAreaOptions: [{ id: 9, name: 'Dockside Warrens', levelLabel: 'Neighborhood' }],
+    });
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'Dockside');
+    expect(screen.queryByTestId('add-dialog-place-area-note')).not.toBeInTheDocument();
+    expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Add');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'area',
+      name: 'Dockside',
+      matchedAreaId: null,
+      entrance: null,
+    });
   });
 
   it('disables Add until a name is entered', () => {
@@ -94,6 +149,7 @@ describe('AddDialog — areas mode', () => {
       kind: 'area',
       name: 'Central Neighborhood',
       level: 20,
+      matchedAreaId: null,
       entrance: null,
     });
   });
@@ -147,6 +203,7 @@ describe('AddDialog — areas mode', () => {
       kind: 'area',
       name: 'Sleepers Chambers',
       level: 10,
+      matchedAreaId: null,
       entrance: {
         roomId: 5,
         exitName: 'Sleepers Chambers',
@@ -173,6 +230,7 @@ describe('AddDialog — areas mode', () => {
       kind: 'area',
       name: 'Sleepers Chambers',
       level: 10,
+      matchedAreaId: null,
       entrance: null,
     });
   });

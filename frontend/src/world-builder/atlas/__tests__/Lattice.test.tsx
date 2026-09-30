@@ -206,6 +206,36 @@ describe('Lattice — plot-then-realize', () => {
     expect(runAction).not.toHaveBeenCalledWith('staff_dig_room', expect.anything());
   });
 
+  it('areas mode: naming an unplaced child area places it via edit_area, not create_area (#4084)', async () => {
+    const { runAction } = renderLattice({
+      mode: 'areas',
+      nodeId: 42,
+      childAreaLevel: 20,
+      tiles: [
+        {
+          id: 9,
+          kind: 'area',
+          name: 'Dockside Warrens',
+          kindLabel: 'Neighborhood',
+          unpublished: false,
+          gridX: null,
+          gridY: null,
+          floor: 0,
+          level: 20,
+        },
+      ],
+    });
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'dockside warrens');
+    expect(screen.getByTestId('add-dialog-place-area-note')).toBeInTheDocument();
+    expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Place');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(runAction).toHaveBeenCalledWith('edit_area', { area_id: 9, grid_x: 1, grid_y: 0 });
+    expect(runAction).not.toHaveBeenCalledWith('create_area', expect.anything());
+  });
+
   it('over-ceiling areas mode offers no planning at all (#3534)', async () => {
     renderLattice({ mode: 'areas', tiles: [], childAreaLevel: 20, maxBuildLevel: 10 });
     const cell = screen.getByTestId('lattice-cell-0-0');

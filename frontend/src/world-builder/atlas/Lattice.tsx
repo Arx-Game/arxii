@@ -398,6 +398,15 @@ export function Lattice({
         .map((t) => ({ id: t.id, name: t.name })),
     [tiles]
   );
+  // Child areas with no grid position (made in the admin, or moved under this one by an
+  // insert): naming one on a planned square places it instead of creating another (#4084).
+  const unplacedAreaOptions = useMemo(
+    () =>
+      tiles
+        .filter((t) => t.kind === 'area' && (t.gridX == null || t.gridY == null))
+        .map((t) => ({ id: t.id, name: t.name, levelLabel: t.kindLabel })),
+    [tiles]
+  );
 
   // ---- tools: prune and connect are mutually exclusive; connect is rooms-only ----
   const [pruning, setPruning] = useState(false);
@@ -547,12 +556,17 @@ export function Lattice({
     }
   }, [tiles, runAction]);
 
-  /** Create the area on this square; with an entrance, dig its first room and link it. */
+  /** Create (or place) the area on this square; with an entrance, dig its first room and link it. */
   const realizeArea = async (
     payload: Extract<AddDialogRealizePayload, { kind: 'area' }>,
     x: number,
     y: number
   ) => {
+    if (payload.matchedAreaId != null) {
+      // The same dispatch the drag uses to move a tile: the area keeps its level and parent.
+      await runAction('edit_area', { area_id: payload.matchedAreaId, grid_x: x, grid_y: y });
+      return;
+    }
     const created = await runAction('create_area', {
       name: payload.name,
       slug: slugify(payload.name),
@@ -1012,6 +1026,7 @@ export function Lattice({
         onConfirm={handleConfirmRealize}
         roomOptions={roomOptions}
         unplacedOptions={unplacedOptions}
+        unplacedAreaOptions={unplacedAreaOptions}
         childLevelLabel={childLevelLabel}
         areaLevelOptions={areaLevelOptions}
         defaultNeighbor={defaultNeighbor}
