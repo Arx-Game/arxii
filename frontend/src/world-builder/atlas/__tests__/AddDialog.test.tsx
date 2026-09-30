@@ -91,6 +91,7 @@ describe('AddDialog — areas mode', () => {
     await userEvent.click(screen.getByTestId('add-dialog-place-area-suggestion'));
     expect(screen.getByTestId('add-dialog-name')).toHaveValue('Dockside Warrens');
     expect(screen.getByTestId('add-dialog-place-area-note')).toBeInTheDocument();
+    expect(screen.getByLabelText('Neighborhood name')).toBeInTheDocument();
     expect(screen.queryByTestId('add-dialog-becomes-row')).not.toBeInTheDocument();
     expect(screen.queryByText(/Entrance from/)).not.toBeInTheDocument();
     expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Place');

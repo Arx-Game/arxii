@@ -460,6 +460,13 @@ export function AddDialog({
   let copy = MODE_COPY[mode];
   if (roomShape && mode === 'areas') {
     copy = { ...MODE_COPY.rooms, placeholder: 'The City Center' };
+  } else if (matchedUnplacedArea) {
+    // Placing an existing area: its own level names it, not the square's default.
+    copy = {
+      title: `Place ${matchedUnplacedArea.name}`,
+      nameLabel: `${matchedUnplacedArea.levelLabel} name`,
+      placeholder: MODE_COPY.areas.placeholder,
+    };
   } else if (mode === 'areas' && chosenLevelLabel) {
     copy = {
       title: `New ${chosenLevelLabel.toLowerCase()}`,
