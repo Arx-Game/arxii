@@ -462,3 +462,30 @@ class EnemyReach(models.TextChoices):
     HOUSE = "house", "A house or company"
     SOCIETY = "society", "A society or church"
     REALM = "realm", "A realm"
+
+
+class ControlKind(models.TextChoices):
+    """The two ladders of territory control (#4060).
+
+    Legitimate control descends: a Domain on any rung, the Lord Mayor's city down
+    to a barony. Criminal control ascends: a Turf on an outdoor room, a
+    neighborhood, a ward or a city. Both may hold the same ground at once, and
+    both yield from it; a lower rung of the SAME kind takes its rooms out of the
+    rung above (the rung above earns through fealty tithes instead).
+    """
+
+    LEGITIMATE = "legitimate", "Legitimate"
+    CRIMINAL = "criminal", "Criminal"
+
+
+class LevyKind(models.TextChoices):
+    """The two cuts a business pays to the controllers above it (#4060 slice 3).
+
+    TAX is the legitimate ladder's: whoever owns the Domain on that rung takes it.
+    PROTECTION is the criminal ladder's: whoever holds the Turf on that rung takes
+    it. A business under both pays both; it is never either/or (maintainer ruling,
+    2026-09-28).
+    """
+
+    TAX = "tax", "Tax"
+    PROTECTION = "protection", "Protection"

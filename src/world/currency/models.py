@@ -281,6 +281,10 @@ class OrgIncomeStream(SharedMemoryModel):
 
     # Reverse-OneToOne safe accessor (#2386): missing row -> None.
     domain_holding_or_none = ReverseOneToOneOrNone("domain_holding")
+    # The territory sidecars (#4060): the Turf or Domain whose land this stream is.
+    turf_or_none = ReverseOneToOneOrNone("turf")
+    territory_domain_or_none = ReverseOneToOneOrNone("territory_domain")
+    levy_or_none = ReverseOneToOneOrNone("levy")
 
     organization = models.ForeignKey(
         ORGANIZATION_MODEL,
@@ -306,6 +310,17 @@ class OrgIncomeStream(SharedMemoryModel):
         help_text=(
             "Where this stream's domain sits — feeds the collection-difficulty "
             "modifier from local order/crime when set (#930)."
+        ),
+    )
+    room_profile = models.ForeignKey(
+        "arxii.RoomProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="income_streams",
+        help_text=(
+            "The one outdoor room this stream is anchored to, for a crew's turf (#4060); "
+            "``area`` anchors every larger rung. A stream anchors to at most one of the two."
         ),
     )
     active = models.BooleanField(default=True)

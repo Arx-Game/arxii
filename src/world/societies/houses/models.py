@@ -28,6 +28,7 @@ from world.societies.houses.constants import (
     CrisisResolutionKind,
     CrisisValence,
     DomainCrisisSeverity,
+    HoldingSiteKind,
     HouseClaimStatus,
     OrgPactDissolutionReason,
     PactCommitmentKind,
@@ -395,6 +396,17 @@ class Domain(SharedMemoryModel):
     prosperity = models.PositiveSmallIntegerField(default=50, help_text="0-100 PLACEHOLDER.")
     unrest = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
     defenses = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
+    territory_stream = models.OneToOneField(
+        "arxii.OrgIncomeStream",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="territory_domain",
+        help_text=(
+            "The TERRITORY stream that is this land's base value (#4060): its gross is "
+            "recomputed each cycle from the domain's land units and prosperity."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -474,6 +486,26 @@ class HoldingKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     base_gross = models.PositiveBigIntegerField(
         help_text="Default coppers-per-cycle gross for a new holding. PLACEHOLDER.",
     )
+    site_kind = models.CharField(
+        max_length=10,
+        choices=HoldingSiteKind.choices,
+        default=HoldingSiteKind.ABSTRACT,
+        help_text="What a holding of this kind sits on (#4060): land, a building, or nothing.",
+    )
+    units_required = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Land units (outdoor rooms) a LAND holding of this kind occupies, taken out of "
+            "the domain's base territory yield (#4060). Ignored for other site kinds."
+        ),
+    )
+    requires_field = models.BooleanField(
+        default=False,
+        help_text=(
+            "A farm: the holding sits on a FIELD room feature (#4060), so one farm grows "
+            "food through agriculture and pays coin through this holding's stream."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -509,12 +541,86 @@ class DomainHolding(SharedMemoryModel):
         related_name="domain_holding",
         help_text="The materialized stream feeding the owner org's books.",
     )
+    # Whose books this business feeds (#4060 slice 4). Blank: the domain's owner, the
+    # pre-#4060 shape (a baron's own farms). Set: a family whose business stands on
+    # someone else's land (a commoner tavern in the Lord Mayor's city), so the
+    # stream is the family's and the domain's owner levies it like anyone else.
+    owner_org = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_holdings",
+        help_text="The organization this holding pays; blank = the domain's owner.",
+    )
+    # The site (#4060 slice 2): where this development physically stands. Which of
+    # these a holding needs is its kind's ``site_kind``; ``site_holding`` validates.
+    room_profile = models.ForeignKey(
+        "arxii.RoomProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="holdings",
+        help_text="A LAND holding's outdoor room under the domain (a farm's is its field's room).",
+    )
+    building = models.ForeignKey(
+        "arxii.Building",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="holdings",
+        help_text="A BUILDING holding's building or ship under the domain.",
+    )
+    field = models.OneToOneField(
+        "arxii.FieldDetails",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="holding",
+        help_text="A farm's FIELD feature: the same farm grows food there and pays coin here.",
+    )
+    level = models.PositiveSmallIntegerField(
+        default=1, help_text="Development level; scales the yield. PLACEHOLDER curve."
+    )
+    standing = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="0-100, how well the business is doing; 50 is neutral. PLACEHOLDER curve.",
+    )
 
     class Meta:
         ordering = ["domain", "name"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.domain.name})"
+
+    @property
+    def owner(self):
+        """The organization whose books this holding feeds."""
+        return self.owner_org if self.owner_org_id is not None else self.domain.owner_org
+
+    @property
+    def is_sited(self) -> bool:
+        """Whether a holding of a sited kind actually stands somewhere yet."""
+        site_kind = self.kind.site_kind
+        if site_kind == HoldingSiteKind.LAND:
+            return self.room_profile_id is not None
+        if site_kind == HoldingSiteKind.BUILDING:
+            return self.building_id is not None
+        return True
+
+    @property
+    def units(self) -> int:
+        """Land units this development occupies (a sited LAND holding only)."""
+        if self.kind.site_kind != HoldingSiteKind.LAND or self.room_profile_id is None:
+            return 0
+        return self.kind.units_required
+
+    @property
+    def yield_multiplier(self) -> float:
+        """Level and standing over the kind's base gross; nothing until a sited kind is sited."""
+        if not self.is_sited:
+            return 0.0
+        return self.level * self.standing / DOMAIN_PROSPERITY_BASELINE
 
 
 class HoldingMaterialSource(SharedMemoryModel):

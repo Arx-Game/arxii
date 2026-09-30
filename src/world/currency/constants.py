@@ -100,6 +100,13 @@ class IncomeStreamKind(models.TextChoices):
 
     DOMAIN_TAX = "domain_tax", "Domain Tax"
     CRIME_KICKUP = "crime_kickup", "Crime Kick-up"
+    # Territory (#4060): the base value of held ground, one stream per controlled
+    # rung (a Domain or a Turf). Its gross is recomputed at accrual from the
+    # rung's land units, never authored; see ``world.societies.territory``.
+    TERRITORY = "territory", "Territory"
+    # Levy (#4060 slice 3): a controller's cut of every business on the rungs below
+    # it. It accrues nothing of its own; the payers' accruals feed it.
+    LEVY = "levy", "Levy"
 
 
 # Graft never reaches zero — some leak always survives (#923 doctrine).
@@ -202,3 +209,10 @@ MATERIALS_ALLOWANCE_PCT = 50
 # collect_and_distribute dispatch, so an unused stockpile doesn't just pile up forever.
 # PLACEHOLDER — magnitude is Apostate's tuning call.
 MATERIAL_AUTO_SELL_THRESHOLD = 5000
+
+
+# Territory (#4060): coppers per land unit (one staff-built outdoor room) per weekly
+# cycle, before the rung's multiplier (a Domain's prosperity, a Turf's grip). Land
+# yields at the lowest controlled rung only; higher rungs earn through fealty tithes.
+# PLACEHOLDER - magnitude is Apostate's tuning call.
+TERRITORY_BASE_PER_UNIT = 100

@@ -949,12 +949,35 @@ def relieve_garrison(*, unit: MilitaryUnit) -> bool:
     return deleted > 0
 
 
-def add_holding(*, domain: Domain, kind: HoldingKind, name: str = "") -> DomainHolding:
-    """Attach a working holding, materializing its income stream.
+def add_holding(  # noqa: PLR0913 - the site is three optional anchors, one per site kind
+    *,
+    domain: Domain,
+    kind: HoldingKind,
+    name: str = "",
+    room_profile=None,
+    building=None,
+    field=None,
+    unsited: bool = False,
+    owner_org: Organization | None = None,
+    standing: int | None = None,
+) -> DomainHolding:
+    """Attach a working holding (a development, #4060) and materialize its income stream.
+
+    ``owner_org`` (#4060 slice 4) is the organization whose books the holding
+    feeds when it is not the domain's owner: a family's business on the city's
+    land. ``standing`` seeds how the business is doing (0-100, 50 neutral).
 
     The stream is the existing ``OrgIncomeStream`` spine — collection,
     graft, and settlement all reuse the audited currency pipeline untouched.
+    A holding of a sited kind (LAND, BUILDING, a farm) is validated against its
+    site before anything is written and placed on it; ``unsited=True`` creates
+    it standing nowhere, for a template materialized at a house claim or a
+    seed, and it yields nothing until ``site_holding`` places it. A second
+    holding of the same kind on one domain gets a numbered name, since a
+    stream's name is unique per organization.
     """
+    from django.db import transaction  # noqa: PLC0415
+
     from world.currency.models import OrgIncomeStream  # noqa: PLC0415
 
     if domain.owner_org_id is None:
@@ -962,20 +985,158 @@ def add_holding(*, domain: Domain, kind: HoldingKind, name: str = "") -> DomainH
         raise HousesServiceError(
             msg, user_message="An unclaimed demesne cannot hold a holding yet."
         )
-    stream_name = name or f"{domain.name}: {kind.name}"
-    stream = OrgIncomeStream.objects.create(
-        organization=domain.owner_org,
-        name=stream_name,
-        kind=kind.stream_kind,
-        gross_amount=kind.base_gross,
-        area=domain.area,
+    placing = not unsited or room_profile is not None or building is not None or field is not None
+    site = (
+        _validate_site(domain, kind, room_profile=room_profile, building=building, field=field)
+        if placing
+        else {}
     )
-    return DomainHolding.objects.create(
-        domain=domain,
-        kind=kind,
-        name=stream_name,
-        income_stream=stream,
+    owner = owner_org or domain.owner_org
+    base_name = name or f"{domain.name}: {kind.name}"
+    stream_name = base_name
+    suffix = 2
+    while OrgIncomeStream.objects.filter(organization=owner, name=stream_name).exists():
+        stream_name = f"{base_name} ({suffix})"[:100]
+        suffix += 1
+    extra = {} if standing is None else {"standing": standing}
+    with transaction.atomic():
+        stream = OrgIncomeStream.objects.create(
+            organization=owner,
+            name=stream_name,
+            kind=kind.stream_kind,
+            gross_amount=kind.base_gross,
+            area=domain.area,
+        )
+        return DomainHolding.objects.create(
+            domain=domain,
+            kind=kind,
+            name=stream_name,
+            income_stream=stream,
+            owner_org=owner_org,
+            **site,
+            **extra,
+        )
+
+
+def _under_domain(domain: Domain, area_id: int | None) -> bool:
+    from world.areas.services import area_subtree_pks  # noqa: PLC0415
+
+    return area_id is not None and area_id in set(area_subtree_pks(domain.area))
+
+
+def _validate_site(  # noqa: PLR0913 - one check per site kind, keyword-only
+    domain: Domain,
+    kind: HoldingKind,
+    *,
+    room_profile=None,
+    building=None,
+    field=None,
+    exclude_holding: DomainHolding | None = None,
+) -> dict:
+    """The site fields a holding of ``kind`` on ``domain`` may stand on (#4060 slice 2).
+
+    A farm (``kind.requires_field``) sits on a FIELD room feature under the
+    domain and takes that field's room; a LAND kind sits on an outdoor room
+    under the domain and occupies ``units_required`` of the domain's land
+    units (refused when none are left); a BUILDING kind sits on a Building or
+    ship under the domain and takes no units; an ABSTRACT kind has nothing to
+    place. Raises ``HousesServiceError`` with a player-facing message.
+    """
+    from world.societies.houses.constants import HoldingSiteKind  # noqa: PLC0415
+
+    site: dict = {}
+    if kind.requires_field:
+        if field is None:
+            msg = f"holding kind {kind.pk} needs a field"
+            raise HousesServiceError(msg, user_message="A farm needs a field to stand on.")
+        field_room = field.feature_instance.room_profile
+        if not _under_domain(domain, field_room.area_id):
+            msg = f"field {field.pk} is not under domain {domain.pk}"
+            raise HousesServiceError(msg, user_message="That field is not on this land.")
+        room_profile = field_room
+        site["field"] = field
+    if kind.site_kind == HoldingSiteKind.LAND:
+        site["room_profile"] = _validate_land_site(
+            domain, kind, room_profile, exclude_holding=exclude_holding
+        )
+    elif kind.site_kind == HoldingSiteKind.BUILDING:
+        site["building"] = _validate_building_site(domain, kind, building)
+    return site
+
+
+def _validate_land_site(domain: Domain, kind: HoldingKind, room_profile, *, exclude_holding):
+    from world.societies.territory import free_units  # noqa: PLC0415
+
+    if room_profile is None:
+        msg = f"holding kind {kind.pk} needs an outdoor room"
+        raise HousesServiceError(msg, user_message="This holding needs ground to stand on.")
+    if not room_profile.is_outdoor or not _under_domain(domain, room_profile.area_id):
+        msg = f"room {room_profile.pk} is not outdoor ground under domain {domain.pk}"
+        raise HousesServiceError(msg, user_message="That is not open ground on this land.")
+    if free_units(domain, exclude_holding=exclude_holding) < kind.units_required:
+        msg = f"domain {domain.pk} has no land left for {kind.pk}"
+        raise HousesServiceError(msg, user_message="There is no land left for it.")
+    return room_profile
+
+
+def _validate_building_site(domain: Domain, kind: HoldingKind, building):
+    if building is None:
+        msg = f"holding kind {kind.pk} needs a building"
+        raise HousesServiceError(msg, user_message="This holding needs a building.")
+    if not _under_domain(domain, building.area_id):
+        msg = f"building {building.pk} is not under domain {domain.pk}"
+        raise HousesServiceError(msg, user_message="That building is not on this land.")
+    return building
+
+
+def site_holding(holding: DomainHolding, *, room_profile=None, building=None, field=None) -> None:
+    """Place an existing holding on the ground its kind calls for (#4060 slice 2).
+
+    The in-play half of ``add_holding``: a template's holdings are created
+    unsited at a house claim and the founder places each one here.
+    """
+    site = _validate_site(
+        holding.domain,
+        holding.kind,
+        room_profile=room_profile,
+        building=building,
+        field=field,
+        exclude_holding=holding,
     )
+    for attr, value in site.items():
+        setattr(holding, attr, value)
+    holding.save(update_fields=["room_profile", "building", "field"])
+
+
+def resolve_holding_site(
+    *, room_id: int | None = None, building_id: int | None = None, field_id: int | None = None
+) -> dict:
+    """Turn an action's optional site ids into ``add_holding``/``site_holding`` kwargs.
+
+    A ``room_id`` is the room's pk (``RoomProfile`` shares ObjectDB's pk). An id
+    that names nothing raises, never a silent fallback to unsited.
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.agriculture.models import FieldDetails  # noqa: PLC0415
+    from world.buildings.models import Building  # noqa: PLC0415
+
+    site: dict = {}
+    if room_id is not None:
+        site["room_profile"] = RoomProfile.objects.filter(pk=room_id).first()
+        if site["room_profile"] is None:
+            msg = f"no room {room_id}"
+            raise HousesServiceError(msg, user_message="No such room.")
+    if building_id is not None:
+        site["building"] = Building.objects.filter(pk=building_id).first()
+        if site["building"] is None:
+            msg = f"no building {building_id}"
+            raise HousesServiceError(msg, user_message="No such building.")
+    if field_id is not None:
+        site["field"] = FieldDetails.objects.filter(pk=field_id).first()
+        if site["field"] is None:
+            msg = f"no field {field_id}"
+            raise HousesServiceError(msg, user_message="No such field.")
+    return site
 
 
 # ---------------------------------------------------------------------------
@@ -1175,3 +1336,40 @@ def maybe_open_unrest_crisis(domain: Domain, *, roll: float | None = None) -> Do
         origin=CrisisOrigin.UNREST,
         description="PLACEHOLDER — simmering unrest boiled over into a crisis.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Family standing (#4060 slice 4): how a family is doing, read from its books
+# ---------------------------------------------------------------------------
+
+
+def standings_for_families(families) -> dict[int, int | None]:
+    """One number per family, batched: the mean prosperity of the domains its
+    organization owns, else the mean standing of the businesses it owns, else None.
+
+    Two grouped queries for the whole list (the CG family picker), never one per row.
+    """
+    from django.db.models import Avg  # noqa: PLC0415
+
+    ids = [family.pk for family in families]
+    result: dict[int, int | None] = dict.fromkeys(ids)
+    holdings = (
+        DomainHolding.objects.filter(owner_org__family_id__in=ids)
+        .values("owner_org__family_id")
+        .annotate(mean=Avg("standing"))
+    )
+    for row in holdings:
+        result[row["owner_org__family_id"]] = round(row["mean"])
+    domains = (
+        Domain.objects.filter(owner_org__family_id__in=ids)
+        .values("owner_org__family_id")
+        .annotate(mean=Avg("prosperity"))
+    )
+    for row in domains:
+        result[row["owner_org__family_id"]] = round(row["mean"])
+    return result
+
+
+def family_standing(family) -> int | None:
+    """``standings_for_families`` for one family (the detail view)."""
+    return standings_for_families([family]).get(family.pk)

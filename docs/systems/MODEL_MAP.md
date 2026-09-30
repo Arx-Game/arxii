@@ -206,9 +206,13 @@
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
   - desc_variants <- evennia_extensions.RoomDescVariant
+  - turf <- societies.Turf
+  - levies <- societies.Levy
+  - holdings <- societies.DomainHolding
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
+  - income_streams <- currency.OrgIncomeStream
   - dream_reflection <- dreams.DreamReflection
   - reflection_of <- dreams.DreamReflection
   - descent_source <- dreams.DreamReflection
@@ -406,6 +410,8 @@
 **Foreign Keys:**
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
   - crop_type -> agriculture.CropType [FK]
+**Pointed to by:**
+  - holding <- societies.DomainHolding
 
 ### FoodConfig
 
@@ -460,7 +466,8 @@
   - building_permits_valid_in <- buildings.BuildingPermitDetails
   - construction_projects <- buildings.BuildingConstructionDetails
   - rooms <- evennia_extensions.RoomProfile
-  - turf <- societies.NeighborhoodTurf
+  - turf <- societies.Turf
+  - levies <- societies.Levy
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
   - hall_of <- societies.Domain
@@ -985,6 +992,7 @@
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
   - mothballed_room_states <- buildings.MothballedRoomState
+  - holdings <- societies.DomainHolding
   - bequests <- estates.Bequest
   - ship_details <- ships.ShipDetails
   - temple_dedications <- worship.TempleDedication
@@ -3495,7 +3503,11 @@
 **Foreign Keys:**
   - organization -> societies.Organization [FK]
   - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
+  - turf <- societies.Turf
+  - levy <- societies.Levy
+  - territory_domain <- societies.Domain
   - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
   - garnishing_contracts <- currency.Contract
@@ -8920,6 +8932,7 @@
   - area -> areas.Area [OneToOne]
   - owner_org -> societies.Organization [FK] (nullable)
   - hall -> areas.Area [FK] (nullable)
+  - territory_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
   - land_shapes -> societies.LandShape [M2M]
 **Pointed to by:**
   - food_stockpile <- agriculture.FoodStockpile
@@ -8975,6 +8988,10 @@
   - domain -> societies.Domain [FK]
   - kind -> societies.HoldingKind [FK]
   - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
+  - owner_org -> societies.Organization [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - building -> buildings.Building [FK] (nullable)
+  - field -> agriculture.FieldDetails [OneToOne] (nullable)
 **Pointed to by:**
   - material_sources <- societies.HoldingMaterialSource
   - improvement_details <- societies.DomainImprovementDetails
@@ -9211,6 +9228,12 @@
   - scene -> scenes.Scene [FK] (nullable)
   - societies_reached -> societies.Society [M2M]
 
+### Levy
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
+
 ### MarriagePact
 **Foreign Keys:**
   - union -> roster.Union [OneToOne]
@@ -9218,11 +9241,6 @@
   - junior_house -> societies.Organization [FK]
 **Pointed to by:**
   - commitments <- societies.PactCommitment
-
-### NeighborhoodTurf
-**Foreign Keys:**
-  - area -> areas.Area [OneToOne]
-  - controlling_org -> societies.Organization [FK] (nullable)
 
 ### NobiliaryParticle
 **Foreign Keys:**
@@ -9285,7 +9303,7 @@
   - reputations <- societies.OrganizationReputation
   - standing_declarations <- societies.StandingDeclaration
   - proclamations <- societies.Proclamation
-  - held_turf <- societies.NeighborhoodTurf
+  - held_turf <- societies.Turf
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge
@@ -9293,6 +9311,7 @@
   - titles <- societies.Title
   - claimed_titles <- societies.Title
   - domains <- societies.Domain
+  - owned_holdings <- societies.DomainHolding
   - org_crises <- societies.DomainCrisis
   - crisis_intel <- societies.CrisisIntel
   - pacts_as_senior <- societies.MarriagePact
@@ -9561,6 +9580,13 @@
   - coronation_ceremonies <- ceremonies.Ceremony
   - coronations <- ceremonies.Coronation
   - claims <- societies.HouseClaim
+
+### Turf
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [OneToOne] (nullable)
+  - controlling_org -> societies.Organization [FK] (nullable)
+  - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
 
 ### Vacancy
 **Foreign Keys:**

@@ -1620,6 +1620,28 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
+- **Developments (#4060 slice 2, ADR-0320):** a `DomainHolding` is the physical
+  income-generating thing a family possesses: `HoldingKind.site_kind`
+  (ABSTRACT/LAND/BUILDING), `units_required`, `requires_field` (a farm);
+  `DomainHolding.room_profile`/`building`/`field`, `level`, `standing`. `add_holding`
+  validates the site before writing (a farm on a FIELD feature under the domain, LAND
+  on an outdoor room with free land units, BUILDING on a Building, no units);
+  `site_holding` places one created `unsited=True` (house-claim templates, seeds);
+  unsited yields nothing; accrual × `level × standing / 50`; sited LAND units come out
+  of the domain's TERRITORY base yield. One farm: "Farmland PLACEHOLDER" is a farm
+  (`requires_field`, data migration 0164), agriculture's FIELD is its food half.
+  **Slice 4 (ADR-0322):** `DomainHolding.owner_org` (a family's business on another's
+  land; blank = the domain's owner), `add_holding(owner_org=, standing=)`;
+  `build_family_org(home_domain=, standing=)` gives a CG-named family its template's
+  businesses on the home city's domain at the standing the Upbringing answer set
+  (`OriginTemplateSlotChoice.family_standing`, `questionnaire.picked_family_standing`);
+  `standings_for_families` feeds `FamilySerializer.standing` for the CG family list.
+- **Levies (#4060 slice 3, ADR-0321):** `Levy` (rung: area or outdoor room; `kind` TAX
+  taken by the Domain owner / PROTECTION taken by the Turf holder; `rate_pct`; own `LEVY`
+  stream on the current controller). `societies.levies`: `set_levy`, `levies_over`,
+  `apply_levies` (off a holding stream's gross at accrual, never either/or, never the
+  payer's own rung, capped at the gross), `ensure_levy_streams` (weekly). Protection
+  streams follow a turf flip; tax streams never do.
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
   `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes
@@ -5002,7 +5024,8 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
 
 - **Models:** `CharacterPurse`, `OrganizationTreasury`, `CurrencyTransfer` (audit),
   `OrgIncomeStream` (`uncollected_pool`, optional `area` FK — authored anchor for a future
-  local order/crime difficulty modifier), `IncomeDeclaration` (actual-vs-declared),
+  local order/crime difficulty modifier; optional `room_profile` FK and kind `TERRITORY`
+  since #4060 — a held rung's base land value, gross recomputed at accrual), `IncomeDeclaration` (actual-vs-declared),
   `OrgEconomicsProfile` (`graft_pct`), `OrgObligation`, `DebtInstrument`, `Contract`,
   `Business`, `CharacterEmployment`, `DistinctionStartingGrant` (#4062 - per-distinction
   inheritance: `coppers` paid into the purse once at CG finalize by `apply_starting_grant`),
@@ -6333,7 +6356,7 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   (encumbrance was invisible before), the `weather` and `justice_laws` seed clusters
   (`world/seeds/weather_content.py`, `world/seeds/justice_laws.py` — the latter is
   what makes crime mint heat at all), the Shade anchor + daily-drain production seed,
-  and admin for `MarketStall` (where a fence gets placed), `NeighborhoodTurf`,
+  and admin for `MarketStall` (where a fence gets placed), `Turf`,
   `CarriedBody`, `AppetiteUpkeep`(+receipts), `FeedingRecord`, `HazardResponseState`.
 - **The underworld (#2862, ADR-0185):** the fence (`MarketStall.stall_kind=FENCE`,
   `sell_to_fence` — the first sell-to-NPC path; first consumer of `ItemTemplate.value`;
@@ -6341,9 +6364,13 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   weighted); Dust/Haze intoxicant ladders (`condition_template` override on INTOXICATE —
   Dusted's pass-out reaches the dream realm via the built Unconscious rule; Hazed cannot
   drop anyone); `CraftingRecipe.required_feature_kind` (LAB hardcode generalized — drug
-  refinement gates on the Workshop of Iniquity); `NeighborhoodTurf` + `turf_services`
-  (grip/flip; writes `StatKey.CRIME`, re-targets CRIME_KICKUP, provokes Retaliation
-  crises; the orphaned gang-turf project machinery finally moves state via
+  refinement gates on the Workshop of Iniquity); `Turf` (was `NeighborhoodTurf`; since
+  #4060 one row per site: an outdoor room, a NEIGHBORHOOD, WARD or CITY area) +
+  `turf_services` (grip/flip; writes the site's `StatKey.CRIME`, re-targets CRIME_KICKUP
+  and the site's TERRITORY stream, provokes Retaliation crises); **territory (#4060):**
+  `societies.territory` — land units are outdoor rooms, yield at the lowest controlled
+  rung per `ControlKind`, one `TERRITORY` `OrgIncomeStream` per held `Domain`/`Turf`
+  recomputed at accrual (ADR-0319); the orphaned gang-turf project machinery finally moves state via
   `complete_gang_turf` + `start_gang_turf` action); guard pressure scales with area
   CRIME (`area_stat_total` in locations services); 7 RESTRICTED criminal missions on a
   covert board + first `MissionCategory` rows + the standing smuggling route

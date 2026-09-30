@@ -426,7 +426,9 @@ class AlmanachDescribeDemesneAction(_AlmanachAction):
 class AlmanachAddHoldingAction(_AlmanachAction):
     """Attach a working holding to a demesne.
 
-    Kwargs: ``domain_id``, ``holding_kind_id``, optional ``name``.
+    Kwargs: ``domain_id``, ``holding_kind_id``, optional ``name``, and the site a
+    sited kind needs (#4060): ``room_id`` (LAND), ``field_id`` (a farm),
+    ``building_id`` (BUILDING). Staff may pass ``unsited`` to place it later.
     """
 
     key: str = "almanach_add_holding"
@@ -440,7 +442,11 @@ class AlmanachAddHoldingAction(_AlmanachAction):
         **kwargs: Any,
     ) -> ActionResult:
         from world.societies.houses.models import Domain, HoldingKind  # noqa: PLC0415
-        from world.societies.houses.services import HousesServiceError, add_holding  # noqa: PLC0415
+        from world.societies.houses.services import (  # noqa: PLC0415
+            HousesServiceError,
+            add_holding,
+            resolve_holding_site,
+        )
 
         domain = Domain.objects.filter(pk=kwargs.get("domain_id")).first()
         if domain is None:
@@ -449,7 +455,17 @@ class AlmanachAddHoldingAction(_AlmanachAction):
         if kind is None:
             return ActionResult(success=False, message="No such holding kind.")
         try:
-            holding = add_holding(domain=domain, kind=kind, name=(kwargs.get("name") or "").strip())
+            holding = add_holding(
+                domain=domain,
+                kind=kind,
+                name=(kwargs.get("name") or "").strip(),
+                unsited=bool(kwargs.get("unsited")),
+                **resolve_holding_site(
+                    room_id=kwargs.get("room_id"),
+                    building_id=kwargs.get("building_id"),
+                    field_id=kwargs.get("field_id"),
+                ),
+            )
         except HousesServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(

@@ -144,7 +144,10 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
         # Serialize with batched groupings, not one lookup per row. Mirrors
         # CGOriginTemplateViewSet.list() (this ViewSet also opts out of pagination,
         # so there is no page branch to preserve).
-        from world.societies.houses.services import particles_for_families  # noqa: PLC0415
+        from world.societies.houses.services import (  # noqa: PLC0415
+            particles_for_families,
+            standings_for_families,
+        )
 
         families = list(self.filter_queryset(self.get_queryset()))
         context = {
@@ -153,6 +156,8 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
             # #3654: born/taken-in particles batched the same way, three flat
             # queries instead of ~six per housed family (resolve_particle).
             "particles_by_family": particles_for_families(families),
+            # #4060 slice 4: how each family is doing, two grouped queries for the list.
+            "standing_by_family": standings_for_families(families),
         }
         serializer = self.get_serializer_class()(families, many=True, context=context)
         return Response(serializer.data)

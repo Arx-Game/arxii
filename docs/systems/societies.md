@@ -557,27 +557,84 @@ All models registered with Django admin:
 - `LegendEntryAdmin` - With total value, spread count, `LegendSpreadInline`
 - `LegendSpreadAdmin` - With society reach tracking
 
-## Neighborhood Turf (#2862, ADR-0185)
+## Turf (#2862, ADR-0185; every rung #4060)
 
-Who holds a crime neighborhood, and how firmly. `NeighborhoodTurf` is one row per
-NEIGHBORHOOD-level `Area`: `controlling_org` + `grip` (0-100). `turf_services
-.apply_turf_push(org, area, amount)` owns the arithmetic — uncontested ground is
-claimed outright, the holder's own pushes deepen grip, a rival's erode it, and grip
-breaking flips control to the pusher at a deliberately shallow `FLIP_START_GRIP`
-(freshly taken ground is loose).
+Who holds a piece of criminal ground, and how firmly. `Turf` (renamed from
+`NeighborhoodTurf` in #4060) is one row per **site**: an outdoor `RoomProfile` (a
+crew's corner) or an `Area` at NEIGHBORHOOD, WARD or CITY level (a gang's, a crime
+family's, a criminal empire's), exactly one of the two (`CheckConstraint` +
+`clean()`). Never a building or an indoor room: rooms are deliberately not
+normalized to outdoor space so players can build without limit, and counting them
+would reward building nonsense rooms to manufacture turf (maintainer ruling,
+2026-09-29). `controlling_org` + `grip` (0-100). `turf_services.apply_turf_push(org,
+site, amount)` owns the arithmetic — uncontested ground is claimed outright, the
+holder's own pushes deepen grip, a rival's erode it, and grip breaking flips control
+to the pusher at a deliberately shallow `FLIP_START_GRIP` (freshly taken ground is
+loose). The telnet `turf` status lists every held rung over the spot, corner first.
 
 Control is consequential, which is what makes turf worth fighting for:
 
-- **Guard pressure** — grip writes an area-wide `StatKey.CRIME` cascade modifier
-  (`_sync_crime_modifier`), and `justice.pipeline.maybe_guard_encounter` scales its
-  trigger chance by it (via `locations.services.area_stat_total`). A tightly-held
-  patch is a *busier* patch for everyone.
-- **Revenue** — `CRIME_KICKUP` income streams on the area re-target to the
-  controller (per-row saves; never a bulk `.update()`, which the identity map
-  would not see).
+- **Guard pressure** — grip writes the site's `StatKey.CRIME` cascade modifier
+  (`_sync_crime_modifier`: the room's own row for a room turf, the area's for an
+  area turf), and `justice.pipeline.maybe_guard_encounter` scales its trigger
+  chance by it (via `locations.services.area_stat_total`, which sums every rung
+  above). A corner under a crew, a gang and a family reads all three.
+- **Revenue** — the site's `CRIME_KICKUP` streams and its `income_stream` (kind
+  `TERRITORY`, the base value of the ground: see Territory below) re-target to the
+  controller (`retarget_territory_streams`; per-row saves; never a bulk `.update()`,
+  which the identity map would not see). A Domain's own TERRITORY stream on the same
+  area belongs to the legitimate ladder and never follows a flip.
 - **Retaliation** — a push against held ground opens a `Gang Retaliation` THREAT
   crisis (CRIMINAL_ORG audience) against the *pusher*: pay tribute, run the
   "Hold the Corner" mission, or wait and bleed grip.
+
+## Territory (#4060 slice 1; ADR-0319)
+
+**Land units** are staff-built outdoor rooms (`RoomProfile.is_outdoor`). Two ladders of
+control (`societies.constants.ControlKind`) may hold the same ground at once and both
+yield from it: **legitimate** control descends (a `Domain` on any rung, a Lord Mayor's
+city down to a barony); **criminal** control ascends (a `Turf` on a corner, a
+neighborhood, a ward, a city). Land yields at the **lowest controlled rung of each
+kind**: `territory.territory_units(site, kind)` counts the outdoor rooms under the site
+minus those a lower rung of the same kind holds (a barony's rooms do not pay the duchy
+again; a crew's corner does not pay its gang again). Higher rungs earn through fealty
+tithes, which is what the ladder is for (ADR-0319).
+
+Every held rung carries one `OrgIncomeStream` of kind `TERRITORY` (`Turf.income_stream`,
+`Domain.territory_stream`; `OrgIncomeStream.room_profile` anchors a crew's), created or
+retargeted by `ensure_turf_stream` / `ensure_domain_stream`; the weekly economy's new
+`territory` phase runs `ensure_territory_streams()` before income accrues, so rungs that
+predate #4060 need no backfill. At accrual (`currency.services.accrue_income_stream`) the
+stream's gross is recomputed: `units × TERRITORY_BASE_PER_UNIT × multiplier`, the
+multiplier a Domain's `income_multiplier` (prosperity / 50, crisis-scaled) or a Turf's
+`grip / 100`; the stored `gross_amount` is last cycle's figure for display. It pools and
+is collected like every other stream (ADR-0081); nothing here lands money.
+`TERRITORY_BASE_PER_UNIT` (`currency/constants.py`) is a PLACEHOLDER.
+
+**Developments (#4060 slice 2, ADR-0320).** A `DomainHolding` is the physical,
+income-generating thing a family possesses (a farm, a quarry, an inn, a ship, a
+tollhouse), standing on a site its kind names: LAND (an outdoor room under the domain,
+occupying `units_required` of the domain's land units, which then pay through the
+holding's own stream instead of the base rate), BUILDING (a `Building` under the domain,
+ships included, no units), or ABSTRACT (the pre-#4060 shape). A farm
+(`HoldingKind.requires_field`) sits on agriculture's FIELD feature: one farm grows food
+there and pays coin here. Yield scales by `level × standing / 50` on top of prosperity;
+a holding of a sited kind that stands nowhere yet yields nothing. See houses.md.
+
+**Levies (#4060 slice 3, ADR-0321).** Every controller above a business takes its cut,
+and it is never either/or: a tavern in a contested neighborhood pays the Lord Mayor's
+**tax** (`LevyKind.TAX`, taken by whoever owns the Domain on that rung) and the gang's
+**protection** (`LevyKind.PROTECTION`, taken by whoever holds the Turf on that rung, an
+outdoor room included). A `Levy` names a rung and a `rate_pct`, never the taker, so the
+take follows control the way kick-up does; `set_levy(site, kind, rate_pct)` sets one (0
+switches it off). At accrual a holding stream's gross loses each applicable levy
+(`levies.apply_levies`: the room's, then every rung up the parent chain; a contested rung
+or the payer's own rung takes nothing; over 100 percent the takes scale down so the payer
+never goes negative), and each take pools in the levy's own `LEVY` `OrgIncomeStream` on the
+current controller, collected like any other (ADR-0081). A LEVY stream accrues nothing of
+its own; `ensure_levy_streams()` (in the weekly `territory` phase) retargets streams to the
+current controllers and zeroes their display total for the new cycle. A turf flip carries
+PROTECTION levy streams (pool included) to the new holder; TAX streams never follow.
 
 Gangs are ordinary `Organization` rows of the `gang` `OrganizationType`; an "NPC
 gang" is simply one with no player members, not a separate model. Pushes are fed

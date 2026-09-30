@@ -416,3 +416,18 @@ class OrgPactDissolutionReason(models.TextChoices):
     DISSOLVED = "dissolved", "Dissolved by Agreement"
     BETRAYAL = "betrayal", "Betrayed"
     FULFILLED = "fulfilled", "Fulfilled"
+
+
+class HoldingSiteKind(models.TextChoices):
+    """What a holding kind physically sits on (#4060 slice 2).
+
+    A holding is a development: the physical, income-generating thing a family
+    possesses. ABSTRACT is the pre-#4060 shape (a stream with no place), kept for
+    authored rows that never named a site. LAND occupies outdoor rooms under the
+    domain and uses up that many of its land units. BUILDING sits on a Building
+    (ships are Buildings) and takes no units: a building is never territory.
+    """
+
+    ABSTRACT = "abstract", "No site"
+    LAND = "land", "Land (outdoor rooms)"
+    BUILDING = "building", "A building or ship"

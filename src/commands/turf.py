@@ -83,24 +83,36 @@ class CmdTurf(ArxCommand):
         return profile.area if profile is not None else None
 
     def _show_status(self) -> None:
-        from world.societies.models import NeighborhoodTurf  # noqa: PLC0415
+        """Every rung of criminal ground over this spot, corner first (#4060)."""
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.societies.models import Turf  # noqa: PLC0415
 
         area = self._area()
         if area is None:
             self.msg("You are nowhere that anyone would fight over.")
             return
-        turf = (
-            NeighborhoodTurf.objects.filter(area=area)
-            .select_related("controlling_org", "area")
-            .first()
-        )
-        if turf is None or turf.controlling_org is None:
+        rungs: list[Turf] = []
+        try:
+            profile = self.caller.location.room_profile
+        except (AttributeError, ObjectDoesNotExist):
+            profile = None
+        if profile is not None:
+            corner = Turf.objects.filter(room_profile=profile).select_related("controlling_org")
+            rungs.extend(corner)
+        node = area
+        while node is not None:
+            rungs.extend(Turf.objects.filter(area=node).select_related("controlling_org", "area"))
+            node = node.parent
+        held = [turf for turf in rungs if turf.controlling_org is not None]
+        if not held:
             self.msg(f"|w{area.name}|n is contested ground — nobody runs it.")
             return
-        self.msg(
-            f"|w{area.name}|n is run by |c{turf.controlling_org.name}|n "
-            f"({self._grip_phrase(turf.grip)})."
-        )
+        for turf in held:
+            self.msg(
+                f"|w{turf.site_name}|n is run by |c{turf.controlling_org.name}|n "
+                f"({self._grip_phrase(turf.grip)})."
+            )
 
     @staticmethod
     def _grip_phrase(grip: int) -> str:

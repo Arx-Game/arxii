@@ -113,6 +113,9 @@ export interface Family {
   // #3617: authored kind row (was a 'commoner' | 'noble' | 'crime' code).
   kind: { id: number; name: string; styles_as_house: boolean };
   influence: number;
+  /** How the family is doing, 0-100 (50 neutral), read from its books: its domains'
+   * prosperity, else its businesses' standing; null when it holds nothing (#4060). */
+  standing: number | null;
   description: string;
   origin_realm?: number;
   // #3261 — resolved nobiliary particles ('' when the family has none).

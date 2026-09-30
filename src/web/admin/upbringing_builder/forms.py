@@ -140,6 +140,7 @@ class AnswerForm(forms.ModelForm):
             "cg_point_cost",
             "cost_per_influence",
             "reputation_seed",
+            "family_standing",
             "is_active",
             "sort_order",
         ]
@@ -149,6 +150,7 @@ class AnswerForm(forms.ModelForm):
             "cg_point_cost": "Cost",
             "cost_per_influence": "Per point of influence",
             "reputation_seed": "Group's opinion",
+            "family_standing": "New family starts at",
         }
 
 
