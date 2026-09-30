@@ -442,6 +442,9 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
 "src/evennia_extensions/mixins.py" = [
     "SLF001",  # private member access - mixin accessing internals is expected
 ]
+"src/web/admin/reviewed_delete.py" = [
+    "SLF001",  # reads Model._meta throughout: it is Django's public model introspection surface
+]
 
 [tool.ruff.lint.pylint]
 # Flat is better than nested. The codebase already passes at 3 (ruff's default is 5), so

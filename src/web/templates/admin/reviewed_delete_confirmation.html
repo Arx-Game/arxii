@@ -1,0 +1,94 @@
+{% extends "admin/delete_confirmation.html" %}
+{% load i18n admin_urls static %}
+{% comment %}
+The reviewed delete (#4064): the stock template's "would require deleting the following
+protected related objects" dead end, replaced by a plan the deleter decides row by row.
+`admin/delete_confirmation.html` links only base.css; the form rows here need forms.css,
+which change_form.html links and this page has to link itself (#3667).
+{% endcomment %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<style>
+  .reviewed-delete .blocking th, .reviewed-delete .blocking td { vertical-align: top; }
+  .reviewed-delete .blocking .choice label { display: inline-block; margin-right: 1em; }
+  .reviewed-delete .blocking .undecided { color: var(--error-fg); font-weight: 600; }
+  .reviewed-delete .blocking .note { color: var(--body-quiet-color); font-size: 12px; }
+  .reviewed-delete .kept ul { margin: 0 0 0 1.5em; }
+  .reviewed-delete .confirm-row { margin-top: 1em; }
+</style>
+{% endblock %}
+
+{% block delete_protected %}
+<div class="reviewed-delete">
+  <p>{% blocktranslate with escaped_object=object %}Deleting the {{ object_name }} "{{ escaped_object }}" removes what depends on it, and other rows point at it and block the delete. Decide what happens to each blocking row; nothing is written until every row is decided and the name is typed back.{% endblocktranslate %}</p>
+
+  <form method="post" id="reviewed-delete-form">{% csrf_token %}
+    <fieldset class="module aligned">
+      <h2>{% translate "Deleted with it" %}</h2>
+      {% include "admin/includes/object_delete_summary.html" %}
+      <ul id="deleted-objects">{{ deleted_objects|unordered_list }}</ul>
+    </fieldset>
+
+    {% if detached %}
+    <fieldset class="module aligned kept">
+      <h2>{% translate "Kept, with the link cleared" %}</h2>
+      <ul id="detached-objects">
+        {% for row in detached %}
+        <li>{{ row.kind }}: {% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %} ({{ row.links|join:", " }})</li>
+        {% endfor %}
+      </ul>
+    </fieldset>
+    {% endif %}
+
+    <fieldset class="module aligned blocking">
+      <h2>{% translate "Blocking rows" %} ({{ protected|length }})</h2>
+      <table id="blocking-rows">
+        <thead>
+          <tr>
+            <th>{% translate "Kind" %}</th>
+            <th>{% translate "Row" %}</th>
+            <th>{% translate "Points here as" %}</th>
+            <th>{% translate "What happens to it" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in protected %}
+          <tr data-row-key="{{ row.key }}" data-round="{{ row.round }}">
+            <td>{{ row.kind }}</td>
+            <td>
+              {% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}
+              {% if row.written_by %}<div class="note">{% translate "written by" %} {{ row.written_by }}</div>{% endif %}
+            </td>
+            <td>{{ row.links|join:", " }}</td>
+            <td>
+              {% if row.forced %}
+                <span class="note">{% translate "Removed by the cascade above." %}</span>
+              {% else %}
+                <div class="choice">
+                  {% if row.can_detach %}
+                  <label><input type="radio" name="{{ choice_prefix }}{{ row.key }}" value="{{ detach }}"{% if row.choice == detach %} checked{% endif %}> {% translate "Detach (keep the row, clear the link)" %}</label>
+                  {% endif %}
+                  <label><input type="radio" name="{{ choice_prefix }}{{ row.key }}" value="{{ delete }}"{% if row.choice == delete %} checked{% endif %}> {% translate "Delete" %}</label>
+                </div>
+                {% if not row.can_detach %}<div class="note">{{ row.detach_note }}</div>{% endif %}
+                {% if not row.decided %}<div class="undecided">{% translate "Undecided" %}</div>{% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </fieldset>
+
+    <div class="submit-row confirm-row">
+      <button type="submit" name="{{ review_field }}" value="{{ review_update }}" class="button" id="review-update">{% translate "Update" %}</button>
+      <label for="typed_name">{% translate "Type the name to confirm:" %} <code>{{ confirm_name }}</code></label>
+      <input type="text" id="typed_name" name="{{ typed_name_field }}" size="40" autocomplete="off">
+      <button type="submit" name="{{ review_field }}" value="{{ review_confirm }}" class="button deletelink" id="review-confirm"{% if undecided %} disabled{% endif %}>{% translate "Delete" %}</button>
+      <a href="{% url opts|admin_urlname:'change' object.pk|admin_urlquote %}" class="button cancel-link">{% translate "No, take me back" %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

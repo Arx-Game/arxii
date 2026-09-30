@@ -42,6 +42,48 @@ copy says so.
   hint to set `CONTENT_REPO_PATH` in `src/.env` (the Import Data upload
   remains the path for ad-hoc fixture files either way).
 
+### Reviewed delete (#4064)
+
+**Purpose:** Django's delete view stops at a `PROTECT` link and offers nothing. For a
+row staff deliberately want gone (a placeholder organization that owns a domain, is
+liege to a house and is named by a template) that was a dead end, and `Domain` and
+`FealtyEdge` had no admin page to go to. `ReviewedDeleteMixin`
+(`web/admin/reviewed_delete.py`) turns the dead end into a plan a superuser decides
+row by row; `PROTECT` itself is untouched, so every other delete path (shell,
+services, the inline tickbox, the bulk action) is still refused.
+
+- **The plan** - `build_delete_plan(root, choices, admin_site)` runs Django's own
+  `NestedObjects` on the root, then on each blocking row chosen for delete, round by
+  round to a fixpoint, so a chosen row's cascade joins "deleted with it" and its own
+  protectors join the blocking list. Each `BlockingRow` carries its links (the
+  `PROTECT` fields pointing at rows being removed), whether detach is offered (every
+  link nullable AND a copy of the row with them cleared passes `clean()` +
+  `validate_constraints()`; the identity-mapped instance is never mutated), its choice,
+  and whether the cascade already removes it (`forced`). Never stored: rebuilt from
+  the posted `choice-<app.model:pk>` fields on every request, so a row added between
+  review and confirm shows up undecided and refuses the confirm.
+- **The view** - `delete_view` defers to the stock view for a non-superuser, a row
+  nothing blocks, or a missing delete permission. Otherwise GET and POST `review=update`
+  render `admin/reviewed_delete_confirmation.html` (extends
+  `admin/delete_confirmation.html`, overrides `delete_protected`, links `forms.css`
+  itself, #3667); POST `review=confirm` refuses (re-render, nothing written) on an
+  undecided row, a choice not offered for its row, or a typed name that is not the row's
+  `name`; else in one `transaction.atomic()`: clear detached links, delete chosen rows
+  deepest round first through `delete_blocking_row` (overridable: `OrganizationAdmin`
+  routes a `FealtyEdge` through `release_fealty`), delete the root, one `LogEntry` per
+  row touched. A `ProtectedError`/`IntegrityError` inside rolls back and re-renders.
+- **Applied to** `OrganizationAdmin` only. Applying it to another admin is one mixin.
+- **The society page's inline** (`OrganizationInline.get_formset`) keeps Django's
+  refusal for a ticked blocked row and ends the message with a link to that
+  organization's delete view, `target="_blank"` so the society's unsaved edits stay.
+- **Domain and fealty pages** - `DomainAdmin` (owner autocomplete, holdings inline, no
+  add: domains are minted by `create_domain`/`plant_rung`) and `FealtyEdgeAdmin` (no
+  add: oaths are sworn by `swear_fealty`; delete goes through `release_fealty`) in
+  `world/societies/admin.py`.
+- Tests: `web/admin/tests/test_reviewed_delete.py` (the liege journey through the
+  HTTP views, the refusals, the inline link, the two pages). Decision record:
+  ADR-0326.
+
 ### Load Conflict Resolution (#3017)
 
 **Purpose:** the admin-side counterpart to the credited-row load guard in

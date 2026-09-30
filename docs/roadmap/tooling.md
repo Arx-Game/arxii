@@ -3,6 +3,19 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
+
+Deleting an organization other rows protect stopped at Django's "cannot delete" page,
+and `Domain` and `FealtyEdge` had no admin page to clear the block from.
+`ReviewedDeleteMixin` (`web/admin/reviewed_delete.py`, on `OrganizationAdmin`) shows a
+superuser the plan instead: the cascade, then every blocking row with a detach-or-delete
+choice (detach only where the link is nullable and the row still validates), nothing
+preselected, the name typed back, one transaction. A row added mid-review refuses the
+confirm. `DomainAdmin` (owner autocomplete, holdings inline) and `FealtyEdgeAdmin`
+(delete through `release_fealty`, so the tithe goes with the oath) are registered; the
+society page's organization rows still refuse a ticked blocked delete, and the refusal
+ends in a link to the review. ADR-0326.
+
 ## Built (2026-08-31, #3477 Tasks 3–7 — the Atlas and the documents)
 
 The grid-first canvas front door is replaced by the two-surface builder the

@@ -610,6 +610,18 @@ def _mint_tithe(*, payer: Organization, payee: Organization, percent: int) -> Or
     )
 
 
+def release_fealty(edge: FealtyEdge) -> None:
+    """End one oath: the tithe minted at swearing goes with it (#3983), then the edge.
+
+    The one seam for removing a ``FealtyEdge``: ``swear_fealty`` uses it for the edge
+    it replaces, and the admin's fealty page (#4064) for a staff deletion, so a tithe
+    is never left charging a vassal whose oath is gone.
+    """
+    if edge.obligation_id is not None:
+        edge.obligation.delete()
+    edge.delete()
+
+
 def swear_fealty(
     *, vassal: Organization, liege: Organization, tithe_pct: int | None = None
 ) -> FealtyEdge:
@@ -632,9 +644,7 @@ def swear_fealty(
         probe = edge.liege if edge is not None else None
     existing = FealtyEdge.objects.filter(vassal=vassal).first()
     if existing is not None:
-        if existing.obligation_id is not None:
-            existing.obligation.delete()
-        existing.delete()
+        release_fealty(existing)
     edge = FealtyEdge.objects.create(vassal=vassal, liege=liege)
     pct = tithe_pct if tithe_pct is not None else _realm_default_tithe(liege)
     if pct > 0:

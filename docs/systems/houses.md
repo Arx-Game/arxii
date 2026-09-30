@@ -132,7 +132,7 @@ finalize, never signals), `recognize_birth` (realm rules over
 public-record edges; mother's-option returns None — `acknowledge_into_family`
 is the explicit seam), `derive_succession_candidates` (omniscient public
 record; tanistry returns the unordered eligible pool; empty list = succession
-crisis, deliberately unresolved), `pass_title`, `swear_fealty` (cycle-refusing)
+crisis, deliberately unresolved), `pass_title`, `swear_fealty` (cycle-refusing) and `release_fealty` (the one seam that removes an edge, taking its tithe with it; the admin's fealty page uses it, #4064)
 / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` (executes DOWRY
 transfer, SUBSIDY → `OrgObligation`, RESIDENCY → `MARRIED_IN` membership),
 `dissolve_pact`, `handle_death_for_pacts` (call seam for the death flow — the

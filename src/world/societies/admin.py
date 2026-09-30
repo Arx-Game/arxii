@@ -7,8 +7,12 @@ Note: Realm admin is in the `realms` app.
 """
 
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest
+from django.urls import reverse
+from django.utils.html import format_html
 
+from web.admin.reviewed_delete import ReviewedDeleteMixin
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
@@ -65,12 +69,41 @@ from world.societies.models import (
 
 
 class OrganizationInline(admin.TabularInline):
-    """Inline for displaying organizations within a society."""
+    """Inline for displaying organizations within a society.
+
+    Ticking Delete on a row other rows protect is still refused, as Django does;
+    the refusal now ends in a link to that organization's own delete view, where
+    the review lives (#4064). It opens in a new tab so the society's unsaved
+    edits stay on this page.
+    """
 
     model = Organization
     extra = 0
     fields = ["name", "org_type", "description"]
     show_change_link = True
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        base_form = formset.form
+
+        class ReviewLinkedForm(base_form):  # type: ignore[valid-type,misc]
+            def hand_clean_DELETE(self):  # noqa: N802 - Django's own hook name
+                try:
+                    super().hand_clean_DELETE()
+                except ValidationError as exc:
+                    url = reverse("admin:arxii_organization_delete", args=(self.instance.pk,))
+                    raise ValidationError(
+                        format_html(
+                            '{} <a href="{}" target="_blank" rel="noopener">Review and delete'
+                            " (opens in a new tab)</a>",
+                            " ".join(exc.messages),
+                            url,
+                        ),
+                        code="deleting_protected",
+                    ) from exc
+
+        formset.form = ReviewLinkedForm
+        return formset
 
 
 class OrganizationRankInline(admin.TabularInline):
@@ -310,10 +343,12 @@ def apply_grants_to_new_memberships(request: HttpRequest, formsets) -> int:
 
 
 @admin.register(Organization)
-class OrganizationAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
+class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelAdmin):
     """Admin interface for Organization management.
 
     Shows organization details, principle overrides, and membership management.
+    Deleting an organization other rows protect opens the reviewed delete (#4064):
+    a superuser decides, row by row, whether a blocking row is detached or removed.
     """
 
     list_display = [
@@ -378,6 +413,15 @@ class OrganizationAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         organization's grants (#3775, #3788)."""
         super().save_related(request, form, formsets, change)
         apply_grants_to_new_memberships(request, formsets)
+
+    def delete_blocking_row(self, request: HttpRequest, obj) -> None:
+        """A fealty edge ends through ``release_fealty`` so its tithe goes with it."""
+        from world.societies.houses.services import release_fealty  # noqa: PLC0415
+
+        if isinstance(obj, FealtyEdge):
+            release_fealty(obj)
+            return
+        super().delete_blocking_row(request, obj)
 
 
 @admin.register(Vacancy)
@@ -988,10 +1032,13 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 from world.societies.houses.models import (  # noqa: E402
+    Domain,
     DomainCrisisType,
     DomainCrisisTypeOption,
     DomainGarrisonPost,
+    DomainHolding,
     EdictKind,
+    FealtyEdge,
     HoldingKind,
     HouseAspectDefinition,
     HouseAspectOption,
@@ -1356,17 +1403,81 @@ class TurfAdmin(admin.ModelAdmin):
     readonly_fields = ["updated_at"]
 
 
+class DomainHoldingInline(admin.TabularInline):
+    """What stands on the domain (#4064): read here, so a delete is decided in the open."""
+
+    model = DomainHolding
+    extra = 0
+    fields = ["name", "kind", "owner_org", "level", "standing", "income_stream"]
+    readonly_fields = ["income_stream"]
+    raw_id_fields = ["kind", "owner_org"]
+    show_change_link = False
+
+
+@admin.register(Domain)
+class DomainAdmin(admin.ModelAdmin):
+    """A landholding on an area (#1884, #3983); page added in #4064.
+
+    Until this page existed a domain blocked its owner's deletion with nothing to
+    click, and land could change hands only through a shell. ``owner_org`` is the
+    field that matters: set it, clear it, or delete the domain from here.
+    """
+
+    list_display = ["name", "area", "owner_org", "population", "prosperity", "unrest"]
+    list_select_related = ["area", "owner_org"]
+    search_fields = ["name", "area__name", "owner_org__name"]
+    autocomplete_fields = ["owner_org", "hall"]
+    raw_id_fields = ["territory_stream"]
+    filter_horizontal = ["land_shapes"]
+    readonly_fields = ["area"]
+    inlines = [DomainHoldingInline]
+    fieldsets = (
+        (None, {"fields": ("area", "name", "description", "owner_org", "hall", "land_shapes")}),
+        ("Civ stats (PLACEHOLDER)", {"fields": ("population", "prosperity", "unrest", "defenses")}),
+        ("Territory", {"fields": ("territory_stream",)}),
+    )
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        """A domain is minted by ``create_domain``/``plant_rung`` on an area; not typed in."""
+        return False
+
+
+@admin.register(FealtyEdge)
+class FealtyEdgeAdmin(admin.ModelAdmin):
+    """Who is sworn to whom (#1884); page added in #4064.
+
+    Deleting an edge here ends the oath and its tithe together through
+    ``release_fealty``, the same seam ``swear_fealty`` uses when it replaces one.
+    A new oath is sworn through ``swear_fealty`` (cycle check, realm tithe), so the
+    page does not add rows.
+    """
+
+    list_display = ["vassal", "liege", "sworn_at", "obligation"]
+    list_select_related = ["vassal", "liege", "obligation"]
+    search_fields = ["vassal__name", "liege__name"]
+    autocomplete_fields = ["vassal", "liege"]
+    readonly_fields = ["sworn_at", "obligation"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        return False
+
+    def delete_model(self, request: HttpRequest, obj: FealtyEdge) -> None:  # noqa: ARG002
+        from world.societies.houses.services import release_fealty  # noqa: PLC0415
+
+        release_fealty(obj)
+
+    def delete_queryset(self, request: HttpRequest, queryset) -> None:  # noqa: ARG002
+        from world.societies.houses.services import release_fealty  # noqa: PLC0415
+
+        for edge in queryset.select_related("obligation"):
+            release_fealty(edge)
+
+
 @admin.register(DomainGarrisonPost)
 class DomainGarrisonPostAdmin(admin.ModelAdmin):
-    """Which MilitaryUnit garrisons which domain (#696 gap 5).
-
-    ``domain`` uses ``raw_id_fields`` rather than ``autocomplete_fields``:
-    ``Domain`` carries no ``ModelAdmin`` of its own to autocomplete against
-    (pre-existing - no Domain-sibling model is admin-registered either).
-    """
+    """Which MilitaryUnit garrisons which domain (#696 gap 5)."""
 
     list_display = ["domain", "unit", "created_at"]
     search_fields = ["domain__name", "unit__name"]
-    raw_id_fields = ["domain"]
-    autocomplete_fields = ["unit"]
+    autocomplete_fields = ["domain", "unit"]
     readonly_fields = ["created_at"]
