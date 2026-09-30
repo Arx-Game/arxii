@@ -87,8 +87,9 @@ widen the `PLAYER_FLAVOR` caps to catch it.
 - `author_player_flavor_secret(...)` — the only *free* path a player may write: Level-1 flavor,
   attributed to their persona. CG's Whispers (#3621) use the same shape through
   `author_secret(provenance=PLAYER_FLAVOR, level=1)`: each line the player wrote becomes one
-  such secret with a `SecretGossip` row seeded in the start region, so the built gossip tier
-  carries "rumors about the character" and no rumor model exists beside it.
+  such secret with a `SecretGossip` row seeded at the start room's own area (and climbed from
+  there like any rumor, #4085), so the built gossip tier carries "rumors about the character"
+  and no rumor model exists beside it.
 - `mint_accusation(*, accuser_persona, subject_sheet, content, level=1, ...)` (#1825) — the
   frame-job author path; thin over `author_secret` with `ACCUSATION` provenance. The first mint
   where subject ≠ actor; rejects self-framing, clamps to `ACCUSATION_MAX_LEVEL` (PLACEHOLDER).
@@ -282,12 +283,21 @@ society-level exposure — the gossip slice), enforcement (wanted/blood-feud con
 hostile-territory consequences), and propaganda (granular re-framing of the diffuse reading) are
 **later slices** of the #1429 sub-epic.
 
-## Gossip — the casual, regional tier (#1572)
+## Gossip — the casual tier that climbs the map (#1572, #4085)
 
 The **lowest** tier of the discovery ladder: a Level-1 secret can spread as **gossip** without the
 full clue loop. Distinct from `tidings` (#1450, which surfaces *formally* `expose_secret`'d
-scandals) — gossip is the **pre-exposure, skill-gated** tier, modelled as a **decaying regional
-"heat"** (`SecretGossip`, per `(secret, region)` where region is the `Area` at `AreaLevel.REGION`).
+scandals) — gossip is the **pre-exposure, skill-gated** tier, modelled as a **decaying "heat"**
+with a **reach** (`SecretGossip`, per `(secret, area)` where `area` is the highest area the rumor
+has climbed to). There is no fixed boundary and no "region" rung:
+
+- A plant starts a rumor at the hub room's own area.
+- `climb_gossip` moves it to the parent each time its heat meets that level's
+  `GOSSIP_CLIMB_THRESHOLDS` entry (placeholder numbers, keyed by `AreaLevel` so skipped rungs
+  do not matter), merging with a row already there, so one secret has one row per reach.
+- Every hub inside the reach hears it (seek, `heat_for`, the public echo all read every rumor
+  whose reach contains the room, via `areas.services.containing_areas`, a parent walk).
+- A reach never descends: decay fades heat, only suppression to 0 ends the rumor.
 
 - **Gate:** the Gossip *specialization* (≥1) drives the check (charm + Persuasion + Gossip, the
   seeded `Gossip` CheckType — needs #1688's spec-in-checks engine) and you must stand in a
@@ -301,8 +311,8 @@ scandals) — gossip is the **pre-exposure, skill-gated** tier, modelled as a **
 - **Authoring guardrail:** you spread only secrets you **hold** (or that are **about you**) — no
   authoring gossip about others.
 - **Public threshold:** at `heat ≥ GOSSIP_PUBLIC_THRESHOLD` the gossip goes **public** (one-shot):
-  ambient **room-arrival echo** at the region's hubs (`Room._echo_public_gossip`) **and**
-  `expose_secret` to the **societies matching the region** — bridging this casual tier into the
+  ambient **room-arrival echo** at the hubs inside the reach (`Room._echo_public_gossip`) **and**
+  `expose_secret` to the **societies of the area reached** — bridging this casual tier into the
   formal reputation/`tidings` engine. All magnitudes are PLACEHOLDER.
 - **Telnet:** `gossip` (`commands/social/gossip.py`) — `gossip` (list), `gossip seek`, `gossip plant
   <#>`, `gossip suppress <#>`, `gossip smear <char> = <claim>`. The reserved `gossip` verb.
@@ -314,8 +324,9 @@ nullification, denounce, case file — is in `docs/systems/justice.md`):
 
 - **Smear** (`gossip.plant_smear` / `SmearAction` `smear_accusation` / `gossip smear`): the
   one-move L1 tier — one Gossip roll gates hub + skill + the target's `hostile` consent,
-  mints the ACCUSATION secret, seeds its regional heat, and plants the counter-clue
-  (`clues.create_accusation_counter_clue`, difficulty seeded from the roll — the
+  mints the ACCUSATION secret, seeds its heat at the hub's area, and plants the counter-clue
+  in the hubs of that reach (`clues.create_accusation_counter_clue(secret, area=...)`,
+  difficulty seeded from the roll — the
   cost-to-mint ↔ difficulty-to-disprove dial). A miss mints nothing.
 - **Refute** (`gossip.refute_accusation` / `RefuteAccusationAction` / `accuse/refute`,
   `AccusationRebuttal`): the **consentless defense** (Tom/Bob/Fred rule) — anyone holding
@@ -327,8 +338,8 @@ nullification, denounce, case file — is in `docs/systems/justice.md`):
   exposure channels (diffuse via `societies.compute_archetype_society_delta`, relational
   org-victim severities) against `societies_exposed` and bumps the negation. NOT
   idempotent; callers own the once-only guard.
-- Public hub seams: `hub_region_for(room)` / `societies_for_region(region)` (consumed by
-  justice's denounce).
+- Public hub seams: `hub_area_for(room)` / `societies_for_area(area)` (consumed by
+  justice's denounce); `heat_for(secret, room=...)` for the surfaces.
 
 ## Boundary with Codex
 

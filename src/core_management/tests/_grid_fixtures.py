@@ -45,13 +45,13 @@ def build_sample_grid() -> SimpleNamespace:  # noqa: PLR0915
 
     region = Area.objects.create(
         name="Arx Region",
-        level=AreaLevel.REGION,
+        level=AreaLevel.COUNTY,
         slug="arx-region",
         origin=GridOrigin.AUTHORED,
     )
     city = Area.objects.create(
         name="Arx City",
-        level=AreaLevel.CITY,
+        level=AreaLevel.BARONY,
         parent=region,
         slug="arx-city",
         origin=GridOrigin.AUTHORED,

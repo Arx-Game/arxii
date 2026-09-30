@@ -19,7 +19,7 @@ from world.societies.turf_services import apply_turf_push
 
 class LevyTests(TestCase):
     def setUp(self):
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.neighborhood = AreaFactory(level=AreaLevel.NEIGHBORHOOD, parent=self.ward)
         self.corner = RoomProfileFactory(area=self.neighborhood, is_outdoor=True)

@@ -96,7 +96,7 @@ class GossipPayoutTests(SpyPayoutTestBase):
         )
         from world.areas.factories import AreaFactory
 
-        gossip = SecretGossip.objects.create(secret=secret, region=AreaFactory(), heat=heat)
+        gossip = SecretGossip.objects.create(secret=secret, area=AreaFactory(), heat=heat)
         return subject.character_sheet.primary_persona, gossip
 
     def test_whisper_campaign_raises_heat(self):

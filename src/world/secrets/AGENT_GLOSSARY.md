@@ -20,8 +20,12 @@ _Avoid_: known secret, CharacterSecret, secret grant.
 The recorded act a secret is the hidden truth behind (#1573) — held as optional FKs on the `Secret` itself (`legend_deed` → `LegendEntry`, `mission_deed` → `MissionDeedRecord`, `scene` → `Scene`). One act = one secret: the act may surface through several of these records at once, but they are co-facets of a single truth, never separate secrets. The distinct *consequences* (legend / criminal / society) are not the anchor — they ride the #1429 reputation payload. The FK lives on the secret (not a back-reference on the record) per ADR-0062.
 _Avoid_: deed link, deed discriminator, one-secret-per-deed, evidence record (the raw-`Interaction` blackmail link is a later slice).
 
+**Reach** (`SecretGossip.area`, #4085):
+The highest area a rumor has climbed to; every social hub inside it hears the rumor. A plant starts a rumor at the hub room's own area, and `climb_gossip` moves it one parent up each time its heat meets that level's `GOSSIP_CLIMB_THRESHOLDS` entry, merging with a row already there. A reach never descends: decay fades heat, only suppression to 0 ends the rumor. There is no fixed boundary and no "region" rung; a faint rumor is a street's, a hot one a kingdom's.
+_Avoid_: region, gossip region, regional heat, scope.
+
 **Smear**:
-The one-move Level-1 accusation through the rumor mill (`plant_smear`, #1825): a single Gossip roll gates hub + skill + the target's hostile consent, mints the ACCUSATION secret, seeds its regional gossip heat, and plants the counter-clue whose difficulty the same roll sets. A miss mints nothing.
+The one-move Level-1 accusation through the rumor mill (`plant_smear`, #1825): a single Gossip roll gates hub + skill + the target's hostile consent, mints the ACCUSATION secret, seeds its gossip heat at the hub's area, and plants the counter-clue whose difficulty the same roll sets. A miss mints nothing.
 _Avoid_: slander (no such verb), gossip attack.
 
 **Rebuttal**:

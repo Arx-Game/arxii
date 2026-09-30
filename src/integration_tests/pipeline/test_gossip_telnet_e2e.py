@@ -72,7 +72,7 @@ class GossipTelnetE2EJourneyTest(TestCase):
         cls.regular = CheckOutcomeFactory(name="gossip_regular_e2e", success_level=1)
 
         cls.realm = RealmFactory()
-        cls.region = AreaFactory(level=AreaLevel.REGION, realm=cls.realm)
+        cls.region = AreaFactory(level=AreaLevel.COUNTY, realm=cls.realm)
         cls.society = SocietyFactory(realm=cls.realm)
 
         from evennia_extensions.factories import RoomProfileFactory
@@ -131,7 +131,7 @@ class GossipTelnetE2EJourneyTest(TestCase):
         with force_check_outcome(self.special):
             _run(self.gossiper, "plant 1")
 
-        row = SecretGossip.objects.get(secret=self.secret, region=self.region)
+        row = SecretGossip.objects.get(secret=self.secret, area=self.region)
         self.assertEqual(row.heat, 2, "special success should add 2 heat")
 
         self.gossiper.msg.assert_called()
@@ -161,13 +161,13 @@ class GossipTelnetE2EJourneyTest(TestCase):
         from world.secrets.models import SecretGossip
 
         # Pre-plant: set heat to 5.
-        SecretGossip.objects.create(secret=self.secret, region=self.region, heat=5)
+        SecretGossip.objects.create(secret=self.secret, area=self.region, heat=5)
 
         self.gossiper.location = self._room()
         with force_check_outcome(self.special):
             _run(self.gossiper, "suppress 1")
 
-        row = SecretGossip.objects.get(secret=self.secret, region=self.region)
+        row = SecretGossip.objects.get(secret=self.secret, area=self.region)
         self.assertEqual(row.heat, 3, "special suppress should remove 2 heat (5 → 3)")
 
         self.gossiper.msg.assert_called()
@@ -186,7 +186,7 @@ class GossipTelnetE2EJourneyTest(TestCase):
         # A hot secret about a third party that the seeker doesn't know.
         target = CharacterSheetFactory()
         hot = SecretFactory(subject_sheet=target, level=SecretLevel.UNCOMMON_KNOWLEDGE)
-        SecretGossip.objects.create(secret=hot, region=self.region, heat=5)
+        SecretGossip.objects.create(secret=hot, area=self.region, heat=5)
 
         self.seeker.location = self._room()
         with force_check_outcome(self.regular):

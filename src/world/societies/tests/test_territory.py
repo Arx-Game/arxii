@@ -51,10 +51,11 @@ class TurfSiteTests(TestCase):
         with self.assertRaises(ValidationError):
             Turf(room_profile=cellar).full_clean()
 
-    def test_turf_refuses_a_barony_and_needs_exactly_one_site(self):
-        barony = AreaFactory(level=AreaLevel.BARONY)
+    def test_turf_refuses_a_county_and_needs_exactly_one_site(self):
+        # A barony is the city rung since #4085, so turf may sit on it; a county is above turf.
+        county = AreaFactory(level=AreaLevel.COUNTY)
         with self.assertRaises(ValidationError):
-            Turf(area=barony).full_clean()
+            Turf(area=county).full_clean()
 
         ward = AreaFactory(level=AreaLevel.WARD)
         with self.assertRaises(ValidationError):
@@ -67,7 +68,7 @@ class LandUnitTests(TestCase):
     """Units are outdoor rooms under the site, minus rooms a lower rung of the same kind holds."""
 
     def setUp(self):
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.neighborhood = AreaFactory(level=AreaLevel.NEIGHBORHOOD, parent=self.ward)
         self.corner = _room(self.neighborhood)

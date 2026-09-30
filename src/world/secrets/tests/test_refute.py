@@ -92,7 +92,7 @@ class RefuteAccusationTests(TestCase):
         cls.success = CheckOutcomeFactory(name="refute_success", success_level=1)
         cls.miss = CheckOutcomeFactory(name="refute_miss", success_level=-1)
         cls.realm = RealmFactory()
-        cls.region = AreaFactory(level=AreaLevel.REGION, realm=cls.realm)
+        cls.region = AreaFactory(level=AreaLevel.COUNTY, realm=cls.realm)
         cls.hub = RoomProfileFactory(area=cls.region, is_social_hub=True)
 
         cls.subject = CharacterSheetFactory()

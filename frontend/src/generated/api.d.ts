@@ -25068,7 +25068,7 @@ export interface components {
     AreaList: {
       readonly id: number;
       readonly name: string;
-      readonly level: components['schemas']['Level4f2Enum'];
+      readonly level: components['schemas']['Level554Enum'];
       readonly level_display: string;
       readonly children_count: number;
       /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
@@ -33170,9 +33170,7 @@ export interface components {
      * @description * `10` - Building
      *     * `20` - Neighborhood
      *     * `30` - Ward
-     *     * `40` - City
-     *     * `46` - Barony
-     *     * `50` - Region
+     *     * `40` - Barony
      *     * `53` - County
      *     * `56` - Duchy
      *     * `60` - Kingdom
@@ -33182,7 +33180,7 @@ export interface components {
      *     * `90` - Plane
      * @enum {integer}
      */
-    Level4f2Enum: 10 | 20 | 30 | 40 | 46 | 50 | 53 | 56 | 60 | 65 | 70 | 80 | 90;
+    Level554Enum: 10 | 20 | 30 | 40 | 53 | 56 | 60 | 65 | 70 | 80 | 90;
     /**
      * @description * `starting` - Starting GM
      *     * `junior` - Junior GM
@@ -48249,7 +48247,7 @@ export interface components {
       readonly name: string;
       /** @description Permanent stable identifier for authored (exported) areas (#2448). Required when origin=AUTHORED; NULL for runtime areas. */
       readonly slug: string | null;
-      readonly level: components['schemas']['Level4f2Enum'];
+      readonly level: components['schemas']['Level554Enum'];
       readonly level_display: string;
       /**
        * @description Who authored this area — only AUTHORED areas export (#2448).

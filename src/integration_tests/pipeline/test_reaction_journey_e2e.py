@@ -169,7 +169,7 @@ class WitnessReportJourneyE2ETests(TestCase):
     def setUpTestData(cls) -> None:
         cls.crown = SocietyFactory()
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.city = AreaFactory(level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.theft = CrimeKindFactory(slug="journey-theft", name="Theft")
         AreaLawFactory(area=cls.kingdom, crime_kind=cls.theft, heat_weight=DEFAULT_HEAT_WEIGHT)
         cls.source_type = LegendSourceTypeFactory()

@@ -33,7 +33,7 @@ class GossipApiTests(APITestCase):
         self.secret = SecretFactory(level=SecretLevel.UNCOMMON_KNOWLEDGE, content="A scandal.")
         self.client.force_authenticate(user=self.account)
 
-    @patch("world.secrets.gossip.region_heat_for", return_value=5)
+    @patch("world.secrets.gossip.heat_for", return_value=5)
     @patch("world.secrets.gossip.spreadable_secrets")
     def test_list_returns_spreadable_with_heat(self, mock_spread, _mock_heat) -> None:  # noqa: PT019
         mock_spread.return_value = [self.secret]

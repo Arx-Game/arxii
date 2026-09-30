@@ -347,7 +347,7 @@ assembles answered question-and-answer pairs and writes each as a public `Journa
 of its `JournalKind` ("<first name>'s First Journal", `APPLICATION_TITLE`, `WHISPERS_TITLE`),
 journal XP as for any entry when the character has an account; each Whispers line also
 becomes a Level-1 `PLAYER_FLAVOR` Secret about the character with a `SecretGossip` row at
-`WHISPERS_SEED_HEAT` in the start region (walked up parent links, not the closure view), so
+`WHISPERS_SEED_HEAT` at the start room's own area, climbed from there like any rumor (#4085), so
 it is overhearable at a hub from day one (#1572). The sheet API's `actor_sheet` section
 carries the answers, the enemy's public line (full row when privileged) and the
 Introductions by kind.

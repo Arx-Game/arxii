@@ -41,20 +41,20 @@ from world.weather.tasks import roll_and_echo_weather
 
 class WeatherResolutionTests(TestCase):
     def test_inherited_from_ancestor(self) -> None:
-        region = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY)
         ward = AreaFactory(level=AreaLevel.WARD, parent=region)
         state = RegionWeatherStateFactory(area=region)
         assert get_effective_weather(ward) == state
 
     def test_subregion_overrides_parent(self) -> None:
-        region = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY)
         ward = AreaFactory(level=AreaLevel.WARD, parent=region)
         RegionWeatherStateFactory(area=region)
         ward_state = RegionWeatherStateFactory(area=ward)
         assert get_effective_weather(ward) == ward_state
 
     def test_none_when_unset(self) -> None:
-        assert get_effective_weather(AreaFactory(level=AreaLevel.CITY)) is None
+        assert get_effective_weather(AreaFactory(level=AreaLevel.BARONY)) is None
         assert get_effective_weather(None) is None
 
 
@@ -63,26 +63,26 @@ class WeatherEligibilityTests(TestCase):
 
     def test_unbounded_type_is_always_eligible(self) -> None:
         clear = WeatherTypeFactory()
-        region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=50))
+        region = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory(temperature=50))
         assert clear in eligible_weather_types(region)
 
     def test_snow_is_filtered_out_of_a_hot_region(self) -> None:
         snow = WeatherTypeFactory(max_temperature=20)  # only cold regions
-        hot = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=50))
-        cold = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=-40))
+        hot = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory(temperature=50))
+        cold = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory(temperature=-40))
         assert snow not in eligible_weather_types(hot)
         assert snow in eligible_weather_types(cold)
 
     def test_special_weather_is_never_eligible_for_the_ambient_roll(self) -> None:
         eclipse = WeatherTypeFactory(is_automated=False)
-        region = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY)
         assert eclipse not in eligible_weather_types(region)
 
 
 class WeatherRollTests(TestCase):
     def _region_room(self, climate=None):
         # Open-air so the room actually feels the weather axes (walls would shelter WET/WIND).
-        region = AreaFactory(level=AreaLevel.CITY, climate=climate)
+        region = AreaFactory(level=AreaLevel.BARONY, climate=climate)
         ward = AreaFactory(level=AreaLevel.WARD, parent=region)
         profile = RoomProfileFactory(area=ward, enclosure=RoomEnclosure.OPEN_AIR)
         return region, profile.objectdb
@@ -117,14 +117,14 @@ class WeatherRollTests(TestCase):
     def test_random_roll_only_picks_eligible_types(self) -> None:
         WeatherTypeFactory(name="Snow", max_temperature=20)  # filtered out of a hot region
         sun = WeatherTypeFactory(name="Sun", min_temperature=30)
-        hot = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=50))
+        hot = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory(temperature=50))
         state = roll_region_weather(hot)
         assert state is not None
         assert state.weather_type == sun  # only the eligible type can be picked
 
     def test_roll_returns_none_when_no_eligible_types(self) -> None:
         WeatherTypeFactory(min_temperature=100)  # nothing is this hot
-        region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=0))
+        region = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory(temperature=0))
         assert roll_region_weather(region) is None
 
     def test_clear_region_weather_removes_state_and_modifiers(self) -> None:
@@ -148,7 +148,7 @@ class WeatherEmitTests(TestCase):
         # A summer-day emit and a winter-night emit on the same weather.
         WeatherEmitFactory(weather_type=storm, text="summer day", in_summer=True, at_day=True)
         WeatherEmitFactory(weather_type=storm, text="winter night", in_winter=True, at_night=True)
-        region = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY)
         RegionWeatherStateFactory(area=region, weather_type=storm)
         self._clock_at(7)  # July → summer, noon → day
 
@@ -159,7 +159,7 @@ class WeatherEmitTests(TestCase):
     def test_no_match_returns_none(self) -> None:
         storm = WeatherTypeFactory()
         WeatherEmitFactory(weather_type=storm, text="winter only", in_winter=True, at_day=True)
-        region = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY)
         RegionWeatherStateFactory(area=region, weather_type=storm)
         self._clock_at(7)  # summer — the winter emit doesn't match
         assert select_weather_emit(region) is None
@@ -167,19 +167,19 @@ class WeatherEmitTests(TestCase):
     def test_explicit_season_phase_override(self) -> None:
         storm = WeatherTypeFactory()
         WeatherEmitFactory(weather_type=storm, text="dusk autumn", in_autumn=True, at_dusk=True)
-        region = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY)
         RegionWeatherStateFactory(area=region, weather_type=storm)
         emit = select_weather_emit(region, season=Season.AUTUMN, phase=TimePhase.DUSK)
         assert emit is not None
         assert emit.text == "dusk autumn"
 
     def test_no_weather_returns_none(self) -> None:
-        assert select_weather_emit(AreaFactory(level=AreaLevel.CITY)) is None
+        assert select_weather_emit(AreaFactory(level=AreaLevel.BARONY)) is None
 
 
 class CurrentConditionsTests(TestCase):
     def _room(self, *, climate=None, weather_type=None):
-        region = AreaFactory(level=AreaLevel.CITY, climate=climate)
+        region = AreaFactory(level=AreaLevel.BARONY, climate=climate)
         ward = AreaFactory(level=AreaLevel.WARD, parent=region)
         profile = RoomProfileFactory(area=ward)
         if weather_type is not None:
@@ -217,14 +217,14 @@ class CurrentConditionsTests(TestCase):
 class WeatherTickTests(TestCase):
     def test_rolls_climate_regions_and_skips_climateless(self) -> None:
         WeatherTypeFactory()  # one unbounded automated type, eligible anywhere
-        region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=10))
-        climateless = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory(temperature=10))
+        climateless = AreaFactory(level=AreaLevel.BARONY)
         roll_and_echo_weather()
         assert get_effective_weather(region) is not None
         assert get_effective_weather(climateless) is None
 
     def test_tick_is_safe_with_no_eligible_weather(self) -> None:
-        AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory())  # no weather types exist
+        AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory())  # no weather types exist
         roll_and_echo_weather()  # must not raise
 
 
@@ -260,7 +260,7 @@ class FeastDayWeatherTests(TestCase):
         madness = WeatherTypeFactory(name="Moon Madness", is_automated=False)
         WeatherTypeFactory(name="Clear")  # the normal type that would otherwise roll
         FeastDayFactory(ic_month=10, ic_day=31, weather_type=madness)
-        region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=10))
+        region = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory(temperature=10))
         self._clock_on(10, 31)
 
         roll_and_echo_weather()
@@ -276,7 +276,7 @@ class WeatherShelterTests(TestCase):
         from world.conditions.factories import ensure_radiant_damage_type
 
         self.radiant = ensure_radiant_damage_type()
-        self.region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory())
+        self.region = AreaFactory(level=AreaLevel.BARONY, climate=ClimateFactory())
         self.overcast = WeatherTypeFactory(name="Overcast")
         from world.weather.factories import WeatherTypeShelterFactory
 

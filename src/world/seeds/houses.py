@@ -278,7 +278,7 @@ def seed_houses_demo() -> None:
 
     swear_fealty(vassal=house, liege=crown)
 
-    area, _ = Area.objects.get_or_create(name=DOMAIN_NAME, defaults={"level": AreaLevel.REGION})
+    area, _ = Area.objects.get_or_create(name=DOMAIN_NAME, defaults={"level": AreaLevel.BARONY})
     domain = create_domain(area=area, name=DOMAIN_NAME, owner_org=house)
     farmland = authored_or_sample(
         HoldingKind,
@@ -358,12 +358,12 @@ def _ensure_demo_capital(realm) -> None:
 
     if Area.objects.filter(realm=realm, is_capital=True).exists():
         return
-    city = Area.objects.filter(realm=realm, level=AreaLevel.CITY).first()
+    city = Area.objects.filter(realm=realm, level=AreaLevel.BARONY).first()
     if city is None:
         city = Area.objects.create(
             name=CAPITAL_CITY_NAME,
             slug=slugify(CAPITAL_CITY_NAME),
-            level=AreaLevel.CITY,
+            level=AreaLevel.BARONY,
             realm=realm,
             origin=GridOrigin.AUTHORED,
         )
@@ -495,7 +495,7 @@ def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
         template.features.add(hearth)
 
     seat_area, _ = Area.objects.get_or_create(
-        name=CLAIMABLE_DOMAIN_NAME, defaults={"level": AreaLevel.REGION}
+        name=CLAIMABLE_DOMAIN_NAME, defaults={"level": AreaLevel.BARONY}
     )
     seat, _ = Domain.objects.get_or_create(
         area=seat_area,

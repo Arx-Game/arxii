@@ -114,7 +114,7 @@ class HouseCreatorTestData(TestCase):
         cls.solano_family = FamilyFactory(name="Solano")
         UnionKindFactory()
         cls.capital = AreaFactory(
-            name="Piropa City", level=AreaLevel.CITY, realm=cls.realm, is_capital=True
+            name="Piropa City", level=AreaLevel.BARONY, realm=cls.realm, is_capital=True
         )
         cls.starting_area = StartingAreaFactory(name="Founder Start", realm=cls.realm)
         cls.draft.selected_area = cls.starting_area

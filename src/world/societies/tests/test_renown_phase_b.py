@@ -186,7 +186,7 @@ class FireRenownAwardReachTests(TestCase):
         )
         cls.home_city = AreaFactory(
             name="Home City",
-            level=AreaLevel.CITY,
+            level=AreaLevel.BARONY,
             realm=cls.home_realm,
             parent=cls.continent,
         )
@@ -378,7 +378,7 @@ class FireRenownAwardBundleTests(TestCase):
     def test_full_bundle_writes_all_axes(self) -> None:
         realm = RealmFactory(name="Bundle Realm")
         society = SocietyFactory(name="Bundle Society", realm=realm, mercy=2, method=2)
-        area = AreaFactory(name="Bundle City", level=AreaLevel.CITY, realm=realm)
+        area = AreaFactory(name="Bundle City", level=AreaLevel.BARONY, realm=realm)
         archetype = PhilosophicalArchetype.objects.create(
             name="BundleHeroic", mercy_delta=1, method_delta=1
         )

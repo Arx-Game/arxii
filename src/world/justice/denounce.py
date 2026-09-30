@@ -61,8 +61,8 @@ def denounce_framer(
     from world.justice.services import accrue_heat, area_for_room  # noqa: PLC0415
     from world.secrets.gossip import (  # noqa: PLC0415
         GossipError,
-        hub_region_for,
-        societies_for_region,
+        hub_area_for,
+        societies_for_area,
     )
     from world.secrets.services import (  # noqa: PLC0415
         accusation_permitted,
@@ -81,7 +81,7 @@ def denounce_framer(
     if not character_knows_secret(knower_sheet=denouncer_sheet, secret=authorship_secret):
         raise DenounceError(_NOT_KNOWN)
     try:
-        region = hub_region_for(room)
+        area = hub_area_for(room)
     except GossipError as exc:
         raise DenounceError(_NOT_HUB) from exc
     framer_sheet = authorship_secret.subject_sheet
@@ -95,7 +95,7 @@ def denounce_framer(
     DenounceRecord.objects.create(
         authorship_secret=authorship_secret, denouncer_sheet=denouncer_sheet
     )
-    societies = societies_for_region(region)
+    societies = societies_for_area(area)
     if societies:
         expose_secret(authorship_secret, societies=societies)
     false_accusation = CrimeKind.objects.filter(slug="false-accusation").first()

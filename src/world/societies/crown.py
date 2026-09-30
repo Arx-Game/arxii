@@ -58,7 +58,7 @@ CROWN_START_GRIP = 50  # the crown family's hold on the city turf at recognition
 _TIER_BY_LEVEL = {
     AreaLevel.NEIGHBORHOOD: CrimeTier.GANG,
     AreaLevel.WARD: CrimeTier.FAMILY,
-    AreaLevel.CITY: CrimeTier.EMPIRE,
+    AreaLevel.BARONY: CrimeTier.EMPIRE,
 }
 _TIER_ORDER = [CrimeTier.CREW, CrimeTier.GANG, CrimeTier.FAMILY, CrimeTier.EMPIRE]
 
@@ -125,7 +125,7 @@ def may_call_vote(org: Organization, city: Area) -> bool:
 def call_crown_vote(org: Organization, city: Area, called_by: Persona | None) -> CrownBid:
     from world.societies.models import CrownBid  # noqa: PLC0415
 
-    if city.level != AreaLevel.CITY:
+    if city.level != AreaLevel.BARONY:
         msg = f"area {city.pk} is not a city"
         raise CrownError(msg, user_message="A crown is a city's.")
     if CrownBid.objects.filter(city=city, status=CrownBidStatus.OPEN).exists():

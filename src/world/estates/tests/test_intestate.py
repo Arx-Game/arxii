@@ -157,7 +157,7 @@ class EscheatTests(TestCase):
 
     def test_primary_home_domain_org(self):
         org = OrganizationFactory()
-        domain_area = AreaFactory(level=AreaLevel.REGION)
+        domain_area = AreaFactory(level=AreaLevel.COUNTY)
         Domain.objects.create(area=domain_area, name="Testmark", owner_org=org)
         sheet = CharacterSheetFactory()
         from evennia_extensions.factories import RoomProfileFactory

@@ -33,7 +33,7 @@ vi.mock('@/components/ui/select', () => ({
   ),
 }));
 
-const city = { id: 2, name: 'Arx City', level: 40, level_display: 'City' };
+const city = { id: 2, name: 'Arx City', level: 40, level_display: 'Barony' };
 const cityCenter = { id: 100, name: 'The City Center', kind: 'room' as const };
 const world = { id: 1, name: 'Nitera', level: 80, level_display: 'World' };
 const ward = { id: 3, name: 'Central Ward', level: 30, level_display: 'Ward' };
@@ -43,8 +43,10 @@ describe('insertableLevels', () => {
     expect(insertableLevels(city, cityCenter).map((choice) => choice.value)).toEqual([30, 20, 10]);
   });
 
-  it('a ward under a world: continent, kingdom, region, city', () => {
-    expect(insertableLevels(world, ward).map((choice) => choice.value)).toEqual([70, 60, 50, 40]);
+  it('a ward under a world: continent, empire, kingdom, duchy, county, barony', () => {
+    expect(insertableLevels(world, ward).map((choice) => choice.value)).toEqual([
+      70, 65, 60, 56, 53, 40,
+    ]);
   });
 
   it('a ward under a city: nothing fits', () => {

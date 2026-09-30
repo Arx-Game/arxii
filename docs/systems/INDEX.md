@@ -1136,10 +1136,11 @@ symmetric.
   ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,
   materialized view), `AreaElevationRequirement` (authored config: `to_level` unique
   `AreaLevel`, `min_held_buildings`, `min_order_stat`, `cost_coppers`, #696 gap 3)
-- **Enums:** `AreaLevel` (low to high: Building, Neighborhood, Ward, City, Barony, Region,
-  County, Duchy, Kingdom, Empire, Continent, World, Plane — Barony/County/Duchy/Empire
-  are the #3983 feudal rungs, sitting between City and Continent so a duchy can contain
-  a county on the map; ADR-0309); `GridOrigin` (both `world.areas.constants` —
+- **Enums:** `AreaLevel` (low to high: Building, Neighborhood, Ward, Barony, County,
+  Duchy, Kingdom, Empire, Continent, World, Plane — sizes only: County/Duchy/Empire are
+  the #3983 feudal rungs, ADR-0309; Barony absorbed City at value 40 and Region was
+  retired in #4085, ADR-0325; the boundary gossip travels across is not a level, see
+  Secrets); `GridOrigin` (both `world.areas.constants` —
   AUTHORED/STORY/PLAYER, #2436/#2448): who authored a grid
   element. Only `origin=AUTHORED` areas/rooms (with their identity key set) export to
   the lore repo via `grid_export.export_grid_bundles()`; `STORY` (GM-built) and
@@ -1147,7 +1148,8 @@ symmetric.
   accident; promotion to `AUTHORED` is a deliberate staff act. `evennia_extensions.
   RoomProfile` carries the matching `fixture_key` (permanent, slugged identity,
   natural-keyed) + `origin` pair — see "Grid content export/import" below.
-- **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`,
+- **Key Functions:** `get_ancestry()` (closure matview), `containing_areas()` (self then
+  parents by `parent` links, matview-free, #4085), `get_descendant_areas()`, `get_rooms_in_area()`,
   `reparent_area()`, `area_grid_path(area) -> list[tuple[int | None, int | None]]`
   (#2223, root->area chain of parent-local `(grid_x, grid_y)` pairs; rendering-hint
   data only, never consulted by `find_route()` or any routing code)
@@ -1998,7 +2000,11 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
   `gossip.refute_accusation` + `AccusationRebuttal` (the consentless defense — partial
   compensating reversal; `RefuteAccusationAction`, `accuse/refute`),
   `reverse_secret_exposure` (the shared compensating-bump seam; full reversal =
-  justice's nullification), public `hub_region_for`/`societies_for_region` seams.
+  justice's nullification), public `hub_area_for`/`societies_for_area`/`heat_for` seams.
+- **Reach (#4085, ADR-0324):** `SecretGossip.area` is the highest area a rumor has climbed
+  to; `gossip.climb_gossip` moves it up a parent each time heat meets that level's
+  `GOSSIP_CLIMB_THRESHOLDS` entry (merging rows that meet), every hub inside the reach hears
+  it (`areas.services.containing_areas`), and it never descends. No region rung exists.
   The evidence/frame/nullify/denounce/case-file machinery is justice-side (see Justice)
 - **Discovery:** secrets are a `Clue` `target_kind` (`SECRET` + `target_secret` FK) — found
   through the same Search / `acquire_clue` loop; `grant_clue_target` teaches the fact

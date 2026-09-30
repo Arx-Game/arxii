@@ -341,8 +341,8 @@ class LandShape(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
 
 class Domain(SharedMemoryModel):
-    """A landholding decorating an Area (seeds use ``AreaLevel.REGION``; a ladder
-    rung's own chain uses its tier-appropriate level via ``TIER_TO_AREA_LEVEL``,
+    """A landholding decorating an Area (the demo seed uses ``AreaLevel.BARONY``; a
+    ladder rung's own chain uses its tier-appropriate level via ``TIER_TO_AREA_LEVEL``,
     #3983; no literal DOMAIN level exists) (#1884, #930 ruling).
 
     ``owner_org`` is nullable — an unclaimed rung's Domain (``plant_rung`` with

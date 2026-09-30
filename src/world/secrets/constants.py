@@ -8,6 +8,8 @@ labels are provisional.
 
 from django.db import models
 
+from world.areas.constants import AreaLevel
+
 
 class SecretLevel(models.IntegerChoices):
     """How deep/dangerous a secret is — narrative weight + default share-scope.
@@ -65,11 +67,28 @@ class SecretProvenance(models.TextChoices):
 ACCUSATION_MAX_LEVEL = SecretLevel.CAREFULLY_KEPT
 
 
-# --- Gossip (#1572): regional Level-1-secret spread "heat". ---
+# --- Gossip (#1572, #4085): Level-1-secret spread "heat", climbing the area ladder. ---
 # PLACEHOLDER magnitudes (Apostate's tuning pass later — build the mechanism, defer the numbers).
 GOSSIP_CHECK_TYPE_NAME = "Gossip"  # the seeded charm + Persuasion + Gossip-spec check
 GOSSIP_DECAY_FLOOR = 1  # heat decays toward this; once gossiped it lingers findable. Suppress → 0.
-GOSSIP_PUBLIC_THRESHOLD = 40  # heat ≥ this → public (ambient echo + region society exposure)
+GOSSIP_PUBLIC_THRESHOLD = 40  # heat ≥ this → public (ambient echo + the reach's society exposure)
+# The heat a rumor needs to climb onto each area level (#4085). A rumor starts at the hub
+# room's own area and moves to the parent once its heat reaches the parent's entry; a
+# level missing here can never be climbed onto. Keyed by AreaLevel value so skipped rungs
+# in a tree do not matter. Building and Neighborhood are starting rungs, never climbed to.
+GOSSIP_CLIMB_THRESHOLDS: dict[int, int] = {
+    AreaLevel.BUILDING: 0,
+    AreaLevel.NEIGHBORHOOD: 0,
+    AreaLevel.WARD: 4,
+    AreaLevel.BARONY: 8,
+    AreaLevel.COUNTY: 14,
+    AreaLevel.DUCHY: 22,
+    AreaLevel.KINGDOM: 32,
+    AreaLevel.EMPIRE: 44,
+    AreaLevel.CONTINENT: 58,
+    AreaLevel.WORLD: 74,
+    AreaLevel.PLANE: 92,
+}
 GOSSIP_SPECIAL_SUCCESS_LEVEL = 2  # CheckOutcome.success_level ≥ this counts as a "special" success
 GOSSIP_PLANT_REGULAR = 1  # heat added by a regular-success plant
 GOSSIP_PLANT_SPECIAL = 2  # heat added by a special-success plant (spec counts double)

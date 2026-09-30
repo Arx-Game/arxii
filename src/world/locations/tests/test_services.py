@@ -97,7 +97,7 @@ class CascadeDefaultsTests(TestCase):
 
 class CascadeOverrideTests(TestCase):
     def setUp(self) -> None:
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.room_profile = RoomProfileFactory(area=self.ward)
         self.room = self.room_profile.objectdb
@@ -167,8 +167,8 @@ class CascadeOverrideTests(TestCase):
 
 class CascadeModifierStackingTests(TestCase):
     def setUp(self) -> None:
-        self.region = AreaFactory(level=AreaLevel.REGION)
-        self.city = AreaFactory(level=AreaLevel.CITY, parent=self.region)
+        self.region = AreaFactory(level=AreaLevel.COUNTY)
+        self.city = AreaFactory(level=AreaLevel.BARONY, parent=self.region)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.room_profile = RoomProfileFactory(area=self.ward)
         self.room = self.room_profile.objectdb
@@ -212,7 +212,7 @@ class EffectiveValueResonanceTests(TestCase):
     """Tests for the resonance axis on the polymorphic effective_value service."""
 
     def setUp(self) -> None:
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.room_profile = RoomProfileFactory(area=self.ward)
         self.room = self.room_profile.objectdb
@@ -355,7 +355,7 @@ class ResolveAreaArtTests(TestCase):
 
     def test_falls_back_to_ancestor_area_art(self) -> None:
         city_media = MediaFactory(player_data=None, slug="city-art")
-        city = AreaFactory(level=AreaLevel.CITY, art=city_media)
+        city = AreaFactory(level=AreaLevel.BARONY, art=city_media)
         ward = AreaFactory(level=AreaLevel.WARD, parent=city)
         profile = RoomProfileFactory(area=ward)
         self.assertEqual(resolve_area_art(profile), city_media.cloudinary_url)
@@ -363,7 +363,7 @@ class ResolveAreaArtTests(TestCase):
     def test_nearest_area_wins_over_further_ancestor(self) -> None:
         city_media = MediaFactory(player_data=None, slug="city-art-2")
         ward_media = MediaFactory(player_data=None, slug="ward-art-3")
-        city = AreaFactory(level=AreaLevel.CITY, art=city_media)
+        city = AreaFactory(level=AreaLevel.BARONY, art=city_media)
         ward = AreaFactory(level=AreaLevel.WARD, parent=city, art=ward_media)
         profile = RoomProfileFactory(area=ward)
         self.assertEqual(resolve_area_art(profile), ward_media.cloudinary_url)

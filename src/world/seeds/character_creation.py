@@ -499,7 +499,7 @@ def ensure_canonical_fallback_room() -> ObjectDB:
 
     reserved_area, area_created = Area.objects.get_or_create(
         slug=RESERVED_FALLBACK_AREA_SLUG,
-        defaults={"name": "Arx", "level": AreaLevel.CITY, "origin": GridOrigin.AUTHORED},
+        defaults={"name": "Arx", "level": AreaLevel.BARONY, "origin": GridOrigin.AUTHORED},
     )
     if not area_created and reserved_area.origin != GridOrigin.AUTHORED:
         logger.warning(

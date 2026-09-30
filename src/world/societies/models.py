@@ -2689,7 +2689,7 @@ class Turf(SharedMemoryModel):
 
     The control state the gang-turf project machinery moves: one row per site
     worth fighting over. A site is an outdoor room (a crew's corner) or an Area
-    at NEIGHBORHOOD, WARD or CITY level (a gang's, a crime family's, a criminal
+    at NEIGHBORHOOD, WARD or BARONY level (a gang's, a crime family's, a criminal
     empire's) - never a building or an indoor room, since player-built rooms
     would otherwise mint territory out of nothing (maintainer ruling,
     2026-09-29). ``grip`` is the controller's hold (0-100); pushes from rivals
@@ -2707,7 +2707,7 @@ class Turf(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="turf",
-        help_text="The contested area: NEIGHBORHOOD, WARD or CITY level (clean()-enforced).",
+        help_text="The contested area: NEIGHBORHOOD, WARD or BARONY level (clean()-enforced).",
     )
     room_profile = models.OneToOneField(
         "arxii.RoomProfile",
@@ -2761,9 +2761,9 @@ class Turf(SharedMemoryModel):
         if (self.area_id is None) == (self.room_profile_id is None):
             msg = "Turf sits on exactly one site: an area or an outdoor room."
             raise ValidationError(msg)
-        allowed = (AreaLevel.NEIGHBORHOOD, AreaLevel.WARD, AreaLevel.CITY)
+        allowed = (AreaLevel.NEIGHBORHOOD, AreaLevel.WARD, AreaLevel.BARONY)
         if self.area_id and self.area.level not in allowed:
-            msg = "Turf exists only at NEIGHBORHOOD, WARD or CITY level areas."
+            msg = "Turf exists only at NEIGHBORHOOD, WARD or BARONY level areas."
             raise ValidationError(msg)
         if self.room_profile_id and not self.room_profile.is_outdoor:
             msg = "Turf on a room needs an outdoor room; indoor ground is never territory."

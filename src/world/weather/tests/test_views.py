@@ -21,7 +21,7 @@ CONDITIONS_URL = "/api/weather/conditions/"
 class WeatherConditionsApiTest(APITestCase):
     def setUp(self) -> None:
         self.user = AccountFactory()
-        self.region = AreaFactory(level=AreaLevel.CITY)
+        self.region = AreaFactory(level=AreaLevel.BARONY)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.region)
         self.room = RoomProfileFactory(area=self.ward).objectdb
 

@@ -63,13 +63,13 @@ def nullify_accusation(secret: Secret) -> AccusationNullification:
         claim.retracted_at = timezone.now()
         claim.save(update_fields=["retracted_at"])
 
-    authorship_secret = _mint_authorship_secret(secret, [row.region for row in gossip_rows])
+    authorship_secret = _mint_authorship_secret(secret, [row.area for row in gossip_rows])
     return AccusationNullification.objects.create(
         secret=secret, authorship_secret=authorship_secret
     )
 
 
-def _mint_authorship_secret(secret: Secret, regions: list) -> Secret | None:
+def _mint_authorship_secret(secret: Secret, reaches: list) -> Secret | None:
     """The falseness made discoverable — a secret about the framer, granted to no one."""
     from world.clues.services import create_accusation_counter_clue  # noqa: PLC0415
     from world.secrets.constants import SecretLevel, SecretProvenance  # noqa: PLC0415
@@ -85,6 +85,6 @@ def _mint_authorship_secret(secret: Secret, regions: list) -> Secret | None:
         content=_AUTHORSHIP_CONTENT.format(framer=secret.author_persona),
     )
     difficulty = UNMASK_CLUE_BASE_DIFFICULTY + secret.level * UNMASK_CLUE_DIFFICULTY_PER_LEVEL
-    for region in regions:
-        create_accusation_counter_clue(authorship, region=region, difficulty=difficulty)
+    for area in reaches:
+        create_accusation_counter_clue(authorship, area=area, difficulty=difficulty)
     return authorship

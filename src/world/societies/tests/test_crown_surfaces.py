@@ -30,7 +30,7 @@ def _org(name):
 class CrownSurfaceFixture(TestCase):
     def setUp(self):
         seed_crime_vote_weights()
-        self.city = AreaFactory(level=AreaLevel.CITY, name="Luxen")
+        self.city = AreaFactory(level=AreaLevel.BARONY, name="Luxen")
         self.wards = [AreaFactory(level=AreaLevel.WARD, parent=self.city) for _ in range(3)]
         self.buns = _org("Dread Buns")
         self.lesser = _org("Gutter Kings")

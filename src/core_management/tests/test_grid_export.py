@@ -75,7 +75,7 @@ class GridExportTests(TestCase):
         self.assertEqual(city_bundle["area"]["realm"], "Arx")
         self.assertEqual(city_bundle["area"]["climate"], "Temperate")
         self.assertEqual(city_bundle["area"]["dominant_society"], "The Compact")
-        self.assertEqual(city_bundle["area"]["level"], AreaLevel.CITY)
+        self.assertEqual(city_bundle["area"]["level"], AreaLevel.BARONY)
         self.assertEqual(city_bundle["area"]["permit_eligibility"], PermitEligibility.OPEN)
         self.assertEqual(city_bundle["area"]["permit_cost_multiplier"], "1.500")
         self.assertEqual(city_bundle["area"]["allowed_building_kinds"], ["Tavern"])
@@ -280,7 +280,7 @@ class GridExportTests(TestCase):
         silently unexportable (#2448) — the area itself must be AUTHORED."""
         story_area = Area.objects.create(
             name="GM Pocket Dimension",
-            level=AreaLevel.CITY,
+            level=AreaLevel.BARONY,
             origin=GridOrigin.STORY,
         )
         misplaced_obj = evennia_create.create_object(

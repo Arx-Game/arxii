@@ -27,7 +27,7 @@ class CrewSlotFinalizeTests(FinalizationTestMixin, TestCase):
         self._flush_common_caches()
         self.account = AccountDB.objects.create(username="crew_founder")
         self._setup_finalization_base(self, prefix="Crew", height_min=700, height_max=800)
-        city = AreaFactory(level=AreaLevel.CITY, realm=self.area.realm)
+        city = AreaFactory(level=AreaLevel.BARONY, realm=self.area.realm)
         neighborhood = AreaFactory(level=AreaLevel.NEIGHBORHOOD, parent=city)
         self.gang = OrganizationFactory(name="Ashfingers")
         ensure_default_rank_ladder(self.gang)

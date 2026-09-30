@@ -306,7 +306,7 @@ class GridImportTests(TestCase):
 
         Area.objects.create(
             name="Forgotten Ward",
-            level=AreaLevel.REGION,
+            level=AreaLevel.COUNTY,
             slug="arx-forgotten-ward",
             origin=GridOrigin.AUTHORED,
         )

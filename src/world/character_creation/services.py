@@ -748,25 +748,16 @@ def _seed_whispers(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
     lines: list[str],
 ) -> None:
-    """Each Whispers line: a Level-1 player-flavor Secret with heat in the start region."""
-    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    """Each Whispers line: a Level-1 player-flavor Secret with heat at the start room's own
+    area, climbing from there like any rumor (#4085)."""
     from world.character_creation.constants import WHISPERS_SEED_HEAT  # noqa: PLC0415
     from world.justice.services import area_for_room  # noqa: PLC0415
     from world.secrets.constants import SecretLevel, SecretProvenance  # noqa: PLC0415
+    from world.secrets.gossip import climb_gossip  # noqa: PLC0415
     from world.secrets.models import SecretGossip  # noqa: PLC0415
     from world.secrets.services import author_secret  # noqa: PLC0415
 
-    # Walk parent links (self first, cycle-safe) rather than the AreaClosure matview, which
-    # the SQLite tier's test databases do not carry (the justice heat chain does the same).
-    region = None
-    node = area_for_room(character.location) if character.location is not None else None
-    seen: set[int] = set()
-    while node is not None and node.pk not in seen:
-        if node.level == AreaLevel.REGION:
-            region = node
-            break
-        seen.add(node.pk)
-        node = node.parent
+    area = area_for_room(character.location) if character.location is not None else None
     for line in lines:
         secret = author_secret(
             subject_sheet=sheet,
@@ -776,8 +767,10 @@ def _seed_whispers(
             subject_aware=True,
             author_persona=persona,
         )
-        if region is not None:
-            SecretGossip.objects.create(secret=secret, region=region, heat=WHISPERS_SEED_HEAT)
+        if area is not None:
+            climb_gossip(
+                SecretGossip.objects.create(secret=secret, area=area, heat=WHISPERS_SEED_HEAT)
+            )
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:

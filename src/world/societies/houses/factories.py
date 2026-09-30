@@ -42,7 +42,7 @@ class DomainHoldingFactory(factory.django.DjangoModelFactory):
 
     domain = factory.LazyAttribute(
         lambda o: create_domain(
-            area=AreaFactory(level=AreaLevel.REGION),
+            area=AreaFactory(level=AreaLevel.BARONY),
             name=o.domain_name,
             owner_org=o.owner_org,
         )

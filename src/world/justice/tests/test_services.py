@@ -40,7 +40,7 @@ class JusticeFixtureMixin:
         cls.rival = SocietyFactory()
         cls.guild = SocietyFactory()
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.city = AreaFactory(level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.ward = AreaFactory(level=AreaLevel.WARD, parent=cls.city)
         cls.hall = AreaFactory(
             level=AreaLevel.BUILDING, parent=cls.ward, dominant_society=cls.guild

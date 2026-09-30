@@ -88,14 +88,20 @@ export interface WorldBuilderRoomHit {
   fixture_key: string | null;
 }
 
-/** Mirrors `world.areas.constants.AreaLevel` — select options for CreateAreaDialog. */
+/**
+ * Mirrors `world.areas.constants.AreaLevel` (#4085): sizes only, a barony being the
+ * actual holding of any shape (a city is one). Kept in step by
+ * `__tests__/areaLevels.test.ts` against the generated API schema.
+ */
 export const AREA_LEVELS: { value: number; label: string }[] = [
   { value: 10, label: 'Building' },
   { value: 20, label: 'Neighborhood' },
   { value: 30, label: 'Ward' },
-  { value: 40, label: 'City' },
-  { value: 50, label: 'Region' },
+  { value: 40, label: 'Barony' },
+  { value: 53, label: 'County' },
+  { value: 56, label: 'Duchy' },
   { value: 60, label: 'Kingdom' },
+  { value: 65, label: 'Empire' },
   { value: 70, label: 'Continent' },
   { value: 80, label: 'World' },
   { value: 90, label: 'Plane' },

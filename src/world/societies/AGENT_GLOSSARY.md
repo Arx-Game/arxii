@@ -184,7 +184,7 @@ The alliance bound to a `Union` (`MarriagePact`, senior/junior house) that dies 
 _Avoid_: alliance object, treaty, marriage contract (contracts are a different system).
 
 **Domain**:
-An org-owned decoration on an `Area` at any level (the #1884 demo seed uses `AreaLevel.REGION`; a ladder rung's own chain uses its tier-appropriate `BARONY`/`COUNTY`/`DUCHY`/... level via `TIER_TO_AREA_LEVEL`, #3983; no literal DOMAIN level exists), PLACEHOLDER civ stats (population/prosperity/unrest/defenses) plus `DomainHolding` rows that each materialize an `OrgIncomeStream`, a `hall` FK (see **Hall** below), and a `land_shapes` M2M (see **Land Shape** below). Abstract by design; visitable grids are a later phase.
+An org-owned decoration on an `Area` at any level (the #1884 demo seed uses `AreaLevel.BARONY`; a ladder rung's own chain uses its tier-appropriate `BARONY`/`COUNTY`/`DUCHY`/... level via `TIER_TO_AREA_LEVEL`, #3983; no literal DOMAIN level exists), PLACEHOLDER civ stats (population/prosperity/unrest/defenses) plus `DomainHolding` rows that each materialize an `OrgIncomeStream`, a `hall` FK (see **Hall** below), and a `land_shapes` M2M (see **Land Shape** below). Abstract by design; visitable grids are a later phase.
 _Avoid_: province model, land parcel, estate (that's buildings/dwellings); demesne (bare — that's the ladder's aggregate COUNT of held baronies, not this one row, see **Demesne** below).
 
 **Almanach de Catenys** (#3983):

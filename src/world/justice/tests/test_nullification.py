@@ -39,7 +39,7 @@ class NullifyAccusationTests(TestCase):
     def setUpTestData(cls):
         cls.crown = SocietyFactory(mercy=3)
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.region = AreaFactory(level=AreaLevel.REGION, parent=cls.kingdom)
+        cls.region = AreaFactory(level=AreaLevel.COUNTY, parent=cls.kingdom)
         cls.theft = CrimeKindFactory(slug="theft", name="Theft")
         AreaLawFactory(area=cls.kingdom, crime_kind=cls.theft, heat_weight=DEFAULT_HEAT_WEIGHT)
         cls.subject = CharacterSheetFactory()
@@ -55,7 +55,7 @@ class NullifyAccusationTests(TestCase):
         )
         secret.archetypes.add(self.archetype)
         expose_secret(secret, societies=[self.crown])
-        SecretGossip.objects.create(secret=secret, region=self.region, heat=7)
+        SecretGossip.objects.create(secret=secret, area=self.region, heat=7)
         if criminal:
             record_accusation_crime(secret=secret, crime_kind=self.theft)
         return secret
@@ -70,7 +70,7 @@ class NullifyAccusationTests(TestCase):
         assert self._society_value() == 3
         record = nullify_accusation(secret)
         assert self._society_value() == 0
-        gossip = SecretGossip.objects.get(secret=secret, region=self.region)
+        gossip = SecretGossip.objects.get(secret=secret, area=self.region)
         assert gossip.heat == 0
         claim = AccusationCrimeClaim.objects.get(secret=secret)
         assert claim.retracted_at is not None

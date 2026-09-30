@@ -29,7 +29,6 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { AREA_LEVELS, type WorldBuilderArea, type WorldBuilderAreaManager } from '../types';
 
-const REGION_LEVEL = 50;
 const CLEAR = '__clear__';
 
 export interface EditAreaDialogProps {
@@ -100,8 +99,6 @@ export function EditAreaDialog({
     }
   }, [open, area]);
 
-  const climateWarning = climate !== '' && climate !== CLEAR && Number(level) < REGION_LEVEL;
-
   const submit = () => {
     const named = (value: string) => (value === CLEAR ? '' : value || undefined);
     runAction('edit_area', {
@@ -156,12 +153,6 @@ export function EditAreaDialog({
             options={catalogs.climates}
             onChange={setClimate}
           />
-          {climateWarning && (
-            <p className="text-xs text-amber-600" data-testid="climate-warning">
-              This area is below Region level — a climate here rolls its own weather, independently
-              of its parents.
-            </p>
-          )}
           <NamedSelect
             label="Society"
             value={society}

@@ -1,7 +1,10 @@
 # Areas System
 
-Spatial hierarchy for organizing rooms into buildings, neighborhoods, wards, cities, baronies,
-regions, counties, duchies, kingdoms, empires, continents, worlds, and planes.
+Spatial hierarchy for organizing rooms into buildings, neighborhoods, wards, baronies,
+counties, duchies, kingdoms, empires, continents, worlds, and planes. The ladder is sizes only
+(#4085): a barony is the actual holding a title or a Lord Mayor stands on, whatever its shape
+(a city, a fortress, a temple), and there is no "region" rung; the boundary word travels across
+is not a size (see `docs/systems/secrets.md`, gossip reach).
 
 **Source:** `src/world/areas/`
 
@@ -11,16 +14,17 @@ regions, counties, duchies, kingdoms, empires, continents, worlds, and planes.
 
 ```python
 from world.areas.constants import AreaLevel
-# BUILDING(10), NEIGHBORHOOD(20), WARD(30), CITY(40), BARONY(46), REGION(50),
-# COUNTY(53), DUCHY(56), KINGDOM(60), EMPIRE(65), CONTINENT(70), WORLD(80),
-# PLANE(90)
+# BUILDING(10), NEIGHBORHOOD(20), WARD(30), BARONY(40), COUNTY(53), DUCHY(56),
+# KINGDOM(60), EMPIRE(65), CONTINENT(70), WORLD(80), PLANE(90)
+# (CITY was 40 and BARONY 46 until #4085 merged them at 40; REGION (50) was retired.)
 ```
 
 ### Feudal rungs (#3983)
 
-`BARONY`/`COUNTY`/`DUCHY`/`EMPIRE` were added between `CITY` and `CONTINENT` so a duchy can
+`COUNTY`/`DUCHY`/`EMPIRE` were added between `BARONY` and `CONTINENT` so a duchy can
 contain a county, a county a barony, on the same `Area.parent` map/tree the rest of the Atlas
-ladder already walks — no parallel hierarchy. `KINGDOM` (pre-existing) sits between `COUNTY` and
+ladder already walks — no parallel hierarchy (`BARONY` absorbed the old `CITY` at value 40 in
+#4085, so a city is a barony, ADR-0310). `KINGDOM` (pre-existing) sits between `COUNTY` and
 `EMPIRE`. The Almanach de Catenys's `TitleTier` (`world.societies.houses.constants`:
 empire/kingdom/duchy/march/county/barony, #3091's six-step noun ladder) maps onto these levels via
 `TIER_TO_AREA_LEVEL` — `MARCH` is a county-tier holding and shares `AreaLevel.COUNTY` rather than
@@ -118,15 +122,23 @@ path = area_grid_path(market_area)
 ### Ancestry Queries (via AreaClosure materialized view)
 
 ```python
-from world.areas.services import get_ancestry, get_ancestor_at_level, get_effective_realm
+from world.areas.services import (
+    containing_areas,
+    get_ancestry,
+    get_ancestor_at_level,
+    get_effective_realm,
+)
 from world.areas.constants import AreaLevel
 
 # Get full ancestry (single indexed query via materialized view)
 ancestry = get_ancestry(market_area)
-# Returns: [Plane, World, Continent, Kingdom, Region, City, Ward, Market District]
+# Returns: [Plane, World, Continent, Kingdom, County, Barony, Ward, Market District]
 
-# Find the city this area belongs to
-city = get_ancestor_at_level(market_area, AreaLevel.CITY)
+# Find the barony (the city) this area belongs to
+city = get_ancestor_at_level(market_area, AreaLevel.BARONY)
+
+# The same chain by walking parent links, self first (no matview; safe on the SQLite tier)
+chain = containing_areas(market_area)
 
 # Walk up to find the nearest realm assignment
 realm = get_effective_realm(market_area)

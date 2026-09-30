@@ -182,7 +182,7 @@ class AreaLocationConjunctTests(TestCase):
     def setUp(self) -> None:
         from world.areas.factories import AreaFactory
 
-        self.parent_area = AreaFactory(level=AreaLevel.CITY)
+        self.parent_area = AreaFactory(level=AreaLevel.BARONY)
         self.child_area = AreaFactory(parent=self.parent_area, level=AreaLevel.NEIGHBORHOOD)
         self.other_area = AreaFactory()
 
@@ -272,7 +272,7 @@ class JournalCompassTests(TestCase):
     def test_compass_area_names_target_area(self) -> None:
         from world.areas.factories import AreaFactory
 
-        district = AreaFactory(name="Lowtown", level=AreaLevel.CITY)
+        district = AreaFactory(name="Lowtown", level=AreaLevel.BARONY)
         template, entry, *_ = _graph("compass-area")
         entry.location_mode = NodeLocationMode.AREA
         entry.target_area = district

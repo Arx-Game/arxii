@@ -43,7 +43,7 @@ class ReportHeatTestCase(TestCase):
     def setUpTestData(cls):
         cls.crown = SocietyFactory()
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.city = AreaFactory(level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.theft = CrimeKindFactory(slug="theft", name="Theft")
         cls.law = AreaLawFactory(
             area=cls.kingdom, crime_kind=cls.theft, heat_weight=DEFAULT_HEAT_WEIGHT

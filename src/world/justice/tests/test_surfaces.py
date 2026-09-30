@@ -32,7 +32,7 @@ class _JurisdictionFixture:
         target.crown = SocietyFactory()
         target.guild = SocietyFactory()
         target.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=target.crown)
-        target.city = AreaFactory(level=AreaLevel.CITY, parent=target.kingdom)
+        target.city = AreaFactory(level=AreaLevel.BARONY, parent=target.kingdom)
         target.hall = AreaFactory(
             level=AreaLevel.BUILDING, parent=target.city, dominant_society=target.guild
         )

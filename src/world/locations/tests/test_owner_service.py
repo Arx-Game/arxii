@@ -13,8 +13,8 @@ from world.societies.factories import OrganizationFactory
 
 class EffectiveOwnerCascadeTests(TestCase):
     def setUp(self) -> None:
-        self.region = AreaFactory(level=AreaLevel.REGION)
-        self.city = AreaFactory(level=AreaLevel.CITY, parent=self.region)
+        self.region = AreaFactory(level=AreaLevel.COUNTY)
+        self.city = AreaFactory(level=AreaLevel.BARONY, parent=self.region)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.profile = RoomProfileFactory(area=self.ward)
         self.room = self.profile.objectdb
@@ -139,8 +139,8 @@ class EffectiveOwnerForAreaTests(TestCase):
     """
 
     def setUp(self) -> None:
-        self.region = AreaFactory(level=AreaLevel.REGION)
-        self.city = AreaFactory(level=AreaLevel.CITY, parent=self.region)
+        self.region = AreaFactory(level=AreaLevel.COUNTY)
+        self.city = AreaFactory(level=AreaLevel.BARONY, parent=self.region)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
 
     def test_no_row_anywhere_returns_none(self) -> None:

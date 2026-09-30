@@ -30,12 +30,12 @@ class ClimateResolutionTests(TestCase):
 
     def test_direct_assignment(self) -> None:
         tropical = ClimateFactory(temperature=40, moisture=40)
-        region = AreaFactory(level=AreaLevel.CITY, climate=tropical)
+        region = AreaFactory(level=AreaLevel.BARONY, climate=tropical)
         assert get_effective_climate(region) == tropical
 
     def test_inherited_from_ancestor(self) -> None:
         desert = ClimateFactory(temperature=45, moisture=-45)
-        region = AreaFactory(level=AreaLevel.CITY, climate=desert)
+        region = AreaFactory(level=AreaLevel.BARONY, climate=desert)
         ward = AreaFactory(level=AreaLevel.WARD, parent=region)
         assert get_effective_climate(ward) == desert
 
@@ -43,13 +43,13 @@ class ClimateResolutionTests(TestCase):
         # Luxen (temperate) with a desert sub-region: the room resolves the nearest climate.
         temperate = ClimateFactory(temperature=0, moisture=0)
         desert = ClimateFactory(temperature=45, moisture=-45)
-        luxen = AreaFactory(level=AreaLevel.CITY, climate=temperate)
+        luxen = AreaFactory(level=AreaLevel.BARONY, climate=temperate)
         cinderus = AreaFactory(level=AreaLevel.WARD, parent=luxen, climate=desert)
         assert get_effective_climate(cinderus) == desert
         assert get_effective_climate(luxen) == temperate
 
     def test_none_when_unset(self) -> None:
-        region = AreaFactory(level=AreaLevel.CITY)
+        region = AreaFactory(level=AreaLevel.BARONY)
         assert get_effective_climate(region) is None
         assert get_effective_climate(None) is None
 

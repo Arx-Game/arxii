@@ -39,11 +39,12 @@ def acquire_clue(roster_entry: RosterEntry, clue: Clue) -> CharacterClue:
 ACCUSATION_CLUE_HUB_CAP = 3
 
 
-def create_accusation_counter_clue(secret: Secret, *, region: Area, difficulty: int) -> Clue:
+def create_accusation_counter_clue(secret: Secret, *, area: Area, difficulty: int) -> Clue:
     """Plant the investigable trail an accusation leaves behind (#1825). Idempotent.
 
     Creates (or reuses) a RESEARCH-resolution SECRET clue targeting ``secret`` and
-    places it in up to ``ACCUSATION_CLUE_HUB_CAP`` of the region's social hubs at
+    places it in up to ``ACCUSATION_CLUE_HUB_CAP`` of the social hubs inside ``area``
+    (the rumor's reach, or the room's own area for a trail with no rumor, #4085) at
     ``detect_difficulty=difficulty`` — the accuser's own roll sets how hard their
     trail is to unearth. Existing placements keep their original difficulty (no
     silent re-difficulty on re-runs). Clue name/description are PLACEHOLDER prose.
@@ -60,7 +61,7 @@ def create_accusation_counter_clue(secret: Secret, *, region: Area, difficulty: 
             "resolution_mode": ClueResolution.RESEARCH,
         },
     )
-    for profile in _hub_profiles_in_region(region)[:ACCUSATION_CLUE_HUB_CAP]:
+    for profile in _hub_profiles_in(area)[:ACCUSATION_CLUE_HUB_CAP]:
         RoomClue.objects.get_or_create(
             room_profile=profile,
             clue=clue,
@@ -69,17 +70,16 @@ def create_accusation_counter_clue(secret: Secret, *, region: Area, difficulty: 
     return clue
 
 
-def _hub_profiles_in_region(region: Area) -> list[RoomProfile]:
-    """The social-hub room profiles whose area chain tops out at ``region``."""
+def _hub_profiles_in(area: Area) -> list[RoomProfile]:
+    """The social-hub room profiles inside ``area``: their own area is it or sits under it."""
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-    from world.areas.constants import AreaLevel  # noqa: PLC0415
-    from world.areas.services import get_ancestor_at_level  # noqa: PLC0415
+    from world.areas.services import containing_areas  # noqa: PLC0415
 
     hubs = RoomProfile.objects.filter(is_social_hub=True, area__isnull=False).select_related("area")
     return [
         profile
         for profile in hubs
-        if get_ancestor_at_level(profile.area, AreaLevel.REGION) == region
+        if any(node.pk == area.pk for node in containing_areas(profile.area))
     ]
 
 
