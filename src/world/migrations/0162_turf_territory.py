@@ -9,7 +9,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0161_origintemplate_parentage_and_more"),
+        ("arxii", "0162_distinctionstartinggrant"),
     ]
 
     operations = [

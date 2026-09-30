@@ -76,6 +76,7 @@ const startingAreas: StartingArea[] = [
     realm_theme: 'arx',
     realm_slug: 'arx',
     realm_name: 'Arx',
+    realm_formal_name: 'The Necropolis',
   },
   {
     id: 2,
@@ -85,6 +86,7 @@ const startingAreas: StartingArea[] = [
     realm_theme: 'umbros',
     realm_slug: 'umbros',
     realm_name: 'Umbros',
+    realm_formal_name: 'The Umbral Empire',
   },
 ];
 

@@ -339,6 +339,26 @@ Seeded (idempotent `get_or_create`) by `ensure_somehow_always_broke_distinction`
 
 ---
 
+## Economic axis — `DistinctionStartingGrant`, an inheritance (#4062)
+
+The mirror image of the drain: a distinction that pays a flat sum into its holder's purse
+when the character is finalized. `DistinctionStartingGrant` (`world/currency/models.py`,
+same ADR-0010 sidecar placement as the drain) holds only `coppers`; the distinction's own
+`description` says what was inherited and the player's pick `notes` say what it means to
+them. It is deliberately tied to nothing else - no organization, no income stream - by the
+maintainer's ruling (2026-09-28): the simple half of "starts with money". A family whose
+books pay an allowance is #4060.
+
+Paid once, by `apply_starting_grant` (`world/currency/services.py`) from character
+creation's `_create_distinction_modifiers_bulk`, through the audited `transfer` faucet with
+reason `inheritance: <name>`. It is not a `reconcile_*`: an inheritance is where a character
+started, so a distinction added in play grants nothing and no repeatable path may call it.
+The player sees it priced before picking: `DistinctionListSerializer.effects_summary` adds
+`Starts with 12g 3s 4c` (via `Distinction.starting_grant_or_none`, select_related by the
+list viewset). Authored in the plain admin (Distinction Starting Grants), like the drain.
+
+---
+
 ## Profile Visibility — relocated into Secrets (#1109 → #1334)
 
 A sensitive distinction is no longer flagged public/private; it is **relocated into a Secret**

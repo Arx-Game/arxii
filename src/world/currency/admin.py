@@ -5,6 +5,7 @@ from world.currency.models import (
     CurrencyInstrumentDetails,
     CurrencyTransfer,
     DistinctionPurseDrain,
+    DistinctionStartingGrant,
     FavorTokenDetails,
     OrganizationTreasury,
     Profession,
@@ -68,6 +69,13 @@ class FavorTokenDetailsAdmin(admin.ModelAdmin):
 @admin.register(DistinctionPurseDrain)
 class DistinctionPurseDrainAdmin(admin.ModelAdmin):
     list_display = ("distinction", "drain_percent", "floor_coppers")
+    search_fields = ("distinction__name",)
+    raw_id_fields = ("distinction",)
+
+
+@admin.register(DistinctionStartingGrant)
+class DistinctionStartingGrantAdmin(admin.ModelAdmin):
+    list_display = ("distinction", "coppers")
     search_fields = ("distinction__name",)
     raw_id_fields = ("distinction",)
 

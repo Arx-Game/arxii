@@ -5027,7 +5027,9 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   local order/crime difficulty modifier; optional `room_profile` FK and kind `TERRITORY`
   since #4060 — a held rung's base land value, gross recomputed at accrual), `IncomeDeclaration` (actual-vs-declared),
   `OrgEconomicsProfile` (`graft_pct`), `OrgObligation`, `DebtInstrument`, `Contract`,
-  `Business`, `CharacterEmployment`, `DistinctionPurseDrain` (#2613 — per-distinction weekly
+  `Business`, `CharacterEmployment`, `DistinctionStartingGrant` (#4062 - per-distinction
+  inheritance: `coppers` paid into the purse once at CG finalize by `apply_starting_grant`),
+  `DistinctionPurseDrain` (#2613 — per-distinction weekly
   purse-drain config: `drain_percent`/`floor_coppers`; the "Somehow Always Broke" sidecar,
   in `currency` not `distinctions` per ADR-0010), `PurseDrainWeek` (#2613 — per-holder
   per-week baseline persisted between the `SNAPSHOT` and `DRAIN` cron bands + drain audit row)

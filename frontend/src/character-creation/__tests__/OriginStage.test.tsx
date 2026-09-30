@@ -132,6 +132,15 @@ describe('OriginStage', () => {
     }
   });
 
+  it("tags each area with its realm's formal name, or its plain name when it has none (#4078)", async () => {
+    renderOrigin();
+    const list = await screen.findByRole('list', { name: /starting realms/i });
+    const formal = within(list).getByText('Arx City').closest('li')!;
+    expect(within(formal).getByText('The Necropolis')).toBeInTheDocument();
+    const plain = within(list).getByText('Northern Reaches').closest('li')!;
+    expect(within(plain).getByText('Default')).toBeInTheDocument();
+  });
+
   it('shows the busy line while the record opens', () => {
     vi.mocked(useStartingAreas).mockReturnValueOnce({
       data: undefined,

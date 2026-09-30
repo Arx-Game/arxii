@@ -6,9 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0165_levies"),
-    ]
+    dependencies = [("arxii", "0165_levies")]
 
     operations = [
         migrations.AddField(

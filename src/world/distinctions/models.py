@@ -17,6 +17,7 @@ defining characteristics (merits/flaws equivalent):
 from django.db import models
 from django.utils.functional import cached_property
 
+from core.descriptors import ReverseOneToOneOrNone
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
@@ -277,6 +278,10 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def is_variant_parent(self) -> bool:
         """Check if this distinction has variants (computed from related objects)."""
         return self.variants.exists()
+
+    # The ``currency.DistinctionStartingGrant`` sidecar (#4062), or ``None``: read
+    # by the serializers' effects summary without importing ``world.currency``.
+    starting_grant_or_none = ReverseOneToOneOrNone("starting_grant")
 
     @cached_property
     def cached_effects(self) -> list["DistinctionEffect"]:
