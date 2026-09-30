@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     )
     from world.character_creation.questionnaire import DraftAnswers
     from world.societies.houses.models import HouseTemplate
+    from world.societies.models import CrewSlot
 
 
 def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
@@ -218,6 +219,16 @@ def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:
     return []
 
 
+def _draft_crew_slot(draft: CharacterDraft) -> CrewSlot | None:
+    """The open CrewSlot the draft picked (``draft_data["crew_slot_id"]``), or None (#4061)."""
+    from world.societies.models import CrewSlot  # noqa: PLC0415
+
+    slot_id = draft.draft_data.get("crew_slot_id")
+    if slot_id is None:
+        return None
+    return CrewSlot.objects.filter(pk=slot_id, is_active=True, claimed_by__isnull=True).first()
+
+
 def _get_named_path_errors(draft: CharacterDraft) -> list[str]:
     """Family Template pick, its naming pattern/aspect fence, and the served house (#3648)."""
     from world.character_creation.services import family_name_is_taken  # noqa: PLC0415
@@ -240,6 +251,8 @@ def _get_named_path_errors(draft: CharacterDraft) -> list[str]:
             elif family_name_is_taken(name):
                 errors.append("A family by that name already exists")
     errors.extend(_get_aspect_pick_errors(draft, family_template))
+    if family_template.founds_a_crew and _draft_crew_slot(draft) is None:
+        errors.append("Choose the corner your crew holds")
     if (
         draft.served_house_id is not None
         and not family_template.served_house_choices.filter(pk=draft.served_house_id).exists()

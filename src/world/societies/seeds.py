@@ -61,3 +61,42 @@ def ensure_rite_of_honors_ritual() -> Ritual | None:
         },
         name=RITE_OF_HONORS_NAME,
     )
+
+
+#: The ruling of 2026-09-29 (#4061): a character votes from the highest seat they
+#: personally hold. Retune in the admin (Crime Vote Weights); this only fills gaps.
+CRIME_VOTE_WEIGHTS: tuple[tuple[str, int, int], ...] = (
+    ("family", 1, 20),
+    ("family", 2, 3),
+    ("family", 3, 3),
+    ("family", 4, 0),
+    ("family", 5, 0),
+    ("empire", 1, 20),
+    ("empire", 2, 3),
+    ("empire", 3, 3),
+    ("empire", 4, 0),
+    ("empire", 5, 0),
+    ("gang", 1, 5),
+    ("gang", 2, 2),
+    ("gang", 3, 2),
+    ("gang", 4, 2),
+    ("gang", 5, 2),
+    ("crew", 1, 2),
+    ("crew", 2, 1),
+    ("crew", 3, 1),
+    ("crew", 4, 1),
+    ("crew", 5, 1),
+)
+
+
+def seed_crime_vote_weights() -> int:
+    """Idempotent: every (tier, rung) has a weight row; existing rows are never changed."""
+    from world.societies.models import CrimeVoteWeight  # noqa: PLC0415
+
+    created = 0
+    for tier, rank_tier, weight in CRIME_VOTE_WEIGHTS:
+        _row, was_created = CrimeVoteWeight.objects.get_or_create(
+            tier=tier, rank_tier=rank_tier, defaults={"weight": weight}
+        )
+        created += int(was_created)
+    return created

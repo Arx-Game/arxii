@@ -133,9 +133,21 @@ export interface Family {
 export type FamilyTemplate = components['schemas']['HouseTemplateOption'] & {
   org_type: number;
   served_house_choices: { id: number; name: string }[];
+  /** A crew template (#4061): the family the player names claims one of `crew_slots`, an
+   * authored corner under a gang, and swears to that gang; no liege choice is offered. */
+  founds_a_crew: boolean;
+  crew_slots: CrewSlot[];
 };
 
 // Open app-in positions for a family (#2062 slot mountain).
+/** An open corner under a gang a new crew may claim (#4061). */
+export interface CrewSlot {
+  id: number;
+  name: string;
+  gang: string;
+  rooms: string[];
+}
+
 export interface KinSlot {
   id: number;
   name: string;
@@ -902,6 +914,8 @@ export interface DraftData {
   // null clears the pick (the backend treats null as unset; undefined would
   // be dropped by the JSON encoder and leave the prior pick untouched).
   family_template_id?: number | null;
+  /** The open CrewSlot a crew template claims at finalize (#4061). */
+  crew_slot_id?: number | null;
   // Aspect picks for the chosen Family Template: definition id -> option ids (#3648).
   family_aspect_picks?: Record<string, number[]>;
   [key: string]: unknown;

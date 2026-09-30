@@ -676,6 +676,13 @@ show `standing` on the CG family list (`FamilySerializer`, batched by
 standing, else null), rendered as a bare bar on the family card. Authored in the Upbringing
 builder's answers table ("New family starts at").
 
+**A crew (#4061 slice 3).** A Family Template with `founds_a_crew` names a crew that claims
+an authored `CrewSlot`, a corner under a gang: the template payload lists the open slots in
+its realm (`crew_slots`), the Lineage page offers them as "Your corner" (`crew_slot_heading`
+copy key), the draft stores `crew_slot_id`, `_get_named_path_errors` requires one, and
+finalize's `build_family_org(crew_slot=)` claims it (Turf on the rooms, fealty to the slot's
+gang; the template's liege and served house do not apply). See societies.md.
+
 **Plain word to code word (the Upbringing Builder's labels):**
 
 | Builder label | Code name |

@@ -41,7 +41,7 @@ class StartGangTurfAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         from world.areas.models import Area  # noqa: PLC0415
-        from world.scenes.persona_display import active_persona_for_sheet  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
         from world.societies.gang_turf import start_gang_turf_project  # noqa: PLC0415
         from world.societies.models import Organization  # noqa: PLC0415
 

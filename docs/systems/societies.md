@@ -509,6 +509,7 @@ Read-only endpoints under `/api/societies/`:
 | `/reputations/` | `OrganizationReputationViewSet` | The requester's active persona's org reputations (standing) — `{id, persona, organization, organization_name, tier}`, tier only, self-scoped (#1446) |
 | `/standing-declarations/` | `StandingDeclarationViewSet` | Public favor/disfavor declaration history (#3290) — `{id, organization, organization_name, target_persona, target_persona_name, declared_by_persona, declared_by_persona_name, direction, citation, created_at}`; **public** (unlike `/reputations/`), no `delta_applied` (mirrors the reputation viewset's "tier only, never the raw value" convention); writes go through `declare_standing_action`, never a POST here |
 | `/appeals/` | `OrgAppealViewSet` | Appeals to organizations (#3293) — list/retrieve is members + own appeals; `create` lodges, `signon`/`resolve`/`withdraw` detail actions dispatch through the matching Action |
+| `/crown/<city_id>/` | `CrownView` (#4061) | The city's crown, the open bid (tally hidden until close), the last closed bid's tally, the viewer's own vote and weight, `may_call` |
 | `/deeds/` | `DeedViewSet` (#3466) | Public read of every active `LegendEntry` — any authenticated player, including deeds belonging to a persona they don't play (legend is public, like proclamations); `honor` detail action — `POST /deeds/{id}/honor/` `{journal_title, journal_body}` amplifies this deed. Payload includes `ceiling`/`headroom` (against the anchoring event) and `can_honor` (eligibility preview scoped to the requester's own active persona) |
 | `/events/` | `LegendEventViewSet` (#3466) | Public read of `LegendEvent` rows; `establish` detail action — `POST /events/{id}/establish/` `{honoree_persona, deed_title, journal_title, journal_body}` mints a fresh deed under that event. Both actions dispatch through `PerformRitualAction` against the seeded "Rite of Honors" ritual, never `honor_deed` directly — mirroring `world.magic.views.RitualPerformView`, so telnet and web converge on one action |
 
@@ -620,6 +621,64 @@ ships included, no units), or ABSTRACT (the pre-#4060 shape). A farm
 (`HoldingKind.requires_field`) sits on agriculture's FIELD feature: one farm grows food
 there and pays coin here. Yield scales by `level × standing / 50` on top of prosperity;
 a holding of a sited kind that stands nowhere yet yields nothing. See houses.md.
+
+## The crime ladder (#4061, ADR-0323)
+
+The noble ladder continued downward from Barony, derived from what an organization holds
+(`societies.constants.CrimeTier`, `crown.crime_tier(org)`): a **crew** holds an outdoor
+room, a **gang** a neighborhood, a **crime family** a ward, and the **Criminal Empire** is a
+city's crown, a recognition on a family won by vote rather than ground taken. Never
+authored: a gang that takes a ward reads as a family, one that loses its last neighborhood
+falls back to a crew. Names of the heads (Crimelord, Crime King / Queen) are the org types'
+rank titles, data.
+
+**The vote (`societies.crown`).** `criminal_wards(city)` are the WARD areas under the city
+somebody criminal holds; lawful (Mayor-held) wards are excluded from the count. The head of
+an organization holding a strict majority of them, own plus vassals (`may_call_vote`,
+`wards_held` walks `vassals_of` recursively), may `call_crown_vote`, during a sitting term
+too (the ouster). A `CrownBid` stays OPEN for a real month (`CROWN_VOTE_DAYS`) and is
+tallied only when it closes (`close_crown_bids`, the daily
+`societies.crown_bids_close` cron). Every sheeted underworld character votes at the weight
+of the highest seat they personally hold (`vote_weight`: over the sheet's personas' active
+memberships, the best `CrimeVoteWeight` for (the org's tier, the rank rung); an associate
+rung in a bigger organization is worth 0 and adds nothing; 0 may not vote); NPCs vote only
+when a staffer puppets them. `cast_crown_vote` records one `CrownVote` per character sheet
+at that weight, through whichever persona cast it (the paper trail an unmasking reads;
+voting twice through an alternate persona is IC cheating, punished by staff: deleting the
+vote in the admin is the invalidation), replaceable until the close; the tally is hidden
+until then. Weights are seed data (`societies.seeds.seed_crime_vote_weights`, the
+`underworld` cluster): family 20/3/3/0/0, gang 5/2/2/2/2, crew 2/1/1/1/1, empire as family.
+
+**The crown.** A bid passes when weight for exceeds weight against. `recognize_crown`
+deposes the sitting `Crown` (`deposed_at`), creates the new one (`term_ends_at` = a real
+year, three IC years at 3:1), makes the family hold the city's `Turf` (grip at least
+`CROWN_START_GRIP`), and swears every liege-less family holding a ward in the city, the
+deposed family included and every family the old crown held only as crown, to the winner at
+`CROWN_TITHE_PCT` (`swear_fealty`; a gang or crew genuinely sworn to a family keeps its
+liege, so the crown's cut reaches it through the ladder). The winner's own oath to the old
+crown is released first. Magnitudes PLACEHOLDER.
+
+**Surfaces (slice 2).** Actions `call_crown_vote` (kwargs `organization_id`, `city_id`;
+leadership-gated by `is_org_leader`) and `cast_crown_vote` (`bid_id`, `in_favor`; a staffer
+puppeting an NPC casts the NPC's vote) in `actions/definitions/crown.py`; the telnet `crown`
+command (`crown` status, `crown bid <family>`, `crown vote for|against`; the city is the
+CITY ancestor of the caller's room); the read API `GET /api/societies/crown/<city_id>/`
+(`CrownView`, `crown_views.py`): the sitting crown, the OPEN bid *without* its tally, the
+last closed bid with its tally, the viewer's own vote and weight (the viewer is the
+account's selected roster entry's sheet), and `may_call` (the viewer leads an organization
+that holds the majority). Refusals are `crown.CrownError` with a `user_message`.
+
+**Crew slots (slice 3).** The crime ladder's barony: a `CrewSlot` is an authored corner
+under a gang (`gang`, `name`, outdoor `rooms`, `is_active`, `claimed_by`/`claimed_at`;
+`clean` refuses indoor rooms). Staff author them; a player takes one at character creation
+by naming a crew from a Family Template with `founds_a_crew`: the CG template payload lists
+the open slots in the realm (`FamilyTemplateSerializer.crew_slots`, `crew_slots.open_crew_slots`),
+the Lineage page offers them as "Your corner", the draft stores `crew_slot_id`, the name-path
+validator requires one, and `build_family_org(crew_slot=)` runs `claim_crew_slot`: Turf on
+each room held by the new crew (`CREW_START_GRIP`), fealty to the slot's gang at the gang's
+default tithe, the slot closed. The slot's gang is the liege, so no open-liege choice exists.
+A claimed or inactive slot refuses (`CrewSlotError`). Authored in the admin (Crew Slots;
+rooms are searched).
 
 **Levies (#4060 slice 3, ADR-0321).** Every controller above a business takes its cut,
 and it is never either/or: a tavern in a contested neighborhood pays the Lord Mayor's

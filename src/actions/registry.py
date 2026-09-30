@@ -130,6 +130,7 @@ from actions.definitions.crafting import (
     DetachFacetAction,
 )
 from actions.definitions.crossing import resolve_crossing_offer
+from actions.definitions.crown import CallCrownVoteAction, CastCrownVoteAction
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.distinctions import (
@@ -1029,6 +1030,8 @@ _ALL_ACTIONS: list[Action] = [
     CreateBattleAction(),
     StageBattleMapAction(),
     StartGangTurfAction(),
+    CallCrownVoteAction(),
+    CastCrownVoteAction(),
     ApplyShadeUndeathAction(),
     SpawnBattleUnitsAction(),
     EnlistBattleParticipantAction(),

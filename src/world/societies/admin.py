@@ -15,6 +15,11 @@ from world.codex.services import apply_organization_codex_grants
 from world.contributors.admin import CREDIT_FIELDSET
 from world.societies.models import (
     CovenantLegendCredit,
+    CrewSlot,
+    CrimeVoteWeight,
+    Crown,
+    CrownBid,
+    CrownVote,
     GangTurfDetails,
     GangTurfReputationAward,
     GangTurfTierThreshold,
@@ -1280,6 +1285,54 @@ class HouseClaimAdmin(admin.ModelAdmin):
         for claim in queryset:
             reject_house_claim(claim, reviewer=request.user)
         self.message_user(request, f"Rejected {queryset.count()} claim(s).")
+
+
+@admin.register(CrewSlot)
+class CrewSlotAdmin(admin.ModelAdmin):
+    """An authored corner a new crew may claim (#4061 slice 3)."""
+
+    list_display = ["name", "gang", "is_active", "claimed_by", "claimed_at"]
+    list_filter = ["is_active"]
+    search_fields = ["name", "gang__name"]
+    raw_id_fields = ["gang", "claimed_by"]
+    autocomplete_fields = ["rooms"]  # rooms are searched, never scrolled
+    readonly_fields = ["claimed_at"]
+
+
+@admin.register(CrimeVoteWeight)
+class CrimeVoteWeightAdmin(admin.ModelAdmin):
+    list_display = ["tier", "rank_tier", "weight"]
+    list_filter = ["tier"]
+
+
+@admin.register(CrownBid)
+class CrownBidAdmin(admin.ModelAdmin):
+    list_display = [
+        "city",
+        "bidder",
+        "status",
+        "opened_at",
+        "closes_at",
+        "weight_for",
+        "weight_against",
+    ]
+    list_filter = ["status"]
+    raw_id_fields = ["city", "bidder", "called_by"]
+
+
+@admin.register(CrownVote)
+class CrownVoteAdmin(admin.ModelAdmin):
+    """Deleting a vote here is the invalidation an unmasked double vote earns (#4061)."""
+
+    list_display = ["bid", "character_sheet", "persona", "in_favor", "weight", "cast_at"]
+    list_filter = ["in_favor"]
+    raw_id_fields = ["bid", "character_sheet", "persona"]
+
+
+@admin.register(Crown)
+class CrownAdmin(admin.ModelAdmin):
+    list_display = ["city", "organization", "recognized_at", "term_ends_at", "deposed_at"]
+    raw_id_fields = ["city", "organization", "bid"]
 
 
 @admin.register(Levy)

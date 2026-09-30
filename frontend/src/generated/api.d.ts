@@ -20846,6 +20846,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/crown/{city_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET ``/api/societies/crown/<city_id>/``. */
+    get: operations['societies_crown_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/deeds/': {
     parameters: {
       query?: never;
@@ -77072,6 +77089,26 @@ export interface operations {
         content: {
           'application/json': components['schemas']['OrgAppeal'];
         };
+      };
+    };
+  };
+  societies_crown_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        city_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

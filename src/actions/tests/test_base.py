@@ -458,6 +458,8 @@ class ActionRegistryTests(TestCase):
             "market_sell_fence",
             "sell_materials",
             "start_gang_turf",
+            "call_crown_vote",
+            "cast_crown_vote",
             "gm_apply_shade",
             "market_buy_ware",
             "market_list_ware",

@@ -61,6 +61,7 @@ from commands.conversion import CmdConversion
 from commands.covenant import CmdCovenant
 from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
+from commands.crown import CmdCrown  # #4061
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
 from commands.defenses import CmdDefense
@@ -372,6 +373,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRetreat,
             # #2862 gap close — telnet face of the turf war.
             CmdTurf,
+            CmdCrown,
             # #2862 gap close — GM tool that makes Shades reachable at all.
             CmdMakeShade,
             # #2290 — telnet face of SleepAction; voluntarily sleep to enter the dream realm.

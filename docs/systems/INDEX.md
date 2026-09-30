@@ -1642,6 +1642,19 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   `apply_levies` (off a holding stream's gross at accrual, never either/or, never the
   payer's own rung, capped at the gross), `ensure_levy_streams` (weekly). Protection
   streams follow a turf flip; tax streams never do.
+- **The crime ladder (#4061, ADR-0323):** `CrimeTier` derived from `Turf` (crew / gang /
+  family; the Empire is the crown); `CrimeVoteWeight` (seeded per tier and rung);
+  `CrownBid` (a real month, one OPEN per city), `CrownVote` (one per sheet, weight of the
+  highest seat held, persona recorded), `Crown` (one sitting per city, `term_ends_at`,
+  `deposed_at`). `societies.crown`: `crime_tier`, `criminal_wards`, `may_call_vote` (majority
+  own plus vassals), `call_crown_vote`, `vote_weight`, `cast_crown_vote`, `close_crown_bids`
+  (daily cron), `recognize_crown` (deposes, holds the city turf, swears liege-less families
+  at `CROWN_TITHE_PCT`). Surfaces: actions `call_crown_vote` / `cast_crown_vote`, telnet
+  `crown`, `GET /api/societies/crown/<city_id>/` (`CrownView`; tally hidden while open).
+  **Crew slots (slice 3):** `CrewSlot` (a gang's authored corner: outdoor rooms, open until
+  claimed); `HouseTemplate.founds_a_crew`; `crew_slots.open_crew_slots(realm=)` /
+  `claim_crew_slot` (Turf on the rooms, fealty to the gang); the CG name path requires
+  `draft_data["crew_slot_id"]` for a crew template and claims it at finalize.
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
   `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes

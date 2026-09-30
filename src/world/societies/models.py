@@ -34,6 +34,8 @@ from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
     VACANCY_BASIS_KIN,
     VACANCY_BASIS_RETAINER,
+    CrimeTier,
+    CrownBidStatus,
     DeedKnowledgeSource,
     EnemyReach,
     LevyKind,
@@ -2887,6 +2889,180 @@ class Levy(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_kind_display()} {self.rate_pct}% on {self.site_name}"
+
+
+class CrimeVoteWeight(SharedMemoryModel):
+    """How much a seat in the underworld counts in a crown vote (#4061).
+
+    One row per (crime tier, rank rung), authored so the maintainer can retune
+    it in the admin. The ruling (2026-09-29): a crimelord 20, the family proper
+    (rungs 2-3) 3, its associates (rungs 4-5) nothing; a gang's head 5 and its
+    members 2; a crew's head 2 and its members 1; the crown as a family. A
+    character votes from the highest seat they personally hold, never a sum.
+    """
+
+    tier = models.CharField(max_length=10, choices=CrimeTier.choices)
+    rank_tier = models.PositiveSmallIntegerField(help_text="The rank rung, 1 (head) to 5.")
+    weight = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Crime Vote Weight"
+        verbose_name_plural = "Crime Vote Weights"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tier", "rank_tier"], name="societies_crimevoteweight_tier_rank"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_tier_display()} rank {self.rank_tier}: {self.weight}"
+
+
+class CrownBid(SharedMemoryModel):
+    """A bid to be recognized as a city's Crime King or Queen (#4061).
+
+    Called by the head of an organization holding a majority of the city's
+    criminal wards (own plus vassals), open for a real month, tallied only when
+    it closes. Allowed during a sitting term: that is the ouster.
+    """
+
+    city = models.ForeignKey("arxii.Area", on_delete=models.CASCADE, related_name="crown_bids")
+    bidder = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="crown_bids")
+    called_by = models.ForeignKey(
+        "arxii.Persona", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    opened_at = models.DateTimeField(auto_now_add=True)
+    closes_at = models.DateTimeField()
+    status = models.CharField(
+        max_length=8, choices=CrownBidStatus.choices, default=CrownBidStatus.OPEN
+    )
+    weight_for = models.PositiveIntegerField(default=0)
+    weight_against = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-opened_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["city"],
+                condition=models.Q(status="open"),
+                name="societies_crownbid_one_open_per_city",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.bidder} for {self.city} ({self.status})"
+
+
+class CrownVote(SharedMemoryModel):
+    """One sheeted character's vote on a crown bid (#4061).
+
+    One vote per character sheet, at the weight of their highest seat, cast
+    through whichever persona they used (the paper trail an unmasking reads:
+    voting twice through an alternate persona is IC cheating, caught in
+    character and punished by staff, never prevented here). Re-casting before
+    the close replaces the vote.
+    """
+
+    bid = models.ForeignKey(CrownBid, on_delete=models.CASCADE, related_name="votes")
+    character_sheet = models.ForeignKey(
+        "arxii.CharacterSheet", on_delete=models.CASCADE, related_name="crown_votes"
+    )
+    persona = models.ForeignKey(
+        "arxii.Persona", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    in_favor = models.BooleanField()
+    weight = models.PositiveSmallIntegerField()
+    cast_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bid", "character_sheet"], name="societies_crownvote_one_per_sheet"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        side = "for" if self.in_favor else "against"
+        return f"{self.character_sheet_id} {side} ({self.weight})"
+
+
+class Crown(SharedMemoryModel):
+    """A city's recognized Crime King or Queen: the Criminal Empire (#4061).
+
+    A recognition on a crime family, not an organization of its own. While it
+    stands, every other crime family in the city is its vassal at the crown
+    rate and the family holds the city's Turf. ``deposed_at`` closes it: a
+    later majority's bid, or an expired term nobody renewed.
+    """
+
+    city = models.ForeignKey("arxii.Area", on_delete=models.CASCADE, related_name="crowns")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="crowns")
+    bid = models.OneToOneField(CrownBid, on_delete=models.SET_NULL, null=True, blank=True)
+    recognized_at = models.DateTimeField(auto_now_add=True)
+    term_ends_at = models.DateTimeField()
+    deposed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-recognized_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["city"],
+                condition=models.Q(deposed_at__isnull=True),
+                name="societies_crown_one_sitting_per_city",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization} crowned in {self.city}"
+
+
+class CrewSlot(SharedMemoryModel):
+    """An authored corner under a gang that a new crew may claim (#4061 slice 3).
+
+    The crime ladder's barony: staff mark which outdoor rooms under a gang's
+    neighborhood are crew turf rather than the gang's own, and a player takes
+    one at character creation by naming a crew from a crew template. The claim
+    creates the crew's Turf on the rooms and its fealty to the gang, so the
+    slot's gang is the liege and no open-liege choice exists. A claimed slot
+    is closed; when a crew dies its rooms revert to a slot (staff clear
+    ``claimed_by``).
+    """
+
+    gang = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="crew_slots")
+    name = models.CharField(max_length=120, help_text="The Saltside corner, Wharf Row.")
+    rooms = models.ManyToManyField(
+        "arxii.RoomProfile",
+        related_name="crew_slots",
+        help_text="The outdoor rooms the crew holds; never a building or indoor room.",
+    )
+    is_active = models.BooleanField(default=True)
+    claimed_by = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_crew_slots",
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["gang", "name"]
+
+    @property
+    def is_open(self) -> bool:
+        return self.is_active and self.claimed_by_id is None
+
+    def clean(self) -> None:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        super().clean()
+        if self.pk and self.rooms.filter(is_outdoor=False).exists():
+            msg = "A crew's corner is outdoor ground; indoor rooms are never territory."
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        state = "open" if self.is_open else "claimed"
+        return f"{self.name} under {self.gang} ({state})"
 
 
 class GangTurfDetails(SharedMemoryModel):

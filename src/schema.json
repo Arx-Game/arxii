@@ -33576,6 +33576,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrgAppeal'
           description: ''
+  /api/societies/crown/{city_id}/:
+    get:
+      operationId: societies_crown_retrieve
+      description: GET ``/api/societies/crown/<city_id>/``.
+      parameters:
+      - in: path
+        name: city_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/societies/deeds/:
     get:
       operationId: societies_deeds_list
