@@ -375,15 +375,20 @@ class SecretKnowledge(SharedMemoryModel):
 
 
 class SecretGossip(SharedMemoryModel):
-    """Regional spread "heat" for a Level-1 secret — the casual gossip tier (#1572).
+    """Spread "heat" for a Level-1 secret, and how far it has climbed (#1572, #4085).
 
-    Per-``(secret, region)`` decaying counter, where ``region`` is the `areas.Area` at
-    ``AreaLevel.REGION``. ``heat == 0`` ⇒ never gossiped here (not findable via gossip);
-    ``heat >= 1`` ⇒ findable (and lingers at the decay floor unless actively suppressed to 0).
-    Planting raises heat (a Gossip check), seeking surfaces ``heat >= 1`` secrets, suppression
-    lowers it; a daily tick decays heat toward the floor. At the public threshold the gossip goes
-    ambient and exposes to the region's societies (``went_public`` one-shots that). Distinct from
-    the formal ``expose_secret``/`tidings` path — this is the pre-exposure, skill-gated tier.
+    One row per ``(secret, area)`` where ``area`` is the rumor's **reach**: the highest
+    area it has climbed to. A plant starts it at the hub room's own area; as heat rises
+    past each parent's threshold (``GOSSIP_CLIMB_THRESHOLDS``) ``climb_gossip`` moves it
+    up, merging with a row already there. Every hub inside the reach hears it. It never
+    climbs back down: decay fades it toward the floor, and only suppression to 0 ends it.
+
+    ``heat == 0`` means never gossiped here (not findable); ``heat >= 1`` is findable and
+    lingers at the decay floor unless suppressed. Planting raises heat (a Gossip check),
+    seeking surfaces ``heat >= 1`` secrets, suppression lowers it, a daily tick decays it.
+    At the public threshold the gossip goes ambient and exposes to the reach's societies
+    (``went_public`` one-shots that). Distinct from the formal ``expose_secret``/``tidings``
+    path: this is the pre-exposure, skill-gated tier.
     """
 
     secret = models.ForeignKey(
@@ -392,11 +397,11 @@ class SecretGossip(SharedMemoryModel):
         related_name="gossip_heat",
         help_text="The Level-1 secret being gossiped.",
     )
-    region = models.ForeignKey(
+    area = models.ForeignKey(
         "arxii.Area",
         on_delete=models.CASCADE,
         related_name="gossip_heat",
-        help_text="The region (Area at AreaLevel.REGION) this heat is scoped to.",
+        help_text="The rumor's reach: the highest area it has climbed to; heard everywhere below.",
     )
     heat = models.PositiveIntegerField(
         default=0,
@@ -410,15 +415,15 @@ class SecretGossip(SharedMemoryModel):
     updated_date = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ["secret", "region"]
+        unique_together = ["secret", "area"]
         indexes = [
-            models.Index(fields=["region", "heat"]),
+            models.Index(fields=["area", "heat"]),
         ]
         verbose_name = "Secret gossip"
         verbose_name_plural = "Secret gossip"
 
     def __str__(self) -> str:
-        return f"gossip heat {self.heat} for secret {self.secret_id} in region {self.region_id}"
+        return f"gossip heat {self.heat} for secret {self.secret_id} reaching area {self.area_id}"
 
 
 class Leverage(SharedMemoryModel):

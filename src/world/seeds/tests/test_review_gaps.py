@@ -17,7 +17,7 @@ class BaselineAreaLawTest(TestCase):
         from world.seeds.justice import seed_crime_kinds
         from world.seeds.justice_laws import BASELINE_AREA_SLUG, seed_baseline_area_laws
 
-        Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.CITY)
+        Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.BARONY)
         seed_crime_kinds()
         seed_baseline_area_laws()
         self.assertGreater(AreaLaw.objects.count(), 0)
@@ -30,7 +30,7 @@ class BaselineAreaLawTest(TestCase):
         from world.seeds.justice import seed_crime_kinds
         from world.seeds.justice_laws import BASELINE_AREA_SLUG, seed_baseline_area_laws
 
-        Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.CITY)
+        Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.BARONY)
         seed_crime_kinds()
         seed_baseline_area_laws()
         contraband = AreaLaw.objects.get(crime_kind__slug="contraband")
@@ -47,7 +47,7 @@ class BaselineAreaLawTest(TestCase):
         from world.seeds.justice import seed_crime_kinds
         from world.seeds.justice_laws import BASELINE_AREA_SLUG, seed_baseline_area_laws
 
-        area = Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.CITY)
+        area = Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.BARONY)
         seed_crime_kinds()
         seed_baseline_area_laws()
         crime = CrimeKind.objects.get(slug="contraband")
@@ -60,7 +60,7 @@ class BaselineAreaLawTest(TestCase):
         from world.seeds.justice import seed_crime_kinds
         from world.seeds.justice_laws import BASELINE_AREA_SLUG, seed_baseline_area_laws
 
-        Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.CITY)
+        Area.objects.create(name="Arx", slug=BASELINE_AREA_SLUG, level=AreaLevel.BARONY)
         seed_crime_kinds()
         seed_baseline_area_laws()
         law = AreaLaw.objects.get(crime_kind__slug="theft")

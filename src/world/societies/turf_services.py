@@ -7,7 +7,7 @@ since) finally moves. One service owns the arithmetic:
   a turf mission's PROJECT line pushes: the controller's own pushes deepen
   grip; a rival's erode it; grip breaking flips control. ``site`` is an
   outdoor ``RoomProfile`` (a crew's corner) or an ``Area`` at NEIGHBORHOOD,
-  WARD or CITY level.
+  WARD or BARONY level.
 - Control writes the world: the site's ``StatKey.CRIME`` cascade modifier
   tracks grip (a room's row for a room, the area's row for an area; the
   rollup sums every rung above a room), the site's CRIME_KICKUP income

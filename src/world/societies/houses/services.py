@@ -857,7 +857,7 @@ def breach_commitment(commitment: PactCommitment) -> PactCommitment:
 
 
 def create_domain(*, area: Area, name: str, owner_org: Organization) -> Domain:
-    """Decorate an area (seeds use ``AreaLevel.REGION``; no DOMAIN level exists)
+    """Decorate an area (the demo seed uses ``AreaLevel.BARONY``; no DOMAIN level exists)
     as a landholding of ``owner_org``.
     """
     if Domain.objects.filter(area=area).exists():

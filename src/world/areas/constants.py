@@ -34,15 +34,21 @@ DIRECTIONS: dict[str, Direction] = {
 
 
 class AreaLevel(models.IntegerChoices):
-    """Feudal rungs BARONY/COUNTY/DUCHY/EMPIRE (#3983) sit between CITY and
-    CONTINENT so a duchy can contain a county on the map."""
+    """The size ladder, and only sizes (#4085).
+
+    A child's level is strictly below its parent's (``Area.clean``); levels may be
+    skipped. BARONY is the actual holding a title or a Lord Mayor stands on, whatever
+    its shape: a city, a fortress, a temple, anything big enough for a real population
+    (ADR-0310; it absorbed the former CITY at the same value, so no stored row moved).
+    The feudal rungs above it are ADR-0309's. The former REGION (50) was never a size
+    but the boundary gossip and its readers scoped to; that boundary is gone and a
+    rumor climbs this ladder on its own heat instead (``world.secrets.gossip``).
+    """
 
     BUILDING = 10, "Building"
     NEIGHBORHOOD = 20, "Neighborhood"
     WARD = 30, "Ward"
-    CITY = 40, "City"
-    BARONY = 46, "Barony"
-    REGION = 50, "Region"
+    BARONY = 40, "Barony"
     COUNTY = 53, "County"
     DUCHY = 56, "Duchy"
     KINGDOM = 60, "Kingdom"

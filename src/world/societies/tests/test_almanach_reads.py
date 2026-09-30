@@ -292,7 +292,7 @@ class CharterReadTests(TestCase):
         NobiliaryParticle.objects.create(
             realm=realm, kind=kind, particle="de", taken_in_particle="d'"
         )
-        AreaFactory(level=AreaLevel.CITY, realm=realm, is_capital=True, name="Piropa City")
+        AreaFactory(level=AreaLevel.BARONY, realm=realm, is_capital=True, name="Piropa City")
 
         charter = charter_for_realm(realm)
         assert charter.succession_law == {"name": "Tierless Law", "codex_entry_id": None}

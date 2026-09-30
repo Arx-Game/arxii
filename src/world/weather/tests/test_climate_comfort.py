@@ -24,7 +24,7 @@ from world.weather.factories import ClimateFactory
 
 class ClimateComfortIntegrationTests(TestCase):
     def _room(self, climate, *, enclosure=RoomEnclosure.WALLED):
-        region = AreaFactory(level=AreaLevel.CITY, climate=climate)
+        region = AreaFactory(level=AreaLevel.BARONY, climate=climate)
         ward = AreaFactory(level=AreaLevel.WARD, parent=region)
         profile = RoomProfileFactory(area=ward, enclosure=enclosure)
         return ward, profile.objectdb

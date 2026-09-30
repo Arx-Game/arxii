@@ -171,7 +171,7 @@ class AlmanachApiTests(TestCase):
             realm=self.realm, kind=template.kind, particle="del", taken_in_particle="von"
         )
         AreaFactory(
-            level=AreaLevel.CITY, realm=self.realm, is_capital=True, name="Almanach API Capital"
+            level=AreaLevel.BARONY, realm=self.realm, is_capital=True, name="Almanach API Capital"
         )
 
         client = APIClient()

@@ -10,7 +10,7 @@ class AreaFactory(factory.django.DjangoModelFactory):
         model = Area
 
     name = factory.Sequence(lambda n: f"area_{n}")
-    level = AreaLevel.CITY
+    level = AreaLevel.BARONY
     parent = None
     realm = None
     description = ""

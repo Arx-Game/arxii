@@ -217,7 +217,7 @@ class GossipListView(APIView):
         responses=GossipSecretSerializer(many=True),
     )
     def get(self, request: Request) -> Response:
-        from world.secrets.gossip import region_heat_for, spreadable_secrets  # noqa: PLC0415
+        from world.secrets.gossip import heat_for, spreadable_secrets  # noqa: PLC0415
 
         raw = request.query_params.get("viewer")  # noqa: use_filterset — auth scope, not a filter
         if not raw or not raw.isdigit():
@@ -231,7 +231,7 @@ class GossipListView(APIView):
             {
                 "id": secret.pk,
                 "content": secret.content,
-                "heat": region_heat_for(secret, room=room) if room is not None else 0,
+                "heat": heat_for(secret, room=room) if room is not None else 0,
             }
             for secret in spreadable_secrets(character)
         ]

@@ -148,7 +148,7 @@ class WorldBuilderAreaListTests(WorldBuilderApiBase):
         """#3477 — an area with no art of its own inherits the nearest ancestor's."""
         from evennia_extensions.factories import MediaFactory
 
-        parent = AreaFactory(level=AreaLevel.CITY, name="Parent City")
+        parent = AreaFactory(level=AreaLevel.BARONY, name="Parent City")
         child = AreaFactory(level=AreaLevel.WARD, name="Child Ward", parent=parent)
         media = MediaFactory(player_data=None, slug="city-art-test")
         parent.art = media

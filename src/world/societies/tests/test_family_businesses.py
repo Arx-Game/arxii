@@ -18,7 +18,7 @@ from world.societies.levies import set_levy
 
 class FamilyBusinessTests(TestCase):
     def setUp(self):
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.mayor = OrganizationFactory(name="Office of the Lord Mayor")
         self.family = OrganizationFactory(name="Cisternwrights")
         self.domain = create_domain(area=self.city, name="Luxen", owner_org=self.mayor)

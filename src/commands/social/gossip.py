@@ -68,7 +68,7 @@ class CmdGossip(ArxCommand):
             self.msg(_USAGE)
 
     def _show(self, character: Any, room: Any) -> None:
-        from world.secrets.gossip import region_heat_for, spreadable_secrets  # noqa: PLC0415
+        from world.secrets.gossip import heat_for, spreadable_secrets  # noqa: PLC0415
 
         secrets = spreadable_secrets(character)
         if not secrets:
@@ -76,7 +76,7 @@ class CmdGossip(ArxCommand):
             return
         lines = ["|wGossip you could spread:|n"]
         for index, secret in enumerate(secrets, 1):
-            heat = region_heat_for(secret, room=room)
+            heat = heat_for(secret, room=room)
             lines.append(f"  {index}. {secret.content}  |x(heat here: {heat})|n")
         lines.append("Use |wgossip plant <#>|n to spread, or |wgossip suppress <#>|n to quiet it.")
         self.msg("\n".join(lines))

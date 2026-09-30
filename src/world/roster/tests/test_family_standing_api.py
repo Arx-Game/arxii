@@ -16,7 +16,7 @@ class FamilyStandingApiTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountDB.objects.create_user("standing_viewer", "s@example.com", "pw-1234")
-        cls.city = AreaFactory(level=AreaLevel.CITY)
+        cls.city = AreaFactory(level=AreaLevel.BARONY)
         cls.mayor = OrganizationFactory(name="Office of the Lord Mayor")
         cls.home = create_domain(area=cls.city, name="Luxen", owner_org=cls.mayor)
 

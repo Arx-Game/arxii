@@ -312,7 +312,14 @@ describe('AtlasPage', () => {
         id: 100,
         room: { id: 100, name: 'The City Center', grid_x: 4, grid_y: 5, floor: 0 },
         breadcrumb: [
-          { id: 2, name: 'Arx City', level: 40, level_display: 'City', grid_x: null, grid_y: null },
+          {
+            id: 2,
+            name: 'Arx City',
+            level: 40,
+            level_display: 'Barony',
+            grid_x: null,
+            grid_y: null,
+          },
         ],
         exits: [],
       } as unknown as WorldBuilderRoomDetail,

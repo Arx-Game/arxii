@@ -2233,7 +2233,7 @@ class TestDomainsSection(TestCase):
 
         cls.house = OrganizationFactory(name="House du Verane")
         cls.keep = create_domain(
-            area=AreaFactory(level=AreaLevel.REGION, name="The Lantern Ward"),
+            area=AreaFactory(level=AreaLevel.COUNTY, name="The Lantern Ward"),
             name="Thornmere",
             owner_org=cls.house,
         )
@@ -2242,7 +2242,7 @@ class TestDomainsSection(TestCase):
         # A house the character does NOT belong to, holding land of its own.
         cls.other_house = OrganizationFactory(name="House Blackspire")
         create_domain(
-            area=AreaFactory(level=AreaLevel.REGION, name="The Salt Coast"),
+            area=AreaFactory(level=AreaLevel.COUNTY, name="The Salt Coast"),
             name="Blackspire Hold",
             owner_org=cls.other_house,
         )
@@ -2452,7 +2452,7 @@ def _seed_house_holding_land(persona) -> None:
     also proves the cost does not scale with how many places a character can enter.
     """
     house = OrganizationFactory(name="QCHouse")
-    region = AreaFactory(level=AreaLevel.REGION, name="QCRegion")
+    region = AreaFactory(level=AreaLevel.COUNTY, name="QCRegion")
     create_domain(area=region, name="QCKeep", owner_org=house)
     OrganizationMembershipFactory(persona=persona, organization=house)
 
@@ -3206,7 +3206,7 @@ class TestEstateKeyring(TestCase):
         RosterTenureFactory(player_data=cls.player, roster_entry=cls.roster_entry, player_number=1)
         cls.persona = cls.sheet.primary_persona
 
-        cls.ward = AreaFactory(level=AreaLevel.REGION, name="The Lantern Ward")
+        cls.ward = AreaFactory(level=AreaLevel.COUNTY, name="The Lantern Ward")
         cls.friends_house = RoomProfileFactory(area=cls.ward)
         cls.friends_house.objectdb.db_key = "The Pawnshop Back Room"
         cls.friends_house.objectdb.save()

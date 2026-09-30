@@ -451,7 +451,7 @@ def _gossip_heat(task: OrgTask, delta: int) -> list[str]:
     Never mints secrets: whisper campaigns amplify what exists (or what the
     org planted through other play); quashing cools it.
     """
-    from world.secrets.gossip import _maybe_go_public  # noqa: PLC0415
+    from world.secrets.gossip import _maybe_go_public, climb_gossip  # noqa: PLC0415
     from world.secrets.models import SecretGossip  # noqa: PLC0415
 
     target = task.target_persona
@@ -467,6 +467,7 @@ def _gossip_heat(task: OrgTask, delta: int) -> list[str]:
     row.heat = max(0, row.heat + delta)
     row.save(update_fields=["heat"])
     if delta > 0:
+        row = climb_gossip(row)
         _maybe_go_public(row)
         return [f"The whispers about {target.name} grow louder."]
     return [f"The whispers about {target.name} die down."]
@@ -525,8 +526,6 @@ def _recruit(task: OrgTask) -> list[str]:
 
 def _incriminate(task: OrgTask, fulfillment: TaskFulfillment, level: int) -> list[str]:
     """The residue rule: the job leaves a secret about the handler behind."""
-    from world.areas.constants import AreaLevel  # noqa: PLC0415
-    from world.areas.services import get_ancestor_at_level  # noqa: PLC0415
     from world.clues.services import create_accusation_counter_clue  # noqa: PLC0415
     from world.secrets.constants import SecretProvenance  # noqa: PLC0415
     from world.secrets.services import author_secret  # noqa: PLC0415
@@ -547,14 +546,12 @@ def _incriminate(task: OrgTask, fulfillment: TaskFulfillment, level: int) -> lis
         ),
     )
     # Hub trail: the counter-clue placement pattern, generalized — an
-    # investigable RESEARCH clue seeded in the region's social hubs. Skipped
-    # when no region is derivable (persona-target jobs with no room anchor).
+    # investigable RESEARCH clue seeded in the social hubs of the target room's
+    # own area (#4085). Skipped only for persona-target jobs with no room anchor.
     if task.target_room is not None and task.target_room.area_id is not None:
-        region = get_ancestor_at_level(task.target_room.area, AreaLevel.REGION)
-        if region is not None:
-            create_accusation_counter_clue(
-                secret, region=region, difficulty=RESIDUE_TRAIL_DIFFICULTY
-            )
+        create_accusation_counter_clue(
+            secret, area=task.target_room.area, difficulty=RESIDUE_TRAIL_DIFFICULTY
+        )
     return []  # residue is never reported to the handler — that's the point
 
 

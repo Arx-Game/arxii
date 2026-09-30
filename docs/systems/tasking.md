@@ -102,7 +102,8 @@ missing/mismatched target, never an exception:
   refuses PCs (tenure check) — PC recruitment stays consensual RP.
 - `incriminate_level` — the residue rule: sloppy-tier routes mint a
   GM-provenance (TRUE) `Secret` about the **handler** plus an investigable
-  counter-clue trail in the region's hubs. Never confessed in the report.
+  counter-clue trail in the hubs of the target room's own area (#4085). Never confessed
+  in the report.
 - **Cross-system addendum**: `domain_report` (DOMAIN — population, prosperity,
   unrest, holdings, open crises), `domain_unrest_delta` (DOMAIN, ± clamp
   0–100 — foment or soothe; feeds the weekly domain tick/crisis machinery),

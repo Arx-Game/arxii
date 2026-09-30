@@ -20,7 +20,7 @@ from world.roster.factories import RosterEntryFactory
 class ColoredAreaPathTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.region = AreaFactory(name="Umbros", level=AreaLevel.REGION, color="|y")
+        cls.region = AreaFactory(name="Umbros", level=AreaLevel.COUNTY, color="|y")
         # Ward leaves colour blank → inherits the region's |y.
         cls.ward = AreaFactory(name="Blackgate Ward", level=AreaLevel.WARD, parent=cls.region)
         # Building overrides to |r.

@@ -65,7 +65,7 @@ class AreaModelTests(TestCase):
         cls.plane = AreaFactory(name="Material Plane", level=AreaLevel.PLANE)
         cls.world = AreaFactory(name="Arvum", level=AreaLevel.WORLD, parent=cls.plane)
         cls.continent = AreaFactory(name="Arvum", level=AreaLevel.CONTINENT, parent=cls.world)
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.continent)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.BARONY, parent=cls.continent)
 
     def test_area_creation(self):
         assert self.plane.name == "Material Plane"
@@ -74,7 +74,7 @@ class AreaModelTests(TestCase):
 
     def test_area_str(self):
         assert str(self.plane) == "Material Plane (Plane)"
-        assert str(self.city) == "Arx (City)"
+        assert str(self.city) == "Arx (Barony)"
 
     def test_area_parent_relationship(self):
         assert self.world.parent == self.plane
@@ -89,7 +89,7 @@ class AreaModelTests(TestCase):
 
 class AreaIdentityTest(TestCase):
     def test_area_slug_natural_key_and_origin_default(self):
-        area = Area.objects.create(name="Arx City", level=AreaLevel.CITY, slug="arx-city")
+        area = Area.objects.create(name="Arx City", level=AreaLevel.BARONY, slug="arx-city")
         self.assertEqual(area.origin, GridOrigin.PLAYER)
         self.assertEqual(Area.objects.get_by_natural_key("arx-city").pk, area.pk)
         self.assertEqual(area.natural_key(), ("arx-city",))
@@ -98,7 +98,7 @@ class AreaIdentityTest(TestCase):
 class AreaValidationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.BARONY)
 
     def test_child_level_must_be_lower_than_parent(self):
         bad_area = AreaFactory.build(
@@ -108,7 +108,7 @@ class AreaValidationTests(TestCase):
             bad_area.full_clean()
 
     def test_same_level_as_parent_is_invalid(self):
-        bad_area = AreaFactory.build(name="Bad City", level=AreaLevel.CITY, parent=self.city)
+        bad_area = AreaFactory.build(name="Bad City", level=AreaLevel.BARONY, parent=self.city)
         with self.assertRaises(ValidationError):
             bad_area.full_clean()
 
@@ -121,15 +121,15 @@ class AreaValidationTests(TestCase):
         area.full_clean()  # Should not raise
 
     def test_cycle_detection(self):
-        parent = AreaFactory(name="Region A", level=AreaLevel.REGION)
-        child = AreaFactory(name="City B", level=AreaLevel.CITY, parent=parent)
+        parent = AreaFactory(name="Region A", level=AreaLevel.COUNTY)
+        child = AreaFactory(name="City B", level=AreaLevel.BARONY, parent=parent)
         parent.parent = child
         with self.assertRaises(ValidationError):
             parent.full_clean()
 
     def test_save_validates_level_ordering(self):
         """Saving (not just full_clean) enforces level ordering."""
-        city = AreaFactory(name="City", level=AreaLevel.CITY)
+        city = AreaFactory(name="City", level=AreaLevel.BARONY)
         with self.assertRaises(ValidationError):
             AreaFactory(name="Bad", level=AreaLevel.CONTINENT, parent=city)
 
@@ -165,9 +165,9 @@ class AreaGridCoordinateTests(TestCase):
     @tag("postgres")  # area_grid_path queries areas_areaclosure materialized view (PG-only)
     def test_area_grid_path_three_level_mixed_set_unset(self):
         """Root has coordinates set, middle is unset, leaf is set again."""
-        root = AreaFactory(name="Root Region", level=AreaLevel.REGION, grid_x=10, grid_y=20)
+        root = AreaFactory(name="Root Region", level=AreaLevel.COUNTY, grid_x=10, grid_y=20)
         middle = AreaFactory(
-            name="Middle City", level=AreaLevel.CITY, parent=root, grid_x=None, grid_y=None
+            name="Middle City", level=AreaLevel.BARONY, parent=root, grid_x=None, grid_y=None
         )
         leaf = AreaFactory(
             name="Leaf Ward", level=AreaLevel.WARD, parent=middle, grid_x=4, grid_y=7
@@ -177,8 +177,8 @@ class AreaGridCoordinateTests(TestCase):
 
     @tag("postgres")  # area_grid_path queries areas_areaclosure materialized view (PG-only)
     def test_area_grid_path_all_unset(self):
-        root = AreaFactory(name="Unset Root", level=AreaLevel.REGION)
-        middle = AreaFactory(name="Unset Middle", level=AreaLevel.CITY, parent=root)
+        root = AreaFactory(name="Unset Root", level=AreaLevel.COUNTY)
+        middle = AreaFactory(name="Unset Middle", level=AreaLevel.BARONY, parent=root)
         leaf = AreaFactory(name="Unset Leaf", level=AreaLevel.WARD, parent=middle)
 
         assert area_grid_path(leaf) == [(None, None), (None, None), (None, None)]
@@ -214,7 +214,7 @@ class AreaQueryHelperTests(TestCase):
             parent=cls.continent,
             realm=cls.realm,
         )
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.ward = AreaFactory(name="Upper Boroughs", level=AreaLevel.WARD, parent=cls.city)
         cls.building = AreaFactory(
             name="The Gilded Stag", level=AreaLevel.BUILDING, parent=cls.ward
@@ -239,17 +239,17 @@ class AreaQueryHelperTests(TestCase):
 
     @tag("postgres")  # get_ancestor_at_level walks ancestry via areas_areaclosure (PG-only)
     def test_get_ancestor_at_level_found(self):
-        result = get_ancestor_at_level(self.building, AreaLevel.CITY)
+        result = get_ancestor_at_level(self.building, AreaLevel.BARONY)
         assert result == self.city
 
     @tag("postgres")  # get_ancestor_at_level walks ancestry via areas_areaclosure (PG-only)
     def test_get_ancestor_at_level_not_found(self):
-        result = get_ancestor_at_level(self.building, AreaLevel.REGION)
+        result = get_ancestor_at_level(self.building, AreaLevel.COUNTY)
         assert result is None
 
     @tag("postgres")  # get_ancestor_at_level walks ancestry via areas_areaclosure (PG-only)
     def test_get_ancestor_at_level_self(self):
-        result = get_ancestor_at_level(self.city, AreaLevel.CITY)
+        result = get_ancestor_at_level(self.city, AreaLevel.BARONY)
         assert result == self.city
 
     def test_get_effective_realm_direct(self):
@@ -279,7 +279,7 @@ class AreaQueryHelperTests(TestCase):
 class RoomProfileTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.BARONY)
         cls.building = AreaFactory(name="Tavern", level=AreaLevel.BUILDING, parent=cls.city)
         cls.room_obj = ObjectDBFactory(
             db_key="Main Hall",
@@ -334,7 +334,7 @@ class RoomProfileTests(TestCase):
 class SubtreeQueryTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.BARONY)
         cls.ward = AreaFactory(name="Upper Boroughs", level=AreaLevel.WARD, parent=cls.city)
         cls.neighborhood = AreaFactory(
             name="Valardin Quarter",
@@ -405,9 +405,9 @@ class SubtreeQueryTests(TestCase):
 
 class ReparentingTests(TestCase):
     def test_reparent_updates_area_parent(self):
-        region_a = AreaFactory(name="Region A", level=AreaLevel.REGION)
-        region_b = AreaFactory(name="Region B", level=AreaLevel.REGION)
-        city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region_a)
+        region_a = AreaFactory(name="Region A", level=AreaLevel.COUNTY)
+        region_b = AreaFactory(name="Region B", level=AreaLevel.COUNTY)
+        city = AreaFactory(name="City", level=AreaLevel.BARONY, parent=region_a)
 
         reparent_area(city, region_b)
         city.refresh_from_db()
@@ -417,9 +417,9 @@ class ReparentingTests(TestCase):
     @tag("postgres")  # get_ancestry queries areas_areaclosure materialized view (PG-only)
     def test_reparent_descendants_follow_parent(self):
         """Descendants inherit ancestry from parent FK chain, no manual updates needed."""
-        region_a = AreaFactory(name="Region A", level=AreaLevel.REGION)
-        region_b = AreaFactory(name="Region B", level=AreaLevel.REGION)
-        city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region_a)
+        region_a = AreaFactory(name="Region A", level=AreaLevel.COUNTY)
+        region_b = AreaFactory(name="Region B", level=AreaLevel.COUNTY)
+        city = AreaFactory(name="City", level=AreaLevel.BARONY, parent=region_a)
         ward = AreaFactory(name="Ward", level=AreaLevel.WARD, parent=city)
         building = AreaFactory(name="Building", level=AreaLevel.BUILDING, parent=ward)
 
@@ -431,7 +431,7 @@ class ReparentingTests(TestCase):
         assert region_a not in ancestry
 
     def test_reparent_validates_level(self):
-        city = AreaFactory(name="City", level=AreaLevel.CITY)
+        city = AreaFactory(name="City", level=AreaLevel.BARONY)
         building = AreaFactory(name="Building", level=AreaLevel.BUILDING)
 
         with self.assertRaises(ValidationError):
@@ -439,8 +439,8 @@ class ReparentingTests(TestCase):
 
     @tag("postgres")  # get_ancestry queries areas_areaclosure materialized view (PG-only)
     def test_reparent_to_none(self):
-        region = AreaFactory(name="Region", level=AreaLevel.REGION)
-        city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region)
+        region = AreaFactory(name="Region", level=AreaLevel.COUNTY)
+        city = AreaFactory(name="City", level=AreaLevel.BARONY, parent=region)
         ward = AreaFactory(name="Ward", level=AreaLevel.WARD, parent=city)
 
         reparent_area(city, None)
@@ -466,7 +466,7 @@ class RoomStateAncestryTests(TestCase):
             parent=cls.continent,
             realm=cls.realm,
         )
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.building = AreaFactory(name="The Stag", level=AreaLevel.BUILDING, parent=cls.city)
         cls.room_obj = ObjectDBFactory(
             db_key="Main Hall",
@@ -527,7 +527,7 @@ class PayloadIntegrationTests(TestCase):
     def setUpTestData(cls):
         cls.realm = Realm.objects.create(name="Arx", theme="arx")
         cls.kingdom = AreaFactory(name="Compact", level=AreaLevel.KINGDOM, realm=cls.realm)
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.room_obj = ObjectDBFactory(
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -609,7 +609,7 @@ class SocietiesForSceneTests(TestCase):
         kingdom = AreaFactory(
             name="Walk Kingdom", level=AreaLevel.KINGDOM, realm=self.realm, dominant_society=None
         )
-        city = AreaFactory(name="Walk City", level=AreaLevel.CITY, parent=kingdom, realm=None)
+        city = AreaFactory(name="Walk City", level=AreaLevel.BARONY, parent=kingdom, realm=None)
         hall = AreaFactory(name="Walk Hall", level=AreaLevel.BUILDING, parent=city, realm=None)
         room = _make_room_in_area(hall)
         scene = SceneFactory(location=room)

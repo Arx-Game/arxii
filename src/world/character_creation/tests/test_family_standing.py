@@ -28,7 +28,7 @@ class FamilyStandingTests(FinalizationTestMixin, TestCase):
         self._flush_common_caches()
         self.account = AccountDB.objects.create(username="standing_family")
         self._setup_finalization_base(self, prefix="Standing", height_min=700, height_max=800)
-        capital = AreaFactory(level=AreaLevel.CITY, realm=self.area.realm, is_capital=True)
+        capital = AreaFactory(level=AreaLevel.BARONY, realm=self.area.realm, is_capital=True)
         self.mayor = OrganizationFactory(name="Office of the Lord Mayor")
         self.home = create_domain(area=capital, name="Luxen", owner_org=self.mayor)
         self.tavern = HoldingKindFactory(name="Tavern", base_gross=1000)

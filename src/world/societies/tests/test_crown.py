@@ -66,7 +66,7 @@ class CityFixture(TestCase):
 
     def setUp(self):
         seed_crime_vote_weights()
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.wards = [AreaFactory(level=AreaLevel.WARD, parent=self.city) for _ in range(4)]
         self.buns = _org("Dread Buns")
         self.lesser = _org("Gutter Kings")

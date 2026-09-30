@@ -116,7 +116,9 @@ class CreateAreaActionTests(TestCase):
         result carries the new id so a caller can chain a move or a dig onto it."""
         from actions.definitions.world_builder import CreateAreaAction
 
-        city = AreaFactory(name="Arx", level=AreaLevel.CITY, origin=GridOrigin.AUTHORED, slug="arx")
+        city = AreaFactory(
+            name="Arx", level=AreaLevel.BARONY, origin=GridOrigin.AUTHORED, slug="arx"
+        )
         result = CreateAreaAction().run(
             self.staff,
             name="Central Ward",
@@ -272,7 +274,7 @@ class StaffDigRoomActionTests(TestCase):
         self.staff = _staff_actor("DigRoomStaff")
         self.player = _player_actor("DigRoomPlayer")
         self.authored_area = AreaFactory(
-            name="Arx City", level=AreaLevel.CITY, origin=GridOrigin.AUTHORED, slug="arx-city"
+            name="Arx City", level=AreaLevel.BARONY, origin=GridOrigin.AUTHORED, slug="arx-city"
         )
         self.story_area = AreaFactory(
             name="Story Ward", level=AreaLevel.WARD, origin=GridOrigin.STORY
@@ -731,7 +733,7 @@ class PromoteRoomActionTests(TestCase):
         self.staff = _staff_actor("PromoteRoomStaff")
         self.player = _player_actor("PromoteRoomPlayer")
         self.area = AreaFactory(
-            name="Arx City", level=AreaLevel.CITY, origin=GridOrigin.AUTHORED, slug="arx-city"
+            name="Arx City", level=AreaLevel.BARONY, origin=GridOrigin.AUTHORED, slug="arx-city"
         )
         self.profile = RoomProfileFactory(area=self.area)
         self.profile.objectdb.db_key = "Golden Hart Taproom"
@@ -2028,14 +2030,17 @@ class PhaseCAreaMetadataTests(TestCase):
         result = EditAreaAction().run(self.staff, area_id=self.area.pk, realm="Nowhereland")
         assert not result.success
 
-    def test_climate_below_region_warns(self) -> None:
+    def test_climate_on_a_small_area_sets_without_a_warning(self) -> None:
+        """#4085: no Region rung, no warning; the climate simply lands on the area."""
         from actions.definitions.world_builder import EditAreaAction
         from world.weather.models import Climate
 
         climate = Climate.objects.create(name="Test Drizzle")
         result = EditAreaAction().run(self.staff, area_id=self.area.pk, climate=climate.name)
         assert result.success, result.message
-        assert "below REGION" in result.message
+        assert "REGION" not in result.message
+        self.area.refresh_from_db()
+        assert self.area.climate_id == climate.pk
 
 
 class AmbientResyncTests(TestCase):

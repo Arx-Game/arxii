@@ -36,7 +36,7 @@ class SmearActionTests(TestCase):
         seed_social_check_content()
         cls.regular = CheckOutcomeFactory(name="smear_act_regular", success_level=1)
         cls.realm = RealmFactory()
-        cls.region = AreaFactory(level=AreaLevel.REGION, realm=cls.realm)
+        cls.region = AreaFactory(level=AreaLevel.COUNTY, realm=cls.realm)
         cls.hub = RoomProfileFactory(area=cls.region, is_social_hub=True)
         cls.smearer_entry = RosterEntryFactory()
         cls.smearer = _set_character_location(

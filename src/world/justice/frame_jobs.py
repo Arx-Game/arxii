@@ -167,18 +167,14 @@ def resolve_frame_job(project: Project, outcome_tier: CheckOutcome | None) -> No
 
 
 def _plant_frame_counter_clue(secret, evidence: CrimeEvidence, difficulty: int) -> None:
-    """The frame's disprove trail, seeded from the tamper craft (best-effort on region)."""
-    from world.areas.constants import AreaLevel  # noqa: PLC0415
-    from world.areas.services import get_ancestor_at_level  # noqa: PLC0415
+    """The frame's disprove trail, seeded from the tamper craft, in the hubs of the room's own
+    area (a room off the map leaves none; #4085 dropped the Region lookup)."""
     from world.clues.services import create_accusation_counter_clue  # noqa: PLC0415
 
     area = evidence.room_profile.area
     if area is None:
         return
-    region = get_ancestor_at_level(area, AreaLevel.REGION)
-    if region is None:
-        return
-    create_accusation_counter_clue(secret, region=region, difficulty=difficulty)
+    create_accusation_counter_clue(secret, area=area, difficulty=difficulty)
 
 
 def _workshop_in_room(character: ObjectDB) -> bool:

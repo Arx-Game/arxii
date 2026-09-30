@@ -132,7 +132,8 @@ duplication, and corridor batch-digs. Grid bundles round-trip every one of
 those surfaces (credited ambient emits freeze rather than overwrite, ADR-0201
 pattern), so a live-server build is durable content. Phase C: `edit_area`
 finally has a UI — realm/climate/dominant-society/description/colour/ward
-permits, with effective-climate display and a below-REGION warning — plus
+permits, with effective-climate display (the below-REGION warning went with the
+rung in #4085) — plus
 the "Arrange children" canvas: child areas drag-to-place on the same grid,
 one level up (the city map of wards). `PlaceViewSet`'s player-reachable POST
 was removed (staff authoring only); `AmbientEmit` gained admin parity.

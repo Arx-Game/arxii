@@ -20,7 +20,7 @@ class KnowledgeSeamAccrualTests(TestCase):
     def setUpTestData(cls):
         cls.crown = SocietyFactory()
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.city = AreaFactory(level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.city_room = RoomProfileFactory(area=cls.city).objectdb
         cls.murder = CrimeKindFactory(slug="murder", name="Murder")
         AreaLawFactory(area=cls.kingdom, crime_kind=cls.murder)

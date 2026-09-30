@@ -60,7 +60,7 @@ class CmdCrown(ArxCommand):
             return None
         seen = 0
         while node is not None and seen < 10:  # noqa: PLR2004 - defensive walk cap
-            if node.level == AreaLevel.CITY:
+            if node.level == AreaLevel.BARONY:
                 return node
             node = node.parent
             seen += 1

@@ -78,7 +78,7 @@ class HouseServiceTests(TestCase):
             )
 
     def test_plan_estate_creates_an_area_held_by_the_house(self) -> None:
-        city = AreaFactory(name="Perdition City", level=AreaLevel.CITY, realm=self.realm)
+        city = AreaFactory(name="Perdition City", level=AreaLevel.BARONY, realm=self.realm)
         district = AreaFactory(name="Harborside", level=AreaLevel.NEIGHBORHOOD, parent=city)
         estate = plan_estate(
             house=self.house,

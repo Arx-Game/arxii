@@ -208,6 +208,7 @@
   - desc_variants <- evennia_extensions.RoomDescVariant
   - turf <- societies.Turf
   - levies <- societies.Levy
+  - crew_slots <- societies.CrewSlot
   - holdings <- societies.DomainHolding
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
@@ -608,6 +609,7 @@
 - `area_grid_path(area: 'Area') -> 'list[tuple[int | None, int | None]]' - Return the chain of parent-local (grid_x, grid_y) pairs from root to ``area``.`
 - `area_subtree_pks(area: 'Area') -> 'list[int]' - Return pks of ``area`` and all its descendants.`
 - `colored_area_path(room: 'ObjectDB') -> 'str' - Render a room's full area-hierarchy path with per-area colours (#1463).`
+- `containing_areas(area: 'Area | None') -> 'list[Area]' - The area itself, then each parent up to the root, by walking ``parent`` links.`
 - `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' - Walk the ancestry to find the ancestor at the given AreaLevel.`
 - `get_ancestry(area: 'Area') -> 'list[Area]' - Return the full ancestor chain from root down to this area.`
 - `get_descendant_areas(area: 'Area') -> 'list[Area]' - Return all areas in the subtree below this area.`
@@ -2118,7 +2120,7 @@
 - `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - Record that a character has found a clue (idempotent).`
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' - Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
 - `clue_target_kind_allowed(account: 'object', target_kind: 'str') -> 'bool' - The clue authoring policy (#3432) as one callable (#3566).`
-- `create_accusation_counter_clue(secret: 'Secret', *, region: 'Area', difficulty: 'int') -> 'Clue' - Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
+- `create_accusation_counter_clue(secret: 'Secret', *, area: 'Area', difficulty: 'int') -> 'Clue' - Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' - AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' - Grant clues triggered passively by entering ``room`` (#1160).`
 - `maybe_grant_item_acquisition_clues(character: 'ObjectDB', item: 'ItemInstance') -> 'list[Clue]' - Grant clues triggered passively by ``character`` acquiring ``item`` (#1160).`
@@ -8735,7 +8737,7 @@
 ### SecretGossip
 **Foreign Keys:**
   - secret -> secrets.Secret [FK]
-  - region -> areas.Area [FK]
+  - area -> areas.Area [FK]
 
 ### SecretGrievance
 **Foreign Keys:**
@@ -8924,6 +8926,12 @@
 ### CovenantLegendSummary
 **Foreign Keys:**
   - covenant -> covenants.Covenant [OneToOne]
+
+### CrewSlot
+**Foreign Keys:**
+  - gang -> societies.Organization [FK]
+  - claimed_by -> societies.Organization [FK] (nullable)
+  - rooms -> evennia_extensions.RoomProfile [M2M]
 
 ### CrimeVoteWeight
 
@@ -9332,6 +9340,8 @@
   - held_turf <- societies.Turf
   - crown_bids <- societies.CrownBid
   - crowns <- societies.Crown
+  - crew_slots <- societies.CrewSlot
+  - claimed_crew_slots <- societies.CrewSlot
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge

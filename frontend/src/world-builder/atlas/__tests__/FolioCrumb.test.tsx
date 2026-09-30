@@ -6,7 +6,7 @@ import { FolioCrumb } from '../FolioCrumb';
 
 const entries = [
   { id: 1, name: 'Nitera', level_display: 'World' },
-  { id: 2, name: 'Arx', level_display: 'City' },
+  { id: 2, name: 'Arx', level_display: 'Barony' },
   { id: 3, name: 'Central Ward', level_display: 'Ward' },
 ];
 
@@ -39,7 +39,7 @@ describe('FolioCrumb', () => {
     const levelTags = screen.getAllByTestId('folio-crumb-level');
     expect(levelTags).toHaveLength(3);
     expect(screen.getByTestId('folio-crumb-current').parentElement).toHaveTextContent('Ward');
-    expect(levelTags.map((tag) => tag.textContent)).toEqual(['World', 'City', 'Ward']);
+    expect(levelTags.map((tag) => tag.textContent)).toEqual(['World', 'Barony', 'Ward']);
   });
 
   it('omits the level tag when an entry carries no level_display', () => {
@@ -51,7 +51,7 @@ describe('FolioCrumb', () => {
     const onInsertBetween = vi.fn();
     const ladder = [
       { id: 1, name: 'Nitera', level_display: 'World', level: 80 },
-      { id: 2, name: 'Arx', level_display: 'City', level: 40 },
+      { id: 2, name: 'Arx', level_display: 'Barony', level: 40 },
       { id: 3, name: 'Central Ward', level_display: 'Ward', level: 30 },
     ];
     render(<FolioCrumb entries={ladder} onSelect={vi.fn()} onInsertBetween={onInsertBetween} />);
@@ -67,7 +67,7 @@ describe('FolioCrumb', () => {
 
   it('a room straight under a city takes a ward, neighborhood or building above it', () => {
     const ladder = [
-      { id: 2, name: 'Arx City', level_display: 'City', level: 40 },
+      { id: 2, name: 'Arx City', level_display: 'Barony', level: 40 },
       { id: 100, name: 'The City Center', kind: 'room' as const },
     ];
     render(<FolioCrumb entries={ladder} onSelect={vi.fn()} onInsertBetween={vi.fn()} />);
@@ -79,7 +79,7 @@ describe('FolioCrumb', () => {
   it('shows no insert points when the caller offers no handler', () => {
     const ladder = [
       { id: 1, name: 'Nitera', level_display: 'World', level: 80 },
-      { id: 2, name: 'Arx', level_display: 'City', level: 40 },
+      { id: 2, name: 'Arx', level_display: 'Barony', level: 40 },
     ];
     render(<FolioCrumb entries={ladder} onSelect={vi.fn()} />);
     expect(screen.queryByTestId('folio-crumb-insert')).not.toBeInTheDocument();

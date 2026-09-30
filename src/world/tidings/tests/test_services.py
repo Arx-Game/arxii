@@ -127,7 +127,7 @@ class SocietyScopedFeedTests(TestCase):
         cls.crown = SocietyFactory(name="The Crown")
         cls.rival = SocietyFactory(name="The Rival Court")
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.city = AreaFactory(level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.room = RoomProfileFactory(area=cls.city).objectdb
 
     def test_empty_society_scope_is_an_empty_feed(self) -> None:

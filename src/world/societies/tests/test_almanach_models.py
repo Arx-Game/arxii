@@ -10,9 +10,12 @@ from world.societies.houses.models import Domain, Title
 
 
 class AlmanachSchemaTests(TestCase):
-    def test_feudal_rungs_sit_between_city_and_continent(self) -> None:
-        assert AreaLevel.CITY < AreaLevel.BARONY < AreaLevel.COUNTY < AreaLevel.DUCHY
+    def test_feudal_rungs_climb_from_the_barony_to_the_continent(self) -> None:
+        # #4085: a barony is the holding itself (a city is one), and the ladder is sizes only.
+        assert AreaLevel.WARD < AreaLevel.BARONY < AreaLevel.COUNTY < AreaLevel.DUCHY
         assert AreaLevel.DUCHY < AreaLevel.KINGDOM < AreaLevel.EMPIRE < AreaLevel.CONTINENT
+        assert not hasattr(AreaLevel, "REGION")
+        assert not hasattr(AreaLevel, "CITY")
         assert TIER_TO_AREA_LEVEL[TitleTier.MARCH] == AreaLevel.COUNTY
 
     def test_undefined_rungs_share_the_empty_name(self) -> None:

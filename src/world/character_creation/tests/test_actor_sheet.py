@@ -230,7 +230,7 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
         self.wealth = GoalDomainFactory(name="Wealth")
         # A start room inside a region whose dominant society is the enemy's.
         self.society = SocietyFactory(name="The Republic", realm=self.realm)
-        self.region = AreaFactory(level=AreaLevel.REGION, dominant_society=self.society)
+        self.region = AreaFactory(level=AreaLevel.COUNTY, dominant_society=self.society)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.region)
         room_profile = RoomProfileFactory(area=self.ward)
         self.area.default_starting_room = room_profile
@@ -353,7 +353,7 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
             "They say the gate was paid for.",
         ]
         assert all(s.level == 1 for s in secrets)
-        heats = SecretGossip.objects.filter(secret__in=secrets, region=self.region)
+        heats = SecretGossip.objects.filter(secret__in=secrets, area=self.ward)
         assert heats.count() == 2
         assert all(h.heat == WHISPERS_SEED_HEAT for h in heats)
 

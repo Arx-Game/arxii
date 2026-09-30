@@ -79,7 +79,7 @@ class BulkRoomProfilesAndAncestorsTests(TestCase):
         self.assertEqual(all_ancestor_ids, set())
 
     def test_multiple_rooms_shared_area_union(self) -> None:
-        city = AreaFactory(level=AreaLevel.CITY)
+        city = AreaFactory(level=AreaLevel.BARONY)
         ward = AreaFactory(level=AreaLevel.WARD, parent=city)
         profile_a = RoomProfileFactory(area=ward)
         profile_b = RoomProfileFactory(area=ward)
@@ -215,7 +215,7 @@ class EffectiveOwnersForRoomsTests(TestCase):
         self.assertEqual(result[room_b.pk], ward_owner)
 
     def test_more_specific_area_wins(self) -> None:
-        city = AreaFactory(level=AreaLevel.CITY)
+        city = AreaFactory(level=AreaLevel.BARONY)
         ward = AreaFactory(level=AreaLevel.WARD, parent=city)
         profile = RoomProfileFactory(area=ward)
         room = profile.objectdb
@@ -346,7 +346,7 @@ class EffectiveValuesForRoomsResonanceTests(TestCase):
     """Bulk-read tests for the resonance axis on effective_values_for_rooms."""
 
     def setUp(self) -> None:
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.profile_a = RoomProfileFactory(area=self.ward)
         self.profile_b = RoomProfileFactory(area=self.ward)

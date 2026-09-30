@@ -41011,7 +41011,7 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/Level4f2Enum'
+          - $ref: '#/components/schemas/Level554Enum'
           readOnly: true
         level_display:
           type: string
@@ -58099,14 +58099,12 @@ components:
       - id
       - journal
       - value_added
-    Level4f2Enum:
+    Level554Enum:
       enum:
       - 10
       - 20
       - 30
       - 40
-      - 46
-      - 50
       - 53
       - 56
       - 60
@@ -58119,9 +58117,7 @@ components:
         * `10` - Building
         * `20` - Neighborhood
         * `30` - Ward
-        * `40` - City
-        * `46` - Barony
-        * `50` - Region
+        * `40` - Barony
         * `53` - County
         * `56` - Duchy
         * `60` - Kingdom
@@ -86342,7 +86338,7 @@ components:
           pattern: ^[-a-zA-Z0-9_]+$
         level:
           allOf:
-          - $ref: '#/components/schemas/Level4f2Enum'
+          - $ref: '#/components/schemas/Level554Enum'
           readOnly: true
         level_display:
           type: string

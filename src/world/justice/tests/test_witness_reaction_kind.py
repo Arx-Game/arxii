@@ -60,7 +60,7 @@ class WitnessReactionKindTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.crown = SocietyFactory()
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.city = AreaFactory(level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.city = AreaFactory(level=AreaLevel.BARONY, parent=cls.kingdom)
         cls.theft = CrimeKindFactory(slug="witness-theft", name="Theft")
         cls.assault = CrimeKindFactory(slug="witness-assault", name="Assault")
         cls.theft_law = AreaLawFactory(

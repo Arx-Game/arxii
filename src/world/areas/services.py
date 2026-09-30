@@ -32,6 +32,24 @@ def get_ancestry(area: Area) -> list[Area]:
     return [ancestors_by_pk[pk] for pk in ancestor_pks]
 
 
+def containing_areas(area: Area | None) -> list[Area]:
+    """The area itself, then each parent up to the root, by walking ``parent`` links.
+
+    The SQLite tier's test databases carry no ``AreaClosure`` matview, so readers that
+    have to work there (gossip's reach, the justice heat chain, character creation's
+    Whispers) walk the links instead of calling ``get_ancestry``; this is that walk,
+    cycle-safe, in one place (#4085). Empty for ``None``.
+    """
+    chain: list[Area] = []
+    seen: set[int] = set()
+    node = area
+    while node is not None and node.pk not in seen:
+        chain.append(node)
+        seen.add(node.pk)
+        node = node.parent
+    return chain
+
+
 def get_ancestor_at_level(area: Area, target_level: AreaLevel) -> Area | None:
     """Walk the ancestry to find the ancestor at the given AreaLevel.
 

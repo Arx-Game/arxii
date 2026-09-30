@@ -280,38 +280,30 @@ def _resolve_named_row(model: Any, value: str) -> tuple[Any | None, str | None]:
     return row, None
 
 
-def _apply_area_named_fks(area: Any, kwargs: dict[str, Any]) -> tuple[str | None, str]:
-    """Apply realm/climate/dominant_society by name (#3269 Phase C)."""
-    from world.areas.constants import AreaLevel  # noqa: PLC0415
-
-    climate_note = ""
+def _apply_area_named_fks(area: Any, kwargs: dict[str, Any]) -> str | None:
+    """Apply realm/climate/dominant_society by name (#3269 Phase C); the error, or None."""
     if kwargs.get("realm") is not None:
         from world.realms.models import Realm  # noqa: PLC0415
 
         row, error = _resolve_named_row(Realm, kwargs["realm"])
         if error:
-            return error, ""
+            return error
         area.realm = row
     if kwargs.get("climate") is not None:
         from world.weather.models import Climate  # noqa: PLC0415
 
         row, error = _resolve_named_row(Climate, kwargs["climate"])
         if error:
-            return error, ""
+            return error
         area.climate = row
-        if row is not None and area.level < AreaLevel.REGION:
-            climate_note = (
-                " Warning: this area is below REGION level — a climate here rolls "
-                "its own weather independently of its parents."
-            )
     if kwargs.get("dominant_society") is not None:
         from world.societies.models import Society  # noqa: PLC0415
 
         row, error = _resolve_named_row(Society, kwargs["dominant_society"])
         if error:
-            return error, ""
+            return error
         area.dominant_society = row
-    return None, climate_note
+    return None
 
 
 def _apply_area_plain_fields(area: Any, kwargs: dict[str, Any]) -> str | None:
@@ -392,20 +384,20 @@ def _resolve_art_media(art_id: Any) -> tuple[Any | None, str | None]:
     return media, None
 
 
-def _apply_area_metadata(area: Any, kwargs: dict[str, Any]) -> tuple[str | None, str]:
-    """Apply every Phase C metadata kwarg to ``area``, pre-save (#3269)."""
-    error, climate_note = _apply_area_named_fks(area, kwargs)
+def _apply_area_metadata(area: Any, kwargs: dict[str, Any]) -> str | None:
+    """Apply every Phase C metadata kwarg to ``area``, pre-save (#3269); the error, or None."""
+    error = _apply_area_named_fks(area, kwargs)
     if error is not None:
-        return error, ""
+        return error
     plain_error = _apply_area_plain_fields(area, kwargs)
     if plain_error is not None:
-        return plain_error, ""
+        return plain_error
     if kwargs.get("art_id") is not None:
         media, art_error = _resolve_art_media(kwargs["art_id"])
         if art_error is not None:
-            return art_error, ""
+            return art_error
         area.art = media
-    return None, climate_note
+    return None
 
 
 def _room_description(profile: Any) -> str:
@@ -645,9 +637,9 @@ class EditAreaAction(_WorldBuilderAction):
 
     A slug change is refused once a room beneath carries a fixture key —
     keys are permanent from that moment (shares ``ensure_slug_change_allowed``
-    with ``promote_to_authored``'s guard). Setting a climate below REGION
-    level succeeds but the result message warns: each climate-bearing area
-    rolls its own weather, so per-ward climates mean per-ward weather.
+    with ``promote_to_authored``'s guard). A climate at any level is fine: each
+    climate-bearing area rolls its own weather, so per-ward climates mean
+    per-ward weather (the old "below REGION" warning went with the rung, #4085).
 
     Gated by ``BuildWarrantPrerequisite(level_param="level")`` rather than the
     base class's bare default (#3477 fix round 1): this is the one
@@ -685,14 +677,14 @@ class EditAreaAction(_WorldBuilderAction):
         identity_error = _apply_area_identity(area, kwargs, new_slug)
         if identity_error is not None:
             return ActionResult(success=False, message=identity_error)
-        meta_error, climate_note = _apply_area_metadata(area, kwargs)
+        meta_error = _apply_area_metadata(area, kwargs)
         if meta_error is not None:
             return ActionResult(success=False, message=meta_error)
         try:
             area.save()
         except ValidationError as exc:
             return ActionResult(success=False, message="; ".join(exc.messages))
-        return ActionResult(success=True, message=f"{area.name} updated.{climate_note}")
+        return ActionResult(success=True, message=f"{area.name} updated.")
 
 
 @dataclass

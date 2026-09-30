@@ -18,7 +18,7 @@ from world.societies.turf_services import apply_turf_push
 
 class CrewSlotTests(TestCase):
     def setUp(self):
-        self.realm_city = AreaFactory(level=AreaLevel.CITY)
+        self.realm_city = AreaFactory(level=AreaLevel.BARONY)
         self.neighborhood = AreaFactory(level=AreaLevel.NEIGHBORHOOD, parent=self.realm_city)
         self.gang = OrganizationFactory(name="Ashfingers")
         ensure_default_rank_ladder(self.gang)

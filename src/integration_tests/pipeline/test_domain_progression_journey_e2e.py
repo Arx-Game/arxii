@@ -128,8 +128,8 @@ class FallbackOwnerJourneyTests(TestCase):
     """Gap 4: an unowned ward answers to the nearest owned ancestor, until it is owned."""
 
     def test_fallback_owner_then_own_row(self) -> None:
-        region = AreaFactory(level=AreaLevel.REGION)
-        city = AreaFactory(level=AreaLevel.CITY, parent=region)
+        region = AreaFactory(level=AreaLevel.COUNTY)
+        city = AreaFactory(level=AreaLevel.BARONY, parent=region)
         ward = AreaFactory(level=AreaLevel.WARD, parent=city)
         crown = OrganizationFactory(name="The Crown")
         region_row = LocationOwnership.objects.create(

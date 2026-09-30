@@ -40,7 +40,7 @@ class DenounceFramerTests(TestCase):
         cls.realm = RealmFactory()
         cls.crown = SocietyFactory(realm=cls.realm)
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=cls.crown)
-        cls.region = AreaFactory(level=AreaLevel.REGION, parent=cls.kingdom, realm=cls.realm)
+        cls.region = AreaFactory(level=AreaLevel.COUNTY, parent=cls.kingdom, realm=cls.realm)
         cls.hub = RoomProfileFactory(area=cls.region, is_social_hub=True)
         cls.false_accusation = CrimeKindFactory(slug="false-accusation", name="False Accusation")
         AreaLawFactory(

@@ -730,14 +730,14 @@ def _estate_payload(house: Organization) -> list[dict]:
         walker = area.parent
         under_city = False
         while walker is not None:
-            if walker.level == AreaLevel.CITY:
+            if walker.level == AreaLevel.BARONY:
                 under_city = True
                 break
             walker = walker.parent
         if not under_city:
             continue
         district = None
-        if area.parent is not None and area.parent.level != AreaLevel.CITY:
+        if area.parent is not None and area.parent.level != AreaLevel.BARONY:
             district = area.parent
         estates.append(
             {

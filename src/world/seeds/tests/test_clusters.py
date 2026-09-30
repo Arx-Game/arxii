@@ -263,7 +263,7 @@ class TestClusterRegistry(TestCase):
 
         capital = Area.objects.filter(realm=realm, is_capital=True).first()
         self.assertIsNotNone(capital)
-        self.assertEqual(capital.level, AreaLevel.CITY)
+        self.assertEqual(capital.level, AreaLevel.BARONY)
 
         # Idempotent on re-run: no duplicate ladder rows.
         CLUSTER_SEEDERS["houses"]()

@@ -75,7 +75,7 @@ class PersonaOrganizationIdsTests(TestCase):
 
 class OwnershipForTests(TestCase):
     def setUp(self) -> None:
-        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.city = AreaFactory(level=AreaLevel.BARONY)
         self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
         self.profile = RoomProfileFactory(area=self.ward)
         self.room = self.profile.objectdb
