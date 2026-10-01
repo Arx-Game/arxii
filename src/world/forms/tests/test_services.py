@@ -53,7 +53,11 @@ from world.forms.services import (
     revert_to_true_form,
     switch_form,
 )
-from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+from world.magic.factories import (
+    CharacterTechniqueFactory,
+    TechniqueFactory,
+    UltimateTechniqueFactory,
+)
 from world.mechanics.constants import SOURCE_TYPE_FORM
 from world.mechanics.models import CharacterModifier, ModifierSource
 from world.scenes.factories import PersonaFactory
@@ -624,6 +628,21 @@ class AssumeAlternateSelfTests(TestCase):
 
         ct = self.sheet.character_techniques.get(technique=self.technique)
         self.assertIsNotNone(ct.source)
+
+    def test_assume_never_grants_an_ultimate(self):
+        """An ultimate on an alt-self's techniques is never granted (#4098).
+
+        ``.add()`` bypasses the model's ``limit_choices_to`` (an admin-form
+        constraint, not a DB one) -- simulates a row slipped in before the flag,
+        or authored directly against the DB.
+        """
+        alt_self = AlternateSelfFactory(character=self.sheet)
+        ultimate = UltimateTechniqueFactory()
+        alt_self.techniques.add(ultimate)
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        self.assertFalse(self.sheet.character_techniques.filter(technique=ultimate).exists())
 
     def test_assume_does_not_regrant_permanently_known_technique(self):
         alt_self = AlternateSelfFactory(character=self.sheet)
