@@ -2602,3 +2602,30 @@ class ResolveBattleRoundClimacticMomentBlockTests(TestCase):
         )
 
         resolve_battle_round(battle_round=battle_round)  # Must not raise BattleError.
+
+    def test_does_not_block_once_the_crossing_is_decided(self) -> None:
+        """#4098 decision 9 / final review item 9: only the undecided-offer window
+        blocks round resolution - once the PendingAudereMajoraOffer is resolved
+        (deleted), the crosser's own battle round resolves normally even though the
+        Audere Majora condition itself is still active (post-crossing aftermath)."""
+        from world.battles.resolution import resolve_battle_round
+        from world.magic.audere_majora import PendingAudereMajoraOffer
+        from world.magic.factories import wire_audere_power_multipliers
+        from world.magic.tests.majora_fixtures import build_crossing_world
+
+        wire_audere_power_multipliers()
+        (_character, crossed_sheet, _threshold, _prospect, _puissant, offer) = build_crossing_world(
+            5, "_battleresolvenoblock"
+        )
+        PendingAudereMajoraOffer.objects.filter(pk=offer.pk).delete()
+
+        battle_round = BattleRoundFactory()
+        side = BattleSideFactory(battle=battle_round.battle)
+        BattleParticipantFactory(
+            battle=battle_round.battle,
+            side=side,
+            character_sheet=crossed_sheet,
+            status=BattleParticipantStatus.ACTIVE,
+        )
+
+        resolve_battle_round(battle_round=battle_round)  # Must not raise BattleError.
