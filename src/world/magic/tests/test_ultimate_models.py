@@ -52,6 +52,34 @@ class TechniqueUltimateCleanTests(TestCase):
         with self.assertRaises(ValidationError):
             technique.clean()
 
+    def test_flagging_technique_grant_technique_as_ultimate_refused(self) -> None:
+        """A technique sitting in an item/ritual TechniqueGrant can't become an
+        ultimate (#4098 fix round 1) — mirrors the starter/tradition pool checks."""
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.models import TechniqueGrant
+
+        technique = TechniqueFactory()
+        TechniqueGrant.objects.create(
+            technique=technique,
+            item_template=ItemTemplateFactory(),
+            verb="study",
+        )
+        technique.is_ultimate = True
+        with self.assertRaises(ValidationError):
+            technique.clean()
+
+    def test_flagging_alternate_self_grant_technique_as_ultimate_refused(self) -> None:
+        """A technique granted by an AlternateSelf can't become an ultimate
+        (#4098 fix round 1)."""
+        from world.forms.factories import AlternateSelfFactory
+
+        technique = TechniqueFactory()
+        alt_self = AlternateSelfFactory()
+        alt_self.techniques.add(technique)
+        technique.is_ultimate = True
+        with self.assertRaises(ValidationError):
+            technique.clean()
+
     def test_fresh_technique_may_be_ultimate(self) -> None:
         technique = UltimateTechniqueFactory()
         technique.clean()

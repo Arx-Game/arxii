@@ -591,12 +591,16 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         validate_outcome_narration(self.miss_narration, "miss_narration")
         if self.is_ultimate and self.pk:
             in_pool = (
-                self.granted_by_path_gifts.exists() or self.granted_by_tradition_gifts.exists()
+                self.granted_by_path_gifts.exists()
+                or self.granted_by_tradition_gifts.exists()
+                or self.grants.exists()
+                or self.alternate_self_grants.exists()
             )
             if in_pool or self.character_grants.exists():
                 msg = (
-                    "An ultimate cannot sit in a starter or tradition pool or be known as an "
-                    "ordinary technique. Remove it from those first."
+                    "An ultimate cannot sit in a starter pool, tradition pool, item/ritual "
+                    "TechniqueGrant, alternate-self grant, or be known as an ordinary "
+                    "technique. Remove it from those first."
                 )
                 raise ValidationError({"is_ultimate": msg})
 
