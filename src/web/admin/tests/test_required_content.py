@@ -1038,6 +1038,65 @@ class TestPathMajorGiftUltimatesProbe(TestCase):
         self.assertTrue(_probe_path_major_gift_ultimates().present)
 
 
+class TestAudereConditionShapeProbe(TestCase):
+    """#4098 final review item 2: duration-shape + death_deferred, not just presence."""
+
+    def _well_formed_template(self, name: str) -> rc.ContentProbe:
+        from world.conditions.constants import DurationType
+        from world.mechanics.factories import DeathDeferredPropertyFactory
+
+        template = ConditionTemplateFactory(
+            name=name, default_duration_type=DurationType.UNTIL_END_OF_COMBAT
+        )
+        template.properties.add(DeathDeferredPropertyFactory())
+        return template
+
+    def test_missing_both_templates_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any(AUDERE_CONDITION_NAME in m for m in result.missing))
+        self.assertTrue(any(AUDERE_MAJORA_CONDITION_NAME in m for m in result.missing))
+
+    def test_round_limited_duration_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.conditions.constants import DurationType
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+        from world.mechanics.factories import DeathDeferredPropertyFactory
+
+        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
+            template = ConditionTemplateFactory(
+                name=name, default_duration_type=DurationType.ROUNDS
+            )
+            template.properties.add(DeathDeferredPropertyFactory())
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any("round-limited" in m for m in result.missing))
+
+    def test_missing_death_deferred_property_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.conditions.constants import DurationType
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
+            ConditionTemplateFactory(name=name, default_duration_type=DurationType.PERMANENT)
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any("death_deferred" in m for m in result.missing))
+
+    def test_well_formed_templates_are_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        self._well_formed_template(AUDERE_CONDITION_NAME)
+        self._well_formed_template(AUDERE_MAJORA_CONDITION_NAME)
+        result = _probe_audere_condition_shape()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
 class TestAudereUltimateCopyProbe(TestCase):
     def test_placeholder_copy_reported(self) -> None:
         from web.admin.tuning.required_content import _probe_audere_ultimate_copy
