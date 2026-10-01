@@ -11995,6 +11995,44 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/audere/ultimates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The owner's Audere state: open reveal, readied pick, deferred-death line (#4098).
+     *
+     *     GET /api/magic/audere/ultimates/?character_sheet_id=<id>
+     */
+    get: operations['magic_audere_ultimates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/audere/ultimates/choose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/magic/audere/ultimates/choose/  {character_sheet_id, choice_key} */
+    post: operations['magic_audere_ultimates_choose_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/character-anima/': {
     parameters: {
       query?: never;
@@ -25154,6 +25192,11 @@ export interface components {
       offer_id: number;
       accept: boolean;
     };
+    AudereUltimateState: {
+      reveal: components['schemas']['UltimateReveal'] | null;
+      readied: components['schemas']['ReadiedUltimate'] | null;
+      deferred_death_text: string;
+    };
     /**
      * @description * `owner` - Owner
      *     * `other_side` - Other side
@@ -27469,6 +27512,10 @@ export interface components {
     CheckTypeMinimal: {
       readonly id: number;
       readonly name: string;
+    };
+    ChooseUltimateRequest: {
+      character_sheet_id: number;
+      choice_key: string;
     };
     /** @description One aspect definition's picked option(s), as the claim body sends them. */
     ClaimAspectPickRequest: {
@@ -41445,6 +41492,8 @@ export interface components {
       readonly anima_pool_bonus: number;
       /** @description Live corruption advisory; empty string when no stage-3+ corruption. */
       readonly advisory_text: string;
+      /** @description The authored reveal promise, only when accepting would reveal something. */
+      readonly reveal_framing_text: string;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -41850,6 +41899,7 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
+      readonly is_ultimate: boolean;
     };
     /**
      * @description Owner-authored ``PlayerBoundary`` CRUD shape.
@@ -42713,6 +42763,13 @@ export interface components {
      * @enum {integer}
      */
     ReactionEmojiValenceEnum: 1 | 0 | -1;
+    /** @description A KnownUltimate the player has chosen (Screen 3). */
+    ReadiedUltimate: {
+      technique_id: number;
+      name: string;
+      description: string;
+      readonly label: string;
+    };
     /** @description The realm's two boards. Rows carry a name and a phrase; no numeric field exists. */
     RealmBoards: {
       renown: components['schemas']['RankingRow'][];
@@ -47879,6 +47936,29 @@ export interface components {
       description: string;
       /** @description Whether this category is currently in use */
       is_active?: boolean;
+    };
+    UltimateReveal: {
+      ceremony: string;
+      framing_text: string;
+      groups: components['schemas']['UltimateRevealGroup'][];
+    };
+    /** @description A reveal card. Name/description only for cards the player may see by name. */
+    UltimateRevealCard: {
+      choice_key: string;
+      kind: string;
+      category: string;
+      label: string;
+      readonly name: string;
+      readonly description: string;
+      readonly upgrade_of_name: string;
+    };
+    UltimateRevealGroup: {
+      source: string;
+      readonly path_name: string;
+      readonly gift_name: string;
+      readonly being_name: string;
+      readonly companion_name: string;
+      cards: components['schemas']['UltimateRevealCard'][];
     };
     /** @description One visible union in a family tree payload. */
     UnionEdge: {
@@ -64258,6 +64338,50 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AudereOfferResult'];
+        };
+      };
+    };
+  };
+  magic_audere_ultimates_retrieve: {
+    parameters: {
+      query: {
+        character_sheet_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AudereUltimateState'];
+        };
+      };
+    };
+  };
+  magic_audere_ultimates_choose_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChooseUltimateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReadiedUltimate'];
         };
       };
     };

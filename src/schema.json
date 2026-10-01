@@ -18532,6 +18532,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/AudereOfferResult'
           description: ''
+  /api/magic/audere/ultimates/:
+    get:
+      operationId: magic_audere_ultimates_retrieve
+      description: |-
+        The owner's Audere state: open reveal, readied pick, deferred-death line (#4098).
+
+        GET /api/magic/audere/ultimates/?character_sheet_id=<id>
+      parameters:
+      - in: query
+        name: character_sheet_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudereUltimateState'
+          description: ''
+  /api/magic/audere/ultimates/choose/:
+    post:
+      operationId: magic_audere_ultimates_choose_create
+      description: POST /api/magic/audere/ultimates/choose/  {character_sheet_id,
+        choice_key}
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChooseUltimateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadiedUltimate'
+          description: ''
   /api/magic/character-anima/:
     get:
       operationId: magic_character_anima_list
@@ -41221,6 +41267,23 @@ components:
       required:
       - accept
       - offer_id
+    AudereUltimateState:
+      type: object
+      properties:
+        reveal:
+          allOf:
+          - $ref: '#/components/schemas/UltimateReveal'
+          nullable: true
+        readied:
+          allOf:
+          - $ref: '#/components/schemas/ReadiedUltimate'
+          nullable: true
+        deferred_death_text:
+          type: string
+      required:
+      - deferred_death_text
+      - readied
+      - reveal
     AudienceEnum:
       enum:
       - owner
@@ -46137,6 +46200,18 @@ components:
       required:
       - id
       - name
+    ChooseUltimateRequest:
+      type: object
+      properties:
+        character_sheet_id:
+          type: integer
+        choice_key:
+          type: string
+          minLength: 1
+          maxLength: 80
+      required:
+      - character_sheet_id
+      - choice_key
     ClaimAspectPickRequest:
       type: object
       description: One aspect definition's picked option(s), as the claim body sends
@@ -72363,6 +72438,11 @@ components:
           type: string
           description: Live corruption advisory; empty string when no stage-3+ corruption.
           readOnly: true
+        reveal_framing_text:
+          type: string
+          description: The authored reveal promise, only when accepting would reveal
+            something.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -72376,6 +72456,7 @@ components:
       - fired_intensity
       - id
       - intensity_bonus
+      - reveal_framing_text
       - soulfray_stage_order
     PendingCrossingOffer:
       type: object
@@ -73288,6 +73369,9 @@ components:
           items:
             $ref: '#/components/schemas/AnchorOption'
           readOnly: true
+        is_ultimate:
+          type: boolean
+          readOnly: true
       required:
       - action_category
       - action_template
@@ -73299,6 +73383,7 @@ components:
       - display_name
       - eligible_fury_anchors
       - enhancements
+      - is_ultimate
       - position_target_shape
       - prerequisite_met
       - prerequisite_reasons
@@ -75020,6 +75105,24 @@ components:
         * `1` - Positive
         * `0` - Neutral
         * `-1` - Negative
+    ReadiedUltimate:
+      type: object
+      description: A KnownUltimate the player has chosen (Screen 3).
+      properties:
+        technique_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        label:
+          type: string
+          readOnly: true
+      required:
+      - description
+      - label
+      - name
+      - technique_id
     RealmBoards:
       type: object
       description: The realm's two boards. Rows carry a name and a phrase; no numeric
@@ -85499,6 +85602,79 @@ components:
       - description
       - display_name
       - name
+    UltimateReveal:
+      type: object
+      properties:
+        ceremony:
+          type: string
+        framing_text:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/UltimateRevealGroup'
+      required:
+      - ceremony
+      - framing_text
+      - groups
+    UltimateRevealCard:
+      type: object
+      description: A reveal card. Name/description only for cards the player may see
+        by name.
+      properties:
+        choice_key:
+          type: string
+        kind:
+          type: string
+        category:
+          type: string
+        label:
+          type: string
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        upgrade_of_name:
+          type: string
+          readOnly: true
+      required:
+      - category
+      - choice_key
+      - description
+      - kind
+      - label
+      - name
+      - upgrade_of_name
+    UltimateRevealGroup:
+      type: object
+      properties:
+        source:
+          type: string
+        path_name:
+          type: string
+          readOnly: true
+        gift_name:
+          type: string
+          readOnly: true
+        being_name:
+          type: string
+          readOnly: true
+        companion_name:
+          type: string
+          readOnly: true
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/UltimateRevealCard'
+      required:
+      - being_name
+      - cards
+      - companion_name
+      - gift_name
+      - path_name
+      - source
     UnionEdge:
       type: object
       description: One visible union in a family tree payload.
