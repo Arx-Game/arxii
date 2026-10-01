@@ -224,30 +224,19 @@ def is_mid_audere_majora_crossing(character_sheet: CharacterSheet) -> bool:
 def any_character_mid_audere_majora_crossing(
     character_sheets: Iterable[CharacterSheet],
 ) -> bool:
-    """Batched sibling of ``is_mid_audere_majora_crossing`` — one pair of
-    ``__in=`` queries covering every given character, not one query pair per
-    character. Required for the round-resolution hard block (#1899): a large
-    battle can have 10+ active participants, and this spec's whole point for
-    large battles is to keep resolution cheap — looping the single-character
-    check per participant would reintroduce the N+1 this spec's scale
-    exception exists to avoid.
+    """True while any given character has an UNDECIDED crossing offer (#1899, #4098).
+
+    The round-resolution hard block: one ``__in=`` query over every given character.
+    Only the undecided-offer window blocks. After the crossing resolves, the Audere
+    Majora condition lasts until encounter completion; blocking on it froze every
+    later round, so the crosser could never act on their new Path (#4098 decision 9).
+    The single-character ``is_mid_audere_majora_crossing`` (disconnect pause) still
+    covers both windows.
     """
     sheets = list(character_sheets)
     if not sheets:
         return False
-    if PendingAudereMajoraOffer.objects.filter(character_sheet__in=sheets).exists():
-        return True
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
-    # CharacterSheet.character is a OneToOneField(primary_key=True), so
-    # sheet.pk == sheet.character_id. Filter by id directly instead of
-    # dereferencing `.character` on each sheet, which would issue an
-    # uncached query per sheet (an N+1 identical in shape to the one this
-    # batched function exists to prevent; #1899 spec review).
-    return ConditionInstance.objects.filter(
-        target_id__in=[s.pk for s in sheets],
-        condition__name=AUDERE_MAJORA_CONDITION_NAME,
-    ).exists()
+    return PendingAudereMajoraOffer.objects.filter(character_sheet__in=sheets).exists()
 
 
 def eligible_paths_for_threshold(character: ObjectDB, threshold: AudereMajoraThreshold) -> list:

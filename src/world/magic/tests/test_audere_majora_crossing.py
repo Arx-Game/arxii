@@ -558,7 +558,9 @@ class MidAudereMajoraCrossingTests(TestCase):
         )
         assert is_mid_audere_majora_crossing(sheet) is True
 
-    def test_batched_check_true_when_any_one_is_mid_crossing(self) -> None:
+    def test_batched_check_ignores_resolved_crossing(self) -> None:
+        """A resolved crossing (Majora condition only, no pending offer) must NOT
+        block round resolution (#4098 Task 5) — only the undecided-offer window does."""
         from world.character_sheets.factories import CharacterSheetFactory
         from world.conditions.factories import ConditionTemplateFactory
         from world.magic.audere_majora import any_character_mid_audere_majora_crossing
@@ -569,7 +571,7 @@ class MidAudereMajoraCrossingTests(TestCase):
             target=mid_crossing.character,
             condition=ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME),
         )
-        assert any_character_mid_audere_majora_crossing([uninvolved, mid_crossing]) is True
+        assert any_character_mid_audere_majora_crossing([uninvolved, mid_crossing]) is False
 
     def test_batched_check_false_when_none_mid_crossing(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
@@ -584,17 +586,19 @@ class MidAudereMajoraCrossingTests(TestCase):
         assert any_character_mid_audere_majora_crossing([]) is False
 
     def test_batched_check_is_bounded_query_count(self) -> None:
-        """Regression (#1899 spec review): must not issue one query pair per
+        """Regression (#1899 spec review): must not issue one query per
         character — a large battle can have 10+ active participants. Sheets
         must be re-fetched from the DB (not the raw factory instances) so a
-        cached FK on the Python object can't hide an N+1."""
+        cached FK on the Python object can't hide an N+1. One query total
+        (#4098 Task 5 narrowed the check to the PendingAudereMajoraOffer
+        branch only)."""
         from world.character_sheets.factories import CharacterSheetFactory
         from world.character_sheets.models import CharacterSheet
         from world.magic.audere_majora import any_character_mid_audere_majora_crossing
 
         ids = [CharacterSheetFactory().pk for _ in range(15)]
         sheets = list(CharacterSheet.objects.filter(pk__in=ids))
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(1):
             any_character_mid_audere_majora_crossing(sheets)
 
     def test_batched_check_true_for_pending_offer_branch(self) -> None:
