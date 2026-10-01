@@ -265,6 +265,14 @@ class ResonanceBalanceEntry(TypedDict):
     lifetime_earned: int
 
 
+class KnownUltimateEntry(TypedDict):
+    """A discovered ultimate (#4098), shown with its authored category label."""
+
+    name: str
+    description: str
+    label: str
+
+
 class MagicSection(TypedDict):
     """The magic section of the character sheet API response."""
 
@@ -273,6 +281,7 @@ class MagicSection(TypedDict):
     anima_ritual: AnimaRitualSection | None
     aura: AuraData | None
     resonances: list[ResonanceBalanceEntry]
+    ultimates: list[KnownUltimateEntry]
 
 
 class StorySection(TypedDict):

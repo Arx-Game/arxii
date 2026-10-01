@@ -52,6 +52,49 @@ class TechniqueCapExceeded(MagicError):
     )
 
 
+class TechniqueRequirementsNotMet(MagicError):
+    """Raised when a technique-acquisition route finds an unmet active requirement
+    (``charge_and_learn``, ``learn_technique`` — #4097).
+
+    ``failed`` carries the per-requirement messages (e.g. "Need to know
+    Thornweave"); ``user_message`` lists them, mirroring
+    ``PathRequirementsNotMet`` (``world.progression.exceptions``).
+    """
+
+    user_message = "You have not yet met what this technique requires."
+
+    def __init__(self, failed: list[str]) -> None:
+        super().__init__("; ".join(failed))
+        self.failed = failed
+        self.user_message = "You have not yet met what this technique requires: " + "; ".join(
+            failed
+        )
+
+
+class UltimateNotLearnable(MagicError):
+    """An ultimate is only reachable at Audere, never learned (#4098)."""
+
+    user_message = "That technique can only be used in Audere."
+
+
+class UltimateChoiceError(MagicError):
+    """Base for ultimate reveal choices (#4098)."""
+
+    user_message = "That choice is not available."
+
+
+class UltimateRevealClosed(UltimateChoiceError):
+    """Raised when there is no open Audere/Audere Majora reveal to choose from (#4098)."""
+
+    user_message = "There is no ultimate to choose right now."
+
+
+class UltimateChoiceUnavailable(UltimateChoiceError):
+    """Raised when a choice_key does not resolve against the current reveal (#4098)."""
+
+    user_message = "That choice is not among your ultimates."
+
+
 class GiftAlreadyOwnedError(MagicError):
     user_message = "You already have this gift."
 

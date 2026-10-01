@@ -80,7 +80,17 @@ from world.progression.types import (
 
 ### Requirements (Abstract Hierarchy)
 
-All requirements inherit from `AbstractClassLevelRequirement` which provides `description`, `is_active`, and FK to `ClassLevelUnlock`. Each implements `is_met_by_character(character)` returning `(bool, str)`.
+All requirements inherit from `AbstractUnlockRequirement` (the former
+`AbstractClassLevelRequirement` name is now a backwards-compat alias to it), which
+provides `description`, `is_active`, and a **four-way polymorphic unlock target**:
+exactly one of `class_level_unlock` (Durance path), `thread_crossing_threshold`
+(thread crossing gate), `path` (hybrid path entry gate, #2538), or `technique`
+(technique learning gate, #4097) is set, enforced by a `CheckConstraint`.
+`LegendRequirement` and `ItemRequirement` deliberately narrow this to only the
+first two targets (never `path`/`technique`), enforced by their own
+`Meta.constraints` rather than the base constraint (#4097 fix round 1). Each
+concrete type implements `is_met_by_character(character)` returning `(bool, str)`.
+See "Path and Technique Requirements" below for the per-target check functions.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
@@ -93,7 +103,9 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 | `RelationshipRequirement` | Character's own labelled ties at a claimed tier (#2116, retargeted #3957) | `required_type` (nullable FK `relationships.RelationshipType`, null = any type), `minimum_tier` (the side's claimed `CharacterRelationship.tier`), `minimum_count` (default 1) |
 | `ItemRequirement` | Possesses a physical touchstone/trophy item (#1859) | `item_template` XOR `min_touchstone_tier` (FK `magic.ResonanceTier`), `quantity`, `min_quality_tier` — possession-only, not consumed |
 | `LegendRequirement` | Minimum **banded** legend: only deeds whose station (`LegendEntry.earned_at_level`) is at or above `target_level - counts_from_level_offset`, each multiplied by `station_multiplier()` on read (#3463, ADR-0249). Station 0 qualifies nothing. | `minimum_legend`, `counts_from_level_offset` |
-| `MajorGiftTechniqueRequirement` | Knows >= N techniques of the character's MAJOR gift (#2440 ruling 4) — a COUNT gate, not completeness; minor-gift techniques never count. Seeded onto the level-2 `ClassLevelUnlock` via `world.progression.seeds.seed_major_gift_technique_level_requirement` | `minimum_techniques` (default 3) |
+| `MajorGiftTechniqueRequirement` | Knows >= N techniques of a MAJOR gift (#2440 ruling 4): a COUNT gate, not completeness; minor-gift techniques never count. `gift` named (#4097) counts only that gift's techniques (lineage-aware, via `resolve_owned_gift`); `gift` blank counts the best of any single held major gift (counts are never summed across multiple major gifts a character holds). Seeded onto the level-2 `ClassLevelUnlock` via `world.progression.seeds.seed_major_gift_technique_level_requirement` | `minimum_techniques` (default 3), `gift` (nullable FK `magic.Gift`, #4097) |
+| `GiftHeldRequirement` | Holds a gift (#4097). `gift` named is lineage-aware (a held descendant gift counts); `gift` blank means any gift the character holds satisfies it. Typically gift-agnostic at level 3, gift-named at level 6+. | `gift` (nullable FK `magic.Gift`) |
+| `TechniqueKnownRequirement` | Already knows a specific technique (#4097); the row `world.magic.services.technique_prerequisites.prerequisite_technique_ids` walks to build the technique-prerequisite closure consumed by thread carry (see `docs/systems/magic.md`'s "Thread Carry" section) | `required_technique` (FK `magic.Technique`) |
 | `CodexKnowledgeRequirement` | Gates Path selection (and class-level unlocks / thread crossings) behind codex knowledge. A character must have learned the specified `CodexEntry` (at `KNOWN` status in `CharacterCodexKnowledge`) before they can select that Path at a crossing. Fail-open: a Path with no `CodexKnowledgeRequirement` authored → gate passes. Composes with the existing `check_requirements_for_path` → `cross_into_path` gate — zero new gate wiring. Any discovery route that lands a KNOWN codex entry (CG grants, teaching offers, clue resolution, research projects) satisfies the gate (#2603) | `codex_entry` (FK `codex.CodexEntry`) |
 
 ### Class-Level Advancement Receipts (#1352)
@@ -398,32 +410,60 @@ its own refusal) or `NoAccountForCharacterError` — both from
 `world.magic.services.threads.accept_thread_weaving_unlock`, and
 `world.distinctions.services.approve_sheet_update_request`.
 
-### Path Requirements (#2538)
+### Path and Technique Requirements (#2538, #4097)
 
-`AbstractUnlockRequirement` supports a third polymorphic target FK — `path` —
-alongside `class_level_unlock` and `thread_crossing_threshold` (ADR-0090 pattern).
+`AbstractUnlockRequirement` supports a `path` target FK (#2538) alongside
+`class_level_unlock` and `thread_crossing_threshold` (ADR-0090 pattern), and a
+fourth `technique` target FK (#4097) for gating technique learning directly.
 `TraitRequirement` and `CodexKnowledgeRequirement` rows authored against a `Path`
-gate both hybrid path entry and cross-path technique learning.
+gate hybrid path entry.
 
 ```python
-from world.progression.services.spends import check_requirements_for_path
+from world.progression.services.spends import (
+    check_requirements_for_path,
+    check_requirements_for_technique,
+)
 
-# Check if a character meets a path's TraitRequirements
+# Check if a character meets a path's requirements
 all_met, failed_messages = check_requirements_for_path(character, path)
 # Returns: (True, []) when no requirements authored (fail-open)
+
+# Check if a character meets a technique's learning requirements (#4097)
+all_met, failed_messages = check_requirements_for_technique(character, technique)
 ```
 
 **Hybrid path entry:** `cross_into_path` calls `check_requirements_for_path`
 before switching, raising `PathRequirementsNotMet` when unmet. The semi-crossing
 catches this for a non-breaking level-only advance; Audere Majora lets it propagate.
 
-**Cross-path technique learning:** `can_learn_technique` checks
-`check_requirements_for_path` against each path in
-`technique.style.allowed_paths` when the character's current path is not in the
-list. Derive-on-read (ADR-0014) — reuses the same requirement rows.
+**Technique learning gate (#4097):** `charge_and_learn`
+(`world.magic.services.gift_acquisition`) calls `check_requirements_for_technique`
+right after the duplicate-knowledge check and before the gift-ownership/cap logic,
+raising `TechniqueRequirementsNotMet` (`world.magic.exceptions`) when an active
+requirement on the technique is unmet. Both front doors (`accept_technique_offer`
+for player-to-player teaching, and the Academy TRAIN offer handler) route through it.
+Character creation's own pick list
+(`world.magic.services.cg_catalog.get_technique_options(..., exclude_gated=True)`)
+excludes any technique carrying an active requirement outright, since a draft has
+no character yet to evaluate the gate against; every in-play caller keeps the
+default `exclude_gated=False` and lets `charge_and_learn`'s per-character check be
+the gate. Note: there is no cross-path technique-learning gate keyed on `Path`
+style anymore; that mechanism (`can_learn_technique`) was removed by #2700/ADR-0167
+in favor of gift-ownership curation gating learning and `StyleCapabilityRequirement`
+gating casting, so the `path` target here serves hybrid path entry only.
 
 **Eligible-paths selectors:** `eligible_advanced_paths_for` and
 `eligible_paths_for_threshold` filter out paths whose requirements are unmet.
+
+**Discovery, not a hardcoded list (#4097):** every `_check_requirements` caller
+(`check_requirements_for_unlock`, `_for_thread_crossing`, `_for_path`, and
+`_for_technique`) evaluates `concrete_requirement_types()`, which returns every
+concrete `AbstractUnlockRequirement` subclass registered with Django (found via
+`apps.get_models()`, sorted by class name) instead of a hand-maintained list. A
+new requirement type is picked up the moment its model is defined; there is no
+second registration step to forget (see
+`reference-requirement-types-hardcoded-list` for the prior failure mode this
+replaces).
 
 ### CG Conversion (`services.cg_conversion`)
 

@@ -15,10 +15,12 @@ from world.magic.views import (
     ApplicablePullsView,
     AudereMajoraRespondView,
     AudereRespondView,
+    AudereUltimatesView,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
     CharacterGiftViewSet,
     CharacterResonanceViewSet,
+    ChooseUltimateView,
     ConsequencePoolCatalogViewSet,
     CrossingRespondView,
     DramaticMomentSuggestionViewSet,
@@ -286,6 +288,17 @@ urlpatterns = [
         "audere/respond/",
         AudereRespondView.as_view(),
         name="audere-respond",
+    ),
+    # #4098 — Audere ultimates reveal + choice
+    path(
+        "audere/ultimates/",
+        AudereUltimatesView.as_view(),
+        name="audere-ultimates",
+    ),
+    path(
+        "audere/ultimates/choose/",
+        ChooseUltimateView.as_view(),
+        name="audere-ultimates-choose",
     ),
     # #543 — Audere Majora (Crossing) offer inbox + respond
     path(

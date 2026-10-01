@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
@@ -167,9 +168,13 @@ function TechniquePicker({ techniques, selectedId, onSelect, disabled }: Techniq
     return <p className="text-xs text-muted-foreground">No techniques available.</p>;
   }
 
+  // Ultimates sort first (#4098) so a readied ultimate isn't buried in the
+  // ordinary technique list.
+  const ordered = [...techniques].sort((a, b) => Number(!!b.is_ultimate) - Number(!!a.is_ultimate));
+
   return (
     <div className="flex flex-wrap gap-1.5">
-      {techniques.map((action) => {
+      {ordered.map((action) => {
         const techId = action.ref.technique_id;
         if (techId === null) return null;
         const isSelected = selectedId === techId;
@@ -187,11 +192,17 @@ function TechniquePicker({ techniques, selectedId, onSelect, disabled }: Techniq
             className={cn(
               'rounded border px-2.5 py-1 text-left text-xs font-medium transition-colors',
               'disabled:cursor-not-allowed disabled:opacity-50',
-              isSelected
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border bg-background text-foreground hover:border-primary/50'
+              action.is_ultimate && 'border-fuchsia-500/60 text-fuchsia-300',
+              action.is_ultimate && (isSelected ? 'bg-fuchsia-900/50' : 'bg-fuchsia-950/30'),
+              !action.is_ultimate &&
+                (isSelected
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-background text-foreground hover:border-primary/50')
             )}
           >
+            {action.is_ultimate && (
+              <Flame data-testid="ultimate-chip-mark" className="mr-1 inline h-3 w-3" aria-hidden />
+            )}
             {action.display_name}
           </button>
         );

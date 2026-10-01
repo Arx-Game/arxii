@@ -598,7 +598,10 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
                 if draft.selected_tradition_id is not None and draft.selected_path_id is not None:
                     gift = get_object_or_404(Gift, pk=gift_id)
                     base_options = get_technique_options(
-                        draft.selected_path, gift, draft.selected_tradition
+                        draft.selected_path,
+                        gift,
+                        draft.selected_tradition,
+                        exclude_gated=True,
                     )
                     options = TechniqueOptions(
                         pool=base_options.pool,

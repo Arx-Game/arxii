@@ -147,11 +147,16 @@ def contribute_to_technique_progress(
 
     # 9. Check completion.
     if progress.points_accumulated >= progress.total_required:
+        # completing_progress=True (#4097 fix round 2): the prerequisite check
+        # already ran when this meter was created (charge_and_learn, or
+        # learn_technique's own ap_cost>0 branch) — don't re-gate a meter the
+        # character has already paid AP into.
         ct = learn_technique(
             sheet,
             progress.technique,
             source=progress.source,
             ap_cost=0,
+            completing_progress=True,
         )
         progress.delete()
         return ct

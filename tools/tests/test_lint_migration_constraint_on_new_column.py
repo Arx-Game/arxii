@@ -80,6 +80,24 @@ def test_a_new_column_on_a_different_model_is_clean():
     assert check_source(source) == []
 
 
+def test_positional_q_tuple_pairing_a_new_nullable_column_with_an_old_one_is_flagged():
+    """Django's autodetector serializes OR-combined Q objects as positional tuples.
+
+    ``models.Q(("old__isnull", False), ("new__isnull", True))`` is how Django writes
+    a Q object whose arguments cannot be plain kwargs (e.g. nested inside an OR'd Q).
+    The keyword-only parser never read these, so this was a false negative on the
+    exact failure the linter exists to catch (0149, 2026-09-24).
+    """
+    source = migration(
+        'AddField(model_name="thing", name="new", field=models.IntegerField(null=True))',
+        'AddConstraint(model_name="thing", constraint=models.CheckConstraint('
+        "check=models.Q(models.Q(('old__isnull', False), ('new__isnull', True)), "
+        "models.Q(('old__isnull', True), ('new__isnull', False)), _connector='OR'), "
+        'name="thing_exactly_one"))',
+    )
+    assert check_source(source) == [("thing", "new", "old")]
+
+
 def test_the_message_names_the_columns_and_the_fix(tmp_path):
     path = tmp_path / "0149_partitioned_metadata_integrity.py"
     path.write_text(

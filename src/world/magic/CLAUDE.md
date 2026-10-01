@@ -339,12 +339,19 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 - `TechniqueGrant` — Authored sidecar (`models/technique_grant.py`) linking a
   `Technique` to an `ItemTemplate` (on-use delivery) or `Ritual` (SERVICE delivery).
   Exactly one vehicle enforced by `clean()` + partial UniqueConstraints.
-- `learn_technique(learner, technique, *, source, ap_cost=0, xp_cost=0)` — shared
-  commit seam in `services/technique_acquisition.py`. When `ap_cost > 0`, creates
+- `learn_technique(learner, technique, *, source, ap_cost=0, xp_cost=0, origin=TRAINED,
+  completing_progress=False)` — shared commit seam in
+  `services/technique_acquisition.py`. When `ap_cost > 0`, creates
   a `TechniqueProgress` meter instead of minting immediately (#2711); the learner
   fills the meter via `contribute_to_technique_progress` in subsequent sessions.
   When `ap_cost == 0`, mints `CharacterTechnique` immediately (the meter-completion
-  path or a free grant). Runs gift-owned → cap → (meter-or-mint) → announce.
+  path or a free grant). Runs gift-owned → duplicate → prerequisite → cap →
+  (meter-or-mint) → announce. **Prerequisite gate (#4097 fix round 2):** calls
+  `gift_acquisition.enforce_technique_prerequisites` (same gate `charge_and_learn`
+  uses), skipped for `origin=AcquisitionOrigin.GM_GRANT` (deliberate GM fiat) and
+  for `completing_progress=True` (a meter-fill mint — the check already ran at
+  that meter's creation). See `docs/systems/magic.md`'s "Technique Prerequisites"
+  section for the full wiring across all three acquisition routes.
 - **Technique progress meter (#2711).** `TechniqueProgress`
   (`models/technique_progress.py`) — per-(character × technique) development
   meter. `TechniqueProgressWeekly` — per-week cap tracker mirroring
@@ -1585,6 +1592,58 @@ event:
   choice + declaration composer) mounted in the combat panel.
 - `PathIntent` (`world/progression`) — pre-declared next path; the offer serializer
   pre-selects it when eligible.
+
+**Ultimates (#4098):** `models/ultimates.py` - `KnownUltimate` (`character` CASCADE,
+`technique` PROTECT, nullable `crossing` SET_NULL, `readied` bool; constraints: one
+row per `(character, technique)`, at most one `readied=True` per character). An
+ultimate is a `Technique` with `is_ultimate=True`, never a `CharacterTechnique` -
+every ordinary cast surface reads `CharacterTechnique` and so excludes ultimates by
+construction. Attaches via `PathGiftGrant.ultimate_techniques` (owned, major gifts
+only), `WorshippedBeing.ultimate_techniques` / `CompanionArchetype.ultimate_techniques`
+(bond, active-bond-only).
+
+- **Reveal:** `services/ultimates.py`'s `ultimate_reveal_for(sheet)`
+  derives the reveal fresh on every read, never an offer table - owned pools
+  (current Path x major Gift for plain Audere, new Path x major Gift for Audere
+  Majora), owned-known pools (any Path, still MAJOR), bond pools (active bond only),
+  filtered through #4097's `exclude_unmet_technique_requirements`. Grouped by
+  category (`Technique.archetype_alignment`, labels from
+  `AudereThreshold.label_for_category`). A KNOWN card carries name + description; a
+  CATEGORY (undiscovered) card carries the authored label only, never the
+  technique's identity; an UPGRADE card carries `upgrade_of_name`.
+- **Readied:** `choose_ultimate(sheet, choice_key)` (`@transaction.atomic`,
+  `select_for_update`) re-resolves under the lock to close a double-submit race
+  (stale read → `UltimateRevealClosed`), then `get_or_create`s the `KnownUltimate`
+  row and sets `readied=True`. Choosing readies; it does NOT cast. `readied_ultimate`
+  / `clear_readied_ultimate` / `castable_technique_named` / `has_reveal_cards` /
+  `audere_ultimate_state` round out the surface. `offer_audere`/`end_audere`/
+  `cross_threshold`/`end_audere_majora` each clear any readied pick at the right
+  lifecycle point (accept, end, crossing).
+- **Cast path:** `actions/types.py`'s `PlayerAction.is_ultimate` flags a readied
+  ultimate in the combat action list (`actions/player_interface.py`'s
+  `_combat_actions`). Telnet's `CmdDeclareTechnique._resolve_technique`/
+  `_resolve_technique_id` (`commands/combat.py`) resolve it by name only while an
+  active DECLARING round holds (`_combat_participant_or_none() is not None`) - never
+  through `CmdClashCommit`'s shared `_find_technique_id`, so an ultimate cannot reach
+  a clash contribution or a scene cast. Once declared, it resolves through the
+  ordinary `use_technique` pipeline like any other technique.
+- **Majora round block narrowing:** `any_character_mid_audere_majora_crossing`
+  (`audere_majora.py`) checks only `PendingAudereMajoraOffer` existence now, not the
+  whole Audere Majora condition lifetime - the original block froze every round for
+  the rest of the encounter, which meant a crosser could never act on the new Path's
+  ultimate. `is_mid_audere_majora_crossing` (single-character use) is unchanged.
+- **Telnet:** `offer_handlers.py`'s `UltimateRevealHandler` (keyword `"ultimate"`)
+  plus `format_ultimate_reveal`; the surge/crossing accept handlers append the
+  listing. Every listing snapshots its shown `choice_key`s onto
+  `caller.ndb.ultimate_reveal_choice_keys`; `accept ultimate <n>` refuses and
+  reprints rather than resolving blind if the pool changed since the snapshot.
+- **Deferred certain death:** see `world/vitals/CLAUDE.md`-adjacent coverage in
+  `docs/systems/INDEX.md`'s Vitals section - Soulfray's `character_loss` consequence
+  now calls `defer_or_apply_certain_death`/`apply_pending_certain_death`
+  (`world/vitals/services.py`) instead of killing synchronously, and only ever runs
+  that path inside a combat encounter.
+- Full detail: `docs/systems/magic.md`'s "Ultimates" section;
+  `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
 
 ### Sanctum (#1497 — TELNET+WEB)
 

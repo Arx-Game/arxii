@@ -67,6 +67,7 @@ from world.locations.constants import HolderType, LocationParentType, LocationRo
 from world.locations.models import LocationTenancy
 from world.magic.constants import GlimpseState, GlimpseTagAxis, RitualExecutionKind
 from world.magic.factories import (
+    AudereThresholdFactory,
     CharacterAuraFactory,
     CharacterGiftFactory,
     CharacterGlimpseTagFactory,
@@ -75,6 +76,7 @@ from world.magic.factories import (
     FacetFactory,
     GiftFactory,
     GlimpseTagFactory,
+    KnownUltimateFactory,
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
@@ -84,6 +86,7 @@ from world.magic.factories import (
     RitualFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
+    UltimateTechniqueFactory,
 )
 from world.magic.models import CharacterAura
 from world.progression.factories import CharacterPathHistoryFactory
@@ -1217,6 +1220,15 @@ class TestMagicSectionFull(TestCase):
             lifetime_earned=40,
         )
 
+        # --- Known ultimate (#4098) ---
+        cls.audere_threshold = AudereThresholdFactory()
+        cls.secret_technique = UltimateTechniqueFactory(
+            gift=cls.gift, name="Secretname", description="Secret effect"
+        )
+        cls.known_ultimate = KnownUltimateFactory(
+            character=cls.sheet, technique=cls.secret_technique
+        )
+
     def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(user=self.player.account)
@@ -1234,10 +1246,27 @@ class TestMagicSectionFull(TestCase):
         assert magic is not None
 
     def test_magic_has_all_expected_keys(self) -> None:
-        """Magic section contains gifts, motif, anima_ritual, aura, and resonances (#2032)."""
+        """Magic section contains gifts, motif, anima_ritual, aura, resonances, ultimates."""
         magic = self._get_magic()
-        expected_keys = {"gifts", "motif", "anima_ritual", "aura", "resonances"}
+        expected_keys = {"gifts", "motif", "anima_ritual", "aura", "resonances", "ultimates"}
         assert set(magic.keys()) == expected_keys
+
+    def test_ultimates_known(self) -> None:
+        """Known ultimates carry the technique's name/description and the authored label.
+
+        Same visibility as the spellbook (#4098 leak table): the owner reads the
+        discovered technique's real name/description, never the raw category word.
+        """
+        magic = self._get_magic()
+        assert magic["ultimates"] == [
+            {
+                "name": "Secretname",
+                "description": "Secret effect",
+                "label": self.audere_threshold.label_for_category(
+                    self.secret_technique.archetype_alignment
+                ),
+            }
+        ]
 
     # --- Gift tests ---
 
@@ -2763,7 +2792,16 @@ class TestCharacterSheetQueryCount(TestCase):
         # grants of different holder kinds and the pair still costs two queries,
         # however many places a character can walk into.
         # +1 (#3957): the ties block's single sides read, per 55.
-        with self.assertNumQueries(55):
+        # +1 (#4098 fix round 1): the magic section's known-ultimates read. Not a
+        # prefetch (an idmapper-shared CharacterSheet silently skips a to_attr
+        # prefetch that already ran once -- an ultimate picked mid-session would
+        # never show up on a later GET, reference-idmapper-defeats-to-attr-prefetch)
+        # -- one plain `KnownUltimate.objects.filter(character=sheet)` query per
+        # build, fired unconditionally. This fixture's character has discovered no
+        # ultimates, so AudereThreshold.cached_singleton() is never reached (the
+        # sub-builder skips it entirely when the list comes back empty) -- the
+        # honest cost here is +1, not +2.
+        with self.assertNumQueries(56):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -2990,7 +3028,19 @@ class TestPrefetchCompleteness(TestCase):
         #      spellbook holds. The per-form effect summaries are cached on their
         #      own TechniqueVariant rows and the variants themselves are prefetched,
         #      so nothing else here scales with technique or variant count.
-        with self.assertNumQueries(3):
+        #   4. KnownUltimate.objects.filter(character=sheet) (#4098 fix round 1) —
+        #      _build_magic_ultimates deliberately is NOT a ``to_attr`` prefetch: an
+        #      idmapper-shared CharacterSheet silently skips a to_attr prefetch that
+        #      already ran once (reference-idmapper-defeats-to-attr-prefetch), which
+        #      would hide an ultimate picked mid-session. One plain query per build
+        #      instead, fired unconditionally since there is no cached list to check
+        #      first. This fixture's character knows no ultimates, so
+        #      AudereThreshold.objects.cached_singleton() is never reached (the
+        #      sub-builder skips it entirely when the known-ultimates list is empty —
+        #      it would cost a query only on its first call ever for a row that's
+        #      missing, since ``.first()`` bypasses the identity map; a later call, or
+        #      any call once a row has been found once, is free).
+        with self.assertNumQueries(4):
             _build_magic(sheet)
 
     def test_story_zero_queries(self) -> None:

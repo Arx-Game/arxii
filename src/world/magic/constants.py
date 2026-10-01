@@ -716,3 +716,26 @@ class AcquisitionOrigin(models.TextChoices):
     ALTERNATE_SELF_GRANT = "alternate_self_grant", "Alternate Self Grant"
     AUTHORED = "authored", "Authored"
     GM_GRANT = "gm_grant", "GM Grant"
+
+
+class UltimateSource(models.TextChoices):
+    """Where an ultimate comes from at the reveal (#4098 decision 1)."""
+
+    OWNED = "owned", "Owned"
+    PATRON = "patron", "Patron"
+    COMPANION = "companion", "Companion"
+
+
+class UltimateCardKind(models.TextChoices):
+    """How a reveal card presents (#4098 decision 2)."""
+
+    KNOWN = "known", "Known"
+    UPGRADE = "upgrade", "Upgrade"
+    CATEGORY = "category", "Undiscovered"
+
+
+class AudereCeremony(models.TextChoices):
+    """Which ceremony a reveal belongs to (#4098 decision 12)."""
+
+    AUDERE = "audere", "Audere"
+    AUDERE_MAJORA = "audere_majora", "Audere Majora"

@@ -233,6 +233,7 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
     anima_ritual: null,
     aura: makeAura(),
     resonances: [],
+    ultimates: [],
     ...overrides,
   };
 }
@@ -334,6 +335,25 @@ describe('SpellbookTab', () => {
     mockPayload(makeMagic({ resonances: [] }));
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
     expect(screen.queryByTestId('spellbook-resonances')).not.toBeInTheDocument();
+  });
+
+  it('renders known ultimates by name with their authored category label (#4098)', () => {
+    mockPayload(
+      makeMagic({
+        ultimates: [{ name: 'Ember Ward', description: 'A ward', label: 'Wall' }],
+      })
+    );
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    const card = screen.getByTestId('spellbook-ultimates');
+    expect(within(card).getByText('Ember Ward')).toBeInTheDocument();
+    expect(within(card).getByText('Wall')).toBeInTheDocument();
+  });
+
+  it('omits the ultimates section when none are known', () => {
+    mockPayload(makeMagic({ ultimates: [] }));
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.queryByTestId('spellbook-ultimates')).not.toBeInTheDocument();
   });
 
   it('does not render workbench links for a foreign viewer', () => {

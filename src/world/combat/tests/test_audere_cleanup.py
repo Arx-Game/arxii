@@ -26,6 +26,10 @@ from world.magic.factories import (
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.vitals.constants import CharacterLifeState
+from world.vitals.factories import CharacterVitalsFactory
+from world.vitals.models import CharacterVitals
+from world.vitals.services import defer_or_apply_certain_death
 
 
 class CleanupAudereTeardownTests(TestCase):
@@ -142,3 +146,40 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
         cleanup_completed_encounter(self.encounter)
 
         assert not PendingAudereMajoraOffer.objects.filter(character_sheet=self.sheet).exists()
+
+
+class CleanupCertainDeathBackstopTests(TestCase):
+    """cleanup_completed_encounter is a backstop for a deferred certain death whose
+    death_deferred condition left the character without the ordinary
+    conditions.services._resolve_deferred_death_on_expiry seam ever running
+    (#4098 fix round 1) — e.g. a raw ConditionInstance delete bypassing
+    remove_condition entirely, which the round-duration countdown and some
+    interaction-removal/damage paths effectively do."""
+
+    def setUp(self) -> None:
+        self.audere, _majora = wire_audere_power_multipliers()
+        self.character = ObjectDBFactory(db_key="certain_death_backstop_char")
+        self.sheet = CharacterSheetFactory(character=self.character)
+        CharacterVitalsFactory(character_sheet=self.sheet)
+        self.encounter = CombatEncounterFactory()
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet
+        )
+
+    def _state(self) -> CharacterVitals:
+        return CharacterVitals.objects.get(character_sheet=self.sheet)
+
+    def test_backstop_applies_death_when_condition_left_without_the_expiry_seam(self) -> None:
+        ConditionInstanceFactory(target=self.character, condition=self.audere)
+        self.assertTrue(defer_or_apply_certain_death(self.sheet))
+        self.assertTrue(self._state().death_certain_pending)
+
+        # Raw delete — bypasses remove_condition, so
+        # _resolve_deferred_death_on_expiry never runs.
+        ConditionInstance.objects.filter(target=self.character, condition=self.audere).delete()
+
+        cleanup_completed_encounter(self.encounter)
+
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.DEAD)
+        self.assertFalse(state.death_certain_pending)

@@ -38,6 +38,7 @@ class CompanionArchetypeAdmin(admin.ModelAdmin):
     list_filter = ["domain"]
     search_fields = ["name"]
     ordering = ["domain", "name"]
+    filter_horizontal = ["ultimate_techniques"]
     inlines = [CompanionAbilityInline]
 
 

@@ -581,7 +581,13 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
     if thread.target_kind == TargetKind.TRAIT:
         return thread.target_trait_id in ctx.involved_traits
     if thread.target_kind == TargetKind.TECHNIQUE:
-        return thread.target_technique_id in ctx.involved_techniques
+        # #4097: carries through prerequisites - a thread on A also empowers
+        # B when B requires A (transitively), at the thread's full level.
+        # Cast power and paid pulls both resolve through this predicate, so
+        # both get the carry; the ambient capability sweep below
+        # (``_anchor_ambiently_active``) is deliberately left on the bare
+        # ``involved_techniques`` tuple - this task only widens in-action.
+        return thread.target_technique_id in ctx.involved_technique_closure
     if thread.target_kind == TargetKind.COVENANT_ROLE:
         sheet = thread.owner
         engaged_roles = sheet.character.covenant_roles.currently_engaged_roles()

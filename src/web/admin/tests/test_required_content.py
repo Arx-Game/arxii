@@ -10,6 +10,7 @@ from django.test import TestCase
 from web.admin.tuning import required_content as rc
 from world.conditions.factories import ConditionTemplateFactory
 from world.game_clock.factories import GameClockFactory
+from world.magic.constants import GiftKind
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -1009,3 +1010,157 @@ class TestRiskCalibrationsProbe(TestCase):
         result = rc._probe_risk_calibrations()
         self.assertFalse(result.present)
         self.assertEqual(result.missing, (RenownRisk.EXTREME,))
+
+
+class TestPathMajorGiftUltimatesProbe(TestCase):
+    def test_major_gift_grant_without_ultimate_is_missing(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import GiftFactory, PathGiftGrantFactory
+
+        grant = PathGiftGrantFactory(gift=GiftFactory(kind=GiftKind.MAJOR))
+        result = _probe_path_major_gift_ultimates()
+        self.assertFalse(result.present)
+        self.assertIn(f"{grant.path.name} / {grant.gift.name}", result.missing)
+
+    def test_minor_gift_grant_never_flagged(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import GiftFactory, PathGiftGrantFactory
+
+        PathGiftGrantFactory(gift=GiftFactory(kind=GiftKind.MINOR))
+        self.assertTrue(_probe_path_major_gift_ultimates().present)
+
+    def test_stocked_grant_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import PathGiftGrantFactory, UltimateTechniqueFactory
+
+        grant = PathGiftGrantFactory()
+        grant.ultimate_techniques.add(UltimateTechniqueFactory(gift=grant.gift))
+        self.assertTrue(_probe_path_major_gift_ultimates().present)
+
+
+class TestAudereConditionShapeProbe(TestCase):
+    """#4098 final review item 2: duration-shape + death_deferred, not just presence."""
+
+    def _well_formed_template(self, name: str) -> rc.ContentProbe:
+        from world.conditions.constants import DurationType
+        from world.mechanics.factories import DeathDeferredPropertyFactory
+
+        template = ConditionTemplateFactory(
+            name=name, default_duration_type=DurationType.UNTIL_END_OF_COMBAT
+        )
+        template.properties.add(DeathDeferredPropertyFactory())
+        return template
+
+    def test_missing_both_templates_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any(AUDERE_CONDITION_NAME in m for m in result.missing))
+        self.assertTrue(any(AUDERE_MAJORA_CONDITION_NAME in m for m in result.missing))
+
+    def test_round_limited_duration_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.conditions.constants import DurationType
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+        from world.mechanics.factories import DeathDeferredPropertyFactory
+
+        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
+            template = ConditionTemplateFactory(
+                name=name, default_duration_type=DurationType.ROUNDS
+            )
+            template.properties.add(DeathDeferredPropertyFactory())
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any("round-limited" in m for m in result.missing))
+
+    def test_missing_death_deferred_property_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.conditions.constants import DurationType
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
+            ConditionTemplateFactory(name=name, default_duration_type=DurationType.PERMANENT)
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any("death_deferred" in m for m in result.missing))
+
+    def test_well_formed_templates_are_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        self._well_formed_template(AUDERE_CONDITION_NAME)
+        self._well_formed_template(AUDERE_MAJORA_CONDITION_NAME)
+        result = _probe_audere_condition_shape()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestUltimatesHaveActionTemplateProbe(TestCase):
+    """#4098 final review item 4: an ultimate with no action_template is pickable
+    through Audere and never castable - a sentinel, not a runtime guard."""
+
+    def test_ultimate_with_no_action_template_is_missing(self) -> None:
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import UltimateTechniqueFactory
+
+        ultimate = UltimateTechniqueFactory(name="Test Castless Ultimate")
+        result = _probe_ultimates_have_action_template()
+        self.assertFalse(result.present)
+        self.assertIn(ultimate.name, result.missing)
+
+    def test_ordinary_technique_with_no_action_template_never_flagged(self) -> None:
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import TechniqueFactory
+
+        TechniqueFactory(name="Test Ordinary No Template")
+        result = _probe_ultimates_have_action_template()
+        self.assertTrue(result.present)
+
+    def test_ultimate_with_an_action_template_is_present(self) -> None:
+        from actions.factories import ActionTemplateFactory
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import UltimateTechniqueFactory
+
+        UltimateTechniqueFactory(
+            name="Test Castable Ultimate", action_template=ActionTemplateFactory()
+        )
+        result = _probe_ultimates_have_action_template()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestAudereUltimateCopyProbe(TestCase):
+    def test_placeholder_copy_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+        from world.magic.factories import AudereThresholdFactory
+
+        AudereThresholdFactory()
+        result = _probe_audere_ultimate_copy()
+        self.assertFalse(result.present)
+        self.assertIn("sword_reveal_label", result.missing)
+
+    def test_fully_authored_copy_is_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+        from world.magic.factories import AudereThresholdFactory
+
+        AudereThresholdFactory(
+            reveal_framing_text="The threads of fate pull taut.",
+            deferred_death_text="Death waits at the edge of the circle.",
+            sword_reveal_label="The Sword",
+            shield_reveal_label="The Shield",
+            crown_reveal_label="The Crown",
+        )
+        result = _probe_audere_ultimate_copy()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+    def test_missing_singleton_is_present_not_crashed(self) -> None:
+        """A missing `AudereThreshold` is the REQUIRED `audere-threshold` row's failure
+        state (fix round 1) - this probe must not double-report it, and must not crash
+        reading fields off a `None` singleton."""
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+
+        result = _probe_audere_ultimate_copy()
+        self.assertTrue(result.present)

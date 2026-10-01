@@ -11,12 +11,47 @@ An authored advancement target a character can spend XP to acquire — e.g. `Cla
 _Avoid_: perk, purchase, upgrade.
 
 **Requirement**:
-An authored gate attached to an Unlock, evaluated per character through `is_met_by_character(character) -> (bool, str)`. Concrete kinds include Trait, Level, ClassLevel, MultiClass, Tier, Achievement, Relationship, Legend, Item, and MajorGiftTechnique requirements. New kinds MUST be added to the hardcoded `requirement_types` list in `services/spends.py` — an omitted entry silently never evaluates (see `reference-requirement-types-hardcoded-list`).
-_Avoid_: prerequisite, condition (reserve "condition" for the conditions system).
+An authored gate attached to an Unlock (or, as of #4097, a Technique), evaluated per
+character through `is_met_by_character(character) -> (bool, str)`. Concrete kinds
+include Trait, Level, ClassLevel, MultiClass, Tier, Achievement, Relationship, Legend,
+Item, MajorGiftTechnique, GiftHeld, and TechniqueKnown requirements.
+`AbstractUnlockRequirement` carries four polymorphic unlock targets
+(`class_level_unlock` / `thread_crossing_threshold` / `path` / `technique`), exactly
+one set per row. New requirement kinds are picked up automatically by
+`concrete_requirement_types()` (`services/spends.py`), which discovers every concrete
+subclass via `apps.get_models()`; this replaced a hand-maintained list where an
+omitted entry silently never evaluated (#4097; see
+`reference-requirement-types-hardcoded-list` for the failure mode this discovery
+mechanism retired).
+_Avoid_: condition (reserve "condition" for the conditions system). "Prerequisite" is
+fine informally, but see **Technique prerequisite** below for the narrower, specific
+#4097 sense (a Technique's own `AbstractUnlockRequirement` rows).
 
-**MajorGiftTechniqueRequirement** (#2440 ruling 4):
-The level-2 Durance gate: a character must know >= `minimum_techniques` (default 3) techniques of their single MAJOR gift (`Gift.kind == GiftKind.MAJOR`, resolved via `CharacterGift`) — a COUNT, not completeness (a gift can grow many, several level-gated, techniques over a character's life). Minor-gift techniques never count. Seeded onto the level-2 `ClassLevelUnlock` by `seed_major_gift_technique_level_requirement` (`world.progression.seeds`).
-_Avoid_: "starter pool complete" (CG only hands out 1-3 picks; the rest are meant to be filled out in play via Academy/Archive TRAIN offers, #2440).
+**Technique prerequisite** (#4097):
+A requirement row (most commonly `TechniqueKnownRequirement`, naming another
+technique the learner must already know) authored against
+`AbstractUnlockRequirement.technique`, gating whether a character may *learn* that
+technique at all. Checked by `check_requirements_for_technique`, enforced by
+`charge_and_learn` (raises `TechniqueRequirementsNotMet` on failure), and excluded
+from CG pick lists outright (`get_technique_options(..., exclude_gated=True)`) since a
+draft has no character to evaluate the gate against. `TechniqueKnownRequirement` rows
+double as the prerequisite graph `world.magic.services.technique_prerequisites
+.prerequisite_technique_ids` walks for **Thread carry** (see
+`magic/AGENT_GLOSSARY.md`): a thread woven into a prerequisite technique empowers
+everything that technique transitively unlocks.
+_Avoid_: unlock requirement (reserve for the Path/ClassLevelUnlock/ThreadCrossing
+targets); gate condition.
+
+**MajorGiftTechniqueRequirement** (#2440 ruling 4, extended #4097):
+The level-2 Durance gate: a character must know >= `minimum_techniques` (default 3)
+techniques of a MAJOR gift (`Gift.kind == GiftKind.MAJOR`, resolved via
+`CharacterGift`): a COUNT, not completeness (a gift can grow many, several
+level-gated, techniques over a character's life). Minor-gift techniques never count.
+`gift` named (#4097) counts only that gift's techniques (lineage-aware); `gift` blank
+counts the best of any single held major gift a character holds (counts are never
+summed across multiple major gifts). Seeded onto the level-2 `ClassLevelUnlock` by
+`seed_major_gift_technique_level_requirement` (`world.progression.seeds`).
+_Avoid_: "starter pool complete" (CG only hands out 1-3 picks; the rest are meant to be filled out in play via Academy/Archive TRAIN offers, #2440); "the character's major gift" in the singular, since a character may hold more than one major gift over their life, and this gate reads the best of them when `gift` is blank.
 
 **ClassLevelAdvancement**:
 The receipt for a single within-tier class-level advance performed through the Ritual of the Durance; it records level_before/after, officiant, ritual, and scene, and survives character death. Its tier-crossing sibling is `AudereMajoraCrossing`, both sharing `AbstractClassLevelAdvancement`.

@@ -1672,6 +1672,7 @@
   - technique_progress <- magic.TechniqueProgress
   - technique_progress_weekly <- magic.TechniqueProgressWeekly
   - threads <- magic.Thread
+  - known_ultimates <- magic.KnownUltimate
   - thread_weaving_unlocks <- magic.CharacterThreadWeavingUnlock
   - duels_won <- combat.CombatEncounter
   - summoned_combatants <- combat.CombatOpponent
@@ -2045,6 +2046,8 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
@@ -2752,6 +2755,8 @@
   - ability -> companions.CompanionAbility [FK]
 
 ### CompanionArchetype
+**Foreign Keys:**
+  - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - abilities <- companions.CompanionAbility
   - companions <- companions.Companion
@@ -5226,6 +5231,8 @@
   - threshold -> magic.AudereMajoraThreshold [FK]
   - chosen_path -> classes.Path [FK]
   - legend_entry -> societies.LegendEntry [OneToOne] (nullable)
+**Pointed to by:**
+  - ultimates_discovered <- magic.KnownUltimate
 
 ### AudereMajoraFaithVariant
 **Foreign Keys:**
@@ -5470,6 +5477,8 @@
   - children <- magic.Gift
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - major_gift_technique_requirements <- progression.MajorGiftTechniqueRequirement
+  - gift_held_requirements <- progression.GiftHeldRequirement
   - gift_unlocks <- magic.GiftUnlock
   - path_grants <- magic.PathGiftGrant
   - tradition_grants <- magic.TraditionGiftGrant
@@ -5513,6 +5522,12 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - auderethreshold_set <- magic.AudereThreshold
+
+### KnownUltimate
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK]
+  - crossing -> magic.AudereMajoraCrossing [FK] (nullable)
 
 ### LevelPowerConfig
 
@@ -5575,6 +5590,7 @@
   - path -> classes.Path [FK]
   - gift -> magic.Gift [FK]
   - starter_techniques -> magic.Technique [M2M]
+  - ultimate_techniques -> magic.Technique [M2M]
 
 ### PathRitualGrant
 **Foreign Keys:**
@@ -5979,21 +5995,39 @@
   - removed_conditions <- magic.TechniqueRemovedCondition
   - treatments <- magic.TechniqueTreatment
   - damage_profiles <- magic.TechniqueDamageProfile
+  - traitrequirement_requirements <- progression.TraitRequirement
+  - levelrequirement_requirements <- progression.LevelRequirement
+  - classlevelrequirement_requirements <- progression.ClassLevelRequirement
+  - multiclassrequirement_requirements <- progression.MultiClassRequirement
+  - achievementrequirement_requirements <- progression.AchievementRequirement
+  - relationshiprequirement_requirements <- progression.RelationshipRequirement
+  - legendrequirement_requirements <- progression.LegendRequirement
+  - tierrequirement_requirements <- progression.TierRequirement
+  - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
+  - required_by_requirements <- progression.TechniqueKnownRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
+  - ultimate_for_path_gifts <- magic.PathGiftGrant
   - granted_by_tradition_gifts <- magic.TraditionGiftGrant
   - variants <- magic.TechniqueVariant
   - grants <- magic.TechniqueGrant
   - progress_records <- magic.TechniqueProgress
   - progress_weekly <- magic.TechniqueProgressWeekly
   - anchored_threads <- magic.Thread
+  - known_by_characters <- magic.KnownUltimate
+  - ultimate_for_companion_archetypes <- companions.CompanionArchetype
   - companion_abilities <- companions.CompanionAbility
   - alternate_self_grants <- forms.AlternateSelf
   - train_offers <- npc_services.TrainOfferDetails
   - scene_action_requests <- scenes.SceneActionRequest
+  - ultimate_for_beings <- worship.WorshippedBeing
 
 ### TechniqueAppliedCondition
 **Foreign Keys:**
@@ -6174,6 +6208,8 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### ThreadLevelUnlock
@@ -7281,6 +7317,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - achievement -> achievements.Achievement [FK]
 
 ### CharacterPathHistory
@@ -7316,6 +7353,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - character_class -> classes.CharacterClass [FK]
 
 ### ClassLevelUnlock
@@ -7332,6 +7370,8 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### ClassXPCost
@@ -7344,6 +7384,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK]
 
 ### CohortEnrollment
@@ -7383,11 +7424,20 @@
 **Foreign Keys:**
   - account -> evennia.AccountDB [OneToOne]
 
+### GiftHeldRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - gift -> magic.Gift [FK] (nullable)
+
 ### ItemRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
   - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
@@ -7419,12 +7469,14 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
 
 ### LevelRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
 
 ### LevelStatPointSpend
 **Foreign Keys:**
@@ -7436,6 +7488,8 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - gift -> magic.Gift [FK] (nullable)
 
 ### MaturationSpend
 **Foreign Keys:**
@@ -7454,6 +7508,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - required_classes -> classes.CharacterClass [M2M]
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
@@ -7486,13 +7541,23 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - required_type -> relationships.RelationshipType [FK] (nullable)
+
+### TechniqueKnownRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - required_technique -> magic.Technique [FK]
 
 ### TierRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -7503,6 +7568,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - trait -> traits.Trait [FK]
 
 ### TraitXPCost
@@ -10409,6 +10475,7 @@
 - `advance_bleed_out(character_sheet: 'CharacterSheet | None') -> 'bool' - Advance staged bleed-out conditions toward death.`
 - `advance_surrounded(character_sheet: 'CharacterSheet | None', *, battle: 'Battle') -> 'bool' - Advance staged Surrounded (battle acute-peril) conditions toward death (#1733).`
 - `apply_clamped_chronic_damage(character_sheet: 'CharacterSheet', amount: 'int') -> 'int' - Reduce health by ``amount`` but never to/below the knockout floor, never increasing it.`
+- `apply_pending_certain_death(character_sheet: 'CharacterSheet') -> 'bool' - Apply a deferred certain death once nothing defers it any more (#4098). True = died.`
 - `attempt_wake(character_sheet: 'CharacterSheet | None', *, in_combat_tick: 'bool' = False, destination_room: 'ObjectDB | None' = None) -> 'WakeResult' - Attempt to wake from Unconscious: one Endurance check per round.`
 - `calculate_death_difficulty(*, health_pct: 'float') -> 'int' - Scale death check difficulty by depth of negative health.`
 - `calculate_knockout_difficulty(*, health_pct: 'float') -> 'int' - Scale knockout check difficulty by how far below 20% health.`
@@ -10418,6 +10485,7 @@
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `conscious_bystander_present(room: 'ObjectDB | None', *, subject_id: 'int', exclude_ids: 'frozenset[int]' = frozenset()) -> 'bool' - True if anyone but ``subject_id`` present in ``room`` is conscious (can_act).`
 - `covenant_role_health(character: 'object', level: 'int') -> 'int' - Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged`
+- `defer_or_apply_certain_death(character_sheet: 'CharacterSheet') -> 'bool' - Soulfray made this death certain (#4098 decision 9). True when deferred.`
 - `derive_base_max_health(character_sheet: 'CharacterSheet') -> 'int' - Derive base_max_health = class stage-rate sum + stamina term + covenant-role armor.`
 - `derive_character_status(character_sheet: 'CharacterSheet | None') -> 'str' - Derive a coarse, read-only life-status string for the wire/API.`
 - `frailty_floor_reached(character_sheet: 'CharacterSheet') -> 'bool' - True when age-bled max health has crossed the dying floor (#2756).`
@@ -10669,6 +10737,7 @@
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - tarot_cards -> tarot.TarotCard [M2M]
+  - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant

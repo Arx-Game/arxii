@@ -157,6 +157,12 @@ export interface PlayerAction {
   available_fury_tiers?: FuryTierOption[];
   /** Eligible fury anchors (bonds) that can cap fury commitment (#1543). */
   eligible_fury_anchors?: FuryAnchorOption[];
+  /**
+   * Whether this technique is a readied ultimate for the current Audere/Audere
+   * Majora combat declaration (#4098). Only ever true inside a COMBAT
+   * engagement while the reveal holds — undefined/false everywhere else.
+   */
+  is_ultimate?: boolean;
 }
 
 export interface PlayerActionsResponse {

@@ -149,7 +149,16 @@ class AllyWardReactiveCostTests(TestCase):
         room_text_no_names = room.call_args.args[1].replace(str(ally), "").replace(str(caster), "")
         self.assertNotRegex(room_text_no_names, r"\d")
 
-    def test_consented_ward_fires_past_zero_and_accrues_for_the_caster(self) -> None:
+    def test_consented_ward_out_of_combat_stops_at_zero_and_still_accrues(self) -> None:
+        """Out of combat, a consented ward's reactive spend clamps at zero rather
+        than drawing life force (#4098 Task 6, owner ruling: Soulfray kills only
+        in combat). The caster has no CombatEncounter/CombatParticipant at all
+        here, so ``active_combat_engagement_for`` finds nothing and
+        ``_try_spend_reactive`` falls through to ``lethal=False`` -
+        ``deduct_anima`` then clamps the spend to the caster's available anima
+        (0), so ``deficit`` is 0, not ``reactive_anima_cost``. Soulfray still
+        accrues (consent means the ward fires regardless), just with nothing to
+        draw past zero - severity stays below the death-risk stages."""
         ensure_force_field_content()
         template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
         caster = CharacterSheetFactory().character
@@ -174,7 +183,7 @@ class AllyWardReactiveCostTests(TestCase):
         caster_anima.refresh_from_db()
         self.assertEqual(caster_anima.current, 0)
         accrue.assert_called_once()
-        self.assertEqual(accrue.call_args.kwargs["deficit"], template.reactive_anima_cost)
+        self.assertEqual(accrue.call_args.kwargs["deficit"], 0)
         self.assertEqual(accrue.call_args.kwargs["character"], caster)
 
     def test_unconsented_ward_at_zero_still_fizzles(self) -> None:

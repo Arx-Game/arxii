@@ -6,14 +6,18 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
+    CharacterGiftFactory,
     EffectTypeFactory,
     GiftFactory,
     ResonanceFactory,
     RestrictionFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
+    UltimateTechniqueFactory,
 )
+from world.roster.factories import RosterTenureFactory
 
 
 class TechniqueStyleViewSetTest(APITestCase):
@@ -126,6 +130,7 @@ class GiftViewSetTest(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = AccountFactory()
+        cls.staff_user = AccountFactory(is_staff=True)
         cls.resonance = ResonanceFactory()
         cls.gift = GiftFactory(name="Test Shadow Majesty")
 
@@ -188,6 +193,32 @@ class GiftViewSetTest(APITestCase):
         url = reverse("magic:gift-detail", args=[gift.pk])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_non_staff_detail_hides_ultimate_techniques_and_count(self):
+        """Non-staff never see an ultimate in a gift's techniques or its count (#4098)."""
+        gift = GiftFactory(name="Test Catalog Leak Gift")
+        TechniqueFactory(gift=gift, name="Ordinary Technique")
+        ultimate = UltimateTechniqueFactory(gift=gift, name="Secret Ultimate")
+        self.client.force_authenticate(user=self.user)
+        url = reverse("magic:gift-detail", args=[gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["techniques"]]
+        self.assertNotIn(ultimate.name, technique_names)
+        self.assertEqual(response.data["technique_count"], 1)
+
+    def test_staff_detail_includes_ultimate_techniques_and_count(self):
+        """Staff still see ultimates in a gift's techniques and its count (#4098)."""
+        gift = GiftFactory(name="Test Catalog Staff Gift")
+        TechniqueFactory(gift=gift, name="Ordinary Technique Two")
+        ultimate = UltimateTechniqueFactory(gift=gift, name="Secret Ultimate Two")
+        self.client.force_authenticate(user=self.staff_user)
+        url = reverse("magic:gift-detail", args=[gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["techniques"]]
+        self.assertIn(ultimate.name, technique_names)
+        self.assertEqual(response.data["technique_count"], 2)
 
 
 class TechniqueViewSetTest(APITestCase):
@@ -367,6 +398,87 @@ class TechniqueViewSetTest(APITestCase):
         url = reverse("magic:technique-detail", args=[technique.pk])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_non_staff_list_excludes_ultimates(self):
+        """Non-staff GET of the technique catalog never contains an ultimate (#4098)."""
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Test Secret Ultimate")
+        self.client.force_authenticate(user=self.user)
+        url = reverse("magic:technique-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"] if isinstance(response.data, dict) else response.data
+        names = [t["name"] for t in results]
+        self.assertNotIn(ultimate.name, names)
+
+    def test_non_staff_detail_404s_for_ultimate(self):
+        """Non-staff cannot retrieve an ultimate technique by id either (#4098)."""
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Test Secret Ultimate Detail")
+        self.client.force_authenticate(user=self.user)
+        url = reverse("magic:technique-detail", args=[ultimate.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_staff_list_includes_ultimates(self):
+        """Staff GET of the technique catalog still contains ultimates (#4098)."""
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Test Staff Visible Ultimate")
+        self.client.force_authenticate(user=self.staff_user)
+        url = reverse("magic:technique-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"] if isinstance(response.data, dict) else response.data
+        names = [t["name"] for t in results]
+        self.assertIn(ultimate.name, names)
+
+
+class CharacterGiftViewSetUltimateLeakTests(APITestCase):
+    """#4098 final fix round 2, item 1: gift_detail.techniques must never leak an
+    ultimate through CharacterGiftViewSet's cached_techniques prefetch, mirroring
+    the fix already applied to GiftViewSet/TechniqueViewSet."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = AccountFactory(username="cg_leak_staff", is_staff=True)
+        cls.owner_account = AccountFactory(username="cg_leak_owner")
+        cls.sheet = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry__character_sheet=cls.sheet,
+            player_data__account=cls.owner_account,
+        )
+        cls.gift = GiftFactory(name="Test CG Leak Gift")
+        cls.ordinary = TechniqueFactory(gift=cls.gift, name="Test CG Leak Ordinary")
+        cls.ultimate = UltimateTechniqueFactory(gift=cls.gift, name="Test CG Leak Ultimate")
+        cls.character_gift = CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
+
+    def test_owner_gift_detail_never_contains_an_ultimate(self):
+        """A non-staff player holding the gift never sees the ultimate's name or
+        description via gift_detail.techniques."""
+        self.client.force_authenticate(user=self.owner_account)
+        url = reverse("magic:character-gift-detail", args=[self.character_gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["gift_detail"]["techniques"]]
+        self.assertNotIn(self.ultimate.name, technique_names)
+        self.assertIn(self.ordinary.name, technique_names)
+
+    def test_owner_list_never_contains_an_ultimate(self):
+        """Same check on the list endpoint (no pagination class on this ViewSet)."""
+        self.client.force_authenticate(user=self.owner_account)
+        url = reverse("magic:character-gift-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data["results"] if isinstance(response.data, dict) else response.data
+        row = next(r for r in rows if r["id"] == self.character_gift.pk)
+        technique_names = [t["name"] for t in row["gift_detail"]["techniques"]]
+        self.assertNotIn(self.ultimate.name, technique_names)
+
+    def test_staff_gift_detail_still_contains_the_ultimate(self):
+        """Staff still see everything — the gate is non-staff only."""
+        self.client.force_authenticate(user=self.staff_user)
+        url = reverse("magic:character-gift-detail", args=[self.character_gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["gift_detail"]["techniques"]]
+        self.assertIn(self.ultimate.name, technique_names)
 
 
 class FacetViewSetTest(APITestCase):

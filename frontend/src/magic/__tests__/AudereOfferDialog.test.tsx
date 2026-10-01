@@ -44,6 +44,7 @@ const OFFER: PendingAudereOffer = {
   intensity_bonus: 2,
   anima_pool_bonus: 10,
   advisory_text: '',
+  reveal_framing_text: '',
   created_at: '2026-06-01T00:00:00Z',
 };
 
@@ -110,6 +111,26 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
 
     await screen.findByRole('alertdialog');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('renders the reveal framing line inline as the tail of the offer paragraph (#4098)', async () => {
+    renderGate([{ ...OFFER, reveal_framing_text: 'PLACEHOLDER framing' }]);
+
+    await screen.findByRole('alertdialog');
+    const framing = screen.getByTestId('audere-reveal-framing');
+    expect(framing).toHaveTextContent('PLACEHOLDER framing');
+    // Demo fidelity: the framing sentence is the TAIL of the same paragraph as
+    // the offer text, not a second, separately styled paragraph.
+    const offerParagraph = screen.getByText(/Battered down\. Break through\./);
+    expect(offerParagraph.tagName).toBe('P');
+    expect(offerParagraph).toContainElement(framing);
+  });
+
+  it('renders no reveal framing line when reveal_framing_text is empty (#4098)', async () => {
+    renderGate([{ ...OFFER, reveal_framing_text: '' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.queryByTestId('audere-reveal-framing')).not.toBeInTheDocument();
   });
 
   it('clicking "Break Through" responds with { offer_id, accept: true } and closes on success', async () => {
