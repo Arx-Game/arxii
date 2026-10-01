@@ -473,6 +473,32 @@ class UseItemAction(Action):
         # instead of replacing; only composite-capable traits accept it.
         blend = bool(kwargs.get("blend"))
 
+        # TechniqueGrant hook: if the item template has a grant, learn the technique.
+        from world.magic.models import TechniqueGrant  # noqa: PLC0415
+
+        grant = (
+            TechniqueGrant.objects.filter(item_template=item_instance.template)
+            .select_related("technique")
+            .first()
+        )
+        # Prerequisite pre-check (#4097 fix round 2): run BEFORE use_item() so an
+        # item carrying a gated TechniqueGrant is never consumed on a refusal.
+        # use_item() is its own @transaction.atomic block that commits the moment
+        # it returns, so a post-use raise can't be rolled back to un-consume the
+        # item — the check has to happen before the charge, not after.
+        if grant is not None:
+            from world.progression.services.spends import (  # noqa: PLC0415
+                check_requirements_for_technique,
+            )
+
+            met, failed = check_requirements_for_technique(actor, grant.technique)
+            if not met:
+                from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
+
+                return ActionResult(
+                    success=False, message=TechniqueRequirementsNotMet(failed).user_message
+                )
+
         try:
             result = use_item(
                 item_instance=item_instance,
@@ -485,14 +511,6 @@ class UseItemAction(Action):
         except ItemError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        # TechniqueGrant hook: if the item template has a grant, learn the technique.
-        from world.magic.models import TechniqueGrant  # noqa: PLC0415
-
-        grant = (
-            TechniqueGrant.objects.filter(item_template=item_instance.template)
-            .select_related("technique")
-            .first()
-        )
         if grant is not None:
             # Success predicate: check_result is None (no check) or success_level > 0.
             check_ok = result.check_result is None or result.check_result.success_level > 0
