@@ -1,1 +1,1 @@
-0176_soulfrayconfig_social_safety_bonus
+0178_technique_personalization_constraints

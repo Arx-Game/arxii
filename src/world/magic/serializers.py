@@ -30,6 +30,7 @@ from world.magic.constants import (
     ALTERATION_TIER_CAPS,
     AnimaContributionKind,
     GlimpseTagAxis,
+    RestrictionKind,
     TargetKind,
     anima_band_for,
     is_imbuing_ritual,
@@ -403,7 +404,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
     restriction_ids = serializers.PrimaryKeyRelatedField(
         source="restrictions",
         many=True,
-        queryset=Restriction.objects.all(),
+        queryset=Restriction.objects.filter(kind=RestrictionKind.DESIGN),
         required=False,
     )
     target_spec = serializers.SerializerMethodField()

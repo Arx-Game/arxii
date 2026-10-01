@@ -36,6 +36,7 @@ PROSE_FIELD_NAMES = frozenset(
         "announce_template",
         "arrival_verb",
         "authored_ic_framing",
+        "cast_narration",
         "custom_description",
         "default_description_template",
         "departure_verb",

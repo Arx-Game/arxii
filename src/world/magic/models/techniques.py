@@ -25,7 +25,9 @@ from world.achievements.models import DiscoverableContent
 from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
 from world.magic.constants import (
+    CUSTOM_TECHNIQUE_NAME_MAX_LENGTH,
     AcquisitionOrigin,
+    RestrictionKind,
     TechniqueCategory,
     TechniqueFunction,
     TechniqueReach,
@@ -204,7 +206,32 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     power_bonus = models.PositiveIntegerField(
         default=10,
-        help_text="Power bonus granted when this restriction is applied.",
+        help_text=(
+            "DESIGN: refunded against a design's power cost in the technique builder. "
+            "PRICE: added to the caster's power on every cast, as a power-ledger term."
+        ),
+    )
+    kind = models.CharField(
+        max_length=10,
+        choices=RestrictionKind.choices,
+        default=RestrictionKind.DESIGN,
+        help_text=(
+            "DESIGN: limits a technique design and refunds its builder budget. "
+            "PRICE: a visible cost a caster attaches to their own hold of a technique; "
+            "its power bonus is added to every cast (#4099)."
+        ),
+    )
+    creation_point_cost = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="PRICE only: character-creation points to take this price. Blank = "
+        "not offered in creation.",
+    )
+    cast_narration = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="PRICE only: the clause cast narration adds when the caster pays this "
+        "price. Blank = the price's name.",
     )
     allowed_effect_types = models.ManyToManyField(
         EffectType,
@@ -218,6 +245,13 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     class Meta:
         verbose_name = "Restriction"
         verbose_name_plural = "Restrictions"
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(creation_point_cost__isnull=True)
+                | models.Q(kind=RestrictionKind.PRICE),
+                name="restriction_creation_cost_price_only",
+            ),
+        ]
 
     class NaturalKeyConfig:
         fields = ["name"]
@@ -334,6 +368,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         Restriction,
         blank=True,
         related_name="techniques",
+        limit_choices_to={"kind": RestrictionKind.DESIGN},
         help_text="Restrictions applied to this technique for power bonuses.",
     )
     level = models.PositiveIntegerField(
@@ -1236,14 +1271,72 @@ class CharacterTechnique(SharedMemoryModel):
             "vow-dim path). Null = permanently learned or granted by another source."
         ),
     )
+    custom_name = models.CharField(
+        max_length=CUSTOM_TECHNIQUE_NAME_MAX_LENGTH,
+        blank=True,
+        help_text="The player's own name for this technique (#4099). Display only, never "
+        "a lookup key; blank = the catalog name.",
+    )
+    custom_description = models.TextField(
+        blank=True,
+        help_text="The player's own look and feel for this technique (#4099). Blank = the "
+        "catalog description.",
+    )
+    price = models.ForeignKey(
+        "arxii.Restriction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="paying_holds",
+        limit_choices_to={"kind": RestrictionKind.PRICE},
+        help_text="The price this character pays to cast it (#4099); its power bonus "
+        "enters every cast.",
+    )
+    early_form = models.ForeignKey(
+        "arxii.TechniqueVariant",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="early_holds",
+        help_text="A specialized form bought in creation before the gift thread reaches "
+        "its level (#4099). Applies at its own resonance only.",
+    )
 
     class Meta:
         unique_together = ["character", "technique"]
         verbose_name = "Character Technique"
         verbose_name_plural = "Character Techniques"
+        constraints = [
+            # Computed (not literal) dash characters: the identifier-dashes linter flags
+            # a literal em/en-dash in a `*name*` kwarg as a likely typo, but this
+            # constraint's whole job is detecting that exact character, not naming
+            # anything (#4099).
+            models.CheckConstraint(
+                check=~models.Q(custom_name__contains=chr(0x2014))
+                & ~models.Q(custom_name__contains=chr(0x2013)),
+                name="character_technique_custom_name_no_dash",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.technique} on {self.character}"
+
+    def clean(self) -> None:
+        errors: dict[str, str] = {}
+        if self.price_id is not None and self.price.kind != RestrictionKind.PRICE:
+            errors["price"] = "Only a PRICE restriction can be a price."
+        if (
+            self.early_form_id is not None
+            and self.early_form.parent_technique_id != self.technique_id
+        ):
+            errors["early_form"] = "The early form must be a form of this technique."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def display_name(self) -> str:
+        """What the owner calls this technique: their own name, else the catalog's."""
+        return self.custom_name or self.technique.name
 
 
 class TechniqueOutcomeModifier(NaturalKeyMixin, SharedMemoryModel):

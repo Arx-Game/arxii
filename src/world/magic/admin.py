@@ -249,7 +249,8 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
 
 @admin.register(Restriction)
 class RestrictionAdmin(admin.ModelAdmin):
-    list_display = ["name", "power_bonus", "get_effect_types"]
+    list_display = ["name", "power_bonus", "kind", "creation_point_cost", "get_effect_types"]
+    list_filter = ["kind"]
     search_fields = ["name"]
     filter_horizontal = ["allowed_effect_types"]
 
@@ -952,8 +953,8 @@ class CharacterTraditionAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterTechnique)
 class CharacterTechniqueAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character"]
-    list_display = ["character", "technique", "acquired_at"]
+    autocomplete_fields = ["character", "price", "early_form"]
+    list_display = ["character", "technique", "custom_name", "price", "acquired_at"]
     list_filter = ["technique__gift", "technique__effect_type"]
     search_fields = ["character__character__db_key", "technique__name"]
     date_hierarchy = "acquired_at"
@@ -1760,6 +1761,7 @@ class SignatureMotifBonusAdmin(admin.ModelAdmin):
         "required_resonance",
         "flat_intensity_delta",
         "min_crossing_level",
+        "creation_point_cost",
     ]
     list_filter = ["required_facet", "required_resonance", "min_crossing_level"]
     search_fields = ["name", "narrative_snippet"]
@@ -2336,6 +2338,7 @@ class TechniqueVariantAdmin(admin.ModelAdmin):
         "unlock_thread_level",
         "intensity_delta",
         "control_delta",
+        "creation_point_cost",
     ]
     list_filter = ["resonance", "unlock_thread_level"]
     search_fields = ["name_override", "parent_technique__name"]
