@@ -22,7 +22,11 @@ class TechniqueGrant(SharedMemoryModel):
         "arxii.Technique",
         on_delete=models.PROTECT,
         related_name="grants",
-        help_text="The technique this grant teaches.",
+        limit_choices_to={"is_ultimate": False},
+        help_text=(
+            "The technique this grant teaches. Never an ultimate (#4098) — an "
+            "ultimate is reachable only by discovering it at Audere/Audere Majora."
+        ),
     )
     item_template = models.ForeignKey(
         "arxii.ItemTemplate",
