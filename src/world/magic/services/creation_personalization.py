@@ -36,7 +36,13 @@ def parse_personalization_picks(
     selected = set(technique_ids)
     picks: list[TechniquePersonalizationPick] = []
     for key, entry in raw.items():
-        technique_id = int(key)
+        try:
+            technique_id = int(key)
+        except (TypeError, ValueError):
+            # A key the serializer's own shape check would have rejected (e.g. a
+            # non-decimal digit character `int()` can't parse) — skip rather than
+            # crash every later read of this draft (#4099 fix round 1).
+            continue
         if technique_id not in selected or not isinstance(entry, dict):
             continue
         picks.append(
@@ -187,19 +193,31 @@ def priced_personalization_lines(
     lines: list[PricedPersonalizationLine] = []
     for pick in picks:
         technique_name = techniques_by_id[pick.technique_id].name
-        for row, label in (
-            (bonuses.get(pick.signature_bonus_id), "name"),
-            (forms.get(pick.early_form_id), "name_override"),
-            (prices.get(pick.price_id), "name"),
-        ):
-            if row is None or row.creation_point_cost is None:
-                continue
-            option_name = getattr(row, label, "") or technique_name
+        bonus = bonuses.get(pick.signature_bonus_id)
+        if bonus is not None and bonus.creation_point_cost is not None:
             lines.append(
                 PricedPersonalizationLine(
                     technique_name=technique_name,
-                    option_name=option_name,
-                    cost=row.creation_point_cost,
+                    option_name=bonus.name or technique_name,
+                    cost=bonus.creation_point_cost,
+                )
+            )
+        form = forms.get(pick.early_form_id)
+        if form is not None and form.creation_point_cost is not None:
+            lines.append(
+                PricedPersonalizationLine(
+                    technique_name=technique_name,
+                    option_name=form.name_override or technique_name,
+                    cost=form.creation_point_cost,
+                )
+            )
+        price = prices.get(pick.price_id)
+        if price is not None and price.creation_point_cost is not None:
+            lines.append(
+                PricedPersonalizationLine(
+                    technique_name=technique_name,
+                    option_name=price.name or technique_name,
+                    cost=price.creation_point_cost,
                 )
             )
     return lines

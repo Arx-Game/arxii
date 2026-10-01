@@ -1820,17 +1820,14 @@ class CharacterDraft(SharedMemoryModel):
         if not picks:
             return
         techniques_by_id = Technique.objects.in_bulk([p.technique_id for p in picks])
-        # A `list.extend` generator of plain dict literals doesn't structurally satisfy
-        # `CGPointBreakdownEntry` for `ty` the way a literal `.append()` call's argument
-        # does, so this stays a loop rather than the `list.extend` form (#4099).
-        for line in priced_personalization_lines(picks, techniques_by_id=techniques_by_id):
-            breakdown.append(  # noqa: PERF401
-                {
-                    "category": "magic",
-                    "item": f"{line.technique_name}: {line.option_name}",
-                    "cost": line.cost,
-                }
+        breakdown.extend(
+            CGPointBreakdownEntry(
+                category="magic",
+                item=f"{line.technique_name}: {line.option_name}",
+                cost=line.cost,
             )
+            for line in priced_personalization_lines(picks, techniques_by_id=techniques_by_id)
+        )
 
     def calculate_cg_points_breakdown(self) -> list[CGPointBreakdownEntry]:
         """

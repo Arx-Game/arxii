@@ -1599,6 +1599,35 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_actor_sheet(value)
         return value
 
+    @staticmethod
+    def _personalization_key_is_valid(key: object) -> bool:
+        """Only a plain base-10 integer string (#4099 fix round 1).
+
+        ``isdigit()`` also accepts non-decimal digit characters (e.g. the
+        superscript "²"), which ``int()`` then rejects — ``isdecimal()`` (plain
+        base-10 digits only) plus an actual ``int()`` parse is the real check.
+        The parser side (``parse_personalization_picks``) must agree with this
+        one, or a key this method lets through could still crash there.
+        """
+        if not isinstance(key, str) or not key.isdecimal():
+            return False
+        try:
+            int(key)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def _personalization_entry_is_well_shaped(entry: object, allowed: set[str]) -> bool:
+        """``entry`` is a dict of only the allowed keys, with plain (non-bool) int ids."""
+        if not isinstance(entry, dict) or set(entry) - allowed:
+            return False
+        for id_field in ("signature_bonus_id", "early_form_id", "price_id"):
+            value = entry.get(id_field)
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+                return False
+        return True
+
     def _validate_technique_personalizations(self, data: dict) -> None:
         """Shape + hygiene for ``technique_personalizations`` (#4099); cleans text in place."""
         from world.magic.exceptions import InvalidPersonalText  # noqa: PLC0415
@@ -1621,18 +1650,20 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "price_id",
         }
         for key, entry in raw.items():
-            if not str(key).isdigit() or not isinstance(entry, dict) or set(entry) - allowed:
+            if not self._personalization_key_is_valid(
+                key
+            ) or not self._personalization_entry_is_well_shaped(entry, allowed):
                 raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
-            for id_field in ("signature_bonus_id", "early_form_id", "price_id"):
-                value = entry.get(id_field)
-                if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+            for text_field in ("custom_name", "custom_description"):
+                value = entry.get(text_field)
+                if value is None:
+                    entry[text_field] = ""
+                elif not isinstance(value, str):
                     raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
             try:
-                entry["custom_name"] = clean_custom_technique_name(
-                    str(entry.get("custom_name") or "")
-                )
+                entry["custom_name"] = clean_custom_technique_name(entry["custom_name"])
                 entry["custom_description"] = clean_custom_technique_description(
-                    str(entry.get("custom_description") or "")
+                    entry["custom_description"]
                 )
             except InvalidPersonalText as exc:
                 raise serializers.ValidationError(

@@ -240,6 +240,43 @@ class MagicStageValidationTest(TestCase):
         errors = compute_magic_errors(draft)
         assert errors != []
 
+    def test_personalization_unoffered_price_fails(self):
+        """A `price_id` whose row has no `creation_point_cost` isn't offered (#4099)."""
+        from world.character_creation.constants import TECHNIQUE_PERSONALIZATIONS_KEY
+        from world.magic.factories import PriceFactory
+
+        uncosted_price = PriceFactory(creation_point_cost=None)
+        draft = self._draft(
+            **{
+                TECHNIQUE_PERSONALIZATIONS_KEY: {
+                    str(self.pool_techniques[0].id): {"price_id": uncosted_price.pk}
+                }
+            }
+        )
+        errors = compute_magic_errors(draft)
+        assert errors != []
+
+    def test_personalization_unoffered_form_fails(self):
+        """An `early_form_id` at the right resonance but no `creation_point_cost` (#4099)."""
+        from world.character_creation.constants import TECHNIQUE_PERSONALIZATIONS_KEY
+        from world.magic.factories import TechniqueVariantFactory
+
+        uncosted_form = TechniqueVariantFactory(
+            parent_technique=self.pool_techniques[0],
+            resonance=self.resonance,
+            unlock_thread_level=1,
+            creation_point_cost=None,
+        )
+        draft = self._draft(
+            **{
+                TECHNIQUE_PERSONALIZATIONS_KEY: {
+                    str(self.pool_techniques[0].id): {"early_form_id": uncosted_form.pk}
+                }
+            }
+        )
+        errors = compute_magic_errors(draft)
+        assert errors != []
+
 
 class MagicFinalizationCGSeedingTest(TestCase):
     """finalize_magic_data seeds CharacterAnima and FatiguePool at CG completion (Phase 12)."""

@@ -88,6 +88,30 @@ class PricingTests(_Catalog, TestCase):
         magic = [e for e in draft.calculate_cg_points_breakdown() if e["category"] == "magic"]
         self.assertEqual(sum(e["cost"] for e in magic), 8)
 
+    def test_personalization_costs_push_the_purse_over_budget(self) -> None:
+        """The 8-point pick total overspends a purse with no room for it (#4099)."""
+        from world.character_creation.models import CGPointBudget
+        from world.character_creation.validators import get_purse_errors
+
+        CGPointBudget.objects.create(name="Tight Purse", is_active=True, starting_points=0)
+        draft = CharacterDraftFactory(
+            draft_data={
+                "selected_technique_ids": [self.technique.pk],
+                TECHNIQUE_PERSONALIZATIONS_KEY: self._personalization(),
+            }
+        )
+        self.assertEqual(get_purse_errors(draft), ["CG points over budget by 8"])
+
+    def test_deselected_technique_is_never_charged_in_the_breakdown(self) -> None:
+        draft = CharacterDraftFactory(
+            draft_data={
+                "selected_technique_ids": [],
+                TECHNIQUE_PERSONALIZATIONS_KEY: self._personalization(),
+            }
+        )
+        magic = [e for e in draft.calculate_cg_points_breakdown() if e["category"] == "magic"]
+        self.assertEqual(magic, [])
+
 
 class PickErrorTests(_Catalog, TestCase):
     @classmethod
@@ -146,7 +170,14 @@ class DraftSerializerTests(_Catalog, TestCase):
     def test_malformed_shape_is_refused(self) -> None:
         from rest_framework import serializers
 
-        for bad in ([], {"x": {}}, {str(self.technique.pk): {"price_id": "nope"}}):
+        for bad in (
+            [],
+            {"x": {}},
+            {str(self.technique.pk): {"price_id": "nope"}},
+            # A digit character `int()` can't parse (superscript two, #4099 fix
+            # round 1) — `isdigit()` alone would have let this through.
+            {"²": {}},
+        ):
             with self.assertRaises(serializers.ValidationError):
                 CharacterDraftSerializer().validate_draft_data(
                     {TECHNIQUE_PERSONALIZATIONS_KEY: bad}
@@ -200,3 +231,89 @@ class FinalizeTests(_Catalog, TestCase):
         )
         finalize_magic_data(draft, sheet)
         self.assertTrue(sheet.motif.resonances.filter(resonance=self.frost).exists())
+
+    def test_finalize_then_hold_for_shows_the_picks(self) -> None:
+        """Exercises the cache invalidation apply_creation_personalizations calls."""
+        sheet = CharacterSheetFactory()
+        draft = CharacterDraftFactory(
+            selected_tradition=TraditionFactory(),
+            draft_data={
+                "selected_gift_id": self.gift.pk,
+                "selected_technique_ids": [self.technique.pk],
+                "selected_gift_resonance_id": self.frost.pk,
+                TECHNIQUE_PERSONALIZATIONS_KEY: self._personalization(),
+            },
+        )
+        # Warm the handler's hold cache before finalize writes anything, mirroring
+        # a caller that read the (pre-pick) hold map earlier in the same process.
+        sheet.character.techniques.hold_for(self.technique)
+        finalize_magic_data(draft, sheet)
+
+        hold = sheet.character.techniques.hold_for(self.technique)
+        self.assertIsNotNone(hold)
+        self.assertEqual(hold.custom_name, "Winterbite")
+        self.assertEqual(hold.price, self.price)
+        self.assertEqual(hold.early_form, self.form)
+
+    def test_deselected_technique_picks_are_not_written_at_finalize(self) -> None:
+        sheet = CharacterSheetFactory()
+        draft = CharacterDraftFactory(
+            selected_tradition=TraditionFactory(),
+            draft_data={
+                "selected_gift_id": self.gift.pk,
+                "selected_technique_ids": [],
+                "selected_gift_resonance_id": self.frost.pk,
+                TECHNIQUE_PERSONALIZATIONS_KEY: self._personalization(),
+            },
+        )
+        finalize_magic_data(draft, sheet)
+        self.assertFalse(
+            CharacterTechnique.objects.filter(character=sheet, technique=self.technique).exists()
+        )
+
+    def test_apply_refuses_an_early_form_belonging_to_another_technique(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.magic.services.creation_personalization import (
+            apply_creation_personalizations,
+        )
+        from world.magic.types.personalization import TechniquePersonalizationPick
+
+        other_technique = TechniqueFactory(gift=self.gift)
+        foreign_form = TechniqueVariantFactory(
+            parent_technique=other_technique,
+            resonance=self.frost,
+            unlock_thread_level=1,
+            creation_point_cost=1,
+        )
+        sheet = CharacterSheetFactory()
+        CharacterTechnique.objects.create(character=sheet, technique=self.technique)
+        pick = TechniquePersonalizationPick(
+            technique_id=self.technique.pk, early_form_id=foreign_form.pk
+        )
+        with self.assertRaises(ValidationError):
+            apply_creation_personalizations(sheet, [pick], resonance=self.frost)
+
+
+class PriceFitTests(_Catalog, TestCase):
+    """Direct coverage of `_price_fits` (#4099 fix round 1)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls._make_catalog()
+
+    def test_price_fits_rejects_a_price_whose_allowed_effect_types_exclude_the_technique(
+        self,
+    ) -> None:
+        from world.magic.factories import EffectTypeFactory
+        from world.magic.services.creation_personalization import (
+            _allowed_effect_type_ids_by_price,
+            _price_fits,
+        )
+
+        other_effect_type = EffectTypeFactory()
+        price = PriceFactory(creation_point_cost=1)
+        price.allowed_effect_types.set([other_effect_type])
+        allowed_by_price = _allowed_effect_type_ids_by_price([price])
+        self.assertNotEqual(other_effect_type.pk, self.technique.effect_type_id)
+        self.assertFalse(_price_fits(price, allowed_by_price, self.technique))

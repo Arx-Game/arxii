@@ -2589,7 +2589,6 @@ def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None
     )
 
 
-@transaction.atomic
 def _finalize_technique_personalizations(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 1d (#4099): seed the Motif from the gift resonance, then write the picks.
 
@@ -2616,6 +2615,7 @@ def _finalize_technique_personalizations(draft: CharacterDraft, sheet: Character
     apply_creation_personalizations(sheet, picks, resonance=resonance)
 
 
+@transaction.atomic
 def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:  # noqa: PLR0915
     """Create magic models from the CG-chosen catalog Gift/Techniques during finalization.
 
