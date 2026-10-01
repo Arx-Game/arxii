@@ -657,6 +657,44 @@ they happened to walk.
 
 ---
 
+## Technique prerequisites + thread carry (#4097, BUILT 2026-10-01)
+
+GM rulings needed two things the engine didn't have: a way to say "you must already
+know/hold X before you can learn Y," and a way for early investment in a foundational
+technique to keep paying off once a character learns what it unlocks.
+
+**Built:**
+- `AbstractUnlockRequirement.technique`: a fourth polymorphic target (alongside
+  `class_level_unlock` / `thread_crossing_threshold` / `path`), gating whether a
+  character may *learn* a technique. `LegendRequirement`/`ItemRequirement` reject it
+  (narrowed to their own `Meta.constraints`).
+- `GiftHeldRequirement` (holds a gift, named and lineage-aware or blank for any) and
+  `TechniqueKnownRequirement` (already knows a named technique) are the two new
+  requirement types authored against a technique. `MajorGiftTechniqueRequirement.gift`
+  became optional (named counts that gift's count; blank counts the best of any single
+  held major gift, never summed).
+- `concrete_requirement_types()` (`world.progression.services.spends`) discovers
+  requirement types via `apps.get_models()` instead of a hand-maintained list that
+  silently skipped an unregistered type.
+- `charge_and_learn` calls `check_requirements_for_technique` and raises
+  `TechniqueRequirementsNotMet` when unmet; both front doors (teaching offers, Academy
+  TRAIN) route through it. CG pick lists exclude gated techniques outright
+  (`get_technique_options(..., exclude_gated=True)`), since a draft has no character to
+  evaluate the gate against.
+- **Thread carry:** a thread woven into a prerequisite technique empowers, at full
+  level, everything that technique transitively unlocks (including a hidden
+  ultimate several `TechniqueKnownRequirement` hops downstream).
+  `prerequisite_technique_ids` walks the requirement graph;
+  `PullActionContext.involved_technique_closure` unions it with the pull's own
+  involved techniques; `_anchor_in_action`'s TECHNIQUE branch reads the closure.
+  Applies to both casts and paid pulls; the passive Ambient Activation sweep is
+  deliberately left unwidened.
+- Full record: `docs/systems/magic.md`'s "Technique Prerequisites" and "Thread Carry
+  Through Technique Prerequisites" sections; `docs/systems/progression.md`'s "Path and
+  Technique Requirements" section; ADR-4097.
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

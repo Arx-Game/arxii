@@ -563,8 +563,26 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `NoActiveTechniqueDraft` (no draft to work with),
   `TechniqueDraftIncomplete` (required fields missing at `draft_to_design` time),
   `UnknownTechniqueVocab` / `UnknownGift` (unknown vocab/gift name in telnet parser),
-  `GiftNotOwned` (character doesn't own the design's gift — `validate_design_for_character`) —
+  `GiftNotOwned` (character doesn't own the design's gift; `validate_design_for_character`),
+  `TechniqueRequirementsNotMet` (#4097; `charge_and_learn` raises this when an active
+  requirement targeting the technique is unmet; `.failed` carries the per-requirement
+  messages),
   all with `user_message` properties for safe API responses.
+- **Technique prerequisites + thread carry (#4097):** a `Technique` can carry its own
+  authored requirements (`AbstractUnlockRequirement.technique` target, in
+  `world.progression`) gating whether a character may *learn* it.
+  `check_requirements_for_technique` gates both `charge_and_learn` front doors
+  (`accept_technique_offer`, Academy TRAIN); `get_technique_options(...,
+  exclude_gated=True)` excludes gated techniques from CG pick lists outright (a draft
+  has no character to evaluate the gate against). `TechniqueKnownRequirement` rows
+  double as the prerequisite graph: `world.magic.services.technique_prerequisites
+  .prerequisite_technique_ids` walks it to build `PullActionContext
+  .involved_technique_closure`, which `_anchor_in_action`'s TECHNIQUE branch reads so a
+  thread woven into a prerequisite technique empowers, at full level, everything that
+  technique transitively unlocks. Full detail: `docs/systems/magic.md`'s "Technique
+  Prerequisites" and "Thread Carry Through Technique Prerequisites" sections;
+  `docs/systems/progression.md`'s "Path and Technique Requirements" section;
+  `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
   magical_flavor; thread anchors RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE),
@@ -2296,8 +2314,13 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
     is "N ties", never "N labels" (#2116, retargeted #3957)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
   - `CodexKnowledgeRequirement` — checks `CharacterCodexKnowledge` at `KNOWN` status for a specific `CodexEntry`; gates Path selection behind codex knowledge (#2603)
+  - `GiftHeldRequirement` (#4097): holds a gift; named is lineage-aware, blank means any held gift
+  - `TechniqueKnownRequirement` (#4097): already knows a specific technique; the row `world.magic.services.technique_prerequisites.prerequisite_technique_ids` walks to build the thread-carry closure (see `docs/systems/magic.md`'s "Thread Carry" section)
+  - **Technique learning gate (#4097):** `AbstractUnlockRequirement` grew a fourth polymorphic target, `technique`, so any requirement type can gate learning a `Technique` directly (not just a class-level/thread-crossing/path unlock); `LegendRequirement`/`ItemRequirement` reject it. `concrete_requirement_types()` (below) replaced a hand-maintained requirement-type list with discovery over `apps.get_models()`, so a new type is picked up the moment its model is defined
 - **Key Functions:**
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
+  - `check_requirements_for_technique(character, technique) -> tuple[bool, list[str]]` (#4097): the technique-learning-gate checker; called by `world.magic.services.gift_acquisition.charge_and_learn`, which raises `TechniqueRequirementsNotMet` on failure
+  - `concrete_requirement_types() -> list[type[AbstractUnlockRequirement]]` (#4097): every concrete requirement subclass, discovered rather than hand-listed; shared by every `_check_requirements` caller
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
   - `ExperiencePointsData.can_spend(amount) -> bool`
   - `CharacterXP.can_spend(amount) -> bool` — a locked (CG) pool only; a `transferable=True` row is an attribution ledger, not a pool (#3748)

@@ -1840,6 +1840,91 @@ underlying `CharacterModifier` row cascade-deletes with the `CharacterDistinctio
 (`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge disappears
 the moment the drawback is shed, no separate cleanup needed.
 
+### Technique Prerequisites, the learning gate (#4097) [BUILT & WIRED]
+
+A `Technique` can carry authored requirements of its own, gating whether a character
+is allowed to *learn* it at all. This is distinct from the Path/thread-crossing/
+path-entry gates documented in `docs/systems/progression.md`. `AbstractUnlockRequirement`
+(that doc's "Requirements" section) grew a fourth polymorphic target, `technique`, so
+any existing requirement type (`TraitRequirement`, `RelationshipRequirement`, and so
+on) can be authored against a `Technique` as well as a `ClassLevelUnlock`,
+`ThreadCrossingThreshold`, or `Path`. Two new requirement types exist specifically for
+gating technique acquisition:
+
+- `GiftHeldRequirement`: the character must hold a gift. Named means that gift
+  (lineage-aware via `resolve_owned_gift`); blank means any held gift.
+- `TechniqueKnownRequirement`: the character must already know a named technique.
+  This is also the row `world.magic.services.technique_prerequisites
+  .prerequisite_technique_ids` walks to build the transitive prerequisite closure
+  consumed by thread carry (see "Thread Carry Through Technique Prerequisites" below).
+
+`LegendRequirement` and `ItemRequirement` deliberately reject the `technique` (and
+`path`) target; they only ever gate `class_level_unlock`/`thread_crossing_threshold`.
+
+**Gate wiring:** `check_requirements_for_technique(character, technique)`
+(`world.progression.services.spends`) mirrors the Path/thread-crossing/unlock
+checkers, failing open (`(True, [])`) when the technique carries no active
+requirement. `charge_and_learn` (`world.magic.services.gift_acquisition`) calls it
+immediately after the duplicate-knowledge check and before gift-ownership/cap
+logic, raising `TechniqueRequirementsNotMet` (`world.magic.exceptions`) on failure.
+Both front doors route through it: `accept_technique_offer` (player-to-player
+teaching) and the Academy TRAIN offer handler
+(`world.npc_services.effects.run_train_offer`).
+
+**CG pick list exclusion:** a character-creation draft has no `CharacterSheet` yet,
+so `check_requirements_for_technique` cannot be evaluated against it. Instead,
+`world.magic.services.cg_catalog.get_technique_options(..., exclude_gated=True)`
+excludes every technique carrying at least one active requirement row outright, one
+query per concrete requirement type (via `concrete_requirement_types()`), never one
+per technique. Only call sites that model "what a brand-new character can pick" pass
+`exclude_gated=True`: `world.character_creation.validators` and `.views`, and the
+starting-kit analytics report (`web/admin/tuning/technique_analytics.py`). Every
+in-play caller, today just Academy TRAIN's own eligibility check, keeps the default
+`exclude_gated=False`, because an in-play learner may already satisfy the
+prerequisite and `charge_and_learn`'s own per-character check is the correct gate
+for them, not a blanket catalog exclusion.
+
+**Discovery, not a hardcoded list:** `concrete_requirement_types()`
+(`world.progression.services.spends`) replaces the former hand-maintained list of
+requirement types that every `_check_requirements` caller consulted, where a type
+omitted from that list silently never evaluated. It now returns every concrete
+`AbstractUnlockRequirement` subclass Django has registered (`apps.get_models()`),
+so a new requirement type is live the moment its model is defined.
+
+### Thread Carry Through Technique Prerequisites (#4097) [BUILT & WIRED]
+
+A thread woven into a technique also empowers every technique that technique is a
+prerequisite for, at the thread's full level, transitively, including a hidden
+ultimate several `TechniqueKnownRequirement` hops downstream. Early investment in a
+foundational technique is never wasted once a character learns what it unlocks.
+
+- `prerequisite_technique_ids(technique_ids)`
+  (`world.magic.services.technique_prerequisites`): a breadth-first walk over active
+  `TechniqueKnownRequirement` rows (`technique=X, required_technique=Y` means "X
+  requires Y"), one batched query per depth level, cycle-safe. Returns only the
+  *discovered* prerequisites, excluding the input ids themselves (even one
+  rediscovered through a cycle).
+- `PullActionContext.involved_technique_closure` (`world.magic.types.pull`): a
+  `cached_property` unioning `involved_techniques` with
+  `prerequisite_technique_ids(involved_techniques)`. Memoizing is safe here because
+  `PullActionContext` is a per-call frozen dataclass value object, not a
+  `SharedMemoryModel`, so the cache lives exactly as long as one pull resolution.
+- `_anchor_in_action` (`world.magic.services.resonance`): the TECHNIQUE branch
+  tests thread membership against `involved_technique_closure` instead of the bare
+  `involved_techniques` tuple. This is the one caller that needed widening: both
+  casts and paid combat/non-combat pulls resolve through it, so the carry applies
+  identically to both.
+
+**Deliberately unchanged:** the ambient capability sweep
+(`_anchor_ambiently_active`, "Capability magnitude curve" below) still tests the
+bare involved technique, not the closure. Ambient/passive contribution demands
+demonstrable real state, and a prerequisite's thread is not itself in active use
+just because something it unlocked is being cast.
+
+See `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md` for the
+decision record and rejected alternatives (moving/copying thread investment, a
+stored carried total).
+
 ### Acquisition provenance — `CharacterTechnique.origin` / `CharacterGift.origin` (#3055) [BUILT & WIRED]
 
 Both link models carry an `origin` field (`AcquisitionOrigin` TextChoices,
