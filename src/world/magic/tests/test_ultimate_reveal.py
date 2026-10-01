@@ -145,6 +145,32 @@ class RevealGateTests(_RevealFixture):
         self.assertIsNone(ultimate_reveal_for(self.sheet))
 
 
+class HasRevealCardsTests(_RevealFixture):
+    """`has_reveal_cards` drives the Audere offer's framing line - shown before the
+    Audere condition exists, so it must gate on the COMBAT engagement the same way
+    the reveal itself does, or a challenge/mission offer shows the framing line with
+    no reveal to follow it (#4098 final review item 5)."""
+
+    def test_true_in_combat_with_cards_available(self) -> None:
+        from world.magic.services.ultimates import has_reveal_cards
+
+        self.assertTrue(has_reveal_cards(self.sheet))
+
+    def test_false_outside_combat_engagement_even_with_cards_available(self) -> None:
+        from world.magic.services.ultimates import has_reveal_cards
+
+        engagement = self.sheet.engagement  # CharacterEngagement.character related_name
+        engagement.engagement_type = EngagementType.CHALLENGE
+        engagement.save(update_fields=["engagement_type"])
+        self.assertFalse(has_reveal_cards(self.sheet))
+
+    def test_false_in_combat_with_no_cards_available(self) -> None:
+        from world.magic.services.ultimates import has_reveal_cards
+
+        self.grant.ultimate_techniques.clear()
+        self.assertFalse(has_reveal_cards(self.sheet))
+
+
 class BondSourceTests(_RevealFixture):
     def test_active_patron_adds_patron_group(self) -> None:
         being = WorshippedBeingFactory()
