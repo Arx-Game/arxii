@@ -118,7 +118,9 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
             character_id=character_sheet_id,
             technique__action_template__isnull=False,
         )
-        .select_related("technique", "technique__action_template", "technique__effect_type")
+        .select_related(
+            "technique", "technique__action_template", "technique__effect_type", "price"
+        )
         .prefetch_related(
             # Every payload table the effect summary reads, in one shared
             # definition (#3682) — a surface that misses one pays a query per

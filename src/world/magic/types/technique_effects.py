@@ -165,6 +165,22 @@ class TechniqueSignaturePayload(TypedDict):
     intensity_delta: int
 
 
+class TechniquePricePayload(TypedDict):
+    """The price a caster pays for a technique (#4099). Authored text only."""
+
+    name: str
+    description: str
+    power_bonus: int
+
+
+class TechniqueNextSignaturePayload(TypedDict):
+    """The next flourish weaving this technique's thread will unlock (#4099)."""
+
+    name: str
+    min_level: int
+    thread_level: int
+
+
 @dataclass(frozen=True)
 class TechniqueAuthoringGap:
     """One technique whose authored payload cannot be read back with confidence.

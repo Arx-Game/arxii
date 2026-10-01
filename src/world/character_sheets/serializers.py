@@ -107,8 +107,11 @@ from world.magic.models import (
 from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
     available_technique_forms,
+    next_signatures_by_technique,
+    technique_price_payload,
     technique_signature_payload,
 )
+from world.magic.services.technique_personalization import hold_display_name
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure, TenureMedia
 from world.scenes.constants import PersonaType
@@ -887,6 +890,11 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         queryset=CharacterTechnique.objects.select_related(
             "technique__gift",
             "technique__effect_type",
+            # #4099: the hold's own name/description/price — ride this prefetch
+            # rather than a second query per technique.
+            "price",
+            "early_form",
+            "early_form__resonance",
         ).prefetch_related(
             *technique_payload_prefetches(prefix="technique__"),
             # #2901: the per-caster form list walks the technique's variants.
@@ -946,15 +954,20 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
 
     # Build a lookup of techniques by gift_id from prefetched character_techniques
     character = sheet.character
+    # #4099: the next flourish each TECHNIQUE thread will unlock. One fixed query
+    # for the whole sheet (none when the character holds no TECHNIQUE thread) —
+    # never per technique.
+    next_signatures = next_signatures_by_technique(character)
     techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
     for ct in sheet.cached_character_techniques:
         tech = ct.technique
         techniques_by_gift.setdefault(tech.gift_id, []).append(
             TechniqueEntry(
-                name=tech.name,
+                name=hold_display_name(ct, fallback=tech.name),
+                catalog_name=tech.name,
                 level=tech.level,
                 style=style_name,
-                description=tech.description,
+                description=ct.custom_description or tech.description,
                 # Cached on the Technique row, so the whole spellbook costs one
                 # build per distinct technique however many characters read it (#2898).
                 effect_summary=tech.cached_effect_summary,
@@ -966,6 +979,10 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
                     character, tech, character_technique=ct, sheet=sheet
                 ),
                 signature=technique_signature_payload(character, tech),
+                # #4099: the hold's own price and next flourish — ride the
+                # already-prefetched hold and the one fixed catalog query above.
+                price=technique_price_payload(ct),
+                next_signature=next_signatures.get(tech.pk),
             )
         )
 

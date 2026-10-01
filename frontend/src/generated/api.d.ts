@@ -26659,7 +26659,9 @@ export interface components {
      */
     CastableTechnique: {
       id: number;
-      name: string;
+      /** @description The owner's own name for this technique, or the catalog's (#4099). */
+      readonly name: string;
+      catalog_name: string;
       description: string;
       anima_cost: number;
       tier: number;

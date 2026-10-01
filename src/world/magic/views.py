@@ -2316,6 +2316,10 @@ class ThreadHubSummaryView(APIView):
                 "unlock__unlock_gift",
             )
         )
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            technique_display_name,
+        )
+
         character = sheet.character
         weavable_traits: list[dict] = []
         weavable_techniques: list[dict] = []
@@ -2342,7 +2346,7 @@ class ThreadHubSummaryView(APIView):
                 weavable_techniques.extend(
                     {
                         "technique_id": technique.pk,
-                        "name": technique.name,
+                        "name": technique_display_name(character, technique),
                         "gift_id": gift.pk,
                         "gift_name": gift.name,
                     }

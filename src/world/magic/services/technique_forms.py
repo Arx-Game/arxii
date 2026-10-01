@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING
 from world.magic.constants import TargetKind
 from world.magic.types.technique_effects import (
     TechniqueFormPayload,
+    TechniqueNextSignaturePayload,
+    TechniquePricePayload,
     TechniqueSignaturePayload,
 )
 
@@ -268,3 +270,45 @@ def technique_signature_payload(
         narrative_snippet=bonus.narrative_snippet,
         intensity_delta=bonus.flat_intensity_delta,
     )
+
+
+def technique_price_payload(hold: CharacterTechnique | None) -> TechniquePricePayload | None:
+    """The hold's price for the sheet, or ``None``. Reads the select_related price."""
+    if hold is None or hold.price_id is None:
+        return None
+    price = hold.price
+    return TechniquePricePayload(
+        name=price.name, description=price.description, power_bonus=price.power_bonus
+    )
+
+
+def next_signatures_by_technique(character) -> dict[int, TechniqueNextSignaturePayload]:
+    """Per technique pk, the next flourish its TECHNIQUE thread will unlock (#4099).
+
+    One catalog query per sheet build, and none when the character holds no active
+    TECHNIQUE thread.
+    """
+    from world.magic.models import SignatureMotifBonus  # noqa: PLC0415
+    from world.magic.services.signature import next_signature_bonus  # noqa: PLC0415
+
+    threads = [
+        t
+        for t in character.threads.all()
+        if t.target_kind == TargetKind.TECHNIQUE and t.retired_at is None
+    ]
+    if not threads:
+        return {}
+    catalog = list(
+        SignatureMotifBonus.objects.filter(
+            required_resonance_id__in={t.resonance_id for t in threads},
+            required_facet__isnull=True,
+        )
+    )
+    result: dict[int, TechniqueNextSignaturePayload] = {}
+    for thread in threads:
+        bonus = next_signature_bonus(thread, catalog)
+        if bonus is not None:
+            result[thread.target_technique_id] = TechniqueNextSignaturePayload(
+                name=bonus.name, min_level=bonus.min_crossing_level, thread_level=thread.level
+            )
+    return result

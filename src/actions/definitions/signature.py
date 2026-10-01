@@ -142,6 +142,9 @@ class SignatureListAction(SignatureActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         from world.magic.constants import TargetKind  # noqa: PLC0415
         from world.magic.services.signature import available_signature_bonuses  # noqa: PLC0415
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            technique_display_name,
+        )
 
         sheet = self._sheet(actor)
         if sheet is None:
@@ -156,14 +159,18 @@ class SignatureListAction(SignatureActionBase):
 
         return ActionResult(
             success=True,
-            message=_build_list_message(available, technique_threads),
+            message=_build_list_message(actor, available, technique_threads),
             data={
                 "available_bonus_ids": [b.pk for b in available],
                 "technique_threads": [
                     {
                         "thread_id": t.pk,
                         "thread_name": t.name,
-                        "technique_name": (t.target_technique.name if t.target_technique else ""),
+                        "technique_name": (
+                            technique_display_name(actor, t.target_technique)
+                            if t.target_technique
+                            else ""
+                        ),
                         "current_bonus": (t.signature_bonus.name if t.signature_bonus else None),
                     }
                     for t in technique_threads
@@ -172,8 +179,16 @@ class SignatureListAction(SignatureActionBase):
         )
 
 
-def _build_list_message(available: list, technique_threads: list) -> str:
-    """Compose the telnet listing for ``SignatureListAction``."""
+def _build_list_message(actor: ObjectDB, available: list, technique_threads: list) -> str:
+    """Compose the telnet listing for ``SignatureListAction``.
+
+    Names each thread's technique by the actor's own name for it (#4099) —
+    the same personalization the sheet and cast list show.
+    """
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
+
     bonus_lines: list[str] = (
         ["  (none: check your Motif facets and resonances)"]
         if not available
@@ -186,9 +201,8 @@ def _build_list_message(available: list, technique_threads: list) -> str:
         for t in technique_threads:
             tech = t.target_technique
             bon = t.signature_bonus
-            thread_lines.append(
-                f"  {tech.name if tech else 'unknown'} — signature: {bon.name if bon else 'none'}"
-            )
+            tech_name = technique_display_name(actor, tech) if tech else "unknown"
+            thread_lines.append(f"  {tech_name} — signature: {bon.name if bon else 'none'}")
     sections = [
         "|wAvailable signature bonuses:|n",
         *bonus_lines,

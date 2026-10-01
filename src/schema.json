@@ -44234,6 +44234,10 @@ components:
           type: integer
         name:
           type: string
+          description: The owner's own name for this technique, or the catalog's (#4099).
+          readOnly: true
+        catalog_name:
+          type: string
         description:
           type: string
         anima_cost:
@@ -44282,6 +44286,7 @@ components:
           readOnly: true
       required:
       - anima_cost
+      - catalog_name
       - control
       - description
       - effect_summary

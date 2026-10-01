@@ -12,6 +12,8 @@ from django.db import models
 from world.magic.types.technique_effects import (
     TechniqueEffectPayload,
     TechniqueFormPayload,
+    TechniqueNextSignaturePayload,
+    TechniquePricePayload,
     TechniqueSignaturePayload,
 )
 
@@ -177,9 +179,14 @@ class DistinctionEntry(TypedDict):
 class TechniqueEntry(TypedDict):
     """A single magic technique within a gift."""
 
+    #: The owner's own name for the technique, or the catalog's (#4099).
     name: str
+    #: The catalog ``Technique.name`` — the only lookup key, shown so the owner
+    #: can tell their own name apart from what everyone else calls it (#4099).
+    catalog_name: str
     level: int
     style: str
+    #: The owner's own description, or the catalog's (#4099).
     description: str
     #: What the technique actually does (#2898) — the same block CG, the magic
     #: API, and the in-scene cast list carry, so the sheet can't drift from them.
@@ -192,6 +199,11 @@ class TechniqueEntry(TypedDict):
     #: The signature flourish riding whichever form is chosen, or ``None``.
     #: Additive, never a sibling form (ADR-0072), so it sits beside the list.
     signature: TechniqueSignaturePayload | None
+    #: The price the owner pays to cast this technique, or ``None`` (#4099).
+    price: TechniquePricePayload | None
+    #: The next flourish weaving this technique's thread will unlock, or
+    #: ``None`` when the owner holds no active thread on it (#4099).
+    next_signature: TechniqueNextSignaturePayload | None
 
 
 class GiftEntry(TypedDict):

@@ -3040,6 +3040,12 @@ class TestPrefetchCompleteness(TestCase):
         #      it would cost a query only on its first call ever for a row that's
         #      missing, since ``.first()`` bypasses the identity map; a later call, or
         #      any call once a row has been found once, is free).
+        #   (#4099 — re-pinned, not raised): the hold's own name/description/price
+        #      ride the existing character_techniques prefetch (added select_related
+        #      columns, no new query), and next_signatures_by_technique shares query
+        #      (3)'s cached character.threads handler — this fixture's character
+        #      holds no TECHNIQUE thread, so it returns {} before reading any
+        #      catalog table.
         with self.assertNumQueries(4):
             _build_magic(sheet)
 
