@@ -96,6 +96,7 @@ from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 
 from core.app_domains import credited_content_models, domain_of, resolve_model_by_name
+from core.identifier_dashes import contains_dash
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
@@ -136,9 +137,10 @@ _BACKLOG_CHANGED_EVENT = "authoring-backlog-changed"
 #: En dash and em dash (#3890) - the same identifier rule
 #: `tools/lint_identifier_dashes.py` enforces on Python identifier strings and
 #: fixture identity fields at commit time, applied here at runtime since a
-#: rename through this editor never touches a linted source file. Named by
-#: code point, not written literally, so this source file itself carries none.
-_DASH_CHARACTERS = ("\u2013", "\u2014")
+#: rename through this editor never touches a linted source file.
+#: ``contains_dash`` (`core.identifier_dashes`, promoted here and out of
+#: `contributors.py` by #4099) is named by code point, not written literally,
+#: so this source file itself carries none.
 _DASH_ERROR = "A name cannot contain an em or en dash; use a hyphen."
 
 #: The one column `identity_field_for` currently recognizes (#3890, Decision
@@ -688,7 +690,7 @@ def _apply_edits(
     identity_field = identity_field_for(model)
     if identity_field is not None and identity_field in post_data:
         posted_name = post_data[identity_field].strip()
-        if any(dash in posted_name for dash in _DASH_CHARACTERS):
+        if contains_dash(posted_name):
             return {identity_field: [_DASH_ERROR]}, False
         if posted_name != getattr(instance, identity_field):
             setattr(instance, identity_field, posted_name)

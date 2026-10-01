@@ -23,10 +23,9 @@ from __future__ import annotations
 from django.db import DataError, IntegrityError, transaction
 from evennia.accounts.models import AccountDB
 
+from core.identifier_dashes import contains_dash
 from evennia_extensions.models import PlayerData
 from world.contributors.models import ContentContributor
-
-_DASH_CHARACTERS = "–—"  # en dash, em dash
 
 _DASH_NAME_MESSAGE = (
     "Contributor names use a hyphen, not a dash. Retype the name with a hyphen instead."
@@ -123,7 +122,7 @@ def _create_or_pick_by_name(name: str, player_data: PlayerData) -> ContentContri
     if not stripped_name:
         msg = "Enter a name to write under."
         raise ValueError(msg)
-    if any(char in stripped_name for char in _DASH_CHARACTERS):
+    if contains_dash(stripped_name):
         raise ValueError(_DASH_NAME_MESSAGE)
     if len(stripped_name) > _MAX_NAME_LENGTH:
         raise ValueError(_LONG_NAME_MESSAGE)
