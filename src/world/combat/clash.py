@@ -356,13 +356,26 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_action_interaction,
     )
+    from world.magic.narration import signature_clause  # noqa: PLC0415
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        resolve_price_snippet,
+        technique_display_name,
+    )
 
     recorded_interaction = None
     if participant is not None:
+        # #4099: the caster's own display name + price clause, matching the
+        # combat declaration and outcome narration (not the catalog name with
+        # no price clause).
+        display_name = technique_display_name(objectdb, technique)
+        price_clause_text = signature_clause(resolve_price_snippet(objectdb, technique))
+        clash_summary_label = f"{display_name} → clash contribution"
+        if price_clause_text:
+            clash_summary_label = f"{clash_summary_label} {price_clause_text}"
         clash_interaction = create_action_interaction(
             participant=participant,
             round_number=clash.started_round,
-            summary_label=f"{technique.name} → clash contribution",
+            summary_label=clash_summary_label,
             strain_committed=technique_use_result.declared_strain_commitment,
             strain_effective=technique_use_result.effective_strain_commitment,
             strain_power_bonus=technique_use_result.strain_power_bonus,

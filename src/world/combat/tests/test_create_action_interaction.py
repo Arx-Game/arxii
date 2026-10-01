@@ -143,6 +143,47 @@ class RenderClashContributionLabelTests(TestCase):
         self.assertIn("Inferno Bolt", label)
         self.assertIn("Pyromancer", label)
 
+    def test_label_uses_display_name_and_price_clause(self) -> None:
+        """#4099 fix round: the caster's own name and price clause, not the
+        catalog name with no price (matches render_action_declaration_label /
+        render_action_outcome_narration)."""
+        from world.magic.factories import PriceFactory
+
+        clash = ClashFactory(
+            encounter=self.encounter,
+            npc_opponent=self.opponent,
+            initiator=self.participant.character_sheet,
+        )
+        clash_round = ClashRoundFactory(clash=clash, round_number=1)
+        technique = TechniqueFactory(name="Inferno Bolt")
+        price = PriceFactory()
+        hold = CharacterTechniqueFactory(
+            character=self.participant.character_sheet,
+            technique=technique,
+            custom_name="Pyreclasp",
+            price=price,
+        )
+        self.participant.character_sheet.character.techniques.invalidate()
+        from world.traits.factories import CheckOutcomeFactory
+
+        contribution = ClashContribution.objects.create(
+            clash_round=clash_round,
+            character=self.participant.character_sheet,
+            action_slot="FOCUSED",
+            anima_committed=2,
+            technique=technique,
+            check_outcome=CheckOutcomeFactory(),
+            progress_delta=3,
+            was_overburn=False,
+            was_audere=False,
+            soulfray_severity_accrued=0,
+        )
+
+        label = render_clash_contribution_label(contribution)
+        self.assertIn(hold.custom_name, label)
+        self.assertNotIn(technique.name, label)
+        self.assertIn(price.cast_narration, label)
+
 
 class CreateActionInteractionLegacyTests(TestCase):
     def test_no_primary_persona_returns_none(self) -> None:
