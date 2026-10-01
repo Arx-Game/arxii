@@ -311,7 +311,10 @@ def _build_reveal(sheet: CharacterSheet, ceremony: str) -> UltimateReveal | None
     if not groups:
         return None
     return UltimateReveal(
-        ceremony=ceremony, framing_text=threshold.reveal_framing_text, groups=tuple(groups)
+        ceremony=ceremony,
+        framing_text=threshold.reveal_framing_text,
+        groups=tuple(groups),
+        sheet=sheet,
     )
 
 

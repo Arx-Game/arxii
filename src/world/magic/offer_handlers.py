@@ -147,6 +147,7 @@ class SurgeOfferHandler:
         )
         reveal = ultimate_reveal_for(caller.sheet_data)
         if reveal is not None:
+            _store_ultimate_snapshot(caller, reveal)
             message = f"{message}\n{format_ultimate_reveal(reveal)}"
         return message
 
@@ -253,6 +254,7 @@ class CrossingOfferHandler:
         )
         reveal = ultimate_reveal_for(caller.sheet_data)
         if reveal is not None:
+            _store_ultimate_snapshot(caller, reveal)
             message = f"{message}\n{format_ultimate_reveal(reveal)}"
         return message
 
@@ -271,6 +273,26 @@ class CrossingOfferHandler:
 
 
 _ULTIMATE_USAGE = "Choose with: accept ultimate <number>"  # noqa: STRING_LITERAL
+
+# Session-local (non-persistent) snapshot of the choice_keys shown in the last
+# printed reveal listing, held on the caller's ``ndb.ultimate_reveal_choice_keys``
+# (#4098 fix round 1). Guards against a stale numbered choice: the pools
+# backing a reveal can change between the moment a listing is printed and the
+# moment the player types a number, and `<n>` always resolves against
+# whatever `flat_cards()` returns *right now* — never the list the player
+# actually read.
+
+
+def _ultimate_choice_keys(reveal) -> tuple[str, ...]:
+    return tuple(card.choice_key for _group, card in reveal.flat_cards())
+
+
+def _store_ultimate_snapshot(character, reveal) -> None:
+    character.ndb.ultimate_reveal_choice_keys = _ultimate_choice_keys(reveal)
+
+
+def _clear_ultimate_snapshot(character) -> None:
+    del character.ndb.ultimate_reveal_choice_keys
 
 
 def format_ultimate_reveal(reveal) -> str:
@@ -313,11 +335,22 @@ class UltimateRevealHandler:
         return ultimate_reveal_for(sheet)
 
     def describe(self, offer) -> str:
+        if offer.sheet is not None:
+            _store_ultimate_snapshot(offer.sheet.character, offer)
         return format_ultimate_reveal(offer)
 
     def accept(self, offer, caller, args: str) -> str:
         from world.magic.exceptions import UltimateChoiceError  # noqa: PLC0415
         from world.magic.services.ultimates import choose_ultimate  # noqa: PLC0415
+
+        current_keys = _ultimate_choice_keys(offer)
+        shown_keys = caller.ndb.ultimate_reveal_choice_keys
+        if shown_keys is None:
+            _store_ultimate_snapshot(caller, offer)
+            return f"Your reveal listing expired. Choose again:\n{format_ultimate_reveal(offer)}"
+        if tuple(shown_keys) != current_keys:
+            _store_ultimate_snapshot(caller, offer)
+            return f"The choices have changed. Choose again:\n{format_ultimate_reveal(offer)}"
 
         cards = offer.flat_cards()
         token = args.strip()
@@ -328,6 +361,7 @@ class UltimateRevealHandler:
             known = choose_ultimate(caller.sheet_data, card.choice_key)
         except UltimateChoiceError as exc:
             raise CommandError(exc.user_message) from exc
+        _clear_ultimate_snapshot(caller)
         technique = known.technique
         return (
             f"{technique.name}: {technique.description}\n"
