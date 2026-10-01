@@ -169,6 +169,7 @@ class PlayerActionSerializer(serializers.Serializer):
     soulfray_warning = SoulfrayWarningSerializer(read_only=True, allow_null=True)
     available_fury_tiers = FuryTierOptionSerializer(many=True, read_only=True)
     eligible_fury_anchors = AnchorOptionSerializer(many=True, read_only=True)
+    is_ultimate = serializers.BooleanField(read_only=True)
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:
         """Return the difficulty enum value string, or None."""

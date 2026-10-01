@@ -667,6 +667,12 @@ def cross_threshold(
     # PathGiftGrant rows.
     cross_into_path(sheet, chosen_path)
 
+    # The crossing is an Audere for the next tier (decision 12): reopen the reveal so it
+    # draws on the new Path's ultimates.
+    from world.magic.services.ultimates import clear_readied_ultimate  # noqa: PLC0415
+
+    clear_readied_ultimate(sheet)
+
     crossing = AudereMajoraCrossing.objects.create(
         character_sheet=sheet,
         threshold=threshold,
@@ -808,11 +814,14 @@ def end_audere_majora(character: ObjectDB) -> None:
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.magic.services.ultimates import clear_readied_ultimate  # noqa: PLC0415
 
     template = ConditionTemplate.objects.filter(name=AUDERE_MAJORA_CONDITION_NAME).first()
     if template is None:
         return
     remove_condition(character, template)
+
+    clear_readied_ultimate(character.sheet_data)
 
 
 # =============================================================================
