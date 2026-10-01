@@ -1864,12 +1864,28 @@ gating technique acquisition:
 **Gate wiring:** `check_requirements_for_technique(character, technique)`
 (`world.progression.services.spends`) mirrors the Path/thread-crossing/unlock
 checkers, failing open (`(True, [])`) when the technique carries no active
-requirement. `charge_and_learn` (`world.magic.services.gift_acquisition`) calls it
-immediately after the duplicate-knowledge check and before gift-ownership/cap
-logic, raising `TechniqueRequirementsNotMet` (`world.magic.exceptions`) on failure.
-Both front doors route through it: `accept_technique_offer` (player-to-player
-teaching) and the Academy TRAIN offer handler
-(`world.npc_services.effects.run_train_offer`).
+requirement. `enforce_technique_prerequisites(sheet, technique)`
+(`world.magic.services.gift_acquisition`) wraps it, raising
+`TechniqueRequirementsNotMet` (`world.magic.exceptions`) on failure. Every
+technique-acquisition route calls it: `charge_and_learn`
+(`world.magic.services.gift_acquisition`) — the shared charge+acquire core behind
+both teaching front doors, `accept_technique_offer` (player-to-player teaching) and
+the Academy TRAIN offer handler (`world.npc_services.effects.run_train_offer`) —
+calls it immediately after the duplicate-knowledge check and before gift-ownership/
+cap logic; and `learn_technique` (`world.magic.services.technique_acquisition`) — the
+third route, the shared commit seam behind item-scroll `TechniqueGrant` delivery
+(`actions/definitions/items.py`), ritual `TechniqueGrant` delivery
+(`learn_technique_from_ritual`), and `GMAwardAction`'s story-grant action
+(`actions/definitions/gm_adjudication.py`) — calls the same helper right after its
+own duplicate-knowledge check, in both its immediate-mint (`ap_cost == 0`) and
+meter-creation (`ap_cost > 0`) branches. `learn_technique` skips the check in two
+cases: `origin=AcquisitionOrigin.GM_GRANT` (a GM award is deliberate fiat) and
+`completing_progress=True` (the meter-fill call `contribute_to_technique_progress`
+makes — the check already ran when that meter was created, whichever route created
+it). The item-scroll route additionally runs `check_requirements_for_technique`
+as a pre-flight check *before* `use_item()` consumes the item's charge, since
+`use_item()` is its own committed transaction a post-use refusal can't roll back —
+a gated scroll is refused without being spent.
 
 **CG pick list exclusion:** a character-creation draft has no `CharacterSheet` yet,
 so `check_requirements_for_technique` cannot be evaluated against it. Instead,
