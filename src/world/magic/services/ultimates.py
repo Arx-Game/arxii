@@ -247,6 +247,12 @@ def _build_reveal(sheet: CharacterSheet, ceremony: str) -> UltimateReveal | None
     )
     unknown = [t for t in every if t.pk not in known_ids]
     allowed_ids = {t.pk for t in exclude_unmet_technique_requirements(sheet.character, unknown)}
+    # A dict comprehension keeps the LAST value written per key, and the queryset
+    # below is ordered ascending by the required technique's level/name/pk - so when
+    # an upgrade technique has more than one qualifying TechniqueKnownRequirement row
+    # (several known prior ultimates it could be shown as an upgrade of), the
+    # highest-ordered one (by level, then name, then pk) is the one that survives
+    # into `upgrade_of` and is shown on the UPGRADE card (#4098 final review item 8).
     upgrade_of = {
         req.technique_id: req.required_technique
         for req in TechniqueKnownRequirement.objects.filter(
