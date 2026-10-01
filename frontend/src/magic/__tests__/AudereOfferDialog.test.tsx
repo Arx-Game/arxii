@@ -44,6 +44,7 @@ const OFFER: PendingAudereOffer = {
   intensity_bonus: 2,
   anima_pool_bonus: 10,
   advisory_text: '',
+  reveal_framing_text: '',
   created_at: '2026-06-01T00:00:00Z',
 };
 
