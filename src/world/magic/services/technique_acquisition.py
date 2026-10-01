@@ -38,6 +38,7 @@ from world.magic.exceptions import (
 )
 from world.magic.services.gift_acquisition import (
     count_techniques_for_gift,
+    enforce_not_ultimate,
     enforce_technique_prerequisites,
     get_technique_cap_for_gift,
     resolve_owned_gift,
@@ -127,6 +128,9 @@ def learn_technique(  # noqa: PLR0913
         ``TechniqueProgress`` when ``ap_cost > 0`` (meter created).
 
     Raises:
+        UltimateNotLearnable: ``technique.is_ultimate`` — ultimates are only
+            reached by discovering them at Audere/Audere Majora (#4098), never
+            through this seam, not even a GM award.
         GiftNotOwned: Learner doesn't own the technique's gift.
         TechniqueRequirementsNotMet: An active requirement targeting this
             technique (Path, gift, technique, skill, ...) is not met —
@@ -138,6 +142,11 @@ def learn_technique(  # noqa: PLR0913
         CharacterTechnique,
         TechniqueProgress,
     )
+
+    # 0. An ultimate is never learned through an ordinary route (#4098). Checked
+    # first, even ahead of GM fiat: a GM award is deliberate, but ultimates are
+    # reserved for the Audere reveal specifically, not for any other grant path.
+    enforce_not_ultimate(technique)
 
     # 1. Gift-owned precondition. Ownership walks the gift lineage (#2891): a
     # character holding a child gift reaches its ancestors' techniques too, so

@@ -82,7 +82,7 @@ def get_technique_options(
     ``charge_and_learn``'s own per-character ``check_requirements_for_technique``
     call is the correct gate for them, not a blanket catalog-level exclusion.
     """
-    technique_qs = Technique.objects.select_related("effect_type")
+    technique_qs = Technique.objects.select_related("effect_type").filter(is_ultimate=False)
     if exclude_gated:
         technique_qs = technique_qs.exclude(pk__in=_gated_technique_ids())
     if not include_unready:
@@ -134,7 +134,7 @@ def get_species_technique_options(
         species_id__in=[ancestor.id for ancestor in ancestor_species], inheritable=True
     )
     gift_ids = SpeciesGiftGrant.objects.filter(grant_filter).values_list("gift_id", flat=True)
-    technique_qs = Technique.objects.filter(gift_id__in=gift_ids)
+    technique_qs = Technique.objects.filter(gift_id__in=gift_ids, is_ultimate=False)
     if not include_unready:
         technique_qs = technique_qs.filter(action_template__isnull=False)
     return list(technique_qs.select_related("effect_type").order_by("name", "id"))
