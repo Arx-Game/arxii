@@ -27,14 +27,23 @@ from world.magic.audere import (
     corruption_advisory_for_character,
     maybe_create_audere_offer,
 )
+from world.magic.constants import GiftKind
 from world.magic.exceptions import AudereOfferStaleError
-from world.magic.factories import CharacterAnimaFactory, ResonanceFactory
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    CharacterGiftFactory,
+    GiftFactory,
+    PathGiftGrantFactory,
+    ResonanceFactory,
+    UltimateTechniqueFactory,
+)
 from world.magic.tests.audere_test_helpers import (
     AudereGateFixture,
     build_audere_gate_fixture,
 )
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import RosterTenureFactory
 
 _PENDING_URL = "/api/magic/audere/pending/"
@@ -241,3 +250,44 @@ class AudereRespondViewTests(APITestCase):
             format="json",
         )
         self.assertIn(response.status_code, (401, 403))
+
+
+class PendingAudereOfferFramingTests(APITestCase):
+    """reveal_framing_text on the offer serializer (#4098): shown only when there's a card."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.gate = build_audere_gate_fixture(tier_suffix="api_framing")
+        cls.tenure = RosterTenureFactory()
+        cls.account = cls.tenure.player_data.account
+        cls.sheet = cls.tenure.roster_entry.character_sheet
+        gift = GiftFactory(kind=GiftKind.MAJOR)
+        CharacterGiftFactory(character=cls.sheet, gift=gift)
+        cls.grant = PathGiftGrantFactory(gift=gift)
+        CharacterPathHistoryFactory(character=cls.sheet, path=cls.grant.path)
+        technique = UltimateTechniqueFactory(gift=gift)
+        cls.grant.ultimate_techniques.add(technique)
+
+    def test_framing_text_present_with_reveal_cards(self) -> None:
+        offer = _open_gate_for_tenure(self.tenure, self.gate)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(_PENDING_URL)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = [row for row in response.data["results"] if row["id"] == offer.pk]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["reveal_framing_text"], self.gate.threshold.reveal_framing_text)
+        self.assertNotEqual(rows[0]["reveal_framing_text"], "")
+
+    def test_framing_text_blank_without_reveal_cards(self) -> None:
+        self.grant.ultimate_techniques.clear()
+        offer = _open_gate_for_tenure(self.tenure, self.gate)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(_PENDING_URL)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = [row for row in response.data["results"] if row["id"] == offer.pk]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["reveal_framing_text"], "")
