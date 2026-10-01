@@ -31,7 +31,7 @@ export function AudereMajoraOfferGate({
     offers.find((o) => o.character_sheet_id === characterSheetId) ?? null;
 
   // Auto-open once per offer id (max ceremony); dismissing leaves the strip.
-  const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(offer);
+  const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(offer?.id ?? null);
 
   if (!offer) return null;
 
