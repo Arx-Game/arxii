@@ -91,6 +91,19 @@ class CertainDeathTests(TestCase):
         self.assertEqual(state.life_state, CharacterLifeState.ALIVE)
         self.assertFalse(state.death_certain_pending)
 
+    def test_story_protection_in_audere_sends_no_death_line_and_sets_no_flag(self) -> None:
+        """#4098 fix round 3: story protection is checked BEFORE the Audere-defer
+        branch, so a protected character never gets death_certain_pending set and
+        never receives the deferred-death line — not even while Audere holds."""
+        ConditionInstanceFactory(target=self.character, condition=self.audere)
+        StoryProtectedSubjectFactory(subject_sheet=self.sheet)
+
+        self.assertFalse(defer_or_apply_certain_death(self.sheet))
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.ALIVE)
+        self.assertFalse(state.death_certain_pending)
+        self.character.msg.assert_not_called()
+
     def test_apply_pending_certain_death_returns_false_when_already_dead(self) -> None:
         """#4098 fix round 1: no caller sees True unless this call killed someone."""
         vitals = self._state()
@@ -149,13 +162,18 @@ class SoulfrayCharacterLossTests(TestCase):
         sibling in the SAME tier (world.checks.outcome_utils.filter_character_loss)
         before the #4098 death seam ever sees a selection — exercised through the
         real selection path, with neither select_consequence_from_result nor
-        apply_resolution patched (only the roll itself, so the outcome tier is known)."""
+        apply_resolution patched (only the roll itself, so the outcome tier is known).
+
+        loss carries weight 1000 against safe's weight 1 (#4098 fix round 3) so
+        select_weighted picks the character_loss row on essentially every run —
+        without the redirect this test would fail almost every time, not just when
+        the dice happened to land on loss."""
         self.sheet.rollmod = 10
         self.sheet.save(update_fields=["rollmod"])
 
         tier = CheckOutcomeFactory(name="Soulfray mixed tier", success_level=-2)
         pool = ConsequencePoolFactory(name="Soulfray mixed (test)")
-        loss = ConsequenceFactory(outcome_tier=tier, label="Lost", character_loss=True, weight=1)
+        loss = ConsequenceFactory(outcome_tier=tier, label="Lost", character_loss=True, weight=1000)
         safe = ConsequenceFactory(outcome_tier=tier, label="Safe", character_loss=False, weight=1)
         ConsequencePoolEntryFactory(pool=pool, consequence=loss)
         ConsequencePoolEntryFactory(pool=pool, consequence=safe)

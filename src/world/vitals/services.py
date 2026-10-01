@@ -950,11 +950,14 @@ def _is_terminal_stage(instance: ConditionInstance) -> bool:
 def defer_or_apply_certain_death(character_sheet: CharacterSheet) -> bool:
     """Soulfray made this death certain (#4098 decision 9). True when deferred.
 
-    Under an active ``death_deferred`` condition (Audere, Audere Majora) the death
-    waits for the encounter's end: the character keeps acting, ``death_certain_pending``
-    is set and the authored ``AudereThreshold.deferred_death_text`` is sent to them.
-    Otherwise the death applies now through ``_mark_dead``, the single death writer —
-    unless story protection says no (#4098 fix round 1), in which case nothing happens.
+    Story protection (``is_death_prevented_by_story``) is checked FIRST (#4098 fix
+    round 3): a protected character gets neither ``death_certain_pending`` set nor
+    the deferred-death line sent — protection means this death never happens at all,
+    not merely "wait and ask again later." Only once that's clear does an active
+    ``death_deferred`` condition (Audere, Audere Majora) defer the death to the
+    encounter's end: the character keeps acting, ``death_certain_pending`` is set
+    and the authored ``AudereThreshold.deferred_death_text`` is sent to them.
+    Otherwise the death applies now through ``_mark_dead``, the single death writer.
 
     Story protection is checked directly via ``is_death_prevented_by_story``, not
     ``death_is_permitted`` (``world.vitals.peril_resolution``): that function refuses
@@ -964,7 +967,9 @@ def defer_or_apply_certain_death(character_sheet: CharacterSheet) -> bool:
     self-inflicted, so there never is an attacker ObjectDB to pass.
     ``is_death_prevented_by_story`` already defines ``attacker=None`` semantics for
     exactly this shape (a story-critical character is protected from a sourceless
-    death too).
+    death too). The check is repeated at resolution (``apply_pending_certain_death``)
+    rather than trusted from this call, because protection can be granted or lifted
+    mid-encounter.
     """
     from world.conditions.services import has_death_deferred  # noqa: PLC0415
     from world.magic.audere import AudereThreshold  # noqa: PLC0415
@@ -973,6 +978,11 @@ def defer_or_apply_certain_death(character_sheet: CharacterSheet) -> bool:
 
     vitals, _created = CharacterVitals.objects.get_or_create(character_sheet=character_sheet)
     if vitals.life_state == CharacterLifeState.DEAD:
+        return False
+    if is_death_prevented_by_story(character_sheet, None):
+        if vitals.death_certain_pending:
+            vitals.death_certain_pending = False
+            vitals.save(update_fields=["death_certain_pending"])
         return False
     character = character_sheet.character
     if has_death_deferred(character):
@@ -983,11 +993,6 @@ def defer_or_apply_certain_death(character_sheet: CharacterSheet) -> bool:
             if threshold is not None and threshold.deferred_death_text.strip():
                 character.msg(threshold.deferred_death_text)
         return True
-    if is_death_prevented_by_story(character_sheet, None):
-        if vitals.death_certain_pending:
-            vitals.death_certain_pending = False
-            vitals.save(update_fields=["death_certain_pending"])
-        return False
     vitals.health = 0
     vitals.save(update_fields=["health"])
     _mark_dead(character_sheet)
