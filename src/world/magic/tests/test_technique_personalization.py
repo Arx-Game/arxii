@@ -80,6 +80,12 @@ class HoldReadTests(TestCase):
             "Wall, ash-formed",
         )
 
+    def test_display_name_is_the_catalog_name_for_a_blank_custom_name(self) -> None:
+        technique = TechniqueFactory(name="Ashfall Grasp")
+        CharacterTechniqueFactory(character=self.sheet, technique=technique, custom_name="")
+        self.sheet.character.techniques.invalidate()
+        self.assertEqual(technique_display_name(self.sheet.character, technique), "Ashfall Grasp")
+
     def test_price_and_snippet(self) -> None:
         character = self.sheet.character
         self.assertEqual(technique_price_for(character, self.technique), self.price)

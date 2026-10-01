@@ -72,9 +72,13 @@ def clean_custom_technique_description(value: str) -> str:
 
 
 def hold_display_name(hold: CharacterTechnique | None, *, fallback: str) -> str:
-    """The owner's name for a hold, else ``fallback`` (a variant name or the catalog name)."""
-    if hold is not None and hold.custom_name:
-        return hold.custom_name
+    """The owner's name for a hold, else ``fallback`` (a variant name or the catalog name).
+
+    Delegates to ``CharacterTechnique.display_name`` — the single implementation of
+    "custom name, else the catalog's" — rather than re-deriving it here.
+    """
+    if hold is not None:
+        return hold.display_name
     return fallback
 
 
