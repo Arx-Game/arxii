@@ -303,6 +303,11 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     audere_template = ConditionTemplate.get_by_name(AUDERE_CONDITION_NAME)
 
     with transaction.atomic():
+        from world.magic.services.ultimates import clear_readied_ultimate
+
+        # A stale pick from an Audere that ended abnormally must not hide this reveal.
+        clear_readied_ultimate(character.sheet_data)
+
         # Apply Audere condition
         apply_condition(target=character, condition=audere_template)
 
@@ -376,8 +381,12 @@ def end_audere(character: ObjectDB) -> None:
     threshold = AudereThreshold.objects.cached_singleton()
 
     with transaction.atomic():
+        from world.magic.services.ultimates import clear_readied_ultimate
+
         # Remove condition
         remove_condition(character, audere_template)
+
+        clear_readied_ultimate(character.sheet_data)
 
         # Revert engagement intensity modifier
         if threshold is not None:
