@@ -840,9 +840,15 @@ through `world.magic.services.soulfray.accumulate_soulfray`, the SAME function
 the way a caster does: `_try_technique_interpose` (declared interpose fire),
 `_try_spend_reactive` (a Barrier/other reactive-condition fire, `effect_handlers.py`), and
 `drain_reactive_upkeep` (per-round upkeep drain, via `_debit_ally_paid_upkeep`/
-`_pay_upkeep`). Lethality for the clamp comes from `active_combat_engagement_for`
-(`None` when the bearer has no live COMBAT engagement - treated as lethal, since a
-ward held outside combat has no encounter to read `is_lethal` from). A consented deficit
+`_pay_upkeep`). `_try_technique_interpose` and `drain_reactive_upkeep` always run
+inside a known `CombatEncounter`, so their lethal clamp is just `encounter.is_lethal`.
+`_try_spend_reactive` can fire with no encounter in scope at all (a standing ward held
+outside combat), so it derives lethal from the bearer's own live COMBAT engagement via
+`active_combat_engagement_for` instead - `None` (no live COMBAT engagement) now falls
+through to `lethal=False` (#4098 fix round 2, owner ruling: Soulfray can kill only in a
+combat encounter). Before #4098 the no-engagement case fell through to `lethal=True`,
+exactly backwards: it let a reactive fire with no combat at all draw a life-force
+deficit. A consented deficit
 fire narrates distinctly (`_broadcast_commitment_line`): "tears at their own soul to hold
 the line over {ally}" for an interpose, "bleeds soul to keep the ward on {bearer}" for
 upkeep. See ADR-0255 (amends ADR-0118).
@@ -2197,6 +2203,148 @@ of the Durance uses (`TraitRequirement`, `ItemRequirement`, etc.). No authored
 unlock for that level means no gate (fail-open). Because the check is live and
 non-cached, satisfying the last requirement mid-scene (e.g. acquiring a touchstone)
 makes the very next eligibility poll pass — no separate re-sync step.
+
+### Ultimates (#4098) [BUILT & WIRED]
+
+Audere and Audere Majora are where a character's magic reaches powers no other path
+reaches. See `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`
+for the full design and rejected alternatives.
+
+**An ultimate is a flagged `Technique`, never a separate catalog.**
+`Technique.is_ultimate` (bool, indexed) marks it; `Technique.clean()` refuses to flip
+the flag on a technique already sitting in a starter/tradition/item/alt-self pool or
+known by a character, and refuses to add an already-ultimate technique into any of
+those ordinary pools. A character's discovery of one is a `KnownUltimate` row
+(`world/magic/models/ultimates.py`) - FKs `character` (CASCADE), `technique`
+(PROTECT), nullable `crossing` (SET_NULL - which Crossing discovered it, null for a
+plain Audere), `discovered_at`, `readied` (bool). Two constraints: one row per
+`(character, technique)`, and at most one `readied=True` row per character - the
+single pick of the character's current Audere. Deliberately not a
+`CharacterTechnique`: that row means "castable now" and every ordinary cast surface
+reads it, so keeping ultimates off it excludes them from everyday casting by
+construction rather than by a filter someone could forget.
+
+**Where an ultimate attaches:**
+
+| Source | Field | Scope |
+|--------|-------|-------|
+| Owned (Path x major Gift) | `PathGiftGrant.ultimate_techniques` (M2M, mirrors `starter_techniques`) | major gifts only |
+| Bond: patron | `WorshippedBeing.ultimate_techniques` (M2M) | devotees of that being |
+| Bond: companion | `CompanionArchetype.ultimate_techniques` (M2M) | that archetype's bonded companions |
+
+Court pacts give enhancements only (decision 8), never ultimates of their own. Past-life
+bond ultimates are deferred (spec scope) - the natural home is the past life's alternate
+self, whose ability suite already grants techniques.
+
+**Every ordinary acquisition surface excludes `is_ultimate=True`.** CG catalog pick
+lists, covenant role auto-grants, the Sphinx's shopping list, the ORGANIZATION thread
+weave (`Gift.inherited_techniques`), alternate-self ability suites, item
+`TechniqueGrant`s, GM award, and ritual SERVICE dispatch all filter or refuse it; the
+shared guard is `enforce_not_ultimate(technique)`
+(`world/magic/services/gift_acquisition.py`), raising `UltimateNotLearnable`
+(`exceptions.py`), called from both `learn_technique` and `charge_and_learn` ahead of
+GM-fiat too.
+
+**The reveal is computed state, not an offer table.** `ultimate_reveal_for(sheet,
+ceremony) -> UltimateReveal | None` (`world/magic/services/ultimates.py`) derives the
+reveal fresh on every read: owned pools (current Path x major Gift, for a plain Audere;
+the new Path x major Gift, for Audere Majora), owned-known pools (any technique the
+character already knows via `KnownUltimate` whose grant is for a Gift still held as
+MAJOR, regardless of which Path is current - so an owned known ultimate survives a
+Crossing), and bond pools (active patron devotion, active companion bond only - a
+released bond's ultimates simply fall out of the pool, no extra check needed).
+Candidates are filtered through #4097's `exclude_unmet_technique_requirements`
+(promoted from the Sphinx's own prerequisite filter, now shared). Each pool is grouped
+by category (`Technique.archetype_alignment` - Sword, Shield, Crown; display labels
+come from `AudereThreshold.label_for_category`, never the raw enum word) into one of
+three card kinds:
+
+| Card kind | Shown | Never shown |
+|-----------|-------|-------------|
+| KNOWN | name, description | - |
+| CATEGORY (undiscovered) | the category's authored label only | name, description, the technique's pk |
+| UPGRADE | name, `upgrade_of_name` (the earlier ultimate it supersedes, #4097 prerequisite) | - |
+
+An undiscovered candidate's identity never reaches the wire - the leak-analysis row in
+the spec is enforced structurally by the card shape, not by a serializer omission that
+could regress.
+
+**Choosing readies; it does not cast.** `choose_ultimate(character, choice_key)`
+(`@transaction.atomic`, `select_for_update`) re-resolves the reveal under the lock to
+close a double-submit race (mapping a stale read to `UltimateRevealClosed`), then
+`get_or_create`s the `KnownUltimate` row and sets `readied=True` - clearing any other
+readied row first (the DB constraint backstops this). This is the character's one pick
+for the current Audere; it does not cast anything. `readied_ultimate` /
+`clear_readied_ultimate` / `castable_technique_named` round out the read/clear/resolve
+surface; `has_reveal_cards` answers "would accepting Audere show this character
+anything" for the offer's framing line.
+
+**Lifecycle wiring.** `offer_audere`'s accepted path, `end_audere`, `cross_threshold`,
+and `end_audere_majora` (`world/magic/audere.py`, `audere_majora.py`) each clear any
+readied pick - on accept (a stale pick from an abnormal end must not hide the next
+reveal), on Audere/Majora ending, and on crossing (reopens the reveal for the new
+Path's ultimates).
+
+**Castable only in combat encounters.** `PlayerAction.is_ultimate` (actions/types.py)
+and the corresponding serializer field mark a readied ultimate as a selectable combat
+action; `_combat_actions` (`actions/player_interface.py`) appends it to the character's
+`CharacterTechnique`-derived list only while building combat actions. Telnet's
+`CmdDeclareTechnique._resolve_technique`/`_resolve_technique_id`
+(`commands/combat.py`) resolve a readied ultimate by name only while the caller has an
+active DECLARING round (`_combat_participant_or_none() is not None`) - never through
+`CmdClashCommit`'s shared `_find_technique_id` mixin method, so an ultimate cannot be
+played into a clash contribution or cast outside a combat round through the ordinary
+cast command. An ultimate always resolves through the ordinary `use_technique` cast
+pipeline once declared - no separate resolution path.
+
+**Audere Majora round block narrowed to the undecided offer (#4098).**
+`any_character_mid_audere_majora_crossing` (`world/magic/audere_majora.py`) used to
+treat the whole Audere Majora condition lifetime (lasting until the encounter
+completes) as blocking round resolution; it now checks only
+`PendingAudereMajoraOffer` existence. The original guard protected the narratively
+climactic, undecided moment of the offer from being overtaken by combat resolving
+around the character before they chose to cross; left unscoped it also froze every
+later round for the rest of the encounter, so a crosser could never act on the new
+Path's ultimate. `is_mid_audere_majora_crossing` (single-character, disconnect-pause
+use) is unchanged and still covers both windows.
+
+**Required-content sentinels (`web/admin/tuning/required_content.py`):** a Path x
+major Gift grant with zero rows in `ultimate_techniques` is flagged - an unfinished
+Path (spec decision 15); the runtime fallback is minimal (Audere still gives its
+surge, with no reveal). A second probe flags any `AudereThreshold` copy field
+(`reveal_framing_text`, `deferred_death_text`, the three category labels) still
+carrying its seeded PLACEHOLDER text.
+
+**REST (`world/magic/views.py`, `serializers.py`):** `GET
+/api/magic/audere/ultimates/?character_sheet_id=<id>` and `POST
+/api/magic/audere/ultimates/choose/`, both owner-scoped (staff bypass; a foreign or
+missing sheet both 404 identically - no existence leak).
+`PendingAudereOfferSerializer.reveal_framing_text` surfaces the authored framing line,
+blank unless `has_reveal_cards` is true. The character sheet's magic section gains a
+plain `ultimates: KnownUltimateEntry[]` list (name, description, authored category
+label - same visibility as the rest of the sheet's magic payload).
+
+**Frontend:** `UltimateRevealDialog` / `UltimateRevealGate`
+(`frontend/src/magic/components/`) - the gate mounts whenever a ceremony (Audere or
+Audere Majora) is active, shows the reveal, and renders a persistent "Ultimate ready"
+strip once a pick is readied; `AudereOfferDialog` gained the framing line;
+`ActionDeclarationCard` marks a readied ultimate in the action list;
+`SpellbookTab` lists known ultimates on the magic sheet.
+
+**Telnet (`world/magic/offer_handlers.py`):** `UltimateRevealHandler` (keyword
+`"ultimate"`) plus `format_ultimate_reveal`; the existing surge/crossing accept
+handlers append the reveal listing after their success message. `accept ultimate <n>`
+maps the ordinal onto the same stable card order the web reveal uses. Every reveal
+listing snapshots its shown `choice_key`s onto `caller.ndb.ultimate_reveal_choice_keys`
+- `accept ultimate <n>` is refused and the list reprinted, never resolved blind, if the
+pool has changed since that snapshot (e.g. a stale listing after the character leveled
+mid-read). Undiscovered cards show the authored label only, never the raw
+Sword/Shield/Crown word.
+
+**Deferred certain death.** Soulfray's `character_loss` consequence under Audere no
+longer kills synchronously - see the "Soulfray" note below, `docs/systems/INDEX.md`'s
+Vitals section, `docs/architecture/runtime-modifiers-audere.md`'s "Certain Death
+Deferral" section, and ADR-4098.
 
 ### Dramatic Moment Tagging (#545 / #1139)
 
