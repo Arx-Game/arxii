@@ -71,6 +71,12 @@ class TechniqueRequirementsNotMet(MagicError):
         )
 
 
+class UltimateNotLearnable(MagicError):
+    """An ultimate is only reachable at Audere, never learned (#4098)."""
+
+    user_message = "That technique can only be used in Audere."
+
+
 class GiftAlreadyOwnedError(MagicError):
     user_message = "You already have this gift."
 

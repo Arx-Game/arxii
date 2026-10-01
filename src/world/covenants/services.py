@@ -884,8 +884,10 @@ def _grant_role_gifts_and_techniques(membership: CharacterCovenantRole) -> None:
             gift=gift,
             defaults={"origin": AcquisitionOrigin.ROLE_GRANT},
         )
-        # Mint CharacterTechnique for each of the gift's techniques.
-        for technique in Technique.objects.filter(gift=gift):
+        # Mint CharacterTechnique for each of the gift's techniques. An ultimate is
+        # never auto-granted (#4098) — it is reachable only by discovering it at
+        # Audere/Audere Majora.
+        for technique in Technique.objects.filter(gift=gift, is_ultimate=False):
             CharacterTechnique.objects.get_or_create(
                 character=sheet,
                 technique=technique,

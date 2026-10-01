@@ -1093,13 +1093,22 @@ class TechniqueKnownRequirement(AbstractUnlockRequirement):
             raise ValidationError(msg)
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
-        """Check if character already knows the required technique."""
-        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+        """Check if character knows the required technique (#4097).
+
+        An ultimate is never a CharacterTechnique; it is known through a
+        KnownUltimate (#4098), which is how an upgraded ultimate's prerequisite is met.
+        """
+        from world.magic.models import CharacterTechnique, KnownUltimate  # noqa: PLC0415
 
         sheet = character.sheet_data
-        known = CharacterTechnique.objects.filter(
-            character=sheet, technique_id=self.required_technique_id
-        ).exists()
+        if self.required_technique.is_ultimate:
+            known = KnownUltimate.objects.filter(
+                character=sheet, technique_id=self.required_technique_id
+            ).exists()
+        else:
+            known = CharacterTechnique.objects.filter(
+                character=sheet, technique_id=self.required_technique_id
+            ).exists()
         if known:
             return True, f"Knows {self.required_technique.name}"
         return False, f"Need to know {self.required_technique.name}"

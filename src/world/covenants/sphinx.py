@@ -385,6 +385,7 @@ def _shopping_list(
             Technique.objects.filter(
                 function_tags__function=function,
                 gift_id__in=owned_gift_ids,
+                is_ultimate=False,
             )
             .exclude(pk__in=known_technique_ids)
             .select_related("gift")
