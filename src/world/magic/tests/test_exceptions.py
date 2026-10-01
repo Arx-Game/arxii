@@ -11,6 +11,7 @@ from world.magic.exceptions import (
     RequiredReferenceMissingError,
     SessionNotInPendingError,
     SessionTargetMissingError,
+    TechniqueRequirementsNotMet,
     ThresholdNotMetError,
 )
 
@@ -19,6 +20,31 @@ class NoMatchingWornFacetItemsErrorTests(SimpleTestCase):
     def test_user_message(self) -> None:
         exc = NoMatchingWornFacetItemsError()
         self.assertEqual(exc.user_message, "You aren't wearing anything bearing this facet.")
+
+
+class TechniqueRequirementsNotMetTests(SimpleTestCase):
+    """``user_message`` lists the failed requirement messages (#4097 fix round 2,
+    mirrors ``PathRequirementsNotMet``)."""
+
+    def test_user_message_lists_single_failure(self) -> None:
+        exc = TechniqueRequirementsNotMet(["Need to know Thornweave"])
+        self.assertEqual(
+            exc.user_message,
+            "You have not yet met what this technique requires: Need to know Thornweave",
+        )
+
+    def test_user_message_lists_multiple_failures(self) -> None:
+        exc = TechniqueRequirementsNotMet(["Need to know Thornweave", "Need to hold Embercraft"])
+        self.assertEqual(
+            exc.user_message,
+            "You have not yet met what this technique requires: "
+            "Need to know Thornweave; Need to hold Embercraft",
+        )
+
+    def test_failed_attribute_preserved(self) -> None:
+        failed = ["Need to know Thornweave"]
+        exc = TechniqueRequirementsNotMet(failed)
+        self.assertEqual(exc.failed, failed)
 
 
 class RitualSessionErrorTests(TestCase):

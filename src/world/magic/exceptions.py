@@ -53,11 +53,12 @@ class TechniqueCapExceeded(MagicError):
 
 
 class TechniqueRequirementsNotMet(MagicError):
-    """Raised when ``charge_and_learn`` finds an unmet active requirement (#4097).
+    """Raised when a technique-acquisition route finds an unmet active requirement
+    (``charge_and_learn``, ``learn_technique`` — #4097).
 
-    ``failed`` carries the internal per-requirement messages (e.g. "Need to know
-    Thornweave") for logging/debugging; ``user_message`` stays a curated system
-    message, never the internal detail (same pattern as ``TechniqueCapExceeded``).
+    ``failed`` carries the per-requirement messages (e.g. "Need to know
+    Thornweave"); ``user_message`` lists them, mirroring
+    ``PathRequirementsNotMet`` (``world.progression.exceptions``).
     """
 
     user_message = "You have not yet met what this technique requires."
@@ -65,6 +66,9 @@ class TechniqueRequirementsNotMet(MagicError):
     def __init__(self, failed: list[str]) -> None:
         super().__init__("; ".join(failed))
         self.failed = failed
+        self.user_message = "You have not yet met what this technique requires: " + "; ".join(
+            failed
+        )
 
 
 class GiftAlreadyOwnedError(MagicError):

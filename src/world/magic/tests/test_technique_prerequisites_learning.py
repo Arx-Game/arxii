@@ -110,9 +110,12 @@ class ChargeAndLearnPrerequisitesTest(TestCase):
             self._learn()
 
         exc = ctx.exception
-        self.assertEqual(exc.user_message, "You have not yet met what this technique requires.")
         self.assertEqual(len(exc.failed), 1)
         self.assertIn(self.prerequisite.name, exc.failed[0])
+        # user_message lists the failed requirement messages (#4097 fix round 2,
+        # mirrors PathRequirementsNotMet).
+        self.assertIn("You have not yet met what this technique requires:", exc.user_message)
+        self.assertIn(exc.failed[0], exc.user_message)
 
     def test_succeeds_after_learning_prerequisite(self):
         TechniqueKnownRequirement.objects.create(
@@ -257,4 +260,6 @@ class TrainOfferStillOffersGatedTechniqueTest(TestCase):
     def test_learner_without_prerequisite_is_refused_with_requirements_message(self):
         result = run_train_offer(self.offer, self.persona)
 
-        self.assertEqual(result.message, TechniqueRequirementsNotMet.user_message)
+        # user_message lists the failed requirement (#4097 fix round 2).
+        self.assertIn("You have not yet met what this technique requires:", result.message)
+        self.assertIn(self.prerequisite.name, result.message)
