@@ -303,12 +303,11 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     audere_template = ConditionTemplate.get_by_name(AUDERE_CONDITION_NAME)
 
     with transaction.atomic():
-        from world.character_sheets.models import CharacterSheet
         from world.magic.services.ultimates import clear_readied_ultimate
 
         # A stale pick from an Audere that ended abnormally must not hide this reveal.
         # A sheet-less character (NPC) never has a readied pick to clear.
-        sheet = CharacterSheet.objects.filter(character=character).first()
+        sheet = character.character_sheet
         if sheet is not None:
             clear_readied_ultimate(sheet)
 
@@ -385,13 +384,12 @@ def end_audere(character: ObjectDB) -> None:
     threshold = AudereThreshold.objects.cached_singleton()
 
     with transaction.atomic():
-        from world.character_sheets.models import CharacterSheet
         from world.magic.services.ultimates import clear_readied_ultimate
 
         # Remove condition
         remove_condition(character, audere_template)
 
-        sheet = CharacterSheet.objects.filter(character=character).first()
+        sheet = character.character_sheet
         if sheet is not None:
             clear_readied_ultimate(sheet)
 
