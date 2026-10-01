@@ -31,7 +31,12 @@ from world.currency.models import FavorTokenDetails
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
-from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
+from world.magic.factories import (
+    GiftFactory,
+    ResonanceFactory,
+    TechniqueFactory,
+    UltimateTechniqueFactory,
+)
 from world.magic.models import CharacterGift, CharacterTechnique, Thread
 from world.narrative.models import NarrativeMessage
 from world.progression.models import DevelopmentPoints, ExperiencePointsData, MaturationStatCap
@@ -761,6 +766,21 @@ class GMAwardActionTechniqueTests(GMAdjudicationActionsTestBase):
             actor=self.gm_actor, target=self.target, award_type="technique"
         )
         self.assertFalse(result.success)
+
+    def test_award_ultimate_technique_is_refused_cleanly(self) -> None:
+        """A GM award of an ultimate refuses cleanly, not even a GM grant bypasses
+        this gate (#4098 fix round 1) -- before the fix, UltimateNotLearnable
+        propagated uncaught instead of returning a failure ActionResult."""
+        self._give_gift()
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Adjudication Ultimate")
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="technique",
+            technique_ref=ultimate.name,
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(CharacterTechnique.objects.filter(technique=ultimate).exists())
 
 
 class GMApplyConditionActionTests(GMAdjudicationActionsTestBase):
