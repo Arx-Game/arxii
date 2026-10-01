@@ -121,6 +121,39 @@ class PathGiftGrantAdminFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
 
 
+class KnownUltimateAdminTests(TestCase):
+    """#4098 final review item 6: autocomplete_fields, matching the sibling admins
+    (CharacterTechniqueAdmin's `character`) - never raw_id_fields, where a target's
+    own admin carries search_fields to back the autocomplete."""
+
+    def test_character_and_technique_use_autocomplete(self) -> None:
+        from world.magic.admin import KnownUltimateAdmin
+
+        self.assertEqual(set(KnownUltimateAdmin.autocomplete_fields), {"character", "technique"})
+
+    def test_crossing_has_no_registered_admin_so_stays_raw_id(self) -> None:
+        """AudereMajoraCrossing carries no ModelAdmin of its own (no search_fields to
+        back an autocomplete) - switching this one too would fail Django's admin
+        system checks (admin.E039), so it stays raw_id_fields."""
+        from django.contrib import admin as django_admin
+
+        from world.magic.admin import KnownUltimateAdmin
+        from world.magic.audere_majora import AudereMajoraCrossing
+
+        self.assertNotIn(AudereMajoraCrossing, django_admin.site._registry)
+        self.assertIn("crossing", KnownUltimateAdmin.raw_id_fields)
+        self.assertNotIn("crossing", KnownUltimateAdmin.autocomplete_fields)
+
+    def test_admin_passes_django_system_checks(self) -> None:
+        from django.contrib import admin as django_admin
+
+        from world.magic.admin import KnownUltimateAdmin
+        from world.magic.models import KnownUltimate
+
+        admin_instance = KnownUltimateAdmin(KnownUltimate, django_admin.site)
+        self.assertEqual(admin_instance.check(), [])
+
+
 class AudereCopySeedTests(TestCase):
     def test_copy_fields_seed_with_placeholder_marker(self) -> None:
         threshold = AudereThresholdFactory()
