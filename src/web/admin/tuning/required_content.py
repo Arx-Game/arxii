@@ -428,12 +428,21 @@ _PLACEHOLDER_MARK = "PLACEHOLDER"
 
 
 def _probe_audere_ultimate_copy() -> ProbeResult:
-    """The Audere reveal copy has been authored over its PLACEHOLDER seed (#4098 d.17)."""
+    """The Audere reveal copy has been authored over its PLACEHOLDER seed (#4098 d.17).
+
+    A missing singleton reports `present=True` here: that absence is already the
+    REQUIRED `audere-threshold` row's failure state (ADR-free, fix round 1 - the
+    two rows share one root cause, and reporting it under both buries it behind
+    the wrong consequence text for this TUNING row).
+    """
     from world.magic.audere import AudereThreshold  # noqa: PLC0415
 
     threshold = AudereThreshold.objects.cached_singleton()
     if threshold is None:
-        return ProbeResult(present=False, detail="No AudereThreshold row exists.")
+        return ProbeResult(
+            present=True,
+            detail="No AudereThreshold row exists - see the 'audere-threshold' REQUIRED row.",
+        )
     missing = tuple(
         field for field in _ULTIMATE_COPY_FIELDS if _PLACEHOLDER_MARK in getattr(threshold, field)
     )

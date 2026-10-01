@@ -1047,3 +1047,27 @@ class TestAudereUltimateCopyProbe(TestCase):
         result = _probe_audere_ultimate_copy()
         self.assertFalse(result.present)
         self.assertIn("sword_reveal_label", result.missing)
+
+    def test_fully_authored_copy_is_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+        from world.magic.factories import AudereThresholdFactory
+
+        AudereThresholdFactory(
+            reveal_framing_text="The threads of fate pull taut.",
+            deferred_death_text="Death waits at the edge of the circle.",
+            sword_reveal_label="The Sword",
+            shield_reveal_label="The Shield",
+            crown_reveal_label="The Crown",
+        )
+        result = _probe_audere_ultimate_copy()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+    def test_missing_singleton_is_present_not_crashed(self) -> None:
+        """A missing `AudereThreshold` is the REQUIRED `audere-threshold` row's failure
+        state (fix round 1) - this probe must not double-report it, and must not crash
+        reading fields off a `None` singleton."""
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+
+        result = _probe_audere_ultimate_copy()
+        self.assertTrue(result.present)
