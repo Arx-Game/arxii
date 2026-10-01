@@ -245,11 +245,11 @@ class AbstractUnlockRequirement(models.Model):
     """Abstract base for all types of requirements for unlock targets.
 
     Generalized from the former ``AbstractClassLevelRequirement`` (#1885):
-    the base now supports a polymorphic unlock target — a ``ClassLevelUnlock``
-    (Durance path), a ``ThreadCrossingThreshold`` (thread crossing gate), a
-    ``Path`` (hybrid path entry gate, #2538), or a ``Technique`` (technique
-    learning gate, #4097). Exactly one of the four FKs must be set, enforced
-    by a CheckConstraint.
+    the base now supports a polymorphic unlock target, one of a
+    ``ClassLevelUnlock`` (Durance path), a ``ThreadCrossingThreshold`` (thread
+    crossing gate), a ``Path`` (hybrid path entry gate, #2538), or a
+    ``Technique`` (technique learning gate, #4097). Exactly one of the four
+    FKs must be set, enforced by a CheckConstraint.
 
     See ADR-0090 for the boundary choice and the ADR-0016 (shared base) vs
     ADR-0089 (sibling-per-domain) justification.
@@ -280,7 +280,8 @@ class AbstractUnlockRequirement(models.Model):
         blank=True,
         help_text=(
             "Thread crossing threshold this requirement gates. "
-            "Exactly one of class_level_unlock / thread_crossing_threshold / path must be set."
+            "Exactly one of class_level_unlock / thread_crossing_threshold / path / "
+            "technique must be set."
         ),
     )
     path = models.ForeignKey(
@@ -633,7 +634,14 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
 
 
 class LegendRequirement(AbstractClassLevelRequirement):
-    """Requires a minimum total legend value for path leveling."""
+    """Requires a minimum total legend value for path leveling.
+
+    Deliberately narrower than the base's four-way polymorphic target: this type
+    accepts only ``class_level_unlock`` or ``thread_crossing_threshold`` (never
+    ``path`` or ``technique``), enforced by its own ``Meta.constraints`` below
+    rather than the base class's ``exactly_one_unlock_target`` constraint (#4097
+    fix round 1).
+    """
 
     minimum_legend = models.PositiveIntegerField(
         help_text="Minimum total legend required",
@@ -661,10 +669,14 @@ class LegendRequirement(AbstractClassLevelRequirement):
                 check=(
                     models.Q(class_level_unlock__isnull=False)
                     & models.Q(thread_crossing_threshold__isnull=True)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=False)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 ),
                 name="legendrequirement_exactly_one_unlock_target",
             ),
@@ -777,6 +789,12 @@ class ItemRequirement(AbstractClassLevelRequirement):
     min_touchstone_tier (any attuned item tied to a Resonance the character
     holds, at/above a tier floor) is set. Possession-only — is_met_by_character
     never consumes the qualifying item (#1859 Decision 4).
+
+    Also deliberately narrower than the base's four-way polymorphic unlock
+    target: this type accepts only ``class_level_unlock`` or
+    ``thread_crossing_threshold`` (never ``path`` or ``technique``), enforced by
+    its own ``Meta.constraints`` below rather than the base class's
+    ``exactly_one_unlock_target`` constraint (#4097 fix round 1).
     """
 
     item_template = models.ForeignKey(
@@ -828,10 +846,14 @@ class ItemRequirement(AbstractClassLevelRequirement):
                 check=(
                     models.Q(class_level_unlock__isnull=False)
                     & models.Q(thread_crossing_threshold__isnull=True)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=False)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 ),
                 name="itemrequirement_exactly_one_unlock_target",
             ),
