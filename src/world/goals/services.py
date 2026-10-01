@@ -171,7 +171,7 @@ def set_character_goals(
     from world.goals.constants import GoalHorizon  # noqa: PLC0415
 
     # Resolve domains + validate the cap in one pass; number within each horizon.
-    resolved: list[tuple[ModifierTarget, int, str, str, int]] = []
+    resolved: list[tuple[ModifierTarget, int, str, str, int, bool]] = []
     total_points = 0
     next_ordinal: dict[str, int] = {}
     for goal_data in goals:
@@ -181,10 +181,11 @@ def set_character_goals(
         points = goal_data.get("points", 0)
         notes = goal_data.get("notes", "")
         horizon = goal_data.get("horizon") or GoalHorizon.SHORT_TERM
+        is_secret = bool(goal_data.get("is_secret", False))
         if points > 0 or notes:
             ordinal = next_ordinal.get(horizon, 0) + 1
             next_ordinal[horizon] = ordinal
-            resolved.append((domain, points, notes, horizon, ordinal))
+            resolved.append((domain, points, notes, horizon, ordinal, is_secret))
         total_points += points
 
     if total_points > MAX_GOAL_POINTS:
@@ -192,7 +193,7 @@ def set_character_goals(
 
     with transaction.atomic():
         CharacterGoal.objects.filter(character=character).delete()
-        for domain, points, notes, horizon, ordinal in resolved:
+        for domain, points, notes, horizon, ordinal, is_secret in resolved:
             CharacterGoal.objects.create(
                 character=character,
                 domain=domain,
@@ -200,6 +201,7 @@ def set_character_goals(
                 notes=notes,
                 horizon=horizon,
                 ordinal=ordinal,
+                is_secret=is_secret,
             )
         if has_existing_goals:
             revision.mark_revised()

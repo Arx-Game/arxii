@@ -9,11 +9,13 @@ Journals track progress and award XP.
 """
 
 from datetime import timedelta
+from typing import ClassVar
 
 from django.db import models
 from django.utils import timezone
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.goals.constants import GoalHorizon, GoalStatus
 
 # Goal domain names for reference (stored as ModifierTarget with category='goal'):
@@ -31,7 +33,7 @@ OPTIONAL_GOAL_DOMAINS = {"Drives"}
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
-class CharacterGoal(SharedMemoryModel):
+class CharacterGoal(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     One goal a character holds, in a domain, with the points placed on it (#3621).
 
@@ -42,6 +44,12 @@ class CharacterGoal(SharedMemoryModel):
 
     Domain is a ModifierTarget with category='goal'.
     """
+
+    #: Saving or deleting a goal clears the sheet's cached rows
+    #: (``CharacterSheet.goal_rows``, ADR-0278, #4106): the sheet read used to prefetch
+    #: goals onto the identity-mapped sheet with a ``to_attr``, which Django never
+    #: re-fetches once set, so an edited goal kept its old state until a restart.
+    related_cache_fields: ClassVar[list[str]] = ["character"]
 
     character = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
@@ -77,6 +85,13 @@ class CharacterGoal(SharedMemoryModel):
         choices=GoalStatus.choices,
         default=GoalStatus.ACTIVE,
         help_text="Current status of this goal.",
+    )
+    # #4106: the character's own aim. Shown only to the owner and privileged readers,
+    # whatever the sheet's goals_visibility says; it still costs points and takes an
+    # ordinal like any goal. The journal keeps its own per-entry is_public.
+    is_secret = models.BooleanField(
+        default=False,
+        help_text="Kept to the character: hidden from every reader but the owner and staff.",
     )
     completed_at = models.DateTimeField(
         null=True,

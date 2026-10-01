@@ -1689,7 +1689,14 @@ class TestGoalsSection(TestCase):
         """Each goal entry has domain, horizon, ordinal, points, notes (#3621)."""
         goals = self._get_goals()
         for entry in goals:
-            assert set(entry.keys()) == {"domain", "horizon", "ordinal", "points", "notes"}
+            assert set(entry.keys()) == {
+                "domain",
+                "horizon",
+                "ordinal",
+                "points",
+                "notes",
+                "is_secret",
+            }
 
     def test_goal_entry_values(self) -> None:
         """Goal entries contain correct values."""
@@ -2358,6 +2365,53 @@ class TestStandingAndCovenantSections(TestCase):
         assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
         assert [row["organization"] for row in standing["reputations"]] == ["House du Verane"]
 
+    def test_a_secret_goal_is_the_owners_alone_whatever_the_section_tier_says(self) -> None:
+        """#4106: the mark is applied in the goal builder before the tier is consulted, so
+        opening the goals section to friends or the public never shows a secret goal."""
+        from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
+
+        domain = GoalDomainFactory(name="Mastery")
+        CharacterGoalFactory(
+            character=self.sheet, domain=domain, notes="Prove worthy", points=5, ordinal=1
+        )
+        CharacterGoalFactory(
+            character=self.sheet,
+            domain=domain,
+            notes="Find out who did it",
+            points=5,
+            ordinal=2,
+            is_secret=True,
+        )
+        self.sheet.goals_visibility = SheetVisibility.PUBLIC
+        self.sheet.save(update_fields=["goals_visibility"])
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+
+        owner_goals = self._payload(self.player)["goals"]
+        assert [g["notes"] for g in owner_goals] == ["Prove worthy", "Find out who did it"], (
+            owner_goals
+        )
+        assert [g["is_secret"] for g in owner_goals] == [False, True]
+        for other in (self.friend, self.stranger):
+            goals = self._payload(other)["goals"]
+            assert [g["notes"] for g in goals] == ["Prove worthy"]
+            assert goals[0]["is_secret"] is False
+
+    def test_a_houses_verdict_rides_the_standing_entry(self) -> None:
+        """#4106: favor shows as its label beside the title, and the default shows nothing."""
+        from world.societies.constants import MembershipFavor
+
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+        row = self._payload(self.friend)["standing"]["memberships"][0]
+        assert row["favor"] == ""
+        assert row["favor_note"] == ""
+        self.membership.favor = MembershipFavor.EXILED
+        self.membership.favor_note = "for the attempt on the throne"
+        self.membership.save(update_fields=["favor", "favor_note"])
+        row = self._payload(self.friend)["standing"]["memberships"][0]
+        assert row["favor"] == "Exiled"
+        assert row["favor_note"] == "for the attempt on the throne"
+        assert row["title"]  # still a member, still titled
+
     def test_every_visibility_tier_is_discoverable_from_the_model(self) -> None:
         """The guard on #3923's recurrence shape.
 
@@ -3015,10 +3069,19 @@ class TestPrefetchCompleteness(TestCase):
         with self.assertNumQueries(0):
             _build_story(sheet=sheet, bio_profile=sheet.true_profile)
 
-    def test_goals_zero_queries(self) -> None:
+    def test_goals_one_query_then_cached(self) -> None:
+        """Goals are a cached handler on the sheet (ADR-0278, #4106): one query the first
+        time, none after, and a goal's own save clears it."""
+        from world.goals.factories import CharacterGoalFactory
+
         sheet = self._get_sheet()
+        with self.assertNumQueries(1):
+            _build_goals(sheet, privileged=True)
         with self.assertNumQueries(0):
-            _build_goals(sheet)
+            _build_goals(sheet, privileged=True)
+        before = len(_build_goals(sheet, privileged=True))
+        CharacterGoalFactory(character=sheet, notes="A new aim", points=1)
+        self.assertEqual(len(_build_goals(sheet, privileged=True)), before + 1)
 
     def test_personas_zero_queries(self) -> None:
         sheet = self._get_sheet()

@@ -40,7 +40,7 @@ from world.goals.types import GoalInputData, GoalBonusBreakdown
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterGoal` | One goal, in a domain, with the points placed on it | `character` (ObjectDB), `domain` (ModifierTarget with category='goal'), `horizon` (`GoalHorizon`: short term / long term, #3621), `ordinal` (the number within its horizon, unique per character and horizon), `points`, `notes` (the goal in the player's words), `status` (GoalStatus), `completed_at`, `updated_at` |
+| `CharacterGoal` | One goal, in a domain, with the points placed on it | `character` (ObjectDB), `domain` (ModifierTarget with category='goal'), `horizon` (`GoalHorizon`: short term / long term, #3621), `ordinal` (the number within its horizon, unique per character and horizon), `points`, `notes` (the goal in the player's words), `is_secret` (kept to the character, #4106: the sheet shows it to the owner and staff only, whatever `goals_visibility` says; it still costs points and takes an ordinal), `status` (GoalStatus), `completed_at`, `updated_at`. Goals are read off the sheet through `CharacterSheet.goal_rows`, a cached handler a goal's own save or delete clears (ADR-0278); the old `Prefetch(to_attr=)` onto the identity-mapped sheet was never re-fetched once set |
 | `GoalRevision` | Tracks when goals were last revised (weekly limit) | `character` (OneToOne ObjectDB), `last_revised_at` |
 | `GoalInstance` | Records each time a goal was applied to a roll | `goal` (CharacterGoal), `roll_story`, `created_at` |
 

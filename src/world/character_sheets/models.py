@@ -1089,6 +1089,12 @@ class CharacterSheet(SharedMemoryModel):
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")
 
     @PrunedCachedProperty
+    def goal_rows(self) -> list:
+        """The character's goals, numbered within their horizons (#3621). Cleared by any
+        CharacterGoal save or delete through its related_cache_fields (ADR-0278, #4106)."""
+        return list(self.goals.select_related("domain").order_by("horizon", "ordinal"))
+
+    @PrunedCachedProperty
     def enemy_rows(self) -> list[CharacterEnemy]:
         """Who wants this character to fail (#3621). Cleared by any
         CharacterEnemy save or delete through its related_cache_fields."""

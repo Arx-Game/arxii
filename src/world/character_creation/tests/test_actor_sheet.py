@@ -277,6 +277,7 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
                     "points": 12,
                     "notes": "Doors.",
                     "horizon": "long_term",
+                    "is_secret": True,
                 },
             ],
             "enemy": {
@@ -313,6 +314,8 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
             (GoalHorizon.SHORT_TERM, 1, "Bonds", 12),
             (GoalHorizon.SHORT_TERM, 2, "Wealth", 6),
         ]
+        # #4106: the mark survives finalize; it is the long-term goal's alone.
+        assert [g.is_secret for g in goals] == [True, False, False]
 
         enemy = CharacterEnemy.objects.get(character=sheet)
         assert enemy.organization == self.republic

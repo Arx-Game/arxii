@@ -315,6 +315,9 @@ class GoalEntry(TypedDict):
     ordinal: int
     points: int
     notes: str
+    #: #4106: only ever True in the owner's or a privileged reader's own payload; a
+    #: secret goal is dropped from everyone else's before the section is built.
+    is_secret: bool
 
 
 class EnemyEntry(TypedDict):
@@ -435,6 +438,9 @@ class OrgMembershipEntry(TypedDict):
     organization_id: int
     organization: str
     title: str
+    #: #4106: the house's verdict on a standing member, as its label; "" when in favour.
+    favor: str
+    favor_note: str
 
 
 class OrgReputationEntry(TypedDict):

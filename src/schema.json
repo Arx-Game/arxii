@@ -52745,6 +52745,16 @@ components:
       - current
       - percentage
       - zone
+    FavorEnum:
+      enum:
+      - in_favor
+      - in_disgrace
+      - exiled
+      type: string
+      description: |-
+        * `in_favor` - In favour
+        * `in_disgrace` - In disgrace
+        * `exiled` - Exiled
     FeastDayLine:
       type: object
       properties:
@@ -62954,6 +62964,19 @@ components:
           format: date-time
           nullable: true
           description: When the persona was forcibly removed from the organization
+        favor:
+          allOf:
+          - $ref: '#/components/schemas/FavorEnum'
+          description: |-
+            The organization's standing verdict on this member; they remain a member.
+
+            * `in_favor` - In favour
+            * `in_disgrace` - In disgrace
+            * `exiled` - Exiled
+        favor_note:
+          type: string
+          description: Why, in one line, for a member in disgrace or exile.
+          maxLength: 200
         is_active:
           type: boolean
           readOnly: true

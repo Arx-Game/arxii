@@ -84,7 +84,6 @@ from world.forms.models import (
     FormType,
     PersonaTraitDescriptor,
 )
-from world.goals.models import CharacterGoal
 from world.items.models import EquippedItem
 from world.items.services.visibility import compute_worn_visibility
 from world.locations.constants import LocationRole
@@ -113,6 +112,7 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
+from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
 from world.societies.models import OrganizationMembership, OrganizationReputation
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
@@ -1193,18 +1193,22 @@ def _build_story(
     )
 
 
+# The goals are a cached handler on the sheet (``CharacterSheet.goal_rows``, ADR-0278),
+# cleared by a goal's own save or delete, so nothing is prefetched here: a
+# ``Prefetch(to_attr=...)`` onto the identity-mapped sheet was never re-fetched once
+# set, and an edited goal kept its old state until a restart (#4106).
 _GOALS_SELECT_RELATED: tuple[str, ...] = ()
-_GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    Prefetch(
-        "goals",
-        queryset=CharacterGoal.objects.select_related("domain"),
-        to_attr="cached_goals",
-    ),
-)
+_GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
-def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
-    """Build the goals section from prefetched CharacterGoal data."""
+def _build_goals(sheet: CharacterSheet, *, privileged: bool) -> list[GoalEntry]:
+    """Build the goals section from the sheet's cached goal rows.
+
+    A secret goal (#4106) is the character's own: it is dropped here for every viewer
+    but the owner or staff, before the section's visibility tier is even consulted, so
+    opening the goals section to friends or the public never shows it. The owner's
+    payload carries the mark so the page can show it.
+    """
     return [
         GoalEntry(
             domain=goal.domain.name,
@@ -1212,8 +1216,10 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
             ordinal=goal.ordinal,
             points=goal.points,
             notes=goal.notes,
+            is_secret=goal.is_secret,
         )
-        for goal in sheet.cached_goals
+        for goal in sheet.goal_rows
+        if privileged or not goal.is_secret
     ]
 
 
@@ -1473,6 +1479,9 @@ def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection
                 organization_id=row.organization_id,
                 organization=row.organization.name,
                 title=row.get_title(),
+                # #4106: the house's verdict beside the title; "" for the default standing.
+                favor=(row.get_favor_display() if row.favor != MembershipFavor.IN_FAVOR else ""),
+                favor_note=row.favor_note,
             )
             for row in membership_rows
         ],
@@ -2085,7 +2094,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             "magic": _build_magic(sheet, privileged=privileged) if show_magic else None,
             # Story reads from the presented face's profile (cover identities show their own).
             "story": _build_story(sheet=sheet, bio_profile=bio_profile, privileged=privileged),
-            "goals": _build_goals(sheet) if show_goals else [],
+            "goals": _build_goals(sheet, privileged=privileged) if show_goals else [],
             # #3906 — Ties' rail. Standing rides its own tier; covenant roles are
             # public, the way the Titles block beside them has always been.
             "standing": _build_standing(active, visible=show_standing),

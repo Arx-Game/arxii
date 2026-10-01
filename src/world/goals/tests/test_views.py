@@ -199,7 +199,7 @@ class CharacterGoalViewSetTests(TestCase):
         data = {
             "goals": [
                 {"domain": self.standing.id, "points": 15, "notes": "Become Count"},
-                {"domain": self.wealth.id, "points": 10},
+                {"domain": self.wealth.id, "points": 10, "is_secret": True},
             ]
         }
         response = self.client.post(
@@ -214,9 +214,10 @@ class CharacterGoalViewSetTests(TestCase):
         assert response.data["total_points"] == 25
         assert response.data["points_remaining"] == 5
 
-        # Verify goals were created
-        goals = CharacterGoal.objects.filter(character=self.sheet)
+        # Verify goals were created, the second kept to the character (#4106).
+        goals = CharacterGoal.objects.filter(character=self.sheet).order_by("ordinal")
         assert goals.count() == 2
+        assert [g.is_secret for g in goals] == [False, True]
 
     @patch("world.goals.views.CharacterGoalViewSet._get_character")
     def test_update_all_replaces_existing_goals(self, mock_get_char):

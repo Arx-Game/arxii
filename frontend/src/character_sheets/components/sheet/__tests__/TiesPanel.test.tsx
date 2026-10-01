@@ -108,7 +108,15 @@ describe('TiesPanel', () => {
   it('draws the standing rows the payload carries, for a viewer who is not the owner', () => {
     renderTies({
       standing: {
-        memberships: [{ organization_id: 10, organization: 'House Valardin', title: 'Voice' }],
+        memberships: [
+          {
+            organization_id: 10,
+            organization: 'House Valardin',
+            title: 'Voice',
+            favor: '',
+            favor_note: '',
+          },
+        ],
         reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
       },
     });

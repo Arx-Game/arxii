@@ -452,7 +452,14 @@ export interface CharacterSheetTie {
  * Reputation is the NAMED TIER only, never the raw value.
  */
 export interface CharacterSheetStanding {
-  memberships: { organization_id: number; organization: string; title: string }[];
+  memberships: {
+    organization_id: number;
+    organization: string;
+    title: string;
+    /** The house's verdict on a standing member (#4106), as its label; '' when in favour. */
+    favor: string;
+    favor_note: string;
+  }[];
   reputations: { organization_id: number; organization: string; tier: string }[];
 }
 

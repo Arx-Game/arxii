@@ -119,7 +119,7 @@ class OrganizationMembershipInline(admin.TabularInline):
 
     model = OrganizationMembership
     extra = 0
-    fields = ["persona", "rank", "joined_date", "left_at", "exiled_at"]
+    fields = ["persona", "rank", "favor", "favor_note", "joined_date", "left_at", "exiled_at"]
     readonly_fields = ["joined_date", "left_at", "exiled_at"]
     raw_id_fields = ["persona"]
 
@@ -471,11 +471,12 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
         "organization",
         "rank",
         "get_title",
+        "favor",
         "joined_date",
         "left_at",
         "exiled_at",
     ]
-    list_filter = ["organization__society", "organization", "rank"]
+    list_filter = ["organization__society", "organization", "rank", "favor"]
     search_fields = ["persona__name", "organization__name"]
     ordering = ["organization", "rank__tier", "persona__name"]
     readonly_fields = ["joined_date", "get_title", "left_at", "exiled_at"]

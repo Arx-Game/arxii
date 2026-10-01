@@ -39,6 +39,7 @@ from world.societies.constants import (
     DeedKnowledgeSource,
     EnemyReach,
     LevyKind,
+    MembershipFavor,
     ObligationOrigin,
     ObligationState,
     OrgAppealState,
@@ -817,6 +818,20 @@ class OrganizationMembership(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="When the persona was forcibly removed from the organization",
+    )
+    # #4106: the house's verdict on a standing member. A member in disgrace or in exile
+    # is still a member (exiled_at is the one that removes them); this is what the roster
+    # and the sheet show beside the name, and the note says why.
+    favor = models.CharField(
+        max_length=20,
+        choices=MembershipFavor.choices,
+        default=MembershipFavor.IN_FAVOR,
+        help_text="The organization's standing verdict on this member; they remain a member.",
+    )
+    favor_note = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Why, in one line, for a member in disgrace or exile.",
     )
     covert_secret = models.ForeignKey(
         "arxii.Secret",

@@ -44,6 +44,7 @@ class CharacterGoalSerializer(serializers.ModelSerializer):
             "ordinal",
             "points",
             "notes",
+            "is_secret",
             "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
@@ -60,6 +61,8 @@ class GoalInputSerializer(serializers.Serializer):
     points = serializers.IntegerField(min_value=0)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     horizon = serializers.ChoiceField(choices=GoalHorizon.choices, default=GoalHorizon.SHORT_TERM)
+    # #4106: kept to the character; the sheet hides it from everyone but the owner and staff.
+    is_secret = serializers.BooleanField(required=False, default=False)
 
     def validate_points(self, value: int) -> int:
         """Validate points is non-negative."""

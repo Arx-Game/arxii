@@ -43,8 +43,21 @@ export function Ledger({ children }: { children: ReactNode }) {
 }
 
 /** A small uppercase tag. `accent` marks the one that matters on a row. */
-export function Tag({ children, accent }: { children: ReactNode; accent?: boolean }) {
-  return <span className={cn('refsheet-tag', accent && 'refsheet-tag-accent')}>{children}</span>;
+export function Tag({
+  children,
+  accent,
+  title,
+}: {
+  children: ReactNode;
+  accent?: boolean;
+  /** A hover note, for a tag that stands for a longer line (#4106). */
+  title?: string;
+}) {
+  return (
+    <span className={cn('refsheet-tag', accent && 'refsheet-tag-accent')} title={title}>
+      {children}
+    </span>
+  );
 }
 
 export interface GlanceRow {

@@ -105,7 +105,15 @@ describe('ReputationTab', () => {
         isMyCharacter
         viewedEntryId={1}
         standing={{
-          memberships: [{ organization_id: 10, organization: 'House Valardin', title: 'Voice' }],
+          memberships: [
+            {
+              organization_id: 10,
+              organization: 'House Valardin',
+              title: 'Voice',
+              favor: '',
+              favor_note: '',
+            },
+          ],
           reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
         }}
       />
@@ -117,6 +125,39 @@ describe('ReputationTab', () => {
     expect(screen.getByText('Thought of as')).toBeInTheDocument();
     // Covenant is its own rail block on the sheet (#3898), not a group in here.
     expect(screen.queryByText('Covenants')).not.toBeInTheDocument();
+  });
+
+  it("shows the house's verdict beside a membership, and nothing for the default (#4106)", () => {
+    setRenown(makeRenown());
+    renderWithProviders(
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        standing={{
+          memberships: [
+            {
+              organization_id: 10,
+              organization: 'House Valardin',
+              title: 'Voice',
+              favor: 'Exiled',
+              favor_note: 'for the attempt on the throne',
+            },
+            {
+              organization_id: 11,
+              organization: 'The Iron Guard',
+              title: 'Sworn',
+              favor: '',
+              favor_note: '',
+            },
+          ],
+          reputations: [],
+        }}
+      />
+    );
+    expect(screen.getByText('Exiled')).toHaveAttribute('title', 'for the attempt on the throne');
+    expect(screen.queryByText('In favour')).not.toBeInTheDocument();
   });
 
   it('shows a Wanted badge on a society row whose id appears in the heat data', () => {
@@ -160,7 +201,15 @@ describe('ReputationTab', () => {
         isMyCharacter={false}
         viewedEntryId={null}
         standing={{
-          memberships: [{ organization_id: 10, organization: 'House Valardin', title: 'Voice' }],
+          memberships: [
+            {
+              organization_id: 10,
+              organization: 'House Valardin',
+              title: 'Voice',
+              favor: '',
+              favor_note: '',
+            },
+          ],
           reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
         }}
       />
