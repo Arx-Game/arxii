@@ -13,6 +13,7 @@ from world.character_creation.constants import (
     PERSONALIZATION_COPY_KEYS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    TECHNIQUE_PERSONALIZATIONS_KEY,
     AnchorSource,
     OfferChapter,
     QuestionKind,
@@ -1589,6 +1590,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_origin_figures(value)
         self._validate_new_family_name(value)
         self._validate_family_aspect_picks(value)
+        self._validate_technique_personalizations(value)
 
         goals = value.get("goals")
         if goals is not None:
@@ -1596,6 +1598,46 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         self._validate_actor_sheet(value)
         return value
+
+    def _validate_technique_personalizations(self, data: dict) -> None:
+        """Shape + hygiene for ``technique_personalizations`` (#4099); cleans text in place."""
+        from world.magic.exceptions import InvalidPersonalText  # noqa: PLC0415
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            clean_custom_technique_description,
+            clean_custom_technique_name,
+        )
+
+        raw = data.get(TECHNIQUE_PERSONALIZATIONS_KEY)
+        if raw is None:
+            return
+        msg = "technique_personalizations must map a technique id to its picks"
+        if not isinstance(raw, dict):
+            raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
+        allowed = {
+            "custom_name",
+            "custom_description",
+            "signature_bonus_id",
+            "early_form_id",
+            "price_id",
+        }
+        for key, entry in raw.items():
+            if not str(key).isdigit() or not isinstance(entry, dict) or set(entry) - allowed:
+                raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
+            for id_field in ("signature_bonus_id", "early_form_id", "price_id"):
+                value = entry.get(id_field)
+                if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+                    raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
+            try:
+                entry["custom_name"] = clean_custom_technique_name(
+                    str(entry.get("custom_name") or "")
+                )
+                entry["custom_description"] = clean_custom_technique_description(
+                    str(entry.get("custom_description") or "")
+                )
+            except InvalidPersonalText as exc:
+                raise serializers.ValidationError(
+                    {TECHNIQUE_PERSONALIZATIONS_KEY: exc.user_message}
+                ) from exc
 
     def _validate_actor_sheet(self, data: dict) -> None:
         """The Actor's Sheet keys (#3621): three answers, the enemy pick, the Introductions."""

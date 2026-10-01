@@ -398,3 +398,9 @@ PERSONALIZATION_COPY_KEYS: tuple[str, ...] = (
     "personalize_mechanics_note",
     "personalize_needs_resonance",
 )
+
+#: ``draft_data`` key for creation-time technique personalization picks (#4099).
+#: Maps a technique id (string key, JSON has no int keys) to its picks — name,
+#: description, flourish/form/price ids. Entries for a technique no longer in
+#: ``selected_technique_ids`` are ignored by costs, validation and finalize alike.
+TECHNIQUE_PERSONALIZATIONS_KEY = "technique_personalizations"

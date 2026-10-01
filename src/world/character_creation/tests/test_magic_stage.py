@@ -218,6 +218,28 @@ class MagicStageValidationTest(TestCase):
         errors = compute_magic_errors(draft)
         assert errors == []
 
+    def test_personalization_pick_at_wrong_resonance_fails(self):
+        """An early form picked at a resonance other than the draft's gift resonance (#4099)."""
+        from world.character_creation.constants import TECHNIQUE_PERSONALIZATIONS_KEY
+        from world.magic.factories import TechniqueVariantFactory
+
+        other_resonance = ResonanceFactory()
+        form = TechniqueVariantFactory(
+            parent_technique=self.pool_techniques[0],
+            resonance=other_resonance,
+            unlock_thread_level=1,
+            creation_point_cost=1,
+        )
+        draft = self._draft(
+            **{
+                TECHNIQUE_PERSONALIZATIONS_KEY: {
+                    str(self.pool_techniques[0].id): {"early_form_id": form.pk}
+                }
+            }
+        )
+        errors = compute_magic_errors(draft)
+        assert errors != []
+
 
 class MagicFinalizationCGSeedingTest(TestCase):
     """finalize_magic_data seeds CharacterAnima and FatiguePool at CG completion (Phase 12)."""

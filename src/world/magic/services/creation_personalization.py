@@ -1,0 +1,257 @@
+"""Character creation's "make it yours" picks for a chosen technique (#4099, ADR-4099).
+
+Offers, validates, prices and applies three catalog picks (a flourish, an early form,
+a price) plus the player's own name and description. A null ``creation_point_cost``
+means a row is not offered in creation. Everything is keyed by technique id; entries
+for techniques the draft no longer selects are ignored.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING
+
+from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL, RestrictionKind
+from world.magic.types.personalization import (
+    PersonalizationOptionSet,
+    PricedPersonalizationLine,
+    TechniquePersonalizationPick,
+)
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Resonance, Restriction, SignatureMotifBonus, Technique
+    from world.magic.specialization.models import TechniqueVariant
+
+_PICK_INT_FIELDS = ("signature_bonus_id", "early_form_id", "price_id")
+_PICK_TEXT_FIELDS = ("custom_name", "custom_description")
+
+
+def parse_personalization_picks(
+    raw: object, *, technique_ids: Iterable[int]
+) -> list[TechniquePersonalizationPick]:
+    """Read already-validated draft data; drops entries for unselected techniques."""
+    if not isinstance(raw, dict):
+        return []
+    selected = set(technique_ids)
+    picks: list[TechniquePersonalizationPick] = []
+    for key, entry in raw.items():
+        technique_id = int(key)
+        if technique_id not in selected or not isinstance(entry, dict):
+            continue
+        picks.append(
+            TechniquePersonalizationPick(
+                technique_id=technique_id,
+                **{name: entry.get(name) or "" for name in _PICK_TEXT_FIELDS},
+                **{name: entry.get(name) for name in _PICK_INT_FIELDS},
+            )
+        )
+    return picks
+
+
+def _offered_flourishes(resonance_id: int | None) -> list[SignatureMotifBonus]:
+    from world.magic.models import SignatureMotifBonus  # noqa: PLC0415
+
+    if resonance_id is None:
+        return []
+    return list(
+        SignatureMotifBonus.objects.filter(
+            creation_point_cost__isnull=False,
+            required_facet__isnull=True,
+            required_resonance_id=resonance_id,
+            min_crossing_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL,
+        ).order_by("creation_point_cost", "name")
+    )
+
+
+def _offered_prices() -> list[Restriction]:
+    from world.magic.models import Restriction  # noqa: PLC0415
+
+    return list(
+        Restriction.objects.filter(
+            kind=RestrictionKind.PRICE, creation_point_cost__isnull=False
+        ).order_by("creation_point_cost", "name")
+    )
+
+
+def _allowed_effect_type_ids_by_price(prices: Sequence[Restriction]) -> dict[int, set[int]]:
+    """One bulk query over the M2M through table; never a cached read off the row itself.
+
+    ``Restriction`` is a ``SharedMemoryModel``, so any form of prefetch caching that
+    writes onto the instance (a ``Prefetch`` targeting an attribute, or plain
+    prefetch-related caching) shares that cache across every later read of the same
+    row for the life of the process - the same bug class ``CharacterTechnique.clean()``
+    deliberately avoids by querying fresh (#4099 Task 1 review). Reading the through
+    table directly sidesteps instance caching entirely.
+    """
+    from world.magic.models import Restriction  # noqa: PLC0415
+
+    through = Restriction.allowed_effect_types.through
+    pairs = through.objects.filter(restriction_id__in=[p.pk for p in prices]).values_list(
+        "restriction_id", "effecttype_id"
+    )
+    result: dict[int, set[int]] = {}
+    for restriction_id, effect_type_id in pairs:
+        result.setdefault(restriction_id, set()).add(effect_type_id)
+    return result
+
+
+def _price_fits(
+    price: Restriction, allowed_by_price: Mapping[int, set[int]], technique: Technique
+) -> bool:
+    allowed = allowed_by_price.get(price.pk)
+    return not allowed or technique.effect_type_id in allowed
+
+
+def creation_personalization_options(
+    techniques: Sequence[Technique], *, resonance_id: int | None
+) -> list[PersonalizationOptionSet]:
+    """What creation offers per technique. A fixed number of queries regardless of count."""
+    from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
+
+    flourishes = _offered_flourishes(resonance_id)
+    prices = _offered_prices()
+    allowed_by_price = _allowed_effect_type_ids_by_price(prices)
+    forms: list[TechniqueVariant] = []
+    if resonance_id is not None:
+        forms = list(
+            TechniqueVariant.objects.filter(
+                parent_technique_id__in=[t.pk for t in techniques],
+                resonance_id=resonance_id,
+                creation_point_cost__isnull=False,
+            )
+            .select_related("resonance")
+            .order_by("unlock_thread_level", "pk")
+        )
+    return [
+        PersonalizationOptionSet(
+            technique=technique,
+            flourishes=flourishes,
+            forms=[f for f in forms if f.parent_technique_id == technique.pk],
+            prices=[p for p in prices if _price_fits(p, allowed_by_price, technique)],
+        )
+        for technique in techniques
+    ]
+
+
+def personalization_pick_errors(
+    picks: Sequence[TechniquePersonalizationPick],
+    *,
+    techniques: Sequence[Technique],
+    resonance_id: int | None,
+) -> list[str]:
+    """Every pick must still be on offer for its technique at the draft's resonance."""
+    options = {
+        o.technique.pk: o
+        for o in creation_personalization_options(techniques, resonance_id=resonance_id)
+    }
+    errors: list[str] = []
+    names: set[str] = set()
+    for pick in picks:
+        option = options.get(pick.technique_id)
+        if option is None:
+            continue
+        if pick.signature_bonus_id is not None and pick.signature_bonus_id not in {
+            f.pk for f in option.flourishes
+        }:
+            errors.append("A chosen signature flourish is no longer available.")
+        if pick.early_form_id is not None and pick.early_form_id not in {
+            f.pk for f in option.forms
+        }:
+            errors.append("A chosen specialized form is no longer available.")
+        if pick.price_id is not None and pick.price_id not in {p.pk for p in option.prices}:
+            errors.append("A chosen price is no longer available.")
+        if pick.custom_name:
+            folded = pick.custom_name.casefold()
+            if folded in names:
+                errors.append("Give each technique its own name.")
+            names.add(folded)
+    return errors
+
+
+def priced_personalization_lines(
+    picks: Sequence[TechniquePersonalizationPick],
+    *,
+    techniques_by_id: Mapping[int, Technique],
+) -> list[PricedPersonalizationLine]:
+    """One CG-points line per priced pick, at each row's own cost. Three bulk lookups."""
+    from world.magic.models import Restriction, SignatureMotifBonus  # noqa: PLC0415
+    from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
+
+    picks = [p for p in picks if p.technique_id in techniques_by_id]
+    bonuses = SignatureMotifBonus.objects.in_bulk(
+        [p.signature_bonus_id for p in picks if p.signature_bonus_id]
+    )
+    forms = TechniqueVariant.objects.in_bulk([p.early_form_id for p in picks if p.early_form_id])
+    prices = Restriction.objects.in_bulk([p.price_id for p in picks if p.price_id])
+    lines: list[PricedPersonalizationLine] = []
+    for pick in picks:
+        technique_name = techniques_by_id[pick.technique_id].name
+        for row, label in (
+            (bonuses.get(pick.signature_bonus_id), "name"),
+            (forms.get(pick.early_form_id), "name_override"),
+            (prices.get(pick.price_id), "name"),
+        ):
+            if row is None or row.creation_point_cost is None:
+                continue
+            option_name = getattr(row, label, "") or technique_name
+            lines.append(
+                PricedPersonalizationLine(
+                    technique_name=technique_name,
+                    option_name=option_name,
+                    cost=row.creation_point_cost,
+                )
+            )
+    return lines
+
+
+def apply_creation_personalizations(
+    sheet: CharacterSheet,
+    picks: Sequence[TechniquePersonalizationPick],
+    *,
+    resonance: Resonance | None,
+) -> None:
+    """Write validated picks onto the new character's holds (CG finalize).
+
+    The flourish weaves the TECHNIQUE thread at the flourish's own level and signs it;
+    the Motif must already carry the gift resonance (``seed_motif_from_gift_resonance``).
+    """
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterTechnique,
+        Restriction,
+        SignatureMotifBonus,
+    )
+    from world.magic.services.signature import set_signature_bonus  # noqa: PLC0415
+    from world.magic.services.threads import weave_creation_technique_thread  # noqa: PLC0415
+    from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
+
+    if not picks:
+        return
+    holds = {
+        h.technique_id: h
+        for h in CharacterTechnique.objects.filter(
+            character=sheet, technique_id__in=[p.technique_id for p in picks]
+        ).select_related("technique")
+    }
+    bonuses = SignatureMotifBonus.objects.in_bulk(
+        [p.signature_bonus_id for p in picks if p.signature_bonus_id]
+    )
+    forms = TechniqueVariant.objects.in_bulk([p.early_form_id for p in picks if p.early_form_id])
+    prices = Restriction.objects.in_bulk([p.price_id for p in picks if p.price_id])
+    for pick in picks:
+        hold = holds.get(pick.technique_id)
+        if hold is None:
+            continue
+        hold.custom_name = pick.custom_name
+        hold.custom_description = pick.custom_description
+        hold.price = prices.get(pick.price_id)
+        hold.early_form = forms.get(pick.early_form_id)
+        hold.full_clean()
+        hold.save(update_fields=["custom_name", "custom_description", "price", "early_form"])
+        bonus = bonuses.get(pick.signature_bonus_id)
+        if bonus is not None and resonance is not None:
+            thread = weave_creation_technique_thread(
+                sheet, hold.technique, resonance, level=bonus.min_crossing_level
+            )
+            set_signature_bonus(thread, bonus)
+    sheet.character.techniques.invalidate()
