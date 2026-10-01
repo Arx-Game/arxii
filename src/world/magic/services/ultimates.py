@@ -7,6 +7,7 @@ one card exists. No offer row exists to clean up.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -22,10 +23,15 @@ from world.magic.types.ultimates import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import KnownUltimate, Technique
+    from world.classes.models import Path
+    from world.companions.models import Companion
+    from world.magic.models import Gift, KnownUltimate, Technique
+    from world.worship.models import WorshippedBeing
 
 _CATEGORY_ORDER = (RoleArchetype.SWORD, RoleArchetype.SHIELD, RoleArchetype.CROWN)
 _KEY_SEP = ":"
@@ -36,10 +42,10 @@ class _Pool:
     source: str
     source_id: int
     techniques: tuple[Technique, ...]
-    path: object = None
-    gift: object = None
-    being: object = None
-    companion: object = None
+    path: Path | None = None
+    gift: Gift | None = None
+    being: WorshippedBeing | None = None
+    companion: Companion | None = None
 
 
 def active_ceremony(character: ObjectDB) -> str | None:  # noqa: OBJECTDB_PARAM - condition target
@@ -63,7 +69,7 @@ def active_ceremony(character: ObjectDB) -> str | None:  # noqa: OBJECTDB_PARAM 
     return None
 
 
-def _ordered(techniques) -> tuple:
+def _ordered(techniques: Iterable[Technique]) -> tuple[Technique, ...]:
     return tuple(sorted(techniques, key=lambda t: (t.level, t.name, t.pk)))
 
 
@@ -85,12 +91,76 @@ def _owned_pools(sheet: CharacterSheet) -> list[_Pool]:
     links = PathGiftGrant.ultimate_techniques.through.objects.filter(
         pathgiftgrant_id__in=[g.pk for g in grants], technique__is_ultimate=True
     ).select_related("technique")
-    by_grant: dict[int, list] = {}
+    by_grant: dict[int, list[Technique]] = {}
     for link in links:
         by_grant.setdefault(link.pathgiftgrant_id, []).append(link.technique)
     return [
         _Pool(UltimateSource.OWNED, g.pk, _ordered(by_grant.get(g.pk, [])), path=path, gift=g.gift)
         for g in grants
+    ]
+
+
+def _owned_known_pools(sheet: CharacterSheet) -> list[_Pool]:
+    """Every KNOWN ultimate, grouped by the (Path x Gift) grant that offers it,
+    regardless of the character's CURRENT path (#4098 fix round 1, I1).
+
+    An owned ultimate the character has already discovered must stay listed (and
+    choosable) through every later Audere/Majora even after a Crossing moves them
+    off the path that originally offered it -- decisions 4 and 12. The gate is
+    "gift still held as MAJOR", not "grant belongs to the current path": a
+    ``KnownUltimate`` whose technique sits in any ``PathGiftGrant.ultimate_techniques``
+    for a MAJOR-held gift qualifies, from any Path. Batched: known-technique ids (1
+    query) + one through-table join (1 query, with the MAJOR-gift-id and
+    known-technique-id filters both compiled as nested subqueries) -- no query
+    inside a loop. A technique still offered by the character's CURRENT path's own
+    grant is naturally deduplicated by ``_pools``'s cross-pool ``seen`` set, so it
+    is never double-listed.
+    """
+    from world.magic.models import CharacterGift, KnownUltimate, PathGiftGrant  # noqa: PLC0415
+
+    known_ids = set(
+        KnownUltimate.objects.filter(character=sheet).values_list("technique_id", flat=True)
+    )
+    if not known_ids:
+        return []
+    major_gift_ids = CharacterGift.objects.filter(
+        character=sheet, gift__kind=GiftKind.MAJOR
+    ).values_list("gift_id", flat=True)
+    links = (
+        PathGiftGrant.ultimate_techniques.through.objects.filter(
+            pathgiftgrant__gift_id__in=major_gift_ids,
+            technique_id__in=known_ids,
+            technique__is_ultimate=True,
+        )
+        .select_related("pathgiftgrant__path", "pathgiftgrant__gift", "technique")
+        .order_by(
+            "pathgiftgrant__path__name",
+            "pathgiftgrant__gift__name",
+            "pathgiftgrant_id",
+            "technique_id",
+        )
+    )
+    # Deterministic tie-break when more than one grant offers the same known
+    # technique: the first one in (path name, gift name, grant pk) order.
+    seen_techniques: set[int] = set()
+    grant_by_pk: dict[int, PathGiftGrant] = {}
+    techniques_by_grant: dict[int, list[Technique]] = {}
+    for link in links:
+        if link.technique_id in seen_techniques:
+            continue
+        seen_techniques.add(link.technique_id)
+        grant = link.pathgiftgrant
+        grant_by_pk[grant.pk] = grant
+        techniques_by_grant.setdefault(grant.pk, []).append(link.technique)
+    return [
+        _Pool(
+            UltimateSource.OWNED,
+            grant_pk,
+            _ordered(techs),
+            path=grant_by_pk[grant_pk].path,
+            gift=grant_by_pk[grant_pk].gift,
+        )
+        for grant_pk, techs in techniques_by_grant.items()
     ]
 
 
@@ -102,7 +172,7 @@ def _patron_pools(sheet: CharacterSheet) -> list[_Pool]:
     links = WorshippedBeing.ultimate_techniques.through.objects.filter(
         worshippedbeing_id__in=[b.pk for b in beings], technique__is_ultimate=True
     ).select_related("technique")
-    by_being: dict[int, list] = {}
+    by_being: dict[int, list[Technique]] = {}
     for link in links:
         by_being.setdefault(link.worshippedbeing_id, []).append(link.technique)
     return [
@@ -123,7 +193,7 @@ def _companion_pools(sheet: CharacterSheet) -> list[_Pool]:
         companionarchetype_id__in={c.archetype_id for c in companions},
         technique__is_ultimate=True,
     ).select_related("technique")
-    by_archetype: dict[int, list] = {}
+    by_archetype: dict[int, list[Technique]] = {}
     for link in links:
         by_archetype.setdefault(link.companionarchetype_id, []).append(link.technique)
     return [
@@ -141,10 +211,16 @@ def _pools(sheet: CharacterSheet) -> list[_Pool]:
     """Every source pool, a technique appearing in an earlier pool dropped from later ones."""
     seen: set[int] = set()
     pools: list[_Pool] = []
-    for pool in _owned_pools(sheet) + _patron_pools(sheet) + _companion_pools(sheet):
+    every_pool = (
+        _owned_pools(sheet)
+        + _owned_known_pools(sheet)
+        + _patron_pools(sheet)
+        + _companion_pools(sheet)
+    )
+    for pool in every_pool:
         fresh = tuple(t for t in pool.techniques if t.pk not in seen)
         seen.update(t.pk for t in fresh)
-        pools.append(_Pool(**{**pool.__dict__, "techniques": fresh}))
+        pools.append(dataclasses.replace(pool, techniques=fresh))
     return pools
 
 
@@ -353,6 +429,7 @@ def readied_ultimate(sheet: CharacterSheet) -> KnownUltimate | None:
 
 
 def clear_readied_ultimate(sheet: CharacterSheet) -> None:
+    """Clear any readied pick for this character (a stale Audere's end, a Crossing)."""
     from world.magic.models import KnownUltimate  # noqa: PLC0415
 
     # Iterate + save rather than a bulk .update(): a bulk update leaves any

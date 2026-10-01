@@ -13,8 +13,15 @@ that carries a non-null ``discovery_achievement`` FK.  Capability handling is
 identical regardless of source — never branch on covenant (spec Decision 11).
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from world.achievements.constants import AccessChangeSource
 from world.achievements.services import can_earn_achievements, grant_achievement
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 
 def announce_achievement(
@@ -76,7 +83,7 @@ def announce_access_change(character_sheet, *, gained, lost, source):
     fire_first_discoveries(character_sheet, gained)
 
 
-def fire_first_discoveries(character_sheet, gained) -> None:
+def fire_first_discoveries(character_sheet: CharacterSheet, gained: list[object]) -> None:
     """Fire the discovery ceremony for each discoverable item in ``gained`` (ADR-0016).
 
     The second half of ``announce_access_change``, callable alone by a seam that
