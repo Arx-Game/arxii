@@ -2,6 +2,7 @@
 
 from rest_framework.test import APITestCase
 
+from evennia_extensions.factories import AccountFactory
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.conditions.factories import ConditionInstanceFactory
 from world.covenants.constants import RoleArchetype
@@ -49,6 +50,7 @@ class AudereUltimateApiTests(APITestCase):
         CharacterEngagementFactory(character=cls.sheet, engagement_type=EngagementType.COMBAT)
         CombatParticipantFactory(encounter=CombatEncounterFactory(), character_sheet=cls.sheet)
         cls.stranger = RosterTenureFactory().player_data.account
+        cls.staff = AccountFactory(username="ultimate_api_staff", is_staff=True)
 
     def setUp(self) -> None:
         ConditionInstanceFactory(target=self.sheet.character, condition=self.audere)
@@ -84,10 +86,41 @@ class AudereUltimateApiTests(APITestCase):
         self.assertEqual(response.data["name"], "Secretname")
         self.assertTrue(KnownUltimate.objects.get(character=self.sheet).readied)
 
-    def test_other_account_refused(self) -> None:
+    def test_other_account_get_404(self) -> None:
+        """#4098 fix round 1: ownership is a permission (404), never a 400."""
         self.client.force_authenticate(user=self.stranger)
         response = self.client.get(_STATE, {"character_sheet_id": self.sheet.pk})
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 404, response.content)
+
+    def test_other_account_choose_404(self) -> None:
+        self.client.force_authenticate(user=self.stranger)
+        response = self.client.post(
+            _CHOOSE,
+            {"character_sheet_id": self.sheet.pk, "choice_key": "known:1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404, response.content)
+
+    def test_missing_sheet_404_same_as_foreign(self) -> None:
+        """A nonexistent sheet id and a foreign-owned one read byte-identically."""
+        self.client.force_authenticate(user=self.stranger)
+        missing_id = self.sheet.pk + 1_000_000
+        foreign = self.client.get(_STATE, {"character_sheet_id": self.sheet.pk})
+        missing = self.client.get(_STATE, {"character_sheet_id": missing_id})
+        self.assertEqual(missing.status_code, 404, missing.content)
+        self.assertEqual(foreign.data, missing.data)
+
+    def test_staff_allowed_get_and_choose(self) -> None:
+        """Staff can read/choose on a sheet they don't own."""
+        self.client.force_authenticate(user=self.staff)
+        state = self.client.get(_STATE, {"character_sheet_id": self.sheet.pk})
+        self.assertEqual(state.status_code, 200, state.content)
+        key = state.data["reveal"]["groups"][0]["cards"][0]["choice_key"]
+        response = self.client.post(
+            _CHOOSE, {"character_sheet_id": self.sheet.pk, "choice_key": key}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["name"], "Secretname")
 
     def test_bad_key_is_400_with_user_message(self) -> None:
         self.client.force_authenticate(user=self.account)
