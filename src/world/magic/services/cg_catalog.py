@@ -47,7 +47,12 @@ def _gated_technique_ids() -> set[int]:
 
 
 def get_technique_options(
-    path: Path, gift: Gift, tradition: Tradition, *, include_unready: bool = False
+    path: Path,
+    gift: Gift,
+    tradition: Tradition,
+    *,
+    include_unready: bool = False,
+    exclude_gated: bool = False,
 ) -> TechniqueOptions:
     """Return the ready technique pool for one CG pick.
 
@@ -61,14 +66,25 @@ def get_technique_options(
     distinguish an unavailable technique from an unfinished one when reporting
     a stale or tampered selection.
 
-    A technique carrying any active requirement row (``TechniqueKnownRequirement``,
-    ``GiftHeldRequirement``, ...) is excluded outright (#4097): CG starter/special
-    picks have no prerequisites authored against them, and a draft has no
-    character yet to evaluate ``check_requirements_for_technique`` against.
+    ``exclude_gated=True`` (#4097) additionally excludes any technique carrying an
+    active requirement row (``TechniqueKnownRequirement``, ``GiftHeldRequirement``,
+    ...) — a draft has no character yet to evaluate
+    ``check_requirements_for_technique`` against, so CG picks skip gated
+    techniques outright rather than offering a pick nobody can finalize.
+    **Controller ruling (#4097 fix round 1):** pass ``exclude_gated=True`` only
+    from character-creation call sites that model what a new character can pick —
+    ``character_creation.validators``/``views`` and the starting-kit analytics
+    report (``web/admin/tuning/technique_analytics.py``, which explicitly models
+    "the picks a new character gets"). Any **in-play** caller — Academy TRAIN's
+    eligibility check (``npc_services.effects._technique_available_to_learner``)
+    is the one that exists today — MUST keep the default ``exclude_gated=False``:
+    an in-play learner may already meet the prerequisite, and
+    ``charge_and_learn``'s own per-character ``check_requirements_for_technique``
+    call is the correct gate for them, not a blanket catalog-level exclusion.
     """
-    technique_qs = Technique.objects.select_related("effect_type").exclude(
-        pk__in=_gated_technique_ids()
-    )
+    technique_qs = Technique.objects.select_related("effect_type")
+    if exclude_gated:
+        technique_qs = technique_qs.exclude(pk__in=_gated_technique_ids())
     if not include_unready:
         technique_qs = technique_qs.filter(action_template__isnull=False)
 

@@ -532,6 +532,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
         gift,
         draft.selected_tradition,
         include_unready=True,
+        exclude_gated=True,
     )
     available_techniques = [
         *technique_options.pool,
