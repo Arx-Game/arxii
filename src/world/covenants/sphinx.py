@@ -46,14 +46,9 @@ from world.magic.models import (
     TechniqueFunctionTag,
     Tradition,
 )
-from world.progression.services.spends import (
-    check_requirements_for_technique,
-    concrete_requirement_types,
-)
+from world.progression.services.spends import exclude_unmet_technique_requirements
 
 if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
-
     from world.character_sheets.models import CharacterSheet
 
 #: Shopping-list cap per uncovered function (spec: "up to 3 Technique rows").
@@ -294,48 +289,6 @@ def _uncovered_target_functions(demands: list[SphinxDemand]) -> set[str]:
     return targets
 
 
-def _exclude_prerequisite_gated(
-    character: ObjectDB, candidates: list[Technique]
-) -> list[Technique]:
-    """Drop a candidate whose authored prerequisites ``character`` fails to meet.
-
-    "Learnable" means ``learn_technique`` would actually mint it — gift ownership
-    (checked by the caller) is necessary but no longer sufficient since #4097: a
-    ``TechniqueKnownRequirement``/``GiftHeldRequirement``/etc. row targeting the
-    technique can still refuse it. Bounded, not a per-candidate query explosion:
-    one batched query per concrete requirement type (a small constant) to find
-    which of THIS CALL's candidates carry any active requirement at all —
-    typically none — and ``check_requirements_for_technique`` only for that
-    (usually empty) gated subset, never for every candidate.
-
-    ``_shopping_list`` calls this exactly ONCE per ``judge_vow`` invocation, over
-    the union of every uncovered function's candidate pool (#4097 fix round 3) —
-    calling it once per function instead made its query cost scale with the
-    number of uncovered functions, up to
-    ``len(concrete_requirement_types())`` extra queries per function.
-    """
-    candidate_ids = [technique.pk for technique in candidates]
-    gated_ids: set[int] = set()
-    for req_type in concrete_requirement_types():
-        gated_ids.update(
-            req_type.objects.filter(technique_id__in=candidate_ids, is_active=True).values_list(
-                "technique_id", flat=True
-            )
-        )
-    if not gated_ids:
-        return candidates
-
-    unmet_ids = {
-        technique.pk
-        for technique in candidates
-        if technique.pk in gated_ids
-        and not check_requirements_for_technique(character, technique)[0]
-    }
-    if not unmet_ids:
-        return candidates
-    return [technique for technique in candidates if technique.pk not in unmet_ids]
-
-
 def _shopping_list(
     sheet: CharacterSheet,
     demands: list[SphinxDemand],
@@ -345,7 +298,7 @@ def _shopping_list(
 
     "Learnable" = the sheet already owns the technique's gift (#2700) AND meets
     every authored prerequisite the technique carries (#4097 fix round 2, see
-    ``_exclude_prerequisite_gated``). Gift ownership is
+    ``exclude_unmet_technique_requirements``). Gift ownership is
     ``learn_technique``'s own first gate (``GiftNotOwned``); the prerequisite
     gate is its second. Every row here is something the character can actually
     go and learn right now. The previous path-style filter both under- and
@@ -359,8 +312,8 @@ def _shopping_list(
     capped candidate pool, plus the small constant-bounded gate check — run
     ONCE across every function's pooled candidates (#4097 fix round 3), never
     once per function. Running the gate per function made its cost scale with
-    the number of uncovered functions (up to ``len(concrete_requirement_types())``
-    extra queries PER function); hoisting it to a single pass over the union of
+    the number of uncovered functions (up to a small constant extra queries
+    PER function); hoisting it to a single pass over the union of
     every function's candidates keeps the gate's cost independent of how many
     functions are uncovered.
     """
@@ -400,7 +353,9 @@ def _shopping_list(
     #    candidates — its query count is now independent of len(sorted_functions).
     allowed_ids = {
         technique.pk
-        for technique in _exclude_prerequisite_gated(sheet.character, list(union_by_pk.values()))
+        for technique in exclude_unmet_technique_requirements(
+            sheet.character, list(union_by_pk.values())
+        )
     }
 
     # 3. Filter + slice each function's own pool against the shared allowed set

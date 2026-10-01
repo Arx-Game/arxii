@@ -253,6 +253,52 @@ def check_requirements_for_technique(
     return _check_requirements(character, technique, "technique")
 
 
+def exclude_unmet_technique_requirements(
+    character: ObjectDB,
+    candidates: list[Technique],
+) -> list[Technique]:
+    """Drop a candidate whose authored prerequisites ``character`` fails to meet.
+
+    "Learnable" means ``learn_technique`` would actually mint it — gift ownership
+    (checked by the caller) is necessary but no longer sufficient since #4097: a
+    ``TechniqueKnownRequirement``/``GiftHeldRequirement``/etc. row targeting the
+    technique can still refuse it. Bounded, not a per-candidate query explosion:
+    one batched query per concrete requirement type (a small constant) to find
+    which of THIS CALL's candidates carry any active requirement at all —
+    typically none — and ``check_requirements_for_technique`` only for that
+    (usually empty) gated subset, never for every candidate.
+
+    Two callers: the Sphinx's ``_shopping_list`` (``world.covenants.sphinx``, one
+    call per ``judge_vow`` invocation over the union of every uncovered function's
+    candidate pool — calling it once per function instead made its query cost
+    scale with the number of uncovered functions, up to
+    ``len(concrete_requirement_types())`` extra queries per function); and the
+    Audere ultimate reveal (``world.magic.services.ultimates``, #4098), which
+    filters undiscovered ultimates down to the ones a character could actually
+    choose.
+    """
+    candidate_ids = [technique.pk for technique in candidates]
+    gated_ids: set[int] = set()
+    for req_type in concrete_requirement_types():
+        gated_ids.update(
+            req_type.objects.filter(technique_id__in=candidate_ids, is_active=True).values_list(
+                "technique_id", flat=True
+            )
+        )
+    if not gated_ids:
+        return candidates
+
+    unmet_ids = {
+        technique.pk
+        for technique in candidates
+        if technique.pk in gated_ids
+        and not check_requirements_for_technique(character, technique)[0]
+    }
+    if not unmet_ids:
+        return candidates
+    return [technique for technique in candidates if technique.pk not in unmet_ids]
+
+
 def get_available_unlocks_for_character(
     character: ObjectDB,
 ) -> AvailableUnlocks:
