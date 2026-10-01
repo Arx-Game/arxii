@@ -106,56 +106,47 @@ def _resolve_scene_pk(value: int) -> object:
         raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
 
 
-def _resolve_account_sheet(sheet_id: int, request) -> CharacterSheet:
+def _resolve_account_sheet(
+    sheet_id: int,
+    request,
+    *,
+    exception_class: type[Exception] = serializers.ValidationError,
+) -> CharacterSheet:
     """Resolve ``sheet_id`` to a CharacterSheet owned by ``request.user``.
 
-    Staff bypass the ownership check. Raises ``serializers.ValidationError``
-    on lookup miss or ownership violation.
+    Staff bypass the ownership check. Raises ``exception_class`` on lookup miss or
+    ownership violation. Every pre-existing caller keeps the default
+    ``serializers.ValidationError`` (400, two distinct messages — not-found vs
+    not-owned).
+
+    #4098 fix round 1: the two ultimate serializers pass ``exception_class=NotFound``
+    instead — there, ownership is a permission (404), not a validation error (400): a
+    foreign account's sheet and a missing sheet must read identically, so the
+    not-owned branch raises the SAME ``_ERR_CHARACTER_SHEET_NOT_FOUND`` body a
+    ``NotFound`` caller gets on lookup miss, never revealing whether a sheet with
+    that id exists at all. (Final review item 10 merged the former
+    ``_resolve_account_sheet_or_404`` near-duplicate into this parameter.)
     """
     try:
         sheet = CharacterSheet.objects.get(pk=sheet_id)
     except CharacterSheet.DoesNotExist as exc:
-        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        raise exception_class(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
 
     user = request.user if request is not None else None
     if user is not None and user.is_staff:
         return sheet
 
+    not_owned_message = (
+        _ERR_CHARACTER_SHEET_NOT_OWNED
+        if exception_class is serializers.ValidationError
+        else _ERR_CHARACTER_SHEET_NOT_FOUND
+    )
     if user is None:
-        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_OWNED)
+        raise exception_class(not_owned_message)
 
     owned_ids = set(RosterEntry.objects.for_account(user).character_ids())
     if sheet.pk not in owned_ids:
-        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_OWNED)
-    return sheet
-
-
-def _resolve_account_sheet_or_404(sheet_id: int, request) -> CharacterSheet:
-    """Resolve ``sheet_id`` to a CharacterSheet owned by ``request.user``, as a 404.
-
-    #4098 fix round 1: ownership here is a permission, not a validation error — a
-    foreign account's sheet and a missing sheet must read identically (``NotFound``,
-    the same ``_ERR_CHARACTER_SHEET_NOT_FOUND`` body either way), so the response
-    never reveals whether a sheet with that id exists at all. Staff bypass the
-    ownership check (but a truly missing sheet still 404s for staff too).
-    """
-    from rest_framework.exceptions import NotFound  # noqa: PLC0415
-
-    try:
-        sheet = CharacterSheet.objects.get(pk=sheet_id)
-    except CharacterSheet.DoesNotExist as exc:
-        raise NotFound(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
-
-    user = request.user if request is not None else None
-    if user is not None and user.is_staff:
-        return sheet
-
-    if user is None:
-        raise NotFound(_ERR_CHARACTER_SHEET_NOT_FOUND)
-
-    owned_ids = set(RosterEntry.objects.for_account(user).character_ids())
-    if sheet.pk not in owned_ids:
-        raise NotFound(_ERR_CHARACTER_SHEET_NOT_FOUND)
+        raise exception_class(not_owned_message)
     return sheet
 
 
@@ -2670,9 +2661,11 @@ class AudereUltimateQuerySerializer(serializers.Serializer):
     character_sheet_id = serializers.IntegerField()
 
     def validate_character_sheet_id(self, value: int):
+        from rest_framework.exceptions import NotFound  # noqa: PLC0415
+
         # #4098 fix round 1: ownership is a permission (404), not a validation
         # error (400) — a foreign sheet must read identically to a missing one.
-        return _resolve_account_sheet_or_404(value, self.context.get("request"))
+        return _resolve_account_sheet(value, self.context.get("request"), exception_class=NotFound)
 
 
 class ChooseUltimateSerializer(serializers.Serializer):
@@ -2680,9 +2673,11 @@ class ChooseUltimateSerializer(serializers.Serializer):
     choice_key = serializers.CharField(max_length=80)
 
     def validate_character_sheet_id(self, value: int):
+        from rest_framework.exceptions import NotFound  # noqa: PLC0415
+
         # #4098 fix round 1: ownership is a permission (404), not a validation
         # error (400) — a foreign sheet must read identically to a missing one.
-        return _resolve_account_sheet_or_404(value, self.context.get("request"))
+        return _resolve_account_sheet(value, self.context.get("request"), exception_class=NotFound)
 
     def create(self, validated_data: dict):
         from world.magic.exceptions import UltimateChoiceError  # noqa: PLC0415
