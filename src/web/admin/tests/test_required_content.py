@@ -1097,6 +1097,40 @@ class TestAudereConditionShapeProbe(TestCase):
         self.assertEqual(result.missing, ())
 
 
+class TestUltimatesHaveActionTemplateProbe(TestCase):
+    """#4098 final review item 4: an ultimate with no action_template is pickable
+    through Audere and never castable - a sentinel, not a runtime guard."""
+
+    def test_ultimate_with_no_action_template_is_missing(self) -> None:
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import UltimateTechniqueFactory
+
+        ultimate = UltimateTechniqueFactory(name="Test Castless Ultimate")
+        result = _probe_ultimates_have_action_template()
+        self.assertFalse(result.present)
+        self.assertIn(ultimate.name, result.missing)
+
+    def test_ordinary_technique_with_no_action_template_never_flagged(self) -> None:
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import TechniqueFactory
+
+        TechniqueFactory(name="Test Ordinary No Template")
+        result = _probe_ultimates_have_action_template()
+        self.assertTrue(result.present)
+
+    def test_ultimate_with_an_action_template_is_present(self) -> None:
+        from actions.factories import ActionTemplateFactory
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import UltimateTechniqueFactory
+
+        UltimateTechniqueFactory(
+            name="Test Castable Ultimate", action_template=ActionTemplateFactory()
+        )
+        result = _probe_ultimates_have_action_template()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
 class TestAudereUltimateCopyProbe(TestCase):
     def test_placeholder_copy_reported(self) -> None:
         from web.admin.tuning.required_content import _probe_audere_ultimate_copy
