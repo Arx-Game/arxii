@@ -113,11 +113,17 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('renders the reveal framing line when reveal_framing_text is non-empty (#4098)', async () => {
+  it('renders the reveal framing line inline as the tail of the offer paragraph (#4098)', async () => {
     renderGate([{ ...OFFER, reveal_framing_text: 'PLACEHOLDER framing' }]);
 
     await screen.findByRole('alertdialog');
-    expect(screen.getByTestId('audere-reveal-framing')).toHaveTextContent('PLACEHOLDER framing');
+    const framing = screen.getByTestId('audere-reveal-framing');
+    expect(framing).toHaveTextContent('PLACEHOLDER framing');
+    // Demo fidelity: the framing sentence is the TAIL of the same paragraph as
+    // the offer text, not a second, separately styled paragraph.
+    const offerParagraph = screen.getByText(/Battered down\. Break through\./);
+    expect(offerParagraph.tagName).toBe('P');
+    expect(offerParagraph).toContainElement(framing);
   });
 
   it('renders no reveal framing line when reveal_framing_text is empty (#4098)', async () => {
