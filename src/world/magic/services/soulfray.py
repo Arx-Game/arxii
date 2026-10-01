@@ -378,7 +378,26 @@ def _fire_stage_consequence_pool(
     # Select and apply consequence
     pending = select_consequence_from_result(character, resilience_check, consequences)
     applied = apply_resolution(pending, ResolutionContext(character=character))
+    if lethal and pending.selected_consequence.character_loss:
+        _resolve_soulfray_character_loss(character)
     return resilience_check, (applied[0] if applied else None)
+
+
+def _resolve_soulfray_character_loss(character: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
+    """A selected character_loss consequence is a certain death (#4098 d.9).
+
+    Soulfray is now genuinely life-threatening (controller ruling, 2026-10-01):
+    characters don't respawn. Routes through the vitals death seam, which defers
+    under an active Audere/Audere Majora ``death_deferred`` condition and applies
+    now otherwise. No NPC Audere (decision 10): a character with no CharacterSheet
+    is skipped via the cached accessor, never re-queried.
+    """
+    from world.vitals import services as vitals_services  # noqa: PLC0415
+
+    sheet = character.character_sheet
+    if sheet is None:
+        return
+    vitals_services.defer_or_apply_certain_death(sheet)
 
 
 def _resolve_mishap(

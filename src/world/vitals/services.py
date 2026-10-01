@@ -947,6 +947,59 @@ def _is_terminal_stage(instance: ConditionInstance) -> bool:
     ).exists()
 
 
+def defer_or_apply_certain_death(character_sheet: CharacterSheet) -> bool:
+    """Soulfray made this death certain (#4098 decision 9). True when deferred.
+
+    Under an active ``death_deferred`` condition (Audere, Audere Majora) the death
+    waits for the encounter's end: the character keeps acting, ``death_certain_pending``
+    is set and the authored ``AudereThreshold.deferred_death_text`` is sent to them.
+    Otherwise the death applies now through ``_mark_dead``, the single death writer.
+    """
+    from world.conditions.services import has_death_deferred  # noqa: PLC0415
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals, _created = CharacterVitals.objects.get_or_create(character_sheet=character_sheet)
+    if vitals.life_state == CharacterLifeState.DEAD:
+        return False
+    character = character_sheet.character
+    if has_death_deferred(character):
+        if not vitals.death_certain_pending:
+            vitals.death_certain_pending = True
+            vitals.save(update_fields=["death_certain_pending"])
+            threshold = AudereThreshold.objects.cached_singleton()
+            if threshold is not None and threshold.deferred_death_text.strip():
+                character.msg(threshold.deferred_death_text)
+        return True
+    vitals.health = 0
+    vitals.save(update_fields=["health"])
+    _mark_dead(character_sheet)
+    return False
+
+
+def apply_pending_certain_death(character_sheet: CharacterSheet) -> bool:
+    """Apply a deferred certain death once nothing defers it any more (#4098). True = died.
+
+    Called from the condition-expiry seam (``_resolve_deferred_death_on_expiry``) when
+    the LAST ``death_deferred`` condition on the character ends, so a death made certain
+    during Audere Majora while plain Audere also holds waits for whichever expires last.
+    """
+    from world.conditions.services import has_death_deferred  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals = CharacterVitals.objects.filter(character_sheet=character_sheet).first()
+    if vitals is None or not vitals.death_certain_pending:
+        return False
+    if has_death_deferred(character_sheet.character):
+        return False
+    vitals.death_certain_pending = False
+    vitals.health = 0
+    vitals.save(update_fields=["death_certain_pending", "health"])
+    if vitals.life_state != CharacterLifeState.DEAD:
+        _mark_dead(character_sheet)
+    return True
+
+
 def mark_fed_to_death(victim_sheet: CharacterSheet) -> bool:
     """Kill an NPC drained past empty by feeding (#2853). Returns True on death.
 

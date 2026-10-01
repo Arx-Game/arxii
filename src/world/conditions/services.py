@@ -1432,12 +1432,15 @@ def _resolve_deferred_death_on_expiry(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     condition: "ConditionTemplate",
 ) -> None:
-    """Emit CHARACTER_KILLED if the expiring condition was deferring a pending death.
+    """Resolve a pending death this expiring condition was deferring.
 
-    Checks two gates: the removed condition must have carried the 'death_deferred'
-    property, and the target's CharacterVitals.death_deferred_pending must be True
-    (set when CHARACTER_KILLED was suppressed during damage resolution). Both gates
-    must hold to avoid spurious kills on unrelated condition removal.
+    Checks the removed condition carried the 'death_deferred' property, then two
+    independent pending flags: ``CharacterVitals.death_deferred_pending`` (set when
+    CHARACTER_KILLED was suppressed during damage resolution — emits the event) and
+    ``death_certain_pending`` (#4098 — Soulfray made the death certain while this
+    condition held; applies through ``apply_pending_certain_death``, which waits for
+    the LAST deferring condition when more than one is active, e.g. Audere Majora
+    crossed while plain Audere also holds). Neither is gated on the other.
     """
     if not condition.properties.filter(name="death_deferred").exists():
         return
@@ -1451,22 +1454,25 @@ def _resolve_deferred_death_on_expiry(
     except (CharacterVitals.DoesNotExist, CharacterSheet.DoesNotExist):
         return
 
-    if not vitals.death_deferred_pending:
-        return
+    if vitals.death_deferred_pending:
+        vitals.death_deferred_pending = False
+        vitals.save(update_fields=["death_deferred_pending"])
 
-    vitals.death_deferred_pending = False
-    vitals.save(update_fields=["death_deferred_pending"])
+        target_location = target.location
+        if target_location is not None:
+            from flows.constants import EventName  # noqa: PLC0415
+            from flows.events.payloads import CharacterKilledPayload  # noqa: PLC0415
 
-    target_location = target.location
-    if target_location is not None:
-        from flows.constants import EventName  # noqa: PLC0415
-        from flows.events.payloads import CharacterKilledPayload  # noqa: PLC0415
+            emit_event(
+                EventName.CHARACTER_KILLED,
+                CharacterKilledPayload(character=target, source_event=None),
+                location=target_location,
+            )
 
-        emit_event(
-            EventName.CHARACTER_KILLED,
-            CharacterKilledPayload(character=target, source_event=None),
-            location=target_location,
-        )
+    if vitals.death_certain_pending:
+        from world.vitals.services import apply_pending_certain_death  # noqa: PLC0415
+
+        apply_pending_certain_death(sheet)
 
 
 @transaction.atomic
