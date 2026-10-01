@@ -312,8 +312,8 @@ def _shopping_list(
     capped candidate pool, plus the small constant-bounded gate check — run
     ONCE across every function's pooled candidates (#4097 fix round 3), never
     once per function. Running the gate per function made its cost scale with
-    the number of uncovered functions (up to a small constant extra queries
-    PER function); hoisting it to a single pass over the union of
+    the number of uncovered functions (up to a small, constant number of extra
+    queries PER function); hoisting it to a single pass over the union of
     every function's candidates keeps the gate's cost independent of how many
     functions are uncovered.
     """
