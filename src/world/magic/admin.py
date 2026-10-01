@@ -965,7 +965,13 @@ class KnownUltimateAdmin(admin.ModelAdmin):
 
     list_display = ["character", "technique", "readied", "discovered_at"]
     list_filter = ["readied"]
-    raw_id_fields = ["character", "technique", "crossing"]
+    # character/technique match the sibling admins (CharacterTechniqueAdmin's
+    # `character`); both targets' own admins carry search_fields to back the
+    # autocomplete. `crossing` (AudereMajoraCrossing) has no registered admin of
+    # its own, so it stays raw_id_fields - autocomplete_fields there would fail
+    # Django's admin system checks (admin.E039).
+    autocomplete_fields = ["character", "technique"]
+    raw_id_fields = ["crossing"]
 
 
 @admin.register(CharacterAnima)
