@@ -312,15 +312,19 @@ class SetSignatureBonusTests(TestCase):
         refreshed = Thread.objects.get(pk=self.technique_thread.pk)
         self.assertEqual(refreshed.signature_bonus_id, second_bonus.pk)
 
-    def test_set_raises_signature_below_crossing_for_low_level_thread(self) -> None:
-        """SignatureBelowCrossing raised when thread.level < 3 (first crossing)."""
-        from world.magic.exceptions import SignatureBelowCrossing
+    def test_set_succeeds_on_a_level_one_thread_for_a_level_one_bonus(self) -> None:
+        """A low authored min_crossing_level works below the first crossing (#4099).
 
-        # Explicitly set below the first crossing.
-        self.technique_thread.level = 0
+        The hard ``thread.level >= 3`` floor is gone — ``min_crossing_level`` is
+        the only gate, so a staff-authored bonus with ``min_crossing_level=1``
+        (below the first PathStage crossing) is settable on a level-1 thread.
+        """
+        self.bonus.min_crossing_level = 1
+        self.bonus.save(update_fields=["min_crossing_level"])
+        self.technique_thread.level = 1
         self.technique_thread.save(update_fields=["level"])
-        with self.assertRaises(SignatureBelowCrossing):
-            set_signature_bonus(self.technique_thread, self.bonus)
+        result = set_signature_bonus(self.technique_thread, self.bonus)
+        self.assertEqual(result.signature_bonus_id, self.bonus.pk)
 
     def test_set_succeeds_when_thread_at_level_3(self) -> None:
         """set_signature_bonus succeeds when thread.level >= 3."""

@@ -25,7 +25,6 @@ from actions.base import Action
 from actions.types import ActionResult, TargetType
 from world.magic.exceptions import (
     NotATechniqueThread,
-    SignatureBelowCrossing,
     SignatureBonusLocked,
     SignatureBonusNotAvailable,
     TechniqueNotOwned,
@@ -37,7 +36,6 @@ if TYPE_CHECKING:
 
 _SIGNATURE_SET_EXCEPTIONS = (
     NotATechniqueThread,
-    SignatureBelowCrossing,
     SignatureBonusLocked,
     SignatureBonusNotAvailable,
     TechniqueNotOwned,

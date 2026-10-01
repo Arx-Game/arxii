@@ -90,6 +90,7 @@ def _base_form(technique: Technique, *, is_default: bool) -> TechniqueFormPayloa
         is_locked=False,
         unlock_thread_level=0,
         thread_level=0,
+        is_early=False,
         effect_summary=technique.cached_effect_summary,
     )
 
@@ -104,13 +105,14 @@ def base_technique_form(technique: Technique) -> list[TechniqueFormPayload]:
     return [_base_form(technique, is_default=True)]
 
 
-def _variant_form(
+def _variant_form(  # noqa: PLR0913
     technique: Technique,
     variant,
     *,
     thread_level: int,
     is_default: bool,
     is_locked: bool,
+    is_early: bool = False,
 ) -> TechniqueFormPayload:
     """One specialized form, unlocked or not.
 
@@ -129,6 +131,7 @@ def _variant_form(
         is_locked=is_locked,
         unlock_thread_level=variant.unlock_thread_level,
         thread_level=thread_level,
+        is_early=is_early,
         effect_summary=variant.cached_effect_summary,
     )
 
@@ -195,6 +198,8 @@ def available_technique_forms(
         default.variant.pk if isinstance(default, _ResolvedTechnique) else None  # type: ignore[union-attr]
     )
 
+    early_form_id = character_technique.early_form_id if character_technique is not None else None
+
     threads = _candidate_threads(character, technique, character_technique)
     forms: list[TechniqueFormPayload] = [
         _base_form(technique, is_default=default_variant_id is None)
@@ -219,6 +224,10 @@ def available_technique_forms(
                     thread_level=thread.level,
                     is_default=resolved.variant.pk == default_variant_id,
                     is_locked=False,
+                    is_early=(
+                        resolved.variant.pk == early_form_id
+                        and resolved.variant.unlock_thread_level > thread.level
+                    ),
                 )
             )
 

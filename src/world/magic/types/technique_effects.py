@@ -146,6 +146,10 @@ class TechniqueFormPayload(TypedDict):
     unlock_thread_level: int
     #: The caster's current level on the thread this form resolves through.
     thread_level: int
+    #: True when this form applies because it was bought early, #4099 — the
+    #: caster's ``CharacterTechnique.early_form`` reached it before their thread
+    #: did. False for the base form and for any naturally-unlocked form.
+    is_early: bool
     effect_summary: TechniqueEffectPayload
 
 

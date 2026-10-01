@@ -496,6 +496,19 @@ def _resolve_technique_variant(
         resonance=effective_resonance,
         thread_level=thread.level,
     )
+
+    # #4099: a form bought early (in creation) applies before the GIFT thread reaches
+    # its level, at its own resonance only. A naturally reached higher form still wins.
+    if not use_role_thread:
+        hold = character.techniques.hold_for(technique)
+        early = hold.early_form if hold is not None else None
+        if (
+            early is not None
+            and early.resonance_id == effective_resonance.pk
+            and (variant is None or early.unlock_thread_level > variant.unlock_thread_level)
+        ):
+            variant = early
+
     if variant is None:
         return technique
     return _ResolvedTechnique(technique, variant=variant)

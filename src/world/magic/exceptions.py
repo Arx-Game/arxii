@@ -38,6 +38,12 @@ class PathCapExceeded(MagicError):
     user_message = "Your Path stage limits this thread's growth."
 
 
+class CreationThreadLevelTooHigh(MagicError):
+    """A creation pick tried to start a thread at or past the first crossing (#4099)."""
+
+    user_message = "Character creation cannot start a thread that deep."
+
+
 class XPInsufficient(MagicError):
     user_message = "You do not have enough XP for this."
 
@@ -609,12 +615,6 @@ class SignatureBonusNotAvailable(MagicError):
     """Raised when the requested SignatureMotifBonus does not qualify for the owner's Motif."""
 
     user_message = "This bonus is not available for your motif."
-
-
-class SignatureBelowCrossing(MagicError):
-    """Raised when set_signature_bonus is called on a thread below the first crossing (level 3)."""
-
-    user_message = "A signature can only be set on a technique thread that has crossed level 3."
 
 
 class SignatureBonusLocked(MagicError):
