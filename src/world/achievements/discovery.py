@@ -73,9 +73,20 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             category=NarrativeCategory.ABILITY,
             sender_account=None,
         )
+    fire_first_discoveries(character_sheet, gained)
+
+
+def fire_first_discoveries(character_sheet, gained) -> None:
+    """Fire the discovery ceremony for each discoverable item in ``gained`` (ADR-0016).
+
+    The second half of ``announce_access_change``, callable alone by a seam that
+    tells the player about the gain itself (the Audere ultimate reveal, #4098).
+    """
     # Same current-tenure, non-staff gate as the grant_achievement chokepoint (#3024).
     if not can_earn_achievements(character_sheet):
         return
+
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
 
     excluded_ids = _cg_catalog_exclusions(gained)
 
