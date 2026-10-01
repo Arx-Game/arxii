@@ -529,7 +529,7 @@ class AppearanceSection(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     The opener for ``OfferChapter.APPEARANCE``: an offer line names the section it sits
     in, and the leaf renders one block per section in ``sort_order``. Three or four rows
-    for the whole game (Frame; Face and voice; What the Gift left), authored in admin.
+    for the whole game (Frame; Face and voice; Traces of the Gift), authored in admin.
     """
 
     name = models.CharField(max_length=80, unique=True)

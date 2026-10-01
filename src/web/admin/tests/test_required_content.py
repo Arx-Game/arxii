@@ -1009,3 +1009,78 @@ class TestRiskCalibrationsProbe(TestCase):
         result = rc._probe_risk_calibrations()
         self.assertFalse(result.present)
         self.assertEqual(result.missing, (RenownRisk.EXTREME,))
+
+
+class TestCharacterCreationGapProbes(TestCase):
+    """The six probes the first roster PC stock-take asked for (#4104): each names the
+    rows a realm still lacks so a staff member filling it never has to walk a draft
+    into the gap to find it."""
+
+    def test_beginnings_without_species_and_traditions_are_named(self) -> None:
+        from world.character_creation.factories import (
+            BeginningsFactory,
+            BeginningTraditionFactory,
+        )
+        from world.species.factories import SpeciesFactory
+
+        bare = BeginningsFactory(name="Nobility")
+        full = BeginningsFactory(name="Caretaker")
+        full.allowed_species.add(SpeciesFactory(name="Human"))
+        BeginningTraditionFactory(beginning=full)
+        BeginningsFactory(name="Retired", is_active=False)
+
+        species = rc._beginnings_without_species()
+        self.assertFalse(species.present)
+        self.assertEqual(species.missing, ("Nobility",))
+        traditions = rc._beginnings_without_traditions()
+        self.assertFalse(traditions.present)
+        self.assertEqual(traditions.missing, ("Nobility",))
+
+        bare.allowed_species.add(SpeciesFactory(name="Elf"))
+        BeginningTraditionFactory(beginning=bare)
+        self.assertTrue(rc._beginnings_without_species().present)
+        self.assertTrue(rc._beginnings_without_traditions().present)
+
+    def test_realm_with_nobility_but_no_particles_is_named(self) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.roster.constants import NOBLE_KIND_NAME
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.houses.models import NobiliaryParticle
+
+        umbros = RealmFactory(name="Umbros", theme="umbros")
+        # Arx has no nobility by ruling and is not in the canon table, so it never lists.
+        RealmFactory(name="Arx", theme="arx")
+
+        result = rc._realms_without_nobiliary_particles()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Umbros",))
+
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        NobiliaryParticle.objects.create(realm=umbros, kind=noble, particle="arn")
+        self.assertTrue(rc._realms_without_nobiliary_particles().present)
+
+    def test_feature_rows_must_all_exist_and_be_active(self) -> None:
+        from world.distinctions.factories import DistinctionFactory
+        from world.seeds.distinctive_features import FEATURE_ROW_NAMES
+
+        self.assertEqual(set(rc._probe_feature_distinctions().missing), set(FEATURE_ROW_NAMES))
+        for name in FEATURE_ROW_NAMES[:-1]:
+            DistinctionFactory(name=name)
+        DistinctionFactory(name=FEATURE_ROW_NAMES[-1], is_active=False)
+        result = rc._probe_feature_distinctions()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (FEATURE_ROW_NAMES[-1],))
+
+    def test_the_six_are_registered_with_admin_links(self) -> None:
+        keys = {dep.key: dep for dep in rc.build_registry(rc._declarations())}
+        for key in (
+            "character_creation.beginnings_allow_species",
+            "character_creation.beginnings_have_traditions",
+            "societies.realm_nobiliary_particles",
+            "character_creation.appearance_sections",
+            "distinctions.feature_rows",
+            "character_sheets.enemy_reasons",
+        ):
+            self.assertIn(key, keys)
+            self.assertEqual(keys[key].tier, rc.DependencyTier.REQUIRED)
+            self.assertTrue(keys[key].admin_model)
