@@ -18,6 +18,7 @@ from world.codex.models import CharacterCodexKnowledge, OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
 from world.roster.factories import RosterTenureFactory
 from world.societies.admin import apply_grants_to_new_memberships
+from world.societies.constants import MembershipFavor
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.societies.models import OrganizationMembership
 
@@ -168,7 +169,12 @@ class OrganizationMembershipAdminGrantTests(TestCase):
     def test_creating_a_membership_applies_the_organizations_grants(self):
         response = self.client.post(
             reverse("admin:arxii_organizationmembership_add"),
-            {"organization": self.organization.pk, "persona": self.persona.pk, "rank": ""},
+            {
+                "organization": self.organization.pk,
+                "persona": self.persona.pk,
+                "rank": "",
+                "favor": MembershipFavor.IN_FAVOR,
+            },
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
@@ -196,6 +202,7 @@ class OrganizationMembershipAdminGrantTests(TestCase):
                 "organization": self.organization.pk,
                 "persona": self.persona.pk,
                 "rank": membership.rank_id or "",
+                "favor": MembershipFavor.IN_FAVOR,
             },
             follow=True,
         )
