@@ -612,4 +612,25 @@ class Migration(migrations.Migration):
                 to="arxii.threadcrossingthreshold",
             ),
         ),
+        migrations.AlterField(
+            model_name="majorgifttechniquerequirement",
+            name="gift",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Major gift to count; blank means any single held major gift reaching the count.",
+                limit_choices_to={"kind": "MAJOR"},
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="major_gift_technique_requirements",
+                to="arxii.gift",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="majorgifttechniquerequirement",
+            name="minimum_techniques",
+            field=models.PositiveSmallIntegerField(
+                default=3,
+                help_text="Techniques required of the named gift (or of any single held MAJOR gift, if blank) to satisfy this requirement (#2440 ruling 4).",
+            ),
+        ),
     ]

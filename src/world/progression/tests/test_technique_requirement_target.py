@@ -13,6 +13,7 @@ Meta.constraints without subclassing the abstract base's Meta).
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
@@ -71,3 +72,46 @@ class NarrowerTargetRequirementsRejectTechniqueTests(TestCase):
                 technique=self.technique,
                 item_template=template,
             )
+
+
+class TechniqueKnownRequirementSelfReferenceTests(TestCase):
+    """A technique cannot require itself, directly or through a cycle (#4097 fix round 2)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target = TechniqueFactory()
+
+    def test_db_constraint_rejects_direct_self_reference(self):
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            TechniqueKnownRequirement.objects.create(
+                technique=self.target, required_technique=self.target
+            )
+
+    def test_clean_rejects_direct_self_reference(self):
+        req = TechniqueKnownRequirement(technique=self.target, required_technique=self.target)
+        with self.assertRaises(ValidationError):
+            req.full_clean()
+
+    def test_clean_rejects_transitive_cycle(self):
+        """A requires B already; a row making B require A would close a cycle."""
+        technique_a = self.target
+        technique_b = TechniqueFactory()
+        TechniqueKnownRequirement.objects.create(
+            technique=technique_a, required_technique=technique_b
+        )
+
+        cyclical = TechniqueKnownRequirement(technique=technique_b, required_technique=technique_a)
+        with self.assertRaises(ValidationError):
+            cyclical.full_clean()
+
+    def test_clean_allows_a_genuine_non_cyclical_chain(self):
+        """A requires B, B requires C — no cycle, clean() does not object."""
+        technique_a = self.target
+        technique_b = TechniqueFactory()
+        technique_c = TechniqueFactory()
+        TechniqueKnownRequirement.objects.create(
+            technique=technique_a, required_technique=technique_b
+        )
+
+        chained = TechniqueKnownRequirement(technique=technique_b, required_technique=technique_c)
+        chained.full_clean()  # does not raise

@@ -458,4 +458,11 @@ class Migration(migrations.Migration):
                 name="legendrequirement_exactly_one_unlock_target",
             ),
         ),
+        migrations.AddConstraint(
+            model_name="techniqueknownrequirement",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("technique", models.F("required_technique")), _negated=True),
+                name="techniqueknownrequirement_no_self_prerequisite",
+            ),
+        ),
     ]

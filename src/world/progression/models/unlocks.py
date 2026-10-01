@@ -15,6 +15,7 @@ from django.db import models
 from evennia.objects.models import ObjectDB
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from world.magic.constants import GiftKind
 from world.traits.models import CharacterTraitValue, display_trait_value
 
 # XP Cost System
@@ -933,7 +934,10 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
 
     minimum_techniques = models.PositiveSmallIntegerField(
         default=3,
-        help_text="Techniques of the character's MAJOR gift required (#2440 ruling 4).",
+        help_text=(
+            "Techniques required of the named gift (or of any single held MAJOR gift, "
+            "if blank) to satisfy this requirement (#2440 ruling 4)."
+        ),
     )
     gift = models.ForeignKey(
         "arxii.Gift",
@@ -941,6 +945,7 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
         related_name="major_gift_technique_requirements",
         null=True,
         blank=True,
+        limit_choices_to={"kind": GiftKind.MAJOR},
         help_text=(
             "Major gift to count; blank means any single held major gift reaching the count."
         ),
@@ -973,9 +978,11 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
                 f"Need {minimum} techniques of {self.gift.name}, have {count}",
             )
 
-        major_links = CharacterGift.objects.filter(
-            character=sheet, gift__kind=GiftKind.MAJOR
-        ).select_related("gift")
+        major_links = (
+            CharacterGift.objects.filter(character=sheet, gift__kind=GiftKind.MAJOR)
+            .select_related("gift")
+            .order_by("gift__name")
+        )
         if not major_links:
             return (
                 False,
@@ -1050,6 +1057,40 @@ class TechniqueKnownRequirement(AbstractUnlockRequirement):
         related_name="required_by_requirements",
         help_text="Technique the character must already know.",
     )
+
+    class Meta(AbstractUnlockRequirement.Meta):
+        constraints = [
+            *AbstractUnlockRequirement.Meta.constraints,
+            models.CheckConstraint(
+                condition=~models.Q(technique=models.F("required_technique")),
+                name="techniqueknownrequirement_no_self_prerequisite",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Reject a direct self-reference or a transitive cycle (#4097 fix round 2).
+
+        The DB CheckConstraint above only catches the direct
+        ``technique == required_technique`` case; a cycle through intermediate
+        techniques (A requires B, B requires A) needs the graph walk —
+        ``prerequisite_technique_ids`` is cycle-safe (BFS with a seen-set) and
+        already excludes every id it started from, so membership of
+        ``self.technique_id`` in the closure of ``{self.required_technique_id}``
+        IS a cycle.
+        """
+        super().clean()
+        if self.technique_id is None or self.required_technique_id is None:
+            return
+        if self.technique_id == self.required_technique_id:
+            msg = "A technique cannot require itself."
+            raise ValidationError(msg)
+        from world.magic.services.technique_prerequisites import (  # noqa: PLC0415
+            prerequisite_technique_ids,
+        )
+
+        if self.technique_id in prerequisite_technique_ids((self.required_technique_id,)):
+            msg = "This would create a prerequisite cycle."
+            raise ValidationError(msg)
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character already knows the required technique."""
