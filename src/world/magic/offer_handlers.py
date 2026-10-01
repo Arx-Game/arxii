@@ -335,6 +335,13 @@ class UltimateRevealHandler:
         return ultimate_reveal_for(sheet)
 
     def describe(self, offer) -> str:
+        """Print the reveal listing, snapshotting its choice_keys as a side effect.
+
+        The snapshot is stored HERE, not in ``accept``, because this is the one
+        moment the listing is actually shown to the caller - the ndb snapshot must
+        match whatever text just printed, not some earlier or later reveal (#4098
+        final review item 11).
+        """
         if offer.sheet is not None:
             _store_ultimate_snapshot(offer.sheet.character, offer)
         return format_ultimate_reveal(offer)
