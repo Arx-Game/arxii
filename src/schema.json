@@ -4648,6 +4648,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/OffersResponse'
           description: ''
+  /api/character-creation/drafts/{id}/personalization-options/:
+    get:
+      operationId: character_creation_drafts_personalization_options_list
+      description: The make-it-yours options for each technique this draft has chosen
+        (#4099).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGTechniquePersonalizationOptions'
+          description: ''
   /api/character-creation/drafts/{id}/resubmit/:
     post:
       operationId: character_creation_drafts_resubmit_create
@@ -43837,6 +43861,36 @@ components:
       - parentage_note
       - slots
       - sort_order
+    CGPersonalizationOption:
+      type: object
+      description: One flourish, form or price a CG pick can take (#4099). All text
+        is authored.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        gloss:
+          type: string
+        intensity_delta:
+          type: integer
+        control_delta:
+          type: integer
+        power_bonus:
+          type: integer
+        level:
+          type: integer
+        cost:
+          type: integer
+      required:
+      - control_delta
+      - cost
+      - gloss
+      - id
+      - intensity_delta
+      - level
+      - name
+      - power_bonus
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -43917,6 +43971,40 @@ components:
       - is_species_technique
       - is_tradition_technique
       - name
+    CGTechniquePersonalizationOptions:
+      type: object
+      description: Everything the make-it-yours panel can offer for one chosen technique
+        (#4099).
+      properties:
+        technique_id:
+          type: integer
+        technique_name:
+          type: string
+        needs_resonance:
+          type: boolean
+          readOnly: true
+        flourishes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPersonalizationOption'
+          readOnly: true
+        forms:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPersonalizationOption'
+          readOnly: true
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPersonalizationOption'
+          readOnly: true
+      required:
+      - flourishes
+      - forms
+      - needs_resonance
+      - prices
+      - technique_id
+      - technique_name
     CGVacancy:
       type: object
       description: An opening reachable from the draft, priced for it (#3648).

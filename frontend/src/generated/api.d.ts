@@ -3001,6 +3001,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/personalization-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The make-it-yours options for each technique this draft has chosen (#4099). */
+    get: operations['character_creation_drafts_personalization_options_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/resubmit/': {
     parameters: {
       query?: never;
@@ -26481,6 +26498,17 @@ export interface components {
       }[];
       readonly slots: components['schemas']['OriginTemplateSlot'][];
     };
+    /** @description One flourish, form or price a CG pick can take (#4099). All text is authored. */
+    CGPersonalizationOption: {
+      id: number;
+      name: string;
+      gloss: string;
+      intensity_delta: number;
+      control_delta: number;
+      power_bonus: number;
+      level: number;
+      cost: number;
+    };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -26517,6 +26545,15 @@ export interface components {
       /** @description True when this technique belongs to a gift granted by the species. */
       readonly is_species_technique: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
+    };
+    /** @description Everything the make-it-yours panel can offer for one chosen technique (#4099). */
+    CGTechniquePersonalizationOptions: {
+      technique_id: number;
+      technique_name: string;
+      readonly needs_resonance: boolean;
+      readonly flourishes: components['schemas']['CGPersonalizationOption'][];
+      readonly forms: components['schemas']['CGPersonalizationOption'][];
+      readonly prices: components['schemas']['CGPersonalizationOption'][];
     };
     /** @description An opening reachable from the draft, priced for it (#3648). */
     CGVacancy: {
@@ -52544,6 +52581,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OffersResponse'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_personalization_options_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGTechniquePersonalizationOptions'][];
         };
       };
     };

@@ -317,3 +317,61 @@ class PriceFitTests(_Catalog, TestCase):
         allowed_by_price = _allowed_effect_type_ids_by_price([price])
         self.assertNotEqual(other_effect_type.pk, self.technique.effect_type_id)
         self.assertFalse(_price_fits(price, allowed_by_price, self.technique))
+
+
+class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
+    """GET drafts/{id}/personalization-options/ (#4099)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls._make_catalog()
+
+    def setUp(self) -> None:
+        from rest_framework.test import APIClient
+
+        from evennia_extensions.factories import AccountFactory
+
+        self.account = AccountFactory()
+        self.client = APIClient()
+        self.client.force_authenticate(self.account)
+
+    def _draft(self, resonance_id):
+        return CharacterDraftFactory(
+            account=self.account,
+            draft_data={
+                "selected_gift_id": self.gift.pk,
+                "selected_technique_ids": [self.technique.pk],
+                "selected_gift_resonance_id": resonance_id,
+            },
+        )
+
+    def test_offers_per_selected_technique(self) -> None:
+        draft = self._draft(self.frost.pk)
+        response = self.client.get(
+            f"/api/character-creation/drafts/{draft.pk}/personalization-options/"
+        )
+        self.assertEqual(response.status_code, 200)
+        [entry] = response.data
+        self.assertEqual(entry["technique_id"], self.technique.pk)
+        self.assertFalse(entry["needs_resonance"])
+        self.assertEqual([f["cost"] for f in entry["flourishes"]], [3])
+        self.assertEqual(entry["forms"][0]["name"], "Scorch Lash, frost-formed")
+        self.assertEqual(entry["prices"][0]["power_bonus"], 4)
+
+    def test_without_a_resonance_flourishes_and_forms_wait(self) -> None:
+        draft = self._draft(None)
+        response = self.client.get(
+            f"/api/character-creation/drafts/{draft.pk}/personalization-options/"
+        )
+        [entry] = response.data
+        self.assertTrue(entry["needs_resonance"])
+        self.assertEqual(entry["flourishes"], [])
+        self.assertEqual(entry["forms"], [])
+        self.assertEqual(len(entry["prices"]), 1)
+
+    def test_other_accounts_draft_is_not_found(self) -> None:
+        other = CharacterDraftFactory()
+        response = self.client.get(
+            f"/api/character-creation/drafts/{other.pk}/personalization-options/"
+        )
+        self.assertEqual(response.status_code, 404)

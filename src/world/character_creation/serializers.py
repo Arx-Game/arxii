@@ -55,6 +55,7 @@ from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.services import get_ic_now
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.magic.serializers import TechniqueEffectSummarySerializer
+from world.magic.types.personalization import PersonalizationOptionSet
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.constants import MembershipBasis
 from world.roster.models import Family, KinSlotPool, Kinsperson
@@ -535,6 +536,84 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     def get_is_species_technique(self, obj: Technique) -> bool:
         """True when this technique belongs to a gift granted by the species."""
         return obj.id in self.context.get("species_technique_ids", set())
+
+
+class CGPersonalizationOptionSerializer(serializers.Serializer):
+    """One flourish, form or price a CG pick can take (#4099). All text is authored."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    gloss = serializers.CharField(allow_blank=True)
+    intensity_delta = serializers.IntegerField()
+    control_delta = serializers.IntegerField()
+    power_bonus = serializers.IntegerField()
+    level = serializers.IntegerField()
+    cost = serializers.IntegerField()
+
+
+class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
+    """Everything the make-it-yours panel can offer for one chosen technique (#4099)."""
+
+    technique_id = serializers.IntegerField(source="technique.pk")
+    technique_name = serializers.CharField(source="technique.name")
+    needs_resonance = serializers.SerializerMethodField()
+    flourishes = serializers.SerializerMethodField()
+    forms = serializers.SerializerMethodField()
+    prices = serializers.SerializerMethodField()
+
+    def get_needs_resonance(self, obj: PersonalizationOptionSet) -> bool:  # noqa: ARG002
+        return self.context.get("resonance_id") is None
+
+    @extend_schema_field(CGPersonalizationOptionSerializer(many=True))
+    def get_flourishes(self, obj: PersonalizationOptionSet) -> list[dict]:
+        rows = [
+            {
+                "id": b.pk,
+                "name": b.name,
+                "gloss": b.narrative_snippet,
+                "intensity_delta": b.flat_intensity_delta,
+                "control_delta": 0,
+                "power_bonus": 0,
+                "level": b.min_crossing_level,
+                "cost": b.creation_point_cost,
+            }
+            for b in obj.flourishes
+        ]
+        return list(CGPersonalizationOptionSerializer(rows, many=True).data)
+
+    @extend_schema_field(CGPersonalizationOptionSerializer(many=True))
+    def get_forms(self, obj: PersonalizationOptionSet) -> list[dict]:
+        rows = [
+            {
+                "id": v.pk,
+                "name": v.name_override or obj.technique.name,
+                "gloss": v.description,
+                "intensity_delta": v.intensity_delta,
+                "control_delta": v.control_delta,
+                "power_bonus": 0,
+                "level": v.unlock_thread_level,
+                "cost": v.creation_point_cost,
+            }
+            for v in obj.forms
+        ]
+        return list(CGPersonalizationOptionSerializer(rows, many=True).data)
+
+    @extend_schema_field(CGPersonalizationOptionSerializer(many=True))
+    def get_prices(self, obj: PersonalizationOptionSet) -> list[dict]:
+        rows = [
+            {
+                "id": p.pk,
+                "name": p.name,
+                "gloss": p.description,
+                "intensity_delta": 0,
+                "control_delta": 0,
+                "power_bonus": p.power_bonus,
+                "level": 0,
+                "cost": p.creation_point_cost,
+            }
+            for p in obj.prices
+        ]
+        return list(CGPersonalizationOptionSerializer(rows, many=True).data)
 
 
 def _offer_row(offer: DistinctionOffer, *, with_arrival: bool) -> dict:
