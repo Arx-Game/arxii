@@ -26,7 +26,11 @@ from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import CharacterVitals
-from world.vitals.services import apply_pending_certain_death, defer_or_apply_certain_death
+from world.vitals.services import (
+    apply_pending_certain_death,
+    clear_pending_certain_death,
+    defer_or_apply_certain_death,
+)
 
 
 class CertainDeathTests(TestCase):
@@ -113,6 +117,28 @@ class CertainDeathTests(TestCase):
 
         self.assertFalse(apply_pending_certain_death(self.sheet))
         self.assertFalse(self._state().death_certain_pending)
+
+    def test_clear_pending_certain_death_cancels_without_killing(self) -> None:
+        """#4098 owner ruling: an abandoned encounter cancels the death outright —
+        clear_pending_certain_death never applies it, unlike apply_pending_certain_death."""
+        ConditionInstanceFactory(target=self.character, condition=self.audere)
+        self.assertTrue(defer_or_apply_certain_death(self.sheet))
+        self.assertTrue(self._state().death_certain_pending)
+
+        self.assertTrue(clear_pending_certain_death(self.sheet))
+
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.ALIVE)
+        self.assertFalse(state.death_certain_pending)
+
+    def test_clear_pending_certain_death_is_a_no_op_when_nothing_is_pending(self) -> None:
+        self.assertFalse(self._state().death_certain_pending)
+
+        self.assertFalse(clear_pending_certain_death(self.sheet))
+
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.ALIVE)
+        self.assertFalse(state.death_certain_pending)
 
 
 class SoulfrayCharacterLossTests(TestCase):

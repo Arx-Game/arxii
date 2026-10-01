@@ -1679,11 +1679,16 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="soulfray-config",
             label="Soulfray config singleton",
             tier=DependencyTier.TUNING,
-            consumer="world/magic/services/anima.py:219 apply_anima_ritual_outcome()",
+            consumer=(
+                "world/magic/services/anima.py:219 apply_anima_ritual_outcome(); "
+                "world/magic/services/techniques.py _get_social_safety_bonus()"
+            ),
             consequence=(
                 "Anima ritual outcomes cannot compute Soulfray severity "
                 "accumulation or resilience checks - the ritual outcome silently "
-                "omits the Soulfray term."
+                "omits the Soulfray term. The out-of-combat social safety control "
+                "bonus also falls back to its field default (10) instead of a "
+                "staff-tuned value."
             ),
             probe=AnyRowProbe(label="SoulfrayConfig"),
         ),

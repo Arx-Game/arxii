@@ -8961,8 +8961,17 @@ combat, poison, spells, exhaustion, and any damage source.
     participant at encounter close, in case the condition never expired cleanly. See
     `docs/architecture/runtime-modifiers-audere.md`'s "Certain Death Deferral"
     section and `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
+  - `clear_pending_certain_death(character_sheet) -> bool` (#4098 owner ruling,
+    2026-10-01) - cancels a pending death outright, never applying it (unlike
+    `apply_pending_certain_death`). Called by
+    `world.combat.services._cancel_pending_certain_death_if_abandoned` when an
+    encounter's `outcome == EncounterOutcome.ABANDONED`, BEFORE
+    `cleanup_completed_encounter` ends Audere/Audere Majora for that encounter's
+    participants - a GM closing a broken fight shouldn't kill anyone, and ending
+    Audere there would otherwise reach the same `_resolve_deferred_death_on_expiry`
+    seam described below and kill through it.
   - `CharacterVitals.death_certain_pending` (#4098, bool, default False) - the pending
-    flag the two functions above read and write; sibling to the pre-existing
+    flag the three functions above read and write; sibling to the pre-existing
     `death_deferred_pending` (CHARACTER_KILLED-suppression flag), resolved
     independently of it.
 - **Key Services (`world/vitals/peril_resolution.py`, #1479):**

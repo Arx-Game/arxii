@@ -108,10 +108,18 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
 def _get_social_safety_bonus() -> int:
     """Return the social safety control bonus for unengaged characters.
 
-    Hardcoded to 10 for now.
-    TODO: Replace with authored data (e.g., a GlobalSetting or config model).
+    Staff-tunable via ``SoulfrayConfig.social_safety_bonus`` (default 10) — raising
+    it lowers the effective anima cost of casting outside combat. Falls back to the
+    model's own default when the singleton is missing (mirrors ``apply_anima_ritual_
+    outcome``'s handling of the same config in ``anima.py``); the "soulfray-config"
+    TUNING row on the required-content dashboard already reports that gap, so no
+    separate guard is needed here.
     """
-    return 10
+    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
+
+    config = SoulfrayConfig.objects.cached_singleton()
+    # Fallback matches SoulfrayConfig.social_safety_bonus's own field default.
+    return 10 if config is None else config.social_safety_bonus
 
 
 def _get_intensity_tier_control_modifier(runtime_intensity: int) -> int:
