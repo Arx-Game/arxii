@@ -47,7 +47,7 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
     # the same CodexEntryAdmin (which declares the required search_fields).
     autocomplete_fields = ("codex_entry",)
     # 78 tarot cards: too many for a scrolling multi-select, too few to search.
-    filter_horizontal = ("tarot_cards",)
+    filter_horizontal = ("tarot_cards", "ultimate_techniques")
 
 
 @admin.register(BeingFacet)

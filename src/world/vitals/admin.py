@@ -6,8 +6,15 @@ from world.vitals.models import CarriedBody, CharacterVitals, VitalsConsequenceC
 @admin.register(CharacterVitals)
 class CharacterVitalsAdmin(admin.ModelAdmin):
     autocomplete_fields = ["character_sheet", "died_in_scene"]
-    list_display = ["character_sheet", "health", "max_health", "life_state", "died_at"]
-    list_filter = ["life_state"]
+    list_display = [
+        "character_sheet",
+        "health",
+        "max_health",
+        "life_state",
+        "died_at",
+        "death_certain_pending",
+    ]
+    list_filter = ["life_state", "death_certain_pending"]
     search_fields = ["character_sheet__character__db_key"]
 
 

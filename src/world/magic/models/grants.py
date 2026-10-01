@@ -113,7 +113,19 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
         "arxii.Technique",
         blank=True,
         related_name="granted_by_path_gifts",
+        limit_choices_to={"is_ultimate": False},
         help_text=("Curated subset of this gift's techniques minted on crossing into this path."),
+    )
+    ultimate_techniques = models.ManyToManyField(
+        "arxii.Technique",
+        blank=True,
+        related_name="ultimate_for_path_gifts",
+        limit_choices_to={"is_ultimate": True},
+        help_text=(
+            "#4098: this Path's ultimates for this gift, revealed at Audere to a character "
+            "on this Path holding it as a MAJOR gift. Major gifts only. An empty list on a "
+            "major-gift grant is an unfinished Path (Required-content dashboard)."
+        ),
     )
 
     objects = NaturalKeyManager()
@@ -173,6 +185,7 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         "arxii.Technique",
         blank=True,
         related_name="granted_by_tradition_gifts",
+        limit_choices_to={"is_ultimate": False},
         help_text=(
             "Techniques special to this tradition for this gift — additive "
             "extras on top of the path's starter pool. Empty = no "
