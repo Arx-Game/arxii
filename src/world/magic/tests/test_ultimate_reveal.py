@@ -189,6 +189,72 @@ class BondSourceTests(_RevealFixture):
         self.assertEqual(len(pools), 2)
 
 
+class CrossPathAndBondLifecycleTests(_RevealFixture):
+    """#4098 fix round 1, I1: decisions 4/12 — a known ultimate never disappears.
+
+    Owned known ultimates stay listed (and choosable) regardless of the
+    character's CURRENT path, as long as the gift that offers them is still
+    held as MAJOR. Bond known ultimates (patron, companion) are the opposite:
+    they stay listed only while the bond itself is active (decision 5).
+    """
+
+    def test_known_ultimate_survives_a_path_crossing(self) -> None:
+        from world.classes.factories import PathFactory
+
+        KnownUltimateFactory(character=self.sheet, technique=self.strike)
+        path_b = PathFactory()
+        CharacterPathHistoryFactory(character=self.sheet, path=path_b)
+
+        reveal = ultimate_reveal_for(self.sheet)
+        self.assertIsNotNone(reveal)
+        known_cards = [
+            c for grp in reveal.groups for c in grp.cards if c.kind == UltimateCardKind.KNOWN
+        ]
+        self.assertIn(self.strike, [c.technique for c in known_cards])
+
+        key = next(c.choice_key for c in known_cards if c.technique == self.strike)
+        known = choose_ultimate(self.sheet, key)
+        self.assertEqual(known.technique, self.strike)
+
+    def test_known_ultimate_not_duplicated_when_still_on_its_offering_path(self) -> None:
+        """A known ultimate still on its ORIGINAL (current) grant must appear once,
+        not once from the current-path pool and again from the known-ultimate pool."""
+        KnownUltimateFactory(character=self.sheet, technique=self.strike)
+        reveal = ultimate_reveal_for(self.sheet)
+        known_cards = [
+            c for grp in reveal.groups for c in grp.cards if c.kind == UltimateCardKind.KNOWN
+        ]
+        self.assertEqual([c.technique for c in known_cards], [self.strike])
+
+    def test_known_patron_ultimate_delisted_once_patronage_is_released(self) -> None:
+        from django.utils import timezone
+
+        being = WorshippedBeingFactory()
+        patron_tech = UltimateTechniqueFactory(archetype_alignment=RoleArchetype.CROWN)
+        being.ultimate_techniques.add(patron_tech)
+        standing = DevotionStandingFactory(
+            character_sheet=self.sheet, being=being, valence=PatronageValence.DEVOTIONAL
+        )
+        KnownUltimateFactory(character=self.sheet, technique=patron_tech)
+
+        before = ultimate_reveal_for(self.sheet)
+        before_techniques = [
+            c.technique for grp in before.groups for c in grp.cards if c.technique is not None
+        ]
+        self.assertIn(patron_tech, before_techniques)
+
+        standing.released_at = timezone.now()
+        standing.save(update_fields=["released_at"])
+
+        after = ultimate_reveal_for(self.sheet)
+        after_techniques = (
+            [c.technique for grp in after.groups for c in grp.cards if c.technique is not None]
+            if after is not None
+            else []
+        )
+        self.assertNotIn(patron_tech, after_techniques)
+
+
 class UpgradeOfOrderingTests(_RevealFixture):
     def test_upgrade_of_picks_deterministically_by_required_technique_order(self) -> None:
         """Two TechniqueKnownRequirement rows on one upgrade: the winner is driven by
