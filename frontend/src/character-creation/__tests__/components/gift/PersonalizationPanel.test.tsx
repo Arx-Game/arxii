@@ -1,14 +1,19 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import { PersonalizationPanel } from '../../../components/gift/PersonalizationPanel';
+import {
+  PersonalizationPanel,
+  sanitizeCustomDescription,
+  sanitizeCustomName,
+} from '../../../components/gift/PersonalizationPanel';
 import { createMockDraft, mockCGExplanations, mockPersonalizationOptions } from '../../fixtures';
 import { renderWithCharacterCreationProviders } from '../../testUtils';
 
 const mutate = vi.fn();
+let mockIsError = false;
 vi.mock('../../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../queries')>()),
-  useUpdateDraft: () => ({ mutate, mutateAsync: vi.fn() }),
+  useUpdateDraft: () => ({ mutate, mutateAsync: vi.fn(), isError: mockIsError }),
 }));
 
 function draftWith(pick = {}) {
@@ -21,7 +26,10 @@ function draftWith(pick = {}) {
 }
 
 describe('PersonalizationPanel', () => {
-  beforeEach(() => mutate.mockReset());
+  beforeEach(() => {
+    mutate.mockReset();
+    mockIsError = false;
+  });
 
   it('renders every line from authored copy, never a literal', () => {
     renderWithCharacterCreationProviders(
@@ -45,7 +53,15 @@ describe('PersonalizationPanel', () => {
     );
     const price = screen.getByRole('button', { name: /Frost on the skin/ });
     expect(price).toHaveTextContent('+4 power');
-    expect(price).toHaveTextContent('1');
+    expect(price).toHaveTextContent('1 pt');
+    // The demo's Screen 3 rows carry no "level N" segment.
+    expect(price).not.toHaveTextContent(/level/i);
+
+    const flourish = screen.getByRole('button', {
+      name: /A chill rides your voice when you cast/,
+    });
+    expect(flourish).toHaveTextContent('3 pts');
+    expect(flourish).not.toHaveTextContent(/level/i);
   });
 
   it('pressing a price writes it to the draft, pressing again clears it', async () => {
@@ -108,5 +124,63 @@ describe('PersonalizationPanel', () => {
       />
     );
     expect(screen.getByText(mockCGExplanations.personalize_needs_resonance)).toBeInTheDocument();
+  });
+
+  it('shows the sync-error hint when the save mutation errors', () => {
+    mockIsError = true;
+    renderWithCharacterCreationProviders(
+      <PersonalizationPanel
+        draft={draftWith()}
+        options={mockPersonalizationOptions}
+        copy={mockCGExplanations}
+      />
+    );
+    expect(screen.getByText('That pick did not save. Try again.')).toBeInTheDocument();
+  });
+
+  it('does not show the sync-error hint when the mutation has not errored', () => {
+    renderWithCharacterCreationProviders(
+      <PersonalizationPanel
+        draft={draftWith()}
+        options={mockPersonalizationOptions}
+        copy={mockCGExplanations}
+      />
+    );
+    expect(screen.queryByText('That pick did not save. Try again.')).not.toBeInTheDocument();
+  });
+});
+
+describe('sanitizeCustomName', () => {
+  it('replaces an em dash and an en dash with a plain hyphen', () => {
+    expect(sanitizeCustomName('Winter—bite')).toBe('Winter-bite');
+    expect(sanitizeCustomName('Winter–bite')).toBe('Winter-bite');
+  });
+
+  it('strips the telnet markup character', () => {
+    expect(sanitizeCustomName('Scorch|Lash')).toBe('ScorchLash');
+  });
+
+  it('strips control characters, including a newline (a name is single-line)', () => {
+    expect(sanitizeCustomName('Scorch\nLash\x07')).toBe('ScorchLash');
+  });
+
+  it('leaves an already-clean name untouched', () => {
+    expect(sanitizeCustomName('Winterbite')).toBe('Winterbite');
+  });
+});
+
+describe('sanitizeCustomDescription', () => {
+  it('keeps newlines (paragraph breaks are allowed)', () => {
+    expect(sanitizeCustomDescription('Line one\nLine two')).toBe('Line one\nLine two');
+  });
+
+  it('strips other control characters', () => {
+    expect(sanitizeCustomDescription('Cold\x07 to the touch')).toBe('Cold to the touch');
+  });
+
+  it('does not touch dashes (the dash rule is name-only)', () => {
+    expect(sanitizeCustomDescription('Flame gutters—then nothing.')).toBe(
+      'Flame gutters—then nothing.'
+    );
   });
 });
