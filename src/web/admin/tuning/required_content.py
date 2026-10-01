@@ -474,6 +474,34 @@ def _probe_audere_condition_shape() -> ProbeResult:
     return ProbeResult(present=False, missing=tuple(problems), detail=detail)
 
 
+def _probe_ultimates_have_action_template() -> ProbeResult:
+    """Every `is_ultimate=True` Technique carries an `action_template` (#4098 final
+    review item 4).
+
+    `Technique.action_template` is nullable at the model layer (staff admin, unlike
+    the budget builder's `create_technique`, does not default it to the shared
+    "Technique Cast" template), so an ultimate authored directly in admin with the
+    field left blank can be revealed and readied through the whole Audere ceremony
+    and then has nothing to resolve a cast against - `use_technique`'s ordinary
+    pipeline has no template to dispatch. A sentinel, not a runtime guard: the
+    ceremony itself has no reason to assume every authored ultimate is cast-ready.
+    """
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    missing = tuple(
+        Technique.objects.filter(is_ultimate=True, action_template__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} ultimate technique(s) have no action_template: revealed and "
+        "pickable, but never castable."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 _ULTIMATE_COPY_FIELDS = (
     "reveal_framing_text",
     "deferred_death_text",
@@ -1495,6 +1523,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_path_major_gift_ultimates),
             admin_model="PathGiftGrant",
+        ),
+        ContentDependency(
+            key="ultimates-have-action-template",
+            label="Ultimates with no action template",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/technique_builder.py (use_technique cast pipeline)",
+            consequence=(
+                "An ultimate with no action_template can be revealed through Audere and "
+                "readied by the player, then has nothing to resolve a cast against - it "
+                "is pickable and never castable."
+            ),
+            probe=CustomProbe(fn=_probe_ultimates_have_action_template),
+            admin_model="Technique",
         ),
         ContentDependency(
             key="soulfray-stage-pools",
