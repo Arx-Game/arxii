@@ -307,6 +307,12 @@ def _exclude_prerequisite_gated(
     which of THIS CALL's candidates carry any active requirement at all —
     typically none — and ``check_requirements_for_technique`` only for that
     (usually empty) gated subset, never for every candidate.
+
+    ``_shopping_list`` calls this exactly ONCE per ``judge_vow`` invocation, over
+    the union of every uncovered function's candidate pool (#4097 fix round 3) —
+    calling it once per function instead made its query cost scale with the
+    number of uncovered functions, up to
+    ``len(concrete_requirement_types())`` extra queries per function.
     """
     candidate_ids = [technique.pk for technique in candidates]
     gated_ids: set[int] = set()
@@ -350,8 +356,13 @@ def _shopping_list(
     ``allowed_paths`` excluded.
 
     Bounded: one query per uncovered function (typically a handful) fetching a
-    capped candidate pool, plus the small constant-bounded gate check above —
-    no per-candidate query explosion.
+    capped candidate pool, plus the small constant-bounded gate check — run
+    ONCE across every function's pooled candidates (#4097 fix round 3), never
+    once per function. Running the gate per function made its cost scale with
+    the number of uncovered functions (up to ``len(concrete_requirement_types())``
+    extra queries PER function); hoisting it to a single pass over the union of
+    every function's candidates keeps the gate's cost independent of how many
+    functions are uncovered.
     """
     target_functions = _uncovered_target_functions(demands)
     if not target_functions:
@@ -363,9 +374,13 @@ def _shopping_list(
     if not owned_gift_ids:
         return []
 
-    character = sheet.character
-    shopping_list: list[SphinxShoppingItem] = []
-    for function in sorted(target_functions):
+    sorted_functions = sorted(target_functions)
+
+    # 1. Fetch each function's own capped candidate pool (one query per
+    #    function — unavoidable, each filters on a different function tag).
+    pools: dict[str, list[Technique]] = {}
+    union_by_pk: dict[int, Technique] = {}
+    for function in sorted_functions:
         candidate_pool = list(
             Technique.objects.filter(
                 function_tags__function=function,
@@ -376,7 +391,22 @@ def _shopping_list(
             .distinct()
             .order_by("name")[:_SHOPPING_LIST_CANDIDATE_POOL_SIZE]
         )
-        candidates = _exclude_prerequisite_gated(character, candidate_pool)
+        pools[function] = candidate_pool
+        for technique in candidate_pool:
+            union_by_pk.setdefault(technique.pk, technique)
+
+    # 2. Run the prerequisite gate ONCE over the union of every function's
+    #    candidates — its query count is now independent of len(sorted_functions).
+    allowed_ids = {
+        technique.pk
+        for technique in _exclude_prerequisite_gated(sheet.character, list(union_by_pk.values()))
+    }
+
+    # 3. Filter + slice each function's own pool against the shared allowed set
+    #    (no further queries — plain membership tests).
+    shopping_list: list[SphinxShoppingItem] = []
+    for function in sorted_functions:
+        candidates = [technique for technique in pools[function] if technique.pk in allowed_ids]
         shopping_list.extend(
             SphinxShoppingItem(
                 technique_name=technique.name,

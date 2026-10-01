@@ -115,3 +115,13 @@ class TechniqueKnownRequirementSelfReferenceTests(TestCase):
 
         chained = TechniqueKnownRequirement(technique=technique_b, required_technique=technique_c)
         chained.full_clean()  # does not raise
+
+    def test_clean_does_not_raise_without_required_technique(self):
+        """``clean()`` tolerates an incomplete instance missing ``required_technique``
+        (#4097 fix round 3). A bare ``.clean()`` call (not ``full_clean()``, which
+        would separately reject the missing required field for its own reason)
+        must not raise or crash — the self-reference/cycle checks guard on
+        ``required_technique_id`` being set before touching it.
+        """
+        req = TechniqueKnownRequirement(technique=self.target)
+        req.clean()  # does not raise
