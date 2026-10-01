@@ -175,7 +175,9 @@ def _build_reveal(sheet: CharacterSheet, ceremony: str) -> UltimateReveal | None
         req.technique_id: req.required_technique
         for req in TechniqueKnownRequirement.objects.filter(
             technique_id__in=allowed_ids, required_technique_id__in=known_ids, is_active=True
-        ).select_related("required_technique")
+        )
+        .select_related("required_technique")
+        .order_by("required_technique__level", "required_technique__name", "required_technique__pk")
     }
 
     groups: list[UltimateRevealGroup] = []
