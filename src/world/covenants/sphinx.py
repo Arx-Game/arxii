@@ -46,12 +46,22 @@ from world.magic.models import (
     TechniqueFunctionTag,
     Tradition,
 )
+from world.progression.services.spends import (
+    check_requirements_for_technique,
+    concrete_requirement_types,
+)
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
 
 #: Shopping-list cap per uncovered function (spec: "up to 3 Technique rows").
 _SHOPPING_LIST_PER_FUNCTION = 3
+#: Headroom over `_SHOPPING_LIST_PER_FUNCTION` fetched per function before the
+#: prerequisite-gate exclusion below, so excluding a gated-and-unmet row still
+#: leaves enough ungated candidates to fill the list (#4097 fix round 2).
+_SHOPPING_LIST_CANDIDATE_POOL_SIZE = _SHOPPING_LIST_PER_FUNCTION * 3
 #: The label used for demand rows sourced from a role's technique-specialty
 #: table, distinguishing them from perk-sourced (situation) demand rows whose
 #: ``source`` is the perk's own authored name.
@@ -284,6 +294,42 @@ def _uncovered_target_functions(demands: list[SphinxDemand]) -> set[str]:
     return targets
 
 
+def _exclude_prerequisite_gated(
+    character: ObjectDB, candidates: list[Technique]
+) -> list[Technique]:
+    """Drop a candidate whose authored prerequisites ``character`` fails to meet.
+
+    "Learnable" means ``learn_technique`` would actually mint it — gift ownership
+    (checked by the caller) is necessary but no longer sufficient since #4097: a
+    ``TechniqueKnownRequirement``/``GiftHeldRequirement``/etc. row targeting the
+    technique can still refuse it. Bounded, not a per-candidate query explosion:
+    one batched query per concrete requirement type (a small constant) to find
+    which of THIS CALL's candidates carry any active requirement at all —
+    typically none — and ``check_requirements_for_technique`` only for that
+    (usually empty) gated subset, never for every candidate.
+    """
+    candidate_ids = [technique.pk for technique in candidates]
+    gated_ids: set[int] = set()
+    for req_type in concrete_requirement_types():
+        gated_ids.update(
+            req_type.objects.filter(technique_id__in=candidate_ids, is_active=True).values_list(
+                "technique_id", flat=True
+            )
+        )
+    if not gated_ids:
+        return candidates
+
+    unmet_ids = {
+        technique.pk
+        for technique in candidates
+        if technique.pk in gated_ids
+        and not check_requirements_for_technique(character, technique)[0]
+    }
+    if not unmet_ids:
+        return candidates
+    return [technique for technique in candidates if technique.pk not in unmet_ids]
+
+
 def _shopping_list(
     sheet: CharacterSheet,
     demands: list[SphinxDemand],
@@ -291,17 +337,21 @@ def _shopping_list(
 ) -> list[SphinxShoppingItem]:
     """Up to ``_SHOPPING_LIST_PER_FUNCTION`` learnable techniques per uncovered function.
 
-    "Learnable" = the sheet already owns the technique's gift (#2700). That is
-    ``learn_technique``'s own first gate (``GiftNotOwned``), so every row here is
-    something the character can actually go and learn. The previous path-style
-    filter both under- and over-reported: it recommended techniques from gifts the
-    character did not own (which ``learn_technique`` would reject) while hiding
-    ones their own path had already granted them, since 71% of authored
-    ``PathGiftGrant`` starter techniques carried a style the granting path's own
+    "Learnable" = the sheet already owns the technique's gift (#2700) AND meets
+    every authored prerequisite the technique carries (#4097 fix round 2, see
+    ``_exclude_prerequisite_gated``). Gift ownership is
+    ``learn_technique``'s own first gate (``GiftNotOwned``); the prerequisite
+    gate is its second. Every row here is something the character can actually
+    go and learn right now. The previous path-style filter both under- and
+    over-reported: it recommended techniques from gifts the character did not
+    own (which ``learn_technique`` would reject) while hiding ones their own
+    path had already granted them, since 71% of authored ``PathGiftGrant``
+    starter techniques carried a style the granting path's own
     ``allowed_paths`` excluded.
 
-    Bounded: one query per uncovered function (typically a handful), each capped
-    in SQL — no per-candidate Python check.
+    Bounded: one query per uncovered function (typically a handful) fetching a
+    capped candidate pool, plus the small constant-bounded gate check above —
+    no per-candidate query explosion.
     """
     target_functions = _uncovered_target_functions(demands)
     if not target_functions:
@@ -313,9 +363,10 @@ def _shopping_list(
     if not owned_gift_ids:
         return []
 
+    character = sheet.character
     shopping_list: list[SphinxShoppingItem] = []
     for function in sorted(target_functions):
-        candidates = (
+        candidate_pool = list(
             Technique.objects.filter(
                 function_tags__function=function,
                 gift_id__in=owned_gift_ids,
@@ -323,15 +374,16 @@ def _shopping_list(
             .exclude(pk__in=known_technique_ids)
             .select_related("gift")
             .distinct()
-            .order_by("name")[:_SHOPPING_LIST_PER_FUNCTION]
+            .order_by("name")[:_SHOPPING_LIST_CANDIDATE_POOL_SIZE]
         )
+        candidates = _exclude_prerequisite_gated(character, candidate_pool)
         shopping_list.extend(
             SphinxShoppingItem(
                 technique_name=technique.name,
                 gift_name=technique.gift.name,
                 function=function,
             )
-            for technique in candidates
+            for technique in candidates[:_SHOPPING_LIST_PER_FUNCTION]
         )
     return shopping_list
 

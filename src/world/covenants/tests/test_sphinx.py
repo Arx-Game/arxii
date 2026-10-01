@@ -141,6 +141,61 @@ class JudgeVowNoCoverageTests(TestCase):
         self.assertEqual(verdict.tier, SphinxTier.NOT_YET)
         self.assertEqual(verdict.shopping_list, [])
 
+    def test_shopping_list_excludes_techniques_with_unmet_prerequisite(self) -> None:
+        """The list never recommends what learn_technique would still refuse (#4097).
+
+        Owning the gift is necessary but not sufficient since #4097:
+        learn_technique's second gate is an authored prerequisite
+        (TechniqueKnownRequirement et al.). A gift-owned-but-prerequisite-gated
+        technique is not "learnable" and must not be recommended.
+        """
+        from world.progression.models import TechniqueKnownRequirement
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.BARRIER
+        )
+
+        gated = TechniqueFactory(name="Ward of the Unready")
+        TechniqueFunctionTagFactory(technique=gated, function=TechniqueFunction.BARRIER)
+        CharacterGiftFactory(character=sheet, gift=gated.gift)
+        prerequisite = TechniqueFactory(name="Foundational Ward")
+        TechniqueKnownRequirement.objects.create(
+            technique=gated, required_technique=prerequisite, is_active=True
+        )
+        # The character does not know `prerequisite`.
+
+        verdict = judge_vow(sheet, role)
+
+        self.assertEqual(verdict.tier, SphinxTier.NOT_YET)
+        shopping_names = [item.technique_name for item in verdict.shopping_list]
+        self.assertNotIn("Ward of the Unready", shopping_names)
+
+    def test_shopping_list_includes_technique_once_prerequisite_is_met(self) -> None:
+        """Once the character meets the prerequisite, the technique is recommended again."""
+        from world.progression.models import TechniqueKnownRequirement
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.BARRIER
+        )
+
+        gated = TechniqueFactory(name="Ward of the Unready")
+        TechniqueFunctionTagFactory(technique=gated, function=TechniqueFunction.BARRIER)
+        CharacterGiftFactory(character=sheet, gift=gated.gift)
+        prerequisite = TechniqueFactory(name="Foundational Ward")
+        TechniqueKnownRequirement.objects.create(
+            technique=gated, required_technique=prerequisite, is_active=True
+        )
+        CharacterTechniqueFactory(character=sheet, technique=prerequisite)
+
+        verdict = judge_vow(sheet, role)
+
+        shopping_names = [item.technique_name for item in verdict.shopping_list]
+        self.assertIn("Ward of the Unready", shopping_names)
+
 
 class JudgeVowSituationDemandTests(TestCase):
     """A SELF-beneficiary perk's in-mapping situation demands a creator function."""
