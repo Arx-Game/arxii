@@ -1,14 +1,26 @@
 """Non-teaching technique acquisition service (#1732).
 
 learn_technique is the shared commit seam: it runs the gift-owned check,
-cap check, AP/XP spend, mints CharacterTechnique, and announces. Called by
-item on-use and ritual SERVICE dispatch.
+prerequisite check, cap check, AP/XP spend, mints CharacterTechnique, and
+announces. Called by item on-use and ritual SERVICE dispatch.
 
 Gift ownership is the whole path gate (#2700). The former per-technique
 path-style gate was removed: which techniques a path can reach is authored
 on ``PathGiftGrant``/``TraditionGiftGrant`` at technique granularity, and
 style now lives on the caster (``classes.Path.style``), where it gates
 *casting* rather than *learning*.
+
+**Prerequisite gate (#4097 fix round 2).** ``learn_technique`` used to mint
+with no check of authored ``TechniqueKnownRequirement``/``GiftHeldRequirement``/
+etc. rows — ``charge_and_learn`` ran the check, but this seam (item scrolls,
+rituals, GM award) did not, so an item scroll or a ritual could teach a
+technique whose prerequisites were never met. The gate now runs here too,
+via the same ``enforce_technique_prerequisites`` helper ``charge_and_learn``
+uses, skipped only for ``origin=AcquisitionOrigin.GM_GRANT`` (deliberate GM
+fiat) and for a meter-completion mint (``completing_progress=True`` —
+whichever path created the meter already ran this check at creation time;
+re-checking at completion would let a character's paid-for progress rot the
+moment they shed an unrelated prerequisite mid-training).
 """
 
 from __future__ import annotations
@@ -26,6 +38,7 @@ from world.magic.exceptions import (
 )
 from world.magic.services.gift_acquisition import (
     count_techniques_for_gift,
+    enforce_technique_prerequisites,
     get_technique_cap_for_gift,
     resolve_owned_gift,
 )
@@ -71,6 +84,7 @@ def learn_technique(  # noqa: PLR0913
     xp_cost: int = 0,
     location: object | None = None,
     origin: AcquisitionOrigin = AcquisitionOrigin.TRAINED,
+    completing_progress: bool = False,
 ) -> CharacterTechnique | TechniqueProgress:
     """Learn a technique from an owned gift (non-teaching path).
 
@@ -80,7 +94,7 @@ def learn_technique(  # noqa: PLR0913
 
     When ``ap_cost == 0``: mints the ``CharacterTechnique`` immediately
     (the meter-completion path, or a free grant). Runs: gift-owned check
-    -> cap check -> mint -> announce.
+    -> duplicate check -> prerequisite check -> cap check -> mint -> announce.
 
     Never implicitly acquires the gift — that is the teaching path's job.
 
@@ -98,7 +112,15 @@ def learn_technique(  # noqa: PLR0913
             every existing caller). ``GMAwardAction`` (#3055 slice 1c) is the
             first caller to pass ``AcquisitionOrigin.GM_GRANT`` here, marking
             a technique granted by GM fiat rather than earned via
-            training/teaching investment.
+            training/teaching investment — a GM award is deliberate fiat, so
+            it also skips the prerequisite check below (#4097 fix round 2).
+        completing_progress: True when this call is minting the
+            ``CharacterTechnique`` that fills an already-existing
+            ``TechniqueProgress`` meter (``contribute_to_technique_progress``,
+            #4097 fix round 2). The prerequisite check already ran whenever
+            that meter was created (either here, in the ``ap_cost > 0``
+            branch below, or in ``charge_and_learn``), so it is skipped here
+            to avoid re-gating already-committed training.
 
     Returns:
         ``CharacterTechnique`` when ``ap_cost == 0`` (immediate mint),
@@ -106,6 +128,9 @@ def learn_technique(  # noqa: PLR0913
 
     Raises:
         GiftNotOwned: Learner doesn't own the technique's gift.
+        TechniqueRequirementsNotMet: An active requirement targeting this
+            technique (Path, gift, technique, skill, ...) is not met —
+            skipped for ``origin=GM_GRANT`` and ``completing_progress=True``.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
         ValueError: Learner already knows this technique.
     """
@@ -125,6 +150,12 @@ def learn_technique(  # noqa: PLR0913
     if CharacterTechnique.objects.filter(character=learner, technique=technique).exists():
         msg = f"{learner} already knows {technique.name}."
         raise ValueError(msg)
+
+    # 3b. Prerequisites (#4097 fix round 2): same gate charge_and_learn runs.
+    # Skipped for GM fiat and for a meter-completion mint — see the
+    # `origin`/`completing_progress` docstring entries above.
+    if origin != AcquisitionOrigin.GM_GRANT and not completing_progress:
+        enforce_technique_prerequisites(learner, technique)
 
     # 4. Cap check — against the gift the learner actually holds, since that is
     # where their one GIFT thread hangs and what its cap covers.
