@@ -219,6 +219,22 @@ def thread_power_term(ctx: PowerTermContext) -> int:
     return total
 
 
+def price_power_term(ctx: PowerTermContext) -> int:
+    """The caster's chosen price for this technique buys power (#4099, ruling 6).
+
+    A PRICE ``Restriction`` on the caster's hold adds its ``power_bonus`` to every cast,
+    read raw (cast-power units), never through the builder's refund multiplier.
+    """
+    if ctx.technique is None:
+        return 0
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_price_for,
+    )
+
+    price = technique_price_for(ctx.sheet.character, ctx.technique)
+    return price.power_bonus if price is not None else 0
+
+
 def touchstone_power_term(ctx: PowerTermContext) -> int:
     """Flat bonus from attuned touchstones matching the technique's gift resonance (#2023).
 
@@ -637,6 +653,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     covenant_role_blend_power_term,
     covenant_role_specialty_power_term,
     vow_situational_power_term,
+    price_power_term,
 ]
 
 

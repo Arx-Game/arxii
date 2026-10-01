@@ -311,6 +311,7 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     outcome: ActionOutcome,
     power_ledger: PowerLedger | None = None,
     signature_snippet: str | None = None,
+    price_snippet: str | None = None,
     interaction_result: DamageInteractionResult | None = None,
     hit_text: str = "",
     miss_text: str = "",
@@ -333,6 +334,10 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     a ``SignatureMotifBonus``, #1728), its cosmetic "— <snippet>" clause is
     appended alongside the power clause — the combat-narration sibling of
     ``render_cast_outcome_narration``'s signature handling.
+
+    When ``price_snippet`` is supplied (the caster's hold carries a chosen PRICE,
+    #4099), its cosmetic "— <snippet>" clause is appended alongside the others —
+    the combat-narration sibling of ``render_cast_outcome_narration``'s price handling.
 
     When ``hit_text`` / ``miss_text`` are supplied (the technique's or threat entry's
     authored lines, #3554), the authored line replaces the HEAD sentence only:
@@ -365,8 +370,9 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
 
     power_clause = power_outcome_clause(power_ledger)
     sig_clause = signature_clause(signature_snippet)
+    price_clause_text = signature_clause(price_snippet)
     synergy = synergy_clause(interaction_result)
-    suffix_parts = [c for c in (power_clause, sig_clause, synergy) if c]
+    suffix_parts = [c for c in (power_clause, sig_clause, price_clause_text, synergy) if c]
     suffix = " ".join(suffix_parts)
 
     # Targeted action with no damage and no wounds → miss (or warded bounce).

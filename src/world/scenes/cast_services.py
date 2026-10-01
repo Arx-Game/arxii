@@ -345,6 +345,15 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         caster_persona.character_sheet.character, technique
     )
 
+    # Price clause (#4099): the caster's own chosen price's authored cast-narration
+    # line, resolved through the cached hold lookup.
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        resolve_price_snippet,
+    )
+
+    caster_character = caster_persona.character_sheet.character
+    price_snippet = resolve_price_snippet(caster_character, technique)
+
     narration = render_cast_outcome_narration(
         actor_label=caster_persona.name,
         technique_name=technique_name if technique_name is not None else technique.name,
@@ -354,6 +363,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
         signature_snippet=signature_snippet,
+        price_snippet=price_snippet,
     )
 
     # #3807: every row this function creates was persisted and delivered to
@@ -426,7 +436,7 @@ def _conceal_action_interaction(action_interaction: Interaction, audience: CastA
     conceal_action_interaction(action_interaction, audience)
 
 
-def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
+def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolution
     *,
     request: SceneActionRequest,
     scene: Scene,
@@ -494,6 +504,14 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         )
         resolved_name = resolved.name
         resolved_intensity = resolved.intensity
+
+    # #4099: the caster's own personalized name for the technique, else whatever
+    # the variant/base resolution above produced.
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
+
+    resolved_name = technique_display_name(character, technique, fallback=resolved_name)
 
     difficulty = derive_cast_difficulty(technique)
 

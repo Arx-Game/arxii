@@ -23,13 +23,19 @@ def render_cast_outcome_narration(  # noqa: PLR0913 - stable caller signature
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
     signature_snippet: str | None = None,
+    price_snippet: str | None = None,
 ) -> str:
-    """One-line deterministic narration for a standalone scene cast. Pure."""
+    """One-line deterministic narration for a standalone scene cast. Pure.
+
+    ``price_snippet`` (#4099), when supplied, appends the caster's chosen price's
+    cosmetic "— <snippet>" clause after the signature clause.
+    """
     clause = power_outcome_clause(power_ledger)
     sig = signature_clause(signature_snippet)
+    price = signature_clause(price_snippet)  # the same cosmetic "(em dash) <line>" clause shape
     target_part = f" at {target_label}" if target_label else ""
     head = f"{actor_label} casts {technique_name}{target_part}: {outcome_label}"
-    suffix_parts = [c for c in (clause, sig) if c]
+    suffix_parts = [c for c in (clause, sig, price) if c]
     base = f"{head} {' '.join(suffix_parts)}." if suffix_parts else f"{head}."
     return f"{base} {fizzle_note}" if fizzle_note else base
 
