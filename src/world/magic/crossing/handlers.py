@@ -228,10 +228,7 @@ class TechniqueCrossingHandler:
         execute_ceremony_beat(
             sheet=sheet,
             narrative=CeremonyNarrative(
-                personal_body=(
-                    "Your technique thread has crossed the first threshold. "
-                    "Check 'signature list' for what this depth unlocks."
-                ),
+                personal_body="Your technique thread has crossed the first threshold.",
             ),
         )
 
