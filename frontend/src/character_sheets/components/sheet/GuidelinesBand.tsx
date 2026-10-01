@@ -39,7 +39,16 @@ function GoalsPrompt({ question, goals }: { question: string; goals: CharacterSh
       <span className="refsheet-prompt-q">{question}</span>
       <ol className="refsheet-prompt-a m-0 list-decimal pl-5">
         {goals.map((goal) => (
-          <li key={`${goal.horizon}-${goal.ordinal}`}>{goal.notes || goal.domain}</li>
+          <li key={`${goal.horizon}-${goal.ordinal}`}>
+            {goal.notes || goal.domain}
+            {/* The server drops secret goals for every other reader (#4106), so the
+                mark only ever shows the owner which of their own goals is kept. */}
+            {goal.is_secret && (
+              <span className="refsheet-note ml-2" data-testid="goal-secret">
+                kept to yourself
+              </span>
+            )}
+          </li>
         ))}
       </ol>
     </div>

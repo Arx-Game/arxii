@@ -18,8 +18,6 @@ interface GoalRow {
   ordinal: number;
   points: number;
   notes: string;
-  /** Kept to the character (#4106): only ever true in the owner's own payload. */
-  is_secret?: boolean;
 }
 
 interface ActorSheetSectionProps {
@@ -92,11 +90,6 @@ export function ActorSheetSection({ block, goals }: ActorSheetSectionProps) {
               {shortTerm.map((g) => (
                 <div key={`${g.horizon}-${g.ordinal}`}>
                   {g.ordinal}. {g.notes || g.domain}
-                  {g.is_secret && (
-                    <span className="ml-2 text-xs text-muted-foreground" data-testid="goal-secret">
-                      kept to yourself
-                    </span>
-                  )}
                 </div>
               ))}
             </dd>
@@ -109,11 +102,6 @@ export function ActorSheetSection({ block, goals }: ActorSheetSectionProps) {
               {longTerm.map((g) => (
                 <div key={`${g.horizon}-${g.ordinal}`}>
                   {g.ordinal}. {g.notes || g.domain}
-                  {g.is_secret && (
-                    <span className="ml-2 text-xs text-muted-foreground" data-testid="goal-secret">
-                      kept to yourself
-                    </span>
-                  )}
                 </div>
               ))}
             </dd>

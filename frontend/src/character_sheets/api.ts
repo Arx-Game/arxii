@@ -235,6 +235,8 @@ export interface CharacterSheetGoal {
   ordinal: number;
   points: number;
   notes: string;
+  /** Kept to the character (#4106): only ever true in the owner's or staff's payload. */
+  is_secret: boolean;
 }
 
 /** Mirrors `world.character_sheets.types.IdNameRef`. */
