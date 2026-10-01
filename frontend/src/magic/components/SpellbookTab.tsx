@@ -74,7 +74,14 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
   const locked = technique.forms.filter((form) => form.is_locked);
   const { signature } = technique;
 
-  if (unlocked.length <= 1 && locked.length === 0 && !signature) return null;
+  if (
+    unlocked.length <= 1 &&
+    locked.length === 0 &&
+    !signature &&
+    !technique.price &&
+    !technique.next_signature
+  )
+    return null;
 
   const label = (form: TechniqueForm) =>
     form.variant_id === null ? 'base form' : `${form.name} (${form.resonance_name})`;
@@ -91,6 +98,7 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm">{label(form)}</span>
                 {form.is_default && <Tag>default</Tag>}
+                {form.is_early && <Tag>early</Tag>}
                 <span className="text-xs text-muted-foreground">
                   intensity {form.intensity}, control {form.control}
                 </span>
@@ -107,7 +115,7 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
         </div>
       )}
 
-      {locked.length > 0 && (
+      {(locked.length > 0 || technique.next_signature) && (
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Not yet yours
@@ -121,6 +129,11 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
               {label(form)}, at thread level {form.unlock_thread_level}
             </p>
           ))}
+          {technique.next_signature && (
+            <p className="text-sm text-muted-foreground" data-testid="technique-next-signature">
+              {technique.next_signature.name}, at thread level {technique.next_signature.min_level}
+            </p>
+          )}
         </div>
       )}
 
@@ -134,6 +147,12 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
               {signature.narrative_snippet}
             </span>
           )}
+        </p>
+      )}
+
+      {technique.price && (
+        <p className="text-sm" data-testid="technique-price">
+          <span className="font-medium">Price:</span> {technique.price.name}
         </p>
       )}
     </div>
@@ -276,7 +295,13 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
                   <div key={technique.name} data-testid="spellbook-technique">
                     <Entry
                       name={technique.name}
-                      aside={<span className="refsheet-note">{`Level ${technique.level}`}</span>}
+                      aside={
+                        <span className="refsheet-note">
+                          {technique.name !== technique.catalog_name
+                            ? `${technique.catalog_name} · Level ${technique.level}`
+                            : `Level ${technique.level}`}
+                        </span>
+                      }
                       tags={<Tag>{technique.style}</Tag>}
                       gloss={technique.description || undefined}
                     >

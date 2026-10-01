@@ -21,6 +21,7 @@ import type {
   CharacterSheetMagic,
   CharacterSheetAura,
   CharacterSheetDistinction,
+  CharacterSheetTechnique,
 } from '@/character_sheets/api';
 import type { GlimpseTagOption } from './glimpse/glimpseTypes';
 import type { TechniqueEffectSummary, TechniqueForm, TechniqueSignature } from '../types';
@@ -55,6 +56,7 @@ const mockBaseForm: TechniqueForm = {
   is_locked: false,
   unlock_thread_level: 0,
   thread_level: 0,
+  is_early: false,
   effect_summary: mockEffectSummary,
 };
 
@@ -216,12 +218,15 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
         techniques: [
           {
             name: 'Flare',
+            catalog_name: 'Flare',
             level: 3,
             style: 'Manifestation',
             description: 'A burst of fire.',
             effect_summary: mockEffectSummary,
             forms: [mockBaseForm],
             signature: null,
+            price: null,
+            next_signature: null,
           },
         ],
       },
@@ -553,6 +558,7 @@ describe('SpellbookTab technique forms (#2901)', () => {
     is_locked: false,
     unlock_thread_level: 3,
     thread_level: 3,
+    is_early: false,
     effect_summary: mockEffectSummary,
   };
 
@@ -611,5 +617,97 @@ describe('SpellbookTab technique forms (#2901)', () => {
     expect(screen.getByTestId('technique-signature')).toBeInTheDocument();
     expect(screen.getByText(/\+1 intensity/)).toBeInTheDocument();
     expect(screen.queryAllByTestId('technique-form')).toHaveLength(0);
+  });
+});
+
+describe('SpellbookTab personalization (#4099)', () => {
+  function baseForm(overrides: Partial<TechniqueForm> = {}): TechniqueForm {
+    return { ...mockBaseForm, ...overrides };
+  }
+
+  function variantForm(overrides: Partial<TechniqueForm> = {}): TechniqueForm {
+    return {
+      variant_id: 7,
+      name: 'Ashfall Flare',
+      resonance_id: 2,
+      resonance_name: 'Cinder',
+      intensity: 8,
+      control: 3,
+      is_default: true,
+      is_locked: false,
+      unlock_thread_level: 3,
+      thread_level: 3,
+      is_early: false,
+      effect_summary: mockEffectSummary,
+      ...overrides,
+    };
+  }
+
+  function mockTechnique(
+    overrides: Partial<CharacterSheetTechnique> = {}
+  ): CharacterSheetTechnique {
+    const name = overrides.name ?? 'Flare';
+    return {
+      name,
+      catalog_name: name,
+      level: 3,
+      style: 'Manifestation',
+      description: 'A burst of fire.',
+      effect_summary: mockEffectSummary,
+      forms: [baseForm()],
+      signature: null,
+      price: null,
+      next_signature: null,
+      ...overrides,
+    };
+  }
+
+  function renderSheetWith({ techniques }: { techniques: CharacterSheetTechnique[] }) {
+    const magic = makeMagic();
+    magic.gifts[0].techniques = techniques;
+    mockPayload(magic);
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMotifStyleQueries();
+    mockGlimpseQueries();
+  });
+
+  it("titles the technique with the player's name and keeps the catalog name beside it", () => {
+    renderSheetWith({
+      techniques: [
+        mockTechnique({
+          name: 'Winterbite',
+          catalog_name: 'Scorch Lash',
+          description: 'Flame gutters to white.',
+          price: { name: 'Frost on the skin', description: '', power_bonus: 4 },
+          next_signature: { name: 'Rime walks with you', min_level: 3, thread_level: 1 },
+        }),
+      ],
+    });
+    const entry = screen.getByTestId('spellbook-technique');
+    expect(within(entry).getByText('Winterbite')).toBeInTheDocument();
+    expect(within(entry).getByText(/Scorch Lash · Level/)).toBeInTheDocument();
+    expect(within(entry).getByText('Flame gutters to white.')).toBeInTheDocument();
+    expect(within(entry).getByTestId('technique-price')).toHaveTextContent('Frost on the skin');
+    expect(within(entry).getByTestId('technique-next-signature')).toHaveTextContent(
+      'Rime walks with you, at thread level 3'
+    );
+  });
+
+  it('marks a form bought early', () => {
+    renderSheetWith({
+      techniques: [
+        mockTechnique({
+          forms: [
+            baseForm(),
+            { ...variantForm(), is_early: true, name: 'Scorch Lash, frost-formed' },
+          ],
+        }),
+      ],
+    });
+    expect(screen.getByText('early')).toBeInTheDocument();
   });
 });

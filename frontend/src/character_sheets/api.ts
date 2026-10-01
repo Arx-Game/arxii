@@ -11,13 +11,26 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
-import type { TechniqueEffectSummary, TechniqueForm, TechniqueSignature } from '@/magic/types';
+import type {
+  TechniqueEffectSummary,
+  TechniqueForm,
+  TechniqueNextSignature,
+  TechniquePrice,
+  TechniqueSignature,
+} from '@/magic/types';
 
 /** Mirrors `world.character_sheets.types.TechniqueEntry`. */
 export interface CharacterSheetTechnique {
+  /** The owner's own name for the technique, or the catalog's (#4099). */
   name: string;
+  /**
+   * The catalog `Technique.name` — the only lookup key, shown so the owner
+   * can tell their own name apart from what everyone else calls it (#4099).
+   */
+  catalog_name: string;
   level: number;
   style: string;
+  /** The owner's own description, or the catalog's (#4099). */
   description: string;
   /** The shared effect block (#2898) — cost, reach, targeting, hostility, plain-words summary. */
   effect_summary: TechniqueEffectSummary;
@@ -30,6 +43,13 @@ export interface CharacterSheetTechnique {
   forms: TechniqueForm[];
   /** The signature flourish riding whichever form is chosen, if any. */
   signature: TechniqueSignature | null;
+  /** The price the owner pays to cast this technique, or null (#4099). */
+  price: TechniquePrice | null;
+  /**
+   * The next flourish weaving this technique's thread will unlock, or null
+   * when the owner holds no active thread on it (#4099).
+   */
+  next_signature: TechniqueNextSignature | null;
 }
 
 /** Mirrors `world.character_sheets.types.GiftEntry`. */

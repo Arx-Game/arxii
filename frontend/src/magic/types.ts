@@ -598,6 +598,12 @@ export interface TechniqueForm {
   /** 0 for the base form. */
   unlock_thread_level: number;
   thread_level: number;
+  /**
+   * True when this form applies because it was bought early (#4099) — the
+   * caster's hold reached it before their thread did. False for the base
+   * form and for any naturally-unlocked form.
+   */
+  is_early: boolean;
   effect_summary: TechniqueEffectSummary;
 }
 
@@ -610,6 +616,20 @@ export interface TechniqueSignature {
   name: string;
   narrative_snippet: string;
   intensity_delta: number;
+}
+
+/** The price the owner pays to cast a technique, authored text only (#4099). */
+export interface TechniquePrice {
+  name: string;
+  description: string;
+  power_bonus: number;
+}
+
+/** The next flourish weaving a technique's thread will unlock (#4099). */
+export interface TechniqueNextSignature {
+  name: string;
+  min_level: number;
+  thread_level: number;
 }
 
 // ---------------------------------------------------------------------------
