@@ -43,11 +43,13 @@ def ready() -> None:
         CrossingOfferHandler,
         SoulfrayPendingHandler,
         SurgeOfferHandler,
+        UltimateRevealHandler,
     )
 
     register_offer_handler(SurgeOfferHandler())
     register_offer_handler(CrossingOfferHandler())
     register_offer_handler(SoulfrayPendingHandler())
+    register_offer_handler(UltimateRevealHandler())
 
     # Register crossing-ceremony handlers (ADR-0094, #1987).
     # Each TargetKind dispatches to a handler when a thread crosses a
