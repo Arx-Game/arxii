@@ -73,7 +73,7 @@ needs a separate design review rather than another general caching wrapper.
 
 ## Known stale-cache traps
 
-If a `@tag("postgres")` test fails with `obj.<fk> != expected` after a `refresh_from_db()` or a bulk `SET_NULL` elsewhere, the identity map can be stale in two distinct, easy-to-conflate ways — see [`references/stale-cache-traps.md`](references/stale-cache-traps.md) for the decision procedure before reaching for a fix (a cache-pop only helps one of the two cases; the other needs `flush_instance_cache()`, and the most common cause is neither — a service that never wrote the row).
+If a `@tag("postgres")` test fails with `obj.<fk> != expected` after a `refresh_from_db()` or a bulk `SET_NULL` elsewhere, the identity map can be stale in two distinct, easy-to-conflate ways — see [`references/stale-cache-traps.md`](references/stale-cache-traps.md) for the decision procedure before reaching for a fix (a cache-pop only helps one of the two cases; the other needs `flush_instance_cache()`, and the most common cause is neither — a service that never wrote the row). An ORM delete on `ArxSharedMemoryModel` now carries its own `SET_NULL` updates into the cache (ADR-0327), so that case only arises from a write that skips the ORM.
 
 ## `path` is a reserved idmapper attribute name
 
