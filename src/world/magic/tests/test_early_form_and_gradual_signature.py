@@ -3,8 +3,9 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.factories import CharacterCovenantRoleFactory
 from world.magic.constants import TargetKind
-from world.magic.exceptions import CreationThreadLevelTooHigh
+from world.magic.exceptions import CreationThreadLevelTooHigh, TechniqueNotOwned
 from world.magic.factories import (
     CharacterTechniqueFactory,
     GiftFactory,
@@ -13,7 +14,8 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueVariantFactory,
 )
-from world.magic.models import CharacterResonance
+from world.magic.models import CharacterResonance, CharacterTechnique, Thread
+from world.magic.serializers import TechniqueFormSerializer
 from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.services.signature import (
     available_signature_bonuses,
@@ -92,6 +94,83 @@ class EarlyFormTests(TestCase):
         self.assertTrue(early[0]["is_early"])
         self.assertFalse(early[0]["is_locked"])
 
+    def test_is_early_reaches_the_serialized_form(self) -> None:
+        """TechniqueFormSerializer declares its fields explicitly, so a new payload
+        key must be added to it by name or it is silently dropped (fix round 1)."""
+        hold = self._hold(self.frost_form)
+        forms = available_technique_forms(
+            self.sheet.character, self.technique, character_technique=hold, sheet=self.sheet
+        )
+        serialized = TechniqueFormSerializer(forms, many=True).data
+        early = next(f for f in serialized if f["variant_id"] == self.frost_form.pk)
+        self.assertTrue(early["is_early"])
+
+    def test_another_character_without_the_form_does_not_get_it(self) -> None:
+        """A true non-buyer: a second character's own hold, same resonance, no pick."""
+        other_sheet = CharacterSheetFactory()
+        CharacterTechniqueFactory(character=other_sheet, technique=self.technique)
+        provision_latent_gift_thread(other_sheet, self.gift, resonance=self.frost)
+
+        resolved = resolve_specialized_variant(
+            entity=self.technique, character=other_sheet.character
+        )
+        self.assertEqual(resolved, self.technique)
+
+    def test_naturally_reached_higher_form_beats_the_early_form(self) -> None:
+        hold = self._hold(self.frost_form)  # unlock_thread_level=1
+        ascended_form = TechniqueVariantFactory(
+            parent_technique=self.technique,
+            resonance=self.frost,
+            unlock_thread_level=2,
+            name_override="Scorch Lash, frost-ascended",
+        )
+        thread = Thread.objects.get(
+            owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
+        )
+        thread.level = 2
+        thread.save(update_fields=["level"])
+        self.sheet.character.threads.invalidate()
+
+        resolved = resolve_specialized_variant(
+            entity=self.technique, character=self.sheet.character, character_technique=hold
+        )
+        self.assertIsInstance(resolved, _ResolvedTechnique)
+        self.assertEqual(resolved.variant, ascended_form)
+
+    def test_is_early_becomes_false_once_the_thread_reaches_the_forms_level(self) -> None:
+        hold = self._hold(self.frost_form)  # unlock_thread_level=1
+        thread = Thread.objects.get(
+            owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
+        )
+        thread.level = 1
+        thread.save(update_fields=["level"])
+        self.sheet.character.threads.invalidate()
+
+        forms = available_technique_forms(
+            self.sheet.character, self.technique, character_technique=hold, sheet=self.sheet
+        )
+        early = next(f for f in forms if f["variant_id"] == self.frost_form.pk)
+        self.assertFalse(early["is_early"])
+        self.assertFalse(early["is_locked"])
+
+    def test_role_granted_hold_does_not_leak_early_form(self) -> None:
+        """A role-granted hold's early_form never applies, even when the caller omits
+        ``character_technique`` — the gate reads the hold's own role_source_id, not
+        only the (possibly-absent) caller-supplied flag (fix round 1)."""
+        membership = CharacterCovenantRoleFactory(character_sheet=self.sheet)
+        CharacterTechnique.objects.create(
+            character=self.sheet,
+            technique=self.technique,
+            role_source=membership,
+            early_form=self.frost_form,
+        )
+        self.sheet.character.techniques.invalidate()
+
+        resolved = resolve_specialized_variant(
+            entity=self.technique, character=self.sheet.character
+        )
+        self.assertEqual(resolved, self.technique)
+
 
 class GradualSignatureTests(TestCase):
     """Weaving a thread unlocks the next flourish (spec test seam)."""
@@ -147,3 +226,15 @@ class GradualSignatureTests(TestCase):
         )
         self.assertEqual(thread.target_kind, TargetKind.TECHNIQUE)
         self.assertEqual(thread.target_technique, self.technique)
+
+    def test_weaving_at_exactly_level_two_succeeds(self) -> None:
+        """CREATION_PERSONALIZATION_MAX_LEVEL (2) is the inclusive ceiling."""
+        thread = weave_creation_technique_thread(
+            self.sheet, self.technique, self.resonance, level=2
+        )
+        self.assertEqual(thread.level, 2)
+
+    def test_creation_weave_of_unowned_technique_raises_technique_not_owned(self) -> None:
+        unowned_technique = TechniqueFactory(level=1)
+        with self.assertRaises(TechniqueNotOwned):
+            weave_creation_technique_thread(self.sheet, unowned_technique, self.resonance, level=1)

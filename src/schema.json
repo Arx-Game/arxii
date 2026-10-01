@@ -76123,7 +76123,9 @@ components:
         power_bonus:
           type: integer
           readOnly: true
-          description: Power bonus granted when this restriction is applied.
+          description: 'DESIGN: refunded against a design''s power cost in the technique
+            builder. PRICE: added to the caster''s power on every cast, as a power-ledger
+            term.'
         allowed_effect_type_ids:
           type: array
           items:
@@ -83241,6 +83243,9 @@ components:
         thread_level:
           type: integer
           readOnly: true
+        is_early:
+          type: boolean
+          readOnly: true
         effect_summary:
           allOf:
           - $ref: '#/components/schemas/TechniqueEffectSummary'
@@ -83250,6 +83255,7 @@ components:
       - effect_summary
       - intensity
       - is_default
+      - is_early
       - is_locked
       - name
       - resonance_id

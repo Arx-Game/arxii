@@ -759,6 +759,8 @@ def weave_creation_technique_thread(
     ThreadWeavingUnlock gate ``weave_thread`` enforces in play. It never starts a thread
     at or past the first crossing (``CREATION_PERSONALIZATION_MAX_LEVEL``), so no
     crossing ceremony or threshold is skipped, and never past the anchor cap.
+
+    Call only from character-creation finalize.
     """
     from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL  # noqa: PLC0415
     from world.magic.exceptions import CreationThreadLevelTooHigh  # noqa: PLC0415

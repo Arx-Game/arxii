@@ -43250,7 +43250,7 @@ export interface components {
       readonly name: string;
       /** @description Description of this restriction's limitations. */
       readonly description: string;
-      /** @description Power bonus granted when this restriction is applied. */
+      /** @description DESIGN: refunded against a design's power cost in the technique builder. PRICE: added to the caster's power on every cast, as a power-ledger term. */
       readonly power_bonus: number;
       /** @description Get effect type IDs, using cached property if available. */
       readonly allowed_effect_type_ids: number[];
@@ -46626,6 +46626,7 @@ export interface components {
       readonly is_locked: boolean;
       readonly unlock_thread_level: number;
       readonly thread_level: number;
+      readonly is_early: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /**
