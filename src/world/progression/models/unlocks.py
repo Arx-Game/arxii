@@ -245,10 +245,11 @@ class AbstractUnlockRequirement(models.Model):
     """Abstract base for all types of requirements for unlock targets.
 
     Generalized from the former ``AbstractClassLevelRequirement`` (#1885):
-    the base now supports a polymorphic unlock target — either a
-    ``ClassLevelUnlock`` (Durance path), a ``ThreadCrossingThreshold``
-    (thread crossing gate), or a ``Path`` (hybrid path entry gate, #2538).
-    Exactly one of the three FKs must be set, enforced by a CheckConstraint.
+    the base now supports a polymorphic unlock target — a ``ClassLevelUnlock``
+    (Durance path), a ``ThreadCrossingThreshold`` (thread crossing gate), a
+    ``Path`` (hybrid path entry gate, #2538), or a ``Technique`` (technique
+    learning gate, #4097). Exactly one of the four FKs must be set, enforced
+    by a CheckConstraint.
 
     See ADR-0090 for the boundary choice and the ADR-0016 (shared base) vs
     ADR-0089 (sibling-per-domain) justification.
@@ -291,7 +292,18 @@ class AbstractUnlockRequirement(models.Model):
         help_text=(
             "Path this requirement gates (#2538). Used for hybrid path entry "
             "and cross-path technique learning. Exactly one of "
-            "class_level_unlock / thread_crossing_threshold / path must be set."
+            "class_level_unlock / thread_crossing_threshold / path / technique must be set."
+        ),
+    )
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        related_name=_REQUIREMENTS_RELATED_NAME,
+        null=True,
+        blank=True,
+        help_text=(
+            "Technique this requirement gates learning of (#4097). Exactly one of "
+            "class_level_unlock / thread_crossing_threshold / path / technique must be set."
         ),
     )
 
@@ -303,16 +315,25 @@ class AbstractUnlockRequirement(models.Model):
                     models.Q(class_level_unlock__isnull=False)
                     & models.Q(thread_crossing_threshold__isnull=True)
                     & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=False)
                     & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=True)
                     & models.Q(path__isnull=False)
+                    & models.Q(technique__isnull=True)
+                )
+                | (
+                    models.Q(class_level_unlock__isnull=True)
+                    & models.Q(thread_crossing_threshold__isnull=True)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=False)
                 ),
                 name="%(class)s_exactly_one_unlock_target",
             ),
@@ -888,6 +909,16 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
         default=3,
         help_text="Techniques of the character's MAJOR gift required (#2440 ruling 4).",
     )
+    gift = models.ForeignKey(
+        "arxii.Gift",
+        on_delete=models.CASCADE,
+        related_name="major_gift_technique_requirements",
+        null=True,
+        blank=True,
+        help_text=(
+            "Major gift to count; blank means any single held major gift reaching the count."
+        ),
+    )
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Count CharacterTechnique rows whose technique belongs to the MAJOR gift."""
@@ -917,6 +948,43 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
 
     def __str__(self) -> str:
         return f"Major Gift Techniques: >= {self.minimum_techniques}"
+
+
+class GiftHeldRequirement(AbstractUnlockRequirement):
+    """Requires holding a gift (#4097).
+
+    ``gift`` named: only that gift satisfies it, lineage-aware (a held descendant
+    reaching it counts). ``gift`` blank: any gift the character holds satisfies it.
+    Level 3 Paths are typically gift-agnostic; level 6+ name a gift.
+    """
+
+    gift = models.ForeignKey(
+        "arxii.Gift",
+        on_delete=models.CASCADE,
+        related_name="gift_held_requirements",
+        null=True,
+        blank=True,
+        help_text="Gift required; blank means any held gift satisfies it.",
+    )
+
+    def __str__(self) -> str:
+        if self.gift_id is not None:
+            return f"Gift Held: {self.gift.name}"
+        return "Gift Held: any"
+
+
+class TechniqueKnownRequirement(AbstractUnlockRequirement):
+    """Requires knowing a specific technique (#4097)."""
+
+    required_technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        related_name="required_by_requirements",
+        help_text="Technique the character must already know.",
+    )
+
+    def __str__(self) -> str:
+        return f"Technique Known: {self.required_technique.name}"
 
 
 class CodexKnowledgeRequirement(AbstractUnlockRequirement):

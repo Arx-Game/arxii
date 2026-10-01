@@ -18,6 +18,7 @@ from world.progression.models import (
     DevelopmentTransaction,
     DuranceTrainingSite,
     ExperiencePointsData,
+    GiftHeldRequirement,
     KudosClaimCategory,
     KudosDifficultyWeight,
     KudosPointsData,
@@ -25,6 +26,7 @@ from world.progression.models import (
     KudosTransaction,
     PathIntent,
     RandomSceneTarget,
+    TechniqueKnownRequirement,
     WeeklySkillUsage,
     WeeklySocialEngagement,
     XPTransaction,
@@ -40,6 +42,7 @@ _WEEK_SERVICES_MODULE = "world.game_clock.week_services"
 
 # Lazy factory reference (Django app_label.ModuleName.Factory), extracted to satisfy S1192.
 PATH_FACTORY = "world.classes.factories.PathFactory"
+_TECHNIQUE_FACTORY = "world.magic.factories.TechniqueFactory"
 
 
 class ExperiencePointsDataFactory(factory_django.DjangoModelFactory):
@@ -323,3 +326,22 @@ class CodexKnowledgeRequirementFactory(factory_django.DjangoModelFactory):
 
     codex_entry = factory.SubFactory("world.codex.factories.CodexEntryFactory")
     path = factory.SubFactory(PATH_FACTORY)
+
+
+class GiftHeldRequirementFactory(factory_django.DjangoModelFactory):
+    """Factory for GiftHeldRequirement (#4097)."""
+
+    class Meta:
+        model = GiftHeldRequirement
+
+    technique = factory.SubFactory(_TECHNIQUE_FACTORY)
+
+
+class TechniqueKnownRequirementFactory(factory_django.DjangoModelFactory):
+    """Factory for TechniqueKnownRequirement (#4097)."""
+
+    class Meta:
+        model = TechniqueKnownRequirement
+
+    technique = factory.SubFactory(_TECHNIQUE_FACTORY)
+    required_technique = factory.SubFactory(_TECHNIQUE_FACTORY)
