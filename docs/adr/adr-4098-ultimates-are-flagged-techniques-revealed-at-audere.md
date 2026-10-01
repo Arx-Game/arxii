@@ -22,10 +22,11 @@ PLACEHOLDER marker, never a string in code. Soulfray's `character_loss` conseque
 `death_deferred` condition, sets the new `CharacterVitals.death_certain_pending` instead of
 killing synchronously; it resolves through the existing condition-expiry seam when the last
 deferring condition ends, backstopped by a cleanup pass at encounter completion, and honors story
-protection at both the defer and resolution points. Per the #4073 owner's ruling (2026-10-01),
-Soulfray can kill only inside a combat encounter: scene casts, technique-enhanced social actions,
-battles, and reactive spends with no active COMBAT engagement all pass non-lethal, which bounds
-accumulated severity below the first death-risk stage instead of ever rolling a death consequence.
+protection at both the defer and resolution points. Per the project owner's ruling of 2026-10-01
+on #4098, Soulfray can kill only inside a combat encounter: scene casts, technique-enhanced social
+actions, battles, and reactive spends with no active COMBAT engagement all pass non-lethal, which
+bounds accumulated severity below the first death-risk stage instead of ever rolling a death
+consequence.
 The Audere Majora round-resolution block, originally an unconditional guard against any round
 resolving while a participant was mid-crossing, is narrowed to the undecided-offer window only -
 the post-crossing aftermath (the rest of the Majora condition's lifetime) must let the crosser act

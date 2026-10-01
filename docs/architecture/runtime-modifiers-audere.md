@@ -282,7 +282,7 @@ ultimates once the Crossing resolves (spec decision 12 corrected the original fr
 above before #4098 shipped).
 
 An ultimate is a flagged `Technique` (`is_ultimate=True`), never a separate catalog or
-a `CharacterTechnique`. `ultimate_reveal_for(sheet, ceremony)`
+a `CharacterTechnique`. `ultimate_reveal_for(sheet)`
 (`world/magic/services/ultimates.py`) derives the reveal on every read - no offer
 table - from the character's owned (current/new Path x major Gift), owned-known (any
 Path, still held as MAJOR), and bond (active patron/companion) pools, filtered by

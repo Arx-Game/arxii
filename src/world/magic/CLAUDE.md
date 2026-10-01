@@ -1602,7 +1602,7 @@ construction. Attaches via `PathGiftGrant.ultimate_techniques` (owned, major gif
 only), `WorshippedBeing.ultimate_techniques` / `CompanionArchetype.ultimate_techniques`
 (bond, active-bond-only).
 
-- **Reveal:** `services/ultimates.py`'s `ultimate_reveal_for(sheet, ceremony)`
+- **Reveal:** `services/ultimates.py`'s `ultimate_reveal_for(sheet)`
   derives the reveal fresh on every read, never an offer table - owned pools
   (current Path x major Gift for plain Audere, new Path x major Gift for Audere
   Majora), owned-known pools (any Path, still MAJOR), bond pools (active bond only),
@@ -1611,7 +1611,7 @@ only), `WorshippedBeing.ultimate_techniques` / `CompanionArchetype.ultimate_tech
   `AudereThreshold.label_for_category`). A KNOWN card carries name + description; a
   CATEGORY (undiscovered) card carries the authored label only, never the
   technique's identity; an UPGRADE card carries `upgrade_of_name`.
-- **Readied:** `choose_ultimate(character, choice_key)` (`@transaction.atomic`,
+- **Readied:** `choose_ultimate(sheet, choice_key)` (`@transaction.atomic`,
   `select_for_update`) re-resolves under the lock to close a double-submit race
   (stale read → `UltimateRevealClosed`), then `get_or_create`s the `KnownUltimate`
   row and sets `readied=True`. Choosing readies; it does NOT cast. `readied_ultimate`
