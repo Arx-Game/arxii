@@ -403,13 +403,13 @@ def _render_technique_forms(technique: TechniqueEntry) -> list[str]:
         lines.append("      Forms you can work:")
         for form in unlocked:
             lines.extend(_render_unlocked_form(form))
-    if locked:
+    next_signature = technique["next_signature"]
+    if locked or next_signature:
         lines.append("      Not yet yours:")
         lines.extend(
             f"        {_form_label(form)}, at thread level {form['unlock_thread_level']}"
             for form in locked
         )
-        next_signature = technique["next_signature"]
         if next_signature:
             lines.append(
                 f"        {next_signature['name']}, at thread level {next_signature['min_level']}"

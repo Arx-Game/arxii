@@ -41,7 +41,9 @@ from world.magic.types.technique_effects import (
 )
 
 if TYPE_CHECKING:
+    from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models.signature import SignatureMotifBonus
     from world.magic.models.techniques import CharacterTechnique, Technique
     from world.magic.models.threads import Thread
 
@@ -282,20 +284,23 @@ def technique_price_payload(hold: CharacterTechnique | None) -> TechniquePricePa
     )
 
 
-def next_signatures_by_technique(character) -> dict[int, TechniqueNextSignaturePayload]:
+def next_signatures_by_technique(
+    character: Character,
+) -> dict[int, TechniqueNextSignaturePayload]:
     """Per technique pk, the next flourish its TECHNIQUE thread will unlock (#4099).
 
     One catalog query per sheet build, and none when the character holds no active
-    TECHNIQUE thread.
+    TECHNIQUE thread. A character can hold several TECHNIQUE threads on the SAME
+    technique (one per resonance, ``uniq_thread_technique``) — the nearest flourish
+    wins, by ``min_crossing_level``, then name, then pk, so the pick never depends
+    on dict-overwrite order.
     """
     from world.magic.models import SignatureMotifBonus  # noqa: PLC0415
     from world.magic.services.signature import next_signature_bonus  # noqa: PLC0415
 
-    threads = [
-        t
-        for t in character.threads.all()
-        if t.target_kind == TargetKind.TECHNIQUE and t.retired_at is None
-    ]
+    # ``character.threads.all()`` (the cached handler) already filters
+    # ``retired_at__isnull=True`` at the query level — no second filter needed here.
+    threads = [t for t in character.threads.all() if t.target_kind == TargetKind.TECHNIQUE]
     if not threads:
         return {}
     catalog = list(
@@ -304,11 +309,18 @@ def next_signatures_by_technique(character) -> dict[int, TechniqueNextSignatureP
             required_facet__isnull=True,
         )
     )
-    result: dict[int, TechniqueNextSignaturePayload] = {}
+    candidates: dict[int, list[tuple[SignatureMotifBonus, Thread]]] = {}
     for thread in threads:
         bonus = next_signature_bonus(thread, catalog)
         if bonus is not None:
-            result[thread.target_technique_id] = TechniqueNextSignaturePayload(
-                name=bonus.name, min_level=bonus.min_crossing_level, thread_level=thread.level
-            )
+            candidates.setdefault(thread.target_technique_id, []).append((bonus, thread))
+
+    result: dict[int, TechniqueNextSignaturePayload] = {}
+    for technique_id, pairs in candidates.items():
+        bonus, thread = min(
+            pairs, key=lambda pair: (pair[0].min_crossing_level, pair[0].name, pair[0].pk)
+        )
+        result[technique_id] = TechniqueNextSignaturePayload(
+            name=bonus.name, min_level=bonus.min_crossing_level, thread_level=thread.level
+        )
     return result

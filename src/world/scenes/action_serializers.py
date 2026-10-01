@@ -298,7 +298,9 @@ class CastableTechniqueSerializer(serializers.Serializer):
     catalog_name = serializers.CharField(source="name")
     # #2898: this list dropped the description entirely, so the same technique a
     # player chose by its prose was unrecognisable in the cast list.
-    description = serializers.CharField()
+    # #4099 fix round 1: the owner's own description, else the catalog's — telnet
+    # already showed the custom one (``_castable_listing``), this closed the gap.
+    description = serializers.SerializerMethodField()
     anima_cost = serializers.IntegerField()
     tier = serializers.IntegerField()
     intensity = serializers.IntegerField()
@@ -319,6 +321,13 @@ class CastableTechniqueSerializer(serializers.Serializer):
         """The owner's own name for this technique, or the catalog's (#4099)."""
         hold = self.context.get("character_techniques", {}).get(obj.pk)
         return hold_display_name(hold, fallback=obj.name)
+
+    def get_description(self, obj: Technique) -> str:
+        """The owner's own description for this technique, or the catalog's (#4099)."""
+        hold = self.context.get("character_techniques", {}).get(obj.pk)
+        if hold is not None and hold.custom_description:
+            return hold.custom_description
+        return obj.description
 
     @extend_schema_field(TechniqueEffectSummarySerializer)
     def get_effect_summary(self, obj: Technique) -> dict:
