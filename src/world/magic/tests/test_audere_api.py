@@ -270,6 +270,14 @@ class PendingAudereOfferFramingTests(APITestCase):
 
     def test_framing_text_present_with_reveal_cards(self) -> None:
         offer = _open_gate_for_tenure(self.tenure, self.gate)
+        # has_reveal_cards (#4098 final review item 5) only shows the framing
+        # line while the character is in a COMBAT engagement - the Audere gate
+        # itself is reachable from any engagement, so _open_gate_for_tenure
+        # builds a CHALLENGE engagement by design. Flip it to COMBAT for this
+        # card-present case; the CHALLENGE case is covered by the test below.
+        engagement = self.sheet.engagement
+        engagement.engagement_type = EngagementType.COMBAT
+        engagement.save(update_fields=["engagement_type"])
 
         self.client.force_authenticate(user=self.account)
         response = self.client.get(_PENDING_URL)
@@ -282,6 +290,22 @@ class PendingAudereOfferFramingTests(APITestCase):
 
     def test_framing_text_blank_without_reveal_cards(self) -> None:
         self.grant.ultimate_techniques.clear()
+        offer = _open_gate_for_tenure(self.tenure, self.gate)
+        engagement = self.sheet.engagement
+        engagement.engagement_type = EngagementType.COMBAT
+        engagement.save(update_fields=["engagement_type"])
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(_PENDING_URL)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = [row for row in response.data["results"] if row["id"] == offer.pk]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["reveal_framing_text"], "")
+
+    def test_framing_text_blank_outside_combat_even_with_reveal_cards(self) -> None:
+        """#4098 final review item 5: the CHALLENGE engagement _open_gate_for_tenure
+        builds by design must not show the framing line even though cards exist."""
         offer = _open_gate_for_tenure(self.tenure, self.gate)
 
         self.client.force_authenticate(user=self.account)
