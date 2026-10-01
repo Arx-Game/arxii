@@ -478,9 +478,12 @@ def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckRe
         technique=technique,
         resolve_fn=resolver,
         confirm_soulfray_risk=True,
-        # lethal defaults True (unlike combat's lethal=encounter.is_lethal) — battles
-        # have no non-lethal encounter concept; this only bounds the CASTER's own
-        # anima-overburn/Soulfray severity, not PvP damage (ADR-0023 is unaffected).
+        # Soulfray kills only in combat encounters (#4098 fix round 2, controller
+        # ruling) — a Battle is not a CombatEncounter, so lethal=False here: the
+        # caster's anima-overburn is still bounded and Soulfray severity is still
+        # capped below the first death-risk stage, but a character_loss consequence
+        # can never be selected. PvP damage itself is unaffected (ADR-0023).
+        lethal=False,
         situation_ctx=_battle_situation_ctx(character, declaration.action_kind),
     )
     if not result.confirmed or result.resolution_result is None:

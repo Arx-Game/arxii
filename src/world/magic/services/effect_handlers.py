@@ -140,8 +140,11 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
     narrated by ``_narrate_reactive_fizzle``, #3574). A consented instance
     (#3573, ``soulfray_consented``) pays into deficit through
     ``deduct_anima`` and accrues Soulfray on every fire; lethality comes
-    from the payer's live combat engagement, defaulting to lethal out of
-    combat.
+    from the payer's live combat engagement, defaulting to NON-lethal out
+    of combat (#4098 fix round 2, controller ruling: Soulfray kills only in
+    combat encounters) — the old default fell through to ``lethal=True``
+    for any reactive fire with no active combat engagement, which is
+    exactly backwards.
 
     Returns True immediately when cost is 0 (free-to-fire condition).
     Does NOT use select_for_update — single-threaded game tick is the expected
@@ -164,7 +167,7 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
     from world.magic.services.anima import deduct_anima  # noqa: PLC0415
 
     engagement = active_combat_engagement_for(payer)
-    lethal = engagement.source.is_lethal if engagement is not None else True
+    lethal = engagement.source.is_lethal if engagement is not None else False
     deficit = deduct_anima(payer, cost, lethal=lethal)
     if instance.soulfray_consented:
         accumulate_soulfray(

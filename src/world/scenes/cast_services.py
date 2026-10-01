@@ -258,6 +258,10 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
         apply_variant=apply_variant,
         preferred_resonance=preferred_resonance,
+        # Soulfray kills only in combat encounters (#4098 fix round 2) — a
+        # standalone scene cast is never a CombatEncounter, so a character_loss
+        # Soulfray consequence can never be selected here.
+        lethal=False,
     )
 
     # Soulfray gate: use_technique returned without resolving — propagate None result.
