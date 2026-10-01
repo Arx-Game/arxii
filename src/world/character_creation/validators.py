@@ -608,8 +608,6 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
 
     return []
 
-    return []
-
 
 def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplate) -> list[str]:
     from world.societies.houses.creator import _validate_aspect_picks  # noqa: PLC0415
