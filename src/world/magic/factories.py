@@ -1002,6 +1002,7 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     base_check_difficulty = 15
     ritual_severity_cost_per_point = 1
+    social_safety_bonus = 10
 
 
 class MishapPoolTierFactory(factory.django.DjangoModelFactory):

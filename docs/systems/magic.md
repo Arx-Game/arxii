@@ -2204,6 +2204,18 @@ unlock for that level means no gate (fail-open). Because the check is live and
 non-cached, satisfying the last requirement mid-scene (e.g. acquiring a touchstone)
 makes the very next eligibility poll pass — no separate re-sync step.
 
+**Social safety bonus is staff-tunable (#4098 owner ruling).** `_get_social_safety_bonus()`
+(`world/magic/services/techniques.py`) reads `SoulfrayConfig.social_safety_bonus`
+(`PositiveIntegerField`, default 10) — the control bonus `get_runtime_technique_stats`
+adds for a caster with no active `CharacterEngagement` row (i.e. not currently in
+combat). Via `calculate_effective_anima_cost`'s control-delta formula (`effective_cost
+= max(base_cost − (control − intensity), 0)`), raising this knob lowers the anima cost
+of social/out-of-combat casting — high enough, it's nearly free. Falls back to the
+field's own default (10) when no `SoulfrayConfig` row exists yet, matching
+`apply_anima_ritual_outcome`'s handling of the same singleton in `anima.py`; the
+"soulfray-config" TUNING row on the required-content dashboard already reports that
+gap, so `_get_social_safety_bonus()` adds no separate guard of its own.
+
 ### Ultimates (#4098) [BUILT & WIRED]
 
 Audere and Audere Majora are where a character's magic reaches powers no other path

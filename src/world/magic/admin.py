@@ -1101,6 +1101,7 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "deficit_scale",
         "resilience_check_type",
         "base_check_difficulty",
+        "social_safety_bonus",
     ]
 
 
