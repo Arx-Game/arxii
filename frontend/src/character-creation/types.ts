@@ -593,6 +593,51 @@ export interface CGTechniqueOption {
   effect_summary: TechniqueEffectSummary;
 }
 
+/**
+ * One chosen technique's "make it yours" pick (#4099): a name/description, a
+ * signature flourish, an early specialized form, and a price, each stored by
+ * id (or null to clear). Saved at `DraftData.technique_personalizations`,
+ * keyed by the technique's id as a string.
+ */
+export interface TechniquePersonalizationPick {
+  custom_name?: string;
+  custom_description?: string;
+  signature_bonus_id?: number | null;
+  early_form_id?: number | null;
+  price_id?: number | null;
+}
+
+/**
+ * One flourish, form or price a "make it yours" pick can take (#4099). All
+ * text (`name`, `gloss`) is staff-authored.
+ * From GET /api/character-creation/drafts/<id>/personalization-options/
+ */
+export interface PersonalizationOption {
+  id: number;
+  name: string;
+  gloss: string;
+  intensity_delta: number;
+  control_delta: number;
+  power_bonus: number;
+  level: number;
+  cost: number;
+}
+
+/**
+ * Everything the "make it yours" panel can offer for one chosen technique
+ * (#4099). `needs_resonance` is true before the Gift Resonance step runs —
+ * flourishes and forms are resonance-gated, so both arrive empty until then.
+ * From GET /api/character-creation/drafts/<id>/personalization-options/
+ */
+export interface TechniquePersonalizationOptions {
+  technique_id: number;
+  technique_name: string;
+  needs_resonance: boolean;
+  flourishes: PersonalizationOption[];
+  forms: PersonalizationOption[];
+  prices: PersonalizationOption[];
+}
+
 // =============================================================================
 // NEW Magic System Types (Build-Your-Own)
 // =============================================================================
@@ -918,6 +963,10 @@ export interface DraftData {
   crew_slot_id?: number | null;
   // Aspect picks for the chosen Family Template: definition id -> option ids (#3648).
   family_aspect_picks?: Record<string, number[]>;
+  // "Make it yours" picks (#4099), keyed by the chosen technique's id (as a
+  // string). An unselected technique's entry is ignored by costs,
+  // validation and finalize; the UI prunes it on deselect.
+  technique_personalizations?: Record<string, TechniquePersonalizationPick>;
   [key: string]: unknown;
 }
 

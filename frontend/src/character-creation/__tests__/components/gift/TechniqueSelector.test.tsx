@@ -29,6 +29,8 @@ const updateDraftMock = vi.fn();
 
 vi.mock('../../../api', () => ({
   getCGTechniqueOptions: vi.fn(),
+  getCGExplanations: vi.fn(),
+  getPersonalizationOptions: vi.fn(),
   updateDraft: (...args: unknown[]) => updateDraftMock(...args),
 }));
 
@@ -128,6 +130,37 @@ describe('TechniqueSelector', () => {
         1,
         expect.objectContaining({
           draft_data: expect.objectContaining({ selected_technique_ids: [] }),
+        })
+      );
+    });
+  });
+
+  it('deselecting a technique prunes its personalization picks in the same write', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({
+      id: 1,
+      selected_tradition: mockTradition,
+      starting_technique_picks: 1,
+      draft_data: {
+        selected_technique_ids: [10],
+        technique_personalizations: {
+          '10': { custom_name: 'Winterbite' },
+          '99': { custom_name: 'Untouched' },
+        },
+      },
+    });
+    renderSelector(draft);
+
+    await user.click(screen.getByRole('button', { name: 'Selected Shadow Strike' }));
+
+    await waitFor(() => {
+      expect(updateDraftMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          draft_data: expect.objectContaining({
+            selected_technique_ids: [],
+            technique_personalizations: { '99': { custom_name: 'Untouched' } },
+          }),
         })
       );
     });

@@ -48,6 +48,7 @@ import type {
   StatDefinition,
   TarotCard,
   Technique,
+  TechniquePersonalizationOptions,
   TechniqueStyle,
   Tradition,
   Vacancy,
@@ -457,6 +458,20 @@ export async function getCGTechniqueOptions(
   );
   if (!res.ok) {
     throw new Error('Failed to load technique options');
+  }
+  return res.json();
+}
+
+/**
+ * The "make it yours" options (flourishes, forms, prices) for every technique
+ * the draft has chosen so far (#4099).
+ */
+export async function getPersonalizationOptions(
+  draftId: number
+): Promise<TechniquePersonalizationOptions[]> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/personalization-options/`);
+  if (!res.ok) {
+    throw new Error('Failed to load personalization options');
   }
   return res.json();
 }
