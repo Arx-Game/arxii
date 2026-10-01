@@ -924,11 +924,6 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         queryset=CharacterGlimpseTag.objects.select_related("tag"),
         to_attr="cached_glimpse_tags",
     ),
-    Prefetch(
-        "known_ultimates",
-        queryset=KnownUltimate.objects.select_related("technique"),
-        to_attr="cached_known_ultimates",
-    ),
 )
 
 
@@ -1111,21 +1106,35 @@ def _build_magic_ultimates(sheet: CharacterSheet) -> list[KnownUltimateEntry]:
 
     The owner reads the discovered technique's real name/description (never the raw
     SWORD/SHIELD/CROWN category word) alongside the authored reveal label.
+
+    Deliberately NOT a ``to_attr`` prefetch (#4098 fix round 1): ``choose_ultimate``
+    writes a ``KnownUltimate`` row mid-session with no sheet-queryset refetch in
+    between, so a prefetch on the idmapper-shared ``CharacterSheet`` would go stale
+    across that write (sharedmemory-model skill) — an ultimate picked this Audere
+    would never show up on the sheet. One plain query per read instead, ordered to
+    match the model's own ``Meta.ordering`` explicitly for a stable render.
     """
+    known = list(
+        KnownUltimate.objects.filter(character=sheet)
+        .select_related("technique")
+        .order_by("discovered_at", "pk")
+    )
+    if not known:
+        return []
     from world.magic.audere import AudereThreshold  # noqa: PLC0415
 
     threshold = AudereThreshold.objects.cached_singleton()
     return [
         KnownUltimateEntry(
-            name=known.technique.name,
-            description=known.technique.description,
+            name=row.technique.name,
+            description=row.technique.description,
             label=(
-                threshold.label_for_category(known.technique.archetype_alignment)
+                threshold.label_for_category(row.technique.archetype_alignment)
                 if threshold is not None
                 else ""
             ),
         )
-        for known in sheet.cached_known_ultimates
+        for row in known
     ]
 
 

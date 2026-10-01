@@ -2792,14 +2792,16 @@ class TestCharacterSheetQueryCount(TestCase):
         # grants of different holder kinds and the pair still costs two queries,
         # however many places a character can walk into.
         # +1 (#3957): the ties block's single sides read, per 55.
-        # +2 (#4098): the magic section's known-ultimates prefetch (one query, however
-        # many ultimates the character has discovered) plus the AudereThreshold
-        # singleton lookup inside the ultimates sub-builder (`cached_singleton()`'s
-        # first-call `.first()`, 0 queries on any later read within the same identity
-        # map). This fixture's character has discovered none and no threshold row
-        # exists, and both queries fire regardless -- the prefetch is unconditional and
-        # the singleton lookup still has to establish that there's nothing to find.
-        with self.assertNumQueries(57):
+        # +1 (#4098 fix round 1): the magic section's known-ultimates read. Not a
+        # prefetch (an idmapper-shared CharacterSheet silently skips a to_attr
+        # prefetch that already ran once -- an ultimate picked mid-session would
+        # never show up on a later GET, reference-idmapper-defeats-to-attr-prefetch)
+        # -- one plain `KnownUltimate.objects.filter(character=sheet)` query per
+        # build, fired unconditionally. This fixture's character has discovered no
+        # ultimates, so AudereThreshold.cached_singleton() is never reached (the
+        # sub-builder skips it entirely when the list comes back empty) -- the
+        # honest cost here is +1, not +2.
+        with self.assertNumQueries(56):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -3026,12 +3028,18 @@ class TestPrefetchCompleteness(TestCase):
         #      spellbook holds. The per-form effect summaries are cached on their
         #      own TechniqueVariant rows and the variants themselves are prefetched,
         #      so nothing else here scales with technique or variant count.
-        #   4. AudereThreshold.objects.cached_singleton() (#4098) — _build_magic_ultimates
-        #      resolves the authored reveal labels for the character's known ultimates.
-        #      cached_singleton()'s first call always issues one ``.first()`` query (even
-        #      when, as here, no row exists); a later call in the same identity map is free.
-        #      known_ultimates itself is prefetched (_MAGIC_PREFETCH_RELATED), so walking
-        #      it costs nothing further however many ultimates the character knows.
+        #   4. KnownUltimate.objects.filter(character=sheet) (#4098 fix round 1) —
+        #      _build_magic_ultimates deliberately is NOT a ``to_attr`` prefetch: an
+        #      idmapper-shared CharacterSheet silently skips a to_attr prefetch that
+        #      already ran once (reference-idmapper-defeats-to-attr-prefetch), which
+        #      would hide an ultimate picked mid-session. One plain query per build
+        #      instead, fired unconditionally since there is no cached list to check
+        #      first. This fixture's character knows no ultimates, so
+        #      AudereThreshold.objects.cached_singleton() is never reached (the
+        #      sub-builder skips it entirely when the known-ultimates list is empty —
+        #      it would cost a query only on its first call ever for a row that's
+        #      missing, since ``.first()`` bypasses the identity map; a later call, or
+        #      any call once a row has been found once, is free).
         with self.assertNumQueries(4):
             _build_magic(sheet)
 
