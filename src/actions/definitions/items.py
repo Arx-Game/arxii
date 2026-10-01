@@ -487,9 +487,23 @@ class UseItemAction(Action):
         # it returns, so a post-use raise can't be rolled back to un-consume the
         # item — the check has to happen before the charge, not after.
         if grant is not None:
+            from world.magic.exceptions import UltimateNotLearnable  # noqa: PLC0415
+            from world.magic.services.gift_acquisition import (  # noqa: PLC0415
+                enforce_not_ultimate,
+            )
             from world.progression.services.spends import (  # noqa: PLC0415
                 check_requirements_for_technique,
             )
+
+            # Ultimate pre-check (#4098 fix round 1): a TechniqueGrant naming an
+            # ultimate must refuse before the item is consumed — without this the
+            # post-use learn_technique() call below raises UltimateNotLearnable
+            # (a MagicError) and is silently swallowed, so the item would still
+            # be used up for nothing instead of cleanly refusing.
+            try:
+                enforce_not_ultimate(grant.technique)
+            except UltimateNotLearnable as exc:
+                return ActionResult(success=False, message=exc.user_message)
 
             met, failed = check_requirements_for_technique(actor, grant.technique)
             if not met:
