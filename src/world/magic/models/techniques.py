@@ -25,6 +25,7 @@ from world.achievements.models import DiscoverableContent
 from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
 from world.magic.constants import (
+    CREATION_PERSONALIZATION_MAX_LEVEL,
     CUSTOM_TECHNIQUE_NAME_MAX_LENGTH,
     AcquisitionOrigin,
     RestrictionKind,
@@ -1323,13 +1324,23 @@ class CharacterTechnique(SharedMemoryModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.price_id is not None and self.price.kind != RestrictionKind.PRICE:
-            errors["price"] = "Only a PRICE restriction can be a price."
-        if (
-            self.early_form_id is not None
-            and self.early_form.parent_technique_id != self.technique_id
-        ):
-            errors["early_form"] = "The early form must be a form of this technique."
+        if self.price_id is not None:
+            if self.price.kind != RestrictionKind.PRICE:
+                errors["price"] = "Only a PRICE restriction can be a price."
+            else:
+                allowed = self.price.cached_allowed_effect_types
+                if allowed and self.technique.effect_type_id not in {
+                    effect_type.pk for effect_type in allowed
+                }:
+                    errors["price"] = "This price doesn't allow this technique's effect type."
+        if self.early_form_id is not None:
+            if self.early_form.parent_technique_id != self.technique_id:
+                errors["early_form"] = "The early form must be a form of this technique."
+            elif self.early_form.unlock_thread_level > CREATION_PERSONALIZATION_MAX_LEVEL:
+                errors["early_form"] = (
+                    "An early form can't be granted above creation's level "
+                    f"{CREATION_PERSONALIZATION_MAX_LEVEL} ceiling."
+                )
         if errors:
             raise ValidationError(errors)
 

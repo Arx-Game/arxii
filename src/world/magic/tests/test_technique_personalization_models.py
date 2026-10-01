@@ -8,6 +8,7 @@ from world.classes.services import is_crossing_level
 from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL, RestrictionKind
 from world.magic.factories import (
     CharacterTechniqueFactory,
+    EffectTypeFactory,
     PriceFactory,
     RestrictionFactory,
     SignatureMotifBonusFactory,
@@ -49,6 +50,37 @@ class HoldCleanTests(TestCase):
         hold.early_form = TechniqueVariantFactory(unlock_thread_level=1)
         with self.assertRaises(ValidationError):
             hold.full_clean()
+
+    def test_early_form_above_the_creation_ceiling_is_refused(self) -> None:
+        hold = CharacterTechniqueFactory()
+        hold.early_form = TechniqueVariantFactory(
+            parent_technique=hold.technique,
+            unlock_thread_level=CREATION_PERSONALIZATION_MAX_LEVEL + 1,
+        )
+        with self.assertRaises(ValidationError):
+            hold.full_clean()
+
+    def test_early_form_at_the_creation_ceiling_is_accepted(self) -> None:
+        hold = CharacterTechniqueFactory()
+        hold.early_form = TechniqueVariantFactory(
+            parent_technique=hold.technique,
+            unlock_thread_level=CREATION_PERSONALIZATION_MAX_LEVEL,
+        )
+        hold.full_clean()
+
+    def test_price_must_allow_the_technique_effect_type(self) -> None:
+        other_effect_type = EffectTypeFactory()
+        narrow_price = PriceFactory(allowed_effect_types=[other_effect_type])
+        hold = CharacterTechniqueFactory()
+        hold.price = narrow_price
+        with self.assertRaises(ValidationError):
+            hold.full_clean()
+
+    def test_price_allowing_the_technique_effect_type_is_accepted(self) -> None:
+        hold = CharacterTechniqueFactory()
+        matching_price = PriceFactory(allowed_effect_types=[hold.technique.effect_type])
+        hold.price = matching_price
+        hold.full_clean()
 
     def test_display_name_prefers_the_players_name(self) -> None:
         hold = CharacterTechniqueFactory(technique=TechniqueFactory(name="Scorch Lash"))
