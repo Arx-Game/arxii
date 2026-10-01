@@ -128,8 +128,10 @@ values. The technique use flow doesn't care where a bonus originated.
 
 **Social safety bonus** is applied directly when the character has no
 CharacterEngagement, rather than as a modifier record. The absence of
-engagement IS the social state. The bonus value is authored data (a game
-setting, not hardcoded).
+engagement IS the social state. The bonus value is authored data —
+`SoulfrayConfig.social_safety_bonus` (default 10, staff-tunable in admin,
+#4098 owner ruling) — not hardcoded; see `docs/systems/magic.md`'s
+"Social safety bonus" note for the formula it feeds.
 
 **IntensityTier.control_modifier** is looked up based on the final runtime
 intensity (after all modifiers). The IntensityTier model already exists with
