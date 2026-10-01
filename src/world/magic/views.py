@@ -14,7 +14,7 @@ from dataclasses import asdict
 from typing import cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -332,9 +332,22 @@ class GiftViewSet(viewsets.ModelViewSet):
     Note: technique_count is annotated to avoid N+1 queries in serializer.
     """
 
-    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
-    queryset = (
-        Gift.objects.prefetch_related(
+    # Queryset is built in get_queryset() (it depends on request.user.is_staff —
+    # see #4098 catalog-leak fix). ``queryset.model`` is still needed by DRF's
+    # router/schema introspection in some code paths, so keep a bare model
+    # reference rather than duplicating the Prefetch/annotate chain here.
+    queryset = Gift.objects.none()
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        """Non-staff never see ultimates — not name, not description, not count.
+
+        Ultimates are revealed only through the Audere ceremony (#4098); listing
+        them here would leak their existence (and the count would hint at how many
+        a gift holds) to any authenticated user. Staff see the full catalog.
+        """
+        queryset = Gift.objects.prefetch_related(
             Prefetch(
                 "resonances",
                 queryset=Resonance.objects.select_related(
@@ -342,17 +355,15 @@ class GiftViewSet(viewsets.ModelViewSet):
                 ),
                 to_attr="cached_resonances",
             ),
-            Prefetch(
-                "techniques",
-                queryset=Technique.objects.select_related("effect_type"),
-                to_attr="cached_techniques",
-            ),
-        )
-        .annotate(technique_count=Count("techniques"))
-        .order_by("name")
-    )
-    permission_classes = [IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
+        ).order_by("name")
+        technique_qs = Technique.objects.select_related("effect_type")
+        count_filter = Q()
+        if self.request is None or not self.request.user.is_staff:
+            technique_qs = technique_qs.filter(is_ultimate=False)
+            count_filter = Q(techniques__is_ultimate=False)
+        return queryset.prefetch_related(
+            Prefetch("techniques", queryset=technique_qs, to_attr="cached_techniques"),
+        ).annotate(technique_count=Count("techniques", filter=count_filter))
 
     def get_serializer_class(self):
         """Use create serializer for write ops, list/detail serializers for reads."""
@@ -414,23 +425,34 @@ class TechniqueViewSet(viewsets.ModelViewSet):
     author techniques through the budget-enforced ``author`` action.
     """
 
-    queryset = (
-        Technique.objects.select_related("gift", "effect_type")
-        .prefetch_related(
-            Prefetch(
-                "restrictions",
-                queryset=Restriction.objects.all(),
-                to_attr="cached_restrictions",
-            ),
-        )
-        .order_by("name")
-    )
+    # Queryset is built in get_queryset() (it depends on request.user.is_staff —
+    # see #4098 catalog-leak fix). ``queryset.model`` is still needed by DRF's
+    # router/schema introspection in some code paths, so keep a bare model
+    # reference rather than duplicating the Prefetch chain here.
+    queryset = Technique.objects.none()
     serializer_class = TechniqueSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ["gift", "effect_type"]
     ordering_fields = ["name", "level"]
     pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        """Non-staff never see ultimates — they're revealed only via Audere (#4098)."""
+        queryset = (
+            Technique.objects.select_related("gift", "effect_type")
+            .prefetch_related(
+                Prefetch(
+                    "restrictions",
+                    queryset=Restriction.objects.all(),
+                    to_attr="cached_restrictions",
+                ),
+            )
+            .order_by("name")
+        )
+        if self.request is None or not self.request.user.is_staff:
+            queryset = queryset.filter(is_ultimate=False)
+        return queryset
 
     def get_permissions(self):
         """Base create/update/destroy are staff-only raw admin; authoring goes

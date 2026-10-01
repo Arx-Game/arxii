@@ -13,6 +13,7 @@ from world.magic.factories import (
     RestrictionFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
+    UltimateTechniqueFactory,
 )
 
 
@@ -126,6 +127,7 @@ class GiftViewSetTest(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = AccountFactory()
+        cls.staff_user = AccountFactory(is_staff=True)
         cls.resonance = ResonanceFactory()
         cls.gift = GiftFactory(name="Test Shadow Majesty")
 
@@ -188,6 +190,32 @@ class GiftViewSetTest(APITestCase):
         url = reverse("magic:gift-detail", args=[gift.pk])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_non_staff_detail_hides_ultimate_techniques_and_count(self):
+        """Non-staff never see an ultimate in a gift's techniques or its count (#4098)."""
+        gift = GiftFactory(name="Test Catalog Leak Gift")
+        TechniqueFactory(gift=gift, name="Ordinary Technique")
+        ultimate = UltimateTechniqueFactory(gift=gift, name="Secret Ultimate")
+        self.client.force_authenticate(user=self.user)
+        url = reverse("magic:gift-detail", args=[gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["techniques"]]
+        self.assertNotIn(ultimate.name, technique_names)
+        self.assertEqual(response.data["technique_count"], 1)
+
+    def test_staff_detail_includes_ultimate_techniques_and_count(self):
+        """Staff still see ultimates in a gift's techniques and its count (#4098)."""
+        gift = GiftFactory(name="Test Catalog Staff Gift")
+        TechniqueFactory(gift=gift, name="Ordinary Technique Two")
+        ultimate = UltimateTechniqueFactory(gift=gift, name="Secret Ultimate Two")
+        self.client.force_authenticate(user=self.staff_user)
+        url = reverse("magic:gift-detail", args=[gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["techniques"]]
+        self.assertIn(ultimate.name, technique_names)
+        self.assertEqual(response.data["technique_count"], 2)
 
 
 class TechniqueViewSetTest(APITestCase):
@@ -367,6 +395,36 @@ class TechniqueViewSetTest(APITestCase):
         url = reverse("magic:technique-detail", args=[technique.pk])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_non_staff_list_excludes_ultimates(self):
+        """Non-staff GET of the technique catalog never contains an ultimate (#4098)."""
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Test Secret Ultimate")
+        self.client.force_authenticate(user=self.user)
+        url = reverse("magic:technique-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"] if isinstance(response.data, dict) else response.data
+        names = [t["name"] for t in results]
+        self.assertNotIn(ultimate.name, names)
+
+    def test_non_staff_detail_404s_for_ultimate(self):
+        """Non-staff cannot retrieve an ultimate technique by id either (#4098)."""
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Test Secret Ultimate Detail")
+        self.client.force_authenticate(user=self.user)
+        url = reverse("magic:technique-detail", args=[ultimate.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_staff_list_includes_ultimates(self):
+        """Staff GET of the technique catalog still contains ultimates (#4098)."""
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Test Staff Visible Ultimate")
+        self.client.force_authenticate(user=self.staff_user)
+        url = reverse("magic:technique-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"] if isinstance(response.data, dict) else response.data
+        names = [t["name"] for t in results]
+        self.assertIn(ultimate.name, names)
 
 
 class FacetViewSetTest(APITestCase):
