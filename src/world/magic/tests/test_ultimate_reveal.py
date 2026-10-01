@@ -189,6 +189,34 @@ class BondSourceTests(_RevealFixture):
         self.assertEqual(len(pools), 2)
 
 
+class UpgradeOfOrderingTests(_RevealFixture):
+    def test_upgrade_of_picks_deterministically_by_required_technique_order(self) -> None:
+        """Two TechniqueKnownRequirement rows on one upgrade: the winner is driven by
+        (required_technique.level, name, pk), not by DB/pk/creation order (#4098 fix
+        round 1, M1).
+
+        ``x`` is created FIRST (lower pk) with a HIGH sort key (level 50, "Zulu");
+        ``y`` is created SECOND (higher pk) with a LOW sort key (level 1, "Alpha").
+        An unordered query (which, empirically, returns these rows sorted by the
+        required technique's own pk — x then y) would pick ``y`` as the last
+        dict-comprehension write; the (level, name, pk)-ordered fix sorts ``y``
+        before ``x`` and picks ``x``. The two disagree, so this proves the fix,
+        not an accident of row/pk order.
+        """
+        x = UltimateTechniqueFactory(gift=self.gift, name="Zulu", level=50)
+        y = UltimateTechniqueFactory(gift=self.gift, name="Alpha", level=1)
+        self.grant.ultimate_techniques.add(x, y)
+        KnownUltimateFactory(character=self.sheet, technique=x)
+        KnownUltimateFactory(character=self.sheet, technique=y)
+        upgrade = UltimateTechniqueFactory(gift=self.gift, name="Apex", level=99)
+        self.grant.ultimate_techniques.add(upgrade)
+        TechniqueKnownRequirement.objects.create(technique=upgrade, required_technique=x)
+        TechniqueKnownRequirement.objects.create(technique=upgrade, required_technique=y)
+        groups = ultimate_reveal_for(self.sheet).groups
+        upgrades = [c for grp in groups for c in grp.cards if c.kind == UltimateCardKind.UPGRADE]
+        self.assertEqual([(c.technique, c.upgrade_of) for c in upgrades], [(upgrade, x)])
+
+
 class ChooseTests(_RevealFixture):
     def test_category_choice_reveals_lowest_level_and_readies_it(self) -> None:
         reveal = ultimate_reveal_for(self.sheet)
