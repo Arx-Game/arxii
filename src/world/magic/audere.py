@@ -303,10 +303,14 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     audere_template = ConditionTemplate.get_by_name(AUDERE_CONDITION_NAME)
 
     with transaction.atomic():
+        from world.character_sheets.models import CharacterSheet
         from world.magic.services.ultimates import clear_readied_ultimate
 
         # A stale pick from an Audere that ended abnormally must not hide this reveal.
-        clear_readied_ultimate(character.sheet_data)
+        # A sheet-less character (NPC) never has a readied pick to clear.
+        sheet = CharacterSheet.objects.filter(character=character).first()
+        if sheet is not None:
+            clear_readied_ultimate(sheet)
 
         # Apply Audere condition
         apply_condition(target=character, condition=audere_template)
@@ -381,12 +385,15 @@ def end_audere(character: ObjectDB) -> None:
     threshold = AudereThreshold.objects.cached_singleton()
 
     with transaction.atomic():
+        from world.character_sheets.models import CharacterSheet
         from world.magic.services.ultimates import clear_readied_ultimate
 
         # Remove condition
         remove_condition(character, audere_template)
 
-        clear_readied_ultimate(character.sheet_data)
+        sheet = CharacterSheet.objects.filter(character=character).first()
+        if sheet is not None:
+            clear_readied_ultimate(sheet)
 
         # Revert engagement intensity modifier
         if threshold is not None:
