@@ -391,6 +391,59 @@ def _probe_audere_majora_thresholds() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_path_major_gift_ultimates() -> ProbeResult:
+    """Every Path x MAJOR-gift grant carries at least one ultimate (#4098 decision 15).
+
+    Consumer: `world/magic/services/ultimates.py` `_owned_pools`. A grant with none is
+    an unfinished Path: Audere still surges, but its character sees no reveal.
+    """
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.models import PathGiftGrant  # noqa: PLC0415
+
+    missing = tuple(
+        f"{path_name} / {gift_name}"
+        for path_name, gift_name in PathGiftGrant.objects.filter(
+            gift__kind=GiftKind.MAJOR, ultimate_techniques__isnull=True
+        )
+        .order_by("path__name", "gift__name")
+        .values_list("path__name", "gift__name")
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} Path / major-gift grant(s) have no ultimate: unfinished Paths."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+_ULTIMATE_COPY_FIELDS = (
+    "reveal_framing_text",
+    "deferred_death_text",
+    "sword_reveal_label",
+    "shield_reveal_label",
+    "crown_reveal_label",
+)
+
+# Mirrors upbringing_builder/live.py's `_PLACEHOLDER_MARK` - the seed text every
+# field in `_ULTIMATE_COPY_FIELDS` ships with until staff overwrites it.
+_PLACEHOLDER_MARK = "PLACEHOLDER"
+
+
+def _probe_audere_ultimate_copy() -> ProbeResult:
+    """The Audere reveal copy has been authored over its PLACEHOLDER seed (#4098 d.17)."""
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+    threshold = AudereThreshold.objects.cached_singleton()
+    if threshold is None:
+        return ProbeResult(present=False, detail="No AudereThreshold row exists.")
+    missing = tuple(
+        field for field in _ULTIMATE_COPY_FIELDS if _PLACEHOLDER_MARK in getattr(threshold, field)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False, missing=missing, detail=f"Still placeholder: {', '.join(missing)}."
+    )
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
     """Every `ConditionStage` of the Soulfray template carries a `consequence_pool`.
 
@@ -1345,6 +1398,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="AudereMajoraThreshold",
         ),
         ContentDependency(
+            key="path-major-gift-ultimates",
+            label="Ultimates for every Path and major gift",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/ultimates.py _owned_pools() (Audere reveal)",
+            consequence=(
+                "A character on that Path holding that major gift breaks through in Audere "
+                "and is shown nothing: the surge applies with no reveal."
+            ),
+            probe=CustomProbe(fn=_probe_path_major_gift_ultimates),
+            admin_model="PathGiftGrant",
+        ),
+        ContentDependency(
             key="soulfray-stage-pools",
             label="Soulfray stage consequence pools",
             tier=DependencyTier.REQUIRED,
@@ -1435,6 +1500,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_capability_bridges),
         ),
         # --- TUNING tier: singleton config tables (dormant-by-design, not yet set) -------
+        ContentDependency(
+            key="audere-ultimate-copy",
+            label="Audere reveal labels and lines",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/ultimates.py, world/vitals/services.py",
+            consequence=(
+                "Players see PLACEHOLDER text for the reveal categories, the reveal "
+                "framing line and the deferred-death line."
+            ),
+            probe=CustomProbe(fn=_probe_audere_ultimate_copy),
+            admin_model="AudereThreshold",
+        ),
         ContentDependency(
             key="capability-power-config",
             label="Capability power config singleton",

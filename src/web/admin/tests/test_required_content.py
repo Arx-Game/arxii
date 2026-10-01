@@ -10,6 +10,7 @@ from django.test import TestCase
 from web.admin.tuning import required_content as rc
 from world.conditions.factories import ConditionTemplateFactory
 from world.game_clock.factories import GameClockFactory
+from world.magic.constants import GiftKind
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -1009,3 +1010,40 @@ class TestRiskCalibrationsProbe(TestCase):
         result = rc._probe_risk_calibrations()
         self.assertFalse(result.present)
         self.assertEqual(result.missing, (RenownRisk.EXTREME,))
+
+
+class TestPathMajorGiftUltimatesProbe(TestCase):
+    def test_major_gift_grant_without_ultimate_is_missing(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import GiftFactory, PathGiftGrantFactory
+
+        grant = PathGiftGrantFactory(gift=GiftFactory(kind=GiftKind.MAJOR))
+        result = _probe_path_major_gift_ultimates()
+        self.assertFalse(result.present)
+        self.assertIn(f"{grant.path.name} / {grant.gift.name}", result.missing)
+
+    def test_minor_gift_grant_never_flagged(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import GiftFactory, PathGiftGrantFactory
+
+        PathGiftGrantFactory(gift=GiftFactory(kind=GiftKind.MINOR))
+        self.assertTrue(_probe_path_major_gift_ultimates().present)
+
+    def test_stocked_grant_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import PathGiftGrantFactory, UltimateTechniqueFactory
+
+        grant = PathGiftGrantFactory()
+        grant.ultimate_techniques.add(UltimateTechniqueFactory(gift=grant.gift))
+        self.assertTrue(_probe_path_major_gift_ultimates().present)
+
+
+class TestAudereUltimateCopyProbe(TestCase):
+    def test_placeholder_copy_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+        from world.magic.factories import AudereThresholdFactory
+
+        AudereThresholdFactory()
+        result = _probe_audere_ultimate_copy()
+        self.assertFalse(result.present)
+        self.assertIn("sword_reveal_label", result.missing)
