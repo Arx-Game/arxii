@@ -12,6 +12,7 @@ from world.magic.services.power_terms import (
     get_power_term_providers,
     price_power_term,
 )
+from world.magic.services.technique_personalization import resolve_price_snippet
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
@@ -47,6 +48,72 @@ class PricePowerTermTests(TestCase):
     def test_no_technique_adds_nothing(self) -> None:
         ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
         self.assertEqual(price_power_term(ctx), 0)
+
+
+class PriceOwnershipScopingTests(TestCase):
+    """A price belongs to the hold that bought it - never bleeds to another caster's
+    cast of the same technique (#4099 fix round 1)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory()
+        cls.price = PriceFactory(
+            power_bonus=6, cast_narration="frost blooms white across their hand"
+        )
+        cls.sheet_a = CharacterSheetFactory()
+        cls.sheet_b = CharacterSheetFactory()
+        hold_a = CharacterTechniqueFactory(character=cls.sheet_a, technique=cls.technique)
+        hold_a.price = cls.price
+        hold_a.save(update_fields=["price"])
+        CharacterTechniqueFactory(character=cls.sheet_b, technique=cls.technique)
+
+    def test_non_owner_power_term_is_zero(self) -> None:
+        self.sheet_b.character.techniques.invalidate()
+        ctx = PowerTermContext(sheet=self.sheet_b, technique=self.technique, applicable_threads=[])
+        self.assertEqual(price_power_term(ctx), 0)
+
+    def test_owner_still_gets_the_power_bonus(self) -> None:
+        """Sanity check alongside the non-owner test: A's own cast is unaffected by B."""
+        self.sheet_a.character.techniques.invalidate()
+        ctx = PowerTermContext(sheet=self.sheet_a, technique=self.technique, applicable_threads=[])
+        self.assertEqual(price_power_term(ctx), 6)
+
+    def test_non_owner_narration_carries_no_price_clause(self) -> None:
+        self.sheet_b.character.techniques.invalidate()
+        snippet = resolve_price_snippet(self.sheet_b.character, self.technique)
+        self.assertIsNone(snippet)
+        line = render_cast_outcome_narration(
+            actor_label="B",
+            technique_name=self.technique.name,
+            target_label=None,
+            outcome_label="Success",
+            success_level=1,
+            price_snippet=snippet,
+        )
+        self.assertNotIn("frost blooms white", line)
+
+
+class PriceHandlerCachingTests(TestCase):
+    """price_power_term reads the hold through the cached handler - one query no
+    matter how many times a single cast context asks for it (#4099 fix round 1)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.technique = TechniqueFactory()
+        cls.price = PriceFactory(power_bonus=6)
+        hold = CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
+        hold.price = cls.price
+        hold.save(update_fields=["price"])
+
+    def test_hold_is_read_once_and_cached_across_calls(self) -> None:
+        self.sheet.character.techniques.invalidate()
+        ctx = PowerTermContext(sheet=self.sheet, technique=self.technique, applicable_threads=[])
+
+        with self.assertNumQueries(1):
+            self.assertEqual(price_power_term(ctx), 6)
+        with self.assertNumQueries(0):
+            self.assertEqual(price_power_term(ctx), 6)
 
 
 class PriceNarrationRenderTests(TestCase):

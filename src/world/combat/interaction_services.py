@@ -205,19 +205,31 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
     ``<TechniqueName>`` alone when no target. Falls back to ``"passives only"``
     when ``focused_action`` is null (which the resolver normally skips, but
     surfacing a non-empty string is safer than empty content).
+
+    ``<TechniqueName>`` is the declaring caster's own display name (#4099 fix
+    round 1) — the same ``technique_display_name`` resolution the outcome
+    narration uses, so the declaration and the outcome agree on what to call it
+    within the same round.
     """
     technique = action.focused_action
     if technique is None:
         return "passives only"
 
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
+
+    caster_character = action.participant.character_sheet.character
+    display_name = technique_display_name(caster_character, technique)
+
     if action.focused_opponent_target_id is not None:
         target_name = action.focused_opponent_target.name
-        return f"{technique.name} at {target_name}"
+        return f"{display_name} at {target_name}"
     if action.focused_ally_target_id is not None:
         ally = action.focused_ally_target
         target_name = ally.character_sheet.character.db_key
-        return f"{technique.name} at {target_name}"
-    return technique.name
+        return f"{display_name} at {target_name}"
+    return display_name
 
 
 def render_clash_contribution_label(contribution: ClashContribution) -> str:

@@ -18,7 +18,7 @@ from world.combat.interaction_services import (
     render_clash_contribution_label,
 )
 from world.combat.models import ClashContribution
-from world.magic.factories import FuryTierFactory, TechniqueFactory
+from world.magic.factories import CharacterTechniqueFactory, FuryTierFactory, TechniqueFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory
 
@@ -87,6 +87,26 @@ class RenderActionDeclarationLabelTests(TestCase):
             focused_action=None,
         )
         self.assertEqual(render_action_declaration_label(action), "passives only")
+
+    def test_label_uses_the_casters_own_display_name(self) -> None:
+        """#4099 fix round 1: the declaration must agree with the outcome narration,
+        which already shows the caster's own name, not the catalog name."""
+        opponent = CombatOpponentFactory(encounter=self.encounter, name="Pyromancer")
+        technique = TechniqueFactory(name="Frost Bolt")
+        hold = CharacterTechniqueFactory(
+            character=self.participant.character_sheet, technique=technique
+        )
+        hold.custom_name = "Winterbite"
+        hold.save(update_fields=["custom_name"])
+        self.participant.character_sheet.character.techniques.invalidate()
+        action = CombatRoundActionFactory(
+            participant=self.participant,
+            focused_action=technique,
+            focused_opponent_target=opponent,
+        )
+        label = render_action_declaration_label(action)
+        self.assertEqual(label, "Winterbite at Pyromancer")
+        self.assertNotIn("Frost Bolt", label)
 
 
 class RenderClashContributionLabelTests(TestCase):
