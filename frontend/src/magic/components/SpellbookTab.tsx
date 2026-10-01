@@ -294,6 +294,22 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
         </div>
       )}
 
+      {drawsMain && magic && magic.ultimates.length > 0 && (
+        <div className="refsheet-stack" data-testid="spellbook-ultimates">
+          <Subheading>Ultimates</Subheading>
+          <Entries>
+            {magic.ultimates.map((ultimate) => (
+              <Entry
+                key={ultimate.name}
+                name={ultimate.name}
+                tags={<Tag>{ultimate.label}</Tag>}
+                gloss={ultimate.description || undefined}
+              />
+            ))}
+          </Entries>
+        </div>
+      )}
+
       {drawsRail && magic && magic.resonances.length > 0 && (
         <div className="refsheet-stack" data-testid="spellbook-resonances">
           <Subheading>Resonances</Subheading>

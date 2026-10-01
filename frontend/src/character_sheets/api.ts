@@ -91,6 +91,13 @@ export interface CharacterSheetResonanceBalance {
   lifetime_earned: number;
 }
 
+/** Mirrors `world.character_sheets.types.KnownUltimateEntry` (#4098). */
+export interface CharacterSheetUltimate {
+  name: string;
+  description: string;
+  label: string;
+}
+
 /** Mirrors `world.character_sheets.types.MagicSection`. */
 export interface CharacterSheetMagic {
   gifts: CharacterSheetGift[];
@@ -99,6 +106,8 @@ export interface CharacterSheetMagic {
   aura: CharacterSheetAura | null;
   /** Claimed-resonance spendable balances (#2032/#3042) — sorted by name server-side. */
   resonances: CharacterSheetResonanceBalance[];
+  /** Known ultimates (#4098), shown by name with the authored category label. */
+  ultimates: CharacterSheetUltimate[];
 }
 
 /** Mirrors `world.character_sheets.types.DistinctionEntry`. */
