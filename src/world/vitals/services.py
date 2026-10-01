@@ -1041,6 +1041,31 @@ def apply_pending_certain_death(character_sheet: CharacterSheet) -> bool:
     return True
 
 
+def clear_pending_certain_death(character_sheet: CharacterSheet) -> bool:
+    """Cancel a pending certain death without applying it (#4098 owner ruling).
+
+    Called when an encounter ends ABANDONED (a GM closing a broken fight) — the
+    encounter that made the death certain never reached a real conclusion, so
+    nobody dies from it. Unlike ``apply_pending_certain_death``, this never kills;
+    it only clears the flag. ``cleanup_completed_encounter`` must call this BEFORE
+    removing the Audere/Audere Majora condition for an abandoned encounter's
+    participants — ending Audere removes the condition through
+    ``world.conditions.services.remove_condition``, which reaches
+    ``_resolve_deferred_death_on_expiry`` and applies the death the instant the
+    last deferring condition is gone, before this function's own caller ever runs.
+
+    Returns True iff a pending death was actually cleared.
+    """
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals = CharacterVitals.objects.filter(character_sheet=character_sheet).first()
+    if vitals is None or not vitals.death_certain_pending:
+        return False
+    vitals.death_certain_pending = False
+    vitals.save(update_fields=["death_certain_pending"])
+    return True
+
+
 def mark_fed_to_death(victim_sheet: CharacterSheet) -> bool:
     """Kill an NPC drained past empty by feeding (#2853). Returns True on death.
 

@@ -6,6 +6,7 @@ from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import EncounterOutcome
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.services import cleanup_completed_encounter
 from world.conditions.factories import ConditionInstanceFactory
@@ -177,6 +178,63 @@ class CleanupCertainDeathBackstopTests(TestCase):
         # Raw delete — bypasses remove_condition, so
         # _resolve_deferred_death_on_expiry never runs.
         ConditionInstance.objects.filter(target=self.character, condition=self.audere).delete()
+
+        cleanup_completed_encounter(self.encounter)
+
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.DEAD)
+        self.assertFalse(state.death_certain_pending)
+
+
+class CleanupAbandonedCertainDeathTests(TestCase):
+    """An ABANDONED encounter cancels a pending certain death instead of applying
+    it (#4098 owner ruling) — a GM closing a broken fight shouldn't kill anyone.
+    The cancellation must beat the ordinary end_audere -> remove_condition ->
+    _resolve_deferred_death_on_expiry seam, which would otherwise apply the death
+    the moment cleanup removes the deferring Audere condition."""
+
+    def setUp(self) -> None:
+        self.audere, _majora = wire_audere_power_multipliers()
+        self.character = ObjectDBFactory(db_key="abandoned_certain_death_char")
+        self.sheet = CharacterSheetFactory(character=self.character)
+        CharacterVitalsFactory(character_sheet=self.sheet)
+        self.encounter = CombatEncounterFactory()
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet
+        )
+
+    def _state(self) -> CharacterVitals:
+        return CharacterVitals.objects.get(character_sheet=self.sheet)
+
+    def test_abandoned_outcome_clears_pending_death_and_leaves_character_alive(self) -> None:
+        ConditionInstanceFactory(target=self.character, condition=self.audere)
+        self.assertTrue(defer_or_apply_certain_death(self.sheet))
+        self.assertTrue(self._state().death_certain_pending)
+
+        self.encounter.outcome = EncounterOutcome.ABANDONED
+        self.encounter.save(update_fields=["outcome"])
+
+        cleanup_completed_encounter(self.encounter)
+
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.ALIVE)
+        self.assertFalse(state.death_certain_pending)
+        # The Audere condition is still torn down as part of ordinary cleanup —
+        # only the death itself is cancelled, not the condition teardown.
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=self.character, condition=self.audere).exists()
+        )
+
+    def test_non_abandoned_outcome_still_applies_the_death(self) -> None:
+        """A normally completed encounter (VICTORY, DEFEAT, FLED) is unaffected —
+        the deferred death still applies through the ordinary end_audere ->
+        remove_condition -> _resolve_deferred_death_on_expiry seam."""
+        ConditionInstanceFactory(target=self.character, condition=self.audere)
+        self.assertTrue(defer_or_apply_certain_death(self.sheet))
+        self.assertTrue(self._state().death_certain_pending)
+
+        self.encounter.outcome = EncounterOutcome.VICTORY
+        self.encounter.save(update_fields=["outcome"])
 
         cleanup_completed_encounter(self.encounter)
 
