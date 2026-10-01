@@ -16,14 +16,15 @@ reviewed delete makes deleting an organization a routine staff act. **The ruling
 delete with `core.deletion.IdentityMapCollector`, which records every row it removes,
 cascades included, and afterwards nulls those ids on cached `SET_NULL` referrers: the
 write the `Collector` would have made had they been in memory. Both overrides mirror
-Django 5.2's bodies line for line, so a Django upgrade re-checks them. **Rejected:**
-(a) guarding the read site (`t.house is not None` instead of `t.house_id`), which
-fixes one endpoint and leaves every other reader of a stale id wrong; (b) a per-model
-mixin on `Organization`, which leaves the other 751 links, and the referrers a cascade
-reaches, still stale; (c) `flush_instance_cache()` on each referrer model after a
-delete, which discards whole caches that other holders still reference instead of
-correcting them; (d) a `post_delete` signal (ADR-0009); (e) making the base manager
-guarded, which changes forward-FK access for every model to fix one write. Like Django
-nulling a deleted instance's pk, the correction is not undone if an enclosing
-transaction later rolls back. Related: ADR-0008 (SharedMemoryModel everywhere),
-ADR-0326.
+Django 5.2's bodies line for line, so a Django upgrade re-checks them. **Rejected:** (a)
+guarding the read site (`t.house is not None` instead of `t.house_id`), which fixes one
+endpoint and leaves every other reader of a stale id wrong; (b) a per-model mixin on
+`Organization`, which leaves the other 751 links, and the referrers a cascade reaches,
+still stale; (c) `flush_instance_cache()` on each referrer model after a delete, which
+discards whole caches that other holders still reference instead of correcting them; (d)
+a `post_delete` signal (ADR-0009); (e) making the base manager guarded, which changes
+forward-FK access for every model to fix one write. Inside an atomic block the delete
+can still roll back (the reviewed delete removes blocking rows, then refuses the root),
+so there the affected referrers are evicted from the identity map rather than nulled,
+and the next read loads whatever the database holds once the transaction settles.
+Related: ADR-0008 (SharedMemoryModel everywhere), ADR-0326.
