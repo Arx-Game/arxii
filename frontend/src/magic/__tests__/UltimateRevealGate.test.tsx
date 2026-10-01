@@ -115,6 +115,50 @@ describe('UltimateRevealGate', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('PLACEHOLDER death line');
   });
 
+  it('keeps the confirmation visible through the post-choice refetch, then shows the ready strip once dismissed (fix round 1 item 1)', async () => {
+    vi.mocked(api.getAudereUltimates)
+      .mockResolvedValueOnce(OPEN)
+      .mockResolvedValueOnce({
+        reveal: null,
+        readied: {
+          technique_id: 9,
+          name: 'Cinder Crown',
+          description: 'One strike',
+          label: 'Edge',
+        },
+        deferred_death_text: '',
+      });
+    vi.mocked(api.chooseUltimate).mockResolvedValue({
+      technique_id: 9,
+      name: 'Cinder Crown',
+      description: 'One strike',
+      label: 'Edge',
+    });
+
+    render(
+      <UltimateRevealGate characterSheetId={3} characterId={3} encounterId={1} isCeremonyActive />,
+      {
+        wrapper,
+      }
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edge/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Choose' }));
+
+    // The refetch right after the choice lands ({reveal: null, readied: {...}})
+    // must not blank out the confirmation.
+    await waitFor(() => expect(api.getAudereUltimates).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByText('Cinder Crown')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'To the fight' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('ultimate-ready-strip')).toHaveTextContent(
+      'Ultimate ready: Cinder Crown'
+    );
+  });
+
   it('uses Majora chrome for a Crossing reveal', async () => {
     vi.mocked(api.getAudereUltimates).mockResolvedValue({
       ...OPEN,
