@@ -370,6 +370,17 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
             "edge cases like a self-damage-buff→SWORD)."
         ),
     )
+    is_ultimate = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "#4098: an ultimate, a tide-turning power reachable only at Audere. Never "
+            "learned as an ordinary technique (no CharacterTechnique row) and castable "
+            "only while Audere or Audere Majora holds and it is the pick readied there. "
+            "Attach it to its source: a Path Gift Grant, a Worshipped Being or a "
+            "Companion Archetype. Its archetype_alignment is its reveal category."
+        ),
+    )
     reach = models.CharField(
         max_length=20,
         choices=TechniqueReach.choices,
@@ -578,6 +589,16 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
             raise ValidationError({"reach_hops": msg})
         validate_outcome_narration(self.hit_narration, "hit_narration")
         validate_outcome_narration(self.miss_narration, "miss_narration")
+        if self.is_ultimate and self.pk:
+            in_pool = (
+                self.granted_by_path_gifts.exists() or self.granted_by_tradition_gifts.exists()
+            )
+            if in_pool or self.character_grants.exists():
+                msg = (
+                    "An ultimate cannot sit in a starter or tradition pool or be known as an "
+                    "ordinary technique. Remove it from those first."
+                )
+                raise ValidationError({"is_ultimate": msg})
 
     @cached_property
     def cached_restrictions(self) -> list:

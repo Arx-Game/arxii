@@ -59,6 +59,7 @@ from world.magic.models import (
     GlimpseTag,
     ImbuingProseTemplate,
     IntensityTier,
+    KnownUltimate,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
     MagicProgressionMilestone,
@@ -377,6 +378,13 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
                 technique=self,
                 base_damage=self.effect_type.base_power,
             )
+
+
+class UltimateTechniqueFactory(TechniqueFactory):
+    """A Technique flagged as an ultimate (#4098)."""
+
+    is_ultimate = True
+    level = 6
 
 
 class GiftUnlockFactory(factory.django.DjangoModelFactory):
@@ -833,6 +841,17 @@ class CharacterTechniqueFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     technique = factory.SubFactory(TechniqueFactory)
+
+
+class KnownUltimateFactory(factory.django.DjangoModelFactory):
+    """Factory for KnownUltimate — a discovered ultimate receipt (#4098)."""
+
+    class Meta:
+        model = KnownUltimate
+
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    technique = factory.SubFactory(UltimateTechniqueFactory)
+    readied = False
 
 
 # =============================================================================

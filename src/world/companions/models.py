@@ -78,6 +78,15 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
             "for now — mount-riding mechanics are deferred (#1863)."
         ),
     )
+    ultimate_techniques = models.ManyToManyField(
+        "arxii.Technique",
+        blank=True,
+        related_name="ultimate_for_companion_archetypes",
+        limit_choices_to={"is_ultimate": True},
+        help_text=(
+            "#4098: ultimates a bonded companion of this archetype makes available at Audere."
+        ),
+    )
 
     class Meta:
         ordering = ["domain", "name"]
