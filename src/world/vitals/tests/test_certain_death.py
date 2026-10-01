@@ -21,11 +21,12 @@ from world.magic.factories import (
     wire_audere_power_multipliers,
 )
 from world.magic.services.soulfray import _fire_stage_consequence_pool
+from world.stories.factories import StoryProtectedSubjectFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import CharacterVitals
-from world.vitals.services import defer_or_apply_certain_death
+from world.vitals.services import apply_pending_certain_death, defer_or_apply_certain_death
 
 
 class CertainDeathTests(TestCase):
@@ -70,6 +71,36 @@ class CertainDeathTests(TestCase):
         remove_condition(self.character, self.majora)
         self.assertEqual(self._state().life_state, CharacterLifeState.DEAD)
 
+    def test_story_protection_blocks_the_immediate_death(self) -> None:
+        """#4098 fix round 1: story protection is honored, not just death_deferred."""
+        StoryProtectedSubjectFactory(subject_sheet=self.sheet)
+
+        self.assertFalse(defer_or_apply_certain_death(self.sheet))
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.ALIVE)
+        self.assertFalse(state.death_certain_pending)
+
+    def test_story_protection_blocks_the_deferred_resolution(self) -> None:
+        ConditionInstanceFactory(target=self.character, condition=self.audere)
+        defer_or_apply_certain_death(self.sheet)
+        StoryProtectedSubjectFactory(subject_sheet=self.sheet)
+
+        remove_condition(self.character, self.audere)
+
+        state = self._state()
+        self.assertEqual(state.life_state, CharacterLifeState.ALIVE)
+        self.assertFalse(state.death_certain_pending)
+
+    def test_apply_pending_certain_death_returns_false_when_already_dead(self) -> None:
+        """#4098 fix round 1: no caller sees True unless this call killed someone."""
+        vitals = self._state()
+        vitals.life_state = CharacterLifeState.DEAD
+        vitals.death_certain_pending = True
+        vitals.save(update_fields=["life_state", "death_certain_pending"])
+
+        self.assertFalse(apply_pending_certain_death(self.sheet))
+        self.assertFalse(self._state().death_certain_pending)
+
 
 class SoulfrayCharacterLossTests(TestCase):
     """A selected character_loss Soulfray consequence routes through the death seam."""
@@ -112,3 +143,39 @@ class SoulfrayCharacterLossTests(TestCase):
 
     def test_non_lethal_never_calls_death_seam(self) -> None:
         self._fire(lethal=False).assert_not_called()
+
+    def test_positive_rollmod_filters_character_loss_before_the_death_seam(self) -> None:
+        """A positive rollmod redirects a character_loss pick to its worst non-loss
+        sibling in the SAME tier (world.checks.outcome_utils.filter_character_loss)
+        before the #4098 death seam ever sees a selection — exercised through the
+        real selection path, with neither select_consequence_from_result nor
+        apply_resolution patched (only the roll itself, so the outcome tier is known)."""
+        self.sheet.rollmod = 10
+        self.sheet.save(update_fields=["rollmod"])
+
+        tier = CheckOutcomeFactory(name="Soulfray mixed tier", success_level=-2)
+        pool = ConsequencePoolFactory(name="Soulfray mixed (test)")
+        loss = ConsequenceFactory(outcome_tier=tier, label="Lost", character_loss=True, weight=1)
+        safe = ConsequenceFactory(outcome_tier=tier, label="Safe", character_loss=False, weight=1)
+        ConsequencePoolEntryFactory(pool=pool, consequence=loss)
+        ConsequencePoolEntryFactory(pool=pool, consequence=safe)
+        template = ConditionTemplateFactory(name="Soulfray mixed (test)", has_progression=True)
+        stage = ConditionStageFactory(condition=template, stage_order=5, consequence_pool=pool)
+        check_result = MagicMock(outcome=tier)
+
+        with (
+            patch(
+                "world.checks.services.perform_check_with_modifiers",
+                return_value=check_result,
+            ),
+            patch("world.vitals.services.defer_or_apply_certain_death") as seam,
+        ):
+            _fire_stage_consequence_pool(
+                character=self.character,
+                current_stage=stage,
+                soulfray_config=self.config,
+                technique_check_result=None,
+                lethal=True,
+            )
+
+        seam.assert_not_called()
