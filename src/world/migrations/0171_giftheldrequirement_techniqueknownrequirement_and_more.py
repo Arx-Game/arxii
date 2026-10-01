@@ -64,42 +64,6 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
         ),
-        migrations.RemoveConstraint(
-            model_name="achievementrequirement",
-            name="achievementrequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="classlevelrequirement",
-            name="classlevelrequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="codexknowledgerequirement",
-            name="codexknowledgerequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="levelrequirement",
-            name="levelrequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="majorgifttechniquerequirement",
-            name="majorgifttechniquerequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="multiclassrequirement",
-            name="multiclassrequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="relationshiprequirement",
-            name="relationshiprequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="tierrequirement",
-            name="tierrequirement_exactly_one_unlock_target",
-        ),
-        migrations.RemoveConstraint(
-            model_name="traitrequirement",
-            name="traitrequirement_exactly_one_unlock_target",
-        ),
         migrations.AddField(
             model_name="achievementrequirement",
             name="technique",
@@ -244,6 +208,122 @@ class Migration(migrations.Migration):
                 to="arxii.technique",
             ),
         ),
+        migrations.AddField(
+            model_name="giftheldrequirement",
+            name="class_level_unlock",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.classlevelunlock",
+            ),
+        ),
+        migrations.AddField(
+            model_name="giftheldrequirement",
+            name="gift",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Gift required; blank means any held gift satisfies it.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="gift_held_requirements",
+                to="arxii.gift",
+            ),
+        ),
+        migrations.AddField(
+            model_name="giftheldrequirement",
+            name="path",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Path this requirement gates (#2538). Used for hybrid path entry and cross-path technique learning. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.path",
+            ),
+        ),
+        migrations.AddField(
+            model_name="giftheldrequirement",
+            name="technique",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Technique this requirement gates learning of (#4097). Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.technique",
+            ),
+        ),
+        migrations.AddField(
+            model_name="giftheldrequirement",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
+            ),
+        ),
+        migrations.AddField(
+            model_name="techniqueknownrequirement",
+            name="class_level_unlock",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.classlevelunlock",
+            ),
+        ),
+        migrations.AddField(
+            model_name="techniqueknownrequirement",
+            name="path",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Path this requirement gates (#2538). Used for hybrid path entry and cross-path technique learning. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.path",
+            ),
+        ),
+        migrations.AddField(
+            model_name="techniqueknownrequirement",
+            name="required_technique",
+            field=models.ForeignKey(
+                help_text="Technique the character must already know.",
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="required_by_requirements",
+                to="arxii.technique",
+            ),
+        ),
+        migrations.AddField(
+            model_name="techniqueknownrequirement",
+            name="technique",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Technique this requirement gates learning of (#4097). Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.technique",
+            ),
+        ),
+        migrations.AddField(
+            model_name="techniqueknownrequirement",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
+            ),
+        ),
         migrations.AlterField(
             model_name="achievementrequirement",
             name="path",
@@ -376,483 +456,160 @@ class Migration(migrations.Migration):
                 to="arxii.path",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
             model_name="achievementrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="achievementrequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
             model_name="classlevelrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="classlevelrequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
             model_name="codexknowledgerequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="codexknowledgerequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
+            model_name="giftheldrequirement",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="itemrequirement",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="legendrequirement",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
+            ),
+        ),
+        migrations.AlterField(
             model_name="levelrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="levelrequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
             model_name="majorgifttechniquerequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="majorgifttechniquerequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
             model_name="multiclassrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="multiclassrequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
             model_name="relationshiprequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="relationshiprequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
+            model_name="techniqueknownrequirement",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
+            ),
+        ),
+        migrations.AlterField(
             model_name="tierrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="tierrequirement_exactly_one_unlock_target",
+            name="thread_crossing_threshold",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="%(class)s_requirements",
+                to="arxii.threadcrossingthreshold",
             ),
         ),
-        migrations.AddConstraint(
+        migrations.AlterField(
             model_name="traitrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="traitrequirement_exactly_one_unlock_target",
-            ),
-        ),
-        migrations.AddField(
-            model_name="giftheldrequirement",
-            name="class_level_unlock",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="%(class)s_requirements",
-                to="arxii.classlevelunlock",
-            ),
-        ),
-        migrations.AddField(
-            model_name="giftheldrequirement",
-            name="gift",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Gift required; blank means any held gift satisfies it.",
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="gift_held_requirements",
-                to="arxii.gift",
-            ),
-        ),
-        migrations.AddField(
-            model_name="giftheldrequirement",
-            name="path",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Path this requirement gates (#2538). Used for hybrid path entry and cross-path technique learning. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="%(class)s_requirements",
-                to="arxii.path",
-            ),
-        ),
-        migrations.AddField(
-            model_name="giftheldrequirement",
-            name="technique",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Technique this requirement gates learning of (#4097). Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="%(class)s_requirements",
-                to="arxii.technique",
-            ),
-        ),
-        migrations.AddField(
-            model_name="giftheldrequirement",
             name="thread_crossing_threshold",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path must be set.",
+                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="%(class)s_requirements",
                 to="arxii.threadcrossingthreshold",
-            ),
-        ),
-        migrations.AddField(
-            model_name="techniqueknownrequirement",
-            name="class_level_unlock",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="%(class)s_requirements",
-                to="arxii.classlevelunlock",
-            ),
-        ),
-        migrations.AddField(
-            model_name="techniqueknownrequirement",
-            name="path",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Path this requirement gates (#2538). Used for hybrid path entry and cross-path technique learning. Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="%(class)s_requirements",
-                to="arxii.path",
-            ),
-        ),
-        migrations.AddField(
-            model_name="techniqueknownrequirement",
-            name="required_technique",
-            field=models.ForeignKey(
-                help_text="Technique the character must already know.",
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="required_by_requirements",
-                to="arxii.technique",
-            ),
-        ),
-        migrations.AddField(
-            model_name="techniqueknownrequirement",
-            name="technique",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Technique this requirement gates learning of (#4097). Exactly one of class_level_unlock / thread_crossing_threshold / path / technique must be set.",
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="%(class)s_requirements",
-                to="arxii.technique",
-            ),
-        ),
-        migrations.AddField(
-            model_name="techniqueknownrequirement",
-            name="thread_crossing_threshold",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Thread crossing threshold this requirement gates. Exactly one of class_level_unlock / thread_crossing_threshold / path must be set.",
-                null=True,
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="%(class)s_requirements",
-                to="arxii.threadcrossingthreshold",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="giftheldrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="giftheldrequirement_exactly_one_unlock_target",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="techniqueknownrequirement",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    models.Q(
-                        ("class_level_unlock__isnull", False),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", False),
-                        ("path__isnull", True),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", False),
-                        ("technique__isnull", True),
-                    ),
-                    models.Q(
-                        ("class_level_unlock__isnull", True),
-                        ("thread_crossing_threshold__isnull", True),
-                        ("path__isnull", True),
-                        ("technique__isnull", False),
-                    ),
-                    _connector="OR",
-                ),
-                name="techniqueknownrequirement_exactly_one_unlock_target",
             ),
         ),
     ]
