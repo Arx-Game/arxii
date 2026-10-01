@@ -6,7 +6,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
+    CharacterGiftFactory,
     EffectTypeFactory,
     GiftFactory,
     ResonanceFactory,
@@ -15,6 +17,7 @@ from world.magic.factories import (
     TechniqueStyleFactory,
     UltimateTechniqueFactory,
 )
+from world.roster.factories import RosterTenureFactory
 
 
 class TechniqueStyleViewSetTest(APITestCase):
@@ -425,6 +428,57 @@ class TechniqueViewSetTest(APITestCase):
         results = response.data["results"] if isinstance(response.data, dict) else response.data
         names = [t["name"] for t in results]
         self.assertIn(ultimate.name, names)
+
+
+class CharacterGiftViewSetUltimateLeakTests(APITestCase):
+    """#4098 final fix round 2, item 1: gift_detail.techniques must never leak an
+    ultimate through CharacterGiftViewSet's cached_techniques prefetch, mirroring
+    the fix already applied to GiftViewSet/TechniqueViewSet."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = AccountFactory(username="cg_leak_staff", is_staff=True)
+        cls.owner_account = AccountFactory(username="cg_leak_owner")
+        cls.sheet = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry__character_sheet=cls.sheet,
+            player_data__account=cls.owner_account,
+        )
+        cls.gift = GiftFactory(name="Test CG Leak Gift")
+        cls.ordinary = TechniqueFactory(gift=cls.gift, name="Test CG Leak Ordinary")
+        cls.ultimate = UltimateTechniqueFactory(gift=cls.gift, name="Test CG Leak Ultimate")
+        cls.character_gift = CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
+
+    def test_owner_gift_detail_never_contains_an_ultimate(self):
+        """A non-staff player holding the gift never sees the ultimate's name or
+        description via gift_detail.techniques."""
+        self.client.force_authenticate(user=self.owner_account)
+        url = reverse("magic:character-gift-detail", args=[self.character_gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["gift_detail"]["techniques"]]
+        self.assertNotIn(self.ultimate.name, technique_names)
+        self.assertIn(self.ordinary.name, technique_names)
+
+    def test_owner_list_never_contains_an_ultimate(self):
+        """Same check on the list endpoint (no pagination class on this ViewSet)."""
+        self.client.force_authenticate(user=self.owner_account)
+        url = reverse("magic:character-gift-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data["results"] if isinstance(response.data, dict) else response.data
+        row = next(r for r in rows if r["id"] == self.character_gift.pk)
+        technique_names = [t["name"] for t in row["gift_detail"]["techniques"]]
+        self.assertNotIn(self.ultimate.name, technique_names)
+
+    def test_staff_gift_detail_still_contains_the_ultimate(self):
+        """Staff still see everything — the gate is non-staff only."""
+        self.client.force_authenticate(user=self.staff_user)
+        url = reverse("magic:character-gift-detail", args=[self.character_gift.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        technique_names = [t["name"] for t in response.data["gift_detail"]["techniques"]]
+        self.assertIn(self.ultimate.name, technique_names)
 
 
 class FacetViewSetTest(APITestCase):
