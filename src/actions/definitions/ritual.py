@@ -73,6 +73,7 @@ class PerformRitualAction(Action):
             ResonanceInsufficient,
             RitualComponentError,
             RitualPoolError,
+            UltimateNotLearnable,
             XPInsufficient,
         )
         from world.magic.services.ritual_dispatch import dispatch_ritual  # noqa: PLC0415
@@ -123,6 +124,9 @@ class PerformRitualAction(Action):
                     )
 
                 result = dispatch_ritual(ritual=ritual, performer_sheet=sheet, **kwargs)
+        # UltimateNotLearnable (#4098 fix round 1): a technique-granting SERVICE
+        # ritual (learn_technique) refuses an ultimate; without this clause the
+        # raise crashed the action instead of a clean refusal.
         except (
             RitualComponentError,
             ResonanceInsufficient,
@@ -132,6 +136,7 @@ class PerformRitualAction(Action):
             GhostTutorError,
             RitualPoolError,
             HonorRefused,
+            UltimateNotLearnable,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
