@@ -375,6 +375,23 @@ at the encounter's natural end) resolves the pending death right there, through 
 same expiry seam - deferral is tied to the condition's own lifetime, not to the
 encounter's, so an early dispel is an early death rather than a held one.
 
+**An ABANDONED encounter cancels the pending death instead of resolving it**
+(#4098 owner ruling, 2026-10-01): a GM closing a broken fight shouldn't kill anyone.
+`cleanup_completed_encounter` (`world/combat/services.py`) checks
+`encounter.outcome == EncounterOutcome.ABANDONED` and, when true, calls the new
+`clear_pending_certain_death(character_sheet) -> bool` (`world/vitals/services.py` -
+clears `death_certain_pending` without ever applying the death, unlike
+`apply_pending_certain_death`) for every participant, via the
+`_cancel_pending_certain_death_if_abandoned` helper - and does this **before** the
+Audere/Audere Majora teardown loop just below it. Ordering matters: ending Audere there
+calls `remove_condition`, which reaches the same `_resolve_deferred_death_on_expiry`
+expiry seam described above, and that seam applies a pending certain death the instant
+the last deferring condition is gone - if the flag were still armed when that loop ran,
+an abandoned encounter would kill through the ordinary expiry seam before the function's
+own backstop loop (further down, unconditional for every outcome) ever got a chance to
+matter. Every other outcome (VICTORY/DEFEAT/FLED) is unaffected - the death still applies
+through the expiry seam or the backstop exactly as before.
+
 **Soulfray can kill only inside a combat encounter** (#4098 owner ruling, 2026-10-01):
 a scene cast, a technique-enhanced social action, a battle, and a reactive protection
 fired with no active COMBAT engagement all pass `lethal=False` into `accumulate_soulfray`,

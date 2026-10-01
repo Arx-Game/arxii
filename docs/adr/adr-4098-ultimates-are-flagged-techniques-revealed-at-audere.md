@@ -33,7 +33,12 @@ the post-crossing aftermath (the rest of the Majora condition's lifetime) must l
 on the new Path, and the full-window block froze every later round instead. A dispel that removes
 Audere's condition mid-fight resolves a pending certain death right there, not at the encounter's
 end - an accepted consequence of tying deferral to the condition's own expiry rather than to the
-encounter's. The telnet reveal and choice are guarded by a session snapshot
+encounter's. Per a further owner ruling (2026-10-01), an encounter that ends ABANDONED cancels any
+`death_certain_pending` instead of resolving it: the cleanup pass that tears down an abandoned
+encounter clears the flag before it ends Audere/Audere Majora, so removing the deferring condition
+there never reaches the condition-expiry seam with a pending death still armed - a GM closing a
+broken fight should not kill anyone who was merely waiting out that fight's own resolution. The
+telnet reveal and choice are guarded by a session snapshot
 (`ndb.ultimate_reveal_choice_keys`) of the cards last shown, so `accept ultimate <n>` against a
 pool that changed since the last listing is refused and reprinted rather than resolved blind.
 
