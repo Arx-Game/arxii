@@ -103,7 +103,13 @@ The magic system for Arx II. Power flows from identity and connection.
   `docs/systems/magic.md`'s "Content pipeline" section for the full model list.
 - `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0167). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`. A Gift may set its own style (`Gift.style`, nullable), which overrides the Path style when resolving `cast_concealment` for that gift's techniques (capability gating is unaffected — it still reads the caster's own Path style) — a species gift the character never chose doesn't inherit the Path's manner (#2905, ADR-0199).
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
-- `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
+- `Restriction` - Limitations that grant power bonuses (Touch Range, etc.), `kind` DESIGN.
+  A `kind=PRICE` row is a different thing wearing the same table: a cost a caster attaches
+  to their own hold (`CharacterTechnique.price`), offered in creation via
+  `creation_point_cost`, whose `power_bonus` is added to every cast as a power-ledger term
+  and whose `cast_narration` joins the cast narration (#4099, ADR-4099). `TechniqueSerializer
+  .restriction_ids` and the builder's `Restriction.objects.filter(...)` call sites scope to
+  `kind=DESIGN`; `CharacterTechnique.clean()` enforces a price can only be `kind=PRICE`.
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
 - `Technique` - Authored magical abilities with level, style, effect type (created via the budget builder or staff CRUD — see "Technique authoring" below)
 - `TechniqueFunctionTag` - Content-authored `(technique, function)` join recording which
@@ -113,8 +119,16 @@ The magic system for Arx II. Power flows from identity and connection.
   (#2536) — see `docs/systems/magic.md`'s power-term section.
 - `CharacterGift` - Links characters to known Gifts. Carries `origin` (`AcquisitionOrigin`,
   #3055 acquisition-provenance ledger — see "Acquisition provenance" in `docs/systems/magic.md`).
-- `CharacterTechnique` - Links characters to known Techniques. Also carries `origin`
-  (`AcquisitionOrigin`, #3055) — every creation site stamps it explicitly.
+- `CharacterTechnique` - Links characters to known Techniques: the character's **hold**.
+  Also carries `origin` (`AcquisitionOrigin`, #3055) — every creation site stamps it
+  explicitly. Carries the character's own personalization of the technique (#4099,
+  ADR-4099, creation-only this release): `custom_name`/`custom_description` (display
+  only, never a lookup key; blank = the catalog's), `price` (FK `Restriction`,
+  `kind=PRICE` only), `early_form` (FK `TechniqueVariant`, bought before the gift thread
+  reaches its level, honored only for its own buyer, never a role-granted hold).
+  `display_name` reads `custom_name or technique.name`. See `docs/systems/magic.md`'s
+  "Technique personalization" section for the full service surface
+  (`services/technique_personalization.py`, `services/creation_personalization.py`).
 - `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition` — abstract bases
   (`models/techniques.py`) whose columns are shared by both the committed `Technique*` and the draft
   `TechniqueDraft*` payload rows; each concrete subclass adds only its owner FK.
@@ -515,11 +529,21 @@ at level 3 (the first PathStage crossing) — but, since signing may already hav
 below that level now, the beat no longer claims level 3 is the first time signing becomes
 possible; higher crossings produce no beat.
 
+**Creation can weave the thread too (#4099).** `SignatureMotifBonus.creation_point_cost`
+(nullable; blank = not offered in creation) is a separate authored decision from
+`min_crossing_level`: a flourish is only offered as a CG pick when staff set its creation
+cost, and creation weaves the TECHNIQUE thread no higher than
+`CREATION_PERSONALIZATION_MAX_LEVEL` (2) via `weave_creation_technique_thread`
+(`services/threads.py`), so a creation pick never skips the first crossing. A flourish with
+no `creation_point_cost` is still reachable later in play, once a thread reaches its
+`min_crossing_level` the ordinary way.
+
 - **Catalog model:** `SignatureMotifBonus` (inherits `DiscoverableContent`) — `name`,
   `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK
   (Resonance, nullable), `flat_intensity_delta`, `min_crossing_level` (default 3),
-  `discovery_achievement` (nullable FK → `Achievement`, from `DiscoverableContent`).
-  At least one gate required (`clean()`). AND semantics.
+  `creation_point_cost` (nullable, #4099), `discovery_achievement` (nullable FK →
+  `Achievement`, from `DiscoverableContent`). At least one of `required_facet`/
+  `required_resonance` required (`clean()`). AND semantics.
 - **Payload child rows:** `SignatureMotifBonusDamageProfile` /
   `SignatureMotifBonusAppliedCondition` — inherit the shared `Abstract*` bases from
   `models/techniques.py`. (The capability-grant sibling was stripped per ADR-0248 —

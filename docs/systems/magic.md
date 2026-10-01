@@ -67,7 +67,7 @@ and the 5-axis Thread model no longer exist.
 | `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0199). | `name`, `description`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
-| `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
+| `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. | `name` (unique), `description` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
 | `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
@@ -87,7 +87,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterAura` | Affinity percentages (must sum to 100) | `celestial`, `primal`, `abyssal` | OneToOne via `character.aura` |
 | `CharacterResonance` | Per-character per-resonance identity + currency (Spec A §2.2) | `character_sheet` FK, `resonance` FK, `balance`, `lifetime_earned`, `claimed_at`, `flavor_text` | FK via `character_sheet.resonances` (unique_together: (character_sheet, resonance)) |
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
-| `CharacterTechnique` | Known techniques | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques) | FK via `character.character_techniques` |
+| `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
 | `CharacterAnimaRitual` | Personalized recovery rituals | `stat`, `skill`, `resonance`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
 
@@ -1046,9 +1046,16 @@ never changes the technique's identity.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity). At least one gate must be set (`clean()` enforces). AND semantics when both gates set. |
+| `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity), `min_crossing_level` (default 3; the only gate on which thread depth unlocks this bonus, #4099), `creation_point_cost` (nullable; character-creation points to weave this flourish at creation, blank = not offered in creation, #4099). At least one of `required_facet`/`required_resonance` must be set (`clean()` enforces). AND semantics when both gates set. |
 | `SignatureMotifBonusDamageProfile` | Damage profile for a bonus (inherits `AbstractDamageProfile`) | `signature_bonus` FK |
 | `SignatureMotifBonusAppliedCondition` | Applied condition for a bonus (inherits `AbstractAppliedCondition`) | `signature_bonus` FK |
+
+**Gradual unlock (#4099, ADR-4099):** `min_crossing_level` is the only gate on which
+thread depth unlocks a flourish, now that the old hard `thread.level >= 3` floor on
+`set_signature_bonus` is gone. Staff may author a bonus below level 3 for an earlier
+flourish, or above 3 for a deeper one; `next_signature_bonus(thread, catalog)`
+(`services/signature.py`) returns the nearest not-yet-reached flourish for a "keep
+imbuing" progress display.
 
 **Gate predicate** — `SignatureMotifBonus.qualifies_for(character_sheet) -> bool`: checks
 the character's `Motif` against `required_resonance` (via `MotifResonance`) and
@@ -1124,6 +1131,91 @@ formerly-inert `SignatureMotifBonusCapabilityGrant` family was stripped.
 
 **Shipped in #1728** (see `docs/adr/0072-...` addendum): the `damage_profiles` combat
 cast seam, combat cosmetic narration, and the web `SignatureViewSet`.
+
+### Technique personalization (#4099, ADR-4099) [BUILT & WIRED]
+
+A character personalizes a technique on their own hold of it (`CharacterTechnique`),
+never on the shared catalog `Technique`. Personalization is creation-only (owner ruling,
+2026-10-01): a player sets it while building the character, and nothing in play lets them
+rename or re-price a technique they already hold. Three pieces, each optional and each
+costed separately in CG points:
+
+- a free **name and description** (`custom_name`/`custom_description`, display only, never
+  a lookup key);
+- a **price** (`CharacterTechnique.price`, a `Restriction` of `kind=PRICE`, offered in
+  creation when its `creation_point_cost` is set). Its `power_bonus` is added straight to
+  every cast's power as a power-ledger term, and its `cast_narration` joins the cast line;
+- an **early form** (`CharacterTechnique.early_form`, a `TechniqueVariant` bought before
+  the gift thread reaches its level). Honored by the variant resolver only for its buyer, at
+  the hold's own resonance, and never for a role-granted hold.
+
+**Services** (`src/world/magic/services/technique_personalization.py`, the hold-reading
+seam used everywhere a technique's own name/price appears):
+
+| Function | Purpose |
+|----------|---------|
+| `clean_custom_technique_name(value) -> str` | Hygiene for a player-typed name: strips markup/control characters, collapses whitespace, rejects an em/en-dash, enforces the length cap. Raises `InvalidPersonalText`. |
+| `clean_custom_technique_description(value) -> str` | Same hygiene for the description (newlines allowed). |
+| `hold_display_name(hold, *, fallback) -> str` | `hold.custom_name` if set, else `fallback`. |
+| `technique_display_name(character, technique, *, fallback=None) -> str` | Reads the caster's own hold (via the cached handler) and returns its display name, else the catalog name. |
+| `technique_price_for(character, technique) -> Restriction \| None` | The caster's own price for this technique, or `None`. |
+| `resolve_price_snippet(character, technique) -> str \| None` | The price's `cast_narration` (or name) for narration, or `None` when unpriced. |
+| `seed_motif_from_gift_resonance(sheet, resonance) -> MotifResonance` | Seeds a `Motif`/`MotifResonance` for a brand-new character at finalize, so an early flourish or price has a resonance to attach to from the start. |
+
+**Creation services** (`src/world/magic/services/creation_personalization.py`, the
+draft-time half):
+
+| Function | Purpose |
+|----------|---------|
+| `parse_personalization_picks(raw, *, technique_ids) -> list[TechniquePersonalizationPick]` | Reads `draft_data["technique_personalizations"]` (keyed by technique id, a string); drops entries for a deselected technique. |
+| `creation_personalization_options(techniques, *, resonance_id) -> list[PersonalizationOptionSet]` | What creation offers (flourishes/forms/prices with a `creation_point_cost`) for each chosen technique at the draft's gift resonance. Backs `GET /drafts/{id}/personalization-options/`. |
+| `personalization_pick_errors(...) -> list[str]` | Validation: an unoffered option, a flourish/form at the wrong resonance, a malformed pick. |
+| `priced_personalization_lines(picks, *, techniques_by_id) -> list[PricedPersonalizationLine]` | One CG-points breakdown line per priced pick, read by `CharacterDraft.calculate_cg_points_breakdown`. |
+| `apply_creation_personalizations(...)` | Finalize-time write: sets the hold's name/description/price/early_form and, for a flourish pick, calls `weave_creation_technique_thread`. |
+
+**Gradual flourish** (`src/world/magic/services/threads.py`,
+`src/world/magic/services/signature.py`):
+
+- `weave_creation_technique_thread(character_sheet, technique, resonance, *, level) ->
+  Thread` weaves a TECHNIQUE thread at a starting level during creation, paid for in CG
+  points. Raises `CreationThreadLevelTooHigh` above `CREATION_PERSONALIZATION_MAX_LEVEL`
+  (2), so creation never starts a thread at or past the first crossing (level 3) and no
+  crossing ceremony is skipped.
+- `next_signature_bonus(thread, catalog) -> SignatureMotifBonus | None` returns the
+  nearest flourish the thread has not yet reached, for a "keep imbuing" display. See
+  "Gradual unlock" above: `min_crossing_level` is the only gate on when a flourish
+  unlocks, not a hard level-3 floor.
+
+**Price at cast** (`src/world/magic/services/power_terms.py`): `price_power_term(ctx) ->
+int` is a registered power-term provider. It reads the caster's own hold's price (via
+`technique_price_for`) and adds its `power_bonus` (or 0, unpriced) to every cast's power,
+in raw cast-power units, never through the technique builder's design-side refund
+multiplier.
+
+**Early form resolution** (`world/magic/specialization/services.py`,
+`_resolve_technique_variant`): before falling back to the thread-derived variant, checks
+the caster's own hold for an `early_form` at the hold's own resonance. Applies only when the
+hold is not role-granted (`role_source_id is None`); a role-granted hold's `early_form`
+never leaks to the role-holder. A naturally-reached higher-level form still beats an early
+pick once the thread catches up; `TechniqueFormSerializer.is_early` marks a payload row
+bought this way.
+
+**Exceptions** (`exceptions.py`): `CreationThreadLevelTooHigh` (raised by
+`weave_creation_technique_thread`). `InvalidPersonalText` (raised by the name/description
+hygiene functions). The old `SignatureBelowCrossing` exception and its hard `thread.level <
+3` guard are removed; `min_crossing_level` is the only remaining gate.
+
+**Endpoint:** `GET /api/character-creation/drafts/{id}/personalization-options/` (see
+`docs/systems/character_creation.md`'s "Magic" API section).
+
+**Visibility (leak table):**
+
+| Surface | Who sees it | What it shows | Contained by |
+|---|---|---|---|
+| Sheet magic section (web and `sheet/magic` telnet) | owner; others per `magic_visibility` tier (#1271) | custom name, custom description, price, next flourish | the existing section gate; the description shows only where the technique itself is visible |
+| Castable list (web), bare `cast` (telnet), combat technique picker | owner only | custom name plus the catalog name, as `Name (Catalog name)` | these endpoints serve only the caster |
+| Cast narration (scene and combat) | room/encounter audience | custom name plus the price's narration clause, never the description | the technique's name was already in this line; a concealed tier names neither |
+| Combo planning panel | party | catalog name only | a shared coordination vocabulary other players read |
 
 ### Threads as Currency Consumers (Resonance Pivot Spec A §2.1)
 

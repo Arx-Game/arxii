@@ -183,6 +183,19 @@ for the five-branch validation gate this data must satisfy before submission.
   gets a `CharacterTechnique.objects.get_or_create` link (`origin=CHARACTER_CREATION`,
   #3055 — same for the gift link's `grant_gift_to_character(..., origin=...)` call).
   `announce_access_change` fires once with every linked technique as `gained`.
+- **Technique personalization (#4099, ADR-4099).** `_finalize_technique_personalizations`
+  runs as step 1d, right after `provision_starting_languages` (1c) and before
+  `CharacterTradition` creation (step 2): first `seed_motif_from_gift_resonance`
+  (`world.magic.services.technique_personalization`) seeds a `Motif`/`MotifResonance`
+  for the brand-new character, then `apply_creation_personalizations`
+  (`world.magic.services.creation_personalization`) writes each pick's custom
+  name/description/price/early_form onto the matching `CharacterTechnique` hold and, for
+  a flourish pick, calls `weave_creation_technique_thread` to start the TECHNIQUE thread.
+  Reads `draft.draft_data["technique_personalizations"]`
+  (`TECHNIQUE_PERSONALIZATIONS_KEY`), parsed by `parse_personalization_picks` and
+  pre-validated by `compute_magic_errors`/`_validate_technique_personalizations`. A pick
+  for a since-deselected technique is silently ignored, never written. Whole call stays
+  inside `finalize_magic_data`'s existing `@transaction.atomic` wrap.
 - **Trait/skill baseline stamp (#3055):** `_create_stat_values`/`_create_skill_values`/
   `_apply_post_cg_bonuses` (`services.py`) each also write a `traits.CharacterTraitChange`
   row (`source=CHARACTER_CREATION`, `old_value=0` for the brand-new stat/skill rows) —

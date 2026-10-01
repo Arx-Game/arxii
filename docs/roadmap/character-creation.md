@@ -321,6 +321,31 @@ section for the full #2428/#2440/#2441/#2442 build record.
   in ADR-0136. See `docs/systems/magic.md` and `docs/systems/character_creation.md`
   for the current model/endpoint shape.
 
+## Built (2026-10-01, #4099: Personalizing magic from the start)
+
+- The Gift stage gained a "make it yours" panel (`PersonalizationPanel`) under each
+  chosen technique: a free name and description, plus up to three priced picks, a
+  signature flourish, an early specialized form, and a price. Each priced pick is
+  offered only when its catalog row carries a `creation_point_cost`, backed by `GET
+  drafts/{id}/personalization-options/` and validated/costed through
+  `draft_data["technique_personalizations"]` (a new `"magic"` CG-points breakdown
+  category).
+- Picks are written at finalize onto the hold (`CharacterTechnique.custom_name`
+  /`custom_description`/`price`/`early_form`), never onto the shared catalog
+  `Technique`; a flourish pick also weaves a TECHNIQUE thread (up to
+  `CREATION_PERSONALIZATION_MAX_LEVEL`, 2) so an early flourish never skips a
+  crossing. A Motif is seeded for every new character at finalize so the pick has a
+  resonance to attach to.
+- Personalization is creation-only this release (owner ruling, 2026-10-01); nothing
+  in play lets a character rename or re-price a technique they already hold.
+- Play surfaces (the sheet, the castable list, cast and combat narration) now show
+  the owner's own name and price wherever the technique itself is already visible to
+  that viewer.
+- Rationale + rejected alternatives recorded in ADR-4099, which supersedes in part
+  ADR-0136's "personalization starts at level 3" clause. See `docs/systems/magic.md`'s
+  "Technique personalization" section and `docs/systems/character_creation.md`'s Magic
+  API section for the full model/service/endpoint detail.
+
 ## Built (2026-07-11, #2162 — CGExplanation stage copy seeded)
 
 - The `character_creation` cluster seeder now writes real heading/intro/desc prose

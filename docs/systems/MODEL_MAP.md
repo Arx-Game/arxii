@@ -5319,6 +5319,8 @@
   - technique -> magic.Technique [FK]
   - source -> mechanics.ModifierSource [FK] (nullable)
   - role_source -> covenants.CharacterCovenantRole [FK] (nullable)
+  - price -> magic.Restriction [FK] (nullable)
+  - early_form -> magic.TechniqueVariant [FK] (nullable)
 
 ### CharacterThreadWeavingUnlock
 **Foreign Keys:**
@@ -5780,6 +5782,7 @@
   - allowed_effect_types -> magic.EffectType [M2M]
 **Pointed to by:**
   - techniques <- magic.Technique
+  - paying_holds <- magic.CharacterTechnique
   - technique_drafts <- magic.TechniqueDraft
 
 ### Ritual
@@ -6145,11 +6148,14 @@
 
 ### TechniqueVariant
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - parent_technique -> magic.Technique [FK]
 **Pointed to by:**
+  - early_holds <- magic.CharacterTechnique
   - capability_grants <- magic.TechniqueVariantCapabilityGrant
   - damage_profiles <- magic.TechniqueVariantDamageProfile
   - condition_applications <- magic.TechniqueVariantAppliedCondition
@@ -10482,6 +10488,7 @@
 - `calculate_wake_difficulty(*, health_pct: 'float', rounds_elapsed: 'int') -> 'int' - Difficulty of the per-round wake check.`
 - `calculate_wound_difficulty(*, damage: 'int', max_health: 'int') -> 'int' - Scale wound check difficulty by how far damage exceeds 50% threshold.`
 - `can_act(character_sheet: 'CharacterSheet | None') -> 'bool' - Coarse 'can engage at all' gate: not dead AND has awareness.`
+- `clear_pending_certain_death(character_sheet: 'CharacterSheet') -> 'bool' - Cancel a pending certain death without applying it (#4098 owner ruling).`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `conscious_bystander_present(room: 'ObjectDB | None', *, subject_id: 'int', exclude_ids: 'frozenset[int]' = frozenset()) -> 'bool' - True if anyone but ``subject_id`` present in ``room`` is conscious (can_act).`
 - `covenant_role_health(character: 'object', level: 'int') -> 'int' - Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged`
