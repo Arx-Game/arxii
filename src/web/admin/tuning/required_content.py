@@ -541,6 +541,36 @@ def _probe_audere_ultimate_copy() -> ProbeResult:
     )
 
 
+def _probe_personalization_copy() -> ProbeResult:
+    """Every make-it-yours panel key exists and is authored over its PLACEHOLDER (#4099).
+
+    Mirrors `_probe_audere_ultimate_copy` above - same `_PLACEHOLDER_MARK`, different
+    source of the marker. There is no seed-data migration for `PERSONALIZATION_COPY_KEYS`
+    (controller ruling: `check_migration_seed_data` forbids one, and authored content
+    lives in the database only) - `CGExplanationsSerializer.to_dict()` fills a missing or
+    blank key with the marker at read time instead, so this probe reads the raw
+    `CGExplanation` rows directly rather than that filled dict: a key with no row at all
+    is "missing" here exactly like a key whose row still carries the marker text, and
+    both report the same panel-line-unwritten consequence to staff.
+    """
+    from world.character_creation.constants import PERSONALIZATION_COPY_KEYS  # noqa: PLC0415
+    from world.character_creation.models import CGExplanation  # noqa: PLC0415
+
+    texts = dict(
+        CGExplanation.objects.filter(key__in=PERSONALIZATION_COPY_KEYS).values_list("key", "text")
+    )
+    missing = tuple(
+        key
+        for key in PERSONALIZATION_COPY_KEYS
+        if key not in texts or _PLACEHOLDER_MARK in texts[key] or not texts[key].strip()
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False, missing=missing, detail=f"{len(missing)} panel line(s) unwritten."
+    )
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
     """Every `ConditionStage` of the Soulfray template carries a `consequence_pool`.
 
@@ -2984,6 +3014,54 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "exactly as much as an open one."
             ),
             probe=AnyRowProbe(label="WeatherTypeShelter"),
+        ),
+        ContentDependency(
+            key="creation-prices",
+            label="Prices offered in character creation",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/creation_personalization.py "
+            "creation_personalization_options()",
+            consequence="The Gift stage offers no price for any technique.",
+            probe=FilteredRowProbe(
+                label="Restriction",
+                filters=(("kind", "price"), ("creation_point_cost__isnull", False)),
+                absent_detail="No PRICE restriction carries a creation_point_cost.",
+            ),
+        ),
+        ContentDependency(
+            key="creation-flourishes",
+            label="Signature flourishes offered in character creation",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/creation_personalization.py "
+            "creation_personalization_options()",
+            consequence="The Gift stage offers no signature flourish.",
+            probe=FilteredRowProbe(
+                label="SignatureMotifBonus",
+                filters=(("creation_point_cost__isnull", False),),
+                absent_detail="No signature bonus carries a creation_point_cost.",
+            ),
+        ),
+        ContentDependency(
+            key="creation-forms",
+            label="Specialized forms offered in character creation",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/creation_personalization.py "
+            "creation_personalization_options()",
+            consequence="The Gift stage offers no early specialized form.",
+            probe=FilteredRowProbe(
+                label="TechniqueVariant",
+                filters=(("creation_point_cost__isnull", False),),
+                absent_detail="No technique variant carries a creation_point_cost.",
+            ),
+        ),
+        ContentDependency(
+            key="personalization-copy",
+            label="Make-it-yours panel lines",
+            tier=DependencyTier.TUNING,
+            consumer="frontend/src/character-creation/components/gift/PersonalizationPanel.tsx",
+            consequence="Players see PLACEHOLDER text on the Gift stage's make-it-yours panel.",
+            probe=CustomProbe(fn=_probe_personalization_copy),
+            admin_model="CGExplanation",
         ),
     )
 

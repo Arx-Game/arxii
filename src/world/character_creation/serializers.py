@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
+    PERSONALIZATION_COPY_KEYS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     AnchorSource,
@@ -1985,9 +1986,21 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
 class CGExplanationsSerializer:
     """Serializes all CG explanatory text as a flat dict: {key: text, ...}."""
 
+    #: Mirrors `web.admin.tuning.required_content._PLACEHOLDER_MARK` /
+    #: `core_management.content_fixtures.PLACEHOLDER_MARK` - the same visible marker
+    #: convention, kept as its own copy here rather than importing across the
+    #: world -> web.admin layering boundary (#4099). Controller ruling: no seed-data
+    #: migration for `PERSONALIZATION_COPY_KEYS` - authored content lives in the
+    #: database only, so a key with no row is filled at read time instead.
+    _PLACEHOLDER_MARK = "PLACEHOLDER"
+
     @staticmethod
     def to_dict() -> dict[str, str]:
-        return {obj.key: obj.text for obj in CGExplanation.objects.all()}
+        explanations = {obj.key: obj.text for obj in CGExplanation.objects.all()}
+        for key in PERSONALIZATION_COPY_KEYS:
+            if key not in explanations or not explanations[key].strip():
+                explanations[key] = f"{CGExplanationsSerializer._PLACEHOLDER_MARK}: {key}"
+        return explanations
 
 
 # ---------------------------------------------------------------------------

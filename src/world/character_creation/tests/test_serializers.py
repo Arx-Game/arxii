@@ -8,9 +8,10 @@ from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.factories import AccountFactory
+from world.character_creation.constants import PERSONALIZATION_COPY_KEYS
 from world.character_creation.factories import CharacterDraftFactory
-from world.character_creation.models import CharacterDraft, StartingArea
-from world.character_creation.serializers import CharacterDraftSerializer
+from world.character_creation.models import CGExplanation, CharacterDraft, StartingArea
+from world.character_creation.serializers import CGExplanationsSerializer, CharacterDraftSerializer
 from world.forms.factories import BuildFactory, HeightBandFactory
 from world.realms.models import Realm
 from world.tarot.constants import ArcanaType
@@ -346,3 +347,34 @@ class StartingTechniquePicksFieldTest(TestCase):
         assert serializer.is_valid(), serializer.errors
         updated = serializer.save()
         assert updated.starting_technique_picks == 1
+
+
+class CGExplanationsSerializerPersonalizationPlaceholderTest(TestCase):
+    """A missing make-it-yours panel key is filled at read time (#4099).
+
+    Controller ruling: no seed-data migration for `PERSONALIZATION_COPY_KEYS` -
+    `check_migration_seed_data` forbids it and authored content lives only in the
+    database - so `to_dict()` itself fills any key with no row (or a blank row) with
+    a visible PLACEHOLDER marker rather than leaving it absent or empty.
+    """
+
+    def test_missing_key_returns_placeholder_marker(self) -> None:
+        explanations = CGExplanationsSerializer.to_dict()
+        assert explanations["personalize_heading"] == "PLACEHOLDER: personalize_heading"
+
+    def test_authored_key_returns_its_own_text(self) -> None:
+        CGExplanation.objects.update_or_create(
+            key="personalize_heading", defaults={"text": "Make it yours"}
+        )
+        explanations = CGExplanationsSerializer.to_dict()
+        assert explanations["personalize_heading"] == "Make it yours"
+
+    def test_blank_authored_row_still_returns_placeholder(self) -> None:
+        CGExplanation.objects.update_or_create(key="personalize_heading", defaults={"text": ""})
+        explanations = CGExplanationsSerializer.to_dict()
+        assert explanations["personalize_heading"] == "PLACEHOLDER: personalize_heading"
+
+    def test_every_personalization_key_is_present(self) -> None:
+        explanations = CGExplanationsSerializer.to_dict()
+        for key in PERSONALIZATION_COPY_KEYS:
+            assert key in explanations

@@ -1328,10 +1328,15 @@ class CharacterTechnique(SharedMemoryModel):
             if self.price.kind != RestrictionKind.PRICE:
                 errors["price"] = "Only a PRICE restriction can be a price."
             else:
-                allowed = self.price.cached_allowed_effect_types
-                if allowed and self.technique.effect_type_id not in {
-                    effect_type.pk for effect_type in allowed
-                }:
+                # Queries freshly rather than `cached_allowed_effect_types` (#4099 Task 2
+                # review): that accessor is a plain `cached_property` on the
+                # idmapper-shared `Restriction`, so once read it stays stale for the life
+                # of the process even after staff edit the allowed effect types.
+                allowed = self.price.allowed_effect_types
+                if (
+                    allowed.exists()
+                    and not allowed.filter(pk=self.technique.effect_type_id).exists()
+                ):
                     errors["price"] = "This price doesn't allow this technique's effect type."
         if self.early_form_id is not None:
             if self.early_form.parent_technique_id != self.technique_id:
