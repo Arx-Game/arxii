@@ -722,8 +722,16 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         per-gift visibility hardening (staff-readable species gifts, public gift
         catalog vs. character-held gifts, etc.) is owned by #1587 — do NOT widen
         this queryset without coordinating with that issue.
+
+        Non-staff also never see an ultimate through ``gift_detail.techniques``
+        (#4098 final fix round 2, item 1) — holding the gift is not the same as
+        having discovered the ultimate through Audere, and this prefetch otherwise
+        leaked name + description to any player who holds the gift.
         """
         user = self.request.user
+        technique_qs = Technique.objects.select_related("effect_type")
+        if not user.is_staff:
+            technique_qs = technique_qs.filter(is_ultimate=False)
         queryset = CharacterGift.objects.select_related("gift").prefetch_related(
             Prefetch(
                 "gift__resonances",
@@ -734,7 +742,7 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
             ),
             Prefetch(
                 "gift__techniques",
-                queryset=Technique.objects.select_related("effect_type"),
+                queryset=technique_qs,
                 to_attr="cached_techniques",
             ),
         )
