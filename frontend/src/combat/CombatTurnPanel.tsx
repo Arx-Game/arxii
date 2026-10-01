@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AudereOfferGate } from '@/magic/components/AudereOfferGate';
 import { AudereMajoraOfferGate } from '@/magic/components/AudereMajoraOfferGate';
+import { UltimateRevealGate } from '@/magic/components/UltimateRevealGate';
 import {
   useAvailableActions,
   useCombatEncounter,
@@ -213,6 +214,9 @@ export function CombatTurnPanel({
   const isAudereActive = ((viewerParticipant?.active_conditions ?? []) as ConditionInstance[]).some(
     (c) => c.name === 'Audere'
   );
+  const isMajoraActive = ((viewerParticipant?.active_conditions ?? []) as ConditionInstance[]).some(
+    (c) => c.name === 'Audere Majora'
+  );
 
   return (
     <div
@@ -269,6 +273,14 @@ export function CombatTurnPanel({
         characterSheetId={characterSheetId}
         characterId={characterId}
         encounterId={encounterId}
+      />
+
+      {/* 0c. Ultimate reveal + deferred-death banner (#4098). */}
+      <UltimateRevealGate
+        characterSheetId={characterSheetId}
+        characterId={characterId}
+        encounterId={encounterId}
+        isCeremonyActive={isAudereActive || isMajoraActive}
       />
 
       {/* Active-Audere strip — visible while the breakthrough condition runs. */}

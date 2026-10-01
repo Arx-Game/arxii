@@ -26,7 +26,9 @@ import type {
   AudereRespondRequest,
   AudereMajoraCrossingResult,
   AudereMajoraRespondRequest,
+  AudereUltimateState,
   BindMotifStyleRequest,
+  ChooseUltimateRequest,
   CharacterResonance,
   CrossXPLockRequest,
   CrossXPLockResponse,
@@ -52,6 +54,7 @@ import type {
   PendingStageAdvanceOffer,
   PullPreviewRequest,
   PullPreviewResponse,
+  ReadiedUltimate,
   RescueOutcome,
   RescueRequest,
   SetGlimpseProseRequest,
@@ -755,6 +758,40 @@ export async function respondToAudere(body: AudereRespondRequest): Promise<Auder
   }
 
   return res.json() as Promise<AudereOfferResult>;
+}
+
+/**
+ * GET /api/magic/audere/ultimates/?character_sheet_id= (#4098)
+ *
+ * The in-progress reveal (known/undiscovered cards grouped by source), the
+ * already-readied ultimate for this Audere, and the deferred-death banner
+ * text — cheap to call even when no ceremony is active (reveal/readied come
+ * back null, deferred_death_text empty).
+ */
+export async function getAudereUltimates(characterSheetId: number): Promise<AudereUltimateState> {
+  const res = await apiFetch(`${AUDERE_URL}/ultimates/?character_sheet_id=${characterSheetId}`);
+  if (!res.ok) throw new Error('Failed to load Audere ultimates');
+  return res.json() as Promise<AudereUltimateState>;
+}
+
+/**
+ * POST /api/magic/audere/ultimates/choose/ (#4098)
+ *
+ * Reveals (or re-casts a known) ultimate by its choice_key and readies it as
+ * this Audere's cast. 400 on a bad/stale key carries a `user_message`.
+ */
+export async function chooseUltimate(body: ChooseUltimateRequest): Promise<ReadiedUltimate> {
+  const res = await apiFetch(`${AUDERE_URL}/ultimates/choose/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to choose an ultimate');
+  }
+
+  return res.json() as Promise<ReadiedUltimate>;
 }
 
 // ---------------------------------------------------------------------------
