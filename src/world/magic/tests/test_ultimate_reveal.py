@@ -285,6 +285,39 @@ class CrossPathAndBondLifecycleTests(_RevealFixture):
         )
         self.assertNotIn(patron_tech, after_techniques)
 
+    def test_known_ultimate_delisted_once_its_gift_is_no_longer_major(self) -> None:
+        """The "still held as MAJOR" gate (decisions 4/12) runs both ways: downgrading
+        the held gift's kind delists a known ultimate the same way releasing a bond
+        does, regardless of which Path offered it (#4098 final review item 7)."""
+        from world.classes.factories import PathFactory
+
+        other_path = PathFactory()
+        other_gift = GiftFactory(kind=GiftKind.MAJOR)
+        CharacterGiftFactory(character=self.sheet, gift=other_gift)
+        other_grant = PathGiftGrantFactory(gift=other_gift, path=other_path)
+        other_tech = UltimateTechniqueFactory(
+            gift=other_gift, archetype_alignment=RoleArchetype.CROWN
+        )
+        other_grant.ultimate_techniques.add(other_tech)
+        KnownUltimateFactory(character=self.sheet, technique=other_tech)
+
+        before = ultimate_reveal_for(self.sheet)
+        before_techniques = [
+            c.technique for grp in before.groups for c in grp.cards if c.technique is not None
+        ]
+        self.assertIn(other_tech, before_techniques)
+
+        other_gift.kind = GiftKind.MINOR
+        other_gift.save(update_fields=["kind"])
+
+        after = ultimate_reveal_for(self.sheet)
+        after_techniques = (
+            [c.technique for grp in after.groups for c in grp.cards if c.technique is not None]
+            if after is not None
+            else []
+        )
+        self.assertNotIn(other_tech, after_techniques)
+
 
 class UpgradeOfOrderingTests(_RevealFixture):
     def test_upgrade_of_picks_deterministically_by_required_technique_order(self) -> None:
