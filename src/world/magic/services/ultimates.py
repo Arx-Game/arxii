@@ -342,8 +342,14 @@ def ultimate_reveal_for(sheet: CharacterSheet) -> UltimateReveal | None:
 
 
 def has_reveal_cards(sheet: CharacterSheet) -> bool:
-    """Whether accepting Audere now would show this character anything (offer framing)."""
-    return _build_reveal(sheet, AudereCeremony.AUDERE) is not None
+    """Whether accepting Audere now would show this character anything (offer framing).
+
+    Gated on the same COMBAT engagement check as `ultimate_reveal_for` (#4098 final
+    review item 5): without it, a challenge or mission Audere offer with cards in a
+    character's pools showed the reveal framing sentence even though no reveal would
+    ever follow acceptance - the reveal itself only ever opens in combat.
+    """
+    return _in_combat(sheet) and _build_reveal(sheet, AudereCeremony.AUDERE) is not None
 
 
 def _resolve_card(sheet: CharacterSheet, reveal: UltimateReveal, choice_key: str) -> Technique:
