@@ -1,6 +1,8 @@
 """Personalizing a technique in character creation (#4099)."""
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from world.character_creation.constants import TECHNIQUE_PERSONALIZATIONS_KEY
 from world.character_creation.factories import CharacterDraftFactory
@@ -375,3 +377,95 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
             f"/api/character-creation/drafts/{other.pk}/personalization-options/"
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_an_ultimate_in_selected_technique_ids_gets_no_entry(self) -> None:
+        """A draft PATCH could put an ultimate's pk in selected_technique_ids; the
+        endpoint must never reveal an undiscovered ultimate's name or options (#4099
+        fix round 1)."""
+        from world.magic.factories import UltimateTechniqueFactory
+
+        ultimate = UltimateTechniqueFactory(gift=self.gift, name="Secret Finisher")
+        draft = CharacterDraftFactory(
+            account=self.account,
+            draft_data={
+                "selected_gift_id": self.gift.pk,
+                "selected_technique_ids": [self.technique.pk, ultimate.pk],
+                "selected_gift_resonance_id": self.frost.pk,
+            },
+        )
+        response = self.client.get(
+            f"/api/character-creation/drafts/{draft.pk}/personalization-options/"
+        )
+        self.assertEqual(response.status_code, 200)
+        technique_ids = [entry["technique_id"] for entry in response.data]
+        self.assertEqual(technique_ids, [self.technique.pk])
+        self.assertNotIn(ultimate.pk, technique_ids)
+
+    def test_query_count_is_fixed_regardless_of_technique_count(self) -> None:
+        from world.magic.factories import TechniqueFactory, TechniqueVariantFactory
+
+        second_technique = TechniqueFactory(gift=self.gift, name="Frost Needle", level=1)
+        TechniqueVariantFactory(
+            parent_technique=second_technique,
+            resonance=self.frost,
+            unlock_thread_level=1,
+            name_override="Frost Needle, forged",
+            creation_point_cost=2,
+        )
+        one_draft = self._draft(self.frost.pk)
+        two_draft = CharacterDraftFactory(
+            account=self.account,
+            draft_data={
+                "selected_gift_id": self.gift.pk,
+                "selected_technique_ids": [self.technique.pk, second_technique.pk],
+                "selected_gift_resonance_id": self.frost.pk,
+            },
+        )
+
+        # Warm up one-time, non-view costs (content-type cache, session/auth
+        # queries on the first authenticated request) so they land on neither
+        # measured call below and don't confound the comparison.
+        self.client.get(f"/api/character-creation/drafts/{one_draft.pk}/personalization-options/")
+
+        with CaptureQueriesContext(connection) as one_capture:
+            response = self.client.get(
+                f"/api/character-creation/drafts/{one_draft.pk}/personalization-options/"
+            )
+        self.assertEqual(response.status_code, 200)
+
+        with CaptureQueriesContext(connection) as two_capture:
+            response = self.client.get(
+                f"/api/character-creation/drafts/{two_draft.pk}/personalization-options/"
+            )
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(len(one_capture), len(two_capture))
+
+    def test_multi_technique_options_do_not_leak_across_techniques(self) -> None:
+        from world.magic.factories import TechniqueFactory, TechniqueVariantFactory
+
+        second_technique = TechniqueFactory(gift=self.gift, name="Frost Needle", level=1)
+        second_form = TechniqueVariantFactory(
+            parent_technique=second_technique,
+            resonance=self.frost,
+            unlock_thread_level=1,
+            name_override="Frost Needle, forged",
+            creation_point_cost=2,
+        )
+        draft = CharacterDraftFactory(
+            account=self.account,
+            draft_data={
+                "selected_gift_id": self.gift.pk,
+                "selected_technique_ids": [self.technique.pk, second_technique.pk],
+                "selected_gift_resonance_id": self.frost.pk,
+            },
+        )
+        response = self.client.get(
+            f"/api/character-creation/drafts/{draft.pk}/personalization-options/"
+        )
+        self.assertEqual(response.status_code, 200)
+        by_technique_id = {entry["technique_id"]: entry for entry in response.data}
+        first_forms = by_technique_id[self.technique.pk]["forms"]
+        second_forms = by_technique_id[second_technique.pk]["forms"]
+        self.assertEqual([f["id"] for f in first_forms], [self.form.pk])
+        self.assertEqual([f["id"] for f in second_forms], [second_form.pk])

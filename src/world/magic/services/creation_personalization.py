@@ -112,9 +112,17 @@ def _price_fits(
 def creation_personalization_options(
     techniques: Sequence[Technique], *, resonance_id: int | None
 ) -> list[PersonalizationOptionSet]:
-    """What creation offers per technique. A fixed number of queries regardless of count."""
+    """What creation offers per technique. A fixed number of queries regardless of count.
+
+    Excludes any ``is_ultimate`` technique (#4099 fix round 1): a draft PATCH can put an
+    ultimate's pk in ``selected_technique_ids`` with no gate at write time, and an
+    ultimate's identity/options must stay undiscovered until Audere reveals it (#4098) —
+    offering it here would leak its name and catalog options through the CG panel. Every
+    caller is covered by filtering here rather than at each call site.
+    """
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
+    techniques = [t for t in techniques if not t.is_ultimate]
     flourishes = _offered_flourishes(resonance_id)
     prices = _offered_prices()
     allowed_by_price = _allowed_effect_type_ids_by_price(prices)
