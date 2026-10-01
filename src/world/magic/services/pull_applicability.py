@@ -39,8 +39,13 @@ def compute_thread_applicability(
     Returns one row per active (non-retired) Thread owned by the character sheet.
 
     Current rule set (first match wins):
-    - ANCHORED_ON_OTHER_TECHNIQUE: TECHNIQUE-kind threads whose target_technique
-      differs from the context technique are inapplicable.
+    - ANCHORED_ON_OTHER_TECHNIQUE: TECHNIQUE-kind threads whose anchor is neither
+      the context technique nor one of its transitive prerequisites (#4097) are
+      inapplicable — a thread woven into a prerequisite technique carries through
+      to what it unlocks, the same widening ``PullActionContext
+      .involved_technique_closure`` (``world.magic.types.pull``) applies for
+      combat/cast pulls. The allowed-anchor set is computed once per call (via
+      ``_technique_anchor_ids``), not once per thread.
     - COURT_LEADER_NO_STAKE: COVENANT_ROLE threads (#1831) with a target_persona_id
       in context are inapplicable when no candidate ThreadPullEffect would be
       empowered by the Court leader's signed regard for that target (leader
@@ -70,25 +75,46 @@ def compute_thread_applicability(
         .select_related("resonance", "target_technique")
         .order_by("pk")
     )
+    allowed_technique_ids = _technique_anchor_ids(context.technique)
     out: list[ThreadApplicability] = []
     for thread in threads:
-        applicable, reason = _check_applicability(thread, context)
+        applicable, reason = _check_applicability(thread, context, allowed_technique_ids)
         out.append(ThreadApplicability(thread=thread, applicable=applicable, reason=reason))
     return out
+
+
+def _technique_anchor_ids(technique: Technique | None) -> frozenset[int]:
+    """The TECHNIQUE-thread anchors applicable for casting ``technique`` (#4097).
+
+    ``{technique.pk}`` plus its transitive prerequisite closure — a thread woven
+    into a prerequisite technique carries through to what it unlocks. Empty when
+    ``technique`` is None (no technique in context -> no TECHNIQUE-kind thread is
+    applicable). Computed once per ``compute_thread_applicability`` call.
+    """
+    if technique is None:
+        return frozenset()
+    from world.magic.services.technique_prerequisites import (  # noqa: PLC0415
+        prerequisite_technique_ids,
+    )
+
+    return frozenset({technique.pk}) | prerequisite_technique_ids((technique.pk,))
 
 
 def _check_applicability(
     thread: Thread,
     context: PullActionContext,
+    allowed_technique_ids: frozenset[int],
 ) -> tuple[bool, str | None]:
     """Run the applicability rules for one thread. Returns (applicable, reason)."""
     # Rule: anchored-on-other-technique.
-    # A TECHNIQUE-kind thread is only applicable when the context technique
-    # matches the thread's anchor technique. When the context has no technique
-    # (technique=None), a TECHNIQUE-kind thread is always inapplicable because
-    # the action isn't using any technique that the thread is anchored to.
-    if thread.target_kind == TargetKind.TECHNIQUE and (
-        context.technique is None or thread.target_technique_id != context.technique.pk
+    # A TECHNIQUE-kind thread is only applicable when its anchor is the context
+    # technique or one of its transitive prerequisites (#4097) —
+    # `allowed_technique_ids`, computed once per call by `_technique_anchor_ids`.
+    # When the context has no technique (technique=None), that set is empty, so
+    # a TECHNIQUE-kind thread is always inapplicable.
+    if (
+        thread.target_kind == TargetKind.TECHNIQUE
+        and thread.target_technique_id not in allowed_technique_ids
     ):
         return False, InapplicabilityReason.ANCHORED_ON_OTHER_TECHNIQUE.value
 
