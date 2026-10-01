@@ -71,13 +71,13 @@ def get_technique_options(
     ...) — a draft has no character yet to evaluate
     ``check_requirements_for_technique`` against, so CG picks skip gated
     techniques outright rather than offering a pick nobody can finalize.
-    **Controller ruling (#4097 fix round 1):** pass ``exclude_gated=True`` only
-    from character-creation call sites that model what a new character can pick —
-    ``character_creation.validators``/``views`` and the starting-kit analytics
-    report (``web/admin/tuning/technique_analytics.py``, which explicitly models
-    "the picks a new character gets"). Any **in-play** caller — Academy TRAIN's
+    Pass ``exclude_gated=True`` only from character-creation call sites that
+    model what a new character can pick — ``character_creation.validators``/
+    ``views`` and the starting-kit analytics report
+    (``web/admin/tuning/technique_analytics.py``, which explicitly models "the
+    picks a new character gets"). Any **in-play** caller — Academy TRAIN's
     eligibility check (``npc_services.effects._technique_available_to_learner``)
-    is the one that exists today — MUST keep the default ``exclude_gated=False``:
+    is the one that exists today — keeps the default ``exclude_gated=False``:
     an in-play learner may already meet the prerequisite, and
     ``charge_and_learn``'s own per-character ``check_requirements_for_technique``
     call is the correct gate for them, not a blanket catalog-level exclusion.

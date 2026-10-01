@@ -10,16 +10,38 @@ learning on TechniqueKnownRequirement and friends.
 
 from __future__ import annotations
 
-from django.apps import apps
 from django.test import SimpleTestCase, TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.progression.models import TechniqueKnownRequirement
-from world.progression.models.unlocks import AbstractUnlockRequirement
 from world.progression.services.spends import (
     check_requirements_for_technique,
     concrete_requirement_types,
+)
+
+# Pinned (#4097 fix round 2) — the previous version of this test re-derived
+# "expected" with apps.get_models() filtered the exact same way
+# concrete_requirement_types() filters internally, so a bug shared by both
+# filters (e.g. a stray abstract=False on a base class) would pass silently.
+# An explicit name list is an independent check: it fails loud when a type is
+# added/removed/renamed, same as pinning any other registry.
+EXPECTED_CONCRETE_REQUIREMENT_TYPE_NAMES = frozenset(
+    {
+        "AchievementRequirement",
+        "ClassLevelRequirement",
+        "CodexKnowledgeRequirement",
+        "GiftHeldRequirement",
+        "ItemRequirement",
+        "LegendRequirement",
+        "LevelRequirement",
+        "MajorGiftTechniqueRequirement",
+        "MultiClassRequirement",
+        "RelationshipRequirement",
+        "TechniqueKnownRequirement",
+        "TierRequirement",
+        "TraitRequirement",
+    }
 )
 
 
@@ -27,13 +49,8 @@ class RequirementRegistryTests(SimpleTestCase):
     """concrete_requirement_types() discovers every concrete subclass, not a fixed list."""
 
     def test_every_concrete_requirement_type_is_evaluated(self):
-        expected = {
-            m
-            for m in apps.get_models()
-            if issubclass(m, AbstractUnlockRequirement) and not m._meta.abstract
-        }
-        assert set(concrete_requirement_types()) == expected
-        assert len(expected) >= 13  # 11 existing + GiftHeld + TechniqueKnown
+        names = {m.__name__ for m in concrete_requirement_types()}
+        assert names == EXPECTED_CONCRETE_REQUIREMENT_TYPE_NAMES
 
     def test_sorted_by_name(self):
         names = [m.__name__ for m in concrete_requirement_types()]

@@ -9,6 +9,8 @@ via ``build_cast_applicable_threads`` / ``_anchor_in_action``.
 
 from __future__ import annotations
 
+import itertools
+
 from django.test import TestCase
 
 from world.magic.constants import TargetKind
@@ -61,6 +63,21 @@ class PrerequisiteTechniqueIdsTests(TestCase):
         a = TechniqueFactory()
 
         self.assertEqual(prerequisite_technique_ids([a.pk]), frozenset())
+
+    def test_pinned_query_count_per_chain_depth(self):
+        """One batched query per BFS frontier level, never one per technique in the
+        chain (#4097 fix round 2). A terminating query confirms the frontier is
+        empty, so a chain of N hops costs N+1 queries."""
+        techniques = [TechniqueFactory() for _ in range(4)]
+        # techniques[0] requires [1] requires [2] requires [3] -- a 3-hop chain.
+        for deeper, shallower in itertools.pairwise(techniques):
+            TechniqueKnownRequirementFactory(technique=deeper, required_technique=shallower)
+
+        chain_hops = 3
+        with self.assertNumQueries(chain_hops + 1):
+            result = prerequisite_technique_ids([techniques[0].pk])
+
+        self.assertEqual(result, frozenset(t.pk for t in techniques[1:]))
 
 
 class ThreadCarryThroughPrerequisitesTests(TestCase):
