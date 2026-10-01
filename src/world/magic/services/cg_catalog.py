@@ -27,6 +27,25 @@ if TYPE_CHECKING:
     from world.species.models import Species
 
 
+def _gated_technique_ids() -> set[int]:
+    """Technique pks carrying at least one active requirement row (#4097).
+
+    One query per concrete ``AbstractUnlockRequirement`` subclass (a small, fixed
+    set via ``concrete_requirement_types()``) — never one per technique. The
+    resulting id set is applied with a single ``exclude(pk__in=...)`` by the caller.
+    """
+    from world.progression.services.spends import concrete_requirement_types  # noqa: PLC0415
+
+    gated: set[int] = set()
+    for req_type in concrete_requirement_types():
+        gated.update(
+            req_type.objects.filter(technique__isnull=False, is_active=True).values_list(
+                "technique_id", flat=True
+            )
+        )
+    return gated
+
+
 def get_technique_options(
     path: Path, gift: Gift, tradition: Tradition, *, include_unready: bool = False
 ) -> TechniqueOptions:
@@ -41,8 +60,15 @@ def get_technique_options(
     a CG pick. ``include_unready`` is reserved for validation, which needs to
     distinguish an unavailable technique from an unfinished one when reporting
     a stale or tampered selection.
+
+    A technique carrying any active requirement row (``TechniqueKnownRequirement``,
+    ``GiftHeldRequirement``, ...) is excluded outright (#4097): CG starter/special
+    picks have no prerequisites authored against them, and a draft has no
+    character yet to evaluate ``check_requirements_for_technique`` against.
     """
-    technique_qs = Technique.objects.select_related("effect_type")
+    technique_qs = Technique.objects.select_related("effect_type").exclude(
+        pk__in=_gated_technique_ids()
+    )
     if not include_unready:
         technique_qs = technique_qs.filter(action_template__isnull=False)
 

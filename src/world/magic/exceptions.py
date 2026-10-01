@@ -52,6 +52,21 @@ class TechniqueCapExceeded(MagicError):
     )
 
 
+class TechniqueRequirementsNotMet(MagicError):
+    """Raised when ``charge_and_learn`` finds an unmet active requirement (#4097).
+
+    ``failed`` carries the internal per-requirement messages (e.g. "Need to know
+    Thornweave") for logging/debugging; ``user_message`` stays a curated system
+    message, never the internal detail (same pattern as ``TechniqueCapExceeded``).
+    """
+
+    user_message = "You have not yet met what this technique requires."
+
+    def __init__(self, failed: list[str]) -> None:
+        super().__init__("; ".join(failed))
+        self.failed = failed
+
+
 class GiftAlreadyOwnedError(MagicError):
     user_message = "You already have this gift."
 
