@@ -19,7 +19,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -98,10 +98,13 @@ from world.magic.serializers import (
     AudereMajoraRespondSerializer,
     AudereOfferResultSerializer,
     AudereRespondSerializer,
+    AudereUltimateQuerySerializer,
+    AudereUltimateStateSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
+    ChooseUltimateSerializer,
     ConsequencePoolCatalogSerializer,
     ConsequencePoolDetailSerializer,
     CrossingRespondSerializer,
@@ -127,6 +130,7 @@ from world.magic.serializers import (
     PoseEndorsementSerializer,
     ProgressionStageSerializer,
     PurchaseGiftUnlockRequestSerializer,
+    ReadiedUltimateSerializer,
     RescueOutcomeSerializer,
     ResonanceGrantSerializer,
     RestrictionSerializer,
@@ -1870,6 +1874,39 @@ class AudereRespondView(APIView):
     def post(self, request: Request) -> Response:
         """Validate ownership + dispatch resolve_audere_offer; return the result."""
         return _dispatch_respond(request, AudereRespondSerializer, AudereOfferResultSerializer)
+
+
+class AudereUltimatesView(APIView):
+    """The owner's Audere state: open reveal, readied pick, deferred-death line (#4098).
+
+    GET /api/magic/audere/ultimates/?character_sheet_id=<id>
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("character_sheet_id", int, required=True)],
+        responses={200: AudereUltimateStateSerializer},
+    )
+    def get(self, request: Request) -> Response:
+        from world.magic.services.ultimates import audere_ultimate_state  # noqa: PLC0415
+
+        query = AudereUltimateQuerySerializer(
+            data=request.query_params, context={"request": request}
+        )
+        query.is_valid(raise_exception=True)
+        state = audere_ultimate_state(query.validated_data["character_sheet_id"])
+        return Response(AudereUltimateStateSerializer(state).data, status=status.HTTP_200_OK)
+
+
+class ChooseUltimateView(APIView):
+    """POST /api/magic/audere/ultimates/choose/  {character_sheet_id, choice_key}"""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=ChooseUltimateSerializer, responses={200: ReadiedUltimateSerializer})
+    def post(self, request: Request) -> Response:
+        return _dispatch_respond(request, ChooseUltimateSerializer, ReadiedUltimateSerializer)
 
 
 # =============================================================================
