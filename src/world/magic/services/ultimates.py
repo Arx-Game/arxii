@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from world.covenants.constants import RoleArchetype
 from world.magic.constants import AudereCeremony, GiftKind, UltimateCardKind, UltimateSource
@@ -318,14 +318,22 @@ def choose_ultimate(sheet: CharacterSheet, choice_key: str) -> KnownUltimate:
         crossing = (
             AudereMajoraCrossing.objects.filter(character_sheet=locked).order_by("-pk").first()
         )
-    known, created = KnownUltimate.objects.get_or_create(
-        character=locked,
-        technique=technique,
-        defaults={"crossing": crossing, "readied": True},
-    )
-    if not created:
-        known.readied = True
-        known.save(update_fields=["readied"])
+    try:
+        with transaction.atomic():
+            known, created = KnownUltimate.objects.get_or_create(
+                character=locked,
+                technique=technique,
+                defaults={"crossing": crossing, "readied": True},
+            )
+            if not created:
+                known.readied = True
+                known.save(update_fields=["readied"])
+    except IntegrityError as exc:
+        # one_readied_ultimate_per_character: a race slipped a second readied row
+        # past the _has_readied gate above. Surface the same clean refusal a
+        # same-request double-submit gets, never a raw IntegrityError (#4098 fix
+        # round 1, M2).
+        raise UltimateRevealClosed from exc
     if created:
         fire_first_discoveries(locked, [technique])
     return known

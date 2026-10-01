@@ -248,6 +248,24 @@ class ChooseTests(_RevealFixture):
         with self.assertRaises(UltimateChoiceUnavailable):
             choose_ultimate(self.sheet, f"known:{self.strike.pk}")
 
+    def test_db_race_past_the_readied_gate_raises_reveal_closed(self) -> None:
+        """A race that slips a second readied row past the application-level
+        ``_has_readied`` gate hits the ``one_readied_ultimate_per_character``
+        constraint; ``choose_ultimate`` must surface it as ``UltimateRevealClosed``,
+        not a raw ``IntegrityError`` (#4098 fix round 1, M2)."""
+        from unittest.mock import patch
+
+        from world.magic.services import ultimates as ultimates_module
+
+        reveal = ultimate_reveal_for(self.sheet)
+        sword = next(c for c in reveal.groups[0].cards if c.category == RoleArchetype.SWORD)
+        # Simulate a concurrent request that already readied a different ultimate
+        # for this character, racing past the pre-captured `reveal` snapshot above.
+        KnownUltimateFactory(character=self.sheet, technique=self.ward, readied=True)
+        with patch.object(ultimates_module, "ultimate_reveal_for", return_value=reveal):
+            with self.assertRaises(UltimateRevealClosed):
+                choose_ultimate(self.sheet, sword.choice_key)
+
     def test_readied_needs_active_ceremony(self) -> None:
         KnownUltimateFactory(character=self.sheet, technique=self.ward, readied=True)
         from world.conditions.models import ConditionInstance
