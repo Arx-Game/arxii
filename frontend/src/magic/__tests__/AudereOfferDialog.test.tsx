@@ -113,6 +113,20 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('renders the reveal framing line when reveal_framing_text is non-empty (#4098)', async () => {
+    renderGate([{ ...OFFER, reveal_framing_text: 'PLACEHOLDER framing' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByTestId('audere-reveal-framing')).toHaveTextContent('PLACEHOLDER framing');
+  });
+
+  it('renders no reveal framing line when reveal_framing_text is empty (#4098)', async () => {
+    renderGate([{ ...OFFER, reveal_framing_text: '' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.queryByTestId('audere-reveal-framing')).not.toBeInTheDocument();
+  });
+
   it('clicking "Break Through" responds with { offer_id, accept: true } and closes on success', async () => {
     const user = userEvent.setup();
     vi.mocked(api.respondToAudere).mockResolvedValue({
