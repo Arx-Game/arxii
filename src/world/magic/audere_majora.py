@@ -812,7 +812,6 @@ def end_audere_majora(character: ObjectDB) -> None:
     Audere Majora's effects are condition-modifier driven and cleared by
     the condition removal itself.
     """
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
     from world.magic.services.ultimates import clear_readied_ultimate  # noqa: PLC0415
@@ -823,7 +822,7 @@ def end_audere_majora(character: ObjectDB) -> None:
     remove_condition(character, template)
 
     # A sheet-less character (NPC) never has a readied pick to clear.
-    sheet = CharacterSheet.objects.filter(character=character).first()
+    sheet = character.character_sheet
     if sheet is not None:
         clear_readied_ultimate(sheet)
 
