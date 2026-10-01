@@ -590,7 +590,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   never a `CharacterTechnique`. Attachment M2Ms: `PathGiftGrant.ultimate_techniques`,
   `WorshippedBeing.ultimate_techniques` (`world.worship`), `CompanionArchetype
   .ultimate_techniques` (`world.companions`). Services
-  (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet, ceremony)` (derives
+  (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet)` (derives
   the reveal on read - owned/owned-known/bond pools, grouped by category, filtered by
   #4097's prerequisite gate), `has_reveal_cards`, `choose_ultimate` (readies a pick
   under `select_for_update`), `readied_ultimate`, `clear_readied_ultimate`,

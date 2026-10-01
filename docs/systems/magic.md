@@ -2213,8 +2213,13 @@ for the full design and rejected alternatives.
 **An ultimate is a flagged `Technique`, never a separate catalog.**
 `Technique.is_ultimate` (bool, indexed) marks it; `Technique.clean()` refuses to flip
 the flag on a technique already sitting in a starter/tradition/item/alt-self pool or
-known by a character, and refuses to add an already-ultimate technique into any of
-those ordinary pools. A character's discovery of one is a `KnownUltimate` row
+known by a character. Keeping an *already*-ultimate technique out of those ordinary
+pools in the first place is a separate, admin-side guard: every pool M2M
+(`PathGiftGrant.starter_techniques`, `TraditionGiftGrant.starter_techniques`,
+`TechniqueGrant.technique`, `AlternateSelfGrant.techniques`) carries
+`limit_choices_to={"is_ultimate": False}`, which narrows the admin picker's options but
+is not itself a `clean()`-time validation a programmatic `.add()` would hit. A
+character's discovery of one is a `KnownUltimate` row
 (`world/magic/models/ultimates.py`) - FKs `character` (CASCADE), `technique`
 (PROTECT), nullable `crossing` (SET_NULL - which Crossing discovered it, null for a
 plain Audere), `discovered_at`, `readied` (bool). Two constraints: one row per
@@ -2245,8 +2250,8 @@ shared guard is `enforce_not_ultimate(technique)`
 (`exceptions.py`), called from both `learn_technique` and `charge_and_learn` ahead of
 GM-fiat too.
 
-**The reveal is computed state, not an offer table.** `ultimate_reveal_for(sheet,
-ceremony) -> UltimateReveal | None` (`world/magic/services/ultimates.py`) derives the
+**The reveal is computed state, not an offer table.** `ultimate_reveal_for(sheet)
+-> UltimateReveal | None` (`world/magic/services/ultimates.py`) derives the
 reveal fresh on every read: owned pools (current Path x major Gift, for a plain Audere;
 the new Path x major Gift, for Audere Majora), owned-known pools (any technique the
 character already knows via `KnownUltimate` whose grant is for a Gift still held as
@@ -2269,11 +2274,15 @@ An undiscovered candidate's identity never reaches the wire - the leak-analysis 
 the spec is enforced structurally by the card shape, not by a serializer omission that
 could regress.
 
-**Choosing readies; it does not cast.** `choose_ultimate(character, choice_key)`
+**Choosing readies; it does not cast.** `choose_ultimate(sheet, choice_key)`
 (`@transaction.atomic`, `select_for_update`) re-resolves the reveal under the lock to
 close a double-submit race (mapping a stale read to `UltimateRevealClosed`), then
-`get_or_create`s the `KnownUltimate` row and sets `readied=True` - clearing any other
-readied row first (the DB constraint backstops this). This is the character's one pick
+`get_or_create`s the `KnownUltimate` row and sets `readied=True`. There is no explicit
+clear-then-set: `ultimate_reveal_for`'s own `_has_readied` gate already returns `None`
+(raising `UltimateRevealClosed`) whenever a readied row already exists, so this call
+site is never reached with one in place, and the `one_readied_ultimate_per_character`
+DB constraint is the backstop against a race that slips past that gate, not the
+mechanism that clears a prior pick. This is the character's one pick
 for the current Audere; it does not cast anything. `readied_ultimate` /
 `clear_readied_ultimate` / `castable_technique_named` round out the read/clear/resolve
 surface; `has_reveal_cards` answers "would accepting Audere show this character
