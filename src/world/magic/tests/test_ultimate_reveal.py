@@ -6,7 +6,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.factories import CompanionFactory
 from world.conditions.factories import ConditionInstanceFactory
 from world.covenants.constants import RoleArchetype
-from world.magic.constants import GiftKind, UltimateCardKind, UltimateSource
+from world.magic.constants import AudereCeremony, GiftKind, UltimateCardKind, UltimateSource
 from world.magic.exceptions import UltimateChoiceUnavailable, UltimateRevealClosed
 from world.magic.factories import (
     AudereThresholdFactory,
@@ -18,7 +18,12 @@ from world.magic.factories import (
     wire_audere_power_multipliers,
 )
 from world.magic.models import KnownUltimate
-from world.magic.services.ultimates import choose_ultimate, readied_ultimate, ultimate_reveal_for
+from world.magic.services.ultimates import (
+    choose_ultimate,
+    clear_readied_ultimate,
+    readied_ultimate,
+    ultimate_reveal_for,
+)
 from world.mechanics.constants import EngagementType
 from world.mechanics.factories import CharacterEngagementFactory
 from world.progression.factories import CharacterPathHistoryFactory
@@ -338,3 +343,60 @@ class ChooseTests(_RevealFixture):
 
         ConditionInstance.objects.filter(target=self.character).delete()
         self.assertIsNone(readied_ultimate(self.sheet))
+
+    def test_category_choice_skips_a_candidate_with_unmet_prerequisites(self) -> None:
+        """Strike (level 6) is the lowest-level SWORD candidate but has an unmet
+        GiftHeldRequirement; the category choice must skip it for Cleave (level 7),
+        the next-lowest eligible candidate (#4098 fix round 1, M3)."""
+        GiftHeldRequirement.objects.create(technique=self.strike, gift=GiftFactory())
+        reveal = ultimate_reveal_for(self.sheet)
+        sword = next(c for c in reveal.groups[0].cards if c.category == RoleArchetype.SWORD)
+        known = choose_ultimate(self.sheet, sword.choice_key)
+        self.assertEqual(known.technique, self.cleave)
+
+    def test_fire_first_discoveries_fires_on_first_pick_not_on_reready(self) -> None:
+        from unittest.mock import patch
+
+        reveal = ultimate_reveal_for(self.sheet)
+        sword = next(c for c in reveal.groups[0].cards if c.category == RoleArchetype.SWORD)
+        with patch("world.achievements.discovery.fire_first_discoveries") as mock_fire:
+            known = choose_ultimate(self.sheet, sword.choice_key)
+        mock_fire.assert_called_once()
+        called_sheet, called_gained = mock_fire.call_args.args
+        self.assertEqual(called_sheet.pk, self.sheet.pk)
+        self.assertEqual(called_gained, [self.strike])
+
+        clear_readied_ultimate(self.sheet)
+        reveal2 = ultimate_reveal_for(self.sheet)
+        known_card = next(c for c in reveal2.groups[0].cards if c.kind == UltimateCardKind.KNOWN)
+        with patch("world.achievements.discovery.fire_first_discoveries") as mock_fire2:
+            reready = choose_ultimate(self.sheet, known_card.choice_key)
+        mock_fire2.assert_not_called()
+        self.assertEqual(reready.pk, known.pk)
+
+
+class ChooseMajoraTests(_RevealFixture):
+    def test_majora_pick_sets_crossing(self) -> None:
+        """Choosing during Audere Majora stamps the character's most recent
+        AudereMajoraCrossing receipt onto the KnownUltimate row (#4098 fix round 1,
+        M3)."""
+        from world.classes.factories import PathFactory
+        from world.magic.audere_majora import AudereMajoraCrossing
+        from world.magic.factories import ensure_audere_majora_threshold
+
+        ConditionInstanceFactory(target=self.character, condition=self.majora)
+        threshold = ensure_audere_majora_threshold(boundary_level=97)
+        path = PathFactory()
+        crossing = AudereMajoraCrossing.objects.create(
+            character_sheet=self.sheet,
+            threshold=threshold,
+            chosen_path=path,
+            level_before=4,
+            level_after=5,
+        )
+
+        reveal = ultimate_reveal_for(self.sheet)
+        self.assertEqual(reveal.ceremony, AudereCeremony.AUDERE_MAJORA)
+        key = reveal.groups[0].cards[0].choice_key
+        known = choose_ultimate(self.sheet, key)
+        self.assertEqual(known.crossing, crossing)
