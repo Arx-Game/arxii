@@ -911,7 +911,7 @@ class ItemRequirement(AbstractClassLevelRequirement):
 
 
 class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
-    """Requirement for knowing >= N techniques of the character's MAJOR gift.
+    """Requirement for knowing >= N techniques of a MAJOR gift.
 
     Level-2 gate (#2440 ruling 4): CG hands out only 1-3 starter picks from
     the (Path x Gift) pool (1 + Tradition Training rank); the design intent
@@ -922,9 +922,13 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
     would be a moving, unreachable target. ``minimum_techniques`` defaults
     to 3, matching CG's upper end.
 
-    Only the character's single MAJOR gift counts (``Gift.kind ==
-    GiftKind.MAJOR``, resolved via ``CharacterGift`` — CG links exactly
-    one). Minor-gift techniques never count toward this gate.
+    ``gift`` named (#4097): only that gift's technique count is read
+    (lineage-aware via ``resolve_owned_gift``) — a character holding a
+    different major gift, even at a higher count, does not satisfy it.
+    ``gift`` blank: any single held MAJOR gift (``Gift.kind ==
+    GiftKind.MAJOR``, resolved via ``CharacterGift``) reaching the count
+    passes — counts are never summed across multiple major gifts. Minor-gift
+    techniques never count toward this gate either way.
     """
 
     minimum_techniques = models.PositiveSmallIntegerField(
@@ -943,29 +947,54 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
     )
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
-        """Count CharacterTechnique rows whose technique belongs to the MAJOR gift."""
+        """Count CharacterTechnique rows for one major gift (never summed across gifts)."""
         from world.magic.constants import GiftKind  # noqa: PLC0415
         from world.magic.models import CharacterGift  # noqa: PLC0415
         from world.magic.services.gift_acquisition import (  # noqa: PLC0415
             count_techniques_for_gift,
+            resolve_owned_gift,
         )
 
         sheet = character.sheet_data
-        major_link = CharacterGift.objects.filter(
-            character=sheet, gift__kind=GiftKind.MAJOR
-        ).first()
-        if major_link is None:
+        minimum = cast(int, self.minimum_techniques)
+
+        if self.gift_id is not None:
+            owned = resolve_owned_gift(sheet, self.gift)
+            if owned is None:
+                return (
+                    False,
+                    f"Need {minimum} techniques of {self.gift.name}, don't hold it",
+                )
+            count = count_techniques_for_gift(sheet, owned)
+            if count >= minimum:
+                return True, f"Knows {count} techniques of {self.gift.name}"
             return (
                 False,
-                f"Need {self.minimum_techniques} techniques of your major gift, have no major gift",
+                f"Need {minimum} techniques of {self.gift.name}, have {count}",
             )
 
-        count = count_techniques_for_gift(sheet, major_link.gift)
-        if count >= cast(int, self.minimum_techniques):
-            return True, f"Knows {count} techniques of {major_link.gift.name}"
+        major_links = CharacterGift.objects.filter(
+            character=sheet, gift__kind=GiftKind.MAJOR
+        ).select_related("gift")
+        if not major_links:
+            return (
+                False,
+                f"Need {minimum} techniques of your major gift, have no major gift",
+            )
+
+        best_count = -1
+        best_name = ""
+        for link in major_links:
+            count = count_techniques_for_gift(sheet, link.gift)
+            if count >= minimum:
+                return True, f"Knows {count} techniques of {link.gift.name}"
+            if count > best_count:
+                best_count = count
+                best_name = link.gift.name
+
         return (
             False,
-            f"Need {self.minimum_techniques} techniques of {major_link.gift.name}, have {count}",
+            f"Need {minimum} techniques of {best_name}, have {best_count}",
         )
 
     def __str__(self) -> str:
@@ -989,6 +1018,23 @@ class GiftHeldRequirement(AbstractUnlockRequirement):
         help_text="Gift required; blank means any held gift satisfies it.",
     )
 
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Check if character holds the named gift (lineage-aware) or any gift."""
+        from world.magic.models import CharacterGift  # noqa: PLC0415
+        from world.magic.services.gift_acquisition import resolve_owned_gift  # noqa: PLC0415
+
+        sheet = character.sheet_data
+
+        if self.gift_id is None:
+            if CharacterGift.objects.filter(character=sheet).exists():
+                return True, "Holds a gift"
+            return False, "Need to hold a gift, have none"
+
+        owned = resolve_owned_gift(sheet, self.gift)
+        if owned is not None:
+            return True, f"Holds {self.gift.name}"
+        return False, f"Need to hold {self.gift.name}"
+
     def __str__(self) -> str:
         if self.gift_id is not None:
             return f"Gift Held: {self.gift.name}"
@@ -1004,6 +1050,18 @@ class TechniqueKnownRequirement(AbstractUnlockRequirement):
         related_name="required_by_requirements",
         help_text="Technique the character must already know.",
     )
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Check if character already knows the required technique."""
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        sheet = character.sheet_data
+        known = CharacterTechnique.objects.filter(
+            character=sheet, technique_id=self.required_technique_id
+        ).exists()
+        if known:
+            return True, f"Knows {self.required_technique.name}"
+        return False, f"Need to know {self.required_technique.name}"
 
     def __str__(self) -> str:
         return f"Technique Known: {self.required_technique.name}"

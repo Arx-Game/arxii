@@ -99,6 +99,60 @@ class MajorGiftTechniqueRequirementTests(TestCase):
         assert met is False
         assert "no major gift" in message
 
+    def test_blank_gift_two_major_gifts_the_one_reaching_threshold_counts(self) -> None:
+        # self.major_gift (from setUp) holds 2; a second major gift holds 3.
+        self._grant_major_techniques(2)
+        second_major_gift = GiftFactory(kind=GiftKind.MAJOR)
+        CharacterGiftFactory(character=self.sheet, gift=second_major_gift)
+        for _ in range(3):
+            technique = TechniqueFactory(gift=second_major_gift)
+            CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        req = MajorGiftTechniqueRequirement.objects.create(
+            class_level_unlock=self.unlock, minimum_techniques=3
+        )
+
+        met, message = req.is_met_by_character(self.character)
+
+        assert met is True
+        assert "Knows 3" in message
+
+    def test_blank_gift_two_major_gifts_neither_reaching_threshold_never_summed(self) -> None:
+        # self.major_gift (from setUp) holds 2; a second major gift also holds
+        # 2 — the combined total (4) must never satisfy the gate.
+        self._grant_major_techniques(2)
+        second_major_gift = GiftFactory(kind=GiftKind.MAJOR)
+        CharacterGiftFactory(character=self.sheet, gift=second_major_gift)
+        for _ in range(2):
+            technique = TechniqueFactory(gift=second_major_gift)
+            CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        req = MajorGiftTechniqueRequirement.objects.create(
+            class_level_unlock=self.unlock, minimum_techniques=3
+        )
+
+        met, _message = req.is_met_by_character(self.character)
+
+        assert met is False
+
+    def test_named_gift_only_that_gift_counts(self) -> None:
+        # self.major_gift holds 2; a second major gift holds 5. Naming
+        # self.major_gift means only its 2 count.
+        self._grant_major_techniques(2)
+        other_major_gift = GiftFactory(kind=GiftKind.MAJOR)
+        CharacterGiftFactory(character=self.sheet, gift=other_major_gift)
+        for _ in range(5):
+            technique = TechniqueFactory(gift=other_major_gift)
+            CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        req = MajorGiftTechniqueRequirement.objects.create(
+            class_level_unlock=self.unlock,
+            minimum_techniques=3,
+            gift=self.major_gift,
+        )
+
+        met, message = req.is_met_by_character(self.character)
+
+        assert met is False
+        assert "have 2" in message
+
 
 class MajorGiftTechniqueRequirementRegistryWiringTests(TestCase):
     """Proves the type is actually wired into the hardcoded requirement_types list.
