@@ -25,6 +25,7 @@ class AdminConfig(AppConfig):
 
         _patch_external_admins()
         _attach_credit_admin_extras()
+        _enable_save_as_new()
 
 
 def _patch_external_admins():
@@ -93,3 +94,25 @@ def _attach_credit_admin_extras():
             instance.list_filter = [*instance.list_filter, CreditStatusListFilter]
         if credit_status not in instance.list_display:
             instance.list_display = [*instance.list_display, credit_status]
+
+
+def _enable_save_as_new():
+    """Give every first-party change form a "Save as new" button (#4094).
+
+    Django's third submit button is "Save and add another", which opens a blank
+    form; for the common chore of entering rows that differ by one field (a ladder
+    of ranks, a set of particles, variants of a template) that is a full re-entry
+    each time. ``save_as`` swaps it for "Save as new", which posts the form as it
+    stands, inlines included, and creates a new row from it. Set on the registered
+    instances for ``arxii`` models only, at ready() with the other registry-wide
+    extras; Evennia's and Django's own admins keep their defaults. An admin that
+    refuses adds (``has_add_permission`` False) never shows the button, since
+    Django gates it on add permission.
+    """
+    from django.contrib import admin  # noqa: PLC0415
+
+    from world.apps import ArxiiConfig  # noqa: PLC0415
+
+    for model, instance in admin.site._registry.items():  # noqa: SLF001
+        if model._meta.app_label == ArxiiConfig.label:  # noqa: SLF001
+            instance.save_as = True

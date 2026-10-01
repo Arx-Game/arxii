@@ -84,6 +84,17 @@ services, the inline tickbox, the bulk action) is still refused.
   HTTP views, the refusals, the inline link, the two pages). Decision record:
   ADR-0326.
 
+### Save as new on every change form (#4094)
+
+`web/admin/apps.py:_enable_save_as_new` sets `save_as = True` on every registered
+admin for an `arxii` model at ready(), beside the other registry-wide extras. Django
+then swaps the change form's "Save and add another" for **"Save as new"**: the form is
+posted as it stands, inlines included, and a new row is made from it, so entering rows
+that differ by one field is "change the field, Save as new" (Arx I had it on). The add
+form keeps "Save and add another". An admin whose `has_add_permission` is False never
+shows the button; Evennia's and Django's own admins keep their defaults. Tests:
+`tests/test_save_as_new.py`.
+
 ### Load Conflict Resolution (#3017)
 
 **Purpose:** the admin-side counterpart to the credited-row load guard in
