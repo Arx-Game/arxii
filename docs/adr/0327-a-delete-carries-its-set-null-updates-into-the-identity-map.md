@@ -25,6 +25,11 @@ discards whole caches that other holders still reference instead of correcting t
 a `post_delete` signal (ADR-0009); (e) making the base manager guarded, which changes
 forward-FK access for every model to fix one write. Inside an atomic block the delete
 can still roll back (the reviewed delete removes blocking rows, then refuses the root),
-so there the affected referrers are evicted from the identity map rather than nulled,
-and the next read loads whatever the database holds once the transaction settles.
-Related: ADR-0008 (SharedMemoryModel everywhere), ADR-0326.
+so there the affected referrers are evicted from the identity map at once and nulled in
+place only on commit (`transaction.on_commit`). Eviction makes every fresh read load the
+row; the commit callback corrects copies already held, such as a `Title` cached in
+another row's field cache, so `claim.title.house` cannot reach the gone house; on
+rollback it never runs and the held copy's old id is right again. The clear runs after
+the SQL, never before: only `collect()` knows the cascaded rows, and a read between an
+early eviction and the `UPDATE` would cache the stale row again. Related: ADR-0008
+(SharedMemoryModel everywhere), ADR-0326.

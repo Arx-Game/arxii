@@ -21,26 +21,43 @@ Inside a transaction the delete can still roll back (the admin's reviewed
 delete removes blocking rows, then refuses the root and undoes them all), and a
 referrer nulled in memory would then write NULL over its restored link on its
 next ``save()``. So inside an atomic block the affected referrers are evicted
-from the identity map instead, and the next read loads whatever the database
-holds once the transaction settles. Outside one they are nulled in place.
+from the identity map at once, which makes every fresh read load the row, and
+are nulled in place only on commit. Eviction alone would leave a copy someone
+already holds stale for good: a cached ``x`` keeps its ``Title`` in its own
+field cache, so ``x.title.house`` would still reach the gone house. The commit
+callback corrects that copy; on rollback it never runs, and the held copy's old
+id is right again. Outside an atomic block the referrers are nulled in place
+straight away. The clear runs after the SQL, never before: only ``collect()``
+knows the cascaded rows, and a read between an early eviction and the
+``UPDATE`` would cache the stale row again.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import partial
 from typing import Any
 
-from django.db import connections
+from django.db import connections, transaction
 from django.db.models import SET_NULL, Model
 from django.db.models.deletion import Collector
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 
+def _null_links(objs: list[Any], attname: str, deleted: set[Any]) -> None:
+    """Null ``attname`` on each object still pointing at a deleted row."""
+    for obj in objs:
+        if obj.__dict__.get(attname) in deleted:
+            setattr(obj, attname, None)
+
+
 def clear_set_null_referrers(
-    model: type[Model], pks: Iterable[Any], *, evict: bool = False
+    model: type[Model], pks: Iterable[Any], *, using: str | None = None
 ) -> None:
-    """Null the link on every cached row that pointed at a deleted ``model`` row,
-    or with ``evict`` drop those rows from the identity map instead.
+    """Null the link on every cached row that pointed at a deleted ``model`` row.
+
+    With ``using`` inside an atomic block, evict those rows from the identity map
+    now and null them on commit instead (see the module docstring).
 
     Only ``SET_NULL`` links on identity-mapped referrers are touched; those are
     the only ones whose database value changed without the cache seeing it.
@@ -51,6 +68,7 @@ def clear_set_null_referrers(
     deleted = {pk for pk in pks if pk is not None}
     if not deleted:
         return
+    deferred = using is not None and connections[using].in_atomic_block
     for rel in model._meta.related_objects:  # noqa: SLF001 - Django's model introspection API
         if rel.on_delete is not SET_NULL:
             continue
@@ -58,13 +76,19 @@ def clear_set_null_referrers(
         if not issubclass(referrer, SharedMemoryModel):
             continue
         attname = rel.field.attname
-        for obj in referrer.get_all_cached_instances():
-            if obj.__dict__.get(attname) not in deleted:
-                continue
-            if evict:
-                obj.flush_from_cache(force=True)
-            else:
-                setattr(obj, attname, None)
+        stale = [
+            obj
+            for obj in referrer.get_all_cached_instances()
+            if obj.__dict__.get(attname) in deleted
+        ]
+        if not stale:
+            continue
+        if not deferred:
+            _null_links(stale, attname, deleted)
+            continue
+        for obj in stale:
+            obj.flush_from_cache(force=True)
+        transaction.on_commit(partial(_null_links, stale, attname, deleted), using=using)
 
 
 class IdentityMapCollector(Collector):
@@ -74,7 +98,6 @@ class IdentityMapCollector(Collector):
         # The base delete nulls each collected instance's pk, so read them first.
         deleted = {model: [obj.pk for obj in objs] for model, objs in self.data.items()}
         result = super().delete()
-        evict = connections[self.using].in_atomic_block
         for model, pks in deleted.items():
-            clear_set_null_referrers(model, pks, evict=evict)
+            clear_set_null_referrers(model, pks, using=self.using)
         return result
