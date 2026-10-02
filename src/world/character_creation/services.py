@@ -1696,7 +1696,6 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
                 points=points,
                 notes=notes,
                 status=GoalStatus.ACTIVE,
-                is_secret=bool(g.get("is_secret", False)),
             )
         )
 

@@ -226,8 +226,8 @@ export interface CharacterSheetPersona {
 
 /**
  * Mirrors `world.character_sheets.types.GoalEntry` (#3621) — one numbered goal.
- * The list arrives empty when the viewer's access does not meet `goals_visibility`,
- * which is indistinguishable from "wrote none"; both render as no goals.
+ * The list arrives empty for anyone but the owner and staff (#4106), which is
+ * indistinguishable from "wrote none"; both render as no goals.
  */
 export interface CharacterSheetGoal {
   domain: string;
@@ -235,8 +235,6 @@ export interface CharacterSheetGoal {
   ordinal: number;
   points: number;
   notes: string;
-  /** Kept to the character (#4106): only ever true in the owner's or staff's payload. */
-  is_secret: boolean;
 }
 
 /** Mirrors `world.character_sheets.types.IdNameRef`. */

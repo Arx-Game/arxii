@@ -645,12 +645,9 @@ class CharacterSheet(SharedMemoryModel):
         default=SheetVisibility.SELF,
         help_text="Who can see this character's magic.",
     )
-    goals_visibility = models.CharField(
-        max_length=10,
-        choices=SheetVisibility.choices,
-        default=SheetVisibility.SELF,
-        help_text="Who can see this character's goals.",
-    )
+    # Goals carry no tier (#4106): they are the owner's and staff's, full stop. Showing a
+    # private part of a sheet to a chosen reader is a per-viewer grant still to be
+    # designed, not a tier a player opens for everyone at once.
     # #3906 — the only one of these that does NOT default to SELF. Apostate's ruling:
     # standing is friends-by-default with public as the opt-in, because what a house
     # thinks of you is something your friends would know, unlike your stats or goals.

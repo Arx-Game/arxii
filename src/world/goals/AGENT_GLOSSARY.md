@@ -4,10 +4,6 @@
 One thing a character is after, in the player's words, placed in a goal domain with points on it (and a status), where the invested points add as a situational bonus on checks that align with the goal. Characters distribute a fixed pool (30 points) across any number of goals in any domains; the domain bonus sums across goals sharing it (#3621).
 _Avoid_: objective, ambition, aspiration
 
-**Secret Goal** (`CharacterGoal.is_secret`, #4106):
-A goal kept to the character: the sheet shows it to the owner and staff only, whatever the goals section's visibility tier says, because the mark is applied in the goal builder before the tier is consulted. It still costs points and takes an ordinal. Marked at Final Touches ("Keep to yourself") and editable after through the goals endpoint. A journal entry keeps its own `is_public`; the goal is not named by the entry.
-_Avoid_: private goal (the section tier is "private"; this is per goal), hidden goal.
-
 **Goal Horizon**:
 Short term or long term (`GoalHorizon`). Goals are numbered within their horizon in the order added (`CharacterGoal.ordinal`), so play can name "my third short term goal" or "goal 1 under long term" (#3621).
 _Avoid_: goal tier, goal length

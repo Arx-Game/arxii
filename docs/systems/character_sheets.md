@@ -16,8 +16,10 @@ The **narrative bio** (concept, real_concept, quote, the three Actor's Sheet ans
 
 Each mechanical sheet section carries a player-controlled visibility tier
 (`SheetVisibility`: `SELF` / `FRIENDS` / `PUBLIC`) — `stats_visibility`, `skills_visibility`,
-`magic_visibility`, `goals_visibility` on `CharacterSheet`, defaulting to `SELF` (the #1109
-"private by default" behaviour). The resolver asks
+`magic_visibility` on `CharacterSheet` (and `standing_visibility`, #3906), defaulting to
+`SELF` (the #1109 "private by default" behaviour). Goals carry no tier since #4106: they are
+the owner's and staff's, and showing a private part of a sheet to a chosen reader is a
+per-viewer grant still to be designed, not a tier. The resolver asks
 `CharacterSheet.visibility_field_names()` which tiers exist rather than listing them —
 #3923: #3906 added a fifth tier while `_viewer_access_level` kept its own hand-written
 four, so on a default sheet it short-circuited to the PUBLIC rank without reading the
@@ -63,7 +65,7 @@ trusted-partner list belongs to the account, not to a character.
 
 **Gating is render-or-vanish.** A block a viewer may not read is absent, and the page
 keeps its shape for a stranger, a friend and the owner alike — no empty-state cards. The
-goals band and the abilities band are gated by the existing `goals_visibility` /
+goals band is the owner's and staff's (#4106) and the abilities band is gated by the
 `stats_visibility` / `skills_visibility` tiers, which the serializer already enforces by
 emptying those sections; the frontend renders what it is handed and never re-implements a
 tier. A viewer who gets neither band is offered a rumor about the character in their

@@ -1,6 +1,7 @@
 """Player-controlled section visibility tiers (#1271).
 
-Each mechanical sheet section (stats/skills/magic/goals) carries a SELF/FRIENDS/PUBLIC tier.
+Each mechanical sheet section (stats/skills/magic; goals carry none since #4106)
+carries a SELF/FRIENDS/PUBLIC tier.
 SELF is the default (owner + staff only — the #1269 behaviour); a player can open a section to
 their allow list (FRIENDS) or to everyone (PUBLIC).
 """

@@ -1201,13 +1201,11 @@ _GOALS_SELECT_RELATED: tuple[str, ...] = ()
 _GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
-def _build_goals(sheet: CharacterSheet, *, privileged: bool) -> list[GoalEntry]:
+def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     """Build the goals section from the sheet's cached goal rows.
 
-    A secret goal (#4106) is the character's own: it is dropped here for every viewer
-    but the owner or staff, before the section's visibility tier is even consulted, so
-    opening the goals section to friends or the public never shows it. The owner's
-    payload carries the mark so the page can show it.
+    The caller decides whether the viewer gets the section at all (the owner and
+    staff only, #4106); this builds every row for one who does.
     """
     return [
         GoalEntry(
@@ -1216,10 +1214,8 @@ def _build_goals(sheet: CharacterSheet, *, privileged: bool) -> list[GoalEntry]:
             ordinal=goal.ordinal,
             points=goal.points,
             notes=goal.notes,
-            is_secret=goal.is_secret,
         )
         for goal in sheet.goal_rows
-        if privileged or not goal.is_secret
     ]
 
 
@@ -2059,7 +2055,10 @@ class CharacterSheetSerializer(serializers.Serializer):
         show_stats = _section_visible(access, sheet.stats_visibility)
         show_skills = _section_visible(access, sheet.skills_visibility)
         show_magic = _section_visible(access, sheet.magic_visibility)
-        show_goals = _section_visible(access, sheet.goals_visibility)
+        # Goals have no tier (#4106): the owner's and staff's, never a friend's or the
+        # public's. A per-viewer grant for showing a private part of a sheet is its own
+        # design question, not a tier.
+        show_goals = privileged
         # #3906 — the only tier defaulting to FRIENDS rather than SELF.
         show_standing = _section_visible(access, sheet.standing_visibility)
         # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real
@@ -2094,7 +2093,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             "magic": _build_magic(sheet, privileged=privileged) if show_magic else None,
             # Story reads from the presented face's profile (cover identities show their own).
             "story": _build_story(sheet=sheet, bio_profile=bio_profile, privileged=privileged),
-            "goals": _build_goals(sheet, privileged=privileged) if show_goals else [],
+            "goals": _build_goals(sheet) if show_goals else [],
             # #3906 — Ties' rail. Standing rides its own tier; covenant roles are
             # public, the way the Titles block beside them has always been.
             "standing": _build_standing(active, visible=show_standing),

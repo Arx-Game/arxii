@@ -1,1 +1,1 @@
-0171_goal_secret_and_membership_favor
+0171_membership_favor_and_goals_untiered

@@ -147,43 +147,6 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     expect(screen.getAllByLabelText('Goal 2')).toHaveLength(2);
   });
 
-  it('marks a goal Secret and saves it in the draft (#4106)', async () => {
-    const user = userEvent.setup();
-    let save: (() => Promise<boolean>) | null = null;
-    const draft = createMockDraft({
-      draft_data: {
-        goals: [{ domain_id: 1, notes: 'Find out who did it', points: 5, horizon: 'long_term' }],
-      },
-    });
-    renderWithCharacterCreationProviders(
-      <FinalTouchesStage
-        draft={draft}
-        onRegisterBeforeLeave={(fn) => {
-          save = fn;
-          return undefined;
-        }}
-      />
-    );
-    const mark = screen.getByRole('button', { name: 'Secret: goal 1' });
-    expect(mark).toHaveAttribute('aria-pressed', 'false');
-    await user.click(mark);
-    expect(screen.getByRole('button', { name: 'Secret: goal 1' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    );
-    expect(save).not.toBeNull();
-    await save!();
-    expect(mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          draft_data: expect.objectContaining({
-            goals: [expect.objectContaining({ notes: 'Find out who did it', is_secret: true })],
-          }),
-        }),
-      })
-    );
-  });
-
   it('prices an offered group at each degree and writes the ledger line', async () => {
     const user = userEvent.setup();
     const draft = createMockDraft({ enemy_offers: [rouault, republic] });

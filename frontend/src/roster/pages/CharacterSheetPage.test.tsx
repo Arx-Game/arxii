@@ -453,40 +453,4 @@ describe('CharacterSheetPage', () => {
     expect(panel).toHaveAttribute('data-tie-count', '1');
     expect(panel).toHaveAttribute('data-ap', '12');
   });
-
-  it("marks the owner's secret goal, and only that one (#4106)", () => {
-    // The server already dropped secret goals for anyone else, so the band renders
-    // whatever arrives and marks the row whose flag is set.
-    setEntry(ENTRY);
-    setOwnership(true);
-    mockUseCharacterSheetQuery.mockReturnValue({
-      data: makeSheet({
-        goals: [
-          {
-            domain: 'Ambition',
-            horizon: 'long_term',
-            ordinal: 1,
-            points: 5,
-            notes: 'Prove worthy of my house',
-            is_secret: false,
-          },
-          {
-            domain: 'Family',
-            horizon: 'short_term',
-            ordinal: 1,
-            points: 5,
-            notes: 'Find out what happened to my sister',
-            is_secret: true,
-          },
-        ],
-      }),
-    } as unknown as ReturnType<typeof useCharacterSheetQuery>);
-    mountSheet();
-    const marks = screen.getAllByTestId('goal-secret');
-    expect(marks).toHaveLength(1);
-    expect(marks[0].closest('li')).toHaveTextContent('Find out what happened to my sister');
-    expect(screen.getByText('Prove worthy of my house').closest('li')).not.toContainElement(
-      marks[0]
-    );
-  });
 });

@@ -315,9 +315,6 @@ class GoalEntry(TypedDict):
     ordinal: int
     points: int
     notes: str
-    #: #4106: only ever True in the owner's or a privileged reader's own payload; a
-    #: secret goal is dropped from everyone else's before the section is built.
-    is_secret: bool
 
 
 class EnemyEntry(TypedDict):

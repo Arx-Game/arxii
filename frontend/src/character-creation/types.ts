@@ -812,8 +812,6 @@ export interface DraftGoal {
   points: number;
   /** Short term or long term (#3621); numbered within the horizon in list order. */
   horizon: GoalHorizon;
-  /** Kept to the character (#4106): the sheet shows it to the owner and staff only. */
-  is_secret?: boolean;
 }
 
 /** The draft's enemy pick (#3621): a person or a group, at a degree. */

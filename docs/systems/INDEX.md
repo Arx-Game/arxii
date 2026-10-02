@@ -1724,7 +1724,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 ### Goals
 Goal domain allocation and journal-based XP progression.
 
-- **Models:** `CharacterGoal` (with `horizon` + `ordinal`, #3621: any number per domain, numbered within short and long term, bonus summed; `is_secret`, #4106: kept to the character, dropped in the sheet's goal builder for every reader but the owner or staff; read off the sheet through the `goal_rows` handler, ADR-0278), `GoalJournal`, `GoalRevision`
+- **Models:** `CharacterGoal` (with `horizon` + `ordinal`, #3621: any number per domain, numbered within short and long term, bonus summed; read off the sheet through the `goal_rows` handler, ADR-0278; the owner's and staff's only, #4106 dropped the `goals_visibility` tier), `GoalJournal`, `GoalRevision`
 - **Goal Domains:** Stored as `ModifierTarget(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
 - **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`

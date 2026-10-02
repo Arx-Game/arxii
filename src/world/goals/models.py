@@ -86,13 +86,6 @@ class CharacterGoal(RelatedCacheClearingMixin, SharedMemoryModel):
         default=GoalStatus.ACTIVE,
         help_text="Current status of this goal.",
     )
-    # #4106: the character's own aim. Shown only to the owner and privileged readers,
-    # whatever the sheet's goals_visibility says; it still costs points and takes an
-    # ordinal like any goal. The journal keeps its own per-entry is_public.
-    is_secret = models.BooleanField(
-        default=False,
-        help_text="Kept to the character: hidden from every reader but the owner and staff.",
-    )
     completed_at = models.DateTimeField(
         null=True,
         blank=True,

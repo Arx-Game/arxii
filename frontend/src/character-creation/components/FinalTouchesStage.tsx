@@ -552,19 +552,6 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
                     }
                   />
                 </Field>
-                <button
-                  type="button"
-                  className="entry-mark"
-                  aria-pressed={kg.goal.is_secret === true}
-                  aria-label={`Secret: goal ${index + 1}`}
-                  onClick={() => patchGoal(kg.key, { is_secret: !kg.goal.is_secret })}
-                  data-testid={`goal-${kg.key}-secret`}
-                >
-                  <span className="mark-box" aria-hidden="true">
-                    {kg.goal.is_secret ? '✓' : ''}
-                  </span>
-                  Secret
-                </button>
                 <button type="button" className="btn-quiet" onClick={() => removeGoal(kg.key)}>
                   Remove
                 </button>

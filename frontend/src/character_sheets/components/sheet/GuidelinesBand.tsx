@@ -4,9 +4,9 @@
  * These are the likes/dislikes/fears block every OC reference sheet carries, and Dan
  * ruled them private: a stranger should learn what a character would never do by
  * playing with them, or hear a version of it as rumor, not read it off a page. The
- * server already enforces that — `goals` arrives empty when the viewer's access does
- * not meet `goals_visibility` — so this component renders whatever it is handed and
- * never re-implements the tier client-side.
+ * server already enforces that — `goals` arrives empty for anyone but the owner and
+ * staff (#4106) — so this component renders whatever it is handed and never
+ * re-implements the gate client-side.
  *
  * Six prompts in a three-column grid keeps the band short even when every one is
  * answered, which is why they moved out of the front page's middle column.
@@ -39,16 +39,7 @@ function GoalsPrompt({ question, goals }: { question: string; goals: CharacterSh
       <span className="refsheet-prompt-q">{question}</span>
       <ol className="refsheet-prompt-a m-0 list-decimal pl-5">
         {goals.map((goal) => (
-          <li key={`${goal.horizon}-${goal.ordinal}`}>
-            {goal.notes || goal.domain}
-            {/* The server drops secret goals for every other reader (#4106), so the
-                mark only ever shows the owner which of their own goals is kept. */}
-            {goal.is_secret && (
-              <span className="refsheet-note ml-2 whitespace-nowrap" data-testid="goal-secret">
-                secret
-              </span>
-            )}
-          </li>
+          <li key={`${goal.horizon}-${goal.ordinal}`}>{goal.notes || goal.domain}</li>
         ))}
       </ol>
     </div>
@@ -62,7 +53,7 @@ export function GuidelinesBand({ block, goals }: GuidelinesBandProps) {
   return (
     <Band
       title="Goals and guidelines"
-      note="Yours, your friends', or everyone's. Strangers learn these in play, or hear a version as rumor."
+      note="Goals are yours and staff's. Strangers learn the rest in play, or hear a version as rumor."
     >
       <div className="refsheet-columns-3">
         <Prompt question="They would never" answer={block.never_do} />

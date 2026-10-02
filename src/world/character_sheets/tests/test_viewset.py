@@ -1695,7 +1695,6 @@ class TestGoalsSection(TestCase):
                 "ordinal",
                 "points",
                 "notes",
-                "is_secret",
             }
 
     def test_goal_entry_values(self) -> None:
@@ -2365,9 +2364,9 @@ class TestStandingAndCovenantSections(TestCase):
         assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
         assert [row["organization"] for row in standing["reputations"]] == ["House du Verane"]
 
-    def test_a_secret_goal_is_the_owners_alone_whatever_the_section_tier_says(self) -> None:
-        """#4106: the mark is applied in the goal builder before the tier is consulted, so
-        opening the goals section to friends or the public never shows a secret goal."""
+    def test_goals_are_the_owners_and_staffs_whoever_else_is_allowed(self) -> None:
+        """#4106: goals carry no tier. The owner and staff read them; a friend on the
+        allow list, who meets every FRIENDS tier the sheet has, gets none."""
         from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
 
         domain = GoalDomainFactory(name="Mastery")
@@ -2375,26 +2374,16 @@ class TestStandingAndCovenantSections(TestCase):
             character=self.sheet, domain=domain, notes="Prove worthy", points=5, ordinal=1
         )
         CharacterGoalFactory(
-            character=self.sheet,
-            domain=domain,
-            notes="Find out who did it",
-            points=5,
-            ordinal=2,
-            is_secret=True,
+            character=self.sheet, domain=domain, notes="Find out who did it", points=5, ordinal=2
         )
-        self.sheet.goals_visibility = SheetVisibility.PUBLIC
-        self.sheet.save(update_fields=["goals_visibility"])
         PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
 
         owner_goals = self._payload(self.player)["goals"]
         assert [g["notes"] for g in owner_goals] == ["Prove worthy", "Find out who did it"], (
             owner_goals
         )
-        assert [g["is_secret"] for g in owner_goals] == [False, True]
         for other in (self.friend, self.stranger):
-            goals = self._payload(other)["goals"]
-            assert [g["notes"] for g in goals] == ["Prove worthy"]
-            assert goals[0]["is_secret"] is False
+            assert self._payload(other)["goals"] == []
 
     def test_a_houses_verdict_rides_the_standing_entry(self) -> None:
         """#4106: favor shows as its label beside the title, and the default shows nothing."""
@@ -3076,12 +3065,12 @@ class TestPrefetchCompleteness(TestCase):
 
         sheet = self._get_sheet()
         with self.assertNumQueries(1):
-            _build_goals(sheet, privileged=True)
+            _build_goals(sheet)
         with self.assertNumQueries(0):
-            _build_goals(sheet, privileged=True)
-        before = len(_build_goals(sheet, privileged=True))
+            _build_goals(sheet)
+        before = len(_build_goals(sheet))
         CharacterGoalFactory(character=sheet, notes="A new aim", points=1)
-        self.assertEqual(len(_build_goals(sheet, privileged=True)), before + 1)
+        self.assertEqual(len(_build_goals(sheet)), before + 1)
 
     def test_personas_zero_queries(self) -> None:
         sheet = self._get_sheet()
