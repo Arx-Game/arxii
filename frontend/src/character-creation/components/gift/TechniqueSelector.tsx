@@ -9,9 +9,11 @@
  */
 
 import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { CodexLine, Entry, EntryDoors, EntryList } from '../../folio';
 import {
+  characterCreationKeys,
   useCGExplanations,
   useCGTechniqueOptions,
   usePersonalizationOptions,
@@ -58,6 +60,7 @@ function nextSelection(
 
 export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
   const updateDraft = useUpdateDraft();
+  const queryClient = useQueryClient();
   const { data: options, isLoading } = useCGTechniqueOptions(
     draft.id,
     giftId,
@@ -109,8 +112,14 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
     if (isSelected) {
       // Deselecting: drop this technique's "make it yours" picks in the same
       // write (plan fork 15) — a deselected technique needs no personalization UI.
-      const { [String(techniqueId)]: _dropped, ...rest } =
-        draft.draft_data.technique_personalizations ?? {};
+      // Built from the freshest cached draft, not this render's `draft` prop
+      // (#4099 final fix): PersonalizationPanel can write another technique's
+      // pick into the cache after this component's last render, and building
+      // from the stale prop would silently drop it from this write, the same
+      // race PersonalizationPanel's own `write` already guards against.
+      const cached = queryClient.getQueryData<CharacterDraft>(characterCreationKeys.draft());
+      const latestPersonalizations = (cached ?? draft).draft_data.technique_personalizations ?? {};
+      const { [String(techniqueId)]: _dropped, ...rest } = latestPersonalizations;
       draftData.technique_personalizations = rest;
     }
     updateDraft.mutate({

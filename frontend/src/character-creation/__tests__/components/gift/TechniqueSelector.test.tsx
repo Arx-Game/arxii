@@ -166,6 +166,67 @@ describe('TechniqueSelector', () => {
     });
   });
 
+  it('deselecting one technique preserves another pick that landed in the cache after this render (#4099 final fix)', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({
+      id: 1,
+      selected_tradition: mockTradition,
+      starting_technique_picks: 2,
+      draft_data: {
+        selected_technique_ids: [10, 11],
+        technique_personalizations: {},
+      },
+    });
+
+    const queryClient = createTestQueryClient();
+    // TechniqueSelector never subscribes to the draft query via `useQuery` —
+    // only reads it with `getQueryData` at mutation time — so with the
+    // default test `gcTime: 0` it would otherwise be garbage-collected
+    // instantly.
+    queryClient.setQueryDefaults(characterCreationKeys.draft(), {
+      gcTime: Infinity,
+      staleTime: Infinity,
+    });
+    queryClient.setQueryData(characterCreationKeys.draft(), draft);
+    seedQueryData(
+      queryClient,
+      characterCreationKeys.cgTechniqueOptions(draft.id, GIFT_ID),
+      mockCGTechniqueOptions
+    );
+    seedQueryData(queryClient, codexKeys.entry(20), mockCodexEntry(20));
+
+    renderWithCharacterCreationProviders(<TechniqueSelector draft={draft} giftId={GIFT_ID} />, {
+      queryClient,
+    });
+
+    // Simulate a sibling write (e.g. PersonalizationPanel for technique 11)
+    // landing in the cache after this component's own render, without
+    // TechniqueSelector ever re-rendering with an updated `draft` prop — the
+    // only way the deselect write below can see it is by reading the query
+    // cache fresh at mutation time, not this render's stale `draft` prop.
+    queryClient.setQueryData<CharacterDraft>(characterCreationKeys.draft(), (current) => ({
+      ...(current ?? draft),
+      draft_data: {
+        ...(current ?? draft).draft_data,
+        technique_personalizations: { '11': { custom_name: 'Other Pick' } },
+      },
+    }));
+
+    await user.click(screen.getByRole('button', { name: 'Selected Shadow Strike' }));
+
+    await waitFor(() => {
+      expect(updateDraftMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          draft_data: expect.objectContaining({
+            selected_technique_ids: [11],
+            technique_personalizations: { '11': { custom_name: 'Other Pick' } },
+          }),
+        })
+      );
+    });
+  });
+
   it('caps additional picks at the budget: an over-budget technique offers no doors', () => {
     const draft = createMockDraft({
       id: 1,
