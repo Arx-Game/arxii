@@ -13257,7 +13257,13 @@ export interface paths {
     /**
      * @description ViewSet for Restriction lookup records.
      *
-     *     Provides read-only access to restrictions that grant power bonuses.
+     *     Provides read-only access to the DESIGN restriction catalog — the
+     *     technique-authoring limitations ("Touch Range", "Undead Only") that refund
+     *     builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+     *     table (a caster's own chosen cost, #4099) and must never appear here; no
+     *     consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+     *     query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+     *     model table.
      */
     get: operations['magic_restrictions_list'];
     put?: never;
@@ -13278,7 +13284,13 @@ export interface paths {
     /**
      * @description ViewSet for Restriction lookup records.
      *
-     *     Provides read-only access to restrictions that grant power bonuses.
+     *     Provides read-only access to the DESIGN restriction catalog — the
+     *     technique-authoring limitations ("Touch Range", "Undead Only") that refund
+     *     builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+     *     table (a caster's own chosen cost, #4099) and must never appear here; no
+     *     consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+     *     query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+     *     model table.
      */
     get: operations['magic_restrictions_retrieve'];
     put?: never;
@@ -26662,7 +26674,8 @@ export interface components {
       /** @description The owner's own name for this technique, or the catalog's (#4099). */
       readonly name: string;
       catalog_name: string;
-      description: string;
+      /** @description The owner's own description for this technique, or the catalog's (#4099). */
+      readonly description: string;
       anima_cost: number;
       tier: number;
       intensity: number;

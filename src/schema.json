@@ -20502,7 +20502,13 @@ paths:
       description: |-
         ViewSet for Restriction lookup records.
 
-        Provides read-only access to restrictions that grant power bonuses.
+        Provides read-only access to the DESIGN restriction catalog — the
+        technique-authoring limitations ("Touch Range", "Undead Only") that refund
+        builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+        table (a caster's own chosen cost, #4099) and must never appear here; no
+        consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+        query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+        model table.
       parameters:
       - in: query
         name: allowed_effect_types
@@ -20531,7 +20537,13 @@ paths:
       description: |-
         ViewSet for Restriction lookup records.
 
-        Provides read-only access to restrictions that grant power bonuses.
+        Provides read-only access to the DESIGN restriction catalog — the
+        technique-authoring limitations ("Touch Range", "Undead Only") that refund
+        builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+        table (a caster's own chosen cost, #4099) and must never appear here; no
+        consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+        query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+        model table.
       parameters:
       - in: path
         name: id
@@ -44240,6 +44252,9 @@ components:
           type: string
         description:
           type: string
+          description: The owner's own description for this technique, or the catalog's
+            (#4099).
+          readOnly: true
         anima_cost:
           type: integer
         tier:
