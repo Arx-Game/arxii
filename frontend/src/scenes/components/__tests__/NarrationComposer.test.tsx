@@ -31,6 +31,23 @@ const crossing: GMPrompt = {
   created_at: '2026-10-02T00:00:00Z',
 };
 
+// A kind with no authored private_text (e.g. a stake outcome) -- #4101 Task 10
+// fix round 1, Important finding 1: every kind still gets a private send.
+const stakeOutcome: GMPrompt = {
+  ...crossing,
+  id: 9,
+  kind: 'stake_outcome',
+  kind_label: 'Stake outcome',
+  scene: null,
+  character_sheet: null,
+  subject_name: '',
+  subject_persona_id: null,
+  stake_summary: 'The bridge holds.',
+  room_text: 'The bridge groans but holds.',
+  private_text: '',
+  prepared_for_character: false,
+};
+
 describe('NarrationComposer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,8 +57,19 @@ describe('NarrationComposer', () => {
     renderWithProviders(
       <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
     );
+    expect(screen.getByText(/Tied to/)).toBeInTheDocument();
     expect(screen.getByText(/Crossing: Rowan Ashcombe/)).toBeInTheDocument();
     expect(screen.getByText('Prepared for this character')).toBeInTheDocument();
+  });
+
+  it('renders the Audience line as static labels, not a toggle (R10-1)', () => {
+    renderWithProviders(
+      <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
+    );
+    expect(screen.getByText('Everyone present')).toBeInTheDocument();
+    expect(screen.getByText(/Chosen people/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Everyone present' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Chosen people/ })).toBeNull();
   });
 
   it('sends the prepared text as is to the chosen people', async () => {
@@ -89,9 +117,12 @@ describe('NarrationComposer', () => {
     renderWithProviders(
       <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
     );
+    expect(screen.getByTestId('private-quote')).toHaveTextContent('vision');
     fireEvent.click(screen.getByRole('button', { name: 'Send as is' }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    // The room line draft is untouched by the private send.
+    // The private draft actually cleared -- the quote now reads empty...
+    await waitFor(() => expect(screen.getByTestId('private-quote')).toHaveTextContent(''));
+    // ...and the room line draft is untouched by the private send.
     expect(screen.getByLabelText('Room line')).toHaveValue('room');
   });
 
@@ -102,5 +133,63 @@ describe('NarrationComposer', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Send to the room' }));
     await waitFor(() => expect(screen.getByLabelText('Room line')).toHaveValue(''));
+    // The private draft is untouched by the room send.
+    expect(screen.getByTestId('private-quote')).toHaveTextContent('vision');
+  });
+
+  it('shows the narrate result message after a successful send (#4101 fix round 1)', async () => {
+    mutateAsync.mockResolvedValueOnce({
+      message: 'That prompt was closed before your line landed; it went out as plain narration.',
+    });
+    renderWithProviders(
+      <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send to the room' }));
+    expect(
+      await screen.findByText(
+        'That prompt was closed before your line landed; it went out as plain narration.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('disables each send button while its own draft is empty or whitespace', () => {
+    renderWithProviders(
+      <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
+    );
+    fireEvent.change(screen.getByLabelText('Room line'), { target: { value: '   ' } });
+    expect(screen.getByRole('button', { name: 'Send to the room' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit before sending' }));
+    fireEvent.change(screen.getByLabelText('Private line'), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: 'Send privately' })).toBeDisabled();
+  });
+
+  it('shows a blank private line for a kind with no private_text, and sends it privately', async () => {
+    mutateAsync.mockResolvedValueOnce({});
+    renderWithProviders(
+      <NarrationComposer
+        prompt={stakeOutcome}
+        sceneId="1"
+        personas={[]}
+        open
+        onOpenChange={() => {}}
+      />
+    );
+    expect(screen.queryByText('Prepared for this character')).toBeNull();
+    expect(screen.queryByText('Authored text')).toBeNull();
+    const box = screen.getByLabelText('Private line');
+    expect(box).toHaveValue('');
+    const sendButton = screen.getByRole('button', { name: 'Send privately' });
+    expect(sendButton).toBeDisabled();
+    fireEvent.change(box, { target: { value: 'A private word for them.' } });
+    expect(sendButton).not.toBeDisabled();
+    fireEvent.click(sendButton);
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({
+        promptId: 9,
+        text: 'A private word for them.',
+        audience: 'chosen',
+        receiver_persona_ids: [],
+      })
+    );
   });
 });

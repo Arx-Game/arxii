@@ -1,9 +1,18 @@
 /**
  * NarrationComposer — the narration composer dialog for one GM prompt (#4101,
- * demo Screen 2). Two independent sends: a prepared/authored private line to
- * the chosen people, and a room line everyone present can read. Each send is
+ * demo Screen 2). Two independent sends: a private line to the chosen people
+ * (prepared/authored when the prompt carries one, a blank line to compose
+ * otherwise — every kind gets a private send, not just the ones with
+ * authored text), and a room line everyone present can read. Each send is
  * its own `POST .../narrate/`; a failed send keeps its draft untouched and
- * the dialog stays open so the GM can try again or make the other send.
+ * the dialog stays open so the GM can try again or make the other send. A
+ * successful send that still carries a `message` (e.g. the prompt closed
+ * before the line landed, so it went out as plain narration) shows it as a
+ * standing notice.
+ *
+ * Ruling R10-1: the Audience line is two static labels (the fixed send each
+ * button makes), not a toggle — the people picker still edits who "Chosen
+ * people" means for the private send.
  */
 import { useState } from 'react';
 import {
@@ -44,8 +53,8 @@ export function NarrationComposer({
   const [chosen, setChosen] = useState<number[]>(
     prompt.subject_persona_id != null ? [prompt.subject_persona_id] : []
   );
-  const [audienceMode, setAudienceMode] = useState<'room' | 'chosen'>('chosen');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function toggleChosen(id: number) {
     setChosen((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -64,8 +73,9 @@ export function NarrationComposer({
 
   async function sendPrivate(text: string) {
     setError(null);
+    setNotice(null);
     try {
-      await narrate.mutateAsync({
+      const result = await narrate.mutateAsync({
         promptId: prompt.id,
         text,
         audience: 'chosen',
@@ -73,6 +83,7 @@ export function NarrationComposer({
       });
       setPrivateDraft('');
       setEditingPrivate(false);
+      if (result.message) setNotice(result.message);
     } catch (err) {
       setError(messageFrom(err));
     }
@@ -80,25 +91,38 @@ export function NarrationComposer({
 
   async function sendRoom() {
     setError(null);
+    setNotice(null);
     try {
-      await narrate.mutateAsync({ promptId: prompt.id, text: roomDraft, audience: 'room' });
+      const result = await narrate.mutateAsync({
+        promptId: prompt.id,
+        text: roomDraft,
+        audience: 'room',
+      });
       setRoomDraft('');
+      if (result.message) setNotice(result.message);
     } catch (err) {
       setError(messageFrom(err));
     }
   }
 
-  const showPrivateBox = Boolean(prompt.private_text) || editingPrivate;
+  // Ruling (Task 10 fix round 1, Important finding 1): every kind gets a
+  // private send, not only the ones with authored private_text. When the
+  // prompt carries none, skip straight to the blank-textarea editing view —
+  // there is no prepared/authored text to preview or fall back to.
+  const hasPreparedText = Boolean(prompt.private_text);
+  const showPrivateEditing = editingPrivate || !hasPreparedText;
+  const privateSendDisabled = narrate.isPending || !privateDraft.trim();
+  const roomSendDisabled = narrate.isPending || !roomDraft.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            <span aria-hidden className="text-amber-500">
-              ✦
-            </span>{' '}
-            {prompt.kind_label}: {prompt.subject_name}
+            Tied to <span aria-hidden>✦</span>{' '}
+            {prompt.subject_name
+              ? `${prompt.kind_label}: ${prompt.subject_name}`
+              : prompt.kind_label}
           </DialogTitle>
           <DialogDescription>
             Two sends are offered here: a room line everyone present can read, and a private line to
@@ -111,22 +135,12 @@ export function NarrationComposer({
             Audience
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={audienceMode === 'room' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setAudienceMode('room')}
-            >
+            <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs text-foreground">
               Everyone present
-            </Button>
-            <Button
-              type="button"
-              variant={audienceMode === 'chosen' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setAudienceMode('chosen')}
-            >
+            </span>
+            <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs text-foreground">
               Chosen people{chosenNames ? ` · ${chosenNames}` : ''}
-            </Button>
+            </span>
           </div>
           {personas.length > 0 && (
             <ul className="max-h-32 space-y-1 overflow-y-auto" data-testid="composer-persona-list">
@@ -147,8 +161,8 @@ export function NarrationComposer({
           )}
         </div>
 
-        {showPrivateBox && (
-          <div className="space-y-2 rounded-md border p-3">
+        <div className="space-y-2 rounded-md border border-border bg-card p-3">
+          {hasPreparedText && (
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold">
                 {prompt.prepared_for_character ? 'Prepared for this character' : 'Authored text'}
@@ -159,48 +173,51 @@ export function NarrationComposer({
                 </Badge>
               )}
             </div>
-            {editingPrivate ? (
-              <>
-                <Label htmlFor="narration-private-line">Private line</Label>
-                <Textarea
-                  id="narration-private-line"
-                  value={privateDraft}
-                  onChange={(event) => setPrivateDraft(event.target.value)}
-                />
+          )}
+          {showPrivateEditing ? (
+            <>
+              <Label htmlFor="narration-private-line">Private line</Label>
+              <Textarea
+                id="narration-private-line"
+                value={privateDraft}
+                onChange={(event) => setPrivateDraft(event.target.value)}
+              />
+              <Button
+                type="button"
+                disabled={privateSendDisabled}
+                onClick={() => sendPrivate(privateDraft)}
+              >
+                Send privately
+              </Button>
+            </>
+          ) : (
+            <>
+              <blockquote
+                data-testid="private-quote"
+                className="border-l-2 pl-3 text-sm italic text-muted-foreground"
+              >
+                {privateDraft}
+              </blockquote>
+              <div className="flex gap-2">
                 <Button
                   type="button"
-                  disabled={narrate.isPending}
+                  disabled={privateSendDisabled}
                   onClick={() => sendPrivate(privateDraft)}
                 >
-                  Send privately
+                  Send as is
                 </Button>
-              </>
-            ) : (
-              <>
-                <blockquote className="border-l-2 pl-3 text-sm italic text-muted-foreground">
-                  {privateDraft}
-                </blockquote>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    disabled={narrate.isPending}
-                    onClick={() => sendPrivate(privateDraft)}
-                  >
-                    Send as is
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={narrate.isPending}
-                    onClick={() => setEditingPrivate(true)}
-                  >
-                    Edit before sending
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={narrate.isPending}
+                  onClick={() => setEditingPrivate(true)}
+                >
+                  Edit before sending
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="narration-room-line">Room line</Label>
@@ -209,10 +226,19 @@ export function NarrationComposer({
             value={roomDraft}
             onChange={(event) => setRoomDraft(event.target.value)}
           />
-          <Button type="button" disabled={narrate.isPending} onClick={sendRoom}>
+          <Button type="button" disabled={roomSendDisabled} onClick={sendRoom}>
             Send to the room
           </Button>
         </div>
+
+        {notice && (
+          <p
+            role="status"
+            className="rounded-md border bg-muted/30 p-2 text-sm text-muted-foreground"
+          >
+            {notice}
+          </p>
+        )}
 
         {error && (
           <p role="alert" className="text-sm text-destructive">

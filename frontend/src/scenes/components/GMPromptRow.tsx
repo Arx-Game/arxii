@@ -11,6 +11,8 @@
  * followed by "Narrate it?" (pending) or "Narrated." (already sent).
  */
 import { Check, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useConfirmGMPrompt, useDismissGMPrompt } from '../gmPromptQueries';
 import type { GMPrompt } from '../types';
 
@@ -41,55 +43,57 @@ export function GMPromptRow({
 
   return (
     <div data-testid="gm-prompt-row" className="flex items-center gap-2 py-1 text-sm">
-      <span aria-hidden className="text-amber-500">
-        ✦
-      </span>
-      <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
+      <span aria-hidden>✦</span>
+      <Badge variant="secondary" className="text-xs">
         {prompt.kind_label}
-      </span>
+      </Badge>
       <span className="flex-1">{promptBody(prompt)}</span>
       {isMoment && (
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="outline"
           aria-label={`Confirm ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => confirm.mutate(prompt.id)}
-          className="inline-flex items-center gap-1 rounded px-2 py-0.5 hover:bg-amber-500/20"
         >
           <Check className="h-3 w-3" /> Confirm
-        </button>
+        </Button>
       )}
       {!isMoment && (
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="outline"
           aria-label={`Open ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => onOpen(prompt)}
-          className="rounded px-2 py-0.5 hover:bg-amber-500/20"
         >
           Open
-        </button>
+        </Button>
       )}
       {isNarrated ? (
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="ghost"
           aria-label={`Done ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => dismiss.mutate(prompt.id)}
-          className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-muted-foreground hover:bg-muted"
         >
           <Check className="h-3 w-3" /> Done
-        </button>
+        </Button>
       ) : (
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="ghost"
           aria-label={`Dismiss ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => dismiss.mutate(prompt.id)}
-          className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-muted-foreground hover:bg-muted"
         >
           <X className="h-3 w-3" /> Dismiss
-        </button>
+        </Button>
       )}
     </div>
   );

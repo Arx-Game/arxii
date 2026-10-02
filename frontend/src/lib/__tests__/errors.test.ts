@@ -1,5 +1,5 @@
 /** ApiError + throwApiError/readErrorDetail (2026-07 audit error-path fix). */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   ApiError,
@@ -8,6 +8,7 @@ import {
   readErrorDetail,
   throwApiError,
 } from '../errors';
+import { apiFetch } from '@/evennia_replacements/api';
 
 function jsonResponse(body: unknown, status = 400): Response {
   return new Response(JSON.stringify(body), {
@@ -35,6 +36,41 @@ describe('throwApiError', () => {
     )) as ApiError;
     expect(err.fieldErrors).toEqual(body);
     expect(err.message).toBe('name: This field may not be blank.; tier: Must be positive.');
+  });
+
+  it('strips the "non_field_errors: " prefix (#4101 Task 10 fix round 1)', async () => {
+    const body = { non_field_errors: ['Choose someone in the room.'] };
+    const err = (await throwApiError(jsonResponse(body), 'fb').catch(
+      (e: unknown) => e
+    )) as ApiError;
+    expect(err.message).toBe('Choose someone in the room.');
+    expect(err.message).not.toContain('non_field_errors');
+  });
+
+  it('strips the prefix end-to-end through the real apiFetch/throwApiError path', async () => {
+    const body = { non_field_errors: ["There's no room to narrate from right now."] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(body), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
+    try {
+      const res = await apiFetch('/api/gm/prompts/7/narrate/', {
+        method: 'POST',
+        body: '{}',
+      });
+      const err = (await throwApiError(res, 'Failed to send narration').catch(
+        (e: unknown) => e
+      )) as ApiError;
+      expect(err.message).toBe("There's no room to narrate from right now.");
+      expect(err.message).not.toContain('non_field_errors');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('falls back on a non-JSON body but keeps the status', async () => {

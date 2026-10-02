@@ -17,8 +17,11 @@ export function GMPromptQueue({
   const prompts = data ?? [];
   if (prompts.length === 0) return null;
   return (
-    <section data-testid="gm-prompt-queue" className="rounded-md border border-amber-500/30 p-2">
-      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-600">
+    <section
+      data-testid="gm-prompt-queue"
+      className="space-y-1 rounded-md border border-border bg-card p-3"
+    >
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         GM prompts
       </h3>
       {prompts.map((p) => (
