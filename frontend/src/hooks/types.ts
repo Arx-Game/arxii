@@ -75,6 +75,14 @@ export const EVENNIA_CONTROL_TYPES: ReadonlySet<string> = new Set([
   'sendable_variables',
 ]);
 
+/**
+ * The close reasons the server gives when the player typed `quit`: Evennia's
+ * `CmdQuit` passes them to the disconnect, and the Portal sends them on the
+ * close frame. `src/web/tests/test_quit_close_reason_parity.py` runs that
+ * command and fails when it stops giving exactly these.
+ */
+export const SERVER_QUIT_CLOSE_REASONS: ReadonlySet<string> = new Set(['quit', 'quit/all']);
+
 export interface GameMessage {
   content: string;
   timestamp: number;
