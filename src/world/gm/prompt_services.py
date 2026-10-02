@@ -336,6 +336,18 @@ def narration_prompt_for(
     return prompt
 
 
+def _lock_siblings(prompt: GMPrompt) -> list[GMPrompt]:
+    """Lock every prompt of ``prompt``'s event, always in pk order.
+
+    Siblings are created together and can share ``created_at``, so the model's
+    default ordering does not fix the lock order; pk order does, which keeps a
+    close and a narration from taking the rows in opposite orders.
+    """
+    return list(
+        GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group).order_by("pk")
+    )
+
+
 def _resolve_narration_prompt(
     prompt: GMPrompt, *, new_status: str, resolver: AccountDB | None
 ) -> GMPrompt:
@@ -397,7 +409,7 @@ def _resolve_narration_prompt(
     database row the transaction rollback restores.
     """
     with transaction.atomic():
-        siblings = list(GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group))
+        siblings = _lock_siblings(prompt)
         this = next(s for s in siblings if s.pk == prompt.pk)
         if this.status not in _NARRATABLE_STATUSES:
             raise GMPromptError(_MSG_RESOLVED)
@@ -495,7 +507,7 @@ def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromp
     R6-1); only a close does, see ``_resolve_narration_prompt``.
     """
     with transaction.atomic():
-        siblings = list(GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group))
+        siblings = _lock_siblings(prompt)
         this = next(s for s in siblings if s.pk == prompt.pk)
         if this.status not in _NARRATABLE_STATUSES:
             logger.info(
