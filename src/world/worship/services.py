@@ -5,6 +5,7 @@ call ``grant_worship`` (being pool + ledger) and ``bump_devotion`` (PC↔god
 standing + the God's Favorite achievement check). Explicit calls, no signals.
 """
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Max
@@ -30,6 +31,8 @@ if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.character_sheets.models import CharacterSheet
     from world.worship.models import DivineInterventionConfig, Miracle, MiraclePerformance
+
+logger = logging.getLogger(__name__)
 
 
 def grant_worship(
@@ -263,10 +266,55 @@ def perform_divine_intervention(
             trigger_event=trigger_event,
         )
 
-    # Broadcast narrative (outside transaction, mirrors _broadcast_manifestation)
-    _broadcast_miracle_narrative(character, miracle.narrative_text, scene)
+    _route_miracle(character_sheet, miracle.narrative_text, scene)
 
     return performance
+
+
+def _route_miracle(character_sheet: "CharacterSheet", text: str, scene=None) -> None:
+    """Prompt the scene GM with the miracle, or broadcast its authored text as today (#4101).
+
+    Follows the shape of ``_announce_surge``/``_route_ultimate_chosen``/``_route_crossing``
+    (``world/magic/audere.py`` et al.): the scene lookup and ``route_narratable_event``
+    call run inside their own ``transaction.atomic()``, so a ``DatabaseError`` raised
+    from in there is contained to this savepoint rather than aborting whatever
+    enclosing transaction the caller is in. ``_deliver()`` -- the unprompted
+    broadcast -- runs exactly once, outside the try/except, keyed on whether
+    ``route_narratable_event`` actually produced any prompts.
+    """
+    from django.db import DatabaseError, transaction  # noqa: PLC0415
+
+    from world.gm.constants import GMPromptKind  # noqa: PLC0415
+    from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
+    from world.gm.types import NarratableEvent  # noqa: PLC0415
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    character = character_sheet.character
+    if scene is None:
+        scene = Scene.objects.active_for_room(character.location).first()
+
+    def _deliver() -> None:
+        _broadcast_miracle_narrative(character, text, scene)
+
+    try:
+        with transaction.atomic():
+            prompts = route_narratable_event(
+                NarratableEvent(
+                    kind=GMPromptKind.MIRACLE,
+                    scene=scene,
+                    character_sheet=character_sheet,
+                    room_text=text,
+                ),
+            )
+    except DatabaseError:
+        logger.exception(
+            "Miracle routing failed to create GM prompts for sheet %s; "
+            "delivering unprompted instead (#4101).",
+            character_sheet.pk,
+        )
+        prompts = []
+    if not prompts:
+        _deliver()
 
 
 def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: ARG001

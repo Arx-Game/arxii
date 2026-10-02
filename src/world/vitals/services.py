@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.utils import timezone
 
 from world.checks.models import CheckCategory, CheckType
@@ -1145,6 +1145,48 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
         from world.societies.houses.stature_services import apply_death_shock  # noqa: PLC0415
 
         apply_death_shock(kinsperson)
+
+    _route_death(character_sheet, vitals.died_in_scene)
+
+
+def _route_death(character_sheet: CharacterSheet, scene: Scene | None) -> None:
+    """A death in a GM's scene prompts that GM (#4101). Offscreen deaths prompt no one.
+
+    Deaths carry no authored room line, so with no GM nothing new is delivered
+    (``_deliver`` is a no-op, kept as an explicit function purely for shape
+    consistency with its siblings -- ``_route_miracle``/``_route_ultimate_chosen``/
+    ``_route_crossing`` -- should a default line ever be authored here). The
+    martyr's deferred death reaches here only when it finally lands
+    (``apply_pending_certain_death``), never when it is merely made certain
+    (``defer_or_apply_certain_death``'s defer branch never calls ``_mark_dead``).
+
+    ``_mark_dead``'s callers run inside their own transactions, so the scene
+    lookup and ``route_narratable_event`` call run inside their own
+    ``transaction.atomic()`` here too (matching ``_route_miracle`` et al.) --
+    that is the savepoint that actually contains a ``DatabaseError``.
+    """
+    from world.gm.constants import GMPromptKind  # noqa: PLC0415
+    from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
+    from world.gm.types import NarratableEvent  # noqa: PLC0415
+
+    def _deliver() -> None:
+        return
+
+    try:
+        with transaction.atomic():
+            prompts = route_narratable_event(
+                NarratableEvent(
+                    kind=GMPromptKind.DEATH, scene=scene, character_sheet=character_sheet
+                )
+            )
+    except DatabaseError:
+        logger.exception(
+            "Death routing failed to create GM prompts for sheet %s (#4101).",
+            character_sheet.pk,
+        )
+        prompts = []
+    if not prompts:
+        _deliver()
 
 
 def _active_scene_at_body(character_sheet: CharacterSheet) -> Scene | None:
