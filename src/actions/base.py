@@ -84,6 +84,7 @@ class Action:
     template_name: str = ""
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset()
+    required_input_names: ClassVar[frozenset[str]] = frozenset()
 
     def get_prerequisites(self) -> list[Prerequisite]:
         """Return the prerequisites that must be met for this action.
@@ -167,6 +168,8 @@ class Action:
         actor: ObjectDB,
         target: ObjectDB | None = None,
         context: dict[str, Any] | None = None,
+        *,
+        pending_inputs: frozenset[str] = frozenset(),
     ) -> ActionAvailability:
         """Evaluate all prerequisites. Return availability with reasons.
 
@@ -174,7 +177,16 @@ class Action:
             actor: The character who would perform the action.
             target: Optional target of the action.
             context: Optional situational context (combat, scene, etc.).
+            pending_inputs: Declared, genuinely missing inputs for read checks only.
+                Availability with pending inputs does not authorize execution.
         """
+        kwargs = (context or {}).get("kwargs", {})
+        if not pending_inputs.issubset(self.required_input_names):
+            message = "Pending inputs must be declared by the action."
+            raise ValueError(message)
+        if pending_inputs.intersection(kwargs):
+            message = "Pending inputs must be absent from bound kwargs."
+            raise ValueError(message)
         failures = []
         # #2287 — ghost interlude: dead actors are whitelisted to spectator
         # verbs (bounded emit/pose + the off-ramp actions). A central
@@ -191,6 +203,8 @@ class Action:
             if offscreen_reason:
                 failures.append(offscreen_reason)
         for prereq in self.get_prerequisites():
+            if prereq.required_input_names.intersection(pending_inputs):
+                continue
             met, reason = prereq.is_met(actor, target, context)
             if not met:
                 failures.append(reason)
@@ -418,6 +432,7 @@ class Action:
                 actor,
                 target=context.kwargs.get("target"),
                 context={"kwargs": context.kwargs, "scene_data": sdm},
+                pending_inputs=frozenset(),
             )
             if not availability.available:
                 return self._emit_result(

@@ -409,8 +409,12 @@ class TypedItemLookTests(TestCase):
     def test_execute_reresolves_after_availability(self):
         original = LookAtItemAction.check_availability
 
-        def move_after_check(action, actor, target=None, context=None):
-            result = original(action, actor, target=target, context=context)
+        def move_after_check(
+            action, actor, target=None, context=None, *, pending_inputs=frozenset()
+        ):
+            result = original(
+                action, actor, target=target, context=context, pending_inputs=pending_inputs
+            )
             self.item.game_object.location = self.remote
             return result
 

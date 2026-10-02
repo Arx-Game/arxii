@@ -435,8 +435,12 @@ class TypedItemEquipmentTests(TestCase):
         assert not EquippedItem.objects.filter(item_instance=self.item).exists()
         original = EquipAction.check_availability
 
-        def move_after_check(action, actor, target=None, context=None):
-            checked = original(action, actor, target=target, context=context)
+        def move_after_check(
+            action, actor, target=None, context=None, *, pending_inputs=frozenset()
+        ):
+            checked = original(
+                action, actor, target=target, context=context, pending_inputs=pending_inputs
+            )
             self.item.game_object.location = self.remote
             return checked
 

@@ -652,8 +652,10 @@ class TypedGetDropTests(TestCase):
         assert self.item.holder_character_sheet is None
         original = GetAction.check_availability
 
-        def moved(action, actor, target=None, context=None):
-            checked = original(action, actor, target=target, context=context)
+        def moved(action, actor, target=None, context=None, *, pending_inputs=frozenset()):
+            checked = original(
+                action, actor, target=target, context=context, pending_inputs=pending_inputs
+            )
             self.item.game_object.location = self.remote
             return checked
 

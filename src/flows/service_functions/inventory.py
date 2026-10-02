@@ -86,16 +86,18 @@ def require_hot_goods_consent(
 
     if not has_unresolved_stolen_provenance(item_instance):
         return
-    from world.consent.services import (  # noqa: PLC0415
-        consent_blocks_targeting,
-        receiving_stolen_goods_category,
-    )
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+
+    category = SocialConsentCategory.objects.filter(key="receiving-stolen-goods").first()
+    if category is None:
+        raise RecipientConsentDenied
 
     giver_sheet = item_instance.holder_character_sheet
     giver_tenure = _active_tenure_for_sheet(giver_sheet) if giver_sheet is not None else None
     if consent_blocks_targeting(
         owner_tenure=recipient_tenure,
-        category=receiving_stolen_goods_category(),
+        category=category,
         actor_tenure=giver_tenure,
     ):
         raise RecipientConsentDenied
@@ -385,6 +387,15 @@ def drop(character: CharacterState, item: ItemState) -> None:
     character.obj.carried_items.invalidate()
 
 
+def validate_give(giver: CharacterState, recipient: CharacterState, item: ItemState) -> None:
+    """Check existing recipient-specific transfer permission without mutation."""
+    if not item.can_give(giver=giver, recipient=recipient):
+        raise NotInPossession
+    if recipient.obj.location != giver.obj.location:
+        raise RecipientNotAdjacent
+    require_hot_goods_consent(recipient.obj.character_sheet, item.instance)
+
+
 @transaction.atomic
 def give(
     giver: CharacterState,
@@ -399,11 +410,7 @@ def give(
     The OwnershipEvent also snapshots each side's presented persona for
     IC-narrative purposes; the audit truth is the CharacterSheet pair.
     """
-    if not item.can_give(giver=giver, recipient=recipient):
-        raise NotInPossession
-    if recipient.obj.location != giver.obj.location:
-        raise RecipientNotAdjacent
-    require_hot_goods_consent(recipient.obj.character_sheet, item.instance)
+    validate_give(giver, recipient, item)
 
     previous_holder_sheet = item.instance.holder_character_sheet
     # Snapshot rows before iteration — unequip_item deletes them as we go.

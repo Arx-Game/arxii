@@ -19,19 +19,31 @@ from actions.definitions.item_helpers import (
 )
 from actions.prerequisites import Prerequisite
 from actions.target_menu_types import MenuTargetKind
+from actions.target_resolution import resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
 from evennia_extensions.models import room_is_publicly_listed
+from flows.events.payloads import ActionIntentPayload
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_room_state
-from flows.service_functions.inventory import drop, give, pick_up, validate_drop, validate_pick_up
+from flows.service_functions.inventory import (
+    drop,
+    give,
+    pick_up,
+    validate_drop,
+    validate_give,
+    validate_pick_up,
+)
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
 from world.areas.positioning.travel import find_route
+from world.conditions.services import can_perceive
 from world.items.exceptions import InventoryError, NotReachable
 from world.mechanics.constants import ChallengeType
 from world.mechanics.models import ChallengeInstance
+from world.scenes.models import Persona
+from world.scenes.services import active_persona_for_sheet
 
 _GET_DROP_KINDS = frozenset({MenuTargetKind.ITEMS, MenuTargetKind.OBJECTS})
 _GET_DROP_UNAVAILABLE = "That isn't available."
@@ -225,9 +237,99 @@ class DropAction(_ItemMovementAction):
         return ActionResult(success=True)
 
 
+_GIVE_UNAVAILABLE = "That isn't available."
+_GIVE_RECIPIENT = "recipient_persona_id"
+_GIVE_LEGACY_RECIPIENTS = frozenset({"recipient", "recipient_id"})
+
+
+@dataclass
+class _GiveIntentPayload(ActionIntentPayload):
+    """Typed Give intent exposes its authored public-persona recipient choice."""
+
+    recipient_persona_id: Any = None
+
+
+def _give_item(actor: ObjectDB, kwargs: dict[str, Any]):
+    if MENU_TARGET_KEY in kwargs:
+        if _GIVE_LEGACY_RECIPIENTS.intersection(kwargs):
+            return None
+        resolved = resolve_typed_item(actor, kwargs)
+        return resolved.item if resolved is not None else None
+    return resolve_item_instance(kwargs.get("target"))
+
+
+def _give_recipient(actor: ObjectDB, kwargs: dict[str, Any]) -> ObjectDB | None:
+    if MENU_TARGET_KEY not in kwargs:
+        value = kwargs.get("recipient")
+        return value if isinstance(value, ObjectDB) else None
+    if _GIVE_LEGACY_RECIPIENTS.intersection(kwargs):
+        return None
+    value = kwargs.get(_GIVE_RECIPIENT)
+    if type(value) is not int or value <= 0:
+        return None
+    persona = Persona.objects.filter(pk=value).first()
+    if persona is None:
+        return None
+    recipient = resolve_persona_pk_to_character(value)
+    if recipient is None or recipient == actor:
+        return None
+    if actor.location is None or recipient.location != actor.location:
+        return None
+    if active_persona_for_sheet(persona.character_sheet) != persona:
+        return None
+    return recipient if can_perceive(actor, recipient) else None
+
+
+@dataclass
+class _GiveItemPrerequisite(Prerequisite):
+    action: Any = None
+
+    def is_met(self, actor, target=None, context=None):
+        kwargs = (context or {}).get("kwargs", {})
+        if MENU_TARGET_KEY in kwargs and not self.action.is_applicable(actor, kwargs=kwargs):
+            return False, _GIVE_UNAVAILABLE
+        return True, ""
+
+
+@dataclass
+class _GiveRecipientPrerequisite(Prerequisite):
+    required_input_names: ClassVar[frozenset[str]] = frozenset({_GIVE_RECIPIENT})
+    action: Any = None
+
+    def is_met(self, actor, target=None, context=None):
+        context = context or {}
+        kwargs = dict(context.get("kwargs", {}))
+        if MENU_TARGET_KEY not in kwargs and _MOVEMENT_TARGET_KEY not in kwargs:
+            kwargs[_MOVEMENT_TARGET_KEY] = target
+        # Report bound typed failures once, in the preceding prerequisite.
+        if MENU_TARGET_KEY in kwargs and not self.action.is_applicable(actor, kwargs=kwargs):
+            return True, ""
+        if MENU_TARGET_KEY not in kwargs and (
+            kwargs.get("target") is None or kwargs.get("recipient") is None
+        ):
+            return False, "Give what to whom?"
+        item = _give_item(actor, kwargs)
+        recipient = _give_recipient(actor, kwargs)
+        if item is None:
+            return False, _GIVE_UNAVAILABLE if MENU_TARGET_KEY in kwargs else "That can't be given."
+        if recipient is None:
+            return False, _GIVE_UNAVAILABLE
+        sdm = context.get("scene_data")
+        sdm = sdm if sdm is not None else SceneDataManager()
+        try:
+            validate_give(
+                CharacterState(actor, context=sdm),
+                CharacterState(recipient, context=sdm),
+                ItemState(item, context=sdm),
+            )
+        except InventoryError as exc:
+            return False, exc.user_message
+        return True, ""
+
+
 @dataclass
 class GiveAction(Action):
-    """Give an item to another character."""
+    """Give a physical item, with a declared public-persona recipient choice."""
 
     key: str = "give"
     name: str = "Give"
@@ -237,42 +339,117 @@ class GiveAction(Action):
     target_type: TargetType = TargetType.SINGLE
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target", "recipient"})
+    required_input_names: ClassVar[frozenset[str]] = frozenset({_GIVE_RECIPIENT})
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [
+            *super().get_prerequisites(),
+            _GiveItemPrerequisite(action=self),
+            _GiveRecipientPrerequisite(action=self),
+        ]
+
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _give_item(actor, kwargs)
+        return (
+            item is not None
+            and item.game_object is not None
+            and ItemState(item, context=SceneDataManager()).is_in_possession(actor)
+        )
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        if actor is None or MENU_TARGET_KEY not in context.kwargs:
+            return super()._emit_intent(context, actor)
+
+        def emit_give_intent(bound_context: ActionContext, bound_actor: ObjectDB | None):
+            from flows.constants import EventName  # noqa: PLC0415
+            from flows.emit import emit_event  # noqa: PLC0415
+
+            original_target = bound_context.kwargs.get("target")
+            intent = _GiveIntentPayload(
+                actor=bound_actor,
+                action_key=self.key,
+                target=original_target,
+                recipient_persona_id=bound_context.kwargs.get(_GIVE_RECIPIENT),
+            )
+            stack = emit_event(EventName.ACTION_INTENT, intent, location=bound_actor.location)
+            if stack.was_cancelled():
+                return ActionResult(
+                    success=False, message=intent.cancel_message or "Something prevents you."
+                )
+            if intent.target is not original_target:
+                bound_context.kwargs["target"] = intent.target
+            # Invalid rewrites must refuse, not fall back to the selected person.
+            bound_context.kwargs[_GIVE_RECIPIENT] = intent.recipient_persona_id
+            return None
+
+        return emit_typed_item_intent(context, actor, emit_give_intent)
+
+    def recipient_candidates(
+        self, actor: ObjectDB, *, kwargs: dict[str, Any]
+    ) -> tuple[dict[str, Any], ...]:
+        """Read current public recipients with this action's complete availability."""
+        if MENU_TARGET_KEY not in kwargs or not self.is_applicable(actor, kwargs=kwargs):
+            return ()
+        if actor.location is None:
+            return ()
+        rows = []
+        for persona in Persona.objects.filter(
+            character_sheet__character__db_location=actor.location
+        ).order_by("pk"):
+            candidate_kwargs = {**kwargs, _GIVE_RECIPIENT: persona.pk}
+            if _give_recipient(actor, candidate_kwargs) is None:
+                continue
+            checked = self.check_availability(
+                actor, context={"kwargs": candidate_kwargs}, pending_inputs=frozenset()
+            )
+            rows.append(
+                {
+                    "recipient_persona_id": persona.pk,
+                    "name": persona.display_ic(),
+                    "available": checked.available,
+                    "reasons": list(checked.reasons),
+                }
+            )
+        return tuple(rows)
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        target = kwargs.get("target")
-        recipient = kwargs.get("recipient")
-        if target is None or recipient is None:
+        typed = MENU_TARGET_KEY in kwargs
+        if typed and not self.is_applicable(actor, kwargs=kwargs):
+            return ActionResult(success=False, message=_GIVE_UNAVAILABLE)
+        if not typed and (kwargs.get("target") is None or kwargs.get("recipient") is None):
             return ActionResult(success=False, message="Give what to whom?")
-
-        item_instance = resolve_item_instance(target)
+        item_instance = _give_item(actor, kwargs)
         if item_instance is None:
-            return ActionResult(success=False, message="That can't be given.")
-
+            return ActionResult(
+                success=False, message=_GIVE_UNAVAILABLE if typed else "That can't be given."
+            )
+        recipient = _give_recipient(actor, kwargs)
+        if recipient is None:
+            return ActionResult(success=False, message=_GIVE_UNAVAILABLE)
         sdm = context.scene_data if context else SceneDataManager()
+        try:
+            validate_give(
+                CharacterState(actor, context=sdm),
+                CharacterState(recipient, context=sdm),
+                ItemState(item_instance, context=sdm),
+            )
+        except InventoryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         actor_state = sdm.initialize_state_for_object(actor)
         recipient_state = sdm.initialize_state_for_object(recipient)
         item_state = ItemState(item_instance, context=sdm)
-
         try:
             give(actor_state, recipient_state, item_state)
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
-
         message_location(
             actor_state,
             "$You() $conj(give) {target} to {recipient}.",
             target=recipient_state,
-            mapping={
-                "target": item_state,
-                "recipient": recipient_state,
-            },
+            mapping={"target": item_instance.display_name, "recipient": recipient_state},
         )
-
         return ActionResult(success=True)
 
 

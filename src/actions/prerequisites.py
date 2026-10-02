@@ -7,7 +7,7 @@ Prerequisites are thin wrappers around existing system queries. They answer
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 CANNOT_BE_USED_MESSAGE = "That can't be used."
 CANNOT_SEE_MESSAGE = "You can't see that."
@@ -38,6 +38,8 @@ class Prerequisite:
     Subclasses implement ``is_met`` to check a specific condition.
     Returns (True, "") if met, or (False, "human-readable reason") if not.
     """
+
+    required_input_names: ClassVar[frozenset[str]] = frozenset()
 
     def is_met(
         self,
