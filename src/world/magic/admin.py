@@ -1659,17 +1659,19 @@ class DramaticMomentTagAdmin(admin.ModelAdmin):
 
 
 class CharacterCrossingTextAdminForm(forms.ModelForm):
-    """Approved admin-form labels for the two player-facing text fields (#4101, F8).
+    """Approved admin-form labels for three player-facing fields (#4101, F8/F8b).
 
-    The approved demo labels are "Vision (private)" / "Manifestation (room)" --
-    set as ADMIN FORM labels, never ``verbose_name`` on the model field, so no
-    migration is generated for a cosmetic admin-only rename.
+    The approved demo labels are "Character" / "Vision (private)" /
+    "Manifestation (room)" -- set as ADMIN FORM labels, never ``verbose_name``
+    on the model field, so no migration is generated for a cosmetic
+    admin-only rename.
     """
 
     class Meta:
         model = CharacterCrossingText
         fields = "__all__"  # noqa: DJ007 - admin form mirrors the model
         labels = {
+            "character_sheet": "Character",
             "vision_text": "Vision (private)",
             "manifestation_text": "Manifestation (room)",
         }

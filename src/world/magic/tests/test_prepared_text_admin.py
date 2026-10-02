@@ -58,6 +58,7 @@ class PreparedTextAdminTest(TestCase):
 
     def test_crossing_form_uses_the_approved_field_labels(self):
         form = CharacterCrossingTextAdminForm()
+        self.assertEqual(form.fields["character_sheet"].label, "Character")
         self.assertEqual(form.fields["vision_text"].label, "Vision (private)")
         self.assertEqual(form.fields["manifestation_text"].label, "Manifestation (room)")
 
@@ -68,14 +69,20 @@ class PreparedTextAdminTest(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
+        # ">Character:<" (not just the substring "Character", which also
+        # appears in the page title/breadcrumbs) pins this to the rendered
+        # <label> text specifically.
+        self.assertIn(">Character:<", body)
         self.assertIn("Vision (private)", body)
         self.assertIn("Manifestation (room)", body)
         # The old raw field-name labels are gone.
+        self.assertNotIn(">Character sheet:<", body)
         self.assertNotIn("Vision text:", body)
         self.assertNotIn("Manifestation text:", body)
 
     def test_approved_labels_are_admin_form_only_no_migration(self):
         # verbose_name on the model field is untouched -- the rename lives
-        # only in the ModelForm's Meta.labels (F8: no migration).
-        field = CharacterCrossingTextAdminForm.Meta.model._meta.get_field("vision_text")
-        self.assertEqual(field.verbose_name, "vision text")
+        # only in the ModelForm's Meta.labels (F8/F8b: no migration).
+        model_meta = CharacterCrossingTextAdminForm.Meta.model._meta
+        self.assertEqual(model_meta.get_field("character_sheet").verbose_name, "character sheet")
+        self.assertEqual(model_meta.get_field("vision_text").verbose_name, "vision text")
