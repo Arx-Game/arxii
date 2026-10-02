@@ -20,8 +20,8 @@ this system.
   nominations, kudos claims, and GM story rewards are the production sources, not an
   automatic tick. See "ExperiencePointsData / CharacterXP" below.
 - **Development** is progress toward a skill, stat, or thread cutoff. It stands for the
-  time, effort, and resources the character invests, not fictional risk, and mostly
-  accrues automatically from ordinary play: `DevelopmentPoints` on skills and stats
+  time, effort, and resources the character invests, not fictional risk. It
+  accrues from what the character spends doing: `DevelopmentPoints` on skills and stats
   (see "DevelopmentPoints" below), resonance invested into a `magic.Thread`'s
   `developed_points`, and Action Points spent through weekly training. Threads already
   carry both currencies on one row: every tenth internal thread level is an authored,

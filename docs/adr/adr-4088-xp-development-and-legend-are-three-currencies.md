@@ -29,8 +29,8 @@ measure something distinct, and the gates in code already enforce the separation
   nominations, kudos claims, and GM story rewards are the production sources
   (`world.progression.services.awards.award_xp`), not an automatic tick for playing.
 - **Development** is progress toward a skill, stat, or thread cutoff. It stands for
-  the time, effort, and resources the character invests, and mostly accrues
-  automatically from ordinary play: `DevelopmentPoints` on skills and stats, resonance
+  the time, effort, and resources the character invests, and accrues from
+  what the character spends doing: `DevelopmentPoints` on skills and stats, resonance
   invested into a `magic.Thread.developed_points`, and Action Points spent through
   weekly training. Threads already carry this exactly: every tenth internal level is
   an authored, separately-priced `ThreadXPLockedLevel` boundary, so Development alone
