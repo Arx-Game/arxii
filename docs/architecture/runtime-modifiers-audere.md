@@ -174,23 +174,27 @@ doesn't go super saiyan during a pub darts tournament.
 
 #### Trigger timing
 
-Audere is NOT checked during `use_technique()`. It is checked when intensity
-changes — specifically, when the engaging system updates the engagement's
-process modifiers or escalation level. The flow:
+Audere is checked at the end of a cast. After `use_technique()` resolves a
+technique (`world/magic/services/techniques.py`), it calls
+`maybe_create_audere_offer(character, stats.intensity, sheet=sheet)` and then
+`maybe_create_audere_majora_offer(...)` with that cast's runtime intensity.
+That is the only production call site. The flow:
 
-1. Something spikes intensity (escalation tick, future: ally hurt, damage taken)
-2. The system that caused the spike calls `check_audere_eligibility(character)`
-3. If eligible, `offer_audere(character)` pauses and presents the offer
-4. Player accepts or declines
+1. A cast resolves at some runtime intensity. Escalation ticks and dramatic
+   surges (`SurgeTriggerKind`) raise the engagement intensity that feeds it.
+2. `maybe_create_audere_offer` evaluates the gates (`_evaluate_audere_gates`,
+   the same checks `check_audere_eligibility` exposes) and, if they pass,
+   records one `PendingAudereOffer` per character.
+3. The player accepts or declines it (`offer_audere(character, accept=...)`)
+   before choosing their next technique.
 
-This means Audere is active BEFORE the player chooses a technique. They see
+This means Audere is active BEFORE the player chooses their next technique. They see
 their new power level and the revealed techniques, then decide what to do.
 This avoids the anticlimactic experience of discovering godlike power while
 already committed to casting a weak spell.
 
-For Scope #2, the only system that triggers the eligibility check is
-CharacterEngagement escalation. Future systems (combat events, relationship
-spikes) call the same function.
+Escalation and dramatic surges do not open the gate themselves; they raise the
+intensity that the next cast resolves at, and that cast's hook opens it.
 
 #### On acceptance
 
