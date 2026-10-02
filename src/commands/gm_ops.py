@@ -42,7 +42,9 @@ emit, each linked and skipping a blank one) and then closes the prompt itself
 extra and no separate ``done`` is needed); ``gm prompt dismiss <id>`` /
 ``gm prompt done <id>`` both close a prompt outright (``done`` is the GM-facing
 name for closing a prompt that has already been narrated -- same action as
-dismiss, R6-2). The dashboard's own render gains a
+dismiss, R6-2). A dramatic-moment row is labelled with the ``moment
+confirm|dismiss <id>`` verbs that resolve it (#4101 final review, B7), rather
+than ``gm prompt`` growing a second dispatch path for that kind. The dashboard's own render gains a
 ``Narration prompts waiting: N`` line counting PENDING + NARRATED prompts
 addressed to the caller.
 """
@@ -491,16 +493,19 @@ class CmdGMDashboard(ArxCommand):
         """
         from world.gm.constants import GMPromptStatus  # noqa: PLC0415
         from world.gm.prompt_services import (  # noqa: PLC0415
-            prompt_subject_name,
+            prompt_subject_names,
+            prompt_telnet_commands,
             visible_prompts_for_location,
         )
 
-        prompts = visible_prompts_for_location(self.caller.account, self.caller.location)
+        account = self.caller.account
+        prompts = list(visible_prompts_for_location(account, self.caller.location))
         if not prompts:
             self.msg("No GM prompts are waiting.")
             return
+        names = prompt_subject_names(prompts, account)
         for p in prompts:
-            subject = prompt_subject_name(p) or (
+            subject = names[p.pk] or (
                 p.stake_outcome.stake.player_summary if p.stake_outcome_id else ""
             )
             status_tag = " (narrated)" if p.status == GMPromptStatus.NARRATED else ""
@@ -509,6 +514,7 @@ class CmdGMDashboard(ArxCommand):
                 self.msg(f"  private: {p.private_text}")
             if p.room_text:
                 self.msg(f"  room: {p.room_text}")
+            self.msg(f"  {prompt_telnet_commands(p)}")
 
     def _handle_prompt(self, rest: str) -> None:
         """``gm prompt send|dismiss|done <id>`` (#4101).

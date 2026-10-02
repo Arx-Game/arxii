@@ -32,7 +32,11 @@ from world.gm.models import (
     StoryRoomGrant,
     TableUpdateRequest,
 )
-from world.gm.prompt_services import present_characters_in_room, prompt_subject_name
+from world.gm.prompt_services import (
+    present_characters_in_room,
+    prompt_subject_names,
+    prompt_subject_persona,
+)
 from world.instances.models import InstancedRoom
 from world.mechanics.serializers import (
     ChallengeTemplateListSerializer,
@@ -1023,11 +1027,34 @@ class GMPromptSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def _subject_names(self) -> dict[int, str]:
+        """The page's subject names for this viewer, resolved once (#4101 ruling RF-2).
+
+        Cached on the shared serializer context, like the interaction feed's
+        ``_persona_display_map``: one ``prompt_subject_names`` call (one batched
+        discovery query) covers every row on the page.
+        """
+        cached = self.context.get("_gm_prompt_subject_names")
+        if cached is not None:
+            return cached
+        if self.parent is not None:
+            rows = list(self.parent.instance or [])
+        elif self.instance is not None:
+            rows = [self.instance]
+        else:
+            rows = []
+        request = self.context.get("request")
+        account = request.user if request is not None else None
+        names = prompt_subject_names(rows, account)
+        self.context["_gm_prompt_subject_names"] = names
+        return names
+
     def get_subject_name(self, obj: GMPrompt) -> str:
-        return prompt_subject_name(obj)
+        return self._subject_names().get(obj.pk, "")
 
     def get_subject_persona_id(self, obj: GMPrompt) -> int | None:
-        return obj.character_sheet.primary_persona.pk if obj.character_sheet_id else None
+        persona = prompt_subject_persona(obj)
+        return persona.pk if persona is not None else None
 
 
 class NarrateGMPromptSerializer(serializers.Serializer):

@@ -554,6 +554,8 @@ actions, backends, and service functions.
   needs a separate `done` for a prompt sent this way. `gm prompt dismiss <id>` /
   `gm prompt done <id>` close a prompt directly (`done` is the GM-facing name for
   closing one that has already been narrated, same backend close, `DismissGMPromptAction`).
+  `gm prompts` labels each row with the verbs that resolve it: a dramatic-moment row names
+  `moment confirm|dismiss <id>`, since `gm prompt` closes narration kinds only.
   `gm suggest <kind>=<text>` (#2127 — `kind` one of
   `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`) dispatches
   `SubmitCatalogSuggestionAction` (`actions/definitions/gm_catalog.py`), gated

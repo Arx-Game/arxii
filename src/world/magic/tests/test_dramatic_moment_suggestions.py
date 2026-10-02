@@ -8,6 +8,8 @@ path to maybe_suggest_dramatic_moments and a GM-facing resolve surface to
 resolve_dramatic_moment_suggestion.
 """
 
+from unittest import mock
+
 from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
@@ -30,7 +32,12 @@ from world.magic.services.gain import (
     maybe_suggest_dramatic_moments,
     resolve_dramatic_moment_suggestion,
 )
-from world.scenes.factories import InteractionFactory, SceneFactory, SceneGMParticipationFactory
+from world.scenes.factories import (
+    InteractionFactory,
+    SceneFactory,
+    SceneGMParticipationFactory,
+    SceneOwnerParticipationFactory,
+)
 
 
 class MaybeSuggestDramaticMomentsTest(TestCase):
@@ -195,6 +202,31 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=5,
         )
         self.assertEqual(len(created), 1)
+
+    def test_new_suggestion_is_pushed_live_to_unmuted_scene_gms(self):
+        """#4101 final review, F1: a dramatic moment reaches the scene's GMs live
+        with the same gm_prompt frame a narration prompt gets; a GM who muted the
+        group and a non-GM owner get nothing."""
+        gm = AccountFactory()
+        muted_gm = AccountFactory()
+        owner = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=gm)
+        SceneGMParticipationFactory(scene=self.scene, account=muted_gm)
+        SceneOwnerParticipationFactory(scene=self.scene, account=owner)
+        GMPromptFilterFactory(account=muted_gm, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False)
+        for account in (gm, muted_gm, owner):
+            account.msg = mock.Mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            [created] = maybe_suggest_dramatic_moments(
+                character_sheet=self.sheet, scene=self.scene, success_level=5
+            )
+        gm.msg.assert_called_once()
+        self.assertEqual(
+            gm.msg.call_args.kwargs["gm_prompt"][1],
+            {"prompt_id": created.pk, "scene_id": self.scene.pk, "kind": created.kind},
+        )
+        muted_gm.msg.assert_not_called()
+        owner.msg.assert_not_called()
 
 
 class ResolveDramaticMomentSuggestionTest(TestCase):

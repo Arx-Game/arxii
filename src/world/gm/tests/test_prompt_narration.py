@@ -14,6 +14,7 @@ from world.gm.models import GMPrompt, GMPromptNarration
 from world.gm.prompt_services import dismiss_gm_prompt
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes import interaction_services
+from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 from world.scenes.models import Interaction
 
@@ -125,6 +126,43 @@ class PromptNarrationTest(TestCase):
         result = EmitAction().run(actor=self.gm_char, text="x", gm_prompt_id=self.prompt.pk)
         self.assertFalse(result.success)
         self.assertEqual(Interaction.objects.count(), before)
+
+    def _ephemeral_prompt(self):
+        """Put the prompt (and the GM) in an ephemeral scene."""
+        ephemeral = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
+        SceneGMParticipationFactory(scene=ephemeral, account=self.gm_account)
+        self.prompt.scene = ephemeral
+        self.prompt.save()
+        patcher = mock.patch("world.gm.prompt_services.get_active_scene", return_value=ephemeral)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _assert_refused_untouched(self, result, sent):
+        self.assertFalse(result.success)
+        self.assertIn("keeps no record", result.message)
+        sent.assert_not_called()
+        self.assertFalse(GMPromptNarration.objects.exists())
+        self.prompt.refresh_from_db()
+        self.assertEqual(self.prompt.status, GMPromptStatus.PENDING)
+
+    def test_emit_with_prompt_refused_in_ephemeral_scene(self):
+        """Ruling RF-1 (#4101 final review, B2): an ephemeral scene stores no row
+        to link, so the narration is refused before anything is sent."""
+        self._ephemeral_prompt()
+        with mock.patch("actions.definitions.communication.message_location") as sent:
+            result = EmitAction().run(actor=self.gm_char, text="x", gm_prompt_id=self.prompt.pk)
+        self._assert_refused_untouched(result, sent)
+
+    def test_pemit_with_prompt_refused_in_ephemeral_scene(self):
+        self._ephemeral_prompt()
+        with mock.patch("actions.definitions.communication.send_message") as sent:
+            result = PemitAction().run(
+                actor=self.gm_char,
+                text="vision",
+                receivers=[self.crosser.character],
+                gm_prompt_id=self.prompt.pk,
+            )
+        self._assert_refused_untouched(result, sent)
 
     def test_plain_emit_unchanged(self):
         result = EmitAction().run(actor=self.gm_char, text="plain")

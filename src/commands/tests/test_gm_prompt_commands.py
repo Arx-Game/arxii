@@ -90,6 +90,17 @@ class GMPromptTelnetTest(TestCase):
         self.assertIn("Crossing", text)
         self.assertIn("vision", text)
 
+    def test_gm_prompts_labels_rows_with_the_verbs_that_resolve_them(self):
+        """#4101 final review, B7: a dramatic-moment row names the ``moment``
+        verbs (``gm prompt dismiss`` does not resolve that kind); a narration
+        row keeps its ``gm prompt`` verbs."""
+        moment = GMPromptFactory(scene=self.scene)
+        cmd = self._run(CmdGMDashboard, "prompts")
+        text = " ".join(str(c.args[0]) for c in cmd.msg.call_args_list)
+        self.assertIn(f"moment confirm {moment.pk} | moment dismiss {moment.pk}", text)
+        self.assertIn(f"gm prompt send {self.prompt.pk}", text)
+        self.assertNotIn(f"gm prompt dismiss {moment.pk}", text)
+
     def test_gm_prompts_marks_narrated(self):
         """R6-2: a NARRATED prompt still lists, marked as such."""
         self.prompt.status = GMPromptStatus.NARRATED

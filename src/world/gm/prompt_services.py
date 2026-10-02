@@ -26,7 +26,7 @@ from world.gm.constants import (
 from world.gm.exceptions import GMPromptError
 from world.gm.models import GMPrompt, GMPromptFilter, GMPromptNarration
 from world.roster.selectors import get_account_for_character
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, ScenePrivacyMode
 from world.scenes.interaction_services import (
     broadcast_scene_emit,
     get_active_scene,
@@ -34,10 +34,13 @@ from world.scenes.interaction_services import (
     non_web_sessions,
 )
 from world.scenes.models import Persona
+from world.scenes.persona_display import build_persona_display_map, viewer_context_for_account
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
@@ -53,6 +56,10 @@ _MSG_RESOLVED = "That prompt has already been dealt with."
 _MSG_NO_PROMPT = "There is no such GM prompt."
 _MSG_NOT_YOURS = "That prompt is not addressed to you."
 _MSG_WRONG_SCENE = "Narrate that prompt from the scene it happened in."
+_MSG_EPHEMERAL = (
+    "This scene keeps no record, so a line can't be tied to the prompt. Mark it done to"
+    " send the prepared text, or narrate without the prompt."
+)
 _NARRATABLE_STATUSES = (GMPromptStatus.PENDING, GMPromptStatus.NARRATED)
 
 
@@ -139,7 +146,12 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene | None) -> QuerySet[
             _prompt_visibility_query(account, scene), status__in=_NARRATABLE_STATUSES
         )
         .select_related(
-            "character_sheet", "moment_type", "technique", "stake_outcome__stake", "scene"
+            "character_sheet",
+            "subject_persona__character_sheet",
+            "moment_type",
+            "technique",
+            "stake_outcome__stake",
+            "scene",
         )
         .order_by("-created_at")
     )
@@ -200,7 +212,17 @@ def prompt_visible_to(account: AccountDB, prompt: GMPrompt) -> bool:
 def prompt_recipients(
     scene: Scene | None, kind: str, *, candidates: list[AccountDB] | None = None
 ) -> list[AccountDB]:
-    """The GMs a ``kind`` event should prompt: candidates (default: scene GMs) minus muted."""
+    """The GMs a ``kind`` event should prompt: candidates (default: scene GMs) minus muted.
+
+    A scene that is no longer active prompts nobody (#4101 final review, B1): its
+    ``expire_scene_prompts`` sweep has already run, and ``narration_prompt_for``
+    refuses any prompt whose scene is not the one active where the GM stands, so
+    a prompt routed into a finished scene could never be narrated or released.
+    Returning ``[]`` hands delivery back to the caller's unprompted path instead
+    (e.g. a Crossing accepted after its offer's scene ended).
+    """
+    if scene is not None and not scene.is_active:
+        return []
     pool = scene_gm_accounts(scene) if candidates is None else candidates
     if not pool:
         return []
@@ -318,21 +340,93 @@ def route_narratable_event(
     return prompts
 
 
-def prompt_subject_name(prompt: GMPrompt) -> str:
-    """The name the GM sees for who this concerns (primary persona), or ''.
+def prompt_subject_persona(prompt: GMPrompt) -> Persona | None:
+    """The face this prompt concerns: the frozen ``subject_persona`` (ruling R9-3), else
+    the subject's primary persona, else None (#4101 final review, ruling RF-2).
 
-    GM-only (the GM prompt queue, telnet notify line): deliberately the real
-    primary persona, never masked -- a GM resolving an event needs to know who
-    it actually concerns. The player-facing sibling is ``narrated_event_payload``
-    below, which must NOT unmask a disguise (#4101 fix round 2, ruling R9-1).
+    ``Persona.DoesNotExist`` (the PRIMARY invariant broken) degrades to None, so
+    a queue row never 500s over it.
     """
+    if prompt.subject_persona_id is not None:
+        return prompt.subject_persona
     sheet = prompt.character_sheet
     if sheet is None:
-        return ""
+        return None
     try:
-        return sheet.primary_persona.name
+        return sheet.primary_persona
     except Persona.DoesNotExist:
+        return None
+
+
+def _sees_prompt_subject(account: AccountDB | None, prompt: GMPrompt) -> bool:
+    """Whether ``account`` sees who is behind the prompt's subject (ruling RF-2).
+
+    The addressed GM, a GM of the prompt's scene, and staff do; anyone else who
+    can see the row (a scene co-owner on a dramatic moment) does not.
+    """
+    if account is None:
+        return False
+    if account.is_staff or prompt.addressed_to_id == account.pk:
+        return True
+    return prompt.scene is not None and prompt.scene.is_gm(account)
+
+
+def prompt_subject_names(prompts: Iterable[GMPrompt], account: AccountDB | None) -> dict[int, str]:
+    """Prompt pk -> the subject's name as ``account`` should read it, '' for none (RF-2).
+
+    Both branches go through ``build_persona_display_map``, the feed's own masking
+    helper, never a parallel resolution: a viewer who may see behind the face
+    resolves as a universal discoverer (``is_staff=True``, so a mask reads
+    ``"<mask> (<real>)"`` with no discovery query); every other viewer resolves
+    with their own owned personas and discoveries, in one batched discovery
+    query for the whole page.
+    """
+    rows = [(prompt, prompt_subject_persona(prompt)) for prompt in prompts]
+    revealed_faces = []
+    viewer_faces = []
+    for prompt, persona in rows:
+        if persona is None:
+            continue
+        if _sees_prompt_subject(account, prompt):
+            revealed_faces.append(persona)
+        else:
+            viewer_faces.append(persona)
+    revealed = build_persona_display_map(
+        revealed_faces, viewer_persona_ids=set(), viewer_sheet_ids=set(), is_staff=True
+    )
+    viewer_map: dict[int, tuple[str, bool, bool]] = {}
+    if viewer_faces:
+        persona_ids, sheet_ids = (
+            viewer_context_for_account(account) if account is not None else (set(), set())
+        )
+        viewer_map = build_persona_display_map(
+            viewer_faces, viewer_persona_ids=persona_ids, viewer_sheet_ids=sheet_ids
+        )
+    names: dict[int, str] = {}
+    for prompt, persona in rows:
+        if persona is None:
+            names[prompt.pk] = ""
+            continue
+        source = revealed if _sees_prompt_subject(account, prompt) else viewer_map
+        names[prompt.pk] = source[persona.pk][0]
+    return names
+
+
+def prompt_subject_name(prompt: GMPrompt) -> str:
+    """The name the addressed GM sees for who this concerns, or '' (telnet lines).
+
+    ``prompt_subject_names`` for the prompt's own addressee: GM-facing, so the
+    frozen face reads with who is behind it (ruling RF-2). The player-facing
+    sibling is ``narrated_event_payload`` below, which must NOT unmask a disguise
+    (#4101 fix round 2, ruling R9-1).
+    """
+    persona = prompt_subject_persona(prompt)
+    if persona is None:
         return ""
+    revealed = build_persona_display_map(
+        [persona], viewer_persona_ids=set(), viewer_sheet_ids=set(), is_staff=True
+    )
+    return revealed[persona.pk][0]
 
 
 def narrated_event_subject_persona(interaction: Interaction) -> Persona | None:
@@ -391,28 +485,53 @@ def narrated_event_payload(interaction: Interaction) -> NarratedEventPayload | N
     return payload
 
 
-def _telnet_line(prompt: GMPrompt) -> str:
-    subject = prompt_subject_name(prompt)
-    head = f"GM prompt [{prompt.pk}] {prompt.get_kind_display()}"
-    head = f"{head}: {subject}." if subject else f"{head}."
+def prompt_telnet_commands(prompt: GMPrompt) -> str:
+    """The telnet verbs that act on ``prompt``, as one ``|``-separated hint.
+
+    A dramatic moment is confirmed or dismissed through the ``moment`` command,
+    not ``gm prompt`` (#4101 final review, B7): its rows are labelled with those
+    verbs rather than ``gm prompt`` growing a second dispatch path.
+    """
+    if prompt.kind == GMPromptKind.DRAMATIC_MOMENT:
+        return f"moment confirm {prompt.pk} | moment dismiss {prompt.pk}"
     return (
-        f"{head} emit/prompt {prompt.pk} <text> | pemit/prompt {prompt.pk} <names>=<text>"
+        f"emit/prompt {prompt.pk} <text> | pemit/prompt {prompt.pk} <names>=<text>"
         f" | gm prompt send {prompt.pk} | gm prompt dismiss {prompt.pk}"
         f" | gm prompt done {prompt.pk}"
     )
 
 
+def _telnet_line(prompt: GMPrompt) -> str:
+    subject = prompt_subject_name(prompt)
+    head = f"GM prompt [{prompt.pk}] {prompt.get_kind_display()}"
+    head = f"{head}: {subject}." if subject else f"{head}."
+    return f"{head} {prompt_telnet_commands(prompt)}"
+
+
 def notify_gm_prompt(prompt: GMPrompt) -> None:
-    """Push a new prompt to its GM: a ``gm_prompt`` frame for web, one line for telnet."""
-    account = prompt.addressed_to
-    if account is None:
-        return
-    account.msg(
-        gm_prompt=((), {"prompt_id": prompt.pk, "scene_id": prompt.scene_id, "kind": prompt.kind})
-    )
-    telnet = non_web_sessions(account)
-    if telnet:
-        account.msg(_telnet_line(prompt), session=telnet)
+    """Push a new prompt to its GMs: a ``gm_prompt`` frame for web, one line for telnet.
+
+    A narration prompt goes to its one addressee. A dramatic moment has no
+    addressee (#2183: any GM of the scene may resolve it), so it goes to every
+    GM of its scene who has not muted the group (#4101 final review, F1) -- the
+    same ``prompt_recipients`` gate the queue's own visibility uses.
+    """
+    if prompt.addressed_to_id is not None:
+        accounts = [prompt.addressed_to]
+    elif prompt.kind == GMPromptKind.DRAMATIC_MOMENT:
+        accounts = prompt_recipients(prompt.scene, prompt.kind)
+    else:
+        accounts = []
+    for account in accounts:
+        account.msg(
+            gm_prompt=(
+                (),
+                {"prompt_id": prompt.pk, "scene_id": prompt.scene_id, "kind": prompt.kind},
+            )
+        )
+        telnet = non_web_sessions(account)
+        if telnet:
+            account.msg(_telnet_line(prompt), session=telnet)
 
 
 def _narration_coverage(event_group: uuid.UUID) -> tuple[bool, bool]:
@@ -422,7 +541,10 @@ def _narration_coverage(event_group: uuid.UUID) -> tuple[bool, bool]:
     ``event_group`` (#4101 fix round 1, controller ruling I2). A room EMIT (no
     receivers) covers the room line; a receiver-scoped EMIT (pemit) whose
     receivers include the event's own subject, or a WHISPER to that subject,
-    covers the private line -- the two legs are independent, so a GM who only
+    covers the private line. The subject is matched by CHARACTER, not by persona
+    (#4101 final review, ruling RF-3): any receiver persona on the subject's
+    character sheet counts, so a GM who addresses the disguise face the subject
+    is wearing still covers the private line -- the two legs are independent, so a GM who only
     sends a room line leaves the private default (e.g. a Crossing's vision) to
     release on its own, and the reverse holds too.
 
@@ -434,20 +556,15 @@ def _narration_coverage(event_group: uuid.UUID) -> tuple[bool, bool]:
     so this runs in one query regardless of how many lines were narrated.
     """
     narrations = GMPromptNarration.objects.filter(prompt__event_group=event_group)
-    first = narrations.select_related("prompt__character_sheet").first()
+    first = narrations.select_related("prompt").first()
     if first is None:
         return False, False
 
-    sheet = first.prompt.character_sheet
-    subject_persona_id = None
-    if sheet is not None:
-        with contextlib.suppress(Persona.DoesNotExist):
-            subject_persona_id = sheet.primary_persona.pk
-
+    sheet_id = first.prompt.character_sheet_id
     receiver_qs = InteractionReceiver.objects.filter(interaction_id=OuterRef("interaction_id"))
     subject_receiver_qs = (
-        receiver_qs.filter(persona_id=subject_persona_id)
-        if subject_persona_id is not None
+        receiver_qs.filter(persona__character_sheet_id=sheet_id)
+        if sheet_id is not None
         else receiver_qs.none()
     )
     annotated = narrations.select_related("interaction").annotate(
@@ -601,10 +718,15 @@ def narration_prompt_for(
         raise GMPromptError(_MSG_NOT_YOURS)
     if prompt.status not in _NARRATABLE_STATUSES:
         raise GMPromptError(_MSG_RESOLVED)
-    if prompt.scene_id is not None:
-        here = get_active_scene(location)
-        if here is None or here.pk != prompt.scene_id:
-            raise GMPromptError(_MSG_WRONG_SCENE)
+    here = get_active_scene(location)
+    if prompt.scene_id is not None and (here is None or here.pk != prompt.scene_id):
+        raise GMPromptError(_MSG_WRONG_SCENE)
+    if here is not None and here.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+        # #4101 final review, ruling RF-1: an ephemeral scene stores no
+        # Interaction, so the line could never be linked to the prompt and its
+        # close would release the default on top of it. Refused before anything
+        # is sent; the prompt stays as it was.
+        raise GMPromptError(_MSG_EPHEMERAL)
     return prompt
 
 
@@ -614,10 +736,25 @@ def _lock_siblings(prompt: GMPrompt) -> list[GMPrompt]:
     Siblings are created together and can share ``created_at``, so the model's
     default ordering does not fix the lock order; pk order does, which keeps a
     close and a narration from taking the rows in opposite orders.
+
+    The status each caller checks is the LOCKED row's database value (#4101 final
+    review, B5), never a status already sitting on a cached instance: GMPrompt is
+    idmapper-cached, and a row fetched through the ORM hands back the cached
+    Python object without overwriting its fields, so a write that bypassed this
+    lock (a queryset ``update``, another process) would otherwise go unseen. The
+    locking query reads ``(pk, status)`` values; the cached instances are then
+    brought into line with them before anything reads ``status``.
     """
-    return list(
-        GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group).order_by("pk")
+    locked_status = dict(
+        GMPrompt.objects.select_for_update()
+        .filter(event_group=prompt.event_group)
+        .order_by("pk")
+        .values_list("pk", "status")
     )
+    siblings = list(GMPrompt.objects.filter(pk__in=locked_status).order_by("pk"))
+    for sibling in siblings:
+        sibling.status = locked_status[sibling.pk]
+    return siblings
 
 
 def _resolve_narration_prompt(
@@ -652,13 +789,10 @@ def _resolve_narration_prompt(
     not decided by whichever narration happened to resolve this specific
     prompt's own status.
 
-    The still-open re-check below reads ``siblings`` -- the ``select_for_update()``
-    result, i.e. the identity map's live Python objects, not a fresh row-by-row
-    re-query of the database. That is correct *because* every status change to a
-    GMPrompt goes through this same function under the same lock: no writer can
-    mutate a sibling's status without first taking this exact lock, so the
-    in-memory objects the lock hands back are never stale relative to each other
-    (#4101 fix round 2).
+    The still-open re-check below reads ``siblings`` as ``_lock_siblings`` hands
+    them back: the identity map's instances with ``status`` overwritten from the
+    locked rows' database values (#4101 final review, B5), so a status written
+    outside this function can never be missed.
 
     ``release_prompt_defaults`` is deferred to ``transaction.on_commit`` (#4101
     fix round 2) -- GMPrompt is idmapper-cached, so a Python-level attribute
@@ -710,10 +844,16 @@ def _resolve_narration_prompt(
                     # finish_scene_full/_finish_event_scenes calling
                     # scene.finish_scene() right after this very dismiss).
                     push_live = this.scene is not None and this.scene.is_active
+                    # robust=True (#4101 final review, B6): the close has already
+                    # committed, so a delivery error can only fail to deliver. Django
+                    # logs it with its traceback and runs the remaining callbacks; it
+                    # must not abort whatever committed the close (the rest of
+                    # finish_scene_full after expire_scene_prompts).
                     transaction.on_commit(
                         lambda p=this, r=release_room, pv=release_private, pl=push_live: (
                             release_prompt_defaults(p, room=r, private=pv, push_live=pl)
-                        )
+                        ),
+                        robust=True,
                     )
     return this
 
@@ -812,9 +952,8 @@ def expire_scene_prompts(scene: Scene) -> int:
     prompt is not itself a closed event.
 
     Tolerates a prompt a concurrent dismiss already resolved out from under this
-    sweep (``GMPromptError`` from ``_resolve_narration_prompt``'s identity-map
-    re-check under lock -- see that function's docstring for why reading the
-    cache there is correct) -- that race is a lost race, not a failure to
+    sweep (``GMPromptError`` from ``_resolve_narration_prompt``'s re-check of
+    the locked rows' status) -- that race is a lost race, not a failure to
     report.
     """
     open_prompts = list(
@@ -846,6 +985,9 @@ __all__ = [
     "prompt_narration_coverage",
     "prompt_recipients",
     "prompt_subject_name",
+    "prompt_subject_names",
+    "prompt_subject_persona",
+    "prompt_telnet_commands",
     "prompt_visible_to",
     "prompts_enabled",
     "recipients_excluding_subject",

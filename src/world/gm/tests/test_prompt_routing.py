@@ -759,3 +759,104 @@ class VisiblePromptsForScopeTest(TestCase):
         with mock.patch("world.gm.prompt_services.get_active_scene", return_value=None):
             visible = list(visible_prompts_for_location(self.gm, None))
         self.assertEqual(visible, [self.sceneless_prompt])
+
+
+class FinalReviewRoutingTest(TestCase):
+    """#4101 final review: B1 (finished scene), B4/RF-3 (coverage by character),
+    B5 (status from the locked row), B6 (a failed release never raises)."""
+
+    def setUp(self):
+        self.gm = AccountFactory()
+        self.sheet = CharacterSheetFactory()
+        self.scene = SceneFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+
+    def _crossing_prompt(self):
+        [prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.CROSSING,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="the floor groans",
+                private_text="the vision",
+            )
+        )
+        return prompt
+
+    def test_finished_scene_prompts_nobody(self):
+        """B1: a scene that has finished has no GM to narrate in it, even when
+        its GM never formally left -- the caller delivers unprompted instead."""
+        self.scene.is_active = False
+        self.scene.save()
+        event = NarratableEvent(
+            kind=GMPromptKind.CROSSING, scene=self.scene, character_sheet=self.sheet
+        )
+        self.assertEqual(route_narratable_event(event), [])
+        self.assertEqual(route_narratable_event(event, candidates=[self.gm]), [])
+        self.assertFalse(GMPrompt.objects.exists())
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_pemit_to_the_disguise_face_covers_the_private_line(self, narrate):
+        """B4 / ruling RF-3: the GM chose the face the subject is wearing, not
+        their primary persona -- still the subject, so closing releases no vision."""
+        disguise = PersonaFactory(character_sheet=self.sheet, is_fake_name=True)
+        prompt = self._crossing_prompt()
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="your vision")
+        InteractionReceiverFactory(interaction=interaction, persona=disguise)
+        link_prompt_narration(prompt, interaction)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
+        narrate.assert_not_called()
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_pemit_to_someone_else_still_releases_the_vision(self, narrate):
+        """RF-3's boundary: another character's persona is not the subject."""
+        bystander = PersonaFactory()
+        prompt = self._crossing_prompt()
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="aside")
+        InteractionReceiverFactory(interaction=interaction, persona=bystander)
+        link_prompt_narration(prompt, interaction)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
+        narrate.assert_called_once_with(self.sheet.character, "the vision", scene=self.scene)
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_close_reads_status_from_the_locked_row_not_the_cache(self, narrate):
+        """B5: the row was closed by a write the identity map never saw. The
+        cached instance still says PENDING; the close must read the locked row,
+        refuse, and release nothing a second time."""
+        prompt = self._crossing_prompt()
+        GMPrompt.objects.filter(pk=prompt.pk).update_with_reason(
+            reason="test: a close the identity map never saw", status=GMPromptStatus.DISMISSED
+        )
+        self.assertEqual(prompt.status, GMPromptStatus.PENDING)
+        with self.captureOnCommitCallbacks(execute=True), self.assertRaises(GMPromptError):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
+        narrate.assert_not_called()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+
+    def test_link_reads_status_from_the_locked_row_not_the_cache(self):
+        prompt = self._crossing_prompt()
+        GMPrompt.objects.filter(pk=prompt.pk).update_with_reason(
+            reason="test: a close the identity map never saw", status=GMPromptStatus.DISMISSED
+        )
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="too late")
+        self.assertIsNone(link_prompt_narration(prompt, interaction))
+        self.assertFalse(GMPromptNarration.objects.exists())
+
+    def test_failed_release_is_logged_not_raised(self):
+        """B6: a delivery error after the close committed is logged; it must not
+        propagate out of the commit (e.g. abort the rest of finish_scene_full)."""
+        prompt = self._crossing_prompt()
+        with (
+            mock.patch(
+                "world.gm.prompt_services.release_prompt_defaults",
+                side_effect=RuntimeError("delivery broke"),
+            ),
+            self.assertLogs("django", level="ERROR") as logs,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
+        self.assertIn("delivery broke", logs.output[0])
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)

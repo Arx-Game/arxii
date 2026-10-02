@@ -47,6 +47,16 @@ unmasked name), and omits the subject's name entirely (`kind_label` only) when t
 is no frozen persona (a scene-less `stake_outcome` prompt, or the persona was later
 deleted, `SET_NULL`) rather than falling back to the current face.
 
+Private coverage is decided by character, not persona: a private line covers the
+subject's default when any receiver persona belongs to the subject's character sheet, so
+a GM who addresses the disguise face the subject is wearing still counts (ruling RF-3).
+An ephemeral scene refuses a prompt narration outright, before anything is sent: it
+stores no Interaction to link, so the close would otherwise release the default on top
+of the GM's line (ruling RF-1). The GM queue names the subject from the frozen face for
+the addressed GM, a scene GM and staff, revealing who is behind a mask; any other viewer
+gets the feed's own per-viewer name (ruling RF-2). A scene that is no longer active
+prompts nobody, since a prompt there could never be narrated or released.
+
 Prepared per-character text (`CharacterCrossingText`, `CharacterSurgeText`) resolves
 field by field: the character's own prepared text, then the patron variant (Crossing
 only), then the tier default. A Crossing consumes its prepared text on use.

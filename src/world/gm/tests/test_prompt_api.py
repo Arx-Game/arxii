@@ -2,11 +2,14 @@
 
 from unittest import mock
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.gm import prompt_services
 from world.gm.constants import GMPromptGroup, GMPromptKind, GMPromptStatus
 from world.gm.factories import GMProfileFactory, GMPromptFactory
@@ -21,11 +24,13 @@ from world.magic.models import ResonanceGrant
 from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import (
+    PersonaFactory,
     SceneFactory,
     SceneGMParticipationFactory,
     SceneOwnerParticipationFactory,
 )
-from world.scenes.models import Interaction
+from world.scenes.models import Interaction, Persona
+from world.scenes.persona_display import compose_sdesc
 
 URL = "/api/gm/prompts/"
 
@@ -518,3 +523,73 @@ class GMPromptDramaticMomentConfirmDismissTest(TestCase):
         self.assertEqual(second.status_code, 400, second.data)
         self.assertIn("detail", second.data)
         self.assertTrue(second.data["detail"])
+
+
+class GMPromptSubjectNamingTest(TestCase):
+    """Ruling RF-2 (#4101 final review, B3): the queue names the subject from the
+    frozen face; only the addressee, a scene GM or staff see who is behind it."""
+
+    def setUp(self):
+        self.scene = SceneFactory()
+        self.gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        self.owner = AccountFactory()
+        SceneOwnerParticipationFactory(scene=self.scene, account=self.owner)
+        self.sheet = CharacterSheetFactory()
+        self.disguise = PersonaFactory(
+            character_sheet=self.sheet, is_fake_name=True, name="Grey Mask"
+        )
+        self.moment = GMPromptFactory(
+            scene=self.scene, character_sheet=self.sheet, subject_persona=self.disguise
+        )
+
+    def _row(self, account, prompt):
+        client = APIClient()
+        client.force_authenticate(account)
+        resp = client.get(URL, {"scene": self.scene.pk})
+        self.assertEqual(resp.status_code, 200)
+        return next(r for r in resp.data["results"] if r["id"] == prompt.pk)
+
+    def test_scene_gm_sees_the_frozen_face_and_who_is_behind_it(self):
+        row = self._row(self.gm, self.moment)
+        primary = self.sheet.primary_persona.name
+        self.assertEqual(row["subject_name"], f"Grey Mask ({primary})")
+        self.assertEqual(row["subject_persona_id"], self.disguise.pk)
+
+    def test_co_owner_sees_only_what_the_feed_would_show(self):
+        row = self._row(self.owner, self.moment)
+        self.assertEqual(row["subject_name"], compose_sdesc(self.disguise))
+        self.assertNotIn(self.sheet.primary_persona.name, row["subject_name"])
+        self.assertEqual(row["subject_persona_id"], self.disguise.pk)
+
+    def test_no_frozen_face_falls_back_to_primary(self):
+        plain = GMPromptFactory(scene=self.scene, subject_persona=None)
+        row = self._row(self.gm, plain)
+        self.assertEqual(row["subject_name"], plain.character_sheet.primary_persona.name)
+        self.assertEqual(row["subject_persona_id"], plain.character_sheet.primary_persona.pk)
+
+    def test_broken_primary_invariant_omits_the_name_instead_of_500(self):
+        self.moment.delete()  # its mask's reveal reads the primary too; this row has none
+        plain = GMPromptFactory(scene=self.scene, subject_persona=None)
+        with mock.patch.object(
+            CharacterSheet,
+            "primary_persona",
+            new_callable=mock.PropertyMock,
+            side_effect=Persona.DoesNotExist,
+        ):
+            row = self._row(self.gm, plain)
+        self.assertEqual(row["subject_name"], "")
+        self.assertIsNone(row["subject_persona_id"])
+
+    def test_queue_query_count_does_not_grow_with_rows(self):
+        """B8: subject naming is batched -- one more row is no more queries."""
+        client = APIClient()
+        client.force_authenticate(self.gm)
+        client.get(URL, {"scene": self.scene.pk})  # warm the identity map for both runs
+        with CaptureQueriesContext(connection) as one:
+            client.get(URL, {"scene": self.scene.pk})
+        GMPromptFactory(scene=self.scene)
+        GMPromptFactory(scene=self.scene)
+        with CaptureQueriesContext(connection) as three:
+            client.get(URL, {"scene": self.scene.pk})
+        self.assertEqual(len(three.captured_queries), len(one.captured_queries))

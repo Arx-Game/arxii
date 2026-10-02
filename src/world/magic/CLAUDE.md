@@ -1409,7 +1409,7 @@ Big mechanical moments used to fire with generic authored text and the GM runnin
 scene got no signal. `DramaticMomentSuggestion` (the #2183 technique-entrance confirm
 inbox) is renamed `GMPrompt`, moved to `world/gm/models.py`, and generalized to seven
 kinds (`GMPromptKind` in `world/gm/constants.py`): `dramatic_moment` (the original
-confirm kind, unchanged behavior, see below) plus six narration kinds
+confirm kind, see below) plus six narration kinds
 `audere_surge`/`audere_ultimate`/`crossing`/`miracle`/`death`/`stake_outcome`, each
 fired by `world.gm.prompt_services.route_narratable_event`. Full detail (model,
 services, release-on-close rule, telnet/web surfaces): `docs/systems/scenes.md`'s "GM
@@ -1434,9 +1434,10 @@ is consumed on use (`consume_prepared_crossing_text`); a surge's is reusable.
 A qualifying **Technique Entrance** (see "Technique Entrance" below) does not auto-tag a
 Dramatic Moment; it surfaces a PENDING `GMPrompt` of kind `dramatic_moment` a GM later
 confirms or dismisses. Recognition stays a human-adjudicated nudge, never a mechanical
-auto-grant (ADR-0113). This kind's shape is unchanged by the #4101 generalization: no
-`addressed_to` (it keeps the original scene GM/owner/staff gate), no narration, no
-`route_narratable_event` call.
+auto-grant (ADR-0113). This kind has no `addressed_to` (it keeps the original scene
+GM/owner/staff gate), no narration and no `route_narratable_event` call; since #4101 a new
+suggestion is pushed live (`notify_gm_prompt`, on commit) to each scene GM who has not muted
+the group, with the same `gm_prompt` frame a narration prompt gets.
 
 - `DramaticMomentType.suggest_on_technique_entrance` (bool) / `.suggestion_min_success_level`
   (`PositiveSmallIntegerField`) — opts a moment type into the bridge and sets the cast

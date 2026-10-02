@@ -357,6 +357,32 @@ class CrossingNarrationTest(TestCase):
         )
         self.assertFalse(GMPrompt.objects.filter(kind=GMPromptKind.CROSSING).exists())
 
+    def test_crossing_after_its_scene_finished_delivers_once_with_no_prompt(self):
+        """#4101 final review, B1: the offer's scene finished (its GM never left)
+        before the crossing resolved. A prompt there could never be narrated or
+        released, so nobody is prompted and both lines go out once, unprompted."""
+        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        offer = self._offer()
+        offer.refresh_from_db()
+        self.assertTrue(offer.manifestation_withheld)
+
+        # The identity map's own instance (the one offer.scene resolves to), not
+        # setUpTestData's per-test copy.
+        offer.scene.finish_scene()
+        self._cross(offer)
+
+        self.assertFalse(GMPrompt.objects.filter(kind=GMPromptKind.CROSSING).exists())
+        self.assertEqual(
+            Interaction.objects.filter(
+                content="tier room", mode=InteractionMode.EMIT, scene=self.scene
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            Interaction.objects.filter(content="tier vision", mode=InteractionMode.WHISPER).count(),
+            1,
+        )
+
     def test_decline_racing_a_concurrent_accept_is_a_no_op(self):
         """#4101 fix round 2, should-fix 4: a decline racing a concurrent
         accept (which already deleted the offer under its own lock) must not

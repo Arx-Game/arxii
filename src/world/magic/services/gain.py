@@ -1045,7 +1045,11 @@ def maybe_suggest_dramatic_moments(
     """
     from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
     from world.gm.models import GMPrompt  # noqa: PLC0415
-    from world.gm.prompt_services import prompt_recipients, scene_gm_accounts  # noqa: PLC0415
+    from world.gm.prompt_services import (  # noqa: PLC0415
+        notify_gm_prompt,
+        prompt_recipients,
+        scene_gm_accounts,
+    )
     from world.magic.models.dramatic_moment import (  # noqa: PLC0415
         DramaticMomentTag,
         DramaticMomentType,
@@ -1092,6 +1096,9 @@ def maybe_suggest_dramatic_moments(
         )
         if was_created:
             created.append(suggestion)
+            # #4101 final review, F1: reach the scene's GMs live with the same
+            # gm_prompt frame a narration prompt gets, once the row is committed.
+            transaction.on_commit(lambda p=suggestion: notify_gm_prompt(p))
     return created
 
 

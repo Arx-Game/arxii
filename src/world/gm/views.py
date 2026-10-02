@@ -1086,7 +1086,7 @@ class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         prompt.refresh_from_db()
-        data = dict(GMPromptSerializer(prompt).data)
+        data = dict(GMPromptSerializer(prompt, context=self.get_serializer_context()).data)
         # A successful narrate still carries a message when the dispatched
         # EmitAction/PemitAction has one to report -- e.g. the prompt closed
         # (a sibling dismiss, scene-end expiry) between resolve and link, so

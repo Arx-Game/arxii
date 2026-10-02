@@ -758,7 +758,10 @@ asks `recipients_excluding_subject` which GMs opted in (per-`GMPromptGroup` filt
 roster's `get_account_for_character`); with at least one recipient it creates one PENDING
 `GMPrompt` per GM (sharing one `event_group` UUID) and returns them; with none it returns
 `[]` and the **caller** delivers the resolved text unprompted, byte-identical to
-pre-#4101 behavior.
+pre-#4101 behavior. A scene that is no longer active prompts nobody (`prompt_recipients`
+returns `[]` for it): its scene-end sweep has already run and nobody can narrate from it, so
+an event that lands there (a Crossing accepted after its offer's scene finished) is
+delivered unprompted.
 
 ### Narrating and closing a prompt
 
@@ -771,6 +774,13 @@ row (`(prompt, interaction)`, never one-to-one: a GM may narrate one prompt any 
 times) links the Interaction back to the prompt via
 `world.gm.prompt_services.link_prompt_narration`.
 
+**Ephemeral scenes refuse prompt narration (ruling RF-1).** An ephemeral scene stores no
+Interaction, so a line could never be linked to its prompt and the close would release the
+default on top of it. `narration_prompt_for` refuses a `gm_prompt_id` narration whenever the
+scene active where the GM stands is ephemeral, before anything is sent, and the prompt is left
+as it was; the GM marks it done (which releases the prepared text) or narrates without the
+prompt.
+
 **A GM's narration never releases the prompt's authored defaults by itself (controller
 ruling R6-1).** The room default and the private default go out independently, and only
 once each, when the prompt's event CLOSES: explicitly dismissed, marked "done" after
@@ -781,11 +791,16 @@ both `visible_prompts_for` (REST) and `visible_prompts_for_location` (telnet), u
 Close is the one function, `dismiss_gm_prompt`, for both "nobody ever narrated this" and
 "I'm done adding lines"; only the GM-facing label differs. Closing re-derives, fresh, which
 leg(s) still need releasing from the linked `GMPromptNarration` rows (a room EMIT with no
-receivers covers the room leg; an EMIT/WHISPER whose receivers include the subject covers the
-private leg), under a `select_for_update` lock on every sibling prompt of the same
+receivers covers the room leg; an EMIT/WHISPER whose receivers include any persona of the
+subject's character covers the private leg: coverage is by character, not persona, so a GM
+who addressed the disguise face the subject wore still covers it, ruling RF-3), under a `select_for_update` lock on every sibling prompt of the same
 `event_group`, in pk order (`_lock_siblings`). A dismiss racing scene-end's own sweep, or
-two tabs closing the same prompt, serializes on that lock rather than double-sending.
-Release itself (`release_prompt_defaults`) runs via `transaction.on_commit`, against the
+two tabs closing the same prompt, serializes on that lock rather than double-sending. The
+status every close and every link checks is the locked row's database value, read by that
+same locking query, never a status already sitting on an identity-map instance.
+Release itself (`release_prompt_defaults`) runs via `transaction.on_commit` (registered
+`robust=True`: Django logs a delivery error with its traceback and it cannot abort whatever
+committed the close, such as the rest of `finish_scene_full`), against the
 prompt's own `scene` (never one re-derived from the character's current location), and
 only once every sibling GM's own copy of the event has also reached DISMISSED.
 
@@ -815,7 +830,9 @@ frame.
 
 ### Delivering and viewing a prompt
 
-`notify_gm_prompt` pushes a new prompt to its addressed GM: a `gm_prompt` WS frame
+`notify_gm_prompt` pushes a new prompt to its addressed GM (a `dramatic_moment` has no
+addressee, so it goes to every GM of its scene who has not muted the group, once
+`maybe_suggest_dramatic_moments` commits the row): a `gm_prompt` WS frame
 (`{prompt_id, scene_id, kind}`, `web.webclient.message_types.WebsocketMessageType.GM_PROMPT`,
 `frontend/src/hooks/types.ts`'s `GM_PROMPT`) for a web session, one formatted telnet line for
 a non-web session. `GET /api/gm/prompts/?scene=<id>` (`GMPromptViewSet`) and telnet `gm
@@ -831,6 +848,15 @@ physically present: `narration_location_for` (the prompt's own scene location, f
 to the actor's current room for a location-less Battle scene or a scene-less prompt) plus
 `present_characters_in_room`, one batched query, shared by the REST serializer and telnet's
 `gm prompt send`.
+
+**Who the queue says it concerns (ruling RF-2).** A queue row's `subject_name` and
+`subject_persona_id` come from the frozen `subject_persona` (falling back to the subject's
+primary persona, and to no name at all if even that is missing), resolved for the page by
+`prompt_subject_names` through `build_persona_display_map`. The addressed GM, a GM of the
+scene and staff resolve as universal discoverers, so a mask reads `"<mask> (<real>)"`; any
+other viewer of the row (a scene co-owner looking at a dramatic moment) gets exactly what the
+feed would show them. Telnet `gm prompts` uses the same function, and labels a
+dramatic-moment row with the `moment confirm|dismiss <id>` verbs that resolve it.
 
 **Telnet parity:** `gm prompt send <id>` narrates whichever of the two authored defaults
 (room, private) isn't already covered (`prompt_narration_coverage`, re-derived fresh, never
