@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
+from actions.definitions.item_helpers import emit_typed_item_intent, resolve_typed_item
 from actions.prerequisites import Prerequisite
-from actions.target_menu_types import MenuTargetKind, MenuTargetRequest, ResolvedMenuTarget
+from actions.target_menu_types import MenuTargetKind, MenuTargetRequest
 from actions.target_resolution import resolve_menu_target, resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
@@ -181,72 +182,6 @@ class LookAction(Action):
 
 ITEM_LOOK_UNAVAILABLE_MESSAGE = "That isn't available to look at."
 _ITEM_LOOK_MENU_TARGET_KEY = "menu_target"
-_ITEM_LOOK_KIND_KEY = "kind"
-_ITEM_LOOK_TARGET_ID_KEY = "target_id"
-_ITEM_LOOK_OWNER_PERSONA_ID_KEY = "owner_persona_id"
-_ITEM_LOOK_CONTAINER_ITEM_ID_KEY = "container_item_id"
-_ITEM_LOOK_LEGACY_FIELDS = frozenset(
-    {
-        "target",
-        _ITEM_LOOK_TARGET_ID_KEY,
-        "item",
-        "item_id",
-        "item_instance_id",
-        "item_name",
-        "owner_id",
-        "container_id",
-        "target_persona_id",
-        _ITEM_LOOK_OWNER_PERSONA_ID_KEY,
-        _ITEM_LOOK_CONTAINER_ITEM_ID_KEY,
-    }
-)
-_ITEM_LOOK_WIRE_FIELDS = frozenset(
-    {
-        _ITEM_LOOK_KIND_KEY,
-        _ITEM_LOOK_TARGET_ID_KEY,
-        _ITEM_LOOK_OWNER_PERSONA_ID_KEY,
-        _ITEM_LOOK_CONTAINER_ITEM_ID_KEY,
-    }
-)
-
-
-def _item_look_request(kwargs: dict[str, Any]) -> MenuTargetRequest | None:
-    """Parse this action's typed wire input without guessing an ID domain."""
-    if _ITEM_LOOK_LEGACY_FIELDS.intersection(kwargs):
-        return None
-    wire = kwargs.get(_ITEM_LOOK_MENU_TARGET_KEY)
-    if not isinstance(wire, dict) or set(wire).difference(_ITEM_LOOK_WIRE_FIELDS):
-        return None
-    if wire.get(_ITEM_LOOK_KIND_KEY) != MenuTargetKind.ITEMS.value:
-        return None
-    if _ITEM_LOOK_TARGET_ID_KEY not in wire:
-        return None
-    for name in (
-        _ITEM_LOOK_TARGET_ID_KEY,
-        _ITEM_LOOK_OWNER_PERSONA_ID_KEY,
-        _ITEM_LOOK_CONTAINER_ITEM_ID_KEY,
-    ):
-        if name in wire and (type(wire[name]) is not int or wire[name] <= 0):
-            return None
-    if _ITEM_LOOK_OWNER_PERSONA_ID_KEY in wire and _ITEM_LOOK_CONTAINER_ITEM_ID_KEY in wire:
-        return None
-    return MenuTargetRequest(
-        kind=MenuTargetKind.ITEMS,
-        target_id=wire[_ITEM_LOOK_TARGET_ID_KEY],
-        owner_persona_id=wire.get(_ITEM_LOOK_OWNER_PERSONA_ID_KEY),
-        container_item_id=wire.get(_ITEM_LOOK_CONTAINER_ITEM_ID_KEY),
-    )
-
-
-def _resolve_item_look(actor: ObjectDB, kwargs: dict[str, Any]) -> ResolvedMenuTarget | None:
-    """Return this viewer's current authorized item, not cached permission."""
-    request = _item_look_request(kwargs)
-    if request is None:
-        return None
-    resolved = resolve_menu_target(actor, request)
-    if resolved is None or resolved.item is None:
-        return None
-    return resolved
 
 
 @dataclass
@@ -257,7 +192,7 @@ class _TypedItemLookPrerequisite(Prerequisite):
         kwargs = (context or {}).get("kwargs", {})
         if _ITEM_LOOK_MENU_TARGET_KEY not in kwargs:
             return True, ""
-        if _resolve_item_look(actor, kwargs) is None:
+        if resolve_typed_item(actor, kwargs) is None:
             return False, ITEM_LOOK_UNAVAILABLE_MESSAGE
         return True, ""
 
@@ -288,7 +223,7 @@ class LookAtItemAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         if _ITEM_LOOK_MENU_TARGET_KEY in kwargs:
-            resolved = _resolve_item_look(actor, kwargs)
+            resolved = resolve_typed_item(actor, kwargs)
             if resolved is None:
                 return ActionResult(success=False, message=ITEM_LOOK_UNAVAILABLE_MESSAGE)
             if resolved.game_object is not None:
@@ -316,41 +251,8 @@ class LookAtItemAction(Action):
         return [*super().get_prerequisites(), _TypedItemLookPrerequisite()]
 
     def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
-        """Adapt typed item intent and retain the base interception lifecycle."""
-        if actor is None or _ITEM_LOOK_MENU_TARGET_KEY not in context.kwargs:
-            return super()._emit_intent(context, actor)
-        request = _item_look_request(context.kwargs)
-        if request is None:
-            return super()._emit_intent(context, actor)
-        resolved = _resolve_item_look(actor, context.kwargs)
-        original = resolved.game_object if resolved is not None else None
-        context.kwargs["target"] = original
-        cancelled = super()._emit_intent(context, actor)
-        redirected = context.kwargs.pop("target")
-        if cancelled is not None:
-            return cancelled
-        if redirected is original:
-            return None
-        if type(redirected) is int and redirected > 0:
-            redirected = ObjectDB.objects.filter(pk=redirected).first()
-        if not isinstance(redirected, ObjectDB):
-            context.kwargs[_ITEM_LOOK_MENU_TARGET_KEY] = None
-            return None
-        try:
-            item = redirected.item_instance
-        except ObjectDB.item_instance.RelatedObjectDoesNotExist:
-            context.kwargs[_ITEM_LOOK_MENU_TARGET_KEY] = None
-            return None
-        wire = {
-            _ITEM_LOOK_KIND_KEY: MenuTargetKind.ITEMS.value,
-            _ITEM_LOOK_TARGET_ID_KEY: item.pk,
-        }
-        if request.owner_persona_id is not None:
-            wire[_ITEM_LOOK_OWNER_PERSONA_ID_KEY] = request.owner_persona_id
-        if request.container_item_id is not None:
-            wire[_ITEM_LOOK_CONTAINER_ITEM_ID_KEY] = request.container_item_id
-        context.kwargs[_ITEM_LOOK_MENU_TARGET_KEY] = wire
-        return None
+        """Adapt typed item intent while retaining the standard lifecycle."""
+        return emit_typed_item_intent(context, actor, super()._emit_intent)
 
     def _look_at_worn(
         self,

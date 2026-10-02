@@ -158,6 +158,10 @@ class Action:
 
         return ActionTemplate.objects.filter(name=self.template_name).first()
 
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        """Whether this action is meaningful for bound inputs, separately from permission."""
+        return True
+
     def check_availability(
         self,
         actor: ObjectDB,

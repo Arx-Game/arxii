@@ -143,6 +143,7 @@ class UnequipActionTests(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         actor = CharacterFactory(db_key="UnequipActionNotEquippedActor", location=room)
+        CharacterSheetFactory(character=actor)
 
         template = ItemTemplateFactory(name="Unequip Action NotEquipped Shirt")
         TemplateSlotFactory(

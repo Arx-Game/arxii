@@ -20,6 +20,7 @@ from world.items.exceptions import (
     ContainerFull,
     InventoryError,
     ItemFixedInPlace,
+    ItemPlacedNotEquippable,
     ItemTooLarge,
     NoDropLocation,
     NotAContainer,
@@ -421,6 +422,24 @@ def give(
     _fire_item_acquisition_triggers(recipient, item)
 
 
+def validate_equip(character: CharacterState, item: ItemState) -> None:
+    """Check existing equipment permission and placement without mutation."""
+    if not item.can_equip(wearer=character):
+        raise NotInPossession
+    # A slotless legacy equip remains its existing no-op, including placement.
+    if item.instance.template.cached_slots:
+        from world.items.polish_services import can_equip_item  # noqa: PLC0415
+
+        if not can_equip_item(item.instance):
+            raise ItemPlacedNotEquippable
+
+
+def validate_unequip(character: CharacterState, item: ItemState) -> None:
+    """Check actual equipment membership using the CharacterSheet relation."""
+    if not item.instance.equipped_slots.filter(character=character.obj.sheet_data).exists():
+        raise NotEquipped
+
+
 @transaction.atomic
 def equip(character: CharacterState, item: ItemState) -> None:
     """Equip ``item`` on ``character`` in every slot its template declares.
@@ -430,8 +449,7 @@ def equip(character: CharacterState, item: ItemState) -> None:
     unequipped first (auto-swap). Different layers at the same body region
     are left alone. Multi-region items create one row per region atomically.
     """
-    if not item.can_equip(wearer=character):
-        raise NotInPossession
+    validate_equip(character, item)
 
     sheet = character.obj.sheet_data
     for slot in item.instance.template.cached_slots:
@@ -461,8 +479,9 @@ def unequip(character: CharacterState, item: ItemState) -> None:
     stays in the character's inventory — its underlying ``ObjectDB``
     location is unchanged.
     """
+    validate_unequip(character, item)
     # Snapshot rows before iteration — unequip_item deletes them as we go.
-    equipped_rows = list(item.instance.equipped_slots.filter(character_id=character.obj.pk))
+    equipped_rows = list(item.instance.equipped_slots.filter(character=character.obj.sheet_data))
     if not equipped_rows:
         raise NotEquipped
     for row in equipped_rows:

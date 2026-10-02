@@ -9,7 +9,12 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.definitions.item_helpers import resolve_item_instance
+from actions.definitions.item_helpers import (
+    MENU_TARGET_KEY,
+    emit_typed_item_intent,
+    resolve_item_instance,
+    resolve_typed_item,
+)
 from actions.prerequisites import (
     CanStealPrerequisite,
     HoldsItemPrerequisite,
@@ -19,6 +24,7 @@ from actions.prerequisites import (
     Prerequisite,
 )
 from actions.types import ActionContext, ActionResult, TargetType
+from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
@@ -29,16 +35,88 @@ from flows.service_functions.inventory import (
     steal,
     take_out,
     unequip,
+    validate_equip,
+    validate_unequip,
 )
 from world.gm.constants import GMLevel
 from world.items.constants import ContainerAccessPolicy
 from world.items.exceptions import InventoryError, ItemError, NotReachable
 from world.items.services.usage import use_item
 
+_EQUIPMENT_TARGET_UNAVAILABLE = "That isn't available."
+_EQUIPMENT_TARGET_KEY = "target"
+
+
+def _equipment_item(actor, kwargs):
+    if MENU_TARGET_KEY in kwargs:
+        resolved = resolve_typed_item(actor, kwargs)
+        return resolved.item if resolved is not None else None
+    return resolve_item_instance(kwargs.get("target"))
+
+
+def _equipment_states(actor, item, sdm=None):
+    # Construct read state only; initialization hooks belong to execution.
+    sdm = sdm if sdm is not None else SceneDataManager()
+    return CharacterState(actor, context=sdm), ItemState(item, context=sdm)
+
 
 @dataclass
-class EquipAction(Action):
-    """Equip an item the character is carrying."""
+class _EquipmentPrerequisite(Prerequisite):
+    action: Any = None
+
+    def is_met(self, actor, target=None, context=None):
+        context = context or {}
+        kwargs = dict(context.get("kwargs", {}))
+        if MENU_TARGET_KEY not in kwargs and _EQUIPMENT_TARGET_KEY not in kwargs:
+            kwargs["target"] = target
+        item = _equipment_item(actor, kwargs)
+        if MENU_TARGET_KEY in kwargs:
+            if item is None or not self.action.is_applicable(actor, kwargs=kwargs):
+                return False, _EQUIPMENT_TARGET_UNAVAILABLE
+        elif kwargs.get("target") is None:
+            return False, self.action.missing_target_message
+        elif item is None:
+            return False, self.action.invalid_target_message
+        character, item_state = _equipment_states(actor, item, context.get("scene_data"))
+        try:
+            self.action.validate(character, item_state)
+        except ItemError as exc:
+            return False, exc.user_message
+        return True, ""
+
+
+class _EquipmentAction(Action):
+    """Share equipment lifecycle adaptation, not inventory gameplay rules."""
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), _EquipmentPrerequisite(action=self)]
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        return emit_typed_item_intent(context, actor, super()._emit_intent)
+
+    def _execute_equipment(self, actor, context, kwargs, mutate, message):
+        item = _equipment_item(actor, kwargs)
+        if MENU_TARGET_KEY in kwargs:
+            if item is None or not self.is_applicable(actor, kwargs=kwargs):
+                return ActionResult(success=False, message=_EQUIPMENT_TARGET_UNAVAILABLE)
+        elif kwargs.get("target") is None:
+            return ActionResult(success=False, message=self.missing_target_message)
+        elif item is None:
+            return ActionResult(success=False, message=self.invalid_target_message)
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        item_state = ItemState(item, context=sdm)
+        try:
+            mutate(actor_state, item_state)
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        message_location(actor_state, message, mapping={"target": item.display_name})
+        return ActionResult(success=True)
+
+
+@dataclass
+class EquipAction(_EquipmentAction):
+    """Equip carried equipment, retaining legacy auto-swap and no-op behavior."""
 
     key: str = "equip"
     name: str = "Equip"
@@ -46,44 +124,32 @@ class EquipAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+    missing_target_message: ClassVar[str] = "Equip what?"
+    invalid_target_message: ClassVar[str] = "That can't be equipped."
+    validate = staticmethod(validate_equip)
 
-    def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
-    ) -> ActionResult:
-        target = kwargs.get("target")
-        if target is None:
-            return ActionResult(success=False, message="Equip what?")
-
-        item_instance = resolve_item_instance(target)
-        if item_instance is None:
-            return ActionResult(success=False, message="That can't be equipped.")
-
-        sdm = context.scene_data if context else SceneDataManager()
-        actor_state = sdm.initialize_state_for_object(actor)
-        item_state = ItemState(item_instance, context=sdm)
-
-        try:
-            equip(actor_state, item_state)
-        except InventoryError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        message_location(
-            actor_state,
-            "$You() $conj(equip) {target}.",
-            mapping={"target": item_state},
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _equipment_item(actor, kwargs)
+        if item is None or item.game_object is None or not item.template.cached_slots:
+            return False
+        _, state = _equipment_states(actor, item)
+        return (
+            state.is_in_possession(actor)
+            and not item.equipped_slots.filter(character=actor.sheet_data).exists()
         )
 
-        return ActionResult(success=True)
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        return self._execute_equipment(
+            actor, context, kwargs, equip, "$You() $conj(equip) {target}."
+        )
 
 
 @dataclass
-class UnequipAction(Action):
-    """Remove an equipped item."""
+class UnequipAction(_EquipmentAction):
+    """Remove actual worn equipment without moving the underlying item."""
 
     key: str = "unequip"
     name: str = "Unequip"
@@ -91,39 +157,25 @@ class UnequipAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+    missing_target_message: ClassVar[str] = "Remove what?"
+    invalid_target_message: ClassVar[str] = "That can't be removed."
+    validate = staticmethod(validate_unequip)
 
-    def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
-    ) -> ActionResult:
-        target = kwargs.get("target")
-        if target is None:
-            return ActionResult(success=False, message="Remove what?")
-
-        item_instance = resolve_item_instance(target)
-        if item_instance is None:
-            return ActionResult(success=False, message="That can't be removed.")
-
-        sdm = context.scene_data if context else SceneDataManager()
-        actor_state = sdm.initialize_state_for_object(actor)
-        item_state = ItemState(item_instance, context=sdm)
-
-        try:
-            unequip(actor_state, item_state)
-        except InventoryError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        message_location(
-            actor_state,
-            "$You() $conj(remove) {target}.",
-            mapping={"target": item_state},
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _equipment_item(actor, kwargs)
+        return (
+            item is not None
+            and item.game_object is not None
+            and item.equipped_slots.filter(character=actor.sheet_data).exists()
         )
 
-        return ActionResult(success=True)
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        return self._execute_equipment(
+            actor, context, kwargs, unequip, "$You() $conj(remove) {target}."
+        )
 
 
 @dataclass
