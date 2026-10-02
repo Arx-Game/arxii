@@ -1323,6 +1323,14 @@ class CharacterTechnique(SharedMemoryModel):
         return f"{self.technique} on {self.character}"
 
     def clean(self) -> None:
+        # `technique` is a required FK; without `technique_id` set, nothing below
+        # can be checked against it. An admin partial-clean pass can reach here
+        # with `technique` already excluded from `clean_fields()` (it was flagged
+        # required-but-blank there), so returning early avoids crashing on
+        # `self.technique`'s `RelatedObjectDoesNotExist` instead of just leaving
+        # that one clean field-required error to surface (#4099 final fix).
+        if self.technique_id is None:
+            return
         errors: dict[str, str] = {}
         if self.price_id is not None:
             if self.price.kind != RestrictionKind.PRICE:

@@ -116,6 +116,27 @@ class HoldReadTests(TestCase):
             character.techniques.hold_for(self.technique)
 
 
+class CharacterTechniqueCleanTests(TestCase):
+    """CharacterTechnique.clean() must not crash when ``technique`` is unset (#4099
+    final fix) - e.g. an admin partial-clean pass excludes an already-flagged
+    required field from ``clean_fields()`` but still calls ``clean()``."""
+
+    def test_clean_does_not_crash_without_a_technique(self) -> None:
+        from world.magic.factories import EffectTypeFactory
+        from world.magic.models import CharacterTechnique
+
+        sheet = CharacterSheetFactory()
+        # An effect-type-scoped price forces the `allowed.exists()` branch to
+        # evaluate `self.technique.effect_type_id` — an unscoped price's
+        # `allowed_effect_types.exists()` is False and short-circuits before
+        # ever reaching `self.technique`, masking the crash.
+        price = PriceFactory(allowed_effect_types=[EffectTypeFactory()])
+        hold = CharacterTechnique(character=sheet, price=price)
+        # Must not raise AttributeError / RelatedObjectDoesNotExist by reaching
+        # into ``self.technique`` while ``technique_id`` is None.
+        hold.clean()
+
+
 class MotifSeedTests(TestCase):
     def test_seed_is_idempotent_and_marks_the_gift(self) -> None:
         sheet = CharacterSheetFactory()

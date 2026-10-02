@@ -148,6 +148,39 @@ def creation_personalization_options(
     ]
 
 
+def _technique_anchor_cap(technique: Technique) -> int:
+    """The anchor cap a TECHNIQUE thread on ``technique`` is bound by.
+
+    Delegates to ``compute_anchor_cap`` — the same function ``weave_creation_
+    technique_thread`` checks against at finalize — via a transient, unsaved
+    ``Thread`` (the TECHNIQUE branch only reads ``target_technique.level``, so no
+    owner/resonance is needed). Never re-derives the formula by hand.
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+    from world.magic.services.threads import compute_anchor_cap  # noqa: PLC0415
+
+    thread = Thread(target_kind=TargetKind.TECHNIQUE, target_technique=technique)
+    return compute_anchor_cap(thread)
+
+
+def _flourish_pick_error(
+    pick: TechniquePersonalizationPick, option: PersonalizationOptionSet
+) -> str | None:
+    """The one error for this pick's flourish choice, or ``None``."""
+    if pick.signature_bonus_id is None:
+        return None
+    bonus = next((f for f in option.flourishes if f.pk == pick.signature_bonus_id), None)
+    if bonus is None:
+        return "A chosen signature flourish is no longer available."
+    if bonus.min_crossing_level > _technique_anchor_cap(option.technique):
+        # A level-0 technique has anchor cap 0 (#4099 final fix): the weave at
+        # finalize would reject this pick with AnchorCapExceeded, so it must fail
+        # here instead, using the same cap function the weave uses.
+        return "A chosen signature flourish needs a deeper thread than this technique allows."
+    return None
+
+
 def personalization_pick_errors(
     picks: Sequence[TechniquePersonalizationPick],
     *,
@@ -172,10 +205,9 @@ def personalization_pick_errors(
         option = options.get(pick.technique_id)
         if option is None:
             continue
-        if pick.signature_bonus_id is not None and pick.signature_bonus_id not in {
-            f.pk for f in option.flourishes
-        }:
-            errors.append("A chosen signature flourish is no longer available.")
+        flourish_error = _flourish_pick_error(pick, option)
+        if flourish_error is not None:
+            errors.append(flourish_error)
         if pick.early_form_id is not None and pick.early_form_id not in {
             f.pk for f in option.forms
         }:

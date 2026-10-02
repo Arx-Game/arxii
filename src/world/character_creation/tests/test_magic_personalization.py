@@ -156,6 +156,19 @@ class PickErrorTests(_Catalog, TestCase):
         )
         self.assertTrue(errors)
 
+    def test_flourish_exceeding_a_level_0_technique_anchor_cap_is_rejected(self) -> None:
+        """A level-0 technique has anchor cap 0 (#4099 final fix) - any flourish
+        needing a deeper thread must fail validation here, not at finalize."""
+        zero_level_technique = TechniqueFactory(gift=self.gift, name="Ember Spark", level=0)
+        picks = parse_personalization_picks(
+            {str(zero_level_technique.pk): {"signature_bonus_id": self.flourish.pk}},
+            technique_ids=[zero_level_technique.pk],
+        )
+        errors = personalization_pick_errors(
+            picks, techniques=[zero_level_technique], resonance_id=self.frost.pk
+        )
+        self.assertTrue(errors)
+
     def test_custom_name_matching_its_own_technique_name_is_not_a_collision(self) -> None:
         """Renaming a technique to its own catalog name is a no-op, not a collision."""
         picks = parse_personalization_picks(
