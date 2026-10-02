@@ -8,24 +8,41 @@ from typing import Any, ClassVar
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
-from actions.constants import ActionCategory
+from actions.constants import ActionCategory, TargetKind
 from actions.definitions.item_helpers import (
     MENU_TARGET_KEY,
     emit_typed_item_intent,
     resolve_item_instance,
     resolve_typed_item,
 )
+from actions.definitions.use_item_helpers import (
+    BLEND_KEY,
+    OPTION_ID_KEY,
+    SUPPORTED_KINDS,
+    UNAVAILABLE,
+    USE_TARGET_KEY,
+    UseIntentPayload,
+    _UseBlend,
+    _UseBound,
+    _UseOption,
+    _UseTarget,
+    candidate_options,
+    candidate_targets,
+    scalar_values,
+    source_values,
+    use_source,
+    use_target,
+)
 from actions.prerequisites import (
     CanStealPrerequisite,
-    HoldsItemPrerequisite,
-    ItemUsablePrerequisite,
     MinimumGMLevelPrerequisite,
-    OnUseTargetPrerequisite,
     Prerequisite,
 )
 from actions.target_menu_types import MenuTargetKind, MenuTargetRequest
 from actions.target_resolution import resolve_menu_target
 from actions.types import ActionContext, ActionResult, TargetType
+from flows.constants import EventName
+from flows.emit import emit_event
 from flows.events.payloads import ActionIntentPayload
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
@@ -750,12 +767,160 @@ class UseItemAction(Action):
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"item", "target"})
 
+    required_input_names: ClassVar[frozenset[str]] = frozenset({"use_target", "option_id"})
+
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [
-            HoldsItemPrerequisite(),
-            ItemUsablePrerequisite(),
-            OnUseTargetPrerequisite(),
-        ]
+        return [*super().get_prerequisites(), _UseBound(), _UseTarget(), _UseOption(), _UseBlend()]
+
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = use_source(actor, kwargs)
+        return item is not None and (
+            item.template.on_use_pool_id is not None
+            or item.template.appearance_effects.exists()
+            or item.template.disguise_kit_effects.exists()
+        )
+
+    def use_input_spec(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> dict[str, Any]:
+        item = use_source(actor, kwargs)
+        if item is None:
+            return {
+                "required_inputs": [],
+                "target_kind": None,
+                "cosmetic": False,
+                "descriptor": False,
+                "blend": False,
+            }
+        template = item.template
+        cosmetic = template.appearance_effects.exists()
+        missing = []
+        if template.on_use_target_kind is not None and USE_TARGET_KEY not in kwargs:
+            missing.append("use_target")
+        if (
+            template.appearance_effects.filter(target_option__isnull=True).exists()
+            and OPTION_ID_KEY not in kwargs
+        ):
+            missing.append("option_id")
+        blend = (
+            cosmetic
+            and not template.appearance_effects.filter(
+                trait__composite_option__isnull=True
+            ).exists()
+        )
+        return {
+            "required_inputs": missing,
+            "target_kind": template.on_use_target_kind,
+            "cosmetic": cosmetic,
+            "descriptor": cosmetic,
+            "blend": blend,
+        }
+
+    def use_candidates(
+        self, actor: ObjectDB, *, kwargs: dict[str, Any]
+    ) -> tuple[dict[str, Any], ...]:
+        if MENU_TARGET_KEY not in kwargs:
+            return ()
+        item = use_source(actor, kwargs)
+        if item is None or not self.is_applicable(actor, kwargs=kwargs):
+            return ()
+        kind = item.template.on_use_target_kind
+        if kind is not None and kind not in SUPPORTED_KINDS:
+            return ()
+        targets = candidate_targets(actor, kwargs, item)
+        options = candidate_options(kwargs, item)
+        rows = []
+        for wire, label in targets:
+            for option_id, option_label in options:
+                values = dict(kwargs)
+                if wire is not None:
+                    values["use_target"] = dict(wire)
+                if option_id is not None:
+                    values["option_id"] = option_id
+                checked = self.check_availability(
+                    actor, context={"kwargs": values}, pending_inputs=frozenset()
+                )
+                rows.append(
+                    {
+                        "use_target": wire,
+                        "target_name": label,
+                        "option_id": option_id,
+                        "option_name": option_label,
+                        "available": checked.available,
+                        "reasons": list(checked.reasons),
+                    }
+                )
+        return tuple(rows)
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        if actor is None or MENU_TARGET_KEY not in context.kwargs:
+            return super()._emit_intent(context, actor)
+        # The existing adapter owns source redirect conversion and assertions.
+        bound_context = ActionContext(
+            action=self,
+            actor=actor,
+            target=context.target,
+            kwargs=source_values(context.kwargs),
+            scene_data=context.scene_data,
+        )
+
+        def emit_use_intent(
+            source_context: ActionContext, _bound_actor: ObjectDB | None
+        ) -> ActionResult | None:
+            item = use_source(actor, context.kwargs)
+            effect_target, _ = (
+                use_target(actor, context.kwargs, item) if item is not None else (None, UNAVAILABLE)
+            )
+            original_item = source_context.kwargs.get("target")
+            original_wire = context.kwargs.get("use_target")
+            intent = UseIntentPayload(
+                actor=actor,
+                action_key=self.key,
+                target=effect_target,
+                item_target=original_item,
+                use_target=original_wire,
+                option_id=context.kwargs.get("option_id"),
+                descriptor=context.kwargs.get("descriptor"),
+                blend=context.kwargs.get("blend", False),
+            )
+            stack = emit_event(EventName.ACTION_INTENT, intent, location=actor.location)
+            if stack.was_cancelled():
+                return ActionResult(
+                    success=False, message=intent.cancel_message or "Something prevents you."
+                )
+            source_context.kwargs["target"] = intent.item_target
+            if intent.use_target is not original_wire:
+                context.kwargs["use_target"] = intent.use_target
+            elif intent.target is not effect_target:
+                redirected = intent.target
+                if type(redirected) is int and redirected > 0:
+                    redirected = ObjectDB.objects.filter(pk=redirected).first()
+                if isinstance(redirected, ObjectDB):
+                    redirected_item = resolve_item_instance(redirected)
+                    is_item = (
+                        item is not None and item.template.on_use_target_kind == TargetKind.ITEM
+                    )
+                    context.kwargs["use_target"] = (
+                        {"kind": "items", "target_id": redirected_item.pk}
+                        if is_item and redirected_item is not None
+                        else {"kind": "objects", "target_id": redirected.pk}
+                    )
+                else:
+                    context.kwargs["use_target"] = None
+            for name, value in (
+                ("option_id", intent.option_id),
+                ("descriptor", intent.descriptor),
+                ("blend", intent.blend),
+            ):
+                if (
+                    name in context.kwargs
+                    or (value is not None and name != BLEND_KEY)
+                    or (name == BLEND_KEY and value is not False)
+                ):
+                    context.kwargs[name] = value
+            return None
+
+        cancelled = emit_typed_item_intent(bound_context, actor, emit_use_intent)
+        context.kwargs[MENU_TARGET_KEY] = bound_context.kwargs.get(MENU_TARGET_KEY)
+        return cancelled
 
     def execute(
         self,
@@ -763,25 +928,29 @@ class UseItemAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        item_obj = kwargs.get("item")
-        item_instance = resolve_item_instance(item_obj) if item_obj is not None else None
+        for initialize in (False, True):
+            checked = self.check_availability(
+                actor,
+                target=kwargs.get("target"),
+                context={"kwargs": kwargs, "scene_data": context.scene_data if context else None},
+                pending_inputs=frozenset(),
+            )
+            if not checked.available:
+                return ActionResult(success=False, message="; ".join(checked.reasons))
+            if not initialize:
+                sdm = context.scene_data if context else SceneDataManager()
+                sdm.initialize_state_for_object(actor)
+        item_instance = use_source(actor, kwargs)
         if item_instance is None:
-            return ActionResult(success=False, message="Use what?")
-
-        target = kwargs.get("target")  # validated by prerequisites; None = self-use
-        # #2632 — optional free-text presentation flavor for cosmetic uses
-        # (multi-color hair, ornate work). Ignored by non-cosmetic items.
-        descriptor = (kwargs.get("descriptor") or "").strip() or None
-        # #2632 — choose-at-use cosmetics (Styling Kit / Ariwn Lenses): the
-        # wearer names the FormTraitOption. Ignored by fixed-option items.
-        option_raw = kwargs.get("option_id")
+            return ActionResult(success=False, message=UNAVAILABLE)
+        target, reason = use_target(actor, kwargs, item_instance)
+        if reason:
+            return ActionResult(success=False, message=reason)
         try:
-            option_id = int(option_raw) if option_raw is not None else None
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message="option_id must be a number.")
-        # #2632 — blend adds the color (green dye onto black = Black-Green)
-        # instead of replacing; only composite-capable traits accept it.
-        blend = bool(kwargs.get("blend"))
+        try:
+            option_id, descriptor, blend = scalar_values(kwargs)
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
 
         # TechniqueGrant hook: if the item template has a grant, learn the technique.
         from world.magic.models import TechniqueGrant  # noqa: PLC0415
@@ -791,25 +960,14 @@ class UseItemAction(Action):
             .select_related("technique")
             .first()
         )
-        # Prerequisite pre-check (#4097 fix round 2): run BEFORE use_item() so an
-        # item carrying a gated TechniqueGrant is never consumed on a refusal.
-        # use_item() is its own @transaction.atomic block that commits the moment
-        # it returns, so a post-use raise can't be rolled back to un-consume the
-        # item — the check has to happen before the charge, not after.
+        # Check every grant prerequisite before the atomic use service can spend a charge.
         if grant is not None:
             from world.magic.exceptions import UltimateNotLearnable  # noqa: PLC0415
-            from world.magic.services.gift_acquisition import (  # noqa: PLC0415
-                enforce_not_ultimate,
-            )
+            from world.magic.services.gift_acquisition import enforce_not_ultimate  # noqa: PLC0415
             from world.progression.services.spends import (  # noqa: PLC0415
                 check_requirements_for_technique,
             )
 
-            # Ultimate pre-check (#4098 fix round 1): a TechniqueGrant naming an
-            # ultimate must refuse before the item is consumed — without this the
-            # post-use learn_technique() call below raises UltimateNotLearnable
-            # (a MagicError) and is silently swallowed, so the item would still
-            # be used up for nothing instead of cleanly refusing.
             try:
                 enforce_not_ultimate(grant.technique)
             except UltimateNotLearnable as exc:
@@ -860,11 +1018,10 @@ class UseItemAction(Action):
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
-        item_state = ItemState(item_instance, context=sdm)
         message_location(
             actor_state,
             "$You() $conj(use) {item}.",
-            mapping={"item": item_state},
+            mapping={"item": item_instance.display_name},
         )
         return ActionResult(
             success=True,

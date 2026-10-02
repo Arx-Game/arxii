@@ -850,13 +850,25 @@ def _check_character_target(actor: ObjectDB, target: ObjectDB) -> tuple[bool, st
     return True, ""
 
 
+def room_use_is_visible(actor: ObjectDB, target: ObjectDB) -> bool:
+    """Check occupied-room use scope before the existing concealment rule."""
+    from world.conditions.services import passes_concealment_check  # noqa: PLC0415
+
+    return (
+        actor.location is not None
+        and target == actor.location
+        and target.is_typeclass("typeclasses.rooms.Room", exact=False)
+        and passes_concealment_check(actor, target)
+    )
+
+
 def _check_room_target(actor: ObjectDB, target: ObjectDB) -> tuple[bool, str]:
     """Validate a ROOM-kind on-use target: must be a room the actor occupies and can see."""
     if not target.is_typeclass("typeclasses.rooms.Room", exact=False):
         return False, "That can only be used on a place."
-    if actor.location not in (target.location, target):
+    if actor.location != target:
         return False, "They aren't here."
-    if not _is_visible_to(actor, target):
+    if not room_use_is_visible(actor, target):
         return False, CANNOT_SEE_MESSAGE
     return True, ""
 
