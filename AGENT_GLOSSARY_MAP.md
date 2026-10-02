@@ -9,13 +9,14 @@ term is chosen and the rest are listed under `_Avoid_`.
 ## Per-app glossaries
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
-- [magic](src/world/magic/AGENT_GLOSSARY.md)
+- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds the Ultimates terms (#4098):
+  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md)
-- [vitals](src/world/vitals/AGENT_GLOSSARY.md)
+- [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
 - [worship](src/world/worship/AGENT_GLOSSARY.md)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)

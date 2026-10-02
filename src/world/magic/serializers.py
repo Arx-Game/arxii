@@ -106,27 +106,47 @@ def _resolve_scene_pk(value: int) -> object:
         raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
 
 
-def _resolve_account_sheet(sheet_id: int, request) -> CharacterSheet:
+def _resolve_account_sheet(
+    sheet_id: int,
+    request,
+    *,
+    exception_class: type[Exception] = serializers.ValidationError,
+) -> CharacterSheet:
     """Resolve ``sheet_id`` to a CharacterSheet owned by ``request.user``.
 
-    Staff bypass the ownership check. Raises ``serializers.ValidationError``
-    on lookup miss or ownership violation.
+    Staff bypass the ownership check. Raises ``exception_class`` on lookup miss or
+    ownership violation. Every pre-existing caller keeps the default
+    ``serializers.ValidationError`` (400, two distinct messages — not-found vs
+    not-owned).
+
+    #4098 fix round 1: the two ultimate serializers pass ``exception_class=NotFound``
+    instead — there, ownership is a permission (404), not a validation error (400): a
+    foreign account's sheet and a missing sheet must read identically, so the
+    not-owned branch raises the SAME ``_ERR_CHARACTER_SHEET_NOT_FOUND`` body a
+    ``NotFound`` caller gets on lookup miss, never revealing whether a sheet with
+    that id exists at all. (Final review item 10 merged the former
+    ``_resolve_account_sheet_or_404`` near-duplicate into this parameter.)
     """
     try:
         sheet = CharacterSheet.objects.get(pk=sheet_id)
     except CharacterSheet.DoesNotExist as exc:
-        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        raise exception_class(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
 
     user = request.user if request is not None else None
     if user is not None and user.is_staff:
         return sheet
 
+    not_owned_message = (
+        _ERR_CHARACTER_SHEET_NOT_OWNED
+        if exception_class is serializers.ValidationError
+        else _ERR_CHARACTER_SHEET_NOT_FOUND
+    )
     if user is None:
-        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_OWNED)
+        raise exception_class(not_owned_message)
 
     owned_ids = set(RosterEntry.objects.for_account(user).character_ids())
     if sheet.pk not in owned_ids:
-        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_OWNED)
+        raise exception_class(not_owned_message)
     return sheet
 
 
@@ -2505,6 +2525,7 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
     advisory_text = serializers.SerializerMethodField()
     intensity_bonus = serializers.SerializerMethodField()
     anima_pool_bonus = serializers.SerializerMethodField()
+    reveal_framing_text = serializers.SerializerMethodField()
 
     class Meta:
         from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
@@ -2519,6 +2540,7 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
             "intensity_bonus",
             "anima_pool_bonus",
             "advisory_text",
+            "reveal_framing_text",
             "created_at",
         ]
         read_only_fields = fields
@@ -2544,6 +2566,129 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
         """Anima pool expansion the offer would grant (from the global threshold config)."""
         threshold = self._threshold()
         return threshold.anima_pool_bonus if threshold else 0
+
+    def get_reveal_framing_text(self, obj: object) -> str:
+        """The authored reveal promise, only when accepting would reveal something."""
+        from world.magic.services.ultimates import has_reveal_cards  # noqa: PLC0415
+
+        threshold = self._threshold()
+        if threshold is None or not has_reveal_cards(obj.character_sheet):  # type: ignore[union-attr]
+            return ""
+        return threshold.reveal_framing_text
+
+
+# =============================================================================
+# Audere ultimates REST surface (#4098)
+# =============================================================================
+
+
+class UltimateRevealCardSerializer(serializers.Serializer):
+    """A reveal card. Name/description only for cards the player may see by name."""
+
+    choice_key = serializers.CharField()
+    kind = serializers.CharField()
+    category = serializers.CharField()
+    label = serializers.CharField()
+    name = serializers.SerializerMethodField()
+    description = serializers.SerializerMethodField()
+    upgrade_of_name = serializers.SerializerMethodField()
+
+    def get_name(self, card) -> str:
+        return card.technique.name if card.technique is not None else ""
+
+    def get_description(self, card) -> str:
+        from world.magic.constants import UltimateCardKind  # noqa: PLC0415
+
+        if card.kind == UltimateCardKind.KNOWN and card.technique is not None:
+            return card.technique.description
+        return ""
+
+    def get_upgrade_of_name(self, card) -> str:
+        return card.upgrade_of.name if card.upgrade_of is not None else ""
+
+
+class UltimateRevealGroupSerializer(serializers.Serializer):
+    source = serializers.CharField()
+    path_name = serializers.SerializerMethodField()
+    gift_name = serializers.SerializerMethodField()
+    being_name = serializers.SerializerMethodField()
+    companion_name = serializers.SerializerMethodField()
+    cards = UltimateRevealCardSerializer(many=True)
+
+    def get_path_name(self, group) -> str:
+        return group.path.name if group.path is not None else ""
+
+    def get_gift_name(self, group) -> str:
+        return group.gift.name if group.gift is not None else ""
+
+    def get_being_name(self, group) -> str:
+        return group.being.name if group.being is not None else ""
+
+    def get_companion_name(self, group) -> str:
+        return group.companion.name if group.companion is not None else ""
+
+
+class UltimateRevealSerializer(serializers.Serializer):
+    ceremony = serializers.CharField()
+    framing_text = serializers.CharField(allow_blank=True)
+    groups = UltimateRevealGroupSerializer(many=True)
+
+
+class ReadiedUltimateSerializer(serializers.Serializer):
+    """A KnownUltimate the player has chosen (Screen 3)."""
+
+    technique_id = serializers.IntegerField(source="technique.pk")
+    name = serializers.CharField(source="technique.name")
+    description = serializers.CharField(source="technique.description")
+    label = serializers.SerializerMethodField()
+
+    def get_label(self, known) -> str:
+        from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+        threshold = AudereThreshold.objects.cached_singleton()
+        if threshold is None:
+            return ""
+        return threshold.label_for_category(known.technique.archetype_alignment)
+
+
+class AudereUltimateStateSerializer(serializers.Serializer):
+    reveal = UltimateRevealSerializer(allow_null=True)
+    readied = ReadiedUltimateSerializer(allow_null=True)
+    deferred_death_text = serializers.CharField(allow_blank=True)
+
+
+class AudereUltimateQuerySerializer(serializers.Serializer):
+    character_sheet_id = serializers.IntegerField()
+
+    def validate_character_sheet_id(self, value: int):
+        from rest_framework.exceptions import NotFound  # noqa: PLC0415
+
+        # #4098 fix round 1: ownership is a permission (404), not a validation
+        # error (400) — a foreign sheet must read identically to a missing one.
+        return _resolve_account_sheet(value, self.context.get("request"), exception_class=NotFound)
+
+
+class ChooseUltimateSerializer(serializers.Serializer):
+    character_sheet_id = serializers.IntegerField()
+    choice_key = serializers.CharField(max_length=80)
+
+    def validate_character_sheet_id(self, value: int):
+        from rest_framework.exceptions import NotFound  # noqa: PLC0415
+
+        # #4098 fix round 1: ownership is a permission (404), not a validation
+        # error (400) — a foreign sheet must read identically to a missing one.
+        return _resolve_account_sheet(value, self.context.get("request"), exception_class=NotFound)
+
+    def create(self, validated_data: dict):
+        from world.magic.exceptions import UltimateChoiceError  # noqa: PLC0415
+        from world.magic.services.ultimates import choose_ultimate  # noqa: PLC0415
+
+        try:
+            return choose_ultimate(
+                validated_data["character_sheet_id"], validated_data["choice_key"]
+            )
+        except UltimateChoiceError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
 
 
 class AudereRespondSerializer(serializers.Serializer):

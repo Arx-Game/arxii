@@ -583,6 +583,37 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   Prerequisites" and "Thread Carry Through Technique Prerequisites" sections;
   `docs/systems/progression.md`'s "Path and Technique Requirements" section;
   `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
+- **Ultimates (#4098):** `Technique.is_ultimate` flags a technique as a Path x
+  major-Gift / patron / companion ultimate, discovered through `KnownUltimate`
+  (`character`, `technique`, nullable `crossing`, `readied` - constrained to one row
+  per `(character, technique)` and at most one `readied=True` row per character),
+  never a `CharacterTechnique`. Attachment M2Ms: `PathGiftGrant.ultimate_techniques`,
+  `WorshippedBeing.ultimate_techniques` (`world.worship`), `CompanionArchetype
+  .ultimate_techniques` (`world.companions`). Services
+  (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet)` (derives
+  the reveal on read - owned/owned-known/bond pools, grouped by category, filtered by
+  #4097's prerequisite gate), `has_reveal_cards`, `choose_ultimate` (readies a pick
+  under `select_for_update`), `readied_ultimate`, `clear_readied_ultimate`,
+  `castable_technique_named`, `audere_ultimate_state`. Types
+  (`world.magic.types.ultimates`): `UltimateRevealCard`/`Group`, `UltimateReveal`,
+  `AudereUltimateState`. Exceptions: `UltimateNotLearnable`, `UltimateChoiceError`
+  (`UltimateRevealClosed`/`UltimateChoiceUnavailable`). Every ordinary acquisition
+  surface (CG catalog, covenant role grants, Sphinx shopping list, ORGANIZATION thread
+  weave, alternate-self grants, item `TechniqueGrant`, GM award, ritual SERVICE
+  dispatch) excludes `is_ultimate=True` via the shared `enforce_not_ultimate` guard.
+  Castable only in combat (an active DECLARING round), through the ordinary
+  `use_technique` pipeline, never via clash or a scene cast. REST: `GET
+  /api/magic/audere/ultimates/`, `POST /api/magic/audere/ultimates/choose/`
+  (`world/magic/views.py`); `PendingAudereOfferSerializer.reveal_framing_text`.
+  Telnet: `UltimateRevealHandler` (keyword `"ultimate"`, `world/magic/offer_handlers
+  .py`), appended to the surge/crossing accept messages; snapshotted against
+  `caller.ndb.ultimate_reveal_choice_keys` so a stale listing is refused, not resolved
+  blind. Frontend: `UltimateRevealDialog`/`UltimateRevealGate`
+  (`frontend/src/magic/components/`), `ActionDeclarationCard`, `SpellbookTab`.
+  Required-content probes (`web/admin/tuning/required_content.py`) flag a Path x
+  major-Gift grant with no ultimates and an `AudereThreshold` copy field still
+  carrying PLACEHOLDER text. Full detail: `docs/systems/magic.md`'s "Ultimates"
+  section; `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
   magical_flavor; thread anchors RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE),
@@ -8913,6 +8944,36 @@ combat, poison, spells, exhaustion, and any damage source.
     every peril source is an `ObjectDB` character.
   - `resolve_abandonment(sheet) -> bool` — resolves an abandoned victim through the source-
     appropriate pool; no-op when rescued (no acute-peril instance); seeding gap holds, never kills.
+  - `defer_or_apply_certain_death(character_sheet) -> bool` (#4098) - Soulfray's
+    `character_loss` consequence calls this instead of killing synchronously. Under an
+    active `death_deferred` condition (Audere/Audere Majora), sets
+    `CharacterVitals.death_certain_pending` and returns `False` (deferred); otherwise
+    kills now via the normal death path. Honors `is_death_prevented_by_story` first
+    (no death, no flag set, when a story dependency protects the character).
+  - `apply_pending_certain_death(character_sheet) -> bool` (#4098) - resolves a
+    pending flag: no-ops (`False`) if already dead, clears the flag with no death if
+    story-protected, otherwise kills and clears the flag (`True`). Called from
+    `world.conditions.services._resolve_deferred_death_on_expiry` when the LAST
+    `death_deferred` condition on the character ends (ordinarily Audere's own end at
+    the encounter's close - a dispel mid-fight resolves it right there instead, an
+    accepted consequence of tying deferral to the condition's lifetime), and
+    backstopped by `world.combat.services.cleanup_completed_encounter` for every
+    participant at encounter close, in case the condition never expired cleanly. See
+    `docs/architecture/runtime-modifiers-audere.md`'s "Certain Death Deferral"
+    section and `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
+  - `clear_pending_certain_death(character_sheet) -> bool` (#4098 owner ruling,
+    2026-10-01) - cancels a pending death outright, never applying it (unlike
+    `apply_pending_certain_death`). Called by
+    `world.combat.services._cancel_pending_certain_death_if_abandoned` when an
+    encounter's `outcome == EncounterOutcome.ABANDONED`, BEFORE
+    `cleanup_completed_encounter` ends Audere/Audere Majora for that encounter's
+    participants - a GM closing a broken fight shouldn't kill anyone, and ending
+    Audere there would otherwise reach the same `_resolve_deferred_death_on_expiry`
+    seam described below and kill through it.
+  - `CharacterVitals.death_certain_pending` (#4098, bool, default False) - the pending
+    flag the three functions above read and write; sibling to the pre-existing
+    `death_deferred_pending` (CHARACTER_KILLED-suppression flag), resolved
+    independently of it.
 - **Key Services (`world/vitals/peril_resolution.py`, #1479):**
   - `is_pc_source(source_character) -> bool` — PC-detection via `db_account` presence.
   - `death_is_permitted(*, victim_sheet, source_character) -> bool` — False for PC sources

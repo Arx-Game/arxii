@@ -317,6 +317,22 @@ export type AudereOfferResult = components['schemas']['AudereOfferResult'];
 // cleanly. The respond endpoint is annotated via @extend_schema.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Audere ultimate reveal + choice, #4098 — generated shapes.
+//
+// GET /api/magic/audere/ultimates/?character_sheet_id= and
+// POST /api/magic/audere/ultimates/choose/ are `@extend_schema`-annotated
+// (src/world/magic/views.py), so the generated schema types them cleanly.
+// Re-exported rather than hand-rolled, single source of truth.
+// ---------------------------------------------------------------------------
+
+export type AudereUltimateState = components['schemas']['AudereUltimateState'];
+export type UltimateReveal = components['schemas']['UltimateReveal'];
+export type UltimateRevealGroup = components['schemas']['UltimateRevealGroup'];
+export type UltimateRevealCard = components['schemas']['UltimateRevealCard'];
+export type ReadiedUltimate = components['schemas']['ReadiedUltimate'];
+export type ChooseUltimateRequest = components['schemas']['ChooseUltimateRequest'];
+
 export type EligiblePath = components['schemas']['EligiblePath'];
 export type PendingAudereMajoraOffer = components['schemas']['PendingAudereMajoraOffer'];
 export type PaginatedPendingAudereMajoraOfferList =

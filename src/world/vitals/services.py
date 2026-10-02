@@ -947,6 +947,125 @@ def _is_terminal_stage(instance: ConditionInstance) -> bool:
     ).exists()
 
 
+def defer_or_apply_certain_death(character_sheet: CharacterSheet) -> bool:
+    """Soulfray made this death certain (#4098 decision 9). True when deferred.
+
+    Story protection (``is_death_prevented_by_story``) is checked FIRST (#4098 fix
+    round 3): a protected character gets neither ``death_certain_pending`` set nor
+    the deferred-death line sent — protection means this death never happens at all,
+    not merely "wait and ask again later." Only once that's clear does an active
+    ``death_deferred`` condition (Audere, Audere Majora) defer the death to the
+    encounter's end: the character keeps acting, ``death_certain_pending`` is set
+    and the authored ``AudereThreshold.deferred_death_text`` is sent to them.
+    Otherwise the death applies now through ``_mark_dead``, the single death writer.
+
+    Story protection is checked directly via ``is_death_prevented_by_story``, not
+    ``death_is_permitted`` (``world.vitals.peril_resolution``): that function refuses
+    any call with ``source_character=None`` outright, which is right for an
+    externally-attacked victim with no attacker to blame (environmental death still
+    needs a source to reason about) but wrong here — a Soulfray certain death is
+    self-inflicted, so there never is an attacker ObjectDB to pass.
+    ``is_death_prevented_by_story`` already defines ``attacker=None`` semantics for
+    exactly this shape (a story-critical character is protected from a sourceless
+    death too). The check is repeated at resolution (``apply_pending_certain_death``)
+    rather than trusted from this call, because protection can be granted or lifted
+    mid-encounter.
+    """
+    from world.conditions.services import has_death_deferred  # noqa: PLC0415
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+    from world.stories.npc_protection import is_death_prevented_by_story  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals, _created = CharacterVitals.objects.get_or_create(character_sheet=character_sheet)
+    if vitals.life_state == CharacterLifeState.DEAD:
+        return False
+    if is_death_prevented_by_story(character_sheet, None):
+        if vitals.death_certain_pending:
+            vitals.death_certain_pending = False
+            vitals.save(update_fields=["death_certain_pending"])
+        return False
+    character = character_sheet.character
+    if has_death_deferred(character):
+        if not vitals.death_certain_pending:
+            vitals.death_certain_pending = True
+            vitals.save(update_fields=["death_certain_pending"])
+            threshold = AudereThreshold.objects.cached_singleton()
+            if threshold is not None and threshold.deferred_death_text.strip():
+                character.msg(threshold.deferred_death_text)
+        return True
+    vitals.health = 0
+    vitals.save(update_fields=["health"])
+    _mark_dead(character_sheet)
+    return False
+
+
+def apply_pending_certain_death(character_sheet: CharacterSheet) -> bool:
+    """Apply a deferred certain death once nothing defers it any more (#4098). True = died.
+
+    Called from the condition-expiry seam (``_resolve_deferred_death_on_expiry``) when
+    the LAST ``death_deferred`` condition on the character ends, so a death made certain
+    during Audere Majora while plain Audere also holds waits for whichever expires last.
+    Also the encounter-cleanup backstop (``cleanup_completed_encounter``) for the case
+    where the deferring condition left the character without that seam ever running.
+
+    Honors story protection the same way the immediate-death branch of
+    ``defer_or_apply_certain_death`` does — see that docstring for why
+    ``is_death_prevented_by_story`` is called directly rather than
+    ``death_is_permitted``. Clears ``death_certain_pending`` either way (the pending
+    flag answers "is a death still owed," not "was one actually applied"), so a
+    protected character doesn't stay permanently armed to die on the next unrelated
+    condition expiry.
+
+    Returns False whenever nothing new happened: no pending death, already dead, or
+    story protection held — never True unless this call is what actually killed the
+    character.
+    """
+    from world.conditions.services import has_death_deferred  # noqa: PLC0415
+    from world.stories.npc_protection import is_death_prevented_by_story  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals = CharacterVitals.objects.filter(character_sheet=character_sheet).first()
+    if vitals is None or not vitals.death_certain_pending:
+        return False
+    if has_death_deferred(character_sheet.character):
+        return False
+    vitals.death_certain_pending = False
+    if vitals.life_state == CharacterLifeState.DEAD or is_death_prevented_by_story(
+        character_sheet, None
+    ):
+        vitals.save(update_fields=["death_certain_pending"])
+        return False
+    vitals.health = 0
+    vitals.save(update_fields=["death_certain_pending", "health"])
+    _mark_dead(character_sheet)
+    return True
+
+
+def clear_pending_certain_death(character_sheet: CharacterSheet) -> bool:
+    """Cancel a pending certain death without applying it (#4098 owner ruling).
+
+    Called when an encounter ends ABANDONED (a GM closing a broken fight) — the
+    encounter that made the death certain never reached a real conclusion, so
+    nobody dies from it. Unlike ``apply_pending_certain_death``, this never kills;
+    it only clears the flag. ``cleanup_completed_encounter`` must call this BEFORE
+    removing the Audere/Audere Majora condition for an abandoned encounter's
+    participants — ending Audere removes the condition through
+    ``world.conditions.services.remove_condition``, which reaches
+    ``_resolve_deferred_death_on_expiry`` and applies the death the instant the
+    last deferring condition is gone, before this function's own caller ever runs.
+
+    Returns True iff a pending death was actually cleared.
+    """
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals = CharacterVitals.objects.filter(character_sheet=character_sheet).first()
+    if vitals is None or not vitals.death_certain_pending:
+        return False
+    vitals.death_certain_pending = False
+    vitals.save(update_fields=["death_certain_pending"])
+    return True
+
+
 def mark_fed_to_death(victim_sheet: CharacterSheet) -> bool:
     """Kill an NPC drained past empty by feeding (#2853). Returns True on death.
 
@@ -980,8 +1099,11 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
 
     Also propagates DEAD to the sheet's roster lifecycle_state (#1770 PR2):
     _mark_dead is the single death writer and only fires on the real terminal
-    path (death_deferred is gated upstream via death_is_permitted), so this is
-    the one seam where combat death reaches CharacterSheet.lifecycle_state.
+    path — death_deferred is gated upstream via death_is_permitted for an
+    externally-attacked victim, and via has_death_deferred directly for the
+    self-inflicted Soulfray certain-death path (#4098, defer_or_apply_certain_death
+    / apply_pending_certain_death, which have no attacker to hand death_is_permitted) —
+    so this is the one seam where combat death reaches CharacterSheet.lifecycle_state.
     """
     try:
         vitals = character_sheet.vitals

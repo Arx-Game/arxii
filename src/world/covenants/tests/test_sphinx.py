@@ -203,7 +203,7 @@ class ShoppingListGateQueryScalingTests(TestCase):
     """The prerequisite gate's query cost is independent of uncovered-function
     count (#4097 fix round 3).
 
-    ``_exclude_prerequisite_gated`` must run ONCE per ``judge_vow`` call (over the
+    ``exclude_unmet_technique_requirements`` must run ONCE per ``judge_vow`` call (over the
     union of every uncovered function's candidate pool), not once per uncovered
     function. Before the fix, every uncovered function re-ran the gate's full
     ``concrete_requirement_types()`` scan on its own — ``len(concrete_requirement_

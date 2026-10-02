@@ -58,6 +58,37 @@ class AudereThreshold(SharedMemoryModel):
             "primary-persona name. Blank = accepting stays room-silent."
         ),
     )
+    reveal_framing_text = models.TextField(
+        default="PLACEHOLDER reveal framing line, staff to author",
+        blank=True,
+        help_text=(
+            "#4098: shown on the Audere offer and above the telnet reveal when the "
+            "character has ultimates to reveal. Blank = no line."
+        ),
+    )
+    deferred_death_text = models.TextField(
+        default="PLACEHOLDER deferred-death line, staff to author",
+        blank=True,
+        help_text=(
+            "#4098: shown to a character whose Soulfray has made death certain while "
+            "Audere holds it off until the encounter ends."
+        ),
+    )
+    sword_reveal_label = models.CharField(
+        max_length=60,
+        default="PLACEHOLDER Sword label",
+        help_text="#4098: what players see for an undiscovered Sword ultimate.",
+    )
+    shield_reveal_label = models.CharField(
+        max_length=60,
+        default="PLACEHOLDER Shield label",
+        help_text="#4098: what players see for an undiscovered Shield ultimate.",
+    )
+    crown_reveal_label = models.CharField(
+        max_length=60,
+        default="PLACEHOLDER Crown label",
+        help_text="#4098: what players see for an undiscovered Crown ultimate.",
+    )
     # Deprecated: no longer used by Soulfray severity calculation (Scope #3).
     # Audere naturally drives high Soulfray via intensity boost. Can be removed.
     warp_multiplier = models.PositiveIntegerField(
@@ -75,6 +106,17 @@ class AudereThreshold(SharedMemoryModel):
             f"warp≥{self.minimum_warp_stage}, "
             f"+{self.intensity_bonus} intensity"
         )
+
+    def label_for_category(self, category: str) -> str:
+        """The authored reveal label for a RoleArchetype value (#4098 decision 14)."""
+        from world.covenants.constants import RoleArchetype
+
+        labels = {
+            RoleArchetype.SWORD: self.sword_reveal_label,
+            RoleArchetype.SHIELD: self.shield_reveal_label,
+            RoleArchetype.CROWN: self.crown_reveal_label,
+        }
+        return labels[RoleArchetype(category)]
 
 
 class AbstractPendingOffer(SharedMemoryModel):
@@ -261,6 +303,14 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     audere_template = ConditionTemplate.get_by_name(AUDERE_CONDITION_NAME)
 
     with transaction.atomic():
+        from world.magic.services.ultimates import clear_readied_ultimate
+
+        # A stale pick from an Audere that ended abnormally must not hide this reveal.
+        # A sheet-less character (NPC) never has a readied pick to clear.
+        sheet = character.character_sheet
+        if sheet is not None:
+            clear_readied_ultimate(sheet)
+
         # Apply Audere condition
         apply_condition(target=character, condition=audere_template)
 
@@ -334,8 +384,14 @@ def end_audere(character: ObjectDB) -> None:
     threshold = AudereThreshold.objects.cached_singleton()
 
     with transaction.atomic():
+        from world.magic.services.ultimates import clear_readied_ultimate
+
         # Remove condition
         remove_condition(character, audere_template)
+
+        sheet = character.character_sheet
+        if sheet is not None:
+            clear_readied_ultimate(sheet)
 
         # Revert engagement intensity modifier
         if threshold is not None:

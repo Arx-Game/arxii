@@ -71,6 +71,30 @@ class TechniqueRequirementsNotMet(MagicError):
         )
 
 
+class UltimateNotLearnable(MagicError):
+    """An ultimate is only reachable at Audere, never learned (#4098)."""
+
+    user_message = "That technique can only be used in Audere."
+
+
+class UltimateChoiceError(MagicError):
+    """Base for ultimate reveal choices (#4098)."""
+
+    user_message = "That choice is not available."
+
+
+class UltimateRevealClosed(UltimateChoiceError):
+    """Raised when there is no open Audere/Audere Majora reveal to choose from (#4098)."""
+
+    user_message = "There is no ultimate to choose right now."
+
+
+class UltimateChoiceUnavailable(UltimateChoiceError):
+    """Raised when a choice_key does not resolve against the current reveal (#4098)."""
+
+    user_message = "That choice is not among your ultimates."
+
+
 class GiftAlreadyOwnedError(MagicError):
     user_message = "You already have this gift."
 

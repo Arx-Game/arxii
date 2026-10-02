@@ -45,6 +45,16 @@ class SoulfrayConfig(SharedMemoryModel):
         help_text="Base difficulty for the resilience check before stage modifiers.",
     )
     ritual_severity_cost_per_point = models.PositiveIntegerField(default=1)
+    social_safety_bonus = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Control bonus applied to a character's technique control when they are "
+            "not currently engaged in combat (no active CharacterEngagement row). "
+            "Raising this lowers the effective anima cost of casting outside a fight "
+            "(see calculate_effective_anima_cost's control-delta formula) — at a high "
+            "enough value, social/out-of-combat casting costs barely any anima."
+        ),
+    )
 
     class Meta:
         verbose_name = "Soulfray Configuration"

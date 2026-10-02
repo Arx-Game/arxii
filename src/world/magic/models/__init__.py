@@ -246,6 +246,7 @@ from world.magic.models.threads import (
 )
 from world.magic.models.touchstone_config import TouchstoneCastConfig
 from world.magic.models.training_outcome import TrainingOutcomeAward
+from world.magic.models.ultimates import KnownUltimate
 from world.magic.models.weaving import (
     CharacterThreadWeavingUnlock,
     ThreadWeavingTeachingOffer,
@@ -347,6 +348,8 @@ __all__ = [
     # rituals
     "ImbuingProseTemplate",
     "IntensityTier",
+    # known ultimates (#4098)
+    "KnownUltimate",
     # power config (#637)
     "LevelPowerConfig",
     # progression dashboard (#536)

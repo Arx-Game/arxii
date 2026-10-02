@@ -391,6 +391,156 @@ def _probe_audere_majora_thresholds() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_path_major_gift_ultimates() -> ProbeResult:
+    """Every Path x MAJOR-gift grant carries at least one ultimate (#4098 decision 15).
+
+    Consumer: `world/magic/services/ultimates.py` `_owned_pools`. A grant with none is
+    an unfinished Path: Audere still surges, but its character sees no reveal.
+    """
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.models import PathGiftGrant  # noqa: PLC0415
+
+    missing = tuple(
+        f"{path_name} / {gift_name}"
+        for path_name, gift_name in PathGiftGrant.objects.filter(
+            gift__kind=GiftKind.MAJOR, ultimate_techniques__isnull=True
+        )
+        .order_by("path__name", "gift__name")
+        .values_list("path__name", "gift__name")
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} Path / major-gift grant(s) have no ultimate: unfinished Paths."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_audere_condition_shape() -> ProbeResult:
+    """Audere and Audere Majora must outlast their own round countdown and defer death.
+
+    Sibling to the plain presence check in the `audere-conditions` declaration below
+    (#4098 final review item 2) - this checks *shape*, not just existence, for the two
+    templates the Audere ultimates ceremony hard-depends on (Soulfray is covered by the
+    presence check alone; it carries neither of these requirements):
+
+    - `default_duration_type == ROUNDS` (the model's own default,
+      `world/conditions/factories.py`'s `ConditionTemplateFactory`) lets the condition
+      expire off its own round-tick countdown before `cleanup_completed_encounter`
+      ever runs - bypassing `end_audere`'s engagement-revert/ultimate-clear logic
+      (Task 12 finding, #4098 ledger). The condition must last until the encounter
+      itself ends instead, not for a fixed number of rounds.
+    - It must carry the `death_deferred` Property (`has_death_deferred`,
+      `world/conditions/services.py:2849`, reads `condition__properties__name=
+      "death_deferred"`) - Soulfray's `character_loss` consequence depends on this to
+      defer certain death to encounter cleanup rather than killing immediately.
+
+    Reads plain `values_list` tuples/names rather than model instances on purpose:
+    `ConditionTemplate` is a `SharedMemoryModel` (ADR-0008), and a `prefetch_related`
+    onto an identity-mapped instance can silently replay an earlier, now-stale
+    `properties` snapshot cached on that same pk's shared Python object instead of
+    re-querying (ADR-0263) - exactly the failure mode this probe exists to avoid
+    reproducing. Two queries total, neither inside a loop.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.magic.audere import (  # noqa: PLC0415
+        AUDERE_CONDITION_NAME,
+        AUDERE_MAJORA_CONDITION_NAME,
+    )
+
+    names = (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME)
+    durations = dict(
+        ConditionTemplate.objects.filter(name__in=names).values_list(
+            "name", "default_duration_type"
+        )
+    )
+    death_deferred_names = frozenset(
+        ConditionTemplate.objects.filter(
+            name__in=names, properties__name="death_deferred"
+        ).values_list("name", flat=True)
+    )
+    problems: list[str] = []
+    for name in names:
+        duration = durations.get(name)
+        if duration is None:
+            problems.append(f"{name}: missing")
+            continue
+        if duration == DurationType.ROUNDS:
+            problems.append(f"{name}: duration is round-limited, not until encounter end")
+        if name not in death_deferred_names:
+            problems.append(f"{name}: missing the death_deferred property")
+    if not problems:
+        return ProbeResult(present=True)
+    detail = "Audere/Audere Majora condition problem(s): " + "; ".join(problems) + "."
+    return ProbeResult(present=False, missing=tuple(problems), detail=detail)
+
+
+def _probe_ultimates_have_action_template() -> ProbeResult:
+    """Every `is_ultimate=True` Technique carries an `action_template` (#4098 final
+    review item 4).
+
+    `Technique.action_template` is nullable at the model layer (staff admin, unlike
+    the budget builder's `create_technique`, does not default it to the shared
+    "Technique Cast" template), so an ultimate authored directly in admin with the
+    field left blank can be revealed and readied through the whole Audere ceremony
+    and then has nothing to resolve a cast against - `use_technique`'s ordinary
+    pipeline has no template to dispatch. A sentinel, not a runtime guard: the
+    ceremony itself has no reason to assume every authored ultimate is cast-ready.
+    """
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    missing = tuple(
+        Technique.objects.filter(is_ultimate=True, action_template__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} ultimate technique(s) have no action_template: revealed and "
+        "pickable, but never castable."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+_ULTIMATE_COPY_FIELDS = (
+    "reveal_framing_text",
+    "deferred_death_text",
+    "sword_reveal_label",
+    "shield_reveal_label",
+    "crown_reveal_label",
+)
+
+# Mirrors upbringing_builder/live.py's `_PLACEHOLDER_MARK` - the seed text every
+# field in `_ULTIMATE_COPY_FIELDS` ships with until staff overwrites it.
+_PLACEHOLDER_MARK = "PLACEHOLDER"
+
+
+def _probe_audere_ultimate_copy() -> ProbeResult:
+    """The Audere reveal copy has been authored over its PLACEHOLDER seed (#4098 d.17).
+
+    A missing singleton reports `present=True` here: that absence is already the
+    REQUIRED `audere-threshold` row's failure state (ADR-free, fix round 1 - the
+    two rows share one root cause, and reporting it under both buries it behind
+    the wrong consequence text for this TUNING row).
+    """
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+    threshold = AudereThreshold.objects.cached_singleton()
+    if threshold is None:
+        return ProbeResult(
+            present=True,
+            detail="No AudereThreshold row exists - see the 'audere-threshold' REQUIRED row.",
+        )
+    missing = tuple(
+        field for field in _ULTIMATE_COPY_FIELDS if _PLACEHOLDER_MARK in getattr(threshold, field)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False, missing=missing, detail=f"Still placeholder: {', '.join(missing)}."
+    )
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
     """Every `ConditionStage` of the Soulfray template carries a `consequence_pool`.
 
@@ -858,6 +1008,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 ),
                 case_insensitive=True,
             ),
+        ),
+        ContentDependency(
+            key="audere-condition-shape",
+            label="Audere and Audere Majora condition duration + death deferral",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/audere.py (end_audere, encounter cleanup backstop); "
+                "world/conditions/services.py:2849 has_death_deferred()"
+            ),
+            consequence=(
+                "A round-limited duration lets the condition expire off its own "
+                "countdown before encounter cleanup runs, bypassing end_audere's "
+                "engagement-revert/ultimate-clear logic; missing the death_deferred "
+                "property means Soulfray's certain-death consequence kills "
+                "immediately instead of deferring to encounter cleanup."
+            ),
+            probe=CustomProbe(fn=_probe_audere_condition_shape),
+            admin_model="ConditionTemplate",
         ),
         ContentDependency(
             key="mount-combat-conditions",
@@ -1429,6 +1597,31 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="AudereMajoraThreshold",
         ),
         ContentDependency(
+            key="path-major-gift-ultimates",
+            label="Ultimates for every Path and major gift",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/ultimates.py _owned_pools() (Audere reveal)",
+            consequence=(
+                "A character on that Path holding that major gift breaks through in Audere "
+                "and is shown nothing: the surge applies with no reveal."
+            ),
+            probe=CustomProbe(fn=_probe_path_major_gift_ultimates),
+            admin_model="PathGiftGrant",
+        ),
+        ContentDependency(
+            key="ultimates-have-action-template",
+            label="Ultimates with no action template",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/technique_builder.py (use_technique cast pipeline)",
+            consequence=(
+                "An ultimate with no action_template can be revealed through Audere and "
+                "readied by the player, then has nothing to resolve a cast against - it "
+                "is pickable and never castable."
+            ),
+            probe=CustomProbe(fn=_probe_ultimates_have_action_template),
+            admin_model="Technique",
+        ),
+        ContentDependency(
             key="soulfray-stage-pools",
             label="Soulfray stage consequence pools",
             tier=DependencyTier.REQUIRED,
@@ -1520,6 +1713,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         # --- TUNING tier: singleton config tables (dormant-by-design, not yet set) -------
         ContentDependency(
+            key="audere-ultimate-copy",
+            label="Audere reveal labels and lines",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/ultimates.py, world/vitals/services.py",
+            consequence=(
+                "Players see PLACEHOLDER text for the reveal categories, the reveal "
+                "framing line and the deferred-death line."
+            ),
+            probe=CustomProbe(fn=_probe_audere_ultimate_copy),
+            admin_model="AudereThreshold",
+        ),
+        ContentDependency(
             key="capability-power-config",
             label="Capability power config singleton",
             tier=DependencyTier.TUNING,
@@ -1558,11 +1763,16 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="soulfray-config",
             label="Soulfray config singleton",
             tier=DependencyTier.TUNING,
-            consumer="world/magic/services/anima.py:219 apply_anima_ritual_outcome()",
+            consumer=(
+                "world/magic/services/anima.py:219 apply_anima_ritual_outcome(); "
+                "world/magic/services/techniques.py _get_social_safety_bonus()"
+            ),
             consequence=(
                 "Anima ritual outcomes cannot compute Soulfray severity "
                 "accumulation or resilience checks - the ritual outcome silently "
-                "omits the Soulfray term."
+                "omits the Soulfray term. The out-of-combat social safety control "
+                "bonus also falls back to its field default (10) instead of a "
+                "staff-tuned value."
             ),
             probe=AnyRowProbe(label="SoulfrayConfig"),
         ),

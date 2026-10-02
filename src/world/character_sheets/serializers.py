@@ -47,6 +47,7 @@ from world.character_sheets.types import (
     IdNameRef,
     IntroductionEntry,
     KeyringEntry,
+    KnownUltimateEntry,
     LookEntry,
     MagicSection,
     MentorBondEntry,
@@ -95,6 +96,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterGlimpseTag,
     CharacterTechnique,
+    KnownUltimate,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
@@ -1099,11 +1101,48 @@ def _build_magic_resonances(character: ObjectDB) -> list[ResonanceBalanceEntry]:
     return entries
 
 
+def _build_magic_ultimates(sheet: CharacterSheet) -> list[KnownUltimateEntry]:
+    """Known ultimates, same visibility as the spellbook (#4098 leak table).
+
+    The owner reads the discovered technique's real name/description (never the raw
+    SWORD/SHIELD/CROWN category word) alongside the authored reveal label.
+
+    Deliberately NOT a ``to_attr`` prefetch (#4098 fix round 1): ``choose_ultimate``
+    writes a ``KnownUltimate`` row mid-session with no sheet-queryset refetch in
+    between, so a prefetch on the idmapper-shared ``CharacterSheet`` would go stale
+    across that write (sharedmemory-model skill) — an ultimate picked this Audere
+    would never show up on the sheet. One plain query per read instead, ordered to
+    match the model's own ``Meta.ordering`` explicitly for a stable render.
+    """
+    known = list(
+        KnownUltimate.objects.filter(character=sheet)
+        .select_related("technique")
+        .order_by("discovered_at", "pk")
+    )
+    if not known:
+        return []
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+    threshold = AudereThreshold.objects.cached_singleton()
+    return [
+        KnownUltimateEntry(
+            name=row.technique.name,
+            description=row.technique.description,
+            label=(
+                threshold.label_for_category(row.technique.archetype_alignment)
+                if threshold is not None
+                else ""
+            ),
+        )
+        for row in known
+    ]
+
+
 def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSection | None:
-    """Build the magic section with gifts, motif, anima ritual, aura, and resonances.
+    """Build the magic section with gifts, motif, anima ritual, aura, resonances, ultimates.
 
     Returns ``None`` when the character has no magic data at all (no gifts,
-    no motif, no anima ritual, no aura, and no claimed resonances).
+    no motif, no anima ritual, no aura, no claimed resonances, and no ultimates).
     """
     character = sheet.character
 
@@ -1112,6 +1151,7 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
     anima_ritual_data = _build_magic_anima_ritual(sheet)
     aura_data = _build_magic_aura(character, privileged=privileged)
     resonances = _build_magic_resonances(character)
+    ultimates = _build_magic_ultimates(sheet)
 
     # Return None if no magic data exists at all
     if (
@@ -1120,6 +1160,7 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
         and anima_ritual_data is None
         and aura_data is None
         and not resonances
+        and not ultimates
     ):
         return None
 
@@ -1129,6 +1170,7 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
         anima_ritual=anima_ritual_data,
         aura=aura_data,
         resonances=resonances,
+        ultimates=ultimates,
     )
 
 

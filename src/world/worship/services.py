@@ -427,13 +427,20 @@ def active_patronage_for(sheet: "CharacterSheet") -> list[DevotionStanding]:
     An active patronage is a DevotionStanding with ``valence`` set (non-null)
     and ``released_at`` null. Ordinary worship rows (valence=null) and released
     patronages are excluded.
+
+    ``select_related("being")``: the Audere ultimate reveal (#4098,
+    ``world.magic.services.ultimates._patron_pools``) reads ``s.being`` for
+    every row this returns — without it, that access costs one query per
+    patronage.
     """
     return list(
         DevotionStanding.objects.filter(
             character_sheet=sheet,
             valence__isnull=False,
             released_at__isnull=True,
-        ).order_by("-favor")
+        )
+        .select_related("being")
+        .order_by("-favor")
     )
 
 

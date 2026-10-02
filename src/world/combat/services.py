@@ -9281,6 +9281,30 @@ def _break_pending_sustained_actions(encounter: CombatEncounter) -> None:
         sustained.delete()
 
 
+def _cancel_pending_certain_death_if_abandoned(
+    encounter: CombatEncounter, participants: list[CombatParticipant]
+) -> None:
+    """Abandoned encounters cancel any pending certain death (#4098 owner ruling).
+
+    A GM closing a broken fight shouldn't kill anyone. The caller
+    (``cleanup_completed_encounter``) MUST run this before ending Audere/Audere
+    Majora: removing that condition there (via ``end_audere``/``end_audere_majora``
+    -> ``remove_condition``) reaches ``_resolve_deferred_death_on_expiry``
+    (``world/conditions/services.py``), which applies a pending certain death the
+    instant the last deferring condition is gone — before this function's own
+    caller's backstop loop (further down in ``cleanup_completed_encounter``) ever
+    runs. A no-op for every other outcome (VICTORY/DEFEAT/FLED), which still apply
+    the death through the ordinary seam or that backstop.
+    """
+    if encounter.outcome != EncounterOutcome.ABANDONED:
+        return
+
+    from world.vitals.services import clear_pending_certain_death  # noqa: PLC0415
+
+    for participant in participants:
+        clear_pending_certain_death(participant.character_sheet)
+
+
 def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     """Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs
     are never touched. Layer 5 of the multi-layer guard: defensive re-check
@@ -9309,16 +9333,24 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     # sweep observes those targets too.
     from world.conditions.services import expire_end_of_combat_conditions  # noqa: PLC0415
 
-    participant_targets = [
-        p.character_sheet.character
-        for p in CombatParticipant.objects.filter(encounter=encounter).select_related(
+    # No status filter: includes REMOVED participants too, matching the backstop
+    # loop below (#4098 fix round 1) — a certain death must resolve even for a
+    # participant who left the encounter early.
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter).select_related(
             "character_sheet__character"
         )
-    ]
+    )
+    participant_targets = [p.character_sheet.character for p in participants]
     opponent_targets = [
         opp.objectdb
         for opp in CombatOpponent.objects.filter(encounter=encounter).select_related("objectdb")
     ]
+
+    # Abandoned encounters cancel any pending certain death instead of applying it
+    # (#4098 owner ruling). This MUST run before the Audere-ending loop just below —
+    # see _cancel_pending_certain_death_if_abandoned's docstring for why.
+    _cancel_pending_certain_death_if_abandoned(encounter, participants)
 
     # End Audere and Audere Majora BEFORE the generic condition sweep (#873, #543):
     # the sweep would strip the condition without reverting the engagement intensity
@@ -9358,6 +9390,23 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         ).delete()
 
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
+
+    # Certain-death backstop (#4098 fix round 1): a deferred certain death
+    # normally resolves in conditions.services._resolve_deferred_death_on_expiry
+    # when the LAST death_deferred condition (Audere/Audere Majora) is removed
+    # through the ordinary removal seam. But that seam doesn't always run before
+    # the encounter ends — the round-duration countdown, an interaction removal,
+    # or a damage interaction can all strip the condition without going through
+    # it — which would leave death_certain_pending set forever. Call the same
+    # resolution function directly for every participant sheet so the encounter's
+    # own end is always a backstop. apply_pending_certain_death is idempotent and
+    # no-ops when nothing is pending or the character is already dead, so this is
+    # safe to call unconditionally. Reuses the sheets already loaded above —
+    # never re-selects them.
+    from world.vitals.services import apply_pending_certain_death  # noqa: PLC0415
+
+    for participant in participants:
+        apply_pending_certain_death(participant.character_sheet)
 
     # Combat-owned engagement teardown (#872): deleting the engagement discards
     # the transient escalation process modifiers. Must run AFTER end_audere

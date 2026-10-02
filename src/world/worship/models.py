@@ -127,6 +127,16 @@ class WorshippedBeing(SharedMemoryModel):
             "visibility field on WorshippedBeing itself."
         ),
     )
+    ultimate_techniques = models.ManyToManyField(
+        "arxii.Technique",
+        blank=True,
+        related_name="ultimate_for_beings",
+        limit_choices_to={"is_ultimate": True},
+        help_text=(
+            "#4098: ultimates this being makes available to its Chosen (an active "
+            "patronage) at Audere. The being makes them available; the Chosen pays."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]

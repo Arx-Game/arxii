@@ -378,3 +378,54 @@ _Avoid_: thread inheritance, prerequisite thread (the thread itself doesn't move
 copy; only its empowering effect reaches further).
 
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)
+
+**Ultimate** (#4098):
+A `Technique` flagged `is_ultimate=True`: a power otherwise out of reach, reachable
+only through Audere or Audere Majora. Reuses the catalog, payload tables, and cast
+path of an ordinary technique; the flag is what keeps it off every everyday cast
+surface, not a separate model. Two kinds: **owned** (the character's Path x major
+Gift pushed to its limit, attached via `PathGiftGrant.ultimate_techniques`) and
+**bond** (a patron being or a companion archetype makes it available while the bond
+holds; past-life bond ultimates are deferred, see `docs/roadmap/magic.md`). A Court
+pact enhances qualifying ultimates the same way it enhances qualifying techniques; it
+never grants ultimates of its own.
+_Avoid_: super move, limit break, unlocked technique.
+
+**Known ultimate** (#4098):
+A character's discovery of an ultimate: a `KnownUltimate` row (`character`,
+`technique`, nullable `crossing`, `readied`), never a `CharacterTechnique`. Once
+known, it joins the character's known ultimates for every later Audere; an **owned**
+known ultimate stays listed regardless of which Path is current, as long as the
+granting Gift is still held as MAJOR; a **bond** known ultimate is listed only while
+that bond is active. It cannot be cast outside Audere or Audere Majora.
+_Avoid_: unlocked ultimate, learned ultimate (learning is the ordinary-technique
+vocabulary; an ultimate is discovered, not learned).
+
+**Readied ultimate** (#4098):
+The character's single active pick for the current Audere: the one `KnownUltimate`
+row with `readied=True` (a DB constraint enforces at most one per character).
+Choosing an ultimate at the reveal readies it; it does NOT cast it. The readied pick
+is castable only through the ordinary combat declaration while an active DECLARING
+round holds, and is cleared on the next Audere accept, a Crossing, or Audere's end.
+_Avoid_: active ultimate, equipped ultimate.
+
+**Reveal** (#4098):
+The set of ultimates an Audere or Audere Majora offers a character to choose from,
+grouped by category. Computed fresh on every read (`ultimate_reveal_for`) from the
+character's current owned/owned-known/bond pools, never an offer table written at
+accept time. A known ultimate's card shows its name and description; an undiscovered
+one shows only its authored category label (Sword/Shield/Crown's evocative display
+name), never its name, description, or identity.
+_Avoid_: offer, ultimate list (the reveal is derived state, not a stored offer).
+
+**Owned ultimate** / **Bond ultimate** (#4098):
+The two kinds of ultimate (spec decision 1). An **owned** ultimate comes from the
+character's own Path x major Gift; a **bond** ultimate comes from a patron being or a
+companion archetype and is available only while that bond holds, since bonds make
+ultimates available but never spend or refuse on the character's behalf (spec
+decision 5, "the character pays").
+_Avoid_: patron ultimate / companion ultimate as the category name (those are the two
+bond *sources*, not a third kind alongside owned and bond).
+
+**Certain death (deferred)** (#4098):
+See `vitals/AGENT_GLOSSARY.md`.

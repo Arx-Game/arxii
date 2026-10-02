@@ -18,7 +18,7 @@ from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
-from world.magic.exceptions import XPInsufficient
+from world.magic.exceptions import UltimateNotLearnable, XPInsufficient
 from world.magic.models import (
     CharacterGiftUnlock,
     GiftAcquisitionConfig,
@@ -263,6 +263,21 @@ def magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
     return get_modifier_total(learner, target)
 
 
+def enforce_not_ultimate(technique: Technique) -> None:
+    """Raise ``UltimateNotLearnable`` if ``technique`` is an ultimate (#4098).
+
+    Extracted (mirroring ``enforce_technique_prerequisites`` below) to keep
+    ``charge_and_learn``'s cyclomatic complexity under the lint threshold — a
+    single branch point either way. Shared with ``learn_technique``
+    (``technique_acquisition.py``) so every technique-acquisition front door
+    refuses an ultimate the same way: it is only ever reached by discovering
+    it at Audere/Audere Majora, never through an ordinary learn/teach/train
+    route — not even a GM award.
+    """
+    if technique.is_ultimate:
+        raise UltimateNotLearnable
+
+
 def enforce_technique_prerequisites(sheet: CharacterSheet, technique: Technique) -> None:
     """Raise ``TechniqueRequirementsNotMet`` unless every active requirement is met.
 
@@ -344,6 +359,9 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
         ``contribute_to_technique_progress`` in subsequent sessions.
 
     Raises:
+        UltimateNotLearnable: ``technique.is_ultimate`` — ultimates are only
+            reached by discovering them at Audere/Audere Majora (#4098), never
+            through teaching or Academy TRAIN.
         GiftUnlockMissing: First technique from a gift with no receipt.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
         TechniqueRequirementsNotMet: An active requirement targeting this
@@ -370,6 +388,9 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     sheet = CharacterSheet.objects.select_for_update().get(pk=learner.pk)
 
     gift = technique.gift
+
+    # 0. An ultimate is never learned through teaching or Academy TRAIN (#4098).
+    enforce_not_ultimate(technique)
 
     # 1. Check learner doesn't already know this technique.
     if CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():

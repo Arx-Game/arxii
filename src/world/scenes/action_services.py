@@ -1456,6 +1456,10 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
         strain_power_enabled=False,
+        # Soulfray kills only in combat encounters (#4098 fix round 2) — a
+        # technique-enhanced social action is never a CombatEncounter, so a
+        # character_loss Soulfray consequence can never be selected here.
+        lethal=False,
     )
 
     resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]

@@ -59,7 +59,7 @@ from world.combat.services import (
     select_npc_actions,
     update_encounter_settings,
 )
-from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.services import get_active_conditions
 from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
@@ -963,6 +963,27 @@ class ResolveRoundClimacticMomentBlockTests(TestCase):
 
         resolve_round(encounter)  # Must not raise PARTICIPANT_MID_CROSSING.
 
+    def test_does_not_block_after_crossing_resolves(self) -> None:
+        """A resolved crossing (Majora condition, no pending offer) must not freeze
+        the encounter: the crosser keeps fighting (#4098 decision 9, scenario 3)."""
+        from world.magic.audere_majora import PendingAudereMajoraOffer
+        from world.magic.factories import wire_audere_power_multipliers
+        from world.magic.tests.majora_fixtures import build_crossing_world
+
+        _audere, majora = wire_audere_power_multipliers()
+        (character, sheet, _t, _p, _q, _offer) = build_crossing_world(5, "_postcross")
+        PendingAudereMajoraOffer.objects.filter(character_sheet=sheet).delete()
+        ConditionInstanceFactory(target=character, condition=majora)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=sheet, defaults={"health": 100, "max_health": 100}
+        )
+
+        resolve_round(encounter)  # must not raise PARTICIPANT_MID_CROSSING
+
 
 class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
     """Regression (#1899 whole-branch review): the caller-side sheet-list build
@@ -983,11 +1004,13 @@ class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
                 status=ParticipantStatus.ACTIVE,
             )
 
-        # 1 query for the select_related participant+sheet join, 2 for the
-        # batched crossing check (PendingAudereMajoraOffer + ConditionInstance)
-        # — bounded regardless of participant count. A regression that drops
-        # select_related would instead cost 1 + 12 (one per participant) + 2.
-        with self.assertNumQueries(3):
+        # 1 query for the select_related participant+sheet join, 1 for the
+        # batched crossing check (PendingAudereMajoraOffer only — the block
+        # covers the undecided-offer window, not the Majora condition; #4098
+        # Task 5) — bounded regardless of participant count. A regression
+        # that drops select_related would instead cost 1 + 12 (one per
+        # participant) + 1.
+        with self.assertNumQueries(2):
             _block_if_participant_mid_audere_majora_crossing(encounter)
 
 

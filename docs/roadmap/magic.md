@@ -695,6 +695,66 @@ technique to keep paying off once a character learns what it unlocks.
 
 ---
 
+## Audere unlocks ultimates (#4098, BUILT 2026-10-01)
+
+Audere and Audere Majora used to raise a character's intensity and anima pool without
+giving them anything they couldn't already do. The #4073 owner's GM rulings turned
+Audere into the moment a character's magic reaches powers otherwise out of reach.
+
+**Built:**
+- `Technique.is_ultimate` flags a technique as an ultimate; `KnownUltimate` is a
+  character's per-technique discovery record (never a `CharacterTechnique`), with the
+  character's single `readied` pick enforced by a DB constraint. Attaches via
+  `PathGiftGrant.ultimate_techniques` (owned: Path x major Gift),
+  `WorshippedBeing.ultimate_techniques` (bond: patron), and
+  `CompanionArchetype.ultimate_techniques` (bond: companion).
+- Every ordinary acquisition surface (CG catalog, covenant role grants, the Sphinx's
+  shopping list, the ORGANIZATION thread weave, alternate-self grants, item
+  `TechniqueGrant`, GM award, ritual SERVICE dispatch) excludes `is_ultimate=True`
+  through one shared guard, `enforce_not_ultimate`.
+- **The reveal** (`world/magic/services/ultimates.py`) is derived on read, not an
+  offer table: plain Audere reveals the current Path's ultimates for the character's
+  major Gift; Audere Majora reveals the new Path's. An owned known ultimate persists
+  across a Crossing (still listed as long as the granting Gift stays held as MAJOR); a
+  bond ultimate is listed only while that bond is active. Undiscovered candidates
+  surface only their category (Sword/Shield/Crown, under authored display labels) -
+  never a name, a description, or the technique's identity.
+- **Choosing readies; it does not cast.** The pick is castable only through the
+  ordinary combat declaration while an active DECLARING round holds - never via clash,
+  never via a scene cast.
+- **Upgrades (#4097 integration):** a later Path's ultimate can list an earlier one as
+  its prerequisite, carrying its threads forward.
+- **Deferred certain death:** Soulfray's `character_loss` consequence, under Audere,
+  defers rather than kills - `CharacterVitals.death_certain_pending`, resolved when the
+  last deferring condition ends (backstopped at encounter cleanup), honoring story
+  protection. **Soulfray can kill only inside a combat encounter** (owner ruling,
+  2026-10-01): a scene cast, a technique-enhanced social action, a battle, and an
+  out-of-combat reactive spend are all non-lethal, capped below the first death-risk
+  Soulfray stage.
+- **Audere Majora's round-resolution block narrowed** to the undecided-offer window
+  only, so a round can resolve - and a crosser can act on the new Path - after a
+  Crossing instead of every later round freezing.
+- **Required-content sentinels:** a Path x major Gift grant with no ultimates is
+  flagged as an unfinished Path; the runtime fallback is minimal (Audere's surge with
+  no reveal). A second sentinel flags any unauthored `AudereThreshold` reveal-copy
+  field (framing line, deferred-death line, the three category labels).
+- **Web, telnet, and the magic sheet** all carry the reveal, the choice, and known
+  ultimates - `UltimateRevealDialog`/`UltimateRevealGate`, the telnet `ultimate`
+  reveal handler (snapshot-guarded against a stale listing), and `SpellbookTab`.
+- Full record: `docs/systems/magic.md`'s "Ultimates" section;
+  `docs/systems/INDEX.md`'s Magic and Vitals sections;
+  `docs/architecture/runtime-modifiers-audere.md`'s "Ultimate Reveal During Audere"
+  and "Certain Death Deferral" sections; ADR-4098.
+
+**Deferred (spec scope, not a gap in this build):**
+- Past-life bond ultimates - the natural home is the past life's alternate self,
+  whose ability suite already grants techniques; not wired to ultimates yet.
+- Authoring the ultimates themselves, and the category display labels, is staff work
+  tracked under #4089 - production has 76 Path x Gift grants and 0 authored ultimates
+  today, which is exactly what the Required-content sentinel above is for.
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

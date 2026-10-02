@@ -1,1 +1,1 @@
-0172_remove_itemrequirement_itemrequirement_exactly_one_unlock_target_and_more
+0176_soulfrayconfig_social_safety_bonus

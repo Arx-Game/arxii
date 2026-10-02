@@ -135,15 +135,21 @@ class SurgeOfferHandler:
             AudereOfferNotFoundError,
             AudereOfferStaleError,
         )
+        from world.magic.services.ultimates import ultimate_reveal_for  # noqa: PLC0415
 
         try:
             result = resolve_audere_offer(offer.pk, accept=True)
         except (AudereOfferNotFoundError, AudereOfferStaleError) as exc:
             raise CommandError(str(exc)) from exc
-        return (
+        message = (
             f"The surge takes hold. Intensity bonus: +{result.intensity_bonus_applied}. "
             f"Anima pool expanded by {result.anima_pool_expanded_by}."
         )
+        reveal = ultimate_reveal_for(caller.sheet_data)
+        if reveal is not None:
+            _store_ultimate_snapshot(caller, reveal)
+            message = f"{message}\n{format_ultimate_reveal(reveal)}"
+        return message
 
     def decline(self, offer, caller) -> str:  # noqa: ARG002
         from world.magic.audere import resolve_audere_offer  # noqa: PLC0415
@@ -178,7 +184,7 @@ class CrossingOfferHandler:
             f"Usage: accept crossing path=<name> declaration=<your words>"
         )
 
-    def accept(self, offer, caller, args: str) -> str:  # noqa: ARG002
+    def accept(self, offer, caller, args: str) -> str:
         from world.magic.audere_majora import (  # noqa: PLC0415
             eligible_paths_for_threshold,
             resolve_audere_majora_offer,
@@ -190,6 +196,7 @@ class CrossingOfferHandler:
             GiftResonanceUnresolvable,
             ProtagonismLockedError,
         )
+        from world.magic.services.ultimates import ultimate_reveal_for  # noqa: PLC0415
         from world.magic.types import AlterationGateError  # noqa: PLC0415
 
         # Parse "path=<name> declaration=<text>" from args.
@@ -241,10 +248,15 @@ class CrossingOfferHandler:
             # attribute access is used rather than getattr.
             raise CommandError(exc.user_message) from exc
 
-        return (
+        message = (
             f"You cross into {result.chosen_path_name} "
             f"(level {result.level_before} -> {result.level_after})."
         )
+        reveal = ultimate_reveal_for(caller.sheet_data)
+        if reveal is not None:
+            _store_ultimate_snapshot(caller, reveal)
+            message = f"{message}\n{format_ultimate_reveal(reveal)}"
+        return message
 
     def decline(self, offer, caller) -> str:  # noqa: ARG002
         from world.magic.audere_majora import resolve_audere_majora_offer  # noqa: PLC0415
@@ -258,3 +270,110 @@ class CrossingOfferHandler:
         except (AudereMajoraOfferNotFoundError, AudereMajoraOfferStaleError) as exc:
             raise CommandError(str(exc)) from exc
         return "You step back from the threshold."
+
+
+_ULTIMATE_USAGE = "Choose with: accept ultimate <number>"  # noqa: STRING_LITERAL
+
+# Session-local (non-persistent) snapshot of the choice_keys shown in the last
+# printed reveal listing, held on the caller's ``ndb.ultimate_reveal_choice_keys``
+# (#4098 fix round 1). Guards against a stale numbered choice: the pools
+# backing a reveal can change between the moment a listing is printed and the
+# moment the player types a number, and `<n>` always resolves against
+# whatever `flat_cards()` returns *right now* — never the list the player
+# actually read.
+
+
+def _ultimate_choice_keys(reveal) -> tuple[str, ...]:
+    return tuple(card.choice_key for _group, card in reveal.flat_cards())
+
+
+def _store_ultimate_snapshot(character, reveal) -> None:
+    character.ndb.ultimate_reveal_choice_keys = _ultimate_choice_keys(reveal)
+
+
+def _clear_ultimate_snapshot(character) -> None:
+    del character.ndb.ultimate_reveal_choice_keys
+
+
+def format_ultimate_reveal(reveal) -> str:
+    """Numbered telnet listing; same order as the web reveal (#4098)."""
+    from world.magic.constants import UltimateCardKind, UltimateSource  # noqa: PLC0415
+
+    lines = [reveal.framing_text] if reveal.framing_text.strip() else []
+    lines.append("Ultimates:")
+    for number, (group, card) in enumerate(reveal.flat_cards(), start=1):
+        if card.kind == UltimateCardKind.KNOWN:
+            text = f"{card.technique.name} (known)"
+        elif card.kind == UltimateCardKind.UPGRADE:
+            text = f"{card.technique.name} (upgrade of {card.upgrade_of.name})"
+        else:
+            text = f"{card.label} (undiscovered)"
+        if group.source == UltimateSource.PATRON:
+            text = text[:-1] + f"; bond: {group.being.name})"
+        elif group.source == UltimateSource.COMPANION:
+            text = text[:-1] + f"; bond: {group.companion.name})"
+        lines.append(f"  {number}) {text}")
+    lines.append(_ULTIMATE_USAGE)
+    return "\n".join(lines)
+
+
+class UltimateRevealHandler:
+    """Offer handler for the Audere/Audere Majora ultimate reveal (#4098 decision 16).
+
+    Derived state, not a stored offer row: ``pending_for`` asks the service for
+    the open reveal on demand. ``accept`` maps the telnet ``<n>`` ordinal onto
+    the reveal's stable card order and hands the resolved ``choice_key`` to
+    ``choose_ultimate`` — the service owns every eligibility/locking rule.
+    """
+
+    keyword = "ultimate"
+    label = "Ultimate Reveal"
+
+    def pending_for(self, sheet):
+        from world.magic.services.ultimates import ultimate_reveal_for  # noqa: PLC0415
+
+        return ultimate_reveal_for(sheet)
+
+    def describe(self, offer) -> str:
+        """Print the reveal listing, snapshotting its choice_keys as a side effect.
+
+        The snapshot is stored HERE, not in ``accept``, because this is the one
+        moment the listing is actually shown to the caller - the ndb snapshot must
+        match whatever text just printed, not some earlier or later reveal (#4098
+        final review item 11).
+        """
+        if offer.sheet is not None:
+            _store_ultimate_snapshot(offer.sheet.character, offer)
+        return format_ultimate_reveal(offer)
+
+    def accept(self, offer, caller, args: str) -> str:
+        from world.magic.exceptions import UltimateChoiceError  # noqa: PLC0415
+        from world.magic.services.ultimates import choose_ultimate  # noqa: PLC0415
+
+        current_keys = _ultimate_choice_keys(offer)
+        shown_keys = caller.ndb.ultimate_reveal_choice_keys
+        if shown_keys is None:
+            _store_ultimate_snapshot(caller, offer)
+            return f"Your reveal listing expired. Choose again:\n{format_ultimate_reveal(offer)}"
+        if tuple(shown_keys) != current_keys:
+            _store_ultimate_snapshot(caller, offer)
+            return f"The choices have changed. Choose again:\n{format_ultimate_reveal(offer)}"
+
+        cards = offer.flat_cards()
+        token = args.strip()
+        if not token.isdigit() or not 1 <= int(token) <= len(cards):
+            raise CommandError(_ULTIMATE_USAGE)
+        _group, card = cards[int(token) - 1]
+        try:
+            known = choose_ultimate(caller.sheet_data, card.choice_key)
+        except UltimateChoiceError as exc:
+            raise CommandError(exc.user_message) from exc
+        _clear_ultimate_snapshot(caller)
+        technique = known.technique
+        return (
+            f"{technique.name}: {technique.description}\n"
+            f"Declare it as your action: cast {technique.name} at <target>"
+        )
+
+    def decline(self, offer, caller) -> str:  # noqa: ARG002
+        return f"The reveal stays open while Audere holds. {_ULTIMATE_USAGE}"

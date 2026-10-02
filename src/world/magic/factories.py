@@ -59,6 +59,7 @@ from world.magic.models import (
     GlimpseTag,
     ImbuingProseTemplate,
     IntensityTier,
+    KnownUltimate,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
     MagicProgressionMilestone,
@@ -377,6 +378,13 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
                 technique=self,
                 base_damage=self.effect_type.base_power,
             )
+
+
+class UltimateTechniqueFactory(TechniqueFactory):
+    """A Technique flagged as an ultimate (#4098)."""
+
+    is_ultimate = True
+    level = 6
 
 
 class GiftUnlockFactory(factory.django.DjangoModelFactory):
@@ -835,6 +843,17 @@ class CharacterTechniqueFactory(factory.django.DjangoModelFactory):
     technique = factory.SubFactory(TechniqueFactory)
 
 
+class KnownUltimateFactory(factory.django.DjangoModelFactory):
+    """Factory for KnownUltimate — a discovered ultimate receipt (#4098)."""
+
+    class Meta:
+        model = KnownUltimate
+
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    technique = factory.SubFactory(UltimateTechniqueFactory)
+    readied = False
+
+
 # =============================================================================
 # Phase 3: Anima Factories
 # =============================================================================
@@ -983,6 +1002,7 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     base_check_difficulty = 15
     ritual_severity_cost_per_point = 1
+    social_safety_bonus = 10
 
 
 class MishapPoolTierFactory(factory.django.DjangoModelFactory):
