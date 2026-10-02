@@ -127,6 +127,16 @@ provider whose key resolves to empty fails validation
 (`enabled search provider must configure an API key`), and an invalid user
 config stops new sessions from starting.
 
+## Demo pages
+
+Polytoken cannot publish Claude artifacts, and terminal links do not open. The
+`demoing-a-feature` skill therefore has polytoken write each demo to
+`/workspaces/arxii/.demos/` (gitignored). That folder is on the host bind
+mount, so it shows up in the host checkout's `.demos/`; bookmark it as a
+`file:///` URL. Do not leave demos in a worktree: `.claude/worktrees/` is the
+`arxii-worktrees` volume, which the host cannot see. A spec still needs a
+published link, so ask Claude Code to publish the file before review.
+
 ## Cross-model review subagents
 
 Polytoken has no built-in "adversarial reviewer model" knob. Cross-model review

@@ -13,6 +13,10 @@ docs/superpowers/*
 .polytoken/skills/
 .polytoken/permissions.local.yaml
 
+# Local demo pages from harnesses without artifact publishing (see the
+# demoing-a-feature skill). On the host bind mount so the human can open them.
+.demos/
+
 # Packages
 *.egg
 *.egg-info
