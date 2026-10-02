@@ -15,6 +15,7 @@ from django.db import models
 from evennia.objects.models import ObjectDB
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from world.magic.constants import GiftKind
 from world.traits.models import CharacterTraitValue, display_trait_value
 
 # XP Cost System
@@ -245,10 +246,11 @@ class AbstractUnlockRequirement(models.Model):
     """Abstract base for all types of requirements for unlock targets.
 
     Generalized from the former ``AbstractClassLevelRequirement`` (#1885):
-    the base now supports a polymorphic unlock target — either a
-    ``ClassLevelUnlock`` (Durance path), a ``ThreadCrossingThreshold``
-    (thread crossing gate), or a ``Path`` (hybrid path entry gate, #2538).
-    Exactly one of the three FKs must be set, enforced by a CheckConstraint.
+    the base now supports a polymorphic unlock target, one of a
+    ``ClassLevelUnlock`` (Durance path), a ``ThreadCrossingThreshold`` (thread
+    crossing gate), a ``Path`` (hybrid path entry gate, #2538), or a
+    ``Technique`` (technique learning gate, #4097). Exactly one of the four
+    FKs must be set, enforced by a CheckConstraint.
 
     See ADR-0090 for the boundary choice and the ADR-0016 (shared base) vs
     ADR-0089 (sibling-per-domain) justification.
@@ -279,7 +281,8 @@ class AbstractUnlockRequirement(models.Model):
         blank=True,
         help_text=(
             "Thread crossing threshold this requirement gates. "
-            "Exactly one of class_level_unlock / thread_crossing_threshold / path must be set."
+            "Exactly one of class_level_unlock / thread_crossing_threshold / path / "
+            "technique must be set."
         ),
     )
     path = models.ForeignKey(
@@ -291,7 +294,18 @@ class AbstractUnlockRequirement(models.Model):
         help_text=(
             "Path this requirement gates (#2538). Used for hybrid path entry "
             "and cross-path technique learning. Exactly one of "
-            "class_level_unlock / thread_crossing_threshold / path must be set."
+            "class_level_unlock / thread_crossing_threshold / path / technique must be set."
+        ),
+    )
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        related_name=_REQUIREMENTS_RELATED_NAME,
+        null=True,
+        blank=True,
+        help_text=(
+            "Technique this requirement gates learning of (#4097). Exactly one of "
+            "class_level_unlock / thread_crossing_threshold / path / technique must be set."
         ),
     )
 
@@ -303,16 +317,25 @@ class AbstractUnlockRequirement(models.Model):
                     models.Q(class_level_unlock__isnull=False)
                     & models.Q(thread_crossing_threshold__isnull=True)
                     & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=False)
                     & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=True)
                     & models.Q(path__isnull=False)
+                    & models.Q(technique__isnull=True)
+                )
+                | (
+                    models.Q(class_level_unlock__isnull=True)
+                    & models.Q(thread_crossing_threshold__isnull=True)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=False)
                 ),
                 name="%(class)s_exactly_one_unlock_target",
             ),
@@ -612,7 +635,14 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
 
 
 class LegendRequirement(AbstractClassLevelRequirement):
-    """Requires a minimum total legend value for path leveling."""
+    """Requires a minimum total legend value for path leveling.
+
+    Deliberately narrower than the base's four-way polymorphic target: this type
+    accepts only ``class_level_unlock`` or ``thread_crossing_threshold`` (never
+    ``path`` or ``technique``), enforced by its own ``Meta.constraints`` below
+    rather than the base class's ``exactly_one_unlock_target`` constraint (#4097
+    fix round 1).
+    """
 
     minimum_legend = models.PositiveIntegerField(
         help_text="Minimum total legend required",
@@ -640,10 +670,14 @@ class LegendRequirement(AbstractClassLevelRequirement):
                 check=(
                     models.Q(class_level_unlock__isnull=False)
                     & models.Q(thread_crossing_threshold__isnull=True)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=False)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 ),
                 name="legendrequirement_exactly_one_unlock_target",
             ),
@@ -756,6 +790,12 @@ class ItemRequirement(AbstractClassLevelRequirement):
     min_touchstone_tier (any attuned item tied to a Resonance the character
     holds, at/above a tier floor) is set. Possession-only — is_met_by_character
     never consumes the qualifying item (#1859 Decision 4).
+
+    Also deliberately narrower than the base's four-way polymorphic unlock
+    target: this type accepts only ``class_level_unlock`` or
+    ``thread_crossing_threshold`` (never ``path`` or ``technique``), enforced by
+    its own ``Meta.constraints`` below rather than the base class's
+    ``exactly_one_unlock_target`` constraint (#4097 fix round 1).
     """
 
     item_template = models.ForeignKey(
@@ -807,10 +847,14 @@ class ItemRequirement(AbstractClassLevelRequirement):
                 check=(
                     models.Q(class_level_unlock__isnull=False)
                     & models.Q(thread_crossing_threshold__isnull=True)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 )
                 | (
                     models.Q(class_level_unlock__isnull=True)
                     & models.Q(thread_crossing_threshold__isnull=False)
+                    & models.Q(path__isnull=True)
+                    & models.Q(technique__isnull=True)
                 ),
                 name="itemrequirement_exactly_one_unlock_target",
             ),
@@ -868,7 +912,7 @@ class ItemRequirement(AbstractClassLevelRequirement):
 
 
 class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
-    """Requirement for knowing >= N techniques of the character's MAJOR gift.
+    """Requirement for knowing >= N techniques of a MAJOR gift.
 
     Level-2 gate (#2440 ruling 4): CG hands out only 1-3 starter picks from
     the (Path x Gift) pool (1 + Tradition Training rank); the design intent
@@ -879,44 +923,189 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
     would be a moving, unreachable target. ``minimum_techniques`` defaults
     to 3, matching CG's upper end.
 
-    Only the character's single MAJOR gift counts (``Gift.kind ==
-    GiftKind.MAJOR``, resolved via ``CharacterGift`` — CG links exactly
-    one). Minor-gift techniques never count toward this gate.
+    ``gift`` named (#4097): only that gift's technique count is read
+    (lineage-aware via ``resolve_owned_gift``) — a character holding a
+    different major gift, even at a higher count, does not satisfy it.
+    ``gift`` blank: any single held MAJOR gift (``Gift.kind ==
+    GiftKind.MAJOR``, resolved via ``CharacterGift``) reaching the count
+    passes — counts are never summed across multiple major gifts. Minor-gift
+    techniques never count toward this gate either way.
     """
 
     minimum_techniques = models.PositiveSmallIntegerField(
         default=3,
-        help_text="Techniques of the character's MAJOR gift required (#2440 ruling 4).",
+        help_text=(
+            "Techniques required of the named gift (or of any single held MAJOR gift, "
+            "if blank) to satisfy this requirement (#2440 ruling 4)."
+        ),
+    )
+    gift = models.ForeignKey(
+        "arxii.Gift",
+        on_delete=models.CASCADE,
+        related_name="major_gift_technique_requirements",
+        null=True,
+        blank=True,
+        limit_choices_to={"kind": GiftKind.MAJOR},
+        help_text=(
+            "Major gift to count; blank means any single held major gift reaching the count."
+        ),
     )
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
-        """Count CharacterTechnique rows whose technique belongs to the MAJOR gift."""
+        """Count CharacterTechnique rows for one major gift (never summed across gifts)."""
         from world.magic.constants import GiftKind  # noqa: PLC0415
         from world.magic.models import CharacterGift  # noqa: PLC0415
         from world.magic.services.gift_acquisition import (  # noqa: PLC0415
             count_techniques_for_gift,
+            resolve_owned_gift,
         )
 
         sheet = character.sheet_data
-        major_link = CharacterGift.objects.filter(
-            character=sheet, gift__kind=GiftKind.MAJOR
-        ).first()
-        if major_link is None:
+        minimum = cast(int, self.minimum_techniques)
+
+        if self.gift_id is not None:
+            owned = resolve_owned_gift(sheet, self.gift)
+            if owned is None:
+                return (
+                    False,
+                    f"Need {minimum} techniques of {self.gift.name}, don't hold it",
+                )
+            count = count_techniques_for_gift(sheet, owned)
+            if count >= minimum:
+                return True, f"Knows {count} techniques of {self.gift.name}"
             return (
                 False,
-                f"Need {self.minimum_techniques} techniques of your major gift, have no major gift",
+                f"Need {minimum} techniques of {self.gift.name}, have {count}",
             )
 
-        count = count_techniques_for_gift(sheet, major_link.gift)
-        if count >= cast(int, self.minimum_techniques):
-            return True, f"Knows {count} techniques of {major_link.gift.name}"
+        major_links = (
+            CharacterGift.objects.filter(character=sheet, gift__kind=GiftKind.MAJOR)
+            .select_related("gift")
+            .order_by("gift__name")
+        )
+        if not major_links:
+            return (
+                False,
+                f"Need {minimum} techniques of your major gift, have no major gift",
+            )
+
+        best_count = -1
+        best_name = ""
+        for link in major_links:
+            count = count_techniques_for_gift(sheet, link.gift)
+            if count >= minimum:
+                return True, f"Knows {count} techniques of {link.gift.name}"
+            if count > best_count:
+                best_count = count
+                best_name = link.gift.name
+
         return (
             False,
-            f"Need {self.minimum_techniques} techniques of {major_link.gift.name}, have {count}",
+            f"Need {minimum} techniques of {best_name}, have {best_count}",
         )
 
     def __str__(self) -> str:
         return f"Major Gift Techniques: >= {self.minimum_techniques}"
+
+
+class GiftHeldRequirement(AbstractUnlockRequirement):
+    """Requires holding a gift (#4097).
+
+    ``gift`` named: only that gift satisfies it, lineage-aware (a held descendant
+    reaching it counts). ``gift`` blank: any gift the character holds satisfies it.
+    Level 3 Paths are typically gift-agnostic; level 6+ name a gift.
+    """
+
+    gift = models.ForeignKey(
+        "arxii.Gift",
+        on_delete=models.CASCADE,
+        related_name="gift_held_requirements",
+        null=True,
+        blank=True,
+        help_text="Gift required; blank means any held gift satisfies it.",
+    )
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Check if character holds the named gift (lineage-aware) or any gift."""
+        from world.magic.models import CharacterGift  # noqa: PLC0415
+        from world.magic.services.gift_acquisition import resolve_owned_gift  # noqa: PLC0415
+
+        sheet = character.sheet_data
+
+        if self.gift_id is None:
+            if CharacterGift.objects.filter(character=sheet).exists():
+                return True, "Holds a gift"
+            return False, "Need to hold a gift, have none"
+
+        owned = resolve_owned_gift(sheet, self.gift)
+        if owned is not None:
+            return True, f"Holds {self.gift.name}"
+        return False, f"Need to hold {self.gift.name}"
+
+    def __str__(self) -> str:
+        if self.gift_id is not None:
+            return f"Gift Held: {self.gift.name}"
+        return "Gift Held: any"
+
+
+class TechniqueKnownRequirement(AbstractUnlockRequirement):
+    """Requires knowing a specific technique (#4097)."""
+
+    required_technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        related_name="required_by_requirements",
+        help_text="Technique the character must already know.",
+    )
+
+    class Meta(AbstractUnlockRequirement.Meta):
+        constraints = [
+            *AbstractUnlockRequirement.Meta.constraints,
+            models.CheckConstraint(
+                condition=~models.Q(technique=models.F("required_technique")),
+                name="techniqueknownrequirement_no_self_prerequisite",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Reject a direct self-reference or a transitive cycle (#4097 fix round 2).
+
+        The DB CheckConstraint above only catches the direct
+        ``technique == required_technique`` case; a cycle through intermediate
+        techniques (A requires B, B requires A) needs the graph walk —
+        ``prerequisite_technique_ids`` is cycle-safe (BFS with a seen-set) and
+        already excludes every id it started from, so membership of
+        ``self.technique_id`` in the closure of ``{self.required_technique_id}``
+        IS a cycle.
+        """
+        super().clean()
+        if self.technique_id is None or self.required_technique_id is None:
+            return
+        if self.technique_id == self.required_technique_id:
+            msg = "A technique cannot require itself."
+            raise ValidationError(msg)
+        from world.magic.services.technique_prerequisites import (  # noqa: PLC0415
+            prerequisite_technique_ids,
+        )
+
+        if self.technique_id in prerequisite_technique_ids((self.required_technique_id,)):
+            msg = "This would create a prerequisite cycle."
+            raise ValidationError(msg)
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Check if character already knows the required technique."""
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        sheet = character.sheet_data
+        known = CharacterTechnique.objects.filter(
+            character=sheet, technique_id=self.required_technique_id
+        ).exists()
+        if known:
+            return True, f"Knows {self.required_technique.name}"
+        return False, f"Need to know {self.required_technique.name}"
+
+    def __str__(self) -> str:
+        return f"Technique Known: {self.required_technique.name}"
 
 
 class CodexKnowledgeRequirement(AbstractUnlockRequirement):

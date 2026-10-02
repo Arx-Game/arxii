@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from evennia.objects.models import ObjectDB
@@ -16,6 +17,7 @@ from world.character_sheets.models import CharacterSheet
 from world.magic.services.alterations import enforce_advancement_gate
 from world.progression.exceptions import InsufficientXPError, NoAccountForCharacterError
 from world.progression.models import CharacterUnlock, ClassLevelUnlock
+from world.progression.models.unlocks import AbstractUnlockRequirement
 from world.progression.services.xp_ledger import spend_xp_for_character
 from world.progression.types import (
     AvailableUnlocks,
@@ -28,7 +30,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.classes.models import CharacterClass, Path
-    from world.magic.models import ThreadCrossingThreshold
+    from world.magic.models import Technique, ThreadCrossingThreshold
 
 
 def spend_xp_on_unlock(
@@ -109,6 +111,25 @@ def spend_xp_on_unlock(
         return True, f"Successfully unlocked {unlock_target}", unlock
 
 
+def concrete_requirement_types() -> list[type[AbstractUnlockRequirement]]:
+    """Discover every concrete ``AbstractUnlockRequirement`` subclass.
+
+    Replaces a hand-maintained list (#4097): a new requirement type is picked
+    up by every ``_check_requirements`` caller the moment its model is
+    defined, with no second registration step to forget.
+
+    Returns:
+        The concrete subclasses, sorted by class name for stable iteration.
+    """
+    models = [
+        m
+        for m in apps.get_models()
+        if issubclass(m, AbstractUnlockRequirement) and not m._meta.abstract  # noqa: SLF001
+    ]
+    models.sort(key=lambda m: m.__name__)
+    return models
+
+
 def _check_requirements(
     character: ObjectDB,
     unlock_target: object,
@@ -116,51 +137,28 @@ def _check_requirements(
 ) -> tuple[bool, list[str]]:
     """Check if a character meets all active requirements pointing at a target.
 
-    Shared loop used by both ``check_requirements_for_unlock`` (Durance path,
-    FK ``class_level_unlock``) and ``check_requirements_for_thread_crossing``
-    (thread crossing gate, FK ``thread_crossing_threshold``).
+    Shared loop used by ``check_requirements_for_unlock`` (Durance path, FK
+    ``class_level_unlock``), ``check_requirements_for_thread_crossing``
+    (thread crossing gate, FK ``thread_crossing_threshold``),
+    ``check_requirements_for_path`` (hybrid path entry gate, FK ``path``), and
+    ``check_requirements_for_technique`` (technique learning gate, FK
+    ``technique``). Evaluates every concrete requirement type returned by
+    ``concrete_requirement_types()`` rather than a fixed list.
 
     Args:
         character: Character to check.
-        unlock_target: The unlock/threshold object requirements point to.
-        fk_name: The FK field name to filter on
-            (``"class_level_unlock"`` or ``"thread_crossing_threshold"``).
+        unlock_target: The unlock/threshold/path/technique object requirements
+            point to.
+        fk_name: The FK field name to filter on (``"class_level_unlock"``,
+            ``"thread_crossing_threshold"``, ``"path"``, or ``"technique"``).
 
     Returns:
         tuple: (all_met: bool, failed_messages: list)
     """
-    from world.progression.models import (
-        AchievementRequirement,
-        ClassLevelRequirement,
-        CodexKnowledgeRequirement,
-        ItemRequirement,
-        LegendRequirement,
-        LevelRequirement,
-        MajorGiftTechniqueRequirement,
-        MultiClassRequirement,
-        RelationshipRequirement,
-        TierRequirement,
-        TraitRequirement,
-    )
-
-    requirement_types = [
-        TraitRequirement,
-        LevelRequirement,
-        ClassLevelRequirement,
-        CodexKnowledgeRequirement,
-        TierRequirement,
-        AchievementRequirement,
-        RelationshipRequirement,
-        MultiClassRequirement,
-        LegendRequirement,
-        ItemRequirement,
-        MajorGiftTechniqueRequirement,
-    ]
-
     failed_messages: list[str] = []
     filter_kwargs = {fk_name: unlock_target, "is_active": True}
 
-    for req_type in requirement_types:
+    for req_type in concrete_requirement_types():
         requirements = req_type.objects.filter(**filter_kwargs)
         for requirement in requirements:
             is_met, message = requirement.is_met_by_character(character)
@@ -220,8 +218,9 @@ def check_requirements_for_path(
     Mirrors ``check_requirements_for_unlock`` and
     ``check_requirements_for_thread_crossing`` but filters on the ``path``
     FK. Returns ``(True, [])`` when no requirements are authored on the path
-    (fail-open). Used by ``cross_into_path`` (hybrid path entry gate) and
-    ``can_learn_technique`` (cross-path technique learning).
+    (fail-open). Used by ``cross_into_path`` (hybrid path entry gate); a
+    separate technique-learning gate is ``check_requirements_for_technique``
+    (charge_and_learn gating, #4097).
 
     Args:
         character: Character to check.
@@ -231,6 +230,27 @@ def check_requirements_for_path(
         tuple: (all_met: bool, failed_messages: list)
     """
     return _check_requirements(character, path, "path")
+
+
+def check_requirements_for_technique(
+    character: ObjectDB,
+    technique: Technique,
+) -> tuple[bool, list[str]]:
+    """Check if a character meets all requirements for learning a technique (#4097).
+
+    Mirrors ``check_requirements_for_unlock``, ``check_requirements_for_thread_crossing``,
+    and ``check_requirements_for_path`` but filters on the ``technique`` FK.
+    Returns ``(True, [])`` when no requirements are authored on the technique
+    (fail-open).
+
+    Args:
+        character: Character to check.
+        technique: The ``Technique`` to check requirements for.
+
+    Returns:
+        tuple: (all_met: bool, failed_messages: list)
+    """
+    return _check_requirements(character, technique, "technique")
 
 
 def get_available_unlocks_for_character(

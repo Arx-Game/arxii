@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.utils.functional import cached_property
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
@@ -46,6 +48,31 @@ class PullActionContext:
     # #1919: kinds excluded from the always-in-action shortcut (social pulls
     # exclude GIFT — no gift technique is the anchor of a social action).
     excluded_kinds: frozenset[str] | None = None
+
+    @cached_property
+    def involved_technique_closure(self) -> frozenset[int]:
+        """``involved_techniques`` plus their transitive prerequisites (#4097).
+
+        Ratified spec: a thread woven into a technique also empowers the
+        techniques it is a prerequisite for (including hidden ultimates), at
+        the thread's full level. ``_anchor_in_action``'s TECHNIQUE branch
+        tests membership here instead of the bare ``involved_techniques``
+        tuple so a prerequisite's thread carries through to what it unlocks.
+
+        This is a ``cached_property`` on a per-call value object (not a
+        SharedMemoryModel), so it is safe to memoize: it is computed once per
+        ``PullActionContext`` instance, not once per thread, even though
+        ``_anchor_in_action`` runs once per TECHNIQUE-kind thread in a sweep.
+        Frozen dataclasses still carry an instance ``__dict__`` (no
+        ``slots=True`` here), which is what ``cached_property`` writes into.
+        """
+        from world.magic.services.technique_prerequisites import (  # noqa: PLC0415
+            prerequisite_technique_ids,
+        )
+
+        return frozenset(self.involved_techniques) | prerequisite_technique_ids(
+            self.involved_techniques
+        )
 
 
 @dataclass(frozen=True)

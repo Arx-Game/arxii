@@ -46,12 +46,22 @@ from world.magic.models import (
     TechniqueFunctionTag,
     Tradition,
 )
+from world.progression.services.spends import (
+    check_requirements_for_technique,
+    concrete_requirement_types,
+)
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
 
 #: Shopping-list cap per uncovered function (spec: "up to 3 Technique rows").
 _SHOPPING_LIST_PER_FUNCTION = 3
+#: Headroom over `_SHOPPING_LIST_PER_FUNCTION` fetched per function before the
+#: prerequisite-gate exclusion below, so excluding a gated-and-unmet row still
+#: leaves enough ungated candidates to fill the list (#4097 fix round 2).
+_SHOPPING_LIST_CANDIDATE_POOL_SIZE = _SHOPPING_LIST_PER_FUNCTION * 3
 #: The label used for demand rows sourced from a role's technique-specialty
 #: table, distinguishing them from perk-sourced (situation) demand rows whose
 #: ``source`` is the perk's own authored name.
@@ -284,6 +294,48 @@ def _uncovered_target_functions(demands: list[SphinxDemand]) -> set[str]:
     return targets
 
 
+def _exclude_prerequisite_gated(
+    character: ObjectDB, candidates: list[Technique]
+) -> list[Technique]:
+    """Drop a candidate whose authored prerequisites ``character`` fails to meet.
+
+    "Learnable" means ``learn_technique`` would actually mint it — gift ownership
+    (checked by the caller) is necessary but no longer sufficient since #4097: a
+    ``TechniqueKnownRequirement``/``GiftHeldRequirement``/etc. row targeting the
+    technique can still refuse it. Bounded, not a per-candidate query explosion:
+    one batched query per concrete requirement type (a small constant) to find
+    which of THIS CALL's candidates carry any active requirement at all —
+    typically none — and ``check_requirements_for_technique`` only for that
+    (usually empty) gated subset, never for every candidate.
+
+    ``_shopping_list`` calls this exactly ONCE per ``judge_vow`` invocation, over
+    the union of every uncovered function's candidate pool (#4097 fix round 3) —
+    calling it once per function instead made its query cost scale with the
+    number of uncovered functions, up to
+    ``len(concrete_requirement_types())`` extra queries per function.
+    """
+    candidate_ids = [technique.pk for technique in candidates]
+    gated_ids: set[int] = set()
+    for req_type in concrete_requirement_types():
+        gated_ids.update(
+            req_type.objects.filter(technique_id__in=candidate_ids, is_active=True).values_list(
+                "technique_id", flat=True
+            )
+        )
+    if not gated_ids:
+        return candidates
+
+    unmet_ids = {
+        technique.pk
+        for technique in candidates
+        if technique.pk in gated_ids
+        and not check_requirements_for_technique(character, technique)[0]
+    }
+    if not unmet_ids:
+        return candidates
+    return [technique for technique in candidates if technique.pk not in unmet_ids]
+
+
 def _shopping_list(
     sheet: CharacterSheet,
     demands: list[SphinxDemand],
@@ -291,17 +343,26 @@ def _shopping_list(
 ) -> list[SphinxShoppingItem]:
     """Up to ``_SHOPPING_LIST_PER_FUNCTION`` learnable techniques per uncovered function.
 
-    "Learnable" = the sheet already owns the technique's gift (#2700). That is
-    ``learn_technique``'s own first gate (``GiftNotOwned``), so every row here is
-    something the character can actually go and learn. The previous path-style
-    filter both under- and over-reported: it recommended techniques from gifts the
-    character did not own (which ``learn_technique`` would reject) while hiding
-    ones their own path had already granted them, since 71% of authored
-    ``PathGiftGrant`` starter techniques carried a style the granting path's own
+    "Learnable" = the sheet already owns the technique's gift (#2700) AND meets
+    every authored prerequisite the technique carries (#4097 fix round 2, see
+    ``_exclude_prerequisite_gated``). Gift ownership is
+    ``learn_technique``'s own first gate (``GiftNotOwned``); the prerequisite
+    gate is its second. Every row here is something the character can actually
+    go and learn right now. The previous path-style filter both under- and
+    over-reported: it recommended techniques from gifts the character did not
+    own (which ``learn_technique`` would reject) while hiding ones their own
+    path had already granted them, since 71% of authored ``PathGiftGrant``
+    starter techniques carried a style the granting path's own
     ``allowed_paths`` excluded.
 
-    Bounded: one query per uncovered function (typically a handful), each capped
-    in SQL — no per-candidate Python check.
+    Bounded: one query per uncovered function (typically a handful) fetching a
+    capped candidate pool, plus the small constant-bounded gate check — run
+    ONCE across every function's pooled candidates (#4097 fix round 3), never
+    once per function. Running the gate per function made its cost scale with
+    the number of uncovered functions (up to ``len(concrete_requirement_types())``
+    extra queries PER function); hoisting it to a single pass over the union of
+    every function's candidates keeps the gate's cost independent of how many
+    functions are uncovered.
     """
     target_functions = _uncovered_target_functions(demands)
     if not target_functions:
@@ -313,9 +374,14 @@ def _shopping_list(
     if not owned_gift_ids:
         return []
 
-    shopping_list: list[SphinxShoppingItem] = []
-    for function in sorted(target_functions):
-        candidates = (
+    sorted_functions = sorted(target_functions)
+
+    # 1. Fetch each function's own capped candidate pool (one query per
+    #    function — unavoidable, each filters on a different function tag).
+    pools: dict[str, list[Technique]] = {}
+    union_by_pk: dict[int, Technique] = {}
+    for function in sorted_functions:
+        candidate_pool = list(
             Technique.objects.filter(
                 function_tags__function=function,
                 gift_id__in=owned_gift_ids,
@@ -323,15 +389,31 @@ def _shopping_list(
             .exclude(pk__in=known_technique_ids)
             .select_related("gift")
             .distinct()
-            .order_by("name")[:_SHOPPING_LIST_PER_FUNCTION]
+            .order_by("name")[:_SHOPPING_LIST_CANDIDATE_POOL_SIZE]
         )
+        pools[function] = candidate_pool
+        for technique in candidate_pool:
+            union_by_pk.setdefault(technique.pk, technique)
+
+    # 2. Run the prerequisite gate ONCE over the union of every function's
+    #    candidates — its query count is now independent of len(sorted_functions).
+    allowed_ids = {
+        technique.pk
+        for technique in _exclude_prerequisite_gated(sheet.character, list(union_by_pk.values()))
+    }
+
+    # 3. Filter + slice each function's own pool against the shared allowed set
+    #    (no further queries — plain membership tests).
+    shopping_list: list[SphinxShoppingItem] = []
+    for function in sorted_functions:
+        candidates = [technique for technique in pools[function] if technique.pk in allowed_ids]
         shopping_list.extend(
             SphinxShoppingItem(
                 technique_name=technique.name,
                 gift_name=technique.gift.name,
                 function=function,
             )
-            for technique in candidates
+            for technique in candidates[:_SHOPPING_LIST_PER_FUNCTION]
         )
     return shopping_list
 

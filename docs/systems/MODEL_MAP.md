@@ -2045,6 +2045,8 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
@@ -5470,6 +5472,8 @@
   - children <- magic.Gift
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - major_gift_technique_requirements <- progression.MajorGiftTechniqueRequirement
+  - gift_held_requirements <- progression.GiftHeldRequirement
   - gift_unlocks <- magic.GiftUnlock
   - path_grants <- magic.PathGiftGrant
   - tradition_grants <- magic.TraditionGiftGrant
@@ -5979,6 +5983,20 @@
   - removed_conditions <- magic.TechniqueRemovedCondition
   - treatments <- magic.TechniqueTreatment
   - damage_profiles <- magic.TechniqueDamageProfile
+  - traitrequirement_requirements <- progression.TraitRequirement
+  - levelrequirement_requirements <- progression.LevelRequirement
+  - classlevelrequirement_requirements <- progression.ClassLevelRequirement
+  - multiclassrequirement_requirements <- progression.MultiClassRequirement
+  - achievementrequirement_requirements <- progression.AchievementRequirement
+  - relationshiprequirement_requirements <- progression.RelationshipRequirement
+  - legendrequirement_requirements <- progression.LegendRequirement
+  - tierrequirement_requirements <- progression.TierRequirement
+  - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
+  - required_by_requirements <- progression.TechniqueKnownRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
@@ -6174,6 +6192,8 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### ThreadLevelUnlock
@@ -7281,6 +7301,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - achievement -> achievements.Achievement [FK]
 
 ### CharacterPathHistory
@@ -7316,6 +7337,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - character_class -> classes.CharacterClass [FK]
 
 ### ClassLevelUnlock
@@ -7332,6 +7354,8 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - giftheldrequirement_requirements <- progression.GiftHeldRequirement
+  - techniqueknownrequirement_requirements <- progression.TechniqueKnownRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### ClassXPCost
@@ -7344,6 +7368,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK]
 
 ### CohortEnrollment
@@ -7383,11 +7408,20 @@
 **Foreign Keys:**
   - account -> evennia.AccountDB [OneToOne]
 
+### GiftHeldRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - gift -> magic.Gift [FK] (nullable)
+
 ### ItemRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
   - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
@@ -7419,12 +7453,14 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
 
 ### LevelRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
 
 ### LevelStatPointSpend
 **Foreign Keys:**
@@ -7436,6 +7472,8 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - gift -> magic.Gift [FK] (nullable)
 
 ### MaturationSpend
 **Foreign Keys:**
@@ -7454,6 +7492,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - required_classes -> classes.CharacterClass [M2M]
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
@@ -7486,13 +7525,23 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - required_type -> relationships.RelationshipType [FK] (nullable)
+
+### TechniqueKnownRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - required_technique -> magic.Technique [FK]
 
 ### TierRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -7503,6 +7552,7 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - trait -> traits.Trait [FK]
 
 ### TraitXPCost

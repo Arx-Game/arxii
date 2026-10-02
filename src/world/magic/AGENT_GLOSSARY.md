@@ -359,4 +359,22 @@ caller. Feeds `CharacterThreadHandler.contextual_thread_power`, one of the two t
 curve" section for the full nine-arm breakdown and the deferred ORGANIZATION arm.
 _Avoid_: "passive anchor check", "auto-pull".
 
+**Thread carry** (#4097):
+A thread woven into a technique also empowers, at the thread's full level, every
+technique that technique is a transitive prerequisite for (a `TechniqueKnownRequirement`
+chain, possibly several hops deep, possibly including a hidden ultimate). Read on
+demand, never moved or stored: `prerequisite_technique_ids`
+(`services/technique_prerequisites.py`) walks the requirement graph;
+`PullActionContext.involved_technique_closure` unions it with the pull's own involved
+techniques; `_anchor_in_action`'s TECHNIQUE branch tests the closure instead of the
+bare involved-technique set. Applies to both casts and paid pulls (both resolve
+through `_anchor_in_action`); deliberately does NOT widen the passive **Ambient
+Activation** sweep (above): a prerequisite's thread isn't itself demonstrably in use
+just because something it unlocked is being cast. See
+`docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`. The
+prerequisite gate itself (whether a character may *learn* a technique at all) is
+**Technique prerequisite**; see `progression/AGENT_GLOSSARY.md`.
+_Avoid_: thread inheritance, prerequisite thread (the thread itself doesn't move or
+copy; only its empowering effect reaches further).
+
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)

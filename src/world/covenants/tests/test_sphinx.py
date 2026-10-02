@@ -7,7 +7,9 @@ whole catalog. Both are pure reads — nothing here writes.
 
 from __future__ import annotations
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import SphinxTier
@@ -140,6 +142,121 @@ class JudgeVowNoCoverageTests(TestCase):
 
         self.assertEqual(verdict.tier, SphinxTier.NOT_YET)
         self.assertEqual(verdict.shopping_list, [])
+
+    def test_shopping_list_excludes_techniques_with_unmet_prerequisite(self) -> None:
+        """The list never recommends what learn_technique would still refuse (#4097).
+
+        Owning the gift is necessary but not sufficient since #4097:
+        learn_technique's second gate is an authored prerequisite
+        (TechniqueKnownRequirement et al.). A gift-owned-but-prerequisite-gated
+        technique is not "learnable" and must not be recommended.
+        """
+        from world.progression.models import TechniqueKnownRequirement
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.BARRIER
+        )
+
+        gated = TechniqueFactory(name="Ward of the Unready")
+        TechniqueFunctionTagFactory(technique=gated, function=TechniqueFunction.BARRIER)
+        CharacterGiftFactory(character=sheet, gift=gated.gift)
+        prerequisite = TechniqueFactory(name="Foundational Ward")
+        TechniqueKnownRequirement.objects.create(
+            technique=gated, required_technique=prerequisite, is_active=True
+        )
+        # The character does not know `prerequisite`.
+
+        verdict = judge_vow(sheet, role)
+
+        self.assertEqual(verdict.tier, SphinxTier.NOT_YET)
+        shopping_names = [item.technique_name for item in verdict.shopping_list]
+        self.assertNotIn("Ward of the Unready", shopping_names)
+
+    def test_shopping_list_includes_technique_once_prerequisite_is_met(self) -> None:
+        """Once the character meets the prerequisite, the technique is recommended again."""
+        from world.progression.models import TechniqueKnownRequirement
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.BARRIER
+        )
+
+        gated = TechniqueFactory(name="Ward of the Unready")
+        TechniqueFunctionTagFactory(technique=gated, function=TechniqueFunction.BARRIER)
+        CharacterGiftFactory(character=sheet, gift=gated.gift)
+        prerequisite = TechniqueFactory(name="Foundational Ward")
+        TechniqueKnownRequirement.objects.create(
+            technique=gated, required_technique=prerequisite, is_active=True
+        )
+        CharacterTechniqueFactory(character=sheet, technique=prerequisite)
+
+        verdict = judge_vow(sheet, role)
+
+        shopping_names = [item.technique_name for item in verdict.shopping_list]
+        self.assertIn("Ward of the Unready", shopping_names)
+
+
+class ShoppingListGateQueryScalingTests(TestCase):
+    """The prerequisite gate's query cost is independent of uncovered-function
+    count (#4097 fix round 3).
+
+    ``_exclude_prerequisite_gated`` must run ONCE per ``judge_vow`` call (over the
+    union of every uncovered function's candidate pool), not once per uncovered
+    function. Before the fix, every uncovered function re-ran the gate's full
+    ``concrete_requirement_types()`` scan on its own — ``len(concrete_requirement_
+    types())`` extra queries for EACH additional uncovered function, regardless of
+    whether anything was actually gated.
+    """
+
+    def _role_with_specialties(self, functions):
+        role = CovenantRoleFactory()
+        for function in functions:
+            CovenantRoleTechniqueSpecialtyFactory(covenant_role=role, function=function)
+        return role
+
+    def _sheet_with_learnable_techniques(self, functions):
+        sheet = CharacterSheetFactory()
+        for function in functions:
+            technique = TechniqueFactory()
+            TechniqueFunctionTagFactory(technique=technique, function=function)
+            CharacterGiftFactory(character=sheet, gift=technique.gift)
+        return sheet
+
+    def test_gate_query_cost_does_not_scale_with_uncovered_function_count(self) -> None:
+        from world.progression.services.spends import concrete_requirement_types
+
+        all_functions = [
+            TechniqueFunction.WEAKEN,
+            TechniqueFunction.CHARM,
+            TechniqueFunction.BARRIER,
+            TechniqueFunction.FEAR,
+        ]
+
+        one_function_role = self._role_with_specialties(all_functions[:1])
+        one_function_sheet = self._sheet_with_learnable_techniques(all_functions[:1])
+        with CaptureQueriesContext(connection) as one_function_queries:
+            judge_vow(one_function_sheet, one_function_role)
+
+        four_function_role = self._role_with_specialties(all_functions)
+        four_function_sheet = self._sheet_with_learnable_techniques(all_functions)
+        with CaptureQueriesContext(connection) as four_function_queries:
+            judge_vow(four_function_sheet, four_function_role)
+
+        one_count = len(one_function_queries.captured_queries)
+        four_count = len(four_function_queries.captured_queries)
+        added_functions = len(all_functions) - 1
+        marginal_per_function = (four_count - one_count) / added_functions
+
+        # Before the fix, each ADDED uncovered function re-ran the gate's full
+        # scan (>= len(concrete_requirement_types()) extra queries). After the
+        # fix the gate runs once total, so the only per-function marginal cost
+        # is that function's own specialty/candidate-pool lookups — well under
+        # the requirement-type count. A generous bound catches the regression
+        # shape without being brittle to unrelated incidental query drift.
+        self.assertLess(marginal_per_function, len(concrete_requirement_types()))
 
 
 class JudgeVowSituationDemandTests(TestCase):

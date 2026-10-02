@@ -646,6 +646,88 @@ class UseItemTechniqueGrantTests(TestCase):
         ).exists()
 
 
+class UseItemTechniqueGrantPrerequisiteTests(TestCase):
+    """An unmet prerequisite refuses the use and never consumes the item (#4097).
+
+    Mirrors ``UseItemTechniqueGrantTests`` but the granted technique carries an
+    active ``TechniqueKnownRequirement`` the learner doesn't satisfy. Before the
+    fix, ``use_item`` ran (consuming the item's single charge) and only then did
+    ``learn_technique`` silently swallow the refusal via
+    ``contextlib.suppress(MagicError)`` — the item was gone and the technique
+    never learned. The fix pre-checks requirements before ``use_item`` runs.
+    """
+
+    def setUp(self):
+        from world.action_points.models import ActionPointPool
+        from world.magic.constants import GiftKind, TargetKind
+        from world.magic.factories import (
+            GiftFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models import CharacterGift, Thread
+        from world.progression.models import TechniqueKnownRequirement
+
+        self.sheet = CharacterSheetFactory()
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.resonance = ResonanceFactory()
+        self.gift.resonances.add(self.resonance)
+        CharacterGift.objects.create(character=self.sheet, gift=self.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=0,
+        )
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.prerequisite = TechniqueFactory()
+        TechniqueKnownRequirement.objects.create(
+            technique=self.technique,
+            required_technique=self.prerequisite,
+            is_active=True,
+        )
+
+        from actions.factories import ConsequencePoolFactory
+
+        pool = ConsequencePoolFactory()
+        self.template = ItemTemplateFactory(
+            is_consumable=True,
+            max_charges=1,
+            on_use_pool=pool,
+            on_use_check_type=None,
+        )
+        from world.magic.models import TechniqueGrant
+
+        self.grant = TechniqueGrant.objects.create(
+            technique=self.technique,
+            item_template=self.template,
+            verb="study",
+        )
+        self.actor = self.sheet.character
+        self.item_obj = ObjectDBFactory(db_key="Grimoire", location=self.actor)
+        self.item_instance = ItemInstanceFactory(
+            template=self.template, game_object=self.item_obj, charges=1
+        )
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.actor)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+
+    def test_refused_without_consuming_the_item(self):
+        from world.magic.models import CharacterTechnique
+
+        with patch("actions.definitions.items.use_item") as mock_use:
+            result = UseItemAction().run(self.actor, item=self.item_obj)
+
+        assert result.success is False
+        mock_use.assert_not_called()
+        self.item_instance.refresh_from_db()
+        assert self.item_instance.charges == 1
+        assert not CharacterTechnique.objects.filter(
+            character=self.sheet, technique=self.technique
+        ).exists()
+
+
 class GrantItemActionTests(TestCase):
     """JUNIOR-tier GM item grant (#707/#2117) -- the Action `grant_item` (formerly
     `action = None` on ``CmdGrantItem``, business logic inline in the command)."""

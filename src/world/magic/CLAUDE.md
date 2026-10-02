@@ -339,12 +339,19 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 - `TechniqueGrant` — Authored sidecar (`models/technique_grant.py`) linking a
   `Technique` to an `ItemTemplate` (on-use delivery) or `Ritual` (SERVICE delivery).
   Exactly one vehicle enforced by `clean()` + partial UniqueConstraints.
-- `learn_technique(learner, technique, *, source, ap_cost=0, xp_cost=0)` — shared
-  commit seam in `services/technique_acquisition.py`. When `ap_cost > 0`, creates
+- `learn_technique(learner, technique, *, source, ap_cost=0, xp_cost=0, origin=TRAINED,
+  completing_progress=False)` — shared commit seam in
+  `services/technique_acquisition.py`. When `ap_cost > 0`, creates
   a `TechniqueProgress` meter instead of minting immediately (#2711); the learner
   fills the meter via `contribute_to_technique_progress` in subsequent sessions.
   When `ap_cost == 0`, mints `CharacterTechnique` immediately (the meter-completion
-  path or a free grant). Runs gift-owned → cap → (meter-or-mint) → announce.
+  path or a free grant). Runs gift-owned → duplicate → prerequisite → cap →
+  (meter-or-mint) → announce. **Prerequisite gate (#4097 fix round 2):** calls
+  `gift_acquisition.enforce_technique_prerequisites` (same gate `charge_and_learn`
+  uses), skipped for `origin=AcquisitionOrigin.GM_GRANT` (deliberate GM fiat) and
+  for `completing_progress=True` (a meter-fill mint — the check already ran at
+  that meter's creation). See `docs/systems/magic.md`'s "Technique Prerequisites"
+  section for the full wiring across all three acquisition routes.
 - **Technique progress meter (#2711).** `TechniqueProgress`
   (`models/technique_progress.py`) — per-(character × technique) development
   meter. `TechniqueProgressWeekly` — per-week cap tracker mirroring

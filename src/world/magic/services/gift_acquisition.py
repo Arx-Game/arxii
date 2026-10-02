@@ -263,6 +263,25 @@ def magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
     return get_modifier_total(learner, target)
 
 
+def enforce_technique_prerequisites(sheet: CharacterSheet, technique: Technique) -> None:
+    """Raise ``TechniqueRequirementsNotMet`` unless every active requirement is met.
+
+    Extracted from ``charge_and_learn`` (#4097) to keep that function's cyclomatic
+    complexity under the lint threshold — a single branch point here either way.
+    Shared with ``learn_technique`` (``technique_acquisition.py``, #4097 fix round 2)
+    so every technique-acquisition front door runs the same gate — not module-private
+    (no leading underscore) because that second caller lives outside this module.
+    """
+    from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
+    from world.progression.services.spends import (  # noqa: PLC0415
+        check_requirements_for_technique,
+    )
+
+    met, failed = check_requirements_for_technique(sheet.character, technique)
+    if not met:
+        raise TechniqueRequirementsNotMet(failed)
+
+
 @transaction.atomic
 def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params co-equal
     learner: CharacterSheet,
@@ -327,6 +346,8 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     Raises:
         GiftUnlockMissing: First technique from a gift with no receipt.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
+        TechniqueRequirementsNotMet: An active requirement targeting this
+            technique (Path, gift, technique, skill, ...) is not met.
         ValueError: Learner already knows this technique.
     """
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
@@ -354,6 +375,9 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     if CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():
         msg = f"{sheet} already knows {technique.name}."
         raise ValueError(msg)
+
+    # 1b. Prerequisites (#4097): Paths, gifts, techniques, skills the technique requires.
+    enforce_technique_prerequisites(sheet, technique)
 
     # 2. Check if learner reaches the gift — directly, or through a held
     # descendant gift whose lineage contains it (#2891). Without the lineage

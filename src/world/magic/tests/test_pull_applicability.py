@@ -137,6 +137,60 @@ class AnchoredOnOtherTechniqueRuleTests(TestCase):
         self.assertFalse(rows[0].applicable)
         self.assertEqual(rows[0].reason, InapplicabilityReason.ANCHORED_ON_OTHER_TECHNIQUE.value)
 
+    def test_technique_thread_applicable_when_anchored_on_cast_prerequisite(self) -> None:
+        """A thread anchored on a prerequisite carries through to what it unlocks (#4097)."""
+        from world.progression.models import TechniqueKnownRequirement
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        prerequisite = TechniqueFactory()
+        cast_technique = TechniqueFactory()
+        TechniqueKnownRequirement.objects.create(
+            technique=cast_technique,
+            required_technique=prerequisite,
+            is_active=True,
+        )
+        thread = ThreadFactory(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=prerequisite,
+        )
+        context = _empty_context(technique=cast_technique)
+        rows = compute_thread_applicability(sheet, context)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].thread, thread)
+        self.assertTrue(rows[0].applicable)
+        self.assertIsNone(rows[0].reason)
+
+    def test_technique_thread_inapplicable_when_anchored_on_unrelated_technique(self) -> None:
+        """A thread anchored on a technique that is NOT a prerequisite still blocks (#4097)."""
+        from world.progression.models import TechniqueKnownRequirement
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        prerequisite = TechniqueFactory()
+        cast_technique = TechniqueFactory()
+        unrelated_technique = TechniqueFactory()
+        TechniqueKnownRequirement.objects.create(
+            technique=cast_technique,
+            required_technique=prerequisite,
+            is_active=True,
+        )
+        ThreadFactory(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=unrelated_technique,
+        )
+        context = _empty_context(technique=cast_technique)
+        rows = compute_thread_applicability(sheet, context)
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0].applicable)
+        self.assertEqual(rows[0].reason, InapplicabilityReason.ANCHORED_ON_OTHER_TECHNIQUE.value)
+
     def test_non_technique_thread_unaffected_by_technique_in_context(self) -> None:
         """TRAIT-kind threads are not filtered by technique context."""
         sheet = CharacterSheetFactory()

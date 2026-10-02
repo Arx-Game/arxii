@@ -408,7 +408,7 @@ class StartingKitReport:
 def _kit_options(params: StartingKitParams) -> list[tuple[Technique, OptionSource]]:
     """Character creation's own option set, each option tagged once by its first source."""
     options = cg_catalog.get_technique_options(
-        params.path, params.gift, params.tradition, include_unready=True
+        params.path, params.gift, params.tradition, include_unready=True, exclude_gated=True
     )
     species_options = cg_catalog.get_species_technique_options(params.species, include_unready=True)
     sourced: dict[int, tuple[Technique, OptionSource]] = {}
