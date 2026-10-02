@@ -51,6 +51,53 @@ class FenceTest(TestCase):
         self.assertEqual(sale.kind, MarketSale.SaleKind.FENCE)
         self.assertIsNone(sale.buyer_persona)
 
+    def test_a_fenced_throwaway_leaves_no_row_object_or_orphaned_ledger(self):
+        """#4099: the canonical hard delete removes the item's ledger rows too, never
+        leaving them SET_NULL-orphaned."""
+        from evennia.objects.models import ObjectDB
+
+        from world.items.constants import OwnershipEventType
+        from world.items.models import ItemInstance, OwnershipEvent
+
+        instance = self._held_item(value=100)
+        OwnershipEvent.objects.create(
+            item_instance=instance,
+            event_type=OwnershipEventType.CREATED,
+            to_character_sheet=self.sheet,
+        )
+        game_object_pk = instance.game_object_id
+        sell_to_fence(self.persona, self.fence, instance)
+        self.assertFalse(ItemInstance.objects.filter(pk=instance.pk).exists())
+        self.assertFalse(ObjectDB.objects.filter(pk=game_object_pk).exists())
+        self.assertFalse(OwnershipEvent.objects.filter(item_instance__isnull=True).exists())
+
+    def test_a_fenced_item_with_provenance_is_kept_out_of_play(self):
+        """#4099: an item with a history (here, stolen) is soft-deleted, so its trail
+        survives for the deferred reclamation of fenced goods."""
+        from world.items.constants import OwnershipEventType
+        from world.items.models import OwnershipEvent
+
+        instance = self._held_item(value=100)
+        OwnershipEvent.objects.create(
+            item_instance=instance,
+            event_type=OwnershipEventType.STOLEN,
+            to_character_sheet=self.sheet,
+        )
+        game_object = instance.game_object
+        sell_to_fence(self.persona, self.fence, instance)
+        instance.refresh_from_db()
+        game_object.refresh_from_db()
+        self.assertIsNotNone(instance.destroyed_at)
+        self.assertIsNone(game_object.location)
+        self.assertTrue(
+            instance.ownership_events.filter(event_type=OwnershipEventType.STOLEN).exists()
+        )
+        self.assertTrue(
+            instance.ownership_events.filter(
+                event_type=OwnershipEventType.TRANSFERRED, to_character_sheet__isnull=True
+            ).exists()
+        )
+
     def test_honest_stalls_do_not_buy(self):
         instance = self._held_item()
         with self.assertRaises(MarketServiceError):

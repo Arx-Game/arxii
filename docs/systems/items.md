@@ -161,6 +161,15 @@ Both consumers call it:
   reaches 0. This is the shared consumer for crafting costs, ritual components and
   technique price components.
 
+Three other ways an item leaves play also go through it:
+- **Building completion** (`complete_building_construction`): each contributed item is
+  soft-deleted with `preserve=True`, because its `Contribution` PROTECTs it (the old
+  queryset delete raised `ProtectedError`). `BuildingMaterial` keeps the snapshot.
+- **A shattered gem** (`pry_adornment`, `cut_gem`).
+- **The fence** (`sell_to_fence`). For an item with a history this writes a
+  TRANSFERRED event to no receiver (`event_type=`), so the trail survives for the
+  deferred reclamation of fenced goods.
+
 **Never call `ItemInstance.delete()` to use up an item.** `game_object` cascades from
 the game object to the row, not back, so a bare row delete leaves the item's
 `ObjectDB` on the character as a ghost. `consume_materials` did exactly this until

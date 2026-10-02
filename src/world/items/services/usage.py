@@ -49,7 +49,11 @@ def hard_delete_item_instance(item_instance: ItemInstance) -> None:
 
 
 def destroy_consumed_item_instance(
-    item_instance: ItemInstance, *, preserve: bool | None = None, note: str
+    item_instance: ItemInstance,
+    *,
+    preserve: bool | None = None,
+    note: str,
+    event_type: str = OwnershipEventType.CONSUMED,
 ) -> None:
     """THE rule for an instance used up entirely (#509, #1025, #4099). Call it, never
     ``ItemInstance.delete()``, whenever consumption empties an instance.
@@ -64,8 +68,12 @@ def destroy_consumed_item_instance(
     Either way nothing is left on the holder: a bare ``ItemInstance.delete()`` leaves the
     game object (``game_object`` cascades the other way) sitting in the character's
     inventory as a ghost. The holder's ``carried_items`` cache is invalidated. Pass
-    ``preserve`` explicitly only when the caller had to capture it before writing an event
-    of its own (``consume_item_charges``). Mutates the instance in place and saves with
+    ``preserve`` explicitly only when the caller knows better than
+    ``differs_from_template``: it captured the answer before writing an event of its own
+    (``consume_item_charges``), or a PROTECT reference forbids a hard delete (a project
+    contribution). ``event_type`` is the ledger entry the soft-delete writes: CONSUMED
+    for use, TRANSFERRED (to no receiver) for an item that changed hands out of play,
+    such as one sold to a fence. Mutates the instance in place and saves with
     ``update_fields`` (ADR-0008); caller owns the transaction.
     """
     if preserve is None:
@@ -81,7 +89,7 @@ def destroy_consumed_item_instance(
             game_object.save()
         OwnershipEvent.objects.create(
             item_instance=item_instance,
-            event_type=OwnershipEventType.CONSUMED,
+            event_type=event_type,
             from_character_sheet=item_instance.holder_character_sheet,
             notes=note,
         )

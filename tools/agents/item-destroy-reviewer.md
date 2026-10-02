@@ -63,13 +63,26 @@ item, so a name-based lint is not precise without type inference.
   `character.carried_items`, the handler must be invalidated. The helper does it; a
   bare delete does not.
 
-Known deletion sites outside the helpers when this agent was written (judge each
-against the rules above when a diff touches it): `world/buildings/services.py`
-(a queryset delete of contributed items after CONSUMED events),
-`world/items/market/services.py` (fence: deletes the row, then the game object),
-`world/items/gems/services.py` (a shattered gem), `world/currency/services.py` and
-`world/justice/evidence.py` (game object first, then the row), and
-`world/items/services/org_vault.py`.
+Sites already routed through the helper (#4099), so a diff that reintroduces a bare
+delete there is a regression:
+- `consume_materials` (crafting, rituals, prices);
+- `consume_item_charges`;
+- building completion's contributed items (`world/buildings/services.py`), always
+  preserved because `Contribution.item_instance` PROTECTs them;
+- shattered gems in `pry_adornment` and `cut_gem` (`world/items/gems/services.py`);
+- the fence (`sell_to_fence`, `world/items/market/services.py`), which writes
+  TRANSFERRED to no receiver for an item with a history.
+
+Sites that delete the game object first and the row second
+(`world/currency/services.py` redemption, `world/justice/evidence.py`) leave no ghost.
+They do skip the ledger cleanup, so judge them when a diff touches them.
+`world/items/services/org_vault.py` deletes game objects when items move into a vault
+(a different lifecycle); check it the same way.
+
+**Watch for PROTECT references.** A hard delete of an item that a PROTECT FK points at
+(`Contribution.item_instance`, `Mantle`) raises `ProtectedError`. The old building
+completion did exactly this on every item contribution. Such items are preserved by
+passing `preserve=True`.
 
 ## What tests should assert
 

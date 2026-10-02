@@ -425,8 +425,9 @@ def complete_building_construction(
     BUILDING parented to the ward), snapshots ``space_budget`` from
     ``BuildingSizeTier[target_size]`` (seeded rows — see ``seeds.py``),
     snapshots material contributions to ``BuildingMaterial`` rows
-    (bulk_create), deletes consumed ItemInstances in one statement, and
-    generates the entry Room (``_generate_entry_room``).
+    (bulk_create), destroys each contributed ItemInstance through
+    ``destroy_consumed_item_instance`` (always preserved: the contribution PROTECTs it),
+    and generates the entry Room (``_generate_entry_room``).
 
     Idempotent: if a Building already exists for this project, return it
     without re-creating. The unique constraint on
@@ -434,8 +435,7 @@ def complete_building_construction(
     """
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
-    from world.items.constants import OwnershipEventType  # noqa: PLC0415
-    from world.items.models import ItemInstance, OwnershipEvent  # noqa: PLC0415
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
     from world.projects.constants import ContributionKind  # noqa: PLC0415
 
     existing = Building.objects.filter(source_project=project).first()
@@ -487,19 +487,20 @@ def complete_building_construction(
         )
         for c in contributions
     ]
-    events = [
-        OwnershipEvent(
-            item_instance=c.item_instance,
-            event_type=OwnershipEventType.CONSUMED,
-            from_character_sheet=c.item_instance.holder_character_sheet,
-            notes=f"Consumed by building construction (Project {project.pk})",
-        )
-        for c in contributions
-    ]
     if materials:
         BuildingMaterial.objects.bulk_create(materials)
-        OwnershipEvent.objects.bulk_create(events)
-        ItemInstance.objects.filter(pk__in=[c.item_instance_id for c in contributions]).delete()
+        # #4099: each contributed item leaves play by the canonical destroy rule, never a
+        # queryset delete. That delete left every carried item's game object on its
+        # contributor as a ghost, and raised ProtectedError besides: the Contribution
+        # row PROTECTs its item. Contributed items are therefore always preserved
+        # (soft-deleted, game object out of play, one CONSUMED event); the soft-delete
+        # purge already skips contribution-referenced rows. Per-item writes, over a
+        # project's bounded contribution set.
+        note = f"Consumed by building construction (Project {project.pk})"
+        for contribution in contributions:
+            item = contribution.item_instance
+            item.quantity = 0
+            destroy_consumed_item_instance(item, preserve=True, note=note)
 
     _generate_entry_room(building)
     return building
