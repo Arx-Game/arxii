@@ -322,18 +322,32 @@ pick, so with no GM opted in nothing is delivered. Full model/queue reference:
 `docs/systems/magic.md`'s "GM Prompt Queue" section; `docs/systems/scenes.md`'s "GM
 narration of mechanical events" section; ADR-4101.
 
-### Relationship Event Intensity Spikes
+### Relationship Event Intensity Spikes (#2013) [BUILT & WIRED]
 
-Thread bonds between characters should feed intensity spikes during dramatic
-moments — an ally falling, a loved one being threatened. These spikes update
-`engagement.intensity_modifier` (process state) and can trigger Audere
-eligibility checks.
+This section used to list relationship-driven intensity spikes as a future hook
+waiting on a combat event system and Thread integration. Both exist now, as
+dramatic surges: `SurgeTriggerKind` (`world/combat/constants.py`) names nine
+triggers, and `apply_dramatic_surge` (`world/combat/escalation.py`) is the shared
+seam every one of them writes through, adding its amount straight onto
+`engagement.intensity_modifier`. Two of the nine are the relationship-event
+spikes this section asked for: `ALLY_FALLEN` (`apply_relationship_escalation_spike`,
+fired off the `CHARACTER_INCAPACITATED`/`CHARACTER_KILLED` events via
+`relationship_spike_handler`) and `ALLY_PERIL` (`apply_peril_escalation_spike`,
+fired off `CONDITION_APPLIED` entering an acute-peril condition via
+`peril_spike_handler`). Each reads the surging participant's own bonded ties
+(`CharacterRelationship` rows whose label type has `fuels_escalation_spikes=True`
+and whose combined scene/invested depth clears the escalation curve's
+`spike_minimum_track_points`) before surging, so only characters with an actual
+stake in the one who fell or is in peril get the spike. The other seven
+(`HIGH_STAKES`, `HATED_FOE`, `INTERFERENCE`, the two boss triggers, `GM_MANUAL`)
+cover combat drama outside the relationship axis and are not part of this hook.
 
-**Depends on:** Combat event system, Thread integration, narrative event
-detection.
-
-**Hook point:** Any system that updates engagement process modifiers calls
-`check_audere_eligibility()` after the update.
+One naming note: the depth signal these two triggers read is a bonded
+`CharacterRelationship` (via its labels), not a woven `magic.Thread`, so
+"Thread bonds" in the original wording overstated the mechanism. The intensity
+these surges add feeds the Audere gates exactly as described above: Audere's
+first gate reads the runtime intensity tier, which sums
+`engagement.intensity_modifier`.
 
 ### Escalation Tick Triggers
 

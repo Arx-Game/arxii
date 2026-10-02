@@ -1,6 +1,15 @@
 # Progression glossary
 
-> Durance, XP, and Development Points are cross-cutting terms — see the root `AGENT_GLOSSARY_MAP.md`.
+> Durance, and the three progression currencies (XP, Development, Legend), are
+> cross-cutting terms: see "The three progression currencies (XP, Development,
+> Legend)" in the root `AGENT_GLOSSARY_MAP.md`. **XP** unlocks at an authored
+> cutoff and is largely player-driven; **Development** is progress toward a
+> skill/stat/thread cutoff, accruing from the time and effort a character
+> invests in play (`DevelopmentPoints`, a thread's `developed_points`, weekly
+> training AP); **Legend** is progress toward a character level, earned only
+> from legendary achievement at great personal risk (`LegendRequirement`,
+> #3463, ADR-0249), never from time or effort alone. `docs/systems/progression.md`
+> carries the full model lineup for all three.
 > Kudos, Nomination, and the four settlement paths are defined below — they're the
 > applause-economy axes native to this app (see ADR-0115, amended by ADR-0286, for how
 > they relate to `InteractionReaction`, the sibling axis defined in

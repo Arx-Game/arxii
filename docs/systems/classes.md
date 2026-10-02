@@ -10,7 +10,7 @@ Character paths with evolution hierarchy through stages of power, plus legacy ch
 
 ```python
 from world.classes.models import PathStage
-# PROSPECT = 1   - Level 1-2, pre-awakening, selected in CG
+# PROSPECT = 1   - Level 1-2, post-Glimpse, has magic, selected in CG
 # POTENTIAL = 2   - Level 3, awakening potential
 # PUISSANT = 3    - Level 6, magical power
 # TRUE = 4        - Level 11, true mastery
