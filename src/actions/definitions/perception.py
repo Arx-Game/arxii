@@ -62,6 +62,36 @@ def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     return resolve_persona_pk_to_character(kwargs.get("target_persona_id"))
 
 
+def _character_look_worn_data(actor: ObjectDB, target: ObjectDB) -> dict[str, Any]:
+    """Build current public equipment rows for an authorized character Look."""
+    from world.items.serializers import VisibleWornItemSerializer  # noqa: PLC0415
+    from world.items.services.appearance import visible_worn_items_for  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = target.character_sheet
+    if sheet is None:
+        return {}
+    if not look_target_visible(actor, target):
+        return {}
+    try:
+        persona = active_persona_for_sheet(sheet)
+    except Persona.DoesNotExist:
+        return {}
+    rows = []
+    for row in visible_worn_items_for(target, observer=actor):
+        request = MenuTargetRequest(
+            kind=MenuTargetKind.ITEMS,
+            target_id=row.item_instance.pk,
+            owner_persona_id=persona.pk,
+        )
+        if resolve_menu_target(actor, request) is not None:
+            data = dict(VisibleWornItemSerializer(row).data)
+            data["owner_persona_id"] = persona.pk
+            rows.append(data)
+    return {"visible_worn_items": rows}
+
+
 def _render_physical_look(
     actor: ObjectDB,
     target: ObjectDB,
@@ -79,7 +109,11 @@ def _render_physical_look(
         return ActionResult(success=True, message="")
     if extras.sections:
         description = f"{description}\n" + "\n".join(extras.sections)
-    return ActionResult(success=True, message=description)
+    return ActionResult(
+        success=True,
+        message=description,
+        data=_character_look_worn_data(actor, target),
+    )
 
 
 @dataclass

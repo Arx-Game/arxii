@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -12,6 +13,14 @@ from evennia_extensions.factories import (
     AccountFactory,
     CharacterFactory,
     ObjectDBFactory,
+)
+from flows.constants import EventName
+from flows.consts import FlowActionChoices
+from flows.factories import (
+    FlowDefinitionFactory,
+    FlowStepDefinitionFactory,
+    TriggerDefinitionFactory,
+    TriggerFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
@@ -27,11 +36,13 @@ from world.items.factories import (
     TemplateSlotFactory,
 )
 from world.items.models import EquippedItem
+from world.items.services.equip import unequip_item
 from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
     RosterTenureFactory,
 )
+from world.scenes.services import create_mask, set_active_persona
 
 
 class _VisibleWornSetupMixin:
@@ -151,6 +162,186 @@ class _VisibleWornSetupMixin:
         )
 
         self.client = APIClient()
+
+
+class CharacterLookWornDataTests(_VisibleWornSetupMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(user=self.account_b)
+        self.mask = create_mask(self.sheet_a, name="A Grey Hood")
+        set_active_persona(self.sheet_a, self.mask)
+
+    def _look(self, persona=None, **kwargs):
+        response = self.client.post(
+            f"/api/actions/characters/{self.character_b.pk}/dispatch/",
+            {
+                "ref": {"backend": "registry", "registry_key": "look"},
+                "kwargs": (kwargs if kwargs else {"target_persona_id": (persona or self.mask).pk}),
+            },
+            format="json",
+        )
+        assert response.status_code == 200, response.data
+        # REST renderer must serialize the actual result, not a mocked dispatcher.
+        assert response.content
+        return response.data
+
+    def _detail(self, item=None, observer=None):
+        item = item or self.coat
+        observer = observer or self.character_b
+        return self.client.get(f"/api/items/visible-item-detail/{item.pk}/?observer={observer.pk}")
+
+    def _conceal(self, obj):
+        return ConditionInstanceFactory(
+            target=obj,
+            condition=ConditionTemplateFactory(
+                category=ConditionCategoryFactory(conceals_from_perception=True)
+            ),
+        )
+
+    def _cancel(self, event):
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.CANCEL_EVENT,
+            parameters={},
+        )
+        definition = TriggerDefinitionFactory(event_name=event, flow_definition=flow)
+        trigger = TriggerFactory(trigger_definition=definition, obj=self.room)
+        self.room.trigger_handler.refresh()
+        return trigger
+
+    def test_ac1_exact_public_rows_no_carried_inventory(self):
+        private = ItemInstanceFactory(holder_character_sheet=self.sheet_a, game_object=None)
+        result = self._look()
+        assert result["success"] is True
+        assert result["data"] == {
+            "visible_worn_items": [
+                {
+                    "id": self.coat.pk,
+                    "display_name": self.coat.display_name,
+                    "body_region": BodyRegion.TORSO,
+                    "equipment_layer": EquipmentLayer.OVER,
+                    "owner_persona_id": self.mask.pk,
+                }
+            ]
+        }
+        assert private.pk not in {row["id"] for row in result["data"]["visible_worn_items"]}
+        assert self.character_a.key not in str(result["data"])
+
+    def test_ac2_denied_absent_remote_and_noncharacter_have_no_data(self):
+        hidden = self._conceal(self.character_a)
+        denied = self._look()
+        assert denied["success"] is False
+        assert denied["data"] is None
+        absent = self._look(target_persona_id=999999999)
+        assert absent["data"] is None
+        hidden.delete()
+        self.character_a.location = self.other_room
+        assert self._look()["data"] is None
+        assert self._look(target=self.room.pk)["data"] is None
+        obj = ObjectDBFactory(location=self.room)
+        assert self._look(target=obj.pk)["data"] is None
+
+    def test_ac3_real_cancel_suppresses_companion(self):
+        for event in (EventName.ACTION_INTENT, EventName.EXAMINE_PRE):
+            with self.subTest(event=event):
+                trigger = self._cancel(event)
+                examined_trigger = (
+                    self._cancel(EventName.EXAMINED) if event == EventName.EXAMINE_PRE else None
+                )
+                result = self._look()
+                assert result["data"] is None
+                if event == EventName.EXAMINE_PRE:
+                    assert result["success"] is True
+                    assert result["message"] == ""
+                    assert self.room.trigger_handler.fire_count(examined_trigger.pk) == 0
+                    examined_trigger.delete()
+                    self.room.trigger_handler.refresh()
+                else:
+                    assert result["success"] is False
+                assert self.room.trigger_handler.fire_count(trigger.pk) == 1
+                trigger.delete()
+                self.room.trigger_handler.refresh()
+
+    def test_ac4_detail_hidden_absent_detection_and_layers(self):
+        missing = self.client.get(
+            f"/api/items/visible-item-detail/999999999/?observer={self.character_b.pk}"
+        )
+        self._conceal(self.character_a)
+        with patch("actions.target_resolution.visible_worn_items_for") as layers:
+            hidden = self._detail()
+            assert hidden.status_code == 404
+            layers.assert_not_called()
+        assert hidden.data == missing.data
+        register_detection(self.sheet_b, self.character_a)
+        assert self._detail().status_code == 200
+        assert self._detail(self.shirt).status_code == 404
+        condition = self._conceal(self.coat.game_object)
+        assert self._detail().status_code == 404
+        condition.delete()
+        self.character_a.location = self.other_room
+        assert self._detail().status_code == 404
+        self.character_a.location = None
+        self.character_b.location = None
+        assert self._detail().status_code == 404
+
+    def test_ac5_row_only_equipped_and_carried_have_no_proxy(self):
+        self.coat.game_object = None
+        self.coat.save(update_fields=["game_object"])
+        before = ObjectDBFactory._meta.model.objects.count()
+        assert self._look()["data"]["visible_worn_items"][0]["id"] == self.coat.pk
+        response = self._detail()
+        assert response.status_code == 200
+        assert response.data["game_object_id"] is None
+        carried = ItemInstanceFactory(holder_character_sheet=self.sheet_a, game_object=None)
+        assert self._detail(carried).status_code == 404
+        assert ObjectDBFactory._meta.model.objects.count() == before
+
+    def test_ac6_persona_swap_and_stale_equipment(self):
+        old = self._look()["data"]["visible_worn_items"][0]
+        new = create_mask(self.sheet_a, name="A Blue Hood")
+        set_active_persona(self.sheet_a, new)
+        assert self._look(new)["data"]["visible_worn_items"][0]["owner_persona_id"] == new.pk
+        response = self.client.post(
+            f"/api/actions/characters/{self.character_b.pk}/dispatch/",
+            {
+                "ref": {"backend": "registry", "registry_key": "look_at_item"},
+                "kwargs": {
+                    "menu_target": {
+                        "kind": "items",
+                        "target_id": old["id"],
+                        "owner_persona_id": old["owner_persona_id"],
+                    }
+                },
+            },
+            format="json",
+        )
+        assert response.status_code == 200
+        assert response.data["success"] is False
+        unequip_item(equipped_item=self.coat.equipped_slots.first())
+        assert self._detail().status_code == 404
+        assert self.coat.pk not in {
+            row["id"] for row in self._look(new)["data"]["visible_worn_items"]
+        }
+
+    def test_ac4_destroyed_and_moved_item_fail_closed(self):
+        self.coat.game_object.location = self.other_room
+        assert self._detail().status_code == 404
+        assert self._look()["data"]["visible_worn_items"] == []
+        self.coat.game_object.location = self.character_a
+        self.coat.destroyed_at = timezone.now()
+        self.coat.save(update_fields=["destroyed_at"])
+        assert self._detail().status_code == 404
+        assert self._look()["data"]["visible_worn_items"] == []
+
+    def test_ac2_empty_character_and_ac5_self_layers(self):
+        for item in (self.coat, self.shirt):
+            unequip_item(equipped_item=item.equipped_slots.first())
+        assert self._look()["data"] == {"visible_worn_items": []}
+        # Existing self/staff layer bypass is covered by the retained detail tests.
+        self.client.force_authenticate(user=self.account_a)
+        assert self._detail(self.coat, self.character_a).status_code == 404
 
 
 class VisibleWornObserverPrivacyTests(_VisibleWornSetupMixin, TestCase):

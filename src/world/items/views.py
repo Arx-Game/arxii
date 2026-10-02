@@ -1361,25 +1361,13 @@ class VisibleMarkingViewSet(VisibleWornItemViewSet):
 
 
 class VisibleItemDetailViewSet(viewsets.ViewSet):
-    """Read-only detail for a single visibly worn item.
+    """Read-only detail for a currently readable worn item.
 
-    Item-first permission shape: fetch the item directly, then check
-    whether the requester is allowed to view it.
-
-    The wearing character is derived from ``item.game_object.location``
-    (equipped items have their location set to the wearing character) —
-    no RosterEntry walk, no roster queries.
-
-    Permission rules:
-
-    - Staff: 200 (bypass).
-    - Non-staff with ``?observer=<own_char_pk>``:
-      - Observer must belong to the requester.
-      - Self-look (observer == wearing character): 200 even for concealed
-        items.
-      - Same-room: 200 if the item is not concealed by a higher covering
-        layer; 404 if concealed.
-      - Different room or no observer: 404.
+    Non-staff requests require an account-owned observer and current typed
+    worn-item scope: public persona, co-location, wearer perception, item
+    holder/equipment and visibility. Self-look bypasses clothing layers,
+    not item liveness or equipment checks. Staff retains full visibility.
+    Unavailable items return an ordinary 404 without confirming existence.
     """
 
     permission_classes = [PlayerOrStaffPermission]
@@ -1448,30 +1436,31 @@ class VisibleItemDetailViewSet(viewsets.ViewSet):
         return observer.character_sheet
 
     def _user_can_view(self, user: AccountDB, item: ItemInstance, request: Request) -> bool:
-        """Permission check for ``item`` against ``user`` and the observer."""
+        """Check current worn-item scope for the owned observing character."""
         if user.is_staff:
             return True
-
         observer = _fetch_owned_observer(request, user)
         if observer is None:
             return False
-
-        # Wearing character is derived from item location — equipped
-        # items have their game_object's location set to the wearer.
-        wearing_character = item.game_object.db_location
-        if wearing_character is None:
+        sheet = item.holder_character_sheet
+        if sheet is None:
             return False
 
-        # Self-look: bypass hiding.
-        if observer.pk == wearing_character.pk:
-            return True
+        from actions.target_menu_types import MenuTargetKind, MenuTargetRequest  # noqa: PLC0415
+        from actions.target_resolution import resolve_menu_target  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        # Same-room check.
-        if observer.db_location_id != wearing_character.db_location_id:
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
             return False
-
-        # Visible (not concealed by a covering layer)?
-        return not _is_concealed_for_observer(item, wearing_character)
+        request_target = MenuTargetRequest(
+            kind=MenuTargetKind.ITEMS,
+            target_id=item.pk,
+            owner_persona_id=persona.pk,
+        )
+        return resolve_menu_target(observer, request_target) is not None
 
 
 # =============================================================================
