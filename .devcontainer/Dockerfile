@@ -120,8 +120,8 @@ RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-c
 # at build, no churn on container recreate, explicit upgrades via `just dc-build`.
 # The installer fetches a static linux/amd64 binary into ~/.local/bin (already
 # on PATH) with no sudo. Build-time network is open, so the runtime firewall
-# never needs get/dl.polytoken.dev — only the model-provider host
-# (api.code.umans.ai) is allowlisted in init-firewall.sh.
+# never needs get/dl.polytoken.dev — only the model provider (OpenAI, via the
+# Cloudflare ranges in init-firewall.sh) must be reachable at runtime.
 RUN curl -fsS https://get.polytoken.dev | bash
 
 # Terminal multiplexer for long-lived agent sessions. `just dc-shell` attaches
