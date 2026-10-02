@@ -2807,10 +2807,10 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
     offer_strip_label = serializers.CharField(source="threshold.offer_strip_label", read_only=True)
 
     def get_vision_text(self, obj) -> str:
-        """Return faith variant vision text if set, else the threshold's."""
-        if obj.faith_variant_id is not None:
-            return obj.faith_variant.vision_text
-        return obj.threshold.vision_text
+        """Layered: prepared (character), else faith variant, else the threshold's (#4101)."""
+        from world.magic.services.prepared_text import resolve_crossing_text  # noqa: PLC0415
+
+        return resolve_crossing_text(obj.character_sheet, obj.threshold, obj.faith_variant).vision
 
     class Meta:
         from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415

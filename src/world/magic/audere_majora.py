@@ -67,7 +67,10 @@ class AudereMajoraThreshold(RenownAwardConfig):
         help_text="Shown ONLY to the crossing player. Authored in DB; spoiler-private.",
     )
     manifestation_text = models.TextField(
-        help_text="Broadcast to the room when the offer fires. Authored in DB.",
+        help_text=(
+            "Room line for the crossing. Broadcast when the offer fires, or held "
+            "for the Crossing prompt when a GM is running the scene (#4101)."
+        ),
     )
     deed_title = models.CharField(
         max_length=200,
@@ -123,6 +126,13 @@ class PendingAudereMajoraOffer(AbstractPendingOffer):
         blank=True,
         related_name="pending_offers",
         help_text="Faith variant selected at offer creation; null = no faith coupling.",
+    )
+    manifestation_withheld = models.BooleanField(
+        default=False,
+        help_text=(
+            "#4101: a prompted GM was present when the gate opened, so the room "
+            "line was held for the Crossing prompt instead of broadcast."
+        ),
     )
 
     class Meta:
@@ -414,11 +424,19 @@ def maybe_create_audere_majora_offer(
     )
 
     if created:
+        from world.gm.constants import GMPromptKind  # noqa: PLC0415
+        from world.gm.prompt_services import prompt_recipients  # noqa: PLC0415
+        from world.magic.services.prepared_text import resolve_crossing_text  # noqa: PLC0415
+        from world.scenes.models import Scene  # noqa: PLC0415
+
         variant = maybe_apply_audere_faith_coupling(sheet, threshold, offer)
-        if variant is not None:
-            _broadcast_manifestation(character, variant.manifestation_text)
+        texts = resolve_crossing_text(sheet, threshold, variant)
+        scene = Scene.objects.active_for_room(character.location).first()
+        if prompt_recipients(scene, GMPromptKind.CROSSING):
+            offer.manifestation_withheld = True
+            offer.save(update_fields=["manifestation_withheld"])
         else:
-            _broadcast_manifestation(character, threshold.manifestation_text)
+            _broadcast_manifestation(character, texts.manifestation)
 
     return offer
 
@@ -469,11 +487,15 @@ def maybe_apply_audere_faith_coupling(
 # =============================================================================
 
 
-def _crossing_deed_title(threshold: AudereMajoraThreshold, persona, chosen_path) -> str:
-    """Public, non-spoiler deed name: authored override, else generic composed copy."""
+def _crossing_deed_title(
+    threshold: AudereMajoraThreshold, persona, chosen_path, *, prepared_title: str = ""
+) -> str:
+    """Public deed name: prepared (character) title, else authored tier title, else generic."""
+    if prepared_title:
+        return prepared_title
     if threshold.deed_title:
         return threshold.deed_title
-    return f"{persona.name}'s Crossing — {chosen_path.name}"
+    return f"{persona.name}'s Crossing - {chosen_path.name}"
 
 
 def _crossing_deed_description(persona, chosen_path) -> str:
@@ -481,8 +503,12 @@ def _crossing_deed_description(persona, chosen_path) -> str:
     return f"{persona.name} crossed the threshold onto {chosen_path.name}."
 
 
-def _mint_crossing_deed(crossing: AudereMajoraCrossing) -> None:
+def _mint_crossing_deed(crossing: AudereMajoraCrossing, *, deed_title: str = "") -> None:
     """Mint the renown deed for a completed crossing; record present witnesses.
+
+    ``deed_title`` is the character's own prepared title (#4101), layered ahead of
+    the authored tier title and the generic composed fallback by
+    ``_crossing_deed_title``.
 
     No-ops when the crosser has no primary persona.
 
@@ -522,7 +548,9 @@ def _mint_crossing_deed(crossing: AudereMajoraCrossing) -> None:
     scene = crossing.scene
     origin_area = area_for_scene(scene)
     threshold = crossing.threshold
-    title = _crossing_deed_title(threshold, persona, crossing.chosen_path)
+    title = _crossing_deed_title(
+        threshold, persona, crossing.chosen_path, prepared_title=deed_title
+    )
 
     result = fire_renown_award(
         persona=persona,
@@ -672,6 +700,14 @@ def cross_threshold(
 
     clear_readied_ultimate(sheet)
 
+    from world.magic.services.prepared_text import (  # noqa: PLC0415
+        consume_prepared_crossing_text,
+        resolve_crossing_text,
+    )
+
+    variant = offer.faith_variant if offer is not None else None
+    texts = resolve_crossing_text(sheet, threshold, variant)
+
     crossing = AudereMajoraCrossing.objects.create(
         character_sheet=sheet,
         threshold=threshold,
@@ -681,7 +717,12 @@ def cross_threshold(
         level_before=level_before,
         level_after=level_after,
     )
-    _mint_crossing_deed(crossing)
+    _mint_crossing_deed(crossing, deed_title=texts.deed_title)
+    consume_prepared_crossing_text(sheet, crossing)
+    withheld = offer is not None and offer.manifestation_withheld
+    transaction.on_commit(
+        lambda: _route_crossing(character, sheet, scene, texts, withheld=withheld)
+    )
 
     majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
     # Result deliberately unchecked, mirroring offer_audere: no authored trigger
@@ -734,6 +775,41 @@ def cross_threshold(
         declaration_interaction_id=declaration_id,
         faith_coupling_applied=faith_coupling_applied,
         faith_being_name=faith_being_name,
+    )
+
+
+def _route_crossing(character, sheet, scene, texts, *, withheld: bool) -> None:
+    """Prompt the scene's GMs with the Crossing, or deliver it as today (#4101).
+
+    ``withheld`` is read from the offer BEFORE ``cross_threshold``'s caller deletes
+    it, so this always has a plain bool to work with regardless of the offer row's
+    lifetime. When withheld, the room line is the Crossing prompt's room-text
+    default (spec decision 7); otherwise the room line already went out at
+    gate-open and this only carries the private vision.
+    """
+    from world.gm.constants import GMPromptKind  # noqa: PLC0415
+    from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
+    from world.gm.types import NarratableEvent  # noqa: PLC0415
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    room_text = texts.manifestation if withheld else ""
+
+    def _deliver() -> None:
+        if room_text.strip():
+            _broadcast_manifestation(character, room_text)
+        if texts.vision.strip():
+            narrate_privately(character, texts.vision)
+
+    route_narratable_event(
+        NarratableEvent(
+            kind=GMPromptKind.CROSSING,
+            scene=scene,
+            character_sheet=sheet,
+            room_text=room_text,
+            private_text=texts.vision,
+            prepared_for_character=texts.prepared,
+        ),
+        deliver_unprompted=_deliver,
     )
 
 
@@ -855,7 +931,10 @@ class AudereMajoraFaithVariant(SharedMemoryModel):
         help_text="Shown ONLY to the crossing player. Spoiler-private.",
     )
     manifestation_text = models.TextField(
-        help_text="Broadcast to the room when the offer fires.",
+        help_text=(
+            "Room line for the crossing. Broadcast when the offer fires, or held "
+            "for the Crossing prompt when a GM is running the scene (#4101)."
+        ),
     )
     resonance_pool_cost = models.PositiveIntegerField(
         help_text="Spent from being.resonance_pool when this variant fires (at crossing time).",
