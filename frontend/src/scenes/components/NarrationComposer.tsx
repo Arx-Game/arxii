@@ -13,6 +13,12 @@
  * Ruling R10-1: the Audience line is two static labels (the fixed send each
  * button makes), not a toggle — the people picker still edits who "Chosen
  * people" means for the private send.
+ *
+ * Demo-fidelity fix round (F2): after a send succeeds, its section shows a
+ * clear sent state ("Sent to {names}."/"Sent to the room." plus the text
+ * that went out) instead of leaving the quote/textarea looking blank and the
+ * button greyed out. The GM can still write and send another line right
+ * after -- the sent notice sits above a fresh, empty draft field.
  */
 import { useState } from 'react';
 import {
@@ -55,6 +61,12 @@ export function NarrationComposer({
   );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Sent-state (F2): what the last successful send carried, so the section
+  // shows it was sent instead of going blank. The same lifecycle as
+  // privateDraft/roomDraft above -- reset per prompt because GMPromptQueue
+  // only ever mounts one open NarrationComposer at a time.
+  const [privateSent, setPrivateSent] = useState<{ text: string; names: string } | null>(null);
+  const [roomSent, setRoomSent] = useState<string | null>(null);
 
   function toggleChosen(id: number) {
     setChosen((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -81,6 +93,7 @@ export function NarrationComposer({
         audience: 'chosen',
         receiver_persona_ids: chosen,
       });
+      setPrivateSent({ text, names: chosenNames || 'the chosen people' });
       setPrivateDraft('');
       setEditingPrivate(false);
       if (result.message) setNotice(result.message);
@@ -98,6 +111,7 @@ export function NarrationComposer({
         text: roomDraft,
         audience: 'room',
       });
+      setRoomSent(roomDraft);
       setRoomDraft('');
       if (result.message) setNotice(result.message);
     } catch (err) {
@@ -110,7 +124,10 @@ export function NarrationComposer({
   // prompt carries none, skip straight to the blank-textarea editing view —
   // there is no prepared/authored text to preview or fall back to.
   const hasPreparedText = Boolean(prompt.private_text);
-  const showPrivateEditing = editingPrivate || !hasPreparedText;
+  // F2: once a private send has gone out, the box always falls to the
+  // (now-blank) editing form -- there's nothing left to preview, and the GM
+  // can still write another line.
+  const showPrivateEditing = editingPrivate || privateSent !== null || !hasPreparedText;
   const privateSendDisabled = narrate.isPending || !privateDraft.trim();
   const roomSendDisabled = narrate.isPending || !roomDraft.trim();
 
@@ -118,17 +135,26 @@ export function NarrationComposer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            Tied to <span aria-hidden>✦</span>{' '}
-            {prompt.subject_name
-              ? `${prompt.kind_label}: ${prompt.subject_name}`
-              : prompt.kind_label}
-          </DialogTitle>
+          {/* F5: "Tied to" is its own labelled chip line below, not folded
+              into the title -- the title stays for the accessible name only. */}
+          <DialogTitle className="sr-only">Narrate {prompt.kind_label}</DialogTitle>
           <DialogDescription>
             Two sends are offered here: a room line everyone present can read, and a private line to
             the people chosen.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Tied to
+          </p>
+          <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs text-foreground">
+            <span aria-hidden>✦</span>
+            {prompt.subject_name
+              ? `${prompt.kind_label}: ${prompt.subject_name}`
+              : prompt.kind_label}
+          </span>
+        </div>
 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -164,7 +190,7 @@ export function NarrationComposer({
         <div className="space-y-2 rounded-md border border-border bg-card p-3">
           {hasPreparedText && (
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {prompt.prepared_for_character ? 'Prepared for this character' : 'Authored text'}
               </p>
               {prompt.prepared_for_character && (
@@ -174,9 +200,20 @@ export function NarrationComposer({
               )}
             </div>
           )}
+          {privateSent && (
+            <p role="status" data-testid="private-sent-notice" className="text-sm">
+              Sent to {privateSent.names}.{' '}
+              <span className="italic text-foreground">&ldquo;{privateSent.text}&rdquo;</span>
+            </p>
+          )}
           {showPrivateEditing ? (
             <>
-              <Label htmlFor="narration-private-line">Private line</Label>
+              <Label
+                htmlFor="narration-private-line"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Private line
+              </Label>
               <Textarea
                 id="narration-private-line"
                 value={privateDraft}
@@ -194,9 +231,9 @@ export function NarrationComposer({
             <>
               <blockquote
                 data-testid="private-quote"
-                className="border-l-2 pl-3 text-sm italic text-muted-foreground"
+                className="border-l-2 border-primary pl-3 text-sm italic text-foreground"
               >
-                {privateDraft}
+                &ldquo;{privateDraft}&rdquo;
               </blockquote>
               <div className="flex gap-2">
                 <Button
@@ -220,7 +257,18 @@ export function NarrationComposer({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="narration-room-line">Room line</Label>
+          <Label
+            htmlFor="narration-room-line"
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          >
+            Room line
+          </Label>
+          {roomSent && (
+            <p role="status" data-testid="room-sent-notice" className="text-sm">
+              Sent to the room.{' '}
+              <span className="italic text-foreground">&ldquo;{roomSent}&rdquo;</span>
+            </p>
+          )}
           <Textarea
             id="narration-room-line"
             value={roomDraft}

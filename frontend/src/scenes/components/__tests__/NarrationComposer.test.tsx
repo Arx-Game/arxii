@@ -62,6 +62,19 @@ describe('NarrationComposer', () => {
     expect(screen.getByText('Prepared for this character')).toBeInTheDocument();
   });
 
+  // Demo-fidelity fix round (F5): "Tied to" is its own labelled chip line
+  // (not folded into the dialog title), and the dialog still carries an
+  // accessible name via DialogTitle.
+  it('renders "Tied to" as a labelled chip, separate from the (accessible) dialog title', () => {
+    renderWithProviders(
+      <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
+    );
+    expect(screen.getByRole('dialog', { name: 'Narrate Crossing' })).toBeInTheDocument();
+    const label = screen.getByText('Tied to');
+    expect(label.tagName).toBe('P');
+    expect(screen.getByText('Crossing: Rowan Ashcombe').tagName).toBe('SPAN');
+  });
+
   it('renders the Audience line as static labels, not a toggle (R10-1)', () => {
     renderWithProviders(
       <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
@@ -112,27 +125,48 @@ describe('NarrationComposer', () => {
     expect(screen.getByLabelText('Private line')).toHaveValue('my edit');
   });
 
-  it('clears only the private draft after a successful private send', async () => {
+  // Demo-fidelity fix round (F2): a successful private send shows a clear
+  // sent state instead of leaving the quote looking blank and the button
+  // greyed out, and the GM can still write and send another private line.
+  it('shows a sent notice with the sent text after a successful private send, and stays open for another line', async () => {
     mutateAsync.mockResolvedValueOnce({});
     renderWithProviders(
       <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
     );
     expect(screen.getByTestId('private-quote')).toHaveTextContent('vision');
+    expect(screen.queryByTestId('private-sent-notice')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Send as is' }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    // The private draft actually cleared -- the quote now reads empty...
-    await waitFor(() => expect(screen.getByTestId('private-quote')).toHaveTextContent(''));
+
+    // The sent notice names who it went to and quotes what was sent.
+    const notice = await screen.findByTestId('private-sent-notice');
+    expect(notice).toHaveTextContent('Sent to Rowan Ashcombe.');
+    expect(notice).toHaveTextContent('vision');
+    expect(notice).toHaveAttribute('role', 'status');
+    // The old blockquote preview is gone -- a fresh, empty, editable line
+    // takes its place so the GM can send another.
+    expect(screen.queryByTestId('private-quote')).toBeNull();
+    const box = screen.getByLabelText('Private line');
+    expect(box).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Send privately' })).toBeInTheDocument();
     // ...and the room line draft is untouched by the private send.
     expect(screen.getByLabelText('Room line')).toHaveValue('room');
   });
 
-  it('clears only the room draft after a successful room send', async () => {
+  it('shows a sent notice with the sent text after a successful room send, and stays open for another line', async () => {
     mutateAsync.mockResolvedValueOnce({});
     renderWithProviders(
       <NarrationComposer prompt={crossing} sceneId="1" personas={[]} open onOpenChange={() => {}} />
     );
     fireEvent.click(screen.getByRole('button', { name: 'Send to the room' }));
     await waitFor(() => expect(screen.getByLabelText('Room line')).toHaveValue(''));
+
+    const notice = await screen.findByTestId('room-sent-notice');
+    expect(notice).toHaveTextContent('Sent to the room.');
+    expect(notice).toHaveTextContent('room');
+    expect(notice).toHaveAttribute('role', 'status');
+    expect(screen.getByLabelText('Room line')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Send to the room' })).toBeInTheDocument();
     // The private draft is untouched by the room send.
     expect(screen.getByTestId('private-quote')).toHaveTextContent('vision');
   });
