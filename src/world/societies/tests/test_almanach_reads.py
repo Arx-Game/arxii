@@ -119,6 +119,28 @@ class LadderReadTests(TestCase):
         assert row.claimant_name == "Piropa"
         assert all(r.claimant_name == "" for r in payload.rows if r.title_id != brasa.pk)
 
+    def test_a_deleted_house_leaves_its_titles_unclaimed(self) -> None:
+        """Deleting a house nulls ``Title.house`` through the Collector's bulk
+        UPDATE, which never touches the identity-mapped titles. Read stale,
+        ``house_id`` still named the gone house while ``select_related`` set
+        ``house`` to None, and both ladder reads 500ed in production."""
+        gone = OrganizationFactory(name="Ceniza")
+        ceniza = plant_rung(
+            realm=self.realm, tier=TitleTier.COUNTY, name="Ceniza", parent_title=self.kingdom
+        )
+        # Held, not owning the seat domain (``Domain.owner_org`` would PROTECT).
+        ceniza.house = gone
+        ceniza.save(update_fields=["house"])
+        assert ladder_for_realm(self.realm).rows, "warm the cached titles"
+        gone.delete()
+        for payload in (
+            ladder_for_realm(self.realm),
+            ladder_for_realm(self.realm, for_founder=True),
+        ):
+            row = next(r for r in payload.rows if r.title_id == ceniza.pk)
+            assert row.state == "Unclaimed"
+            assert row.house_id is None
+
     def test_founder_ladder_hides_unpublished_houses(self) -> None:
         other = OrganizationFactory(name="Solano")
         ardor = plant_rung(
