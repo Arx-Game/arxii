@@ -226,4 +226,21 @@ describe('NarrationComposer', () => {
       })
     );
   });
+
+  // Demo-fidelity fix round 2 (F9): the people-picker checkboxes use the
+  // theme's primary accent, the same host-token gap F7 fixed on the filter
+  // card, instead of the browser default blue.
+  it('gives the people-picker checkboxes the theme accent (F9)', () => {
+    renderWithProviders(
+      <NarrationComposer
+        prompt={crossing}
+        sceneId="1"
+        personas={[{ id: 31, name: 'Tamsin Vale' }]}
+        open
+        onOpenChange={() => {}}
+      />
+    );
+    const checkbox = screen.getByRole('checkbox', { name: 'Tamsin Vale' });
+    expect(checkbox.className).toContain('accent-primary');
+  });
 });

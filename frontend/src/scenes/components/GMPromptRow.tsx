@@ -14,10 +14,18 @@
  * the kind, so a narration row drops the separate kind-chip badge -- showing
  * both read as a doubled "Crossing Crossing: Rowan Ashcombe". A dramatic
  * moment's body never repeats its kind_label, so its chip stays.
+ *
+ * Demo-fidelity fix round 2 (F4b): a narration row gets its own tint and
+ * border (the `primary` token the F1 private narration block already uses),
+ * separate from the Dramatic Moment row's plain `border-border`/`bg-card` --
+ * the demo distinguishes `.prompt-chip.kind-crossing` from the plain
+ * Dramatic Moment chip the same way. Theme tokens only, never the demo's
+ * literal amber.
  */
 import { Check, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useConfirmGMPrompt, useDismissGMPrompt } from '../gmPromptQueries';
 import type { GMPrompt } from '../types';
 
@@ -52,7 +60,10 @@ export function GMPromptRow({
   return (
     <div
       data-testid="gm-prompt-row"
-      className="flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-3 pr-1.5 text-sm"
+      className={cn(
+        'flex items-center gap-2 rounded-full border py-1.5 pl-3 pr-1.5 text-sm',
+        isMoment ? 'border-border bg-card' : 'border-primary/40 bg-primary/10'
+      )}
     >
       <span aria-hidden>✦</span>
       {isMoment && (

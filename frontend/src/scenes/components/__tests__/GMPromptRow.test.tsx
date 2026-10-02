@@ -224,6 +224,26 @@ describe('GMPromptRow', () => {
     expect(screen.getByTestId('gm-prompt-row').className).toContain('rounded-full');
   });
 
+  // F4b -- a narration row gets the same primary tint the private narration
+  // block uses, distinct from the Dramatic Moment row's plain border/card.
+  it('tints a narration row with the primary token, distinct from a dramatic-moment row (F4b)', () => {
+    const { unmount } = render(<GMPromptRow prompt={makePrompt()} sceneId="5" onOpen={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    const narrationRow = screen.getByTestId('gm-prompt-row').className;
+    expect(narrationRow).toContain('border-primary');
+    expect(narrationRow).toContain('bg-primary');
+    unmount();
+
+    render(<GMPromptRow prompt={makeMoment()} sceneId="5" onOpen={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    const momentRow = screen.getByTestId('gm-prompt-row').className;
+    expect(momentRow).toContain('border-border');
+    expect(momentRow).toContain('bg-card');
+    expect(momentRow).not.toContain('border-primary');
+  });
+
   it('invalidates the gm-prompts and scene-interactions caches on successful dismiss', async () => {
     const user = userEvent.setup();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

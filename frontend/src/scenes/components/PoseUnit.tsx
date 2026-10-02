@@ -457,8 +457,12 @@ export function PoseUnit({
       );
     }
     return (
-      <div role="note" data-testid="pose-unit-narration" className="my-1.5 max-w-[85%]">
-        <p className="border-l-2 border-border pl-2 text-sm italic text-muted-foreground">
+      <div
+        role="note"
+        data-testid="pose-unit-narration"
+        className="my-1.5 max-w-[85%] border-l-2 border-border pl-2"
+      >
+        <p className="text-sm italic text-muted-foreground">
           <FormattedContent content={interaction.content} />
         </p>
         <NarratedEventTag

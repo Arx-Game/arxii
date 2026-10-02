@@ -112,6 +112,14 @@ describe('GMPromptFilterCard', () => {
     const list = checkbox.closest('ul');
     expect(list).not.toBeNull();
     expect(list!.className).toContain('divide-y');
+
+    // F7b: the row is a label/value grid, so "Prompt me" sits right after
+    // the label column -- not pushed to the row's far-right edge.
+    const row = checkbox.closest('li');
+    expect(row).not.toBeNull();
+    expect(row!.className).toContain('grid');
+    expect(row!.className).not.toContain('justify-between');
+    expect(row!.firstElementChild).toHaveTextContent('Dramatic Moment');
   });
 
   it('shows the load failure in role="alert"', async () => {

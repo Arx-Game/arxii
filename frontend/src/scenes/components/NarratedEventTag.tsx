@@ -8,6 +8,16 @@
  * see `narrated_event_payload`/`get_narrates`), so a masked face's first word
  * can read as a bare article ("a" for "a hooded figure"). This deviates from
  * the demo; flagged for the demo-fidelity reviewer.
+ *
+ * Demo-fidelity fix round 2 (F1b): the demo's `.log-tag` is small, uppercase
+ * and letter-spaced (never italic) -- matches here via `uppercase
+ * tracking-wide`, dropping the earlier italic treatment. The caller places
+ * this tag INSIDE the room line's left-rule box (PoseUnit.tsx's narration
+ * branch moves `border-l-2`/padding onto the shared wrapper, not just the
+ * content `<p>`) so the tag sits under the line within the same rule, as in
+ * the demo, rather than flush below it. The private block already wraps both
+ * the quote and this tag in its own rule/tint box, so it needed no PoseUnit
+ * change -- only this shared styling.
  */
 import type { NarratedEvent } from '../types';
 
@@ -27,7 +37,10 @@ export function NarratedEventTag({
     receiverPersonaIds[0] === narrates.subject_persona_id;
   const suffix = onlySubject ? ` · visible only to ${narrates.subject_name}` : '';
   return (
-    <p data-testid="narrated-event-tag" className="mt-1 text-xs italic text-muted-foreground">
+    <p
+      data-testid="narrated-event-tag"
+      className="mt-1 text-xs uppercase tracking-wide text-muted-foreground"
+    >
       {`✦ part of ${whose} ${narrates.kind_label}${suffix}`}
     </p>
   );

@@ -19,6 +19,10 @@
  * that went out) instead of leaving the quote/textarea looking blank and the
  * button greyed out. The GM can still write and send another line right
  * after -- the sent notice sits above a fresh, empty draft field.
+ *
+ * Demo-fidelity fix round 2 (F9): the people-picker checkboxes carry
+ * `accent-primary` (the same theme-token fix F7 applied to the filter
+ * card's checkboxes), replacing the browser's default blue accent.
  */
 import { useState } from 'react';
 import {
@@ -177,7 +181,7 @@ export function NarrationComposer({
                       type="checkbox"
                       checked={chosen.includes(persona.id)}
                       onChange={() => toggleChosen(persona.id)}
-                      className="h-4 w-4 rounded border-input"
+                      className="h-4 w-4 rounded border-input accent-primary"
                     />
                     {persona.name}
                   </label>

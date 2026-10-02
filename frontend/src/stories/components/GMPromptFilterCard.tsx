@@ -13,6 +13,11 @@
  * established checkbox pattern -- see `CategoryMultiSelect.tsx`) instead of
  * the browser default blue. Each checkbox keeps its own distinct accessible
  * name via `aria-label`.
+ *
+ * Demo-fidelity fix round 2 (F7b): rows are a label/value grid
+ * (`.admin-field`'s `minmax(8rem, 10rem) 1fr` column pair), not
+ * `justify-between` -- "☑ Prompt me" sits right after the label column
+ * instead of pinned to the row's far-right edge.
  */
 import {
   useGMPromptFilters,
@@ -41,7 +46,7 @@ export function GMPromptFilterCard() {
           {rows.map((row) => (
             <FilterRow key={row.group} row={row} onToggle={setFilter.mutate} />
           ))}
-          <li className="flex items-center justify-between gap-2 py-2 text-muted-foreground">
+          <li className="grid grid-cols-[minmax(8rem,10rem)_1fr] items-center gap-2 py-2 text-muted-foreground">
             <span>Player actions</span>
             <span className="text-xs italic">Never prompt. Players write their own.</span>
           </li>
@@ -64,7 +69,7 @@ function FilterRow({
   onToggle: (body: { group: string; enabled: boolean }) => void;
 }) {
   return (
-    <li className="flex items-center justify-between gap-2 py-2">
+    <li className="grid grid-cols-[minmax(8rem,10rem)_1fr] items-center gap-2 py-2">
       <span>{row.label}</span>
       <label className="flex items-center gap-2">
         <input

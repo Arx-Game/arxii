@@ -872,6 +872,14 @@ describe('narration rows (#4101, demo Screen 3, F1)', () => {
     expect(screen.queryByText('Kudos')).not.toBeInTheDocument();
     expect(screen.queryByTestId('nominate-button')).not.toBeInTheDocument();
     expect(screen.getByText(/part of Rowan Ashcombe's Crossing/)).toBeInTheDocument();
+
+    // F1b: the left rule lives on the shared wrapper, so the tag sits INSIDE
+    // it alongside the line -- not flush below, outside the rule's box.
+    const tag = screen.getByTestId('narrated-event-tag');
+    expect(block).toContainElement(tag);
+    expect(block.className).toContain('border-l-2');
+    expect(tag.className).toContain('uppercase');
+    expect(tag.className).not.toContain('italic');
   });
 
   it('renders a receiver-scoped narration as its own private block, not a pose bubble', () => {
@@ -894,5 +902,12 @@ describe('narration rows (#4101, demo Screen 3, F1)', () => {
     expect(screen.queryByText('Alice')).not.toBeInTheDocument();
     expect(screen.queryByText('Kudos')).not.toBeInTheDocument();
     expect(screen.getByText(/visible only to Rowan Ashcombe/)).toBeInTheDocument();
+
+    // F1b: the private block already wraps the tag in its own rule/tint box;
+    // confirm the shared tag styling (uppercase, not italic) applies here too.
+    const tag = screen.getByTestId('narrated-event-tag');
+    expect(block).toContainElement(tag);
+    expect(tag.className).toContain('uppercase');
+    expect(tag.className).not.toContain('italic');
   });
 });
