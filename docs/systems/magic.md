@@ -1217,7 +1217,7 @@ hygiene functions). The old `SignatureBelowCrossing` exception and its hard `thr
 |---|---|---|---|
 | Sheet magic section (web and `sheet/magic` telnet) | owner; others per `magic_visibility` tier (#1271) | custom name, custom description, price, next flourish | the existing section gate; the description shows only where the technique itself is visible |
 | Castable list (web), bare `cast` (telnet), combat technique picker | owner only | custom name plus the catalog name, as `Name (Catalog name)` | these endpoints serve only the caster |
-| Cast narration (scene and combat) | room/encounter audience | custom name plus the price's narration clause, never the description | the technique's name was already in this line; a concealed tier names neither |
+| Cast narration (scene and combat) | room/encounter audience | custom name plus the price's narration clause, never the description — **except when a specialized form applies: the form's own name wins over the custom name, since it describes what actually happened in THIS cast** (ruled 2026-10-02, fixing #4110 CI; `_resolve_and_pose_cast` in `world/scenes/cast_services.py`) | the technique's name was already in this line; a concealed tier names neither |
 | Combo planning panel | party | catalog name only | a shared coordination vocabulary other players read |
 
 ### Threads as Currency Consumers (Resonance Pivot Spec A §2.1)
