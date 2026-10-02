@@ -21,6 +21,10 @@
  * the demo distinguishes `.prompt-chip.kind-crossing` from the plain
  * Dramatic Moment chip the same way. Theme tokens only, never the demo's
  * literal amber.
+ *
+ * #4101 final review (F2): a refused confirm/dismiss shows the server's
+ * message under the row (role="alert"), and the queue refetches so a row
+ * another GM already closed drops out instead of failing silently.
  */
 import { Check, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -56,69 +60,77 @@ export function GMPromptRow({
   const isNarrated = !isMoment && prompt.status === 'narrated';
 
   const body = promptBody(prompt);
+  const failure = confirm.error ?? dismiss.error;
 
   return (
-    <div
-      data-testid="gm-prompt-row"
-      className={cn(
-        'flex items-center gap-2 rounded-full border py-1.5 pl-3 pr-1.5 text-sm',
-        isMoment ? 'border-border bg-card' : 'border-primary/40 bg-primary/10'
-      )}
-    >
-      <span aria-hidden>✦</span>
-      {isMoment && (
-        <Badge variant="secondary" className="text-xs">
-          {prompt.kind_label}
-        </Badge>
-      )}
-      <span className="flex-1">
-        {body.lead}
-        <strong className="font-semibold">{body.emphasis}</strong>
-      </span>
-      {isMoment && (
-        <Button
-          type="button"
-          size="sm"
-          aria-label={`Confirm ${prompt.kind_label}`}
-          disabled={busy}
-          onClick={() => confirm.mutate(prompt.id)}
-        >
-          <Check className="h-3 w-3" /> Confirm
-        </Button>
-      )}
-      {!isMoment && (
-        <Button
-          type="button"
-          size="sm"
-          aria-label={`Open ${prompt.kind_label}`}
-          disabled={busy}
-          onClick={() => onOpen(prompt)}
-        >
-          Open
-        </Button>
-      )}
-      {isNarrated ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          aria-label={`Done ${prompt.kind_label}`}
-          disabled={busy}
-          onClick={() => dismiss.mutate(prompt.id)}
-        >
-          <Check className="h-3 w-3" /> Done
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          aria-label={`Dismiss ${prompt.kind_label}`}
-          disabled={busy}
-          onClick={() => dismiss.mutate(prompt.id)}
-        >
-          <X className="h-3 w-3" /> Dismiss
-        </Button>
+    <div className="space-y-1">
+      <div
+        data-testid="gm-prompt-row"
+        className={cn(
+          'flex items-center gap-2 rounded-full border py-1.5 pl-3 pr-1.5 text-sm',
+          isMoment ? 'border-border bg-card' : 'border-primary/40 bg-primary/10'
+        )}
+      >
+        <span aria-hidden>✦</span>
+        {isMoment && (
+          <Badge variant="secondary" className="text-xs">
+            {prompt.kind_label}
+          </Badge>
+        )}
+        <span className="flex-1">
+          {body.lead}
+          <strong className="font-semibold">{body.emphasis}</strong>
+        </span>
+        {isMoment && (
+          <Button
+            type="button"
+            size="sm"
+            aria-label={`Confirm ${prompt.kind_label}`}
+            disabled={busy}
+            onClick={() => confirm.mutate(prompt.id)}
+          >
+            <Check className="h-3 w-3" /> Confirm
+          </Button>
+        )}
+        {!isMoment && (
+          <Button
+            type="button"
+            size="sm"
+            aria-label={`Open ${prompt.kind_label}`}
+            disabled={busy}
+            onClick={() => onOpen(prompt)}
+          >
+            Open
+          </Button>
+        )}
+        {isNarrated ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            aria-label={`Done ${prompt.kind_label}`}
+            disabled={busy}
+            onClick={() => dismiss.mutate(prompt.id)}
+          >
+            <Check className="h-3 w-3" /> Done
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            aria-label={`Dismiss ${prompt.kind_label}`}
+            disabled={busy}
+            onClick={() => dismiss.mutate(prompt.id)}
+          >
+            <X className="h-3 w-3" /> Dismiss
+          </Button>
+        )}
+      </div>
+      {failure && (
+        <p role="alert" className="px-3 text-xs text-destructive">
+          {failure.message}
+        </p>
       )}
     </div>
   );

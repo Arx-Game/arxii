@@ -243,4 +243,35 @@ describe('NarrationComposer', () => {
     const checkbox = screen.getByRole('checkbox', { name: 'Tamsin Vale' });
     expect(checkbox.className).toContain('accent-primary');
   });
+  // #4101 final review (F4): the subject is always a checkable row, even when
+  // they never posed and so are missing from the scene's persona list.
+  it('offers the subject in the people list even when they are not a scene persona', () => {
+    renderWithProviders(
+      <NarrationComposer
+        prompt={crossing}
+        sceneId="1"
+        personas={[{ id: 31, name: 'Tamsin Vale' }]}
+        open
+        onOpenChange={() => {}}
+      />
+    );
+    const subject = screen.getByRole('checkbox', { name: 'Rowan Ashcombe' });
+    expect(subject).toBeChecked();
+    fireEvent.click(subject);
+    expect(subject).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Tamsin Vale' })).not.toBeChecked();
+  });
+
+  it('does not list the subject twice when they are already a scene persona', () => {
+    renderWithProviders(
+      <NarrationComposer
+        prompt={crossing}
+        sceneId="1"
+        personas={[{ id: 30, name: 'Rowan Ashcombe' }]}
+        open
+        onOpenChange={() => {}}
+      />
+    );
+    expect(screen.getAllByRole('checkbox', { name: 'Rowan Ashcombe' })).toHaveLength(1);
+  });
 });

@@ -1,4 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import type { GMPrompt } from '../../types';
@@ -73,5 +76,42 @@ describe('GMPromptQueue — empty queue', () => {
     } as unknown as ReturnType<typeof useGMPrompts>);
     const { container } = render(<GMPromptQueue sceneId="1" personas={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('GMPromptQueue — final review (#4101)', () => {
+  it('keeps the open composer mounted when the queue empties (F3)', async () => {
+    const user = userEvent.setup();
+    mockUseGMPrompts.mockReturnValue({
+      data: [crossing],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useGMPrompts>);
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { rerender } = render(<GMPromptQueue sceneId="1" personas={[]} />, { wrapper });
+    await user.click(screen.getByRole('button', { name: /open crossing/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    mockUseGMPrompts.mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useGMPrompts>);
+    rerender(<GMPromptQueue sceneId="1" personas={[]} />);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByTestId('gm-prompt-row')).toBeNull();
+  });
+
+  it('says so when the queue fails to load (F6)', () => {
+    mockUseGMPrompts.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Failed to load GM prompts'),
+    } as unknown as ReturnType<typeof useGMPrompts>);
+    renderWithProviders(<GMPromptQueue sceneId="1" personas={[]} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load GM prompts');
   });
 });

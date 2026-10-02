@@ -109,6 +109,15 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     expect(screen.getByTestId('audere-gate-strip')).toHaveTextContent(OFFER.offer_strip_label);
   });
 
+  // #4101 final review, F10: with no AudereThreshold the server sends '' for
+  // both authored labels; the dialog and the strip still have a name.
+  it('keeps an accessible name when the authored title and strip label are blank', async () => {
+    renderGate([{ ...OFFER, offer_title: '', offer_strip_label: '' }]);
+
+    expect(await screen.findByRole('alertdialog', { name: 'Audere offer' })).toBeInTheDocument();
+    expect(screen.getByTestId('audere-gate-strip')).toHaveAccessibleName('Audere offer');
+  });
+
   it('renders the advisory VERBATIM inside a role="alert" element', async () => {
     renderGate([{ ...OFFER, advisory_text: ADVISORY }]);
 

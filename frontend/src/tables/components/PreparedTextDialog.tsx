@@ -112,8 +112,11 @@ export function PreparedTextDialog({
     }
   }, [open, surge]);
 
-  const preparedByLabel = crossing
-    ? PREPARED_BY_ROLE_LABEL[crossing.prepared_by_role]
+  // #4101 final review (F9): whichever row exists names who prepared it; a
+  // character with only a surge line still shows that row's author.
+  const preparedRow = crossing ?? surge;
+  const preparedByLabel = preparedRow
+    ? PREPARED_BY_ROLE_LABEL[preparedRow.prepared_by_role]
     : `Staff, or ${characterName}'s table GM`;
 
   function editField<T>(setter: (value: T) => void) {

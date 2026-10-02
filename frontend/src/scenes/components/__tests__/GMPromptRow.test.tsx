@@ -262,4 +262,38 @@ describe('GMPromptRow', () => {
     );
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['scene-interactions', '5'] });
   });
+  // #4101 final review, F2: a refused dismiss/confirm is never silent. The
+  // 400 travels the real hook -> apiFetch -> throwApiError path; only the
+  // fetch seam is mocked.
+  it.each([
+    ['dismiss', makePrompt({ id: 42 }), /dismiss crossing/i],
+    ['confirm', makeMoment({ id: 42 }), /confirm dramatic moment/i],
+  ] as const)(
+    'shows a refused %s as an alert and refetches the queue',
+    async (verb, prompt, button) => {
+      const user = userEvent.setup();
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      mockApiFetch.mockImplementation(() =>
+        Promise.resolve({
+          ok: false,
+          status: 400,
+          json: () => Promise.resolve({ detail: 'That prompt has already been dealt with.' }),
+        } as Response)
+      );
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <GMPromptRow prompt={prompt} sceneId="5" onOpen={vi.fn()} />
+        </QueryClientProvider>
+      );
+      await user.click(screen.getByRole('button', { name: button }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'That prompt has already been dealt with.'
+      );
+      expect(mockApiFetch).toHaveBeenCalledWith(`/api/gm/prompts/42/${verb}/`, { method: 'POST' });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['gm-prompts', '5'] });
+    }
+  );
 });

@@ -463,4 +463,28 @@ describe('PreparedTextDialog', () => {
     expect(screen.queryByText(/StaffUser99/)).toBeNull();
     expect(screen.queryByText(/@/)).toBeNull();
   });
+  // #4101 final review, F9: a character with only a surge row still names
+  // who prepared it, rather than the "nobody yet" fallback.
+  it("names the surge row's author when there is no Crossing row", async () => {
+    mockApiFetch.mockResolvedValueOnce(emptyList()).mockResolvedValueOnce(
+      okJson({
+        count: 1,
+        results: [
+          {
+            id: 3,
+            character_sheet: 42,
+            character_name: 'Rowan Ashcombe',
+            surge_text: 'Old surge line.',
+            prepared_by_role: 'staff',
+            updated_at: '2026-10-02T00:00:00Z',
+          },
+        ],
+      })
+    );
+
+    renderDialog();
+
+    expect(await screen.findByText('Staff')).toBeInTheDocument();
+    expect(screen.queryByText("Staff, or Rowan Ashcombe's table GM")).toBeNull();
+  });
 });

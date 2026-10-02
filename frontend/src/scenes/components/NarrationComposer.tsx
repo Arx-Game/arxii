@@ -23,6 +23,11 @@
  * Demo-fidelity fix round 2 (F9): the people-picker checkboxes carry
  * `accent-primary` (the same theme-token fix F7 applied to the filter
  * card's checkboxes), replacing the browser's default blue accent.
+ *
+ * #4101 final review (F4): the people picker always offers the event's
+ * subject (`subject_persona_id`, the frozen face) as a checkable row, even
+ * when they have not posed yet and so are missing from the scene's persona
+ * list; everyone else still comes from `personas`.
  */
 import { useState } from 'react';
 import {
@@ -76,9 +81,15 @@ export function NarrationComposer({
     setChosen((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
   }
 
+  const subjectId = prompt.subject_persona_id;
+  const people: ScenePersona[] =
+    subjectId != null && !personas.some((persona) => persona.id === subjectId)
+      ? [{ id: subjectId, name: prompt.subject_name }, ...personas]
+      : personas;
+
   function nameFor(id: number): string {
-    if (id === prompt.subject_persona_id) return prompt.subject_name;
-    return personas.find((persona) => persona.id === id)?.name ?? `#${id}`;
+    if (id === subjectId) return prompt.subject_name;
+    return people.find((persona) => persona.id === id)?.name ?? `#${id}`;
   }
 
   const chosenNames = chosen.map(nameFor).join(', ');
@@ -172,9 +183,9 @@ export function NarrationComposer({
               Chosen people{chosenNames ? ` · ${chosenNames}` : ''}
             </span>
           </div>
-          {personas.length > 0 && (
+          {people.length > 0 && (
             <ul className="max-h-32 space-y-1 overflow-y-auto" data-testid="composer-persona-list">
-              {personas.map((persona) => (
+              {people.map((persona) => (
                 <li key={persona.id}>
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                     <input

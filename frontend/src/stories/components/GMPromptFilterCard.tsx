@@ -18,6 +18,11 @@
  * (`.admin-field`'s `minmax(8rem, 10rem) 1fr` column pair), not
  * `justify-between` -- "☑ Prompt me" sits right after the label column
  * instead of pinned to the row's far-right edge.
+ *
+ * #4101 final review: group labels are small and muted (F7c, the demo's
+ * label column), so "Audere / Audere Majora" stays on one line in the 160px
+ * column and every row is the same height; checkboxes are disabled while a
+ * save is in flight (F8), so a second click cannot race the first.
  */
 import {
   useGMPromptFilters,
@@ -44,10 +49,15 @@ export function GMPromptFilterCard() {
       {rows && (
         <ul className="divide-y divide-border text-sm">
           {rows.map((row) => (
-            <FilterRow key={row.group} row={row} onToggle={setFilter.mutate} />
+            <FilterRow
+              key={row.group}
+              row={row}
+              onToggle={setFilter.mutate}
+              saving={setFilter.isPending}
+            />
           ))}
           <li className="grid grid-cols-[minmax(8rem,10rem)_1fr] items-center gap-2 py-2 text-muted-foreground">
-            <span>Player actions</span>
+            <span className="text-xs text-muted-foreground">Player actions</span>
             <span className="text-xs italic">Never prompt. Players write their own.</span>
           </li>
         </ul>
@@ -64,17 +74,20 @@ export function GMPromptFilterCard() {
 function FilterRow({
   row,
   onToggle,
+  saving,
 }: {
   row: GMPromptFilterRow;
   onToggle: (body: { group: string; enabled: boolean }) => void;
+  saving: boolean;
 }) {
   return (
     <li className="grid grid-cols-[minmax(8rem,10rem)_1fr] items-center gap-2 py-2">
-      <span>{row.label}</span>
+      <span className="text-xs text-muted-foreground">{row.label}</span>
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
           checked={row.enabled}
+          disabled={saving}
           onChange={() => onToggle({ group: row.group, enabled: !row.enabled })}
           aria-label={`Prompt me: ${row.label}`}
           className="h-4 w-4 rounded border-border accent-primary"

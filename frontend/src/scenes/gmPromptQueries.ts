@@ -41,6 +41,11 @@ function usePromptPost(sceneId: string, verb: 'confirm' | 'dismiss') {
       queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) });
       queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
     },
+    // A refused confirm/dismiss usually means the row moved on server-side (another GM
+    // closed it, the scene ended): refetch so the queue stops offering a stale row.
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) });
+    },
   });
 }
 
@@ -78,7 +83,11 @@ export function useNarrateGMPrompt(sceneId: string) {
       if (!res.ok) await throwApiError(res, 'Failed to send narration');
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) }),
+    // The narrated line is a new feed row too, so the scene's interactions refetch with it.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) });
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+    },
   });
 }
 

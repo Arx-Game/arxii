@@ -133,4 +133,44 @@ describe('GMPromptFilterCard', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
+  // #4101 final review, F8: a save in flight disables every checkbox, so a
+  // second click cannot race the first.
+  it('disables the checkboxes while a save is pending (F8)', async () => {
+    const user = userEvent.setup();
+    let finishSave: (value: Response) => void = () => {};
+    mockApiFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(rows) } as Response)
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finishSave = resolve;
+          })
+      );
+
+    render(<GMPromptFilterCard />, { wrapper: createWrapper() });
+    const deaths = await screen.findByRole('checkbox', { name: 'Prompt me: Deaths' });
+    await user.click(deaths);
+
+    await waitFor(() => expect(deaths).toBeDisabled());
+    expect(screen.getByRole('checkbox', { name: 'Prompt me: Miracles' })).toBeDisabled();
+
+    finishSave({ ok: true, json: () => Promise.resolve(rows) } as Response);
+    await waitFor(() => expect(deaths).toBeEnabled());
+  });
+
+  // #4101 final review, F7c: the label column is small and muted, as in the
+  // demo, so "Audere / Audere Majora" fits one line in the 160px column.
+  it('renders group labels small and muted (F7c)', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(rows),
+    } as Response);
+
+    render(<GMPromptFilterCard />, { wrapper: createWrapper() });
+
+    const label = await screen.findByText('Audere / Audere Majora');
+    expect(label.className).toContain('text-xs');
+    expect(label.className).toContain('text-muted-foreground');
+    expect(screen.getByText('Player actions').className).toContain('text-xs');
+  });
 });
