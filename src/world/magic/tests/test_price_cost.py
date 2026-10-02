@@ -131,10 +131,15 @@ class UseTechniquePaysThePriceTests(PriceCostFixture):
         self.assertTrue(self.weary_on_caster())
         self.assertEqual(paid_price_snippet(result.price_paid), "blood beads on the needle")
 
-    def test_last_components_are_used_up(self) -> None:
+    def test_last_components_are_used_up_leaving_no_ghost(self) -> None:
+        from evennia.objects.models import ObjectDB
+
         stack = carry(self.character, self.needle, quantity=2)
+        game_object_pk = stack.game_object_id
         use_technique(character=self.character, technique=self.technique, resolve_fn=MagicMock())
         self.assertFalse(ItemInstance.objects.filter(pk=stack.pk).exists())
+        # The item's game object goes with it, never left in inventory as a ghost.
+        self.assertFalse(ObjectDB.objects.filter(pk=game_object_pk).exists())
         self.assertIsNone(price_paid_for_cast(self.character, self.technique))
 
     def test_cast_without_the_component_still_happens_without_the_price(self) -> None:

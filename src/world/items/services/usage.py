@@ -48,6 +48,49 @@ def hard_delete_item_instance(item_instance: ItemInstance) -> None:
         item_instance.delete()
 
 
+def destroy_consumed_item_instance(
+    item_instance: ItemInstance, *, preserve: bool | None = None, note: str
+) -> None:
+    """THE rule for an instance used up entirely (#509, #1025, #4099). Call it, never
+    ``ItemInstance.delete()``, whenever consumption empties an instance.
+
+    - ``preserve`` (default ``item_instance.differs_from_template``): the instance carries
+      per-instance data or provenance, so it is SOFT-deleted: ``destroyed_at`` is stamped,
+      its game object leaves play (``location = None``, kept, not deleted) and a CONSUMED
+      ``OwnershipEvent`` records ``note``.
+    - otherwise a bare throwaway: ``hard_delete_item_instance`` removes the whole
+      footprint, game object included.
+
+    Either way nothing is left on the holder: a bare ``ItemInstance.delete()`` leaves the
+    game object (``game_object`` cascades the other way) sitting in the character's
+    inventory as a ghost. The holder's ``carried_items`` cache is invalidated. Pass
+    ``preserve`` explicitly only when the caller had to capture it before writing an event
+    of its own (``consume_item_charges``). Mutates the instance in place and saves with
+    ``update_fields`` (ADR-0008); caller owns the transaction.
+    """
+    if preserve is None:
+        preserve = item_instance.differs_from_template
+    game_object = item_instance.game_object
+    holder_object = game_object.location if game_object is not None else None
+    if preserve:
+        item_instance.destroyed_at = timezone.now()
+        item_instance.save(update_fields=["destroyed_at", "quantity", "charges"])
+        if game_object is not None:
+            # Relocate, never delete: the preserved row keeps its game object.
+            game_object.location = None
+            game_object.save()
+        OwnershipEvent.objects.create(
+            item_instance=item_instance,
+            event_type=OwnershipEventType.CONSUMED,
+            from_character_sheet=item_instance.holder_character_sheet,
+            notes=note,
+        )
+    else:
+        hard_delete_item_instance(item_instance)
+    if holder_object is not None and hasattr(holder_object, "carried_items"):
+        holder_object.carried_items.invalidate()
+
+
 def _invalidate_caches(item_instance: ItemInstance) -> None:
     for attr in ("effective_weapon_damage", "effective_armor_soak"):
         with contextlib.suppress(AttributeError):
@@ -78,27 +121,9 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
     )
     _invalidate_caches(locked)
     if locked.charges == 0:
-        if preserve:
-            locked.destroyed_at = timezone.now()
-            locked.save(update_fields=["destroyed_at"])
-            game_object = locked.game_object
-            if game_object is not None:
-                # Deliberately relocate-but-not-delete the game_object: the
-                # ItemInstance is preserved (soft-delete) for its per-instance
-                # data/provenance, so we keep the row and just pull it out of
-                # play (mirrors the hard-delete branch, which DOES delete).
-                game_object.location = None
-                game_object.save()
-            OwnershipEvent.objects.create(
-                item_instance=locked,
-                event_type=OwnershipEventType.CONSUMED,
-                from_character_sheet=locked.holder_character_sheet,
-                notes="Consumed — final charge spent (preserved).",
-            )
-        else:
-            # Bare throwaway: nothing worth preserving — remove the whole
-            # footprint (no dangling CONSUMED row). #1025 convergence.
-            hard_delete_item_instance(locked)
+        destroy_consumed_item_instance(
+            locked, preserve=preserve, note="Consumed — final charge spent (preserved)."
+        )
     return locked
 
 

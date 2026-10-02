@@ -6832,6 +6832,11 @@ holder is never notified a claim exists.
     (no `on_use_pool`) or `NoChargesRemaining` (consumable at 0 charges)
   - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
     deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
+  - `destroy_consumed_item_instance(item_instance, *, preserve=None, note) -> None`
+    (`world/items/services/usage.py`, #4099) — THE rule for an item consumption uses up:
+    soft-delete when `differs_from_template` (destroyed_at, game object out of play,
+    CONSUMED event), else `hard_delete_item_instance`; invalidates the holder's
+    `carried_items`. Called by `consume_item_charges` and `consume_materials`
   - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
     — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
     by the `items.soft_delete_cleanup` daily cron task (#1025)
@@ -6859,7 +6864,9 @@ holder is never notified a claim exists.
       ritual path. Matches a requirement by its `material_category_id` (any member template)
       when set, else by `item_template_id` (Build 0a; ritual requirements have no category
       and their caller pre-filters to `item_template_id`, so that path is unchanged)
-    - `consume_materials(allocations) -> None`
+    - `consume_materials(allocations) -> None`: decrements each stack; a stack that
+      reaches 0 goes through `destroy_consumed_item_instance` (`usage.py`, #4099), soft-
+      or hard-delete, never a bare `delete()` that would leave a ghost game object
     - `meets_quality_tier(inst, requirement) -> bool`
   - **Narrative acquisition** (`world.items.services.narrative_grants`, #707 — no shop/
     merchant system exists anywhere in this codebase):

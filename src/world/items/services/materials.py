@@ -119,13 +119,16 @@ def gather_consumable_pks(
     allocated_pks: set[int] = set()
 
     for req in requirements:
-        # Candidates: right template (or material category), meets quality tier,
-        # not already allocated. Category resolved once per requirement.
+        # Candidates: not empty (a used-up instance soft-deleted by
+        # destroy_consumed_item_instance keeps its row at quantity 0, #4099), right
+        # template (or material category), meets quality tier, not already allocated.
+        # Category resolved once per requirement.
         category_id = _requirement_category_id(req)
         candidates = [
             inst
             for inst in available_list
-            if _matches_requirement(inst, req, category_id)
+            if inst.quantity > 0
+            and _matches_requirement(inst, req, category_id)
             and meets_quality_tier(inst, req)
             and inst.pk not in allocated_pks
         ]
@@ -151,7 +154,9 @@ def consume_materials(allocations: list[tuple[ItemInstance, int]]) -> None:
     """Decrement quantity on each allocated ItemInstance, deleting depleted rows.
 
     Follows the codebase's canonical SharedMemoryModel mutation pattern (ADR-0008):
-    mutate the Python attribute, then ``.save(update_fields=)`` or ``.delete()``.
+    mutate the Python attribute, then ``.save(update_fields=)``; a depleted instance goes
+    through ``destroy_consumed_item_instance`` (soft- or hard-delete, never a bare
+    ``.delete()``).
     Never uses ``F("quantity") - n`` with ``.update()`` — that would leave
     in-memory cached instances stale.
 
@@ -163,10 +168,15 @@ def consume_materials(allocations: list[tuple[ItemInstance, int]]) -> None:
         return
     from django.db import transaction  # noqa: PLC0415
 
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
+
     with transaction.atomic():
         for inst, amount in allocations:
             inst.quantity -= amount
             if inst.quantity <= 0:
-                inst.delete()
+                # #4099: a used-up stack goes through the canonical destroy rule, never a
+                # bare delete() (which left its game object on the holder as a ghost).
+                inst.quantity = 0
+                destroy_consumed_item_instance(inst, note="Consumed — used up as a material.")
             else:
                 inst.save(update_fields=["quantity"])

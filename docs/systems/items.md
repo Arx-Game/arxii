@@ -128,8 +128,8 @@ Items move through three states:
 **`differs_from_template`** (property) — `True` if the instance carries any
 per-instance data worth preserving: a `custom_name`, `custom_description`, `lore_value`,
 non-default `quality_tier`, any attached facets, or any `OwnershipEvent` beyond
-`CREATED`. Used by `consume_item_charges` to decide soft-delete vs. hard-delete at
-0 charges.
+`CREATED`. Used by `destroy_consumed_item_instance` (see below) to decide soft-delete
+vs. hard-delete when consumption empties an item.
 
 **`is_lore_critical`** (property) — a tighter subset; `True` only if the item must
 *never* be auto-purged. Conditions: `lore_value` is nonzero, OR the item has facets,
@@ -146,6 +146,27 @@ left with a null FK), then deletes the `game_object` (whose CASCADE removes the
 `ItemInstance` row) or the `ItemInstance` row directly if there is no game object.
 This helper is used by both the destruction-at-0-charges path and the time-based
 cleanup, so there is no second code path that could leave dangling rows.
+
+### Destroying a consumed item (#4099)
+
+`destroy_consumed_item_instance(item_instance, *, preserve=None, note)` in
+`world/items/services/usage.py` is the one rule for an item that consumption uses up.
+If the item `differs_from_template` it is soft-deleted: `destroyed_at` is stamped, its
+game object leaves play (`location = None`, kept rather than deleted) and a CONSUMED
+`OwnershipEvent` records `note`. Otherwise `hard_delete_item_instance` removes it,
+game object included. Either way the holder's `carried_items` cache is invalidated.
+Both consumers call it:
+- `consume_item_charges`, at 0 charges;
+- `consume_materials` (`world/items/services/materials.py`), when a stack's quantity
+  reaches 0. This is the shared consumer for crafting costs, ritual components and
+  technique price components.
+
+**Never call `ItemInstance.delete()` to use up an item.** `game_object` cascades from
+the game object to the row, not back, so a bare row delete leaves the item's
+`ObjectDB` on the character as a ghost. `consume_materials` did exactly this until
+#4099, and the `item-destroy-reviewer` agent (`tools/agents/`) exists to catch the
+shape. Because a soft-deleted stack keeps its row at quantity 0, `gather_consumable_pks`
+skips any instance with `quantity <= 0`.
 
 ### Time-based cleanup of soft-deleted items
 
