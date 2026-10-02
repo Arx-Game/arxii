@@ -53,8 +53,8 @@ from world.gm.models import (
     GMTableMembership,
     TableUpdateRequest,
 )
-from world.gm.permissions import IsGM, IsGMOrStaff
-from world.gm.prompt_services import prompt_visible_to
+from world.gm.permissions import CanViewGMPromptQueue, IsGM, IsGMOrStaff
+from world.gm.prompt_services import prompt_visible_to, visible_prompts_for
 from world.gm.serializers import (
     CatalogSuggestionDetailSerializer,
     DemandRansomSerializer,
@@ -103,6 +103,7 @@ from world.gm.services import (
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.models.applications import RosterApplication
 from world.roster.services.selection import character_for_request
+from world.scenes.models import Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -974,43 +975,56 @@ class DiscoveryView(APIView):
         return Response(DiscoveryResultSerializer(found).data)
 
 
+class _GMPromptSceneQuerySerializer(serializers.Serializer):
+    """Validates ``?scene=`` for ``GMPromptViewSet`` (#4101 fix round 3, finding M1) --
+    a plain integer field so a missing/non-numeric value 400s through ordinary
+    serializer validation, not a hand-rolled ``request.query_params`` read."""
+
+    scene = serializers.IntegerField()
+
+
 class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     """The one GM prompt queue (#4101; was the #2183 suggestion inbox).
 
     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
     a stake outcome, still surfaces for the GM it's addressed to via
-    ``visible_prompts_for``) -- ``GMPromptQueueFilter`` owns scene resolution
-    (required, 404 if unknown) and the "only the scene's GM may view an empty
-    queue" 403, so ``list`` is the inherited ``ListModelMixin`` behavior with
-    no override: one source, ``get_queryset()`` (#4101 fix round 2, finding 5).
-    ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY actions that own
-    the real authorization/validation -- this view is dispatch plumbing only.
+    ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+    the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+    directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+    ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+    scene's GM may view an empty queue" 403 -- authorization lives in a
+    permission class, not inline in the view or the FilterSet (#4101 fix round
+    3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+    actions that own the real authorization/validation -- this view is
+    dispatch plumbing only.
     """
 
     serializer_class = GMPromptSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanViewGMPromptQueue]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = GMPromptQueueFilter
     queryset = GMPrompt.objects.none()
 
+    def get_scene(self) -> Scene:
+        """The validated ``?scene=`` -- required (400 if missing/non-numeric), 404 if
+        unknown. Shared by ``get_queryset()`` and ``CanViewGMPromptQueue``."""
+        params = _GMPromptSceneQuerySerializer(data=self.request.query_params)
+        params.is_valid(raise_exception=True)
+        return get_object_or_404(Scene, pk=params.validated_data["scene"])
+
     def get_queryset(self) -> QuerySet[GMPrompt]:
-        return GMPrompt.objects.all()
+        return visible_prompts_for(self.request.user, scene=self.get_scene())
 
     def _own_prompt(self, pk: str | None) -> GMPrompt:
         """The prompt, scoped to what ``request.user`` may see (#4101 fix round 2,
         finding 6) -- an id outside their visible queue 404s regardless of kind,
-        same as it never appearing in ``GET .../prompts/?scene=``.
-
-        Staff bypass this scope entirely (ruling R9-2) -- matching
-        ``narration_prompt_for``'s own staff bypass and ``DismissGMPromptAction``'s,
-        this is a per-object "can staff act on ANY prompt by id" exception, kept
-        separate from ``prompt_visible_to``/``visible_prompts_for`` (the scene
-        queue LISTING stays narrower: a narration prompt addressed to a specific
-        GM is never surfaced to every staff member browsing that scene's queue).
+        same as it never appearing in ``GET .../prompts/?scene=``. Staff bypass
+        lives in ``prompt_visible_to`` itself (#4101 fix round 3, finding M2) --
+        the one place that decision is made, not duplicated here.
         """
         prompt = get_object_or_404(GMPrompt, pk=pk)
-        if not self.request.user.is_staff and not prompt_visible_to(self.request.user, prompt):
+        if not prompt_visible_to(self.request.user, prompt):
             raise Http404
         return prompt
 
@@ -1045,9 +1059,14 @@ class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         if actor is None:
             return Response({"detail": "Play a character to narrate."}, status=400)
         # The receiver-presence check (audience="chosen") needs a room to test
-        # against: the prompt's own scene location, or -- a scene-less prompt --
-        # the narrating GM's current location (#4101 fix round 2, finding 1).
-        location = prompt.scene.location if prompt.scene_id else actor.location
+        # against: the prompt's own scene location, falling back to the
+        # narrating GM's current location when the scene has none (a
+        # location-less Battle scene, #4101 fix round 3, finding N3) or the
+        # prompt is scene-less entirely. May still end up None -- the
+        # serializer refuses "chosen" outright rather than treating "nowhere"
+        # as a room.
+        scene_location = prompt.scene.location if prompt.scene_id else None
+        location = scene_location or actor.location
         body = NarrateGMPromptSerializer(data=request.data, context={"location": location})
         body.is_valid(raise_exception=True)
         data = body.validated_data

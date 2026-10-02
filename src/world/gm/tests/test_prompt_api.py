@@ -23,6 +23,7 @@ from world.scenes.factories import (
     SceneGMParticipationFactory,
     SceneOwnerParticipationFactory,
 )
+from world.scenes.models import Interaction
 
 URL = "/api/gm/prompts/"
 
@@ -137,8 +138,16 @@ class GMPromptApiTest(TestCase):
         self.assertTrue(GMPromptNarration.objects.filter(prompt=self.prompt).exists())
 
     def test_narrate_chosen_refused_without_gm_trust_returns_400(self):
+        """A room is required here (#4101 fix round 3, finding N3): with no
+        location at all, the serializer's own "no room to narrate from" refusal
+        would fire first and the response would carry ``non_field_errors``, not
+        this test's actual target -- the trust prerequisite's ``detail``."""
         untrusted = AccountFactory()  # scene GM by participation, no GMProfile, not staff
         SceneGMParticipationFactory(scene=self.scene, account=untrusted)
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        receiver = CharacterSheetFactory()
+        receiver.character.location = room
+        receiver.character.save()
         prompt = GMPromptFactory(
             kind=GMPromptKind.DEATH,
             scene=self.scene,
@@ -149,6 +158,8 @@ class GMPromptApiTest(TestCase):
         )
         char = CharacterSheetFactory().character
         char.account = untrusted
+        char.location = room
+        char.save()
         with (
             mock.patch("world.gm.views.character_for_request", return_value=char),
             mock.patch("world.gm.prompt_services.get_active_scene", return_value=self.scene),
@@ -158,7 +169,7 @@ class GMPromptApiTest(TestCase):
                 {
                     "text": "x",
                     "audience": "chosen",
-                    "receiver_persona_ids": [self.crosser.primary_persona.pk],
+                    "receiver_persona_ids": [receiver.primary_persona.pk],
                 },
                 format="json",
             )
@@ -254,7 +265,10 @@ class GMPromptApiTest(TestCase):
         self.assertFalse(GMPromptNarration.objects.filter(prompt=self.prompt).exists())
 
     def test_narrate_chosen_refuses_persona_outside_the_room(self):
-        """#4101 fix round 2, finding 1: a batched, scene-location presence check."""
+        """#4101 fix round 2, finding 1: a batched, scene-location presence check.
+        Extended (#4101 fix round 3, finding M3): the refusal creates nothing at
+        all -- no narration link, no Interaction (the room/private pose never
+        gets dispatched)."""
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         scene = SceneFactory(location=room)
         SceneGMParticipationFactory(scene=scene, account=self.gm)
@@ -267,6 +281,7 @@ class GMPromptApiTest(TestCase):
             success_level=None,
         )
         elsewhere = CharacterSheetFactory()  # never placed in `room` -- location stays None
+        interactions_before = Interaction.objects.count()
         with (
             mock.patch("world.gm.views.character_for_request", return_value=self._gm_character()),
             mock.patch("world.gm.prompt_services.get_active_scene", return_value=scene),
@@ -282,6 +297,44 @@ class GMPromptApiTest(TestCase):
             )
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertFalse(GMPromptNarration.objects.filter(prompt=prompt).exists())
+        self.assertEqual(Interaction.objects.count(), interactions_before)
+
+    def test_narrate_chosen_refuses_when_no_room_is_available(self):
+        """#4101 fix round 3, finding N3: a location-less scene (e.g. a
+        Battle-backed scene) with no fallback either -- the narrating GM's own
+        character also has no location here -- refuses with a neutral 400
+        rather than treating "nowhere" as a room everyone with no location
+        matches. Also covers finding M3: nothing is created on the refusal."""
+        battle_scene = SceneFactory()  # location=None, mirroring a Battle-backed scene
+        SceneGMParticipationFactory(scene=battle_scene, account=self.gm)
+        prompt = GMPromptFactory(
+            kind=GMPromptKind.DEATH,
+            scene=battle_scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+        )
+        gm_character = self._gm_character()  # fresh factory character -- no location set either
+        interactions_before = Interaction.objects.count()
+        with (
+            mock.patch("world.gm.views.character_for_request", return_value=gm_character),
+            mock.patch("world.gm.prompt_services.get_active_scene", return_value=battle_scene),
+        ):
+            resp = self._client(self.gm).post(
+                f"{URL}{prompt.pk}/narrate/",
+                {
+                    "text": "x",
+                    "audience": "chosen",
+                    "receiver_persona_ids": [self.crosser.primary_persona.pk],
+                },
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 400, resp.data)
+        # Neutral: never names the persona the GM tried to choose.
+        self.assertNotIn(self.crosser.primary_persona.name, str(resp.data))
+        self.assertFalse(GMPromptNarration.objects.filter(prompt=prompt).exists())
+        self.assertEqual(Interaction.objects.count(), interactions_before)
 
     def test_narrate_chosen_accepts_persona_present_in_the_room(self):
         """#4101 fix round 2, finding 1: the mirror-image success case."""

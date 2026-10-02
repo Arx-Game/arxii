@@ -1631,7 +1631,6 @@
   - aura <- magic.CharacterAura
   - resonances <- magic.CharacterResonance
   - dramatic_moment_tags <- magic.DramaticMomentTag
-  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - poseendorsement_given <- magic.PoseEndorsement
   - poseendorsement_received <- magic.PoseEndorsement
   - sceneentryendorsement_given <- magic.SceneEntryEndorsement
@@ -1646,6 +1645,8 @@
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
   - motif <- magic.Motif
+  - prepared_crossing_texts <- magic.CharacterCrossingText
+  - prepared_surge_text <- magic.CharacterSurgeText
   - reincarnations <- magic.Reincarnation
   - ritual_anima_contributions <- magic.RitualAnimaContribution
   - ritual_sacrifices_suffered <- magic.RitualAnimaContribution
@@ -1702,6 +1703,7 @@
   - known_styles <- forms.CharacterKnownStyle
   - story_room_grants <- gm.StoryRoomGrant
   - summon_offers <- gm.GMSummonOffer
+  - gm_prompts <- gm.GMPrompt
   - goals <- goals.CharacterGoal
   - goal_journals <- goals.GoalJournal
   - goal_revision <- goals.GoalRevision
@@ -4184,6 +4186,30 @@
   - stake_outcomes <- stories.StakeOutcome
   - custody_requests <- stories.CustodyClearance
 
+### GMPrompt
+**Foreign Keys:**
+  - addressed_to -> evennia.AccountDB [FK] (nullable)
+  - moment_type -> magic.DramaticMomentType [FK] (nullable)
+  - character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - subject_persona -> scenes.Persona [FK] (nullable)
+  - stake_outcome -> stories.StakeOutcome [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
+  - interaction -> scenes.Interaction [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - resolved_by -> evennia.AccountDB [FK] (nullable)
+  - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
+**Pointed to by:**
+  - narrations <- gm.GMPromptNarration
+
+### GMPromptFilter
+**Foreign Keys:**
+  - account -> evennia.AccountDB [FK]
+
+### GMPromptNarration
+**Foreign Keys:**
+  - prompt -> gm.GMPrompt [FK]
+  - interaction -> scenes.Interaction [FK]
+
 ### GMRewardConfig
 
 ### GMRosterInvite
@@ -4267,6 +4293,7 @@
   - distinction_details <- gm.DistinctionChangeRequestDetails
 
 ### Service Functions
+- `account_is_table_gm_for_sheet(account: 'AccountDB | None', sheet: 'CharacterSheet') -> 'bool' - The #2631 table-access rule: an ACTIVE membership for ``sheet`` at one of`
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' - Approve a roster application on behalf of the overseeing GM.`
 - `archive_table(table: 'GMTable') -> 'None' - Mark a table archived. Sets archived_at timestamp.`
 - `award_gm_story_reward(*, gm_profile: 'GMProfile', players_served: 'int', per_player_xp: 'int', event_cap: 'int', description: 'str') -> 'XPTransaction | None' - Award GM Story Reward XP to ``gm_profile.account`` (#2123).`
@@ -5232,6 +5259,7 @@
   - chosen_path -> classes.Path [FK]
   - legend_entry -> societies.LegendEntry [OneToOne] (nullable)
 **Pointed to by:**
+  - prepared_text <- magic.CharacterCrossingText
   - ultimates_discovered <- magic.KnownUltimate
 
 ### AudereMajoraFaithVariant
@@ -5286,6 +5314,12 @@
   - glimpse_tags <- magic.CharacterGlimpseTag
   - glimpse_born_distinctions <- distinctions.CharacterDistinction
 
+### CharacterCrossingText
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - prepared_by -> evennia.AccountDB [FK] (nullable)
+  - crossing -> magic.AudereMajoraCrossing [OneToOne] (nullable)
+
 ### CharacterGift
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -5312,6 +5346,11 @@
   - roster_entry -> roster.RosterEntry [FK]
   - ritual -> magic.Ritual [FK]
   - learned_from -> roster.RosterTenure [FK] (nullable)
+
+### CharacterSurgeText
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+  - prepared_by -> evennia.AccountDB [FK] (nullable)
 
 ### CharacterTechnique
 **Foreign Keys:**
@@ -5379,16 +5418,6 @@
   - distinction -> distinctions.Distinction [FK]
   - ritual -> magic.Ritual [FK]
 
-### DramaticMomentSuggestion
-**Foreign Keys:**
-  - moment_type -> magic.DramaticMomentType [FK]
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - scene -> scenes.Scene [FK] (nullable)
-  - interaction -> scenes.Interaction [FK] (nullable)
-  - technique -> magic.Technique [FK] (nullable)
-  - resolved_by -> evennia.AccountDB [FK] (nullable)
-  - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
-
 ### DramaticMomentTag
 **Foreign Keys:**
   - moment_type -> magic.DramaticMomentType [FK]
@@ -5397,8 +5426,8 @@
   - tagged_by -> evennia.AccountDB [FK]
   - interaction -> scenes.Interaction [FK] (nullable)
 **Pointed to by:**
-  - source_suggestion <- magic.DramaticMomentSuggestion
   - resonance_grants <- magic.ResonanceGrant
+  - source_suggestion <- gm.GMPrompt
 
 ### DramaticMomentType
 **Foreign Keys:**
@@ -5408,7 +5437,7 @@
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - tags <- magic.DramaticMomentTag
-  - suggestions <- magic.DramaticMomentSuggestion
+  - suggestions <- gm.GMPrompt
 
 ### EffectType
 **Foreign Keys:**
@@ -5617,6 +5646,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - threshold -> magic.AudereMajoraThreshold [FK]
   - faith_variant -> magic.AudereMajoraFaithVariant [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
 
 ### PendingAudereOffer
 **Foreign Keys:**
@@ -6014,7 +6044,6 @@
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
-  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
   - ultimate_for_path_gifts <- magic.PathGiftGrant
@@ -6028,6 +6057,7 @@
   - ultimate_for_companion_archetypes <- companions.CompanionArchetype
   - companion_abilities <- companions.CompanionAbility
   - alternate_self_grants <- forms.AlternateSelf
+  - gm_prompts <- gm.GMPrompt
   - train_offers <- npc_services.TrainOfferDetails
   - scene_action_requests <- scenes.SceneActionRequest
   - ultimate_for_beings <- worship.WorshippedBeing
@@ -8302,11 +8332,12 @@
   - consequence_outcomes <- checks.ConsequenceOutcome
   - action_consequence_outcomes <- checks.ConsequenceOutcome
   - dramatic_moment_tags <- magic.DramaticMomentTag
-  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - endorsements <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - combat_round_actions <- combat.CombatRoundAction
   - clash_contributions <- combat.ClashContribution
+  - gm_prompts <- gm.GMPrompt
+  - prompt_narrations <- gm.GMPromptNarration
   - relationship_bumps <- relationships.RelationshipBump
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
@@ -8587,13 +8618,13 @@
   - durance_cohorts_opened_here <- progression.DuranceCohort
   - cohort_enrollments_here <- progression.CohortEnrollment
   - developmenttransaction_set <- progression.DevelopmentTransaction
+  - pending_audere_majora_offers <- magic.PendingAudereMajoraOffer
   - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - triggered_alterations <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - feedings <- magic.FeedingRecord
   - dramatic_moment_tags <- magic.DramaticMomentTag
-  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - entry_endorsements <- magic.SceneEntryEndorsement
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
@@ -8606,6 +8637,7 @@
   - rescues <- magic.SoulTetherRescue
   - combat_encounters <- combat.CombatEncounter
   - summon_offers <- gm.GMSummonOffer
+  - gm_prompts <- gm.GMPrompt
   - fashion_showings <- items.FashionShowing
   - npc_regard_events <- npc_services.NpcRegardEvent
   - petitions <- player_submissions.Petition
@@ -10027,6 +10059,8 @@
   - activation -> stories.StakeContractActivation [FK] (nullable)
   - resolution -> stories.StakeResolution [FK] (nullable)
   - resolved_by -> gm.GMProfile [FK] (nullable)
+**Pointed to by:**
+  - gm_prompts <- gm.GMPrompt
 
 ### StakeResolution
 **Foreign Keys:**

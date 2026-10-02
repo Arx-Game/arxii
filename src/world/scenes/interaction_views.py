@@ -411,21 +411,13 @@ class InteractionViewSet(
                 # #4101: the per-pose dramatic-moment-suggestion embed is retired in
                 # favor of the GMPromptViewSet queue -- this feeds the feed's
                 # "part of X's Crossing" narration tag instead (see get_narrates).
-                # R9-1 (#4101 fix round 2): the player-facing tag must show the
-                # subject's PRESENTED face, never unmask a disguise -- select_related
-                # the subject's active_persona (free, same join) and batch the PRIMARY
-                # fallback via the same cached_primary_persona to_attr pattern the
-                # SceneEntryEndorsement prefetch above uses, so narrated_event_payload
-                # never queries per row.
-                queryset=GMPromptNarration.objects.select_related(
-                    "prompt__character_sheet__active_persona"
-                ).prefetch_related(
-                    Prefetch(
-                        "prompt__character_sheet__personas",
-                        queryset=Persona.objects.filter(persona_type=PersonaType.PRIMARY),
-                        to_attr="cached_primary_persona",
-                    )
-                ),
+                # R9-3 (#4101 fix round 3): the subject's face is FROZEN at event
+                # time on GMPrompt.subject_persona itself now (never re-derived from
+                # the character's current active/primary face), so this just
+                # select_relateds it -- the serializer's own display-map lookup
+                # (_persona_display_map) handles per-viewer masking from there,
+                # with no further query.
+                queryset=GMPromptNarration.objects.select_related("prompt__subject_persona"),
                 to_attr="cached_prompt_narrations",
             ),
         )

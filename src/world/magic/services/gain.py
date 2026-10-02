@@ -1084,6 +1084,10 @@ def maybe_suggest_dramatic_moments(
                 "interaction": interaction,
                 "interaction_timestamp": interaction.timestamp if interaction else None,
                 "technique": technique,
+                # #4101 fix round 3, ruling R9-3: a dramatic_moment prompt anchored to
+                # an entrance pose freezes the subject's face from that SAME pose
+                # (the one real signal already on hand) rather than re-deriving it.
+                "subject_persona": interaction.persona if interaction else None,
             },
         )
         if was_created:

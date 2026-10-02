@@ -396,6 +396,14 @@ class GMPromptFactory(factory_django.DjangoModelFactory):
     kind = "dramatic_moment"
     moment_type = factory.SubFactory(DramaticMomentTypeFactory)
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    # #4101 fix round 3, ruling R9-3: production always freezes a subject_persona
+    # at route_narratable_event's create time; default to the sheet's primary
+    # persona here so existing call sites get a sensible frozen face without
+    # having to pass one explicitly. Override to test a specific disguise, or
+    # pass None directly alongside character_sheet=None for the no-subject case.
+    subject_persona = factory.LazyAttribute(
+        lambda o: o.character_sheet.primary_persona if o.character_sheet else None
+    )
     scene = None
     interaction = None
     interaction_timestamp = None

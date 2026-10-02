@@ -51,7 +51,7 @@ class NarratedEventPayload(TypedDict):
     kind: str
     kind_label: str
     subject_name: NotRequired[str]
-    subject_persona_id: NotRequired[int | None]
+    subject_persona_id: NotRequired[int]
 
 
 class InteractionPayload(TypedDict):

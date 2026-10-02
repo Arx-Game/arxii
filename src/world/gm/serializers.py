@@ -1034,11 +1034,15 @@ class GMPromptSerializer(serializers.ModelSerializer):
 class NarrateGMPromptSerializer(serializers.Serializer):
     """Body for ``POST .../prompts/{id}/narrate/`` (#4101): the line + its audience.
 
-    ``context["location"]`` (an ``ObjectDB`` room) gates ``audience="chosen"``: the
-    view resolves it as the prompt's own scene location, or the narrating GM's
-    current location for a scene-less prompt, and only a character physically
-    present there may be chosen -- a GM cannot privately address someone who
-    isn't in the room (#4101 fix round 2, finding 1).
+    ``context["location"]`` (an ``ObjectDB`` room, or ``None``) gates
+    ``audience="chosen"``: the view resolves it as the prompt's own scene
+    location, falling back to the narrating GM's current location when the
+    scene has none (a location-less Battle scene, #4101 fix round 3, finding
+    N3) or the prompt is scene-less entirely -- and only a character
+    physically present there may be chosen, a GM cannot privately address
+    someone who isn't in the room (#4101 fix round 2, finding 1). With no
+    room resolvable either way, ``chosen`` refuses outright (400) rather than
+    treating "nowhere" as a room everyone with no location matches.
     """
 
     AUDIENCE_ROOM = "room"
@@ -1057,7 +1061,13 @@ class NarrateGMPromptSerializer(serializers.Serializer):
                 msg = "Choose at least one person."
                 raise serializers.ValidationError(msg)
             location = self.context.get("location")
-            location_id = location.pk if location is not None else None
+            if location is None:
+                # #4101 fix round 3, finding N3: a location-less scene (e.g. a
+                # Battle) with no fallback either leaves no room to test presence
+                # against -- refuse rather than silently matching every persona
+                # whose own character also happens to have no location.
+                msg = "There's no room to narrate from right now."
+                raise serializers.ValidationError(msg)
             # One batched query, not one per persona: CharacterSheet shares
             # ObjectDB's pk (#2608), so `character_sheet_id` IS the character's
             # own ObjectDB pk -- no extra join needed to resolve the room.
@@ -1065,7 +1075,7 @@ class NarrateGMPromptSerializer(serializers.Serializer):
                 obj.pk: obj
                 for obj in ObjectDB.objects.filter(
                     pk__in=[p.character_sheet_id for p in personas],
-                    db_location_id=location_id,
+                    db_location_id=location.pk,
                 )
             }
             receivers = []

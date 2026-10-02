@@ -262,6 +262,7 @@ class GMPromptAdmin(admin.ModelAdmin):
         "interaction",
         "resolved_by",
         "scene",
+        "subject_persona",
     ]
     list_display = (
         "id",

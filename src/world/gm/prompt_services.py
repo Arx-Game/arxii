@@ -35,6 +35,7 @@ from world.scenes.interaction_services import (
 )
 from world.scenes.models import Persona
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -138,11 +139,21 @@ def prompt_visible_to(account: AccountDB, prompt: GMPrompt) -> bool:
     already-CONFIRMED prompt the account genuinely owns must still reach the
     action for its "already resolved" message, not 404 here first.
 
+    Staff bypass unconditionally (#4101 fix round 3, finding M2) -- the ONE
+    place that decision lives now, matching ``narration_prompt_for``'s own
+    staff bypass for narrate and ``DismissGMPromptAction``'s for dismiss. This
+    is deliberately narrower than ``visible_prompts_for``'s own LISTING
+    semantics (which never widens for staff): a per-object lookup by a known id
+    is not the same question as "dump every other GM's narration prompts into
+    a scene queue a staff member is merely browsing."
+
     A scene-less prompt is always a narration kind addressed to one GM (the
     model's own ``gm_prompt_narration_is_addressed`` CheckConstraint), so
     there is no dramatic_moment branch to gate and no scene to pass --
     visibility there is just "am I the addressed GM."
     """
+    if account.is_staff:
+        return True
     if prompt.scene_id is not None:
         query = _prompt_visibility_query(account, prompt.scene)
         return GMPrompt.objects.filter(query, pk=prompt.pk).exists()
@@ -228,12 +239,25 @@ def route_narratable_event(
     the no-recipients path and a recovery path, can only guarantee that by
     owning the one call site itself -- see ``_route_crossing``
     (``world/magic/audere_majora.py``) for the pattern every caller follows.
+
+    ``subject_persona`` (#4101 fix round 3, ruling R9-3) freezes the face the
+    subject was presenting as AT EVENT TIME, resolved once here via
+    ``active_persona_for_sheet`` -- never per sibling -- so every GM's own copy
+    of the event shares one frozen identity. A later persona switch (removing a
+    mask, putting on a different one) must never rewrite what an already-routed
+    prompt says about who it concerns. ``Persona.DoesNotExist`` (the PRIMARY
+    invariant broken) degrades to ``None`` rather than raising -- routing a
+    narratable event must never fail because of this.
     """
     recipients = recipients_excluding_subject(
         event.scene, event.kind, event.character_sheet, candidates=candidates
     )
     if not recipients:
         return []
+    subject_persona = None
+    if event.character_sheet is not None:
+        with contextlib.suppress(Persona.DoesNotExist):
+            subject_persona = active_persona_for_sheet(event.character_sheet)
     event_group = uuid.uuid4()
     with transaction.atomic():
         prompts = [
@@ -242,6 +266,7 @@ def route_narratable_event(
                 event_group=event_group,
                 scene=event.scene,
                 character_sheet=event.character_sheet,
+                subject_persona=subject_persona,
                 addressed_to=account,
                 room_text=event.room_text,
                 private_text=event.private_text,
@@ -273,23 +298,20 @@ def prompt_subject_name(prompt: GMPrompt) -> str:
         return ""
 
 
-def _presented_persona_for_narration(sheet: CharacterSheet) -> Persona | None:
-    """The face ``sheet`` is presenting as, batch-safe for the feed (#4101 R9-1).
+def narrated_event_subject_persona(interaction: Interaction) -> Persona | None:
+    """The FROZEN subject persona of ``interaction``'s linked narration, if any (#4101 R9-3).
 
-    Mirrors ``active_persona_for_sheet``'s (``world.scenes.services``) resolution
-    order -- the active persona when set, else PRIMARY -- which is the same
-    helper ``interaction_views.py`` uses to attribute a pose to the worn face
-    rather than the real identity. Not calling it directly: its PRIMARY fallback
-    is ``CharacterSheet.primary_persona``, a live ``.get()`` query, and this runs
-    once per feed row. Reads ``active_persona`` (select_related by the view's
-    ``cached_prompt_narrations`` Prefetch) and ``cached_primary_persona`` (the
-    same page-wide batched-Prefetch-with-a-named-attribute pattern
-    ``SceneEntryEndorsement.endorser_sheet__personas`` already uses in that same
-    file) instead, so this never queries.
+    Peek-only, from the same ``cached_prompt_narrations`` link cache
+    ``narrated_event_payload`` reads -- never queries. Separated out from that
+    function so the interaction feed's per-viewer display-map builder
+    (``InteractionListSerializer._persona_display_map``) can fold this persona
+    into the page's one batched discovery query instead of reading the name off
+    it unmasked -- see that method's docstring for why.
     """
-    if sheet.active_persona_id is not None:
-        return sheet.active_persona
-    return next(iter(sheet.cached_primary_persona), None)
+    links = interaction.__dict__.get("cached_prompt_narrations") or []
+    if not links:
+        return None
+    return links[0].prompt.subject_persona
 
 
 def narrated_event_payload(interaction: Interaction) -> NarratedEventPayload | None:
@@ -301,29 +323,34 @@ def narrated_event_payload(interaction: Interaction) -> NarratedEventPayload | N
     ``link_prompt_narration`` seeds that same cache key synchronously on the
     just-created row, so the live push always finds it already populated.
 
-    ``subject_name``/``subject_persona_id`` come from the subject's PRESENTED
-    persona (``_presented_persona_for_narration``), never the real primary
-    persona (#4101 fix round 2, ruling R9-1) -- this payload reaches every
-    viewer of the interaction feed, not just the addressed GM, so unmasking a
-    disguise here would leak it to anyone watching the scene. When no sheet is
-    attached (a STAKE_OUTCOME prompt) or no presented persona can be resolved,
-    both keys are omitted entirely rather than sent empty/null -- the payload
-    then carries ``kind``/``kind_label`` only.
+    ``subject_name``/``subject_persona_id`` come from ``GMPrompt.subject_persona``
+    -- the face FROZEN at event-routing time (#4101 fix round 3, ruling R9-3) --
+    never the subject's current or primary face: a later persona switch
+    (undisguising, wearing a different mask) must not rewrite what an
+    already-narrated row says. This is the unmasked value used by the live
+    WebSocket push (which has no per-viewer concept at all, same as every other
+    field on that payload); the REST feed's ``InteractionListSerializer
+    .get_narrates`` overrides ``subject_name`` with the page's per-viewer
+    display-map resolution before returning it, so is_fake_name/undiscovered
+    faces read exactly as the rest of the feed shows them. When no sheet was
+    attached at event time (a STAKE_OUTCOME prompt) or the persona was since
+    deleted (``subject_persona`` is ``SET_NULL``), both keys are omitted
+    entirely rather than sent empty/null -- the payload then carries
+    ``kind``/``kind_label`` only.
     """
     links = interaction.__dict__.get("cached_prompt_narrations") or []
     if not links:
         return None
     prompt = links[0].prompt
-    sheet = prompt.character_sheet
     payload: NarratedEventPayload = {
         "prompt_id": prompt.pk,
         "kind": prompt.kind,
         "kind_label": prompt.get_kind_display(),
     }
-    presented = _presented_persona_for_narration(sheet) if sheet is not None else None
-    if presented is not None:
-        payload["subject_name"] = presented.name
-        payload["subject_persona_id"] = presented.pk
+    subject = prompt.subject_persona
+    if subject is not None:
+        payload["subject_name"] = subject.name
+        payload["subject_persona_id"] = subject.pk
     return payload
 
 
@@ -718,6 +745,7 @@ __all__ = [
     "expire_scene_prompts",
     "link_prompt_narration",
     "narrated_event_payload",
+    "narrated_event_subject_persona",
     "narration_prompt_for",
     "notify_gm_prompt",
     "prompt_recipients",

@@ -1184,6 +1184,24 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
         null=True,
         blank=True,
     )
+    subject_persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+        help_text=(
+            "The face the subject was presenting as when this prompt was created "
+            "(#4101 R9-3) -- frozen at event time so a later persona switch "
+            "(undisguising, wearing a different mask) never rewrites history on an "
+            "already-narrated row. Resolved via active_persona_for_sheet at "
+            "route_narratable_event's create time; for a dramatic_moment prompt "
+            "anchored to an entrance pose, the pose's own persona. Null when no "
+            "sheet is attached (e.g. a STAKE_OUTCOME prompt) or the persona was "
+            "later deleted -- the player-facing narrates payload omits the "
+            "subject's name entirely rather than falling back to the current face."
+        ),
+    )
     room_text = models.TextField(
         blank=True,
         default="",

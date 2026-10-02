@@ -380,10 +380,20 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return obj.persona.character_sheet_id
 
     def _persona_display_map(self) -> dict[int, tuple[str, bool, bool]]:
-        """Cache the page's persona-display resolution on the shared context (O(1) queries)."""
+        """Cache the page's persona-display resolution on the shared context (O(1) queries).
+
+        Includes each row's narrated-event subject persona (#4101 fix round 3,
+        ruling R9-3) alongside the writer personas -- a disguised/undiscovered
+        subject must read exactly as the rest of the feed shows that same
+        persona, through the SAME one discovery query, not a parallel
+        resolution. ``narrated_event_subject_persona`` peeks the warm
+        ``cached_prompt_narrations`` link (select_related on the view's
+        Prefetch) and never queries.
+        """
         cached = self.context.get("_persona_display_map")
         if cached is not None:
             return cached
+        from world.gm.prompt_services import narrated_event_subject_persona  # noqa: PLC0415
         from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
 
         if self.parent is not None:
@@ -392,8 +402,13 @@ class InteractionListSerializer(serializers.ModelSerializer):
             rows = [self.instance]
         else:
             rows = []
+        personas = [row.persona for row in rows]
+        for row in rows:
+            subject = narrated_event_subject_persona(row)
+            if subject is not None:
+                personas.append(subject)
         display_map = build_persona_display_map(
-            [row.persona for row in rows],
+            personas,
             viewer_persona_ids=set(self.context.get("persona_ids", set())),
             viewer_sheet_ids=set(self.context.get("viewer_sheet_ids", set())),
             is_staff=bool(self.context.get("is_staff", False)),
@@ -835,10 +850,27 @@ class InteractionListSerializer(serializers.ModelSerializer):
         plain feed metadata, not a spoiler. Reads from the Prefetch
         (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
         own docstring for why it must never query.
+
+        ``subject_name`` is overridden here with the page's per-viewer display
+        map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+        value is the subject's FROZEN persona's raw name (correct for the
+        live WebSocket push, which has no per-viewer concept at all), but the
+        REST feed must show is_fake_name/undiscovered faces exactly as the rest
+        of this page shows that same persona -- a disguised subject's line
+        must never unmask them just because this field resolves differently
+        from ``get_persona``. ``_persona_display_map`` already folded this
+        row's subject persona into its one page-wide discovery query.
         """
         from world.gm.prompt_services import narrated_event_payload  # noqa: PLC0415
 
-        return narrated_event_payload(obj)
+        payload = narrated_event_payload(obj)
+        if payload is None or "subject_persona_id" not in payload:  # noqa: STRING_LITERAL
+            return payload
+        name, _is_discovered, _reveal_allowed = self._persona_display_map().get(
+            payload["subject_persona_id"], (payload["subject_name"], False, True)
+        )
+        payload["subject_name"] = name
+        return payload
 
     # Reads `CharacterSheet.cached_resonances` (a `PrunedCachedProperty`,
     # #3816 Task 3) -- fed by the prefetched

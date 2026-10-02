@@ -23,6 +23,7 @@ from world.scenes.constants import InteractionMode
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
+    PersonaFactory,
     SceneFactory,
     SceneGMParticipationFactory,
     SceneOwnerParticipationFactory,
@@ -58,6 +59,37 @@ class RouteNarratableEventTest(TestCase):
         self.assertEqual(prompts[0].room_text, "authored")
         self.assertEqual(prompts[0].status, GMPromptStatus.PENDING)
         deliver.assert_not_called()
+
+    def test_subject_persona_is_frozen_once_for_every_sibling(self):
+        """Ruling R9-3 (#4101 fix round 3): the subject's PRESENTED face is
+        resolved ONCE, at routing time, via ``active_persona_for_sheet`` -- not
+        per sibling GM -- and frozen onto every prompt the event creates. A
+        later persona switch (undisguising) must never follow onto an
+        already-routed prompt."""
+        from world.scenes.services import set_active_persona
+
+        disguise = PersonaFactory(character_sheet=self.sheet, name="A Masked Stranger")
+        set_active_persona(self.sheet, disguise)
+        SceneGMParticipationFactory(scene=self.scene, account=self.second_gm)
+
+        prompts = route_narratable_event(self._event(self.scene))
+
+        self.assertEqual(len(prompts), 2)
+        for prompt in prompts:
+            self.assertEqual(prompt.subject_persona_id, disguise.pk)
+
+        set_active_persona(self.sheet, self.sheet.primary_persona)
+        for prompt in prompts:
+            prompt.refresh_from_db()
+            self.assertEqual(prompt.subject_persona_id, disguise.pk)
+
+    def test_subject_persona_is_none_without_a_character_sheet(self):
+        """A scene-less, sheet-less event (e.g. a stake outcome with no single
+        subject) freezes nothing -- there is no face to resolve."""
+        event = NarratableEvent(kind=GMPromptKind.STAKE_OUTCOME, scene=None, character_sheet=None)
+        prompts = route_narratable_event(event, candidates=[self.gm])
+        self.assertEqual(len(prompts), 1)
+        self.assertIsNone(prompts[0].subject_persona_id)
 
     def test_no_gm_delivers_as_today_and_creates_nothing(self):
         deliver = mock.Mock()
