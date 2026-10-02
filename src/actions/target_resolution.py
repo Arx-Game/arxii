@@ -57,10 +57,14 @@ def resolve_menu_target(
         return None
     if type(request.target_id) is not int or request.target_id <= 0:
         return None
-    if request.container_item_id is not None:
-        return None
     if request.kind is not MenuTargetKind.ITEMS:
         return None
+    if request.container_item_id is not None:
+        if request.owner_persona_id is not None:
+            return None
+        if type(request.container_item_id) is not int or request.container_item_id <= 0:
+            return None
+        return _resolve_contained_menu_item(actor, request)
     if request.owner_persona_id is not None:
         if type(request.owner_persona_id) is not int or request.owner_persona_id <= 0:
             return None
@@ -140,6 +144,47 @@ def _resolve_menu_item(
     game_object = item.game_object
     if game_object is not None and not can_perceive(actor, game_object):
         return None
+    return ResolvedMenuTarget(
+        request=request,
+        label=item.display_name,
+        item=item,
+        game_object=game_object,
+    )
+
+
+def _resolve_contained_menu_item(
+    actor: ObjectDB,
+    request: MenuTargetRequest,
+) -> ResolvedMenuTarget | None:
+    """Resolve an immediate child under a current container assertion."""
+    assert request.container_item_id is not None  # noqa: S101
+    container_target = _resolve_menu_item(
+        actor,
+        MenuTargetRequest(MenuTargetKind.ITEMS, request.container_item_id),
+    )
+    if container_target is None:
+        return None
+    container = container_target.item
+    if container is None or container.game_object is None:
+        return None
+    if not container.template.is_container:
+        return None
+    if container.template.supports_open_close and not container.is_open:
+        return None
+    item = (
+        ItemInstance.objects.in_play()
+        .filter(pk=request.target_id, contained_in=container)
+        .select_related("template", "game_object")
+        .first()
+    )
+    if item is None:
+        return None
+    game_object = item.game_object
+    if game_object is not None:
+        if game_object.location != container.game_object:
+            return None
+        if not passes_concealment_check(actor, game_object):
+            return None
     return ResolvedMenuTarget(
         request=request,
         label=item.display_name,
