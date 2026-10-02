@@ -10,9 +10,11 @@
  * Currently shows all members for simplicity.
  */
 
+import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTableMembers } from '../queries';
 import type { GMTable } from '../types';
+import { PreparedTextDialog } from './PreparedTextDialog';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -43,6 +45,13 @@ function MemberRowSkeleton() {
 export function TableMemberRoster({ table, onRemove }: TableMemberRosterProps) {
   const isGM = table.viewer_role === 'gm' || table.viewer_role === 'staff';
   const { data, isLoading } = useTableMembers(table.id, { active: true });
+  // The one open PreparedTextDialog (#4101 Task 11) -- a single shared
+  // instance rather than one per row, so its queries only fire once a GM
+  // actually opens it for a specific member.
+  const [preparedTextMember, setPreparedTextMember] = useState<{
+    characterSheetId: number;
+    characterName: string;
+  } | null>(null);
 
   if (isLoading) {
     return (
@@ -72,17 +81,43 @@ export function TableMemberRoster({ table, onRemove }: TableMemberRosterProps) {
               Joined {new Date(membership.joined_at).toLocaleDateString()}
             </span>
           </div>
-          {isGM && onRemove && (
-            <button
-              type="button"
-              className="rounded border border-destructive/30 px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-              onClick={() => onRemove(membership.id, membership.persona_name)}
-            >
-              Remove
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isGM && (
+              <button
+                type="button"
+                className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                onClick={() =>
+                  setPreparedTextMember({
+                    characterSheetId: membership.character_sheet,
+                    characterName: membership.persona_name,
+                  })
+                }
+              >
+                Prepared text
+              </button>
+            )}
+            {isGM && onRemove && (
+              <button
+                type="button"
+                className="rounded border border-destructive/30 px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+                onClick={() => onRemove(membership.id, membership.persona_name)}
+              >
+                Remove
+              </button>
+            )}
+          </div>
         </div>
       ))}
+      {preparedTextMember && (
+        <PreparedTextDialog
+          characterSheetId={preparedTextMember.characterSheetId}
+          characterName={preparedTextMember.characterName}
+          open
+          onOpenChange={(next) => {
+            if (!next) setPreparedTextMember(null);
+          }}
+        />
+      )}
     </div>
   );
 }

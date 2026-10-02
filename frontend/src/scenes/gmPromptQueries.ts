@@ -81,3 +81,43 @@ export function useNarrateGMPrompt(sceneId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// GM prompt filters (#4101; demo Screen 5) -- GMPromptFilterViewSet
+// (`world/gm/views.py`). Always exactly five rows (one per GMPromptGroup); a
+// missing row synthesizes as enabled server-side, so there is nothing to page.
+// ---------------------------------------------------------------------------
+
+export interface GMPromptFilterRow {
+  group: string;
+  label: string;
+  enabled: boolean;
+}
+
+const GM_PROMPT_FILTER_KEY = ['gm-prompt-filters'] as const;
+
+export function useGMPromptFilters() {
+  return useQuery({
+    queryKey: GM_PROMPT_FILTER_KEY,
+    queryFn: async (): Promise<GMPromptFilterRow[]> => {
+      const res = await apiFetch('/api/gm/prompt-filters/');
+      if (!res.ok) await throwApiError(res, 'Failed to load prompt settings');
+      return res.json();
+    },
+  });
+}
+
+export function useSetGMPromptFilter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { group: string; enabled: boolean }): Promise<GMPromptFilterRow[]> => {
+      const res = await apiFetch('/api/gm/prompt-filters/set/', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) await throwApiError(res, 'Failed to save prompt settings');
+      return res.json();
+    },
+    onSuccess: (rows) => queryClient.setQueryData(GM_PROMPT_FILTER_KEY, rows),
+  });
+}

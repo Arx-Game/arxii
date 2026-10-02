@@ -23,6 +23,7 @@ import { NominateButton } from '@/components/NominateButton';
 import { PersonaMenu } from './PersonaMenu';
 import { ActionResult } from './ActionResult';
 import { ActorLine } from './ActorLine';
+import { NarratedEventTag } from './NarratedEventTag';
 import { ReactionStrip } from './ReactionStrip';
 import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
 import { EndorsementControl } from './EndorsementControl';
@@ -475,6 +476,11 @@ export function PoseUnit({
             actorName={interaction.attributed_companion?.name ?? interaction.persona.name}
           />
         </p>
+        {/* "Part of X's Crossing" (#4101, demo Screen 3) */}
+        <NarratedEventTag
+          narrates={interaction.narrates}
+          receiverPersonaIds={interaction.receiver_persona_ids}
+        />
       </div>
 
       {/* Expandable outcome detail panel */}

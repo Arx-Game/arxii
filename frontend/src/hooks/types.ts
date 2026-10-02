@@ -1,4 +1,5 @@
 import type { FeedKind } from '@/game/feedKinds';
+import type { NarratedEvent } from '@/scenes/types';
 
 export const GAME_MESSAGE_TYPE = {
   SYSTEM: 'system',
@@ -320,6 +321,9 @@ export interface InteractionWsPayload {
   /** Cosmetic companion pose attribution (#3294); null/absent for a normal pose. */
   attributed_companion_id?: number | null;
   attributed_companion_name?: string | null;
+  /** The GM prompt this row narrates (#4101), when it narrates one. Carries the
+   * raw frozen persona name as-is -- the live push has no per-viewer concept. */
+  narrates?: NarratedEvent | null;
 }
 
 /** Redux-owned pose metadata. Full body text is intentionally absent. */
