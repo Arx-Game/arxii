@@ -341,6 +341,9 @@ def run_service_craft(
     """
     from world.items.crafting.services import run_crafting_recipe  # noqa: PLC0415
 
+    if item_instance.destroyed_at is not None:
+        msg = "item is no longer in play"
+        raise MarketServiceError(msg, user_message="That item is no longer in play.")
     if not offer.is_active:
         msg = f"offer {offer.pk} inactive"
         raise MarketServiceError(msg, user_message="That service is not on offer.")

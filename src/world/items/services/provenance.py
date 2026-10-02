@@ -48,3 +48,25 @@ def stolen_victim(item_instance: ItemInstance) -> CharacterSheet | None:
     """The wronged party of the item's unresolved theft, or None when clean."""
     theft = _latest_unresolved_theft(item_instance)
     return theft.from_character_sheet if theft is not None else None
+
+
+def last_holder(item_instance: ItemInstance) -> CharacterSheet | None:
+    """Who held ``item_instance`` last (#4099).
+
+    A live item's holder is its pointer. A destroyed (soft-deleted) item is held by
+    nobody, so its last holder is the ``from_character_sheet`` of the ledger event that
+    took it out of play (CONSUMED, or TRANSFERRED for a fenced or forfeited item).
+    Never re-point the holder of a destroyed row to answer this.
+    """
+    if item_instance.destroyed_at is None:
+        return item_instance.holder_character_sheet
+    exit_event = (
+        OwnershipEvent.objects.filter(
+            item_instance=item_instance,
+            event_type__in=(OwnershipEventType.CONSUMED, OwnershipEventType.TRANSFERRED),
+        )
+        .select_related("from_character_sheet")
+        .order_by("-id")
+        .first()
+    )
+    return exit_event.from_character_sheet if exit_event is not None else None

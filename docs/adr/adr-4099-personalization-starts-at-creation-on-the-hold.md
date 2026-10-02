@@ -37,6 +37,15 @@ matched and consumed by the same shared `gather_consumable_pks` / `consume_mater
 helpers rituals and crafting already use, against the caster's carried inventory
 (`character.carried_items`).
 
+Consuming price components made soft-deletion common, so the item lifecycle rule had to
+be settled (#4099 re-review ruling). **A soft-deleted item is held by nobody.** The
+soft-delete clears `holder_character_sheet` and `contained_in`, and the exit
+`OwnershipEvent` keeps the last holder. A destroyed container's contents spill to where it
+was rather than being destroyed. We rejected keeping the holder pointer and filtering
+every reader with `in_play()`: the "fetch by pk, then compare the holder" shape is spread
+across trade, wares, decor, boons, vaults, bequests and ritual components, and a missed
+reader was a money mint (fencing the same item twice).
+
 The early flourish is the existing `Thread.signature_bonus`: creation weaves the TECHNIQUE
 thread at the flourish's own `min_crossing_level`, up to `CREATION_PERSONALIZATION_MAX_LEVEL`
 (2), so it never skips a crossing. The hard level-3 floor on signing is gone; each bonus's

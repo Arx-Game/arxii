@@ -6837,8 +6837,11 @@ holder is never notified a claim exists.
     soft-delete when `differs_from_template` (destroyed_at, game object out of play,
     CONSUMED event, or `event_type`), else `hard_delete_item_instance`; unequips first
     and invalidates the holder's `carried_items`. Called by `consume_item_charges`,
-    `consume_materials`, building completion, shattered gems and `sell_to_fence`. A
-    soft-deleted row keeps its holder, so holder-keyed readers use `in_play()`
+    `consume_materials`, building completion, shattered gems, `sell_to_fence` and
+    `forfeit_item_instance`. A soft-deleted item is held by nobody: holder and
+    `contained_in` are cleared (last holder: `provenance.last_holder`, from the exit
+    event), a container's contents spill to where it was; holder-keyed readers also
+    use `in_play()`
   - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
     — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
     by the `items.soft_delete_cleanup` daily cron task (#1025)

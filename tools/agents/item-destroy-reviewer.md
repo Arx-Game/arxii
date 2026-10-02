@@ -45,14 +45,36 @@ item, so a name-based lint is not precise without type inference.
   it has no game object). Used by recycling and the soft-delete cleanup.
 - `forfeit_item_instance`: a story consequence (stakes), always a soft-delete.
 
-## The in-play reader rule
+## Soft-deleted items are held by nobody
 
-**A soft-deleted row keeps its holder. Every holder-keyed reader must use
-`ItemInstance.objects.in_play()`** (or filter `destroyed_at__isnull=True` across a
+**Never re-point a holder at a destroyed row.** The soft-delete
+(`_take_out_of_play`, shared by `destroy_consumed_item_instance` and
+`forfeit_item_instance`) clears `holder_character_sheet` and `contained_in`; the last
+holder lives on the exit event's `from_character_sheet` (`provenance.last_holder`). A
+destroyed container's contents spill to where it was, still held by their holder. Origin,
+#4099 re-review: the in-play reader sweep below caught queries, but not the
+"fetch by pk, then compare `holder_character_sheet_id`" shape. That shape still treated a
+destroyed row as its holder's, which allowed:
+- re-spending a touchstone in a ritual;
+- listing a fenced ware;
+- placing fenced decor;
+- granting a fenced item as a boon;
+- dropping, giving or equipping a fenced item found through a carried pouch's
+  `contained_in` chain.
+
+Clearing the pointers fixes every holder compare at once. Flag any diff that:
+- writes a holder or container onto a row with `destroyed_at` set (reclamation's
+  `_return_item` refuses one);
+- reads `holder_character_sheet` to find out who last had a destroyed item.
+
+## The in-play reader rule (defense in depth)
+
+**Every holder-keyed reader must still use `ItemInstance.objects.in_play()`** (or filter `destroyed_at__isnull=True` across a
 relation). Origin, #4099 review: after fencing, consumption and building completion began
-soft-deleting items with a history, the fence action still looked items up with
-`ItemInstance.objects.filter(holder_character_sheet=...)`. It found the fenced row
-again, so the same item could be fenced again for a second payout: a money mint.
+soft-deleting items with a history (which then still kept their holder), the fence
+action looked items up with `ItemInstance.objects.filter(holder_character_sheet=...)`. It
+found the fenced row again, so the same item could be fenced again for a second payout: a
+money mint.
 Crafting costs and estate inheritance had the same blind spot.
 
 When a diff adds or touches a query keyed on `holder_character_sheet` (or

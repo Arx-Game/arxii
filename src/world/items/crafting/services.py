@@ -840,7 +840,8 @@ def _record_crafted_recipe(
     # Invalidate the wearer's equipped_items handler cache if the item is
     # currently equipped — same pattern as attach_facet_to_item.
     for equipped in EquippedItem.objects.filter(item_instance=target_item):
-        equipped.character.equipped_items.invalidate()
+        # EquippedItem.character is a CharacterSheet; the handler is on its Character.
+        equipped.character.character.equipped_items.invalidate()
 
     # Fame at first making moved to run_crafting_recipe step 10d (#2878) —
     # it scales with Accents, which resolve after this record step.

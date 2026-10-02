@@ -53,7 +53,8 @@ def _recompute_wearer_prestige(item_instance: ItemInstance) -> None:
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     for equipped in EquippedItem.objects.filter(item_instance=item_instance):
-        equipped.character.equipped_items.invalidate()
+        # EquippedItem.character is a CharacterSheet; the handler is on its Character.
+        equipped.character.character.equipped_items.invalidate()
         try:
             persona = active_persona_for_sheet(equipped.character)
         except Persona.DoesNotExist:

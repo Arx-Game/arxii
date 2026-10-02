@@ -1,10 +1,10 @@
-"""A soft-deleted item keeps its holder, so every holder-keyed reader must skip it (#4099).
+"""Every holder-keyed reader skips soft-deleted items (#4099).
 
-``destroy_consumed_item_instance`` soft-deletes an item with a history: it stamps
-``destroyed_at`` and takes the game object out of play, but the row keeps its
-``holder_character_sheet``. A reader keyed on the holder that does not use
-``ItemInstance.objects.in_play()`` keeps seeing it, which is how a fenced item could be
-fenced again for a second payout.
+A soft-deleted item used to keep its ``holder_character_sheet``, so a reader keyed on the
+holder that did not use ``ItemInstance.objects.in_play()`` kept seeing it: that is how a
+fenced item could be fenced again for a second payout. The soft-delete now also clears
+the holder (a destroyed item is held by nobody); these readers stay in-play-only as
+defense in depth.
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ class CraftingSkipsSoftDeletedTests(_FenceFixture):
         sell_to_fence(self.persona, self.fence, stack)
         stack.refresh_from_db()
         self.assertIsNotNone(stack.destroyed_at)
-        self.assertEqual(stack.holder_character_sheet_id, self.sheet.pk)
+        self.assertIsNone(stack.holder_character_sheet_id)  # held by nobody
 
         requirement = CraftingMaterialRequirementFactory(item_template=stack.template, quantity=1)
         with self.assertRaises(CraftingCostUnaffordable):
@@ -114,7 +114,7 @@ class EstateSkipsSoftDeletedTests(_FenceFixture):
         _sweep_residuary_items(self.sheet, heir, set())
 
         instance.refresh_from_db()
-        self.assertEqual(instance.holder_character_sheet_id, self.sheet.pk)
+        self.assertIsNone(instance.holder_character_sheet_id)
         self.assertFalse(
             instance.ownership_events.filter(event_type=OwnershipEventType.INHERITED).exists()
         )

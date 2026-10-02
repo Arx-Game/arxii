@@ -57,6 +57,9 @@ def _resolve_touchstone_pks(
             for inst in available
             if inst.pk not in already_allocated
             and inst.pk not in {i.pk for i in matched_instances}
+            # #4099: a spent (soft-deleted) touchstone never satisfies a requirement again.
+            and inst.destroyed_at is None
+            and inst.quantity > 0
             and inst.attuned_to_character_sheet_id == performer_sheet.pk
             and inst.template.tied_resonance_id is not None
             and inst.template.resonance_tier_id is not None

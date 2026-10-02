@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.items.exceptions import StyleAlreadyAttached, StyleCapacityExceeded
+from world.items.exceptions import ItemNotInPlay, StyleAlreadyAttached, StyleCapacityExceeded
 from world.items.models import AudacityTuning, EquippedItem, ItemInstance, ItemStyle, QualityTier
 
 if TYPE_CHECKING:
@@ -36,7 +36,10 @@ def assert_style_attachable(item_instance: ItemInstance, style: Style) -> None:
     Raises:
         StyleAlreadyAttached: already present on the item.
         StyleCapacityExceeded: item is at its template's style_capacity.
+        ItemNotInPlay: the item was destroyed (#4099).
     """
+    if item_instance.destroyed_at is not None:
+        raise ItemNotInPlay
     if item_instance.item_styles.filter(style=style).exists():
         raise StyleAlreadyAttached
     if item_instance.item_styles.count() >= item_instance.template.style_capacity:
