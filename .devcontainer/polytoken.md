@@ -2,136 +2,175 @@
 
 [Polytoken](https://docs.polytoken.dev/) is a second coding-agent harness (a
 daemon + CLI/TUI) installed alongside Claude Code. It is a separate binary with
-its own config and session store, so it stays fully distinct from the
-Claude-Code-via-umans setup.
+its own config and session store.
 
-## What this change adds
+## What the devcontainer provides
 
 - **Dockerfile** — installs the polytoken binary at image-build time
   (`curl -fsS https://get.polytoken.dev | bash` → `~/.local/bin/polytoken`,
   already on `PATH`, no sudo). Pre-creates `~/.config/polytoken` and
   `~/.local/share/polytoken` so the named volumes inherit `vscode` ownership.
+  Upgrade in place with `polytoken update`.
 - **docker-compose.yml** — two named volumes persist polytoken across rebuilds:
-  - `arxii-polytoken-config` → `~/.config/polytoken` (config **and** provider
-    credentials — the part that hurts to lose on a rebuild)
-  - `arxii-polytoken-data` → `~/.local/share/polytoken` (session history)
-- **init-firewall.sh** — allowlists `api.code.umans.ai` (umans's
-  Anthropic-compatible endpoint). This same entry also restores durable
-  Claude-Code-via-umans access, which the runtime firewall otherwise blocks.
-  The installer hosts (`get`/`dl.polytoken.dev`) are **not** allowlisted because
-  install happens at build time, when egress is unrestricted.
+  - `arxii-polytoken-config` → `~/.config/polytoken` (user config)
+  - `arxii-polytoken-data` → `~/.local/share/polytoken` (session history, and
+    provider OAuth tokens under `auth/<provider>/<profile>.*`)
+- **docker-compose.yml `webproxy`** — a Squid forward proxy for polytoken's
+  web tools; see "Web fetch and search" below.
+- **init-firewall.sh** — no polytoken-specific entry. The Codex provider talks
+  to `chatgpt.com` / `auth.openai.com`, which sit behind Cloudflare, and the
+  Cloudflare ranges are already allowlisted. The installer hosts
+  (`get`/`dl.polytoken.dev`) are not allowlisted because install happens at
+  build time, when egress is unrestricted.
 
-## Configuring the umans provider
+## Configuring the Codex provider (ChatGPT subscription)
 
-Recommended: run `polytoken config ui` and add a provider. Umans is reached as a
-**custom Anthropic-compatible** provider. Equivalent hand-written config
-(`~/.config/polytoken/config.yaml`), verified against polytoken 0.3.3's
-`schemas app-config` and a live `polytoken exec` smoke test:
+Polytoken ships a built-in `codex` catalog provider that uses a ChatGPT plan
+through OAuth. User config (`~/.config/polytoken/config.yaml`), verified
+against polytoken 0.8.17:
 
 ```yaml
-defaults:
-  full: umans-glm-5.2              # a full-class model must be the default
-  mini: umans-flash               # fast/cheap model for compaction + permission classifier
+default_permission_matcher: bypass   # safe here: sandboxed container + egress firewall
 providers:
-  umans:
+  codex:
     kind:
-      type: custom_anthropic_compatible   # tagged object, not a bare string
-    url: https://api.code.umans.ai
-    protocol: umans_messages                 # NOT anthropic_messages — see note below
+      type: catalog
+      name: codex
     auth:
-      type: static_key                     # required discriminator
-      key: ${UMANS_API_TOKEN}              # do NOT hardcode the sk-... token here
-      format: anthropic_x_api_key
-models:
-  umans-glm-5.2:
-    provider: umans
-    provider_name: umans-glm-5.2
-    class: full                            # required for custom models
-    context_window: 405504                 # umans-side cap; Z.ai native is 1M
-    max_tokens: 131071                     # recommended_max_tokens (must be < the 131072 cap)
-  umans-flash:                             # mini default — silences mini-fallback warnings
-    provider: umans
-    provider_name: umans-flash
-    class: mini
-    context_window: 262144
-    max_tokens: 32768                      # recommended_max_tokens for flash
-  umans-kimi-k2.7:                         # used by the cross-model review subagents below
-    provider: umans
-    provider_name: umans-kimi-k2.7
-    class: full
-    context_window: 262144
-    max_tokens: 32768                      # recommended_max_tokens for kimi
+      type: codex_device
+      profile: default
+modelgroups:
+  polytoken:default_model_full: codex/gpt-6.1-sol
+  polytoken:default_model_mini: codex/gpt-6-luna
 ```
 
-The `context_window` / `max_tokens` above are umans's own caps per model (GLM-5.2's
-context is below Z.ai's native 1M), read from the authoritative
-`GET https://api.code.umans.ai/v1/models/info` endpoint — query it for the current
-per-model `context_window`, `max_completion_tokens`, and reasoning levels rather
-than guessing. **`max_tokens` must be strictly *less than* the model's
-`max_completion_tokens`** — umans rejects a request where they're equal
-(`max_tokens (131072) is at or above the model's max output tokens`), which is why
-each value uses the published `recommended_max_tokens` (one under the cap for
-GLM-5.2; 32768 for flash/kimi).
+Then log in from a container shell:
 
-**Models live in the global (user) config only** — polytoken forbids `models` and
-`defaults` in the project config layer (`ProjectLayerModelsAndDefaultsForbidden`),
-so this block can't be committed to the repo. It lives on the `arxii-polytoken-config`
-volume (persists across rebuilds) and is reproduced here as the recovery recipe.
+```bash
+polytoken auth provider login --provider codex   # prints a URL + code
+polytoken auth provider status
+```
 
-Validate with `polytoken config validate --user` before relying on it.
+The **device flow** is the default and it works inside the container: open the
+printed URL in a host browser and enter the code. Nothing calls back into the
+container. (The `--authorization-code` browser flow needs a localhost callback,
+so it does not work here.) If ChatGPT refuses the code, enable device-code
+login under ChatGPT Settings → Security.
 
-**Use `protocol: umans_messages`, not `anthropic_messages`.** umans's endpoint
-*does* answer generic Anthropic Messages calls (a raw `curl` to `/v1/messages`
-works), but polytoken's agentic tool-use flow needs its dedicated umans dialect.
-With `anthropic_messages`, tool calls get mangled and every model reflexively
-fires `web_search` on each prompt — even "what is 2+2" comes back as web results
-instead of an answer. Switching the provider to `umans_messages` fixes it for all
-models at once (the protocol is set once on the provider, not per model).
+Prefer the device login to copying a token from the host's `~/.codex/auth.json`.
+OpenAI rotates the refresh token on each use, so two clients that share one
+token log each other out at the first refresh. A separate device login gives
+polytoken its own token.
 
-**Token handling:** the umans token already lives in `~/.umans/config.json`
-(`api_token`). Reference it via the `${UMANS_API_TOKEN}` env substitution (set
-the var in your local, gitignored env) or paste it through `polytoken config ui`.
-Never commit the token.
+Notes for 0.8:
 
-## Cross-model review subagents (Kimi reviews GLM)
+- **Model selectors are `<provider>/<model>`** (`codex/gpt-6.1-sol`). List the
+  catalog with `polytoken models`; each model also has effort variants such as
+  `codex/gpt-6.1-sol(high)` and some have `-1m` context variants.
+- **The top-level `defaults:` block is gone.** Default tiers are the reserved
+  `polytoken:default_model_full` / `_mini` / `_nano` model groups.
+- **Choose models for your plan's quota.** `gpt-6.1-sol` and `gpt-6-luna` are
+  much cheaper than `gpt-6-sol`, and `gpt-6-astra` costs the most. Expensive
+  models use up a small ChatGPT plan quickly; keep them out of defaults and out
+  of model groups that run automatically.
+- **Models and default tiers live in the user config only.** Polytoken forbids
+  `models` and `defaults` in the project config layer
+  (`ProjectLayerModelsAndDefaultsForbidden`); the project layer may define
+  `modelgroups`.
 
-Polytoken has no built-in "adversarial reviewer model" knob — model roles are only
-`full` / `mini` / `nano`. Cross-model review is done with **subagents that pin their
-own model** via `polytoken.model`. The default full model (`umans-glm-5.2`) does the
-work; a reviewer subagent runs on a *different* model (`umans-kimi-k2.7`) so the
-critique isn't the author grading itself.
+Validate with `polytoken config validate --user`, then run
+`polytoken --working-dir /workspaces/arxii doctor` (it also loads the project
+subagents below).
 
-Two project-level subagents ship in the repo at **`.polytoken/subagents/`** (this
-directory is in version control and bind-mounted into the container, so it is durable
-across rebuilds and shared with every contributor — unlike the global model config
-above):
+## Web fetch and search
 
-- **`plan-reviewer.md`** — shadows polytoken's built-in plan reviewer (same name →
-  project layer wins) but pinned to Kimi. The `plan` facet auto-runs it at the
-  plan→execution handoff, so planning gets a cross-model critique for free.
-- **`code-reviewer.md`** — an adversarial code/diff reviewer (no shipped equivalent).
-  Nothing auto-runs it; invoke it via the `subagent` tool / a session prompt
-  ("use the code-reviewer subagent on the current diff"). Read-only; emits
-  severity-classified findings.
+The egress firewall blocks most of the internet, so `web_fetch` fails
+(`error sending request for url`) and `web_search` has no provider. The fix
+routes only polytoken's web tools through a proxy; the firewall itself does not
+change.
 
-Both declare `fallback_models: [default_model:full]`, so on any machine where the
-global config lacks `umans-kimi-k2.7` they degrade gracefully to the default full
-model instead of erroring. Confirm discovery with
-`polytoken --working-dir /workspaces/arxii doctor` (look for the subagent count).
+- **`webproxy`** (docker-compose.yml, config in `.devcontainer/webproxy/squid.conf`)
+  is a Squid forward proxy that runs outside the app container's firewall. The
+  firewall already allows the compose network (172.16.0.0/12), so app reaches
+  it as `http://webproxy:3128`. Only ports 80 and 443 are allowed, and nothing
+  is cached. No `HTTP(S)_PROXY` variable is set in app, so other tools still
+  go through the firewall. **Trade-off:** any process in app that knows the
+  address can reach any HTTPS host through it.
+- Start it without touching app or db:
+  `docker compose -f .devcontainer/docker-compose.yml up -d --no-deps webproxy`.
+  A full `just dc-up` starts it with the rest of the stack.
+- **Search** uses a hosted provider with an API key (`brave`, `tavily`, `exa`,
+  `kagi`, `parallel`, `you`). Put the key in `.devcontainer/dev.env`
+  (gitignored). `env_file` is only read when the container is created, so the
+  config reads the key from the live bind mount (`/workspaces/arxii/src/.env`)
+  instead, which needs `config_command_substitution` (user config only).
 
-## Verified at first `dc-build` (2026-06-29)
+Add to the user config:
 
-All four checks below passed on the first no-cache rebuild after in-flight work
-wrapped:
+```yaml
+config_command_substitution: true
+daemon:
+  web:
+    http_proxy: http://webproxy:3128
+    https_proxy: http://webproxy:3128
+integrations:
+  search:
+    strategy: round_robin
+    providers:
+      tavily:
+        enabled: true
+        key: $(sed -n "s/^TAVILY_API_KEY=//p" /workspaces/arxii/src/.env)
+```
 
-1. ✅ `polytoken --version` → `0.3.3` (binary installed, on `PATH`).
-2. ✅ `~/.config/polytoken/config.yaml` writes to the `arxii-polytoken-config`
-   volume; the dir is `vscode`-owned and shows as a mount in `/proc/mounts`.
-3. ✅ Session history lands under **`~/.local/share/polytoken/sessions/`** (the
-   `arxii-polytoken-data` volume), **not** `~/.local/state/polytoken`. **No third
-   volume is needed** — the XDG data-vs-state question is settled.
-4. ✅ After the firewall reapplies, `api.code.umans.ai` is reachable (a direct
-   Anthropic `/v1/messages` call returned a GLM-5.2 message) and `polytoken exec`
-   ran a full session through umans, while a non-allowlisted host (`google.com`)
-   stayed blocked — confirming default-deny is intact and both harnesses ride the
-   one `api.code.umans.ai` allowlist entry.
+Validate on a copy before you replace a live config: an enabled search
+provider whose key resolves to empty fails validation
+(`enabled search provider must configure an API key`), and an invalid user
+config stops new sessions from starting.
+
+## Demo pages
+
+Polytoken cannot publish Claude artifacts, and terminal links do not open. The
+`demoing-a-feature` skill therefore has polytoken write each demo to
+`/workspaces/arxii/.demos/` (gitignored). That folder is on the host bind
+mount, so it shows up in the host checkout's `.demos/`; bookmark it as a
+`file:///` URL. Do not leave demos in a worktree: `.claude/worktrees/` is the
+`arxii-worktrees` volume, which the host cannot see. A spec still needs a
+published link, so ask Claude Code to publish the file before review.
+
+## Cross-model review subagents
+
+Polytoken has no built-in "adversarial reviewer model" knob. Cross-model review
+is done with **subagents that pin their own model** via `polytoken.model`. Two
+project-level subagents ship in the repo at **`.polytoken/subagents/`**:
+
+- **`plan-reviewer.md`** — shadows polytoken's built-in plan reviewer (same name
+  → project layer wins). The `plan` facet auto-runs it at the plan→execution
+  handoff, so planning gets a cross-model critique for free.
+- **`code-reviewer.md`** — an adversarial code/diff reviewer (no shipped
+  equivalent). Nothing auto-runs it; invoke it via the `subagent` tool / a
+  session prompt ("use the code-reviewer subagent on the current diff").
+  Read-only; emits severity-classified findings.
+
+Both pin `model: "@mg:reviewer"`, a model group defined in the project config
+**`.polytoken/config.yaml`**:
+
+```yaml
+modelgroups:
+  reviewer:
+    - codex/gpt-6-luna                      # cheap; differs from the gpt-6.1-sol default
+    - "@mg:polytoken:default_model_full"   # fallback for any other setup
+```
+
+A group uses its first configured entry, so a contributor without a Codex
+provider gets their own default full model instead of a startup failure. A
+user-layer `reviewer` group replaces this one, so you can choose a different
+reviewer model without editing the repo.
+
+Two polytoken rules shape this. Do not work around them:
+
+- **A subagent that names an unknown model stops the daemon from starting**
+  (`subagent registry load failed: ... references unknown model`).
+  `fallback_models` does not prevent this: the name is checked before any
+  fallback is tried. Always pin a group, never a bare model name.
+- **A subagent with a group model cannot also set `fallback_models`.** Put the
+  fallback in the group.

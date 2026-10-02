@@ -2,12 +2,13 @@
 name: plan-reviewer
 description: Review a handoff plan before execution. Checks the plan shape, inspects relevant code and project context, and returns severity-classified findings that must be fixed or rebutted before handoff.
 polytoken:
-  # Cross-model review: the worker runs on the default full model (umans-glm-5.2);
-  # this reviewer runs on a DIFFERENT model (Kimi K2.7) so the critique is adversarial
-  # rather than the author grading its own work. Falls back to the default full model
-  # for anyone whose global config doesn't define umans-kimi-k2.7.
-  model: umans-kimi-k2.7
-  fallback_models: [default_model:full]
+  # Cross-model review: this reviewer runs on the `reviewer` model group
+  # (.polytoken/config.yaml), which prefers a DIFFERENT model than the default
+  # worker so the critique is adversarial rather than the author grading its own
+  # work. The group falls back to the default full model when its first choice is
+  # not configured. A group model cannot also set fallback_models, and a bare
+  # unknown model name stops the daemon from starting, so always pin the group.
+  model: "@mg:reviewer"
   tools: [file_read, grep, glob, web_search, web_fetch, tag!ALL_MCP]
   undeferred_tools: [file_read, grep, glob, web_search, web_fetch]
   allow_subagent_spawn: false

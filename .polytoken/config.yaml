@@ -1,0 +1,15 @@
+# Project-layer polytoken config. Providers, models and the default model tiers
+# live in each contributor's user config (~/.config/polytoken/config.yaml); see
+# .devcontainer/polytoken.md. A project layer may define model groups, but a
+# user-layer group with the same name replaces this one.
+modelgroups:
+  # Model for the cross-model review subagents in .polytoken/subagents/. The
+  # first entry that is configured wins. The last entry is the default full
+  # model, so a contributor without a Codex provider still gets a reviewer.
+  # gpt-6-luna differs from the usual gpt-6.1-sol default and is one of the
+  # cheapest Codex models. The plan facet runs this reviewer on every handoff, so
+  # an expensive model here (gpt-6-sol, gpt-6-astra) uses up a small ChatGPT
+  # plan's quota quickly.
+  reviewer:
+    - codex/gpt-6-luna
+    - "@mg:polytoken:default_model_full"

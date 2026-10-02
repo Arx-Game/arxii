@@ -10,6 +10,8 @@ from typing import Any
 from django.db import models
 from evennia.utils.idmapper.manager import SharedMemoryManager
 
+from core.deletion import IdentityMapCollector
+
 
 class SharedMemoryWriteError(RuntimeError):
     """Raised when a queryset write would bypass the identity map."""
@@ -63,6 +65,36 @@ class ArxSharedMemoryQuerySet(models.QuerySet):
             operation = "bulk_update"
             raise SharedMemoryWriteError(operation)
         return super().bulk_update(objs, fields, batch_size=batch_size)
+
+    def delete(self) -> tuple[int, dict[str, int]]:
+        """Django's ``QuerySet.delete()`` (5.2) with an ``IdentityMapCollector``,
+        so the delete's ``SET_NULL`` updates reach cached referrers
+        (``core.deletion``). Mirrors the original line for line otherwise."""
+        self._not_support_combined_queries("delete")
+        if self.query.is_sliced:
+            msg = "Cannot use 'limit' or 'offset' with delete()."
+            raise TypeError(msg)
+        if self.query.distinct_fields:
+            msg = "Cannot call delete() after .distinct(*fields)."
+            raise TypeError(msg)
+        if self._fields is not None:
+            msg = "Cannot call delete() after .values() or .values_list()"
+            raise TypeError(msg)
+        del_query = self._chain()
+        del_query._for_write = True  # noqa: SLF001 - mirrors QuerySet.delete
+        del_query.query.select_for_update = False
+        del_query.query.select_related = False
+        del_query.query.clear_ordering(force=True)
+        collector = IdentityMapCollector(using=del_query.db, origin=self)
+        collector.collect(del_query)
+        result = collector.delete()
+        self._result_cache = None
+        return result
+
+    # Django's own flags on QuerySet.delete: never proxied onto a manager, so
+    # there is no ``Model.objects.delete()``, and never called from a template.
+    delete.alters_data = True
+    delete.queryset_only = True
 
     def update_with_reason(self, *, reason: str, **kwargs: Any) -> int:
         """Perform an intentional raw UPDATE after requiring its reason."""
