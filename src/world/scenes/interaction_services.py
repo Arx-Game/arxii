@@ -148,7 +148,12 @@ def invalidate_active_scene_cache(location: ObjectDB) -> None:
 
 
 def broadcast_scene_emit(
-    character: ObjectDB, text: str, *, scene: Scene | None = None, scene_scoped_push: bool = False
+    character: ObjectDB,
+    text: str,
+    *,
+    scene: Scene | None = None,
+    scene_scoped_push: bool = False,
+    push_live: bool | None = None,
 ) -> None:
     """Broadcast ``text`` as a system EMIT to ``scene`` (or the one active at
     ``character``'s location when ``scene`` is omitted).
@@ -169,12 +174,31 @@ def broadcast_scene_emit(
     ``scene``, regardless of this flag). Default False preserves the original
     behavior for every other caller: ``push_interaction`` defaults to the
     writer's CURRENT location. When True, the push instead targets ``scene``'s
-    OWN location, and is skipped entirely (record-only) when ``scene`` is no
-    longer active -- a released GM-prompt default (a withheld manifestation, an
-    uncovered room default) describes an event anchored to a specific scene and
-    must never live-push into whatever room the character has since wandered
-    into, nor resurrect a WebSocket push into a room that has moved on to other
-    business since that scene ended.
+    OWN location, and is skipped entirely (record-only):
+
+    - when ``scene.location`` is None (#4101 fix round 3, ruling N3) -- a
+      location-less scene (a Battle, ADR-0081) has no room to push into, and
+      ``push_interaction``'s own ``location=None`` default would otherwise
+      quietly fall back to the WRITER's CURRENT room, exactly the leak this
+      flag exists to prevent. No generic interaction-push seam reaches a
+      location-less scene's participants today --
+      ``world.battles.services.notify_battle_state_changed`` pushes a slim
+      round-state ping to each connected participant by character, telling
+      clients to refetch the REST aggregate, not an interaction payload with
+      arbitrary EMIT content, so it is not a substitute here. Record only.
+    - when the scene is not active, per ``push_live`` below.
+
+    ``push_live`` (#4101 fix round 3, ruling N4) lets the caller supply an
+    ALREADY-DECIDED answer to "was the scene active when release was decided"
+    instead of this function re-deriving ``scene.is_active`` live at call time.
+    This call typically runs well after that decision was made (inside
+    ``transaction.on_commit``), by which point an action in the SAME call chain
+    (e.g. ``finish_scene_full``/``_finish_event_scenes`` closing the scene
+    right after ``expire_scene_prompts`` releases it) may have already flipped
+    ``scene.is_active`` to False -- re-checking live would then wrongly skip a
+    push that should have gone out, since the scene genuinely WAS active at
+    the moment the release was decided. ``None`` (the default) preserves the
+    original live re-check, for callers with no such earlier decision point.
 
     Queries the scene uncached on purpose when resolving by location:
     ``get_active_scene``'s per-location cache is only invalidated by the scene
@@ -202,7 +226,20 @@ def broadcast_scene_emit(
         mode=InteractionMode.EMIT,
         scene=scene,
     )
-    if scene_scoped_push and not scene.is_active:
+    if not scene_scoped_push:
+        push_interaction(
+            interaction,
+            receiver_persona_ids=[],
+            target_persona_ids=[],
+            receiver_characters=[],
+        )
+        return
+
+    if scene.location is None:
+        # Recorded above; no room to push into (N3).
+        return
+    live = scene.is_active if push_live is None else push_live
+    if not live:
         # Recorded above; no live push into a room that has moved on.
         return
     push_interaction(
@@ -210,7 +247,7 @@ def broadcast_scene_emit(
         receiver_persona_ids=[],
         target_persona_ids=[],
         receiver_characters=[],
-        location=scene.location if scene_scoped_push else None,
+        location=scene.location,
     )
 
 

@@ -253,6 +253,44 @@ class CompleteEventExpiresGMPromptsTest(TestCase):
             1,
         )
 
+    def test_complete_event_expire_then_finish_still_pushes_live(self) -> None:
+        """#4101 fix round 3 (N4): ``expire_scene_prompts`` decides (and
+        captures) push-live eligibility UNDER THE SIBLING LOCK, while the
+        scene is still active -- BEFORE ``_finish_event_scenes`` calls
+        ``scene.finish_scene()`` right after it. Deciding lazily inside the
+        deferred ``on_commit`` callback instead (the round 2 shape) would see
+        ``scene.is_active`` already False by the time it finally runs and
+        wrongly skip the live push, even though the scene was still active at
+        the moment release was actually decided.
+        """
+        from unittest import mock
+
+        sheet = CharacterSheetFactory()
+        gm = AccountFactory()
+        event = EventFactory(status=EventStatus.SCHEDULED, is_public=True)
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        SceneGMParticipationFactory(scene=scene, account=gm)
+
+        [prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=scene,
+                character_sheet=sheet,
+                room_text="a wonder occurs",
+            )
+        )
+
+        with mock.patch("world.scenes.interaction_services.push_interaction") as push:
+            with self.captureOnCommitCallbacks(execute=True):
+                complete_event(event)
+
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        push.assert_called_once()
+        self.assertEqual(push.call_args.kwargs.get("location"), scene.location)
+        self.assertTrue(Interaction.objects.filter(content="a wonder occurs", scene=scene).exists())
+
 
 class AddHostTest(TestCase):
     def test_add_host(self) -> None:

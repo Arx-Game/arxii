@@ -293,15 +293,34 @@ class CrossingNarrationTest(TestCase):
     # -------------------------------------------------------------------
 
     def test_routing_database_error_falls_back_to_unprompted_delivery_once(self):
-        """#4101 fix round 2, must-fix 2/3: a DatabaseError while creating GM
-        prompts falls back to unprompted delivery -- both lines still arrive,
-        exactly once, and no GMPrompt is left behind (no orphan)."""
+        """#4101 fix round 3 (N2 test 2): with TWO candidate GMs, the SECOND
+        ``GMPrompt.objects.create`` raises -- proving must-fix 3's
+        ``transaction.atomic()`` wrap actually rolls the whole batch back
+        (the first GM's already-created prompt doesn't survive as an orphan),
+        rather than merely mocking ``route_narratable_event`` wholesale (which
+        would pass even without the atomic wrap, since nothing would have been
+        created yet either way). No GM notify fires, and the fallback
+        delivers both lines exactly once."""
+        second_gm = AccountFactory()
         SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        SceneGMParticipationFactory(scene=self.scene, account=second_gm)
         offer = self._offer()
-        with mock.patch(
-            "world.gm.prompt_services.route_narratable_event", side_effect=DatabaseError("boom")
-        ):
-            self._cross(offer)
+
+        original_create = GMPrompt.objects.create
+        calls = {"n": 0}
+
+        def _raise_on_second(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                msg = "boom"
+                raise DatabaseError(msg)
+            return original_create(*args, **kwargs)
+
+        with mock.patch.object(GMPrompt.objects, "create", side_effect=_raise_on_second):
+            with mock.patch("world.gm.prompt_services.notify_gm_prompt") as notify:
+                self._cross(offer)
+
+        notify.assert_not_called()
         self.assertFalse(GMPrompt.objects.filter(kind=GMPromptKind.CROSSING).exists())
         self.assertEqual(
             Interaction.objects.filter(content="tier room", mode=InteractionMode.EMIT).count(), 1

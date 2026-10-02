@@ -252,7 +252,9 @@ def _narration_coverage(event_group: uuid.UUID) -> tuple[bool, bool]:
     return room, private
 
 
-def release_prompt_defaults(prompt: GMPrompt, *, room: bool = True, private: bool = True) -> None:
+def release_prompt_defaults(
+    prompt: GMPrompt, *, room: bool = True, private: bool = True, push_live: bool | None = None
+) -> None:
     """Deliver a prompt's authored defaults the unprompted way (no GM covered them).
 
     Releases against the prompt's OWN scene (``prompt.scene``), never one
@@ -268,9 +270,16 @@ def release_prompt_defaults(prompt: GMPrompt, *, room: bool = True, private: boo
     behaves like the old all-or-nothing release.
 
     The room EMIT's live push is scene-scoped (``scene_scoped_push=True``, #4101
-    fix round 2, must-fix 2) -- it targets ``prompt.scene``'s own location, never
-    wherever the character currently stands, and is skipped (record-only) once
-    that scene has gone inactive.
+    fix round 2, must-fix 2) -- it targets ``prompt.scene``'s own location
+    (never a location-less one, ruling N3), never wherever the character
+    currently stands. ``push_live`` (#4101 fix round 3, ruling N4) is the
+    caller's OWN decision, made at the moment release was decided under the
+    sibling lock in ``_resolve_narration_prompt`` -- forwarded as-is rather
+    than letting ``broadcast_scene_emit`` re-derive ``scene.is_active`` live
+    here, since this function itself typically runs inside
+    ``transaction.on_commit``, well after that decision point, by which time
+    something else in the same call chain (scene finish, right after expire)
+    may have already flipped the scene inactive.
     """
     sheet = prompt.character_sheet
     if sheet is None:
@@ -278,7 +287,11 @@ def release_prompt_defaults(prompt: GMPrompt, *, room: bool = True, private: boo
     character = sheet.character
     if room and prompt.room_text.strip():
         broadcast_scene_emit(
-            character, prompt.room_text, scene=prompt.scene, scene_scoped_push=True
+            character,
+            prompt.room_text,
+            scene=prompt.scene,
+            scene_scoped_push=True,
+            push_live=push_live,
         )
     if private and prompt.private_text.strip():
         narrate_privately(character, prompt.private_text, scene=prompt.scene)
@@ -401,9 +414,18 @@ def _resolve_narration_prompt(
                 release_room = not room_covered
                 release_private = not private_covered
                 if release_room or release_private:
+                    # #4101 fix round 3 (N4): decide push-live eligibility HERE,
+                    # under the lock, while the scene's current ``is_active`` is
+                    # still authoritative for "was it active when release was
+                    # decided" -- not inside the on_commit callback below, which
+                    # runs later and could find the scene already finished by
+                    # something else in the same call chain (e.g.
+                    # finish_scene_full/_finish_event_scenes calling
+                    # scene.finish_scene() right after this very dismiss).
+                    push_live = this.scene is not None and this.scene.is_active
                     transaction.on_commit(
-                        lambda p=this, r=release_room, pv=release_private: release_prompt_defaults(
-                            p, room=r, private=pv
+                        lambda p=this, r=release_room, pv=release_private, pl=push_live: (
+                            release_prompt_defaults(p, room=r, private=pv, push_live=pl)
                         )
                     )
     return this
@@ -449,10 +471,7 @@ def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromp
     then re-derives coverage straight from the linked ``GMPromptNarration`` rows
     (controller ruling I2), so only the line THIS narration actually covered
     (room, or private) stops releasing -- the other leg still closes out
-    normally if no other sibling covers it either. A LATER narration of an
-    already-NARRATED prompt is a plain link with no status change --
-    ``narration_prompt_for`` already let it through via
-    ``_NARRATABLE_STATUSES``.
+    normally if no other sibling covers it either.
 
     ``prompt.status`` above is read before the lock ``_resolve_narration_prompt``
     takes, so it can be stale (fix round 1): a sibling dismiss, scene-end
@@ -469,7 +488,42 @@ def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromp
     delivery (the caller's ``record_interaction`` -> ``push_interaction``)
     always runs after this function returns, following Task 2's
     ``on_commit`` pattern for ``release_prompt_defaults``.
+
+    A LATER narration of an ALREADY-NARRATED prompt (#4101 fix round 3, ruling
+    N6) now takes the SAME per-event sibling lock, re-checking THIS prompt's
+    status fresh before creating the link row. Previously this branch created
+    its link row with no lock at all, racing a concurrent close's own coverage
+    check unguarded: the close could decide the private (or room) leg was
+    "not covered" and schedule its release in the exact window this
+    narration's link was about to land, double-sending the same line once
+    both committed. Serializing on the shared lock closes that window: a
+    narration that wins the race lands under lock, so a close racing it either
+    sees the lock already held (and, once granted, sees the just-created link
+    row as real coverage) or the close finishes first and this narration finds
+    the prompt already DISMISSED and is rejected outright --
+    ``GMPromptError(_MSG_RESOLVED)``, no link row created. The Interaction
+    itself was already created by the caller and is still delivered by its own
+    send path regardless; only the LINK (and the "this event is still being
+    narrated" signal it carries) is refused once the prompt has closed.
     """
+    if prompt.status != GMPromptStatus.PENDING:
+        # Covers both an already-NARRATED prompt (the case this ruling is
+        # named for) and an already-DISMISSED one (a narration arriving well
+        # after close) -- either way it's not the first, PENDING-resolving
+        # narration the branch below handles, so it must take the lock.
+        with transaction.atomic():
+            siblings = list(
+                GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group)
+            )
+            this = next(s for s in siblings if s.pk == prompt.pk)
+            if this.status not in _NARRATABLE_STATUSES:
+                raise GMPromptError(_MSG_RESOLVED)
+            link = GMPromptNarration.objects.create(
+                prompt=prompt, interaction=interaction, interaction_timestamp=interaction.timestamp
+            )
+            interaction.cached_prompt_narrations = [link]
+        return link
+
     with transaction.atomic():
         link = GMPromptNarration.objects.create(
             prompt=prompt, interaction=interaction, interaction_timestamp=interaction.timestamp

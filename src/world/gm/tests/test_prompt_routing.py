@@ -9,9 +9,10 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMPromptGroup, GMPromptKind, GMPromptStatus
 from world.gm.exceptions import GMPromptError
 from world.gm.factories import GMPromptFilterFactory
-from world.gm.models import GMPrompt
+from world.gm.models import GMPrompt, GMPromptNarration
 from world.gm.prompt_services import (
     dismiss_gm_prompt,
+    expire_scene_prompts,
     link_prompt_narration,
     prompt_recipients,
     route_narratable_event,
@@ -157,7 +158,11 @@ class RouteNarratableEventTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             dismiss_gm_prompt(prompt, resolver=self.gm)
         broadcast.assert_called_once_with(
-            self.sheet.character, "a wonder occurs", scene=self.scene, scene_scoped_push=True
+            self.sheet.character,
+            "a wonder occurs",
+            scene=self.scene,
+            scene_scoped_push=True,
+            push_live=True,
         )
 
     def test_release_uses_prompts_own_scene_not_characters_current_location(self):
@@ -244,6 +249,34 @@ class RouteNarratableEventTest(TestCase):
 
         push.assert_called_once()
         self.assertEqual(push.call_args.kwargs.get("location"), scene_room)
+
+    @mock.patch("world.scenes.interaction_services.push_interaction")
+    def test_release_into_location_less_scene_is_recorded_never_pushed(self, push):
+        """#4101 fix round 3 (ruling N3): a scene with no location (a Battle,
+        ADR-0081) never falls back to the writer's current room for the live
+        push -- it is recorded (the Interaction row exists) and nothing more.
+        The character here DOES have a real current location, proving this is
+        a genuine guard against ``push_interaction``'s own fallback and not
+        merely a side effect of the character having nowhere to stand."""
+        from evennia_extensions.factories import RoomProfileFactory
+
+        scene = SceneFactory(location=None)
+        SceneGMParticipationFactory(scene=scene, account=self.gm)
+        self.sheet.character.location = RoomProfileFactory().objectdb
+
+        prompt = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            )
+        )[0]
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
+
+        push.assert_not_called()
+        self.assertTrue(Interaction.objects.filter(content="a wonder occurs", scene=scene).exists())
 
     def test_failed_resolve_restores_pending_status_and_a_later_dismiss_still_sends(self):
         """#4101 fix round 2: if the database write inside the resolve-and-
@@ -451,8 +484,58 @@ class SiblingReleaseTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             dismiss_gm_prompt(prompt, resolver=self.gm_a)
         broadcast.assert_called_once_with(
-            self.sheet.character, "the floor groans", scene=self.scene, scene_scoped_push=True
+            self.sheet.character,
+            "the floor groans",
+            scene=self.scene,
+            scene_scoped_push=True,
+            push_live=True,
         )
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_expire_scene_prompts_closes_narrated_and_releases_uncovered_once(self, narrate):
+        """#4101 fix round 3 (N2 test 1): expire_scene_prompts must close a
+        NARRATED prompt too, not just PENDING ones -- a GM who covered the
+        room line, then the scene ends before they send the private line,
+        must still get that uncovered line released exactly once. Fails if
+        the expire query's ``status__in`` is reverted to PENDING-only (the
+        prompt would stay NARRATED forever and the vision would never go
+        out)."""
+        prompt = self._crossing_prompt()
+        room_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the floor groans")
+        link_prompt_narration(prompt, room_interaction)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            expired = expire_scene_prompts(self.scene)
+
+        self.assertEqual(expired, 1)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        narrate.assert_called_once_with(self.sheet.character, "the vision", scene=self.scene)
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_a_narrates_room_b_dismisses_a_closes_releases_private_once(self, narrate):
+        """#4101 fix round 3 (N2 test 3): A narrates the room line (A ->
+        NARRATED, stays open); B dismisses (B -> DISMISSED, but A is still
+        open so nothing releases yet); A then closes -- only now does the
+        event fully close, and the uncovered private line releases exactly
+        once, never on B's earlier dismiss."""
+        prompt_a, prompt_b = self._two_gm_prompts(
+            room_text="a wonder occurs", private_text="the vision"
+        )
+        room_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="a wonder occurs")
+        link_prompt_narration(prompt_a, room_interaction)
+        prompt_a.refresh_from_db()
+        self.assertEqual(prompt_a.status, GMPromptStatus.NARRATED)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt_b, resolver=self.gm_b)
+        narrate.assert_not_called()  # A is still open (NARRATED); event not closed yet
+
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt_a, resolver=self.gm_a)
+        narrate.assert_called_once_with(self.sheet.character, "the vision", scene=self.scene)
 
     def test_live_push_reaches_only_the_addressed_gm(self):
         """``route_narratable_event``'s ``transaction.on_commit`` push (#4101)
@@ -480,3 +563,23 @@ class SiblingReleaseTest(TestCase):
 
         self.gm_a.msg.assert_called_once()
         owner.msg.assert_not_called()
+
+    def test_narration_after_close_is_rejected_not_double_linked(self):
+        """#4101 fix round 3 (ruling N6): a narration arriving for a prompt
+        that has ALREADY closed is rejected outright (``GMPromptError``), not
+        silently linked -- the sibling lock serializes it against the close
+        that already ran, so it can never race a concurrent coverage check
+        into a double-send."""
+        prompt = self._crossing_prompt()
+        room_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the floor groans")
+        link_prompt_narration(prompt, room_interaction)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm_a)
+
+        late_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="too late")
+        with self.assertRaises(GMPromptError):
+            link_prompt_narration(prompt, late_interaction)
+        self.assertFalse(GMPromptNarration.objects.filter(interaction=late_interaction).exists())
