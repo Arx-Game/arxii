@@ -548,6 +548,87 @@ describe('useGameSocket disconnect (#3818 "Leave the world")', () => {
   });
 });
 
+describe('useGameSocket typed quit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  // The server closes the socket for a typed `quit` with code 1000 and the
+  // command's own reason. The code alone is a remote close like any other
+  // (#4007 reconnects those); the reason is the server saying the player left.
+  it.each(['quit', 'quit/all'])(
+    'a close the server gives the reason %s for leaves the world and never reconnects',
+    async (reason) => {
+      const { result } = renderHook(() => useGameSocket());
+      await act(async () => {
+        await result.current.connect('Aria');
+      });
+      const socket = MockWebSocket.instances[0];
+
+      act(() => {
+        socket.dispatch('close', { code: 1000, reason });
+      });
+
+      expect(mockDispatch).toHaveBeenCalledWith({ type: 'game/endSession', payload: 'Aria' });
+      expect(mockDispatch).toHaveBeenCalledWith({ type: 'game/resetGame', payload: undefined });
+      expect(mockDispatch).not.toHaveBeenCalledWith({
+        type: 'game/setSessionLifecycle',
+        payload: { character: 'Aria', lifecycleState: 'reconnecting' },
+      });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['account'] });
+      expect(mockNavigate).toHaveBeenCalledWith('/hall');
+
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(MockWebSocket.instances).toHaveLength(1);
+    }
+  );
+
+  it('leaves another character in the world', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+      await result.current.connect('Bram');
+    });
+    const [ariaSocket] = MockWebSocket.instances;
+
+    act(() => {
+      ariaSocket.dispatch('close', { code: 1000, reason: 'quit' });
+    });
+
+    expect(mockDispatch).toHaveBeenCalledWith({ type: 'game/endSession', payload: 'Aria' });
+    expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'game/endSession', payload: 'Bram' });
+    expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'game/resetGame', payload: undefined });
+  });
+
+  it('still reconnects a normal close that carries any other reason', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].dispatch('close', { code: 1000, reason: 'idle timeout' });
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
 describe('useGameSocket remote close recovery (#4007)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -41,7 +41,10 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
 scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
-  when the reader was already at the bottom for that tab. **The room tab is
+  when the reader was already at the bottom for that tab. Following the newest
+  line between switches is `hooks/useStickToBottom.ts`'s (see its entry below);
+  the tab-switch effect only tells it, through `pinnedRef`, where the switch
+  left the reader. **The room tab is
   the one exception** (#3759): `ThreadedNarrativeReader.tsx` owns restoring
   its own pose-identity anchor for the room view, so this Map's own restore
   only applies there once it already holds a 'room' entry (i.e. from the
@@ -260,11 +263,43 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   `true`) must be `false` whenever a non-room conversation tab is the one
   actually on screen, since `conversationKey` is always scoped to the scene
   regardless of tab — GameWindow passes `activeConvKey === 'room'`.
+  Chronological scrolls inside its own container, so it calls `useStickToBottom`
+  itself for that container; `restoreChronoAnchor` clears the hook's `pinnedRef`
+  when it puts the reader back on a saved row.
 - **`ExplorationReader.tsx`**: The no-scene reader. Room facts stay structured
   (name, description); below them one `Activity` list of the room's ambient
   interactions and the session's notes, ordered by time through `feedRows.ts`.
   An ambient row's body is the server's `line` (#3858) through
   `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`.
+  It owns its scroll container and follows its newest line through
+  `useStickToBottom`.
+- **`hooks/useStickToBottom.ts`**: The one rule for every feed: the newest line
+  stays in view while the reader is at the bottom, and a reader who scrolled up
+  is left where they are until they come back down. It watches the content's
+  **size** with a `ResizeObserver`, never a count of poses: a feed also grows
+  when a note arrives, when a virtualised row is measured taller than its
+  estimate and when an image loads, and the count-based effect this replaced
+  followed none of those (and the quiet-room reader had no following at all).
+  **Only the reader unpins it**: a move up that follows a wheel turn, a touch, a
+  key press, or a pointer held on the scrollbar. Distance from the bottom alone
+  proves nothing (the event from an earlier follow can fire after the next line
+  landed), and neither does a move up alone: a virtualised list pulls the
+  position up by itself when rows measure shorter than their estimate. Treating
+  that as the reader scrolling stopped Chronological following in about one
+  browser run in two, with every jsdom test green; `e2e/feed-follow.spec.ts`
+  found it, and only when repeated. Callers: `GameWindow` (the scene feed's container;
+  off for a reference view), `ExplorationReader`, and `ThreadedNarrativeReader`
+  for Chronological's inner container. A caller that places the reader itself
+  (a tab switch, a restored anchor) writes `pinnedRef`. Tests fire the observer
+  by hand through `test/utils/resizeObserver.ts`, since jsdom lays nothing out.
+- **`DisplaySettings.tsx`**: The per-account reading controls in the sidebar; it
+  writes the preferences to CSS variables on `<html>`. **The text fills the story
+  pane by default**: `--play-reading-measure` is `none` unless the player sets
+  Line length to Limited (`limitMeasure`), which caps the column at `measure`
+  characters and centres it. Every reader's column is
+  `max-w-[var(--play-reading-measure,none)]`. The cap used to be always on at
+  90ch, which on a wide window left hundreds of pixels empty on both sides of
+  the text.
 - **`FeedChipStrip.tsx`**: The strip above the column (#3856 PR 2): one plain label
   per chip (`aria-pressed` = All and on; a "new" pill from `chipUnread`), `+`
   while a custom chip can still be added, All at the right end. Left click

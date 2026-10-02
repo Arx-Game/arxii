@@ -11,9 +11,10 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
   const { preferences, update, storageWarning } = usePlayPreferences(accountId);
   useEffect(() => {
     document.documentElement.style.setProperty('--play-prose-size', `${preferences.proseSize}px`);
+    // `none` is no cap at all: the readers' column fills the story pane.
     document.documentElement.style.setProperty(
       '--play-reading-measure',
-      `${preferences.measure}ch`
+      preferences.limitMeasure ? `${preferences.measure}ch` : 'none'
     );
     document.documentElement.style.setProperty(
       '--play-prose-family',
@@ -50,17 +51,30 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
           />
         </label>
         <label className="flex min-h-11 items-center justify-between gap-2">
-          Measure{' '}
-          <input
-            aria-label="Reading measure"
-            className="h-11"
-            type="range"
-            min="72"
-            max="110"
-            value={preferences.measure}
-            onChange={(event) => update({ measure: Number(event.target.value) })}
-          />
+          Line length{' '}
+          <select
+            aria-label="Line length"
+            value={preferences.limitMeasure ? 'limited' : 'full'}
+            onChange={(event) => update({ limitMeasure: event.target.value === 'limited' })}
+          >
+            <option value="full">Full width</option>
+            <option value="limited">Limited</option>
+          </select>
         </label>
+        {preferences.limitMeasure && (
+          <label className="flex min-h-11 items-center justify-between gap-2">
+            Measure{' '}
+            <input
+              aria-label="Reading measure"
+              className="h-11"
+              type="range"
+              min="72"
+              max="110"
+              value={preferences.measure}
+              onChange={(event) => update({ measure: Number(event.target.value) })}
+            />
+          </label>
+        )}
         <label className="flex min-h-11 items-center justify-between gap-2">
           Font{' '}
           <select

@@ -40,6 +40,17 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   Page Lifecycle `resume` event, or a heartbeat timer that went silent for
   `FROZEN_GAP_MS`. Time spent in another window is not evidence and must never
   trigger it. The test mock rejects illegal close codes the way a browser does.
+- **A typed `quit` leaves the world.** Every close the server makes is reconnected
+  (#4007: a close code never says who meant it), with one exception: the server
+  closes a `quit` with the reason Evennia's `CmdQuit` gave the disconnect (`quit`,
+  or `quit/all`), and the close handler reads `event.reason` against
+  `SERVER_QUIT_CLOSE_REASONS` in `types.ts`. A match does what "Leave the world"
+  (#3818) does: no reconnect, `endSession`, the account refetch, and `/hall`. Before
+  this the backoff reconnected a second later and re-puppeted, so `quit` printed its
+  farewell and nothing else happened. **The server side pins this:**
+  `src/web/tests/test_quit_close_reason_parity.py` runs the command and fails when
+  its reasons and the client's set differ, or when the Portal stops sending the
+  reason on the close frame.
 - **Three tags drop a `text` frame** (#3933, ADR-0306). `dispatchLegacyText` adds no
   note when the frame's kwargs carry `interaction_echo: true` (the structured
   Interaction pushed alongside it is the render), `type: 'lifecycle'` (a puppet

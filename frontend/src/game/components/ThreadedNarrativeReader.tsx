@@ -13,6 +13,7 @@ import {
   usePlayPreferences,
 } from '../playPreferences';
 import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
+import { useStickToBottom } from '../hooks/useStickToBottom';
 import { markConversationRead } from '../playQueries';
 import { excerptOf } from '@/lib/formatParser';
 import { useViewerPersonaId } from '@/roster/persona';
@@ -762,7 +763,19 @@ export function ThreadedNarrativeReader({
     accessiblePage * ACCESSIBLE_PAGE_SIZE,
     (accessiblePage + 1) * ACCESSIBLE_PAGE_SIZE
   );
-  const chronoParentRef = useRef<HTMLDivElement>(null);
+  const chronoParentRef = useRef<HTMLDivElement | null>(null);
+  // Chronological scrolls inside its own container, so keeping its newest row
+  // in view is this reader's job; in Threads the container is GameWindow's,
+  // and so is the following. Off for a reference, which reads history.
+  const chronoStick = useStickToBottom(chronological && !readOnly);
+  const attachChronoContainer = chronoStick.containerRef;
+  const setChronoParent = useCallback(
+    (element: HTMLDivElement | null) => {
+      chronoParentRef.current = element;
+      attachChronoContainer(element);
+    },
+    [attachChronoContainer]
+  );
   const chronoVirtualizer = useVirtualizer({
     count: chronoRows.length,
     getScrollElement: () => chronoParentRef.current,
@@ -1015,6 +1028,9 @@ export function ThreadedNarrativeReader({
     // Deliberately reduced scope (see file-level note above the
     // Chronological branch below): restores to the nearest loaded index at
     // the top of the viewport, not the exact recorded pixel offset.
+    // The reader is back where they stopped, which is not the newest row:
+    // say so, or the next row to arrive would pull them to the bottom.
+    chronoStick.pinnedRef.current = false;
     chronoVirtualizer.scrollToIndex(idx, { align: 'start' });
   };
 
@@ -1099,7 +1115,12 @@ export function ThreadedNarrativeReader({
     });
     return () => cancelAnimationFrame(rafId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preferences.proseSize, preferences.proseFamily, preferences.measure]);
+  }, [
+    preferences.proseSize,
+    preferences.proseFamily,
+    preferences.measure,
+    preferences.limitMeasure,
+  ]);
 
   // --- Deep-link target seek (#3759 review finding C2) ----------------------
   // `PlayContextView` hands the reference reader a fixed +-25-pose window
@@ -1293,7 +1314,7 @@ export function ThreadedNarrativeReader({
         fontFamily: 'var(--play-prose-family, ui-sans-serif)',
       }}
     >
-      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-[var(--play-density-gap,0.75rem)] px-4 py-4">
+      <div className="mx-auto w-full max-w-[var(--play-reading-measure,none)] space-y-[var(--play-density-gap,0.75rem)] px-4 py-4">
         {retention?.gap && (
           <div
             className="rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm"
@@ -1433,7 +1454,7 @@ export function ThreadedNarrativeReader({
             // less-used view. A follow-up wanting pixel parity here would
             // add that second pass once the target row's ref resolves.
             <div
-              ref={chronoParentRef}
+              ref={setChronoParent}
               onScroll={handleChronoScroll}
               data-testid="chrono-scroll-container"
               // Explicit, bounded height (#3759 review Fix round 1 CRITICAL) --
@@ -1453,7 +1474,10 @@ export function ThreadedNarrativeReader({
               // (Wave 6's original C1), now on its second occurrence.
               style={{ height: '70vh', overflow: 'auto' }}
             >
-              <div style={{ height: chronoVirtualizer.getTotalSize(), position: 'relative' }}>
+              <div
+                ref={chronoStick.contentRef}
+                style={{ height: chronoVirtualizer.getTotalSize(), position: 'relative' }}
+              >
                 {chronoVirtualizer.getVirtualItems().map((virtualRow) => {
                   const row = chronoRows[virtualRow.index];
                   if (row.type === 'note') {

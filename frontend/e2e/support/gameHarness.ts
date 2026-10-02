@@ -156,9 +156,13 @@ export async function mockRestRoutes(
  * "In world" ready state `game-entry.spec.ts` establishes. Seeds one present
  * character (Nyx, with a real dbref) and an active scene so callers can open
  * a conversation tab, or (Task 7) reach an active encounter, without a
- * second room_state round trip.
+ * second room_state round trip. `scene: false` leaves the room without one,
+ * which is the quiet-room reader instead of the scene feed.
  */
-export async function reachReadySession(page: Page): Promise<Connection[]> {
+export async function reachReadySession(
+  page: Page,
+  { scene = true }: { scene?: boolean } = {}
+): Promise<Connection[]> {
   const connections: Connection[] = [];
   // #3760 demo-fidelity review Finding 3 — the real backend's
   // `at_post_puppet` (`src/typeclasses/characters.py`) unconditionally calls
@@ -215,13 +219,15 @@ export async function reachReadySession(page: Page): Promise<Connection[]> {
       characters: [NYX],
       objects: [],
       exits: [],
-      scene: {
-        id: 1,
-        name: 'Evening in the courtyard',
-        description: '',
-        is_owner: false,
-        has_unseen_observer: false,
-      },
+      scene: scene
+        ? {
+            id: 1,
+            name: 'Evening in the courtyard',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          }
+        : null,
     },
   ]);
   lastRoomStateFrame = initialRoomState;

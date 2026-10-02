@@ -8,6 +8,11 @@ export type ReaderMode = 'threads' | 'chronological';
 export interface PlayPreferences {
   proseSize: number;
   proseFamily: 'sans' | 'serif';
+  /**
+   * Whether the reading column stops at `measure`. Off, the text fills the
+   * story pane; on, the column is `measure` characters wide and centred.
+   */
+  limitMeasure: boolean;
   measure: number;
   sidebarWidth: number;
   sidebarSide: SidebarSide;
@@ -22,6 +27,7 @@ export interface PlayPreferences {
 export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
   proseSize: 14,
   proseFamily: 'sans',
+  limitMeasure: false,
   measure: 90,
   sidebarWidth: 280,
   sidebarSide: 'right',
@@ -58,6 +64,9 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
     const normalized: PlayPreferences = {
       proseSize: clamp(value.proseSize, 12, 20, DEFAULT_PLAY_PREFERENCES.proseSize),
       proseFamily: value.proseFamily === 'serif' ? 'serif' : 'sans',
+      // Only a stored `true` limits the column: a row saved before this
+      // choice existed carries the old default measure, which nobody chose.
+      limitMeasure: value.limitMeasure === true,
       measure: clamp(value.measure, 72, 110, DEFAULT_PLAY_PREFERENCES.measure),
       sidebarWidth: clamp(value.sidebarWidth, 240, 360, DEFAULT_PLAY_PREFERENCES.sidebarWidth),
       sidebarSide: value.sidebarSide === 'left' ? 'left' : 'right',
