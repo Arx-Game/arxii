@@ -1,5 +1,6 @@
-import type { ReactNode, RefObject } from 'react';
-import { useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { isNearBottom, useStickToBottom } from '../hooks/useStickToBottom';
 import { ExplorationReader } from './ExplorationReader';
 import type { GameLifecycleState, Session } from '@/store/gameSlice';
 import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
@@ -341,7 +342,9 @@ type GameWindowFeedProps = Pick<
   | 'currentPlaceName'
 > & {
   activeConvKey: string;
-  feedScrollRef: RefObject<HTMLDivElement>;
+  /** The scene feed's scroll container, and the content inside it whose growth is followed. */
+  feedScrollRef: (element: HTMLDivElement | null) => void;
+  feedContentRef: (element: HTMLElement | null) => void;
   /** The chip strip above the column (#3856); absent in a reference view. */
   chipStrip?: ReactNode;
   /** Live-only recovery action below the chips and above conversation tabs. */
@@ -367,6 +370,7 @@ function GameWindowFeed({
   onRetryReference,
   activeConvKey,
   feedScrollRef,
+  feedContentRef,
   onFeedScroll,
   chipStrip,
   showHidden,
@@ -468,7 +472,11 @@ function GameWindowFeed({
               </div>
             )}
             {!referenceLoading && !referenceUnavailable && !referenceRetryable && (
-              <section aria-label="Roleplay" data-testid="authoritative-rp-block">
+              <section
+                aria-label="Roleplay"
+                data-testid="authoritative-rp-block"
+                ref={feedContentRef}
+              >
                 <ThreadedNarrativeReader
                   key={sceneFeed.sceneId}
                   sceneId={sceneFeed.sceneId}
@@ -570,15 +578,24 @@ export function GameWindow({
   const selectCharacter = useSelectCharacterMutation();
   const { sessions, active } = useAppSelector((state) => state.game);
 
-  // #2165 per-tab scroll: remember each tab's scroll offset, restore on
-  // switch, and stick to bottom while the reader is already at the bottom
-  // (adapted from ChatWindow's autoScroll pattern).
-  const feedScrollRef = useRef<HTMLDivElement>(null);
+  // #2165 per-tab scroll: remember each tab's scroll offset and restore it on
+  // switch. Staying on the newest line while the reader is at the bottom is
+  // `useStickToBottom`'s; the tab effect below tells it where each switch
+  // left the reader. It is off for a reference view, which reads history.
+  const feedScrollRef = useRef<HTMLDivElement | null>(null);
+  const feedStick = useStickToBottom(!reference);
+  const pinnedRef = feedStick.pinnedRef;
+  const attachFeedContainer = feedStick.containerRef;
+  const setFeedScrollElement = useCallback(
+    (element: HTMLDivElement | null) => {
+      feedScrollRef.current = element;
+      attachFeedContainer(element);
+    },
+    [attachFeedContainer]
+  );
   const allChipRef = useRef<HTMLButtonElement>(null);
   const scrollPositionsRef = useRef(new Map<string, number>());
-  const pinnedRef = useRef(true);
   const activeConvKey = conversationTabs?.activeKey ?? 'room';
-  const interactionCount = sceneFeed?.interactions.length ?? 0;
   // Threads and Chronological keep their OWN anchor slot (#3759 review
   // finding I5) -- this bypass must check whichever mode is CURRENTLY
   // active, not a single shared `anchor` field that no longer exists.
@@ -673,7 +690,7 @@ export function GameWindow({
       pinnedRef.current = false;
     } else if (saved !== undefined) {
       el.scrollTop = saved;
-      pinnedRef.current = el.scrollHeight - saved - el.clientHeight < 8;
+      pinnedRef.current = isNearBottom(el);
     } else {
       el.scrollTop = el.scrollHeight;
       pinnedRef.current = true;
@@ -692,13 +709,6 @@ export function GameWindow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConvKey, conversationTabs?.tabs, sceneFeed?.sceneId]);
 
-  useEffect(() => {
-    const el = feedScrollRef.current;
-    if (el && pinnedRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [interactionCount, activeConvKey]);
-
   const handleFeedScroll = () => {
     // Never record a position while browsing a historical reference (#3759
     // review finding I5): the reference view falls back `activeConvKey` to
@@ -712,7 +722,6 @@ export function GameWindow({
     const el = feedScrollRef.current;
     if (!el) return;
     scrollPositionsRef.current.set(activeConvKey, el.scrollTop);
-    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
   };
 
   if (characters.length === 0) {
@@ -857,7 +866,8 @@ export function GameWindow({
           onReturnToLive={onReturnToLive}
           onRetryReference={onRetryReference}
           activeConvKey={activeConvKey}
-          feedScrollRef={feedScrollRef}
+          feedScrollRef={setFeedScrollElement}
+          feedContentRef={feedStick.contentRef}
           onFeedScroll={handleFeedScroll}
           session={session}
           room={room}

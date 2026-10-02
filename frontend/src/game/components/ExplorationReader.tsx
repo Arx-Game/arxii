@@ -8,6 +8,7 @@ import { FeedNoteBlock } from './FeedNoteBlock';
 import { FeedBlockFrame } from './FeedBlockFrame';
 import { feedItemKey } from '../feedChips';
 import { interleaveNotes } from '../feedRows';
+import { useStickToBottom } from '../hooks/useStickToBottom';
 import type { RoomData } from './RoomPanel';
 
 interface ExplorationReaderProps {
@@ -48,8 +49,12 @@ export function ExplorationReader({
     () => interleaveNotes(ambientInteractions, notes),
     [ambientInteractions, notes]
   );
+  // The newest line stays in view as poses and notes arrive, until the reader
+  // scrolls up to read; this reader owns its scroll container.
+  const stick = useStickToBottom();
   return (
     <section
+      ref={stick.containerRef}
       className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
       style={{
         fontFamily: 'var(--play-prose-family, ui-sans-serif)',
@@ -58,7 +63,10 @@ export function ExplorationReader({
       aria-label="Exploration"
       data-testid="exploration-reader"
     >
-      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-[var(--play-density-gap,1.25rem)] px-4 py-6 sm:px-6">
+      <div
+        ref={stick.contentRef}
+        className="mx-auto w-full max-w-[var(--play-reading-measure,none)] space-y-[var(--play-density-gap,1.25rem)] px-4 py-6 sm:px-6"
+      >
         <header className="border-b pb-4">
           <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {isStale ? 'Last confirmed location' : 'You are here'}

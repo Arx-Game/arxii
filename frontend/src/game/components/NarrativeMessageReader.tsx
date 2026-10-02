@@ -45,7 +45,7 @@ export function NarrativeMessageReader({ messages }: NarrativeMessageReaderProps
       }}
       aria-label="World history"
     >
-      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-3 px-4 py-5">
+      <div className="mx-auto w-full max-w-[var(--play-reading-measure,none)] space-y-3 px-4 py-5">
         {messages.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center">
             <h2 className="font-serif text-xl">The world is quiet.</h2>
