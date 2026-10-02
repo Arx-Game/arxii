@@ -2,10 +2,13 @@
 
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.factories import CompanionFactory
 from world.conditions.factories import ConditionInstanceFactory
 from world.covenants.constants import RoleArchetype
+from world.gm.constants import GMPromptKind
+from world.gm.models import GMPrompt
 from world.magic.constants import AudereCeremony, GiftKind, UltimateCardKind, UltimateSource
 from world.magic.exceptions import UltimateChoiceUnavailable, UltimateRevealClosed
 from world.magic.factories import (
@@ -28,6 +31,8 @@ from world.mechanics.constants import EngagementType
 from world.mechanics.factories import CharacterEngagementFactory
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import GiftHeldRequirement, TechniqueKnownRequirement
+from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
+from world.scenes.models import Interaction
 from world.worship.factories import DevotionStandingFactory, WorshippedBeingFactory
 from world.worship.models import PatronageValence
 
@@ -432,6 +437,27 @@ class ChooseTests(_RevealFixture):
             reready = choose_ultimate(self.sheet, known_card.choice_key)
         mock_fire2.assert_not_called()
         self.assertEqual(reready.pk, known.pk)
+
+    def test_choosing_an_ultimate_prompts_the_gm(self) -> None:
+        """The reveal's pick is a narratable Audere moment for the scene GM (#4101)."""
+        scene = SceneFactory()
+        gm = AccountFactory()
+        SceneGMParticipationFactory(scene=scene, account=gm)
+        reveal = ultimate_reveal_for(self.sheet)
+        sword = next(c for c in reveal.groups[0].cards if c.category == RoleArchetype.SWORD)
+        with self.captureOnCommitCallbacks(execute=True):
+            known = choose_ultimate(self.sheet, sword.choice_key)
+        prompt = GMPrompt.objects.get(kind=GMPromptKind.AUDERE_ULTIMATE, addressed_to=gm)
+        self.assertEqual(prompt.technique, known.technique)
+        self.assertEqual(prompt.character_sheet, self.sheet)
+
+    def test_choosing_an_ultimate_with_no_gm_sends_nothing(self) -> None:
+        reveal = ultimate_reveal_for(self.sheet)
+        sword = next(c for c in reveal.groups[0].cards if c.category == RoleArchetype.SWORD)
+        with self.captureOnCommitCallbacks(execute=True):
+            choose_ultimate(self.sheet, sword.choice_key)
+        self.assertFalse(GMPrompt.objects.exists())
+        self.assertFalse(Interaction.objects.exists())
 
 
 class ChooseMajoraTests(_RevealFixture):

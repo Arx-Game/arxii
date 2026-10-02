@@ -425,9 +425,27 @@ def choose_ultimate(sheet: CharacterSheet, choice_key: str) -> KnownUltimate:
         # same-request double-submit gets, never a raw IntegrityError (#4098 fix
         # round 1, M2).
         raise UltimateRevealClosed from exc
+    transaction.on_commit(lambda: _route_ultimate_chosen(locked, technique))
     if created:
         fire_first_discoveries(locked, [technique])
     return known
+
+
+def _route_ultimate_chosen(sheet: CharacterSheet, technique: Technique) -> None:
+    """The reveal's pick is a narratable Audere moment for the scene GM (#4101)."""
+    from world.gm.constants import GMPromptKind  # noqa: PLC0415
+    from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
+    from world.gm.types import NarratableEvent  # noqa: PLC0415
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    route_narratable_event(
+        NarratableEvent(
+            kind=GMPromptKind.AUDERE_ULTIMATE,
+            scene=Scene.objects.active_for_room(sheet.character.location).first(),
+            character_sheet=sheet,
+            technique=technique,
+        )
+    )
 
 
 def readied_ultimate(sheet: CharacterSheet) -> KnownUltimate | None:

@@ -341,7 +341,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima.maximum += threshold.anima_pool_bonus
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
 
-    _broadcast_surge(character, threshold)
+    _announce_surge(character, threshold)
 
     return AudereOfferResult(
         accepted=True,
@@ -351,28 +351,41 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     )
 
 
-def _broadcast_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
-    """Announce an accepted surge to the room, when the line is authored (#3451).
+def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
+    """Prompt the scene's GMs with the surge, or emit the authored line as today.
 
-    The plain-Audere echo of the Audere Majora manifestation broadcast: an
-    authored ``surge_manifestation_text`` on the threshold config is EMITted to
-    the active scene, with ``{name}`` replaced by the character's primary-persona
-    name (falling back to the object key). Blank text = accepting stays silent —
-    the line is staff-authored content, never code-authored prose.
+    The line is the character's prepared surge text, else the threshold's
+    ``surge_manifestation_text`` (#3451), with ``{name}`` substituted. With no GM
+    and a blank line, accepting stays room-silent exactly as before (#4101).
     """
+    from world.gm.constants import GMPromptKind
+    from world.gm.prompt_services import route_narratable_event
+    from world.gm.types import NarratableEvent
+    from world.magic.services.prepared_text import resolve_surge_text
     from world.scenes.interaction_services import broadcast_scene_emit
-    from world.scenes.models import Persona
+    from world.scenes.models import Persona, Scene
 
-    text = threshold.surge_manifestation_text.strip()
-    if not text:
-        return
+    sheet = character.character_sheet
+    surge = resolve_surge_text(sheet, threshold)
     try:
         name = character.sheet_data.primary_persona.name
     except (AttributeError, Persona.DoesNotExist):
-        # Missing sheet (plain ObjectDB) or no PRIMARY persona — broadcast_scene_emit
-        # would no-op on the same condition, so there is nothing to announce.
+        return  # broadcast_scene_emit would no-op on the same condition
+    text = surge.text.replace("{name}", name)
+    if sheet is None:
+        if text:
+            broadcast_scene_emit(character, text)
         return
-    broadcast_scene_emit(character, text.replace("{name}", name))
+    route_narratable_event(
+        NarratableEvent(
+            kind=GMPromptKind.AUDERE_SURGE,
+            scene=Scene.objects.active_for_room(character.location).first(),
+            character_sheet=sheet,
+            room_text=text,
+            prepared_for_character=surge.prepared,
+        ),
+        deliver_unprompted=(lambda: broadcast_scene_emit(character, text)) if text else None,
+    )
 
 
 def end_audere(character: ObjectDB) -> None:
