@@ -25,6 +25,7 @@ from world.gm.constants import (
 )
 from world.gm.exceptions import GMPromptError
 from world.gm.models import GMPrompt, GMPromptFilter, GMPromptNarration
+from world.roster.selectors import get_account_for_character
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import (
     broadcast_scene_emit,
@@ -141,13 +142,12 @@ def recipients_excluding_subject(
     the gate can withhold a line that the real routing later decides nobody
     was ever going to see, delaying it for no reason.
 
-    ``sheet.character.active_account`` (#4101 fix round 3, ruling R7.3-3) is
-    the existing cached CharacterSheet -> RosterEntry -> current RosterTenure ->
-    PlayerData -> Account walk (``typeclasses/characters.py``) -- reused rather
-    than a second inline copy of the same walk.
+    The subject's player is ``get_account_for_character`` (the roster's active
+    tenure walk). It works on any character object, not only the ``Character``
+    typeclass, which is the only one with ``active_account``.
     """
     recipients = prompt_recipients(scene, kind, candidates=candidates)
-    subject_account = sheet.character.active_account if sheet is not None else None
+    subject_account = get_account_for_character(sheet.character) if sheet is not None else None
     if subject_account is not None:
         recipients = [a for a in recipients if a.pk != subject_account.pk]
     return recipients
