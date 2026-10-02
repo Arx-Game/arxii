@@ -306,6 +306,49 @@ def _apply_on_use_pool(template: ItemTemplate, user: ObjectDB, context: Resoluti
     return pending.check_result, applied
 
 
+def validate_item_use_bound(*, item_instance: ItemInstance, user: ObjectDB) -> None:
+    """Reject unusable, depleted or unattuned items without choosing inputs."""
+    template = item_instance.template
+    if (
+        template.on_use_pool_id is None
+        and not template.appearance_effects.exists()
+        and not template.disguise_kit_effects.exists()
+    ):
+        raise ItemNotUsable
+    if template.is_consumable and item_instance.charges <= 0:
+        raise NoChargesRemaining
+    if template.requires_attunement:
+        acting_sheet = user.character_sheet
+        acting_sheet_pk = acting_sheet.pk if acting_sheet is not None else None
+        if item_instance.attuned_to_character_sheet_id != acting_sheet_pk:
+            raise ItemNotAttuned
+
+
+def validate_item_use_target(
+    *, item_instance: ItemInstance, user: ObjectDB, target: ObjectDB | None
+) -> None:
+    """Retain cosmetic consent; its category lookup can lazily create a row."""
+    if item_instance.template.appearance_effects.exists() and target is not None and target != user:
+        _require_makeover_consent(user, target)
+
+
+def validate_item_use_option(
+    *, item_instance: ItemInstance, user: ObjectDB, option_id: int | None
+) -> FormTraitOption | None:
+    """Resolve the existing first choose-at-use option and actor knowledge."""
+    if not item_instance.template.appearance_effects.exists():
+        return None
+    chosen_option = _resolve_choose_at_use_option(item_instance.template, option_id)
+    _require_style_knowledge(user, chosen_option)
+    return chosen_option
+
+
+def validate_item_use_blend(*, item_instance: ItemInstance, blend: bool) -> None:
+    """Check all cosmetic traits support the existing requested blend."""
+    if blend and item_instance.template.appearance_effects.exists():
+        _require_blendable(item_instance.template)
+
+
 def _run_pre_charge_gates(
     *,
     locked: ItemInstance,
@@ -314,47 +357,13 @@ def _run_pre_charge_gates(
     option_id: int | None,
     blend: bool,
 ) -> FormTraitOption | None:
-    """Every refusal that must land BEFORE a charge is spent, and the chosen option.
-
-    Each of these raises rather than burning a use: an unusable or spent item, an
-    unattuned holder, a target who has not consented to being restyled, a missing
-    or mismatched choose-at-use option, an exotic style the actor does not know,
-    and a blend request against a trait with no composite option. Returns the
-    resolved choose-at-use option (None for a fixed-option or non-cosmetic
-    template) for the caller to hand to the appearance effects.
-    """
-    template = locked.template
-    has_appearance_effects = template.appearance_effects.exists()
-    has_disguise_kit_effects = template.disguise_kit_effects.exists()
-    if (
-        template.on_use_pool_id is None
-        and not has_appearance_effects
-        and not has_disguise_kit_effects
-    ):
-        raise ItemNotUsable
-    if template.is_consumable and locked.charges <= 0:
-        raise NoChargesRemaining
-
-    # Attunement gate (#3430): requires_attunement templates are inert for a holder
-    # the instance isn't attuned to — resolve the acting sheet from the user ObjectDB
-    # (character_sheet is None for a sheet-less actor, which never matches a real
-    # attuned_to_character_sheet_id).
-    if template.requires_attunement:
-        acting_sheet = user.character_sheet
-        acting_sheet_pk = acting_sheet.pk if acting_sheet is not None else None
-        if locked.attuned_to_character_sheet_id != acting_sheet_pk:
-            raise ItemNotAttuned
-
-    if not has_appearance_effects:
+    """Run every existing service refusal in order before effects or charges."""
+    validate_item_use_bound(item_instance=locked, user=user)
+    if not locked.template.appearance_effects.exists():
         return None
-
-    # Styling someone else (#2632): a refused makeover never burns a dye.
-    if target is not None and target != user:
-        _require_makeover_consent(user, target)
-    chosen_option = _resolve_choose_at_use_option(template, option_id)
-    _require_style_knowledge(user, chosen_option)
-    if blend:
-        _require_blendable(template)
+    validate_item_use_target(item_instance=locked, user=user, target=target)
+    chosen_option = validate_item_use_option(item_instance=locked, user=user, option_id=option_id)
+    validate_item_use_blend(item_instance=locked, blend=blend)
     return chosen_option
 
 
