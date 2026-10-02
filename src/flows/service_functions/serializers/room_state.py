@@ -15,7 +15,48 @@ _EXITS_KIND = "exits"
 
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.instances.models import InstancedRoom
+
+
+def exit_hidden_from_viewer(
+    exit_obj: ObjectDB,
+    viewer: ObjectDB,
+    instance_by_room_id: dict[int, InstancedRoom] | None = None,
+) -> bool:
+    """Check the existing publication and instance-entrance visibility gates.
+
+    Args:
+        exit_obj: An already scoped Exit typeclass object.
+        viewer: The actual viewing character.
+        instance_by_room_id: The payload's complete destination-instance map,
+            or None for a single-target read. An empty map means no instances,
+            not permission to perform a fallback lookup.
+
+    Returns:
+        True when the destination is hidden from this viewer. This does not
+        check concealment, room membership or ordinary traversal blockers.
+    """
+    destination = exit_obj.destination
+    if destination is None:
+        return False
+    if instance_by_room_id is None:
+        from behaviors.instance_entrance_package import entrance_refuses  # noqa: PLC0415
+
+        if entrance_refuses(destination, viewer):
+            return True
+    else:
+        instance = instance_by_room_id.get(destination.pk)
+        if instance is not None:
+            from behaviors.instance_entrance_package import instance_refuses  # noqa: PLC0415
+
+            if instance_refuses(instance, viewer):
+                return True
+    if viewer.is_story_runner:
+        return False
+    profile = destination.room_profile_or_none
+    return profile is not None and profile.published_at is None
 
 
 class ObjectStateSerializer(serializers.Serializer):
@@ -195,38 +236,8 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         caller: BaseState,
         instance_by_room_id: dict[int, InstancedRoom],
     ) -> bool:
-        """True when ``exit_state`` leads to a room ``caller`` can't see into.
-
-        Two independent gates, each mirroring an ``ExitState.can_traverse``
-        refusal (not just unenterable, invisible):
-
-        #3477 — the publish gate: an unpublished room does not exist in the
-        live world, so its exits are omitted from the room payload for anyone
-        but a story-runner (GM/Staff, ``is_story_runner``).
-
-        #696 gap 7 — the instance-entrance gate: a doorway into an instanced
-        room is hidden from any looker the entrance package would refuse
-        (only run participants and the GM owner see it - no story-runner
-        bypass; this gate matches the package exactly). ``instance_by_room_id``
-        is the room's one batched ``InstancedRoom`` lookup (``_serialize_contents``),
-        so an ordinary exit costs no query here.
-        """
-        # A dangling one-way exit can have a null destination (nullable FK) —
-        # ``.destination`` itself is always a real Exit property (ExitState
-        # only ever wraps an Exit typeclass, see typeclasses.exits.Exit).
-        destination = exit_state.obj.destination
-        if destination is None:
-            return False
-        instance = instance_by_room_id.get(destination.pk)
-        if instance is not None:
-            from behaviors.instance_entrance_package import instance_refuses  # noqa: PLC0415
-
-            if instance_refuses(instance, caller.obj):
-                return True
-        if caller.obj.is_story_runner:
-            return False
-        profile = destination.room_profile_or_none
-        return profile is not None and profile.published_at is None
+        """Delegate to the shared policy using the payload's batched instances."""
+        return exit_hidden_from_viewer(exit_state.obj, caller.obj, instance_by_room_id)
 
     def _batched_instances(self, content_states: list[BaseState]) -> dict[int, InstancedRoom]:
         """The InstancedRoom record behind each exit's destination, keyed by room pk.
