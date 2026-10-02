@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -12,6 +14,12 @@ from evennia_extensions.factories import (
     ObjectDBFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import register_detection
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     ItemInstanceFactory,
@@ -143,6 +151,56 @@ class _VisibleWornSetupMixin:
         )
 
         self.client = APIClient()
+
+
+class VisibleWornObserverPrivacyTests(_VisibleWornSetupMixin, TestCase):
+    def test_concealed_wearer_is_empty_before_enumeration_then_detected_is_visible(self):
+        category = ConditionCategoryFactory(conceals_from_perception=True)
+        template = ConditionTemplateFactory(category=category)
+        ConditionInstanceFactory(target=self.character_a, condition=template)
+        self.client.force_authenticate(user=self.account_b)
+        url = (
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_b.pk}"
+        )
+        with patch("world.items.views.visible_worn_items_for") as layers:
+            response = self.client.get(url)
+            assert response.status_code == 200
+            assert response.data == []
+            layers.assert_not_called()
+        absent = self.client.get(
+            f"/api/items/visible-worn/?character=999999999&observer={self.character_b.pk}"
+        )
+        assert absent.status_code == response.status_code
+        assert absent.data == response.data
+        register_detection(self.sheet_b, self.character_a)
+        assert {row["id"] for row in self.client.get(url).data} == {self.coat.pk}
+
+    def test_unlocated_other_characters_are_not_a_shared_room(self):
+        self.character_a.location = None
+        self.character_b.location = None
+        self.client.force_authenticate(user=self.account_b)
+        response = self.client.get(
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_b.pk}"
+        )
+        assert response.status_code == 200
+        assert response.data == []
+
+    def test_concealment_keeps_self_and_staff_bypasses(self):
+        category = ConditionCategoryFactory(conceals_from_perception=True)
+        template = ConditionTemplateFactory(category=category)
+        ConditionInstanceFactory(target=self.character_a, condition=template)
+        self.client.force_authenticate(user=self.account_a)
+        response = self.client.get(
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_a.pk}"
+        )
+        assert {row["id"] for row in response.data} == {self.shirt.pk, self.coat.pk}
+        staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff)
+        response = self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
+        assert {row["id"] for row in response.data} == {self.shirt.pk, self.coat.pk}
 
 
 class VisibleWornItemViewSetTests(_VisibleWornSetupMixin, TestCase):

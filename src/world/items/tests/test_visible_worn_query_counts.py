@@ -186,26 +186,22 @@ class VisibleWornListEndpointQueryCountTests(_SharedSetupMixin, TestCase):
     """Lock in the query count for ``GET /api/items/visible-worn/?character=N``."""
 
     def test_same_room_observer_query_count(self) -> None:
-        """Same-room observer (account B looking at character A).
+        """Same-room observer pays for session and current wearer concealment.
 
-        After warm-up, the endpoint runs exactly one query — the DRF
-        session lookup. The two ``ObjectDB.objects.get(pk=...)`` calls
-        (target + observer) hit the SharedMemoryModel identity map and
-        return cached instances; ``visible_worn_items_for`` reads from
-        the cached equipment handler. No RosterEntry walks.
-
-        Pinning at 1 guards against new N+1 patterns sneaking into the
-        request path.
+        After warm-up, the endpoint runs exactly two queries: the session lookup
+        and the active-concealment EXISTS check for the wearer. Target/observer
+        ObjectDB lookups hit the identity map, and equipment reads the warmed
+        handler. The concealment query is intentionally repeated per request;
+        warmed equipment must not authorize a newly concealed wearer.
         """
         self.client.force_authenticate(user=self.account_b)
         url = (
             f"/api/items/visible-worn/?character={self.character_a.pk}"
             f"&observer={self.character_b.pk}"
         )
-        # Warm-up call (loads session, equipment handler, etc.).
         self.client.get(url)
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

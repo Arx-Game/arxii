@@ -16,6 +16,12 @@ from evennia_extensions.factories import (
     ObjectDBFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import register_detection
 from world.forms.constants import MarkingKind
 from world.forms.services.markings import grant_marking
 from world.items.constants import BodyRegion, EquipmentLayer
@@ -90,6 +96,26 @@ class VisibleMarkingsAPITests(TestCase):
             equipment_layer=EquipmentLayer.BASE,
         )
         self.character_a.equipped_items.invalidate()
+
+    def test_concealed_wearer_is_empty_and_detection_restores_markings(self):
+        category = ConditionCategoryFactory(conceals_from_perception=True)
+        template = ConditionTemplateFactory(category=category)
+        ConditionInstanceFactory(target=self.character_a, condition=template)
+        self.client.force_authenticate(user=self.account_b)
+        response = self.client.get(self._url(self.character_b.pk))
+        assert response.status_code == 200
+        assert response.json() == []
+        absent = self.client.get(
+            f"/api/items/visible-markings/?character=999999999&observer={self.character_b.pk}"
+        )
+        assert absent.status_code == response.status_code
+        assert absent.json() == response.json()
+        register_detection(self.character_b.character_sheet, self.character_a)
+        names = {row["name"] for row in self.client.get(self._url(self.character_b.pk)).json()}
+        assert "a coiled serpent tattoo" in names
+        self.client.force_authenticate(user=self.account_a)
+        names = {row["name"] for row in self.client.get(self._url(self.character_a.pk)).json()}
+        assert "a coiled serpent tattoo" in names
 
     def test_same_room_observer_sees_bare_marking(self):
         self.client.force_authenticate(user=self.account_b)

@@ -26,6 +26,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from core_management.permissions import PlayerOrStaffPermission
 from world.character_sheets.models import CharacterSheet
+from world.conditions.services import can_perceive
 from world.items.exceptions import (
     CraftingNotConfigured,
     ItemError,
@@ -1274,7 +1275,7 @@ class VisibleWornItemViewSet(viewsets.ViewSet):
 
     - Staff: full visibility (no observer required).
     - Non-staff: observer must belong to the requester, and either match
-      the target (self-look) or share a room with the target.
+      the target (self-look) or share a current room with and perceive the target.
 
     Out-of-scope requests return ``[]`` (200) — never 403/404 — to avoid
     leaking presence information about characters in rooms the observer
@@ -1321,8 +1322,12 @@ class VisibleWornItemViewSet(viewsets.ViewSet):
             # ``observer is character`` bypass fires.
             return _VisibleWornContext(target=target, observer=target)
 
-        # Must share a room.
+        # Other-person reads need a current room and a perceptible wearer.
+        if observer_obj.db_location_id is None:
+            return None
         if observer_obj.db_location_id != target.db_location_id:
+            return None
+        if not can_perceive(observer_obj, target):
             return None
         return _VisibleWornContext(target=target, observer=observer_obj)
 
