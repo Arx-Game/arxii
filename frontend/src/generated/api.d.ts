@@ -26510,7 +26510,12 @@ export interface components {
       }[];
       readonly slots: components['schemas']['OriginTemplateSlot'][];
     };
-    /** @description One flourish, form or price a CG pick can take (#4099). All text is authored. */
+    /**
+     * @description One flourish, form or price a CG pick can take (#4099). All text is authored.
+     *
+     *     ``consumes`` / ``inflicts`` are a price's real cost (always empty / null for a
+     *     flourish or a form), so a player sees what a price spends before choosing it.
+     */
     CGPersonalizationOption: {
       id: number;
       name: string;
@@ -26520,6 +26525,8 @@ export interface components {
       power_bonus: number;
       level: number;
       cost: number;
+      consumes: components['schemas']['CGPriceComponent'][];
+      inflicts: string | null;
     };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
@@ -26532,6 +26539,11 @@ export interface components {
       xp_conversion_rate?: number;
       /** @description Whether this budget is currently active */
       is_active?: boolean;
+    };
+    /** @description One item a price consumes on every cast that pays it (#4099). Authored name. */
+    CGPriceComponent: {
+      name: string;
+      quantity: number;
     };
     /**
      * @description Technique row for the CG technique-options list (#2426).

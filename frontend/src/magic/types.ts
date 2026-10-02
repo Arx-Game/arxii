@@ -618,11 +618,22 @@ export interface TechniqueSignature {
   intensity_delta: number;
 }
 
+/** One item a price consumes on every cast that pays it (#4099). */
+export interface TechniquePriceComponent {
+  /** The authored item template name. */
+  name: string;
+  quantity: number;
+}
+
 /** The price the owner pays to cast a technique, authored text only (#4099). */
 export interface TechniquePrice {
   name: string;
   description: string;
   power_bonus: number;
+  /** Items consumed on each cast that pays the price; empty when none. */
+  consumes: TechniquePriceComponent[];
+  /** The authored name of the condition each paid cast inflicts, or null. */
+  inflicts: string | null;
 }
 
 /** The next flourish weaving a technique's thread will unlock (#4099). */

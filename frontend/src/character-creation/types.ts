@@ -8,7 +8,7 @@ export type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
 
 // Single definition lives in the magic module (#2898) — every technique
 // surface imports the same shape rather than re-declaring it.
-import type { TechniqueEffectSummary } from '@/magic/types';
+import type { TechniqueEffectSummary, TechniquePriceComponent } from '@/magic/types';
 export type { TechniqueEffectSummary } from '@/magic/types';
 
 // Reused for FamilyTemplate below: the house-claim template shape
@@ -609,7 +609,9 @@ export interface TechniquePersonalizationPick {
 
 /**
  * One flourish, form or price a "make it yours" pick can take (#4099). All
- * text (`name`, `gloss`) is staff-authored.
+ * text (`name`, `gloss`, a component's name, `inflicts`) is staff-authored.
+ * `consumes` / `inflicts` are a price's real cost: empty / null for a flourish
+ * or a form.
  * From GET /api/character-creation/drafts/<id>/personalization-options/
  */
 export interface PersonalizationOption {
@@ -621,6 +623,8 @@ export interface PersonalizationOption {
   power_bonus: number;
   level: number;
   cost: number;
+  consumes: TechniquePriceComponent[];
+  inflicts: string | null;
 }
 
 /**

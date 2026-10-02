@@ -18,6 +18,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { priceCostParts } from '@/magic/priceCost';
 import { Field } from '../../folio';
 import { characterCreationKeys, useUpdateDraft } from '../../queries';
 import type {
@@ -67,12 +68,17 @@ function formatCost(cost: number): string {
   return cost === 1 ? '1 pt' : `${cost} pts`;
 }
 
-/** "+1 intensity · +4 power" — mechanics only, never prose, never the level. */
+/**
+ * "+1 intensity · +4 power · Consumes 2× Shard of rime · Inflicts Numb" — mechanics
+ * and a price's real cost (its authored item and condition names), never prose,
+ * never the level.
+ */
 function mechanicsLine(option: PersonalizationOption): string {
   const parts: string[] = [];
   if (option.intensity_delta) parts.push(`${signed(option.intensity_delta)} intensity`);
   if (option.control_delta) parts.push(`${signed(option.control_delta)} control`);
   if (option.power_bonus) parts.push(`+${option.power_bonus} power`);
+  parts.push(...priceCostParts(option.consumes, option.inflicts));
   return parts.join(' · ');
 }
 
@@ -88,6 +94,7 @@ function SummaryRow({
   sectionKey,
   title,
   pickLabel,
+  detail,
   costLabel,
   isOpen,
   onToggle,
@@ -96,6 +103,8 @@ function SummaryRow({
   sectionKey: SectionKey;
   title: string | undefined;
   pickLabel: string;
+  /** A picked price's real cost, shown under its name while collapsed (#4099). */
+  detail?: string;
   costLabel: string | null;
   isOpen: boolean;
   onToggle: () => void;
@@ -113,6 +122,7 @@ function SummaryRow({
         <span>
           {title && <b>{title}</b>}
           <span className="g">{pickLabel}</span>
+          {detail && <span className="fx">{detail}</span>}
         </span>
         {costLabel && (
           <span className="price">
@@ -297,6 +307,7 @@ export function PersonalizationPanel({ draft, options, copy }: Props) {
         sectionKey="price"
         title={copy?.personalize_price_title}
         pickLabel={pricePick?.name ?? noneChosen}
+        detail={pricePick ? priceCostParts(pricePick.consumes, pricePick.inflicts).join(' · ') : ''}
         costLabel={pricePick ? formatCost(pricePick.cost) : null}
         isOpen={openSections.price}
         onToggle={() => toggleSection('price')}
