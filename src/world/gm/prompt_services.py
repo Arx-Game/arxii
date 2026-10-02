@@ -9,6 +9,7 @@ GMPrompt per GM and pushes it live; with none, it runs the caller's
 from __future__ import annotations
 
 from collections.abc import Callable
+import contextlib
 from typing import TYPE_CHECKING
 import uuid
 
@@ -210,10 +211,11 @@ def narration_prompt_for(
     Staff bypass the addressed-to gate, like every other GM tool (#4101 Task 3
     controller ruling) -- everything else (kind, status, scene binding) applies
     the same to staff and the addressed GM alike. ``_NARRATABLE_STATUSES``
-    includes NARRATED, not just PENDING: a prompt narrated once by its room
-    line is still narratable a second time by its private line (or vice
-    versa) -- ``EmitAction``/``PemitAction`` each resolve this independently
-    before linking their own Interaction.
+    includes NARRATED, not just PENDING: repeat narrations are allowed, NO CAP
+    BY DESIGN (#4101 fix round 1 ruling) -- a GM may add several lines to one
+    prompt (a room line, then one or more private lines to different
+    recipients), and ``EmitAction``/``PemitAction`` each resolve this
+    independently before linking their own Interaction.
     """
     from core_management.permissions import is_staff_observer  # noqa: PLC0415
 
@@ -314,26 +316,47 @@ def dismiss_gm_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> GMProm
 def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromptNarration:
     """Record ``interaction`` as narrating ``prompt`` (#4101 Task 3).
 
+    Repeat narrations are allowed, NO CAP BY DESIGN (fix round 1 ruling): a GM
+    may send several lines for one event (a room line, then one or more
+    private lines to different recipients); each is its own Interaction, each
+    gets its own ``GMPromptNarration`` row linked back to the same prompt.
+
     The FIRST narration of a still-PENDING prompt resolves it to NARRATED
     through ``_resolve_narration_prompt``, under the same per-event lock
     ``dismiss_gm_prompt``/``expire_scene_prompts`` use: the narrating sibling
     then counts as "narrated" in that function's own re-check, so the event's
-    authored defaults never release once this row exists. A SECOND narration
-    of an already-NARRATED prompt (the room line, then a separate private
-    send, or vice versa) is a plain link with no status change --
+    authored defaults never release once this row exists. A LATER narration
+    of an already-NARRATED prompt is a plain link with no status change --
     ``narration_prompt_for`` already let it through via
-    ``_NARRATABLE_STATUSES``, and re-resolving an already-NARRATED prompt
-    would just raise ``_MSG_RESOLVED`` for no reason.
+    ``_NARRATABLE_STATUSES``.
+
+    ``prompt.status`` above is read before the lock ``_resolve_narration_prompt``
+    takes, so it can be stale (fix round 1): a sibling dismiss, scene-end
+    expiry, or a second concurrent narration of the SAME prompt can resolve it
+    out from under this check between the read and the lock. When that
+    happens, ``_resolve_narration_prompt`` raises ``GMPromptError`` for a
+    prompt it finds already resolved under the lock -- a LOST RACE, not a
+    failure. The narration was already sent (the ``Interaction`` row exists),
+    so it must still be delivered: the exception is swallowed here, and the
+    link row stands regardless of which branch ran. The link-row write and the
+    resolve attempt share one ``transaction.atomic()`` block so they commit
+    together (or roll back together on a genuine ``DatabaseError``, which
+    ``_resolve_narration_prompt`` still re-raises past this function) --
+    delivery (the caller's ``record_interaction`` -> ``push_interaction``)
+    always runs after this function returns, following Task 2's
+    ``on_commit`` pattern for ``release_prompt_defaults``.
     """
-    link = GMPromptNarration.objects.create(
-        prompt=prompt, interaction=interaction, interaction_timestamp=interaction.timestamp
-    )
-    # Seed (never read back) the cache so push_interaction's peek finds it with no query.
-    interaction.cached_prompt_narrations = [link]
-    if prompt.status == GMPromptStatus.PENDING:
-        _resolve_narration_prompt(
-            prompt, new_status=GMPromptStatus.NARRATED, resolver=prompt.addressed_to
+    with transaction.atomic():
+        link = GMPromptNarration.objects.create(
+            prompt=prompt, interaction=interaction, interaction_timestamp=interaction.timestamp
         )
+        # Seed (never read back) the cache so push_interaction's peek finds it with no query.
+        interaction.cached_prompt_narrations = [link]
+        if prompt.status == GMPromptStatus.PENDING:
+            with contextlib.suppress(GMPromptError):
+                _resolve_narration_prompt(
+                    prompt, new_status=GMPromptStatus.NARRATED, resolver=prompt.addressed_to
+                )
     return link
 
 

@@ -1335,9 +1335,11 @@ class GMPromptNarration(SharedMemoryModel):
     A side row, not an Interaction column: the FK lives on the specific side
     (ADR-0010) and the partitioned Interaction table stays untouched. Composite
     reference shape per ADR-0293's named precedent, InteractionReceiver. The
-    unique constraint is on ``interaction`` only (never ``prompt``) -- one
-    prompt narrates through both an EMIT (room line) and a PEMIT (private
-    vision), each its own Interaction row linked back to the same prompt.
+    unique constraint is on ``interaction`` only (never ``prompt``) -- a GM may
+    narrate one prompt any number of times, NO CAP BY DESIGN (#4101 fix round
+    1 ruling): a room line, then one or more private lines to different
+    recipients, or several of either, each its own Interaction row linked
+    back to the same prompt.
     """
 
     prompt = models.ForeignKey(GMPrompt, on_delete=models.CASCADE, related_name="narrations")
