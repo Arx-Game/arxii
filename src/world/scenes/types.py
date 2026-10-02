@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from actions.types import PendingActionResolution
 from world.magic.types import TechniqueUseResult
@@ -39,13 +39,19 @@ class ReplyParentPayload(TypedDict):
 
 
 class NarratedEventPayload(TypedDict):
-    """The event a GM narration row belongs to (#4101) -- "part of X's Crossing"."""
+    """The event a GM narration row belongs to (#4101) -- "part of X's Crossing".
+
+    ``subject_name``/``subject_persona_id`` are omitted entirely (``NotRequired``),
+    never sent as ``""``/``None``, when no presented persona can be resolved for the
+    subject (#4101 fix round 2, ruling R9-1) -- a player-facing payload with no
+    identity to show carries ``kind``/``kind_label`` only.
+    """
 
     prompt_id: int
     kind: str
     kind_label: str
-    subject_name: str
-    subject_persona_id: int | None
+    subject_name: NotRequired[str]
+    subject_persona_id: NotRequired[int | None]
 
 
 class InteractionPayload(TypedDict):

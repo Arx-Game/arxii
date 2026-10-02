@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 from django.db.models import QuerySet
+from django.shortcuts import get_object_or_404
 import django_filters
+from rest_framework.exceptions import PermissionDenied
 
-from world.gm.constants import GMApplicationStatus, GMTableStatus, TableRequestRole
+from world.gm.constants import GMApplicationStatus, GMPromptKind, GMTableStatus, TableRequestRole
 from world.gm.models import (
     CatalogSuggestion,
     GMApplication,
     GMProfile,
+    GMPrompt,
     GMTable,
     GMTableMembership,
     StoryRoomGrant,
     TableUpdateRequest,
 )
+from world.gm.prompt_services import account_can_gm_scene, visible_prompts_for
 from world.player_submissions.constants import SubmissionStatus
+from world.scenes.models import Scene
 
 
 class GMProfileFilter(django_filters.FilterSet):
@@ -115,4 +120,39 @@ class TableUpdateRequestFilter(django_filters.FilterSet):
                 membership__persona__gm_table_memberships__left_at__isnull=True,
                 membership__persona__gm_table_memberships__table__gm__account=user,
             ).distinct()
+        return queryset
+
+
+class GMPromptQueueFilter(django_filters.FilterSet):
+    """Scene-scoped list filter for the GM prompt queue (#4101 fix round 2, finding 5).
+
+    ``scene`` is required: a missing ``?scene=`` fails the FilterSet form
+    (django-filter's ``required=True``), and ``DjangoFilterBackend`` -- with
+    its default ``raise_exception = True`` -- turns that into a 400, replacing
+    a hand-rolled "?scene= is required" check that lived in the view (the
+    ``use-filterset`` pre-commit hook forbids reading ``request.query_params``
+    directly there). The real visibility predicate still lives in
+    ``visible_prompts_for``; this FilterSet resolves the validated scene id to
+    a ``Scene`` (404 if unknown), delegates to it, narrows by ``kind``, and
+    carries the "only the scene's GM may view an empty queue" 403 that used to
+    live in the view's own ``list()`` override -- so the view now has exactly
+    one source for the queryset, ``get_queryset()``.
+    """
+
+    scene = django_filters.NumberFilter(required=True)
+    kind = django_filters.ChoiceFilter(choices=GMPromptKind.choices)
+
+    class Meta:
+        model = GMPrompt
+        fields = ["scene", "kind"]
+
+    def filter_queryset(self, queryset: QuerySet[GMPrompt]) -> QuerySet[GMPrompt]:
+        scene = get_object_or_404(Scene, pk=self.form.cleaned_data["scene"])
+        queryset = visible_prompts_for(self.request.user, scene=scene)
+        kind = self.form.cleaned_data.get("kind")
+        if kind:
+            queryset = queryset.filter(kind=kind)
+        if not queryset.exists() and not account_can_gm_scene(self.request.user, scene):
+            msg = "Only the scene's GM may view its prompts."
+            raise PermissionDenied(msg)
         return queryset

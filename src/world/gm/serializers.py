@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
 if TYPE_CHECKING:
@@ -1031,7 +1032,14 @@ class GMPromptSerializer(serializers.ModelSerializer):
 
 
 class NarrateGMPromptSerializer(serializers.Serializer):
-    """Body for ``POST .../prompts/{id}/narrate/`` (#4101): the line + its audience."""
+    """Body for ``POST .../prompts/{id}/narrate/`` (#4101): the line + its audience.
+
+    ``context["location"]`` (an ``ObjectDB`` room) gates ``audience="chosen"``: the
+    view resolves it as the prompt's own scene location, or the narrating GM's
+    current location for a scene-less prompt, and only a character physically
+    present there may be chosen -- a GM cannot privately address someone who
+    isn't in the room (#4101 fix round 2, finding 1).
+    """
 
     AUDIENCE_ROOM = "room"
     AUDIENCE_CHOSEN = "chosen"
@@ -1048,7 +1056,28 @@ class NarrateGMPromptSerializer(serializers.Serializer):
             if not personas:
                 msg = "Choose at least one person."
                 raise serializers.ValidationError(msg)
-            attrs["receivers"] = [p.character_sheet.character for p in personas]
+            location = self.context.get("location")
+            location_id = location.pk if location is not None else None
+            # One batched query, not one per persona: CharacterSheet shares
+            # ObjectDB's pk (#2608), so `character_sheet_id` IS the character's
+            # own ObjectDB pk -- no extra join needed to resolve the room.
+            present_characters = {
+                obj.pk: obj
+                for obj in ObjectDB.objects.filter(
+                    pk__in=[p.character_sheet_id for p in personas],
+                    db_location_id=location_id,
+                )
+            }
+            receivers = []
+            for persona in personas:
+                character = present_characters.get(persona.character_sheet_id)
+                if character is None:
+                    # Names no one outside the room -- a non-member of this scene
+                    # must not learn who else the GM considered.
+                    msg = "Choose someone in the room."
+                    raise serializers.ValidationError(msg)
+                receivers.append(character)
+            attrs["receivers"] = receivers
         return attrs
 
 

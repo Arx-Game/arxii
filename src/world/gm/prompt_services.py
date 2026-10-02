@@ -83,6 +83,26 @@ def account_can_gm_scene(account: AccountDB, scene: Scene) -> bool:
     return bool(account.is_staff or scene.is_gm(account) or scene.is_owner(account))
 
 
+def _prompt_visibility_query(account: AccountDB, scene: Scene) -> Q:
+    """The identity/kind/scene-permission shape ``account`` may act within -- status-agnostic.
+
+    Split out from ``visible_prompts_for`` (#4101 fix round 2, finding 6) so
+    ``prompt_visible_to`` can reuse the SAME eligibility shape without also
+    baking in the PENDING/NARRATED status filter -- an already-resolved prompt
+    (e.g. re-confirming a CONFIRMED dramatic moment) must still reach the
+    action for its own "already resolved" message, not 404 here first.
+    """
+    narration = Q(kind__in=NARRATION_PROMPT_KINDS, addressed_to=account) & (
+        Q(scene=scene) | Q(scene__isnull=True)
+    )
+    query = narration
+    if account_can_gm_scene(account, scene) and prompts_enabled(
+        account, GMPromptKind.DRAMATIC_MOMENT
+    ):
+        query |= Q(kind=GMPromptKind.DRAMATIC_MOMENT, scene=scene)
+    return query
+
+
 def visible_prompts_for(account: AccountDB, *, scene: Scene) -> QuerySet[GMPrompt]:
     """OPEN (PENDING or NARRATED) prompts ``account`` may act on in ``scene``'s queue (#4101).
 
@@ -95,21 +115,38 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene) -> QuerySet[GMPromp
     dramatic_moment prompt never reaches NARRATED in practice (only a narration
     kind transitions there), so this is a no-op widening for that half of the query.
     """
-    narration = Q(kind__in=NARRATION_PROMPT_KINDS, addressed_to=account) & (
-        Q(scene=scene) | Q(scene__isnull=True)
-    )
-    query = narration
-    if account_can_gm_scene(account, scene) and prompts_enabled(
-        account, GMPromptKind.DRAMATIC_MOMENT
-    ):
-        query |= Q(kind=GMPromptKind.DRAMATIC_MOMENT, scene=scene)
     return (
-        GMPrompt.objects.filter(query, status__in=_NARRATABLE_STATUSES)
+        GMPrompt.objects.filter(
+            _prompt_visibility_query(account, scene), status__in=_NARRATABLE_STATUSES
+        )
         .select_related(
             "character_sheet", "moment_type", "technique", "stake_outcome__stake", "scene"
         )
         .order_by("-created_at")
     )
+
+
+def prompt_visible_to(account: AccountDB, prompt: GMPrompt) -> bool:
+    """Scene-agnostic IDOR scope for a single prompt (#4101 fix round 2, finding 6).
+
+    ``confirm``/``dismiss``/``narrate`` act on one prompt by id, not a scene's
+    whole queue, so they scope their object lookup through this rather than a
+    bare ``get_object_or_404(GMPrompt, pk=pk)`` -- an id outside ``account``'s
+    visible queue must 404 regardless of kind, the same way an invisible row
+    never appears in ``GET .../prompts/?scene=``. Deliberately status-agnostic
+    (see ``_prompt_visibility_query``'s own docstring) -- re-confirming an
+    already-CONFIRMED prompt the account genuinely owns must still reach the
+    action for its "already resolved" message, not 404 here first.
+
+    A scene-less prompt is always a narration kind addressed to one GM (the
+    model's own ``gm_prompt_narration_is_addressed`` CheckConstraint), so
+    there is no dramatic_moment branch to gate and no scene to pass --
+    visibility there is just "am I the addressed GM."
+    """
+    if prompt.scene_id is not None:
+        query = _prompt_visibility_query(account, prompt.scene)
+        return GMPrompt.objects.filter(query, pk=prompt.pk).exists()
+    return prompt.kind in NARRATION_PROMPT_KINDS and prompt.addressed_to_id == account.pk
 
 
 def prompt_recipients(
@@ -220,7 +257,13 @@ def route_narratable_event(
 
 
 def prompt_subject_name(prompt: GMPrompt) -> str:
-    """The name the GM sees for who this concerns (primary persona), or ''."""
+    """The name the GM sees for who this concerns (primary persona), or ''.
+
+    GM-only (the GM prompt queue, telnet notify line): deliberately the real
+    primary persona, never masked -- a GM resolving an event needs to know who
+    it actually concerns. The player-facing sibling is ``narrated_event_payload``
+    below, which must NOT unmask a disguise (#4101 fix round 2, ruling R9-1).
+    """
     sheet = prompt.character_sheet
     if sheet is None:
         return ""
@@ -228,6 +271,25 @@ def prompt_subject_name(prompt: GMPrompt) -> str:
         return sheet.primary_persona.name
     except Persona.DoesNotExist:
         return ""
+
+
+def _presented_persona_for_narration(sheet: CharacterSheet) -> Persona | None:
+    """The face ``sheet`` is presenting as, batch-safe for the feed (#4101 R9-1).
+
+    Mirrors ``active_persona_for_sheet``'s (``world.scenes.services``) resolution
+    order -- the active persona when set, else PRIMARY -- which is the same
+    helper ``interaction_views.py`` uses to attribute a pose to the worn face
+    rather than the real identity. Not calling it directly: its PRIMARY fallback
+    is ``CharacterSheet.primary_persona``, a live ``.get()`` query, and this runs
+    once per feed row. Reads ``active_persona`` (select_related by the view's
+    ``cached_prompt_narrations`` Prefetch) and ``cached_primary_persona`` (the
+    same page-wide batched-Prefetch-with-a-named-attribute pattern
+    ``SceneEntryEndorsement.endorser_sheet__personas`` already uses in that same
+    file) instead, so this never queries.
+    """
+    if sheet.active_persona_id is not None:
+        return sheet.active_persona
+    return next(iter(sheet.cached_primary_persona), None)
 
 
 def narrated_event_payload(interaction: Interaction) -> NarratedEventPayload | None:
@@ -238,25 +300,31 @@ def narrated_event_payload(interaction: Interaction) -> NarratedEventPayload | N
     own query, which this seam must never do (it runs on every live push).
     ``link_prompt_narration`` seeds that same cache key synchronously on the
     just-created row, so the live push always finds it already populated.
+
+    ``subject_name``/``subject_persona_id`` come from the subject's PRESENTED
+    persona (``_presented_persona_for_narration``), never the real primary
+    persona (#4101 fix round 2, ruling R9-1) -- this payload reaches every
+    viewer of the interaction feed, not just the addressed GM, so unmasking a
+    disguise here would leak it to anyone watching the scene. When no sheet is
+    attached (a STAKE_OUTCOME prompt) or no presented persona can be resolved,
+    both keys are omitted entirely rather than sent empty/null -- the payload
+    then carries ``kind``/``kind_label`` only.
     """
     links = interaction.__dict__.get("cached_prompt_narrations") or []
     if not links:
         return None
     prompt = links[0].prompt
     sheet = prompt.character_sheet
-    subject_persona_id = None
-    if sheet is not None:
-        try:
-            subject_persona_id = sheet.primary_persona.pk
-        except Persona.DoesNotExist:
-            subject_persona_id = None
-    return {
+    payload: NarratedEventPayload = {
         "prompt_id": prompt.pk,
         "kind": prompt.kind,
         "kind_label": prompt.get_kind_display(),
-        "subject_name": prompt_subject_name(prompt),
-        "subject_persona_id": subject_persona_id,
     }
+    presented = _presented_persona_for_narration(sheet) if sheet is not None else None
+    if presented is not None:
+        payload["subject_name"] = presented.name
+        payload["subject_persona_id"] = presented.pk
+    return payload
 
 
 def _telnet_line(prompt: GMPrompt) -> str:
@@ -654,6 +722,7 @@ __all__ = [
     "notify_gm_prompt",
     "prompt_recipients",
     "prompt_subject_name",
+    "prompt_visible_to",
     "prompts_enabled",
     "recipients_excluding_subject",
     "release_prompt_defaults",

@@ -160,10 +160,13 @@ class DismissGMPromptAction(_DramaticMomentSuggestionActionBase):
     """The addressed GM dismisses a narration prompt; its defaults go out (#4101).
 
     Expects kwargs: ``prompt_id`` (int), ``account`` (AccountDB -- must be the
-    prompt's own ``addressed_to``). Unlike the dramatic-moment confirm/dismiss
-    actions above (scene-GM/owner/staff gated), a narration prompt is addressed
-    to one specific GM -- only that GM (or staff bypass handled inside
-    ``dismiss_gm_prompt``'s caller) may close it.
+    prompt's own ``addressed_to``, or staff). Unlike the dramatic-moment
+    confirm/dismiss actions above (scene-GM/owner/staff gated), a narration
+    prompt is addressed to one specific GM -- only that GM may close it, with
+    a staff bypass (ruling R9-2, #4101 fix round 2) matching
+    ``narration_prompt_for``'s own gate, which lets staff narrate the same
+    prompt. The bypass check lives here, in the action's own authorization
+    gate -- never in the view, which is dispatch plumbing only.
     """
 
     key: str = "dismiss_gm_prompt"
@@ -171,13 +174,16 @@ class DismissGMPromptAction(_DramaticMomentSuggestionActionBase):
     icon: str = "x"
 
     def execute(self, actor, context=None, **kwargs: Any) -> ActionResult:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
         from world.gm.exceptions import GMPromptError  # noqa: PLC0415
         from world.gm.models import GMPrompt  # noqa: PLC0415
         from world.gm.prompt_services import dismiss_gm_prompt  # noqa: PLC0415
 
         account = kwargs.get("account")
         prompt = GMPrompt.objects.filter(pk=kwargs.get("prompt_id")).first()
-        if prompt is None or account is None or prompt.addressed_to_id != account.pk:
+        if prompt is None or account is None:
+            return ActionResult(success=False, message="That prompt is not addressed to you.")
+        if not is_staff_observer(account) and prompt.addressed_to_id != account.pk:
             return ActionResult(success=False, message="That prompt is not addressed to you.")
         try:
             dismiss_gm_prompt(prompt, resolver=account)

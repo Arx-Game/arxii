@@ -5,7 +5,7 @@ from unittest import mock
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMPromptGroup, GMPromptKind, GMPromptStatus
 from world.gm.factories import GMProfileFactory, GMPromptFactory
@@ -17,6 +17,7 @@ from world.magic.factories import (
 )
 from world.magic.models import ResonanceGrant
 from world.magic.models.dramatic_moment import DramaticMomentTag
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import (
     SceneFactory,
     SceneGMParticipationFactory,
@@ -81,6 +82,13 @@ class GMPromptApiTest(TestCase):
         stranger = AccountFactory()
         resp = self._client(stranger).get(URL, {"scene": self.scene.pk})
         self.assertEqual(resp.status_code, 403)
+
+    def test_missing_scene_param_is_400(self):
+        """#4101 fix round 2, finding 5 (ported from the retired suggestion API's own
+        "missing ?scene= returns 400" test): GMPromptQueueFilter's ``scene`` is
+        required, so DjangoFilterBackend raises before the view runs at all."""
+        resp = self._client(self.gm).get(URL)
+        self.assertEqual(resp.status_code, 400)
 
     def test_gm_who_muted_moments_does_not_see_them(self):
         GMPrompt = type(self.moment)
@@ -158,6 +166,155 @@ class GMPromptApiTest(TestCase):
         self.assertIn("detail", resp.data)
         self.assertFalse(GMPromptNarration.objects.filter(prompt=prompt).exists())
 
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_narrated_prompt_stays_in_queue_and_dismiss_closes_it(self, narrate):
+        """Controller amendment R6-2 (#4101 fix round 2, finding 3): a NARRATED
+        prompt stays in the queue and dismiss still closes it, releasing the
+        uncovered (private) line exactly once."""
+        prompt = GMPromptFactory(
+            kind=GMPromptKind.DEATH,
+            scene=self.scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+            status=GMPromptStatus.NARRATED,
+            private_text="vision",
+        )
+        self.assertIn(prompt.pk, self._ids(self.gm))
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self._client(self.gm).post(f"{URL}{prompt.pk}/dismiss/")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        narrate.assert_called_once()
+
+    def test_resolved_prompts_are_excluded_from_the_queue(self):
+        """#4101 fix round 2, finding 10 (ported from the retired suggestion API's
+        own "resolved suggestion is excluded" test)."""
+        dismissed_narration = GMPromptFactory(
+            kind=GMPromptKind.DEATH,
+            scene=self.scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+            status=GMPromptStatus.DISMISSED,
+        )
+        confirmed_moment = GMPromptFactory(scene=self.scene, status=GMPromptStatus.CONFIRMED)
+        ids = self._ids(self.gm)
+        self.assertNotIn(dismissed_narration.pk, ids)
+        self.assertNotIn(confirmed_moment.pk, ids)
+
+    def test_staff_may_dismiss_a_narration_prompt(self):
+        """Ruling R9-2 (#4101 fix round 2, finding 7): staff bypass the addressed-to
+        gate on dismiss, matching narration_prompt_for's own staff bypass for narrate."""
+        staff = AccountFactory(is_staff=True)
+        prompt = GMPromptFactory(
+            kind=GMPromptKind.DEATH,
+            scene=self.scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+        )
+        resp = self._client(staff).post(f"{URL}{prompt.pk}/dismiss/")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+
+    def test_other_gm_cannot_dismiss_my_prompt(self):
+        """IDOR (#4101 fix round 2, finding 4): refused, status unchanged, nothing delivered."""
+        resp = self._client(self.other_gm).post(f"{URL}{self.prompt.pk}/dismiss/")
+        self.assertEqual(resp.status_code, 404)
+        self.prompt.refresh_from_db()
+        self.assertEqual(self.prompt.status, GMPromptStatus.PENDING)
+
+    def test_scene_owner_cannot_dismiss_my_prompt(self):
+        """IDOR (#4101 fix round 2, finding 4): a non-GM player, refused."""
+        resp = self._client(self.owner_player).post(f"{URL}{self.prompt.pk}/dismiss/")
+        self.assertEqual(resp.status_code, 404)
+        self.prompt.refresh_from_db()
+        self.assertEqual(self.prompt.status, GMPromptStatus.PENDING)
+
+    def test_other_gm_cannot_narrate_my_prompt(self):
+        """IDOR (#4101 fix round 2, finding 4): refused before any dispatch, nothing delivered."""
+        resp = self._client(self.other_gm).post(
+            f"{URL}{self.prompt.pk}/narrate/", {"text": "x", "audience": "room"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(GMPromptNarration.objects.filter(prompt=self.prompt).exists())
+
+    def test_scene_owner_cannot_narrate_my_prompt(self):
+        """IDOR (#4101 fix round 2, finding 4): a non-GM player, refused."""
+        resp = self._client(self.owner_player).post(
+            f"{URL}{self.prompt.pk}/narrate/", {"text": "x", "audience": "room"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(GMPromptNarration.objects.filter(prompt=self.prompt).exists())
+
+    def test_narrate_chosen_refuses_persona_outside_the_room(self):
+        """#4101 fix round 2, finding 1: a batched, scene-location presence check."""
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        SceneGMParticipationFactory(scene=scene, account=self.gm)
+        prompt = GMPromptFactory(
+            kind=GMPromptKind.DEATH,
+            scene=scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+        )
+        elsewhere = CharacterSheetFactory()  # never placed in `room` -- location stays None
+        with (
+            mock.patch("world.gm.views.character_for_request", return_value=self._gm_character()),
+            mock.patch("world.gm.prompt_services.get_active_scene", return_value=scene),
+        ):
+            resp = self._client(self.gm).post(
+                f"{URL}{prompt.pk}/narrate/",
+                {
+                    "text": "x",
+                    "audience": "chosen",
+                    "receiver_persona_ids": [elsewhere.primary_persona.pk],
+                },
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertFalse(GMPromptNarration.objects.filter(prompt=prompt).exists())
+
+    def test_narrate_chosen_accepts_persona_present_in_the_room(self):
+        """#4101 fix round 2, finding 1: the mirror-image success case."""
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        SceneGMParticipationFactory(scene=scene, account=self.gm)
+        prompt = GMPromptFactory(
+            kind=GMPromptKind.DEATH,
+            scene=scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+        )
+        present = CharacterSheetFactory()
+        present.character.location = room
+        present.character.save()
+        with (
+            mock.patch("world.gm.views.character_for_request", return_value=self._gm_character()),
+            mock.patch("world.gm.prompt_services.get_active_scene", return_value=scene),
+        ):
+            resp = self._client(self.gm).post(
+                f"{URL}{prompt.pk}/narrate/",
+                {
+                    "text": "x",
+                    "audience": "chosen",
+                    "receiver_persona_ids": [present.primary_persona.pk],
+                },
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(GMPromptNarration.objects.filter(prompt=prompt).exists())
+
     def test_filters_list_five_groups_and_set(self):
         client = self._client(self.gm)
         rows = client.get("/api/gm/prompt-filters/").data
@@ -172,8 +329,23 @@ class GMPromptApiTest(TestCase):
         )
 
     def _gm_character(self):
-        char = CharacterSheetFactory().character
+        """A character puppeted by ``self.gm``, with a REAL roster tenure.
+
+        ``PemitAction``'s ``MinimumGMLevelPrerequisite`` reads ``actor.active_account``,
+        which resolves through a live roster tenure -- NOT the plain ``.account``
+        attribute set below (that idiom only covers code reading ``actor.account``
+        directly, e.g. ``narration_prompt_for``). Mirrors
+        ``world.gm.tests.test_prompt_narration.PromptNarrationTest``'s own setup.
+        """
+        sheet = CharacterSheetFactory()
+        char = sheet.character
         char.account = self.gm
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=entry,
+            player_data=PlayerDataFactory(account=self.gm),
+            end_date=None,
+        )
         return char
 
 
@@ -228,10 +400,12 @@ class GMPromptDramaticMomentConfirmDismissTest(TestCase):
         self.assertIsNone(self.suggestion.confirmed_tag)
 
     def test_non_gm_participant_confirm_is_forbidden(self):
+        """#4101 fix round 2, finding 6: the object lookup itself is now scoped to
+        ``visible_prompts_for`` -- a non-GM/owner never reaches the action's own
+        gate at all, so this is a 404 (an invisible id), not a 400 from inside it."""
         participant = AccountFactory()
         resp = self._client(participant).post(self._url("confirm"))
-        self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn("detail", resp.data)
+        self.assertEqual(resp.status_code, 404, resp.data)
         self.suggestion.refresh_from_db()
         self.assertEqual(self.suggestion.status, GMPromptStatus.PENDING)
 

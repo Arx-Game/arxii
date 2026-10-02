@@ -5,13 +5,13 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Count, Q, QuerySet
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -36,6 +36,7 @@ from world.gm.filters import (
     CatalogSuggestionFilter,
     GMApplicationFilter,
     GMProfileFilter,
+    GMPromptQueueFilter,
     GMTableFilter,
     GMTableMembershipFilter,
     TableUpdateRequestFilter,
@@ -53,7 +54,7 @@ from world.gm.models import (
     TableUpdateRequest,
 )
 from world.gm.permissions import IsGM, IsGMOrStaff
-from world.gm.prompt_services import account_can_gm_scene, visible_prompts_for
+from world.gm.prompt_services import prompt_visible_to
 from world.gm.serializers import (
     CatalogSuggestionDetailSerializer,
     DemandRansomSerializer,
@@ -102,7 +103,6 @@ from world.gm.services import (
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.models.applications import RosterApplication
 from world.roster.services.selection import character_for_request
-from world.scenes.models import Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -979,44 +979,47 @@ class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 
     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
     a stake outcome, still surfaces for the GM it's addressed to via
-    ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
-    REGISTRY actions that own the real authorization/validation -- this view
-    is dispatch plumbing only.
+    ``visible_prompts_for``) -- ``GMPromptQueueFilter`` owns scene resolution
+    (required, 404 if unknown) and the "only the scene's GM may view an empty
+    queue" 403, so ``list`` is the inherited ``ListModelMixin`` behavior with
+    no override: one source, ``get_queryset()`` (#4101 fix round 2, finding 5).
+    ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY actions that own
+    the real authorization/validation -- this view is dispatch plumbing only.
     """
 
     serializer_class = GMPromptSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["kind"]
+    filterset_class = GMPromptQueueFilter
     queryset = GMPrompt.objects.none()
 
-    def _scene(self) -> Scene:
-        scene_id = self.request.query_params.get("scene")  # noqa: USE_FILTERSET
-        if not scene_id:
-            raise serializers.ValidationError({"detail": "A scene id is required (?scene=<id>)."})
-        return get_object_or_404(Scene, pk=scene_id)
-
     def get_queryset(self) -> QuerySet[GMPrompt]:
-        return visible_prompts_for(self.request.user, scene=self._scene())
-
-    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        scene = self._scene()
-        qs = self.filter_queryset(visible_prompts_for(request.user, scene=scene))
-        if not qs.exists() and not account_can_gm_scene(request.user, scene):
-            msg = "Only the scene's GM may view its prompts."
-            raise PermissionDenied(msg)
-        page = self.paginate_queryset(qs)
-        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        return GMPrompt.objects.all()
 
     def _own_prompt(self, pk: str | None) -> GMPrompt:
-        return get_object_or_404(GMPrompt, pk=pk)
+        """The prompt, scoped to what ``request.user`` may see (#4101 fix round 2,
+        finding 6) -- an id outside their visible queue 404s regardless of kind,
+        same as it never appearing in ``GET .../prompts/?scene=``.
+
+        Staff bypass this scope entirely (ruling R9-2) -- matching
+        ``narration_prompt_for``'s own staff bypass and ``DismissGMPromptAction``'s,
+        this is a per-object "can staff act on ANY prompt by id" exception, kept
+        separate from ``prompt_visible_to``/``visible_prompts_for`` (the scene
+        queue LISTING stays narrower: a narration prompt addressed to a specific
+        GM is never surfaced to every staff member browsing that scene's queue).
+        """
+        prompt = get_object_or_404(GMPrompt, pk=pk)
+        if not self.request.user.is_staff and not prompt_visible_to(self.request.user, prompt):
+            raise Http404
+        return prompt
 
     @action(detail=True, methods=["post"])
     def confirm(self, request: Request, pk: str | None = None) -> Response:
         prompt = self._own_prompt(pk)
-        if prompt.kind != GMPromptKind.DRAMATIC_MOMENT:
-            return Response({"detail": "Only a dramatic moment is confirmed."}, status=400)
+        # The kind gate lives in the action itself (ConfirmDramaticMomentSuggestionAction
+        # only ever resolves a DRAMATIC_MOMENT-kind suggestion id) -- #4101 fix round 2,
+        # finding 6: no duplicate check here.
         result = ConfirmDramaticMomentSuggestionAction().run(
             actor=None, account=request.user, suggestion_id=prompt.pk
         )
@@ -1038,11 +1041,15 @@ class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     @action(detail=True, methods=["post"])
     def narrate(self, request: Request, pk: str | None = None) -> Response:
         prompt = self._own_prompt(pk)
-        body = NarrateGMPromptSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
         actor = character_for_request(request, entry_id=None)
         if actor is None:
             return Response({"detail": "Play a character to narrate."}, status=400)
+        # The receiver-presence check (audience="chosen") needs a room to test
+        # against: the prompt's own scene location, or -- a scene-less prompt --
+        # the narrating GM's current location (#4101 fix round 2, finding 1).
+        location = prompt.scene.location if prompt.scene_id else actor.location
+        body = NarrateGMPromptSerializer(data=request.data, context={"location": location})
+        body.is_valid(raise_exception=True)
         data = body.validated_data
         if data["audience"] == NarrateGMPromptSerializer.AUDIENCE_ROOM:
             result = EmitAction().run(actor=actor, text=data["text"], gm_prompt_id=prompt.pk)
