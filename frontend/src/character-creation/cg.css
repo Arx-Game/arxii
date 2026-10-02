@@ -1137,6 +1137,12 @@
 .interview .stance:disabled {
   cursor: not-allowed;
 }
+/* A collapsed "make it yours" summary row (#4099 demo-fidelity fix, approved
+   demo Screen 1): no pressed-dot concept, so two columns (content, price)
+   rather than the three-column pick-stance grid. */
+.interview .stance.summary {
+  grid-template-columns: 1fr auto;
+}
 .interview .stances > li:last-child .stance {
   border-bottom: 1px solid var(--cg-hairline);
 }

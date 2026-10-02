@@ -73,6 +73,12 @@ describe('PersonalizationPanel race safety', () => {
       { queryClient }
     );
 
+    // Each panel's price section starts collapsed (demo-fidelity fix round) —
+    // open both before the stance buttons underneath exist in the DOM.
+    for (const summaryButton of screen.getAllByTestId('personalize-summary-price')) {
+      await user.click(summaryButton);
+    }
+
     const priceButtons = screen.getAllByRole('button', { name: /Frost on the skin/ });
     expect(priceButtons).toHaveLength(2);
 

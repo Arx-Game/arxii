@@ -1346,6 +1346,7 @@ export const mockCGExplanations: Record<string, string> = {
   personalize_free_note: 'Free. No staff review (test)',
   personalize_mechanics_note: 'Mechanically unchanged (test)',
   personalize_needs_resonance: 'Choose your gift resonance first (test)',
+  personalize_summary_none: 'Not yet chosen (test)',
 };
 
 /**

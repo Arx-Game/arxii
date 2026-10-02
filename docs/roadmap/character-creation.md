@@ -329,7 +329,10 @@ section for the full #2428/#2440/#2441/#2442 build record.
   offered only when its catalog row carries a `creation_point_cost`, backed by `GET
   drafts/{id}/personalization-options/` and validated/costed through
   `draft_data["technique_personalizations"]` (a new `"magic"` CG-points breakdown
-  category).
+  category). Each of the four pieces draws as a collapsed summary row (the
+  approved demo's Screen 1 funnel door) showing its current pick (or the
+  `personalize_summary_none` copy key) and that pick's cost; clicking a row
+  expands it to the picker beneath.
 - Picks are written at finalize onto the hold (`CharacterTechnique.custom_name`
   /`custom_description`/`price`/`early_form`), never onto the shared catalog
   `Technique`; a flourish pick also weaves a TECHNIQUE thread (up to

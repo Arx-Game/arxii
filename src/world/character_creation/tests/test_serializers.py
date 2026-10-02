@@ -378,3 +378,10 @@ class CGExplanationsSerializerPersonalizationPlaceholderTest(TestCase):
         explanations = CGExplanationsSerializer.to_dict()
         for key in PERSONALIZATION_COPY_KEYS:
             assert key in explanations
+
+    def test_summary_none_key_exists_for_the_collapsed_rows(self) -> None:
+        """Screen 1's collapsed summary rows (#4099 demo-fidelity fix) need a
+        generic "none chosen" label when a section has no pick yet."""
+        assert "personalize_summary_none" in PERSONALIZATION_COPY_KEYS
+        explanations = CGExplanationsSerializer.to_dict()
+        assert explanations["personalize_summary_none"] == "PLACEHOLDER: personalize_summary_none"

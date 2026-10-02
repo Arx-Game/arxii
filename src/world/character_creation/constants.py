@@ -397,6 +397,10 @@ PERSONALIZATION_COPY_KEYS: tuple[str, ...] = (
     "personalize_free_note",
     "personalize_mechanics_note",
     "personalize_needs_resonance",
+    #: The collapsed summary row's label when a section (name/description,
+    #: flourish, form, or price) carries no pick yet (#4099 demo-fidelity fix,
+    #: Screen 1's funnel-door rows) — one generic key shared by all four rows.
+    "personalize_summary_none",
 )
 
 #: ``draft_data`` key for creation-time technique personalization picks (#4099).
