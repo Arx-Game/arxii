@@ -58,7 +58,7 @@ export function GMPromptFilterCard() {
           ))}
           <li className="grid grid-cols-[minmax(8rem,10rem)_1fr] items-center gap-2 py-2 text-muted-foreground">
             <span className="text-xs text-muted-foreground">Player actions</span>
-            <span className="text-xs italic">Never prompt. Players write their own.</span>
+            <span className="italic">Never prompt. Players write their own.</span>
           </li>
         </ul>
       )}
