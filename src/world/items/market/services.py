@@ -341,6 +341,9 @@ def run_service_craft(
     """
     from world.items.crafting.services import run_crafting_recipe  # noqa: PLC0415
 
+    if item_instance.destroyed_at is not None:
+        msg = "item is no longer in play"
+        raise MarketServiceError(msg, user_message="That item is no longer in play.")
     if not offer.is_active:
         msg = f"offer {offer.pk} inactive"
         raise MarketServiceError(msg, user_message="That service is not on offer.")
@@ -432,6 +435,11 @@ def sell_to_fence(seller: Persona, stall: MarketStall, instance: ItemInstance) -
     if stall.stall_kind != MarketStall.StallKind.FENCE:
         msg = "not a fence stall"
         raise MarketServiceError(msg, user_message="That stall does not buy.")
+    if instance.destroyed_at is not None:
+        # #4099: a soft-deleted item keeps its holder; without this a fenced item with
+        # a history could be fenced again for a second payout.
+        msg = "item is no longer in play"
+        raise MarketServiceError(msg, user_message="You no longer have that to sell.")
     holder = instance.holder_character_sheet
     seller_sheet = seller.character_sheet
     if holder is None or seller_sheet is None or holder.pk != seller_sheet.pk:
@@ -456,10 +464,16 @@ def sell_to_fence(seller: Persona, stall: MarketStall, instance: ItemInstance) -
     )
     is_vice = _template_is_vice(instance.template)
     is_hot = has_unresolved_stolen_provenance(instance)
-    game_object = instance.game_object
-    instance.delete()
-    if game_object is not None:
-        game_object.delete()
+    # #4099: the fenced item leaves player hands by the canonical destroy rule. A bare
+    # throwaway goes entirely, ledger rows included; an item with a history (stolen,
+    # given, lore) is soft-deleted, out of play, with a TRANSFERRED event to no receiver,
+    # so its trail survives for the deferred reclamation of fenced goods.
+    from world.items.constants import OwnershipEventType  # noqa: PLC0415
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
+
+    destroy_consumed_item_instance(
+        instance, note="Sold to a fence.", event_type=OwnershipEventType.TRANSFERRED
+    )
     if is_vice:
         _accrue_fence_heat(seller, stall, CONTRABAND_CRIME_SLUG)
     elif is_hot:

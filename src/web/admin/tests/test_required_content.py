@@ -1166,6 +1166,73 @@ class TestAudereUltimateCopyProbe(TestCase):
         self.assertTrue(result.present)
 
 
+class TestPersonalizationRows(TestCase):
+    """The three TUNING rows gating the Gift stage's personalization catalogs (#4099)."""
+
+    def test_no_price_offered_in_creation_is_reported(self) -> None:
+        from world.magic.factories import RestrictionFactory
+
+        RestrictionFactory()  # a DESIGN restriction never counts
+        self.assertFalse(_probe_for("creation-prices").resolve(None).present)
+
+    def test_an_offered_price_is_present(self) -> None:
+        from world.magic.factories import PriceFactory
+
+        PriceFactory(creation_point_cost=1)
+        self.assertTrue(_probe_for("creation-prices").resolve(None).present)
+
+    def test_offered_flourish_and_form_are_present(self) -> None:
+        from world.magic.factories import SignatureMotifBonusFactory, TechniqueVariantFactory
+
+        SignatureMotifBonusFactory(creation_point_cost=2)
+        TechniqueVariantFactory(unlock_thread_level=1, creation_point_cost=3)
+        self.assertTrue(_probe_for("creation-flourishes").resolve(None).present)
+        self.assertTrue(_probe_for("creation-forms").resolve(None).present)
+
+
+class TestPriceComponentsActiveProbe(TestCase):
+    """The TUNING row for prices whose consumed item can no longer be made (#4099)."""
+
+    def test_no_component_is_present(self) -> None:
+        self.assertTrue(_probe_for("price-components-active").resolve(None).present)
+
+    def test_a_component_from_an_inactive_template_is_reported(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import PriceFactory
+        from world.magic.models import PriceComponentRequirement
+
+        price = PriceFactory(name="Ash and bone")
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Old bone", is_active=False)
+        )
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Fresh ash")
+        )
+        result = _probe_for("price-components-active").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Ash and bone: Old bone",))
+
+
+class TestPersonalizationCopyProbe(TestCase):
+    """The TUNING row for the Gift stage's make-it-yours panel copy (#4099)."""
+
+    def test_seeded_placeholder_copy_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_personalization_copy
+
+        result = _probe_personalization_copy()
+        self.assertFalse(result.present)
+        self.assertIn("personalize_heading", result.missing)
+
+    def test_authored_copy_is_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_personalization_copy
+        from world.character_creation.constants import PERSONALIZATION_COPY_KEYS
+        from world.character_creation.models import CGExplanation
+
+        for key in PERSONALIZATION_COPY_KEYS:
+            CGExplanation.objects.update_or_create(key=key, defaults={"text": f"Authored {key}"})
+        self.assertTrue(_probe_personalization_copy().present)
+
+
 class TestCharacterCreationGapProbes(TestCase):
     """The six probes the first roster PC stock-take asked for (#4104): each names the
     rows a realm still lacks so a staff member filling it never has to walk a draft

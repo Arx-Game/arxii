@@ -281,10 +281,11 @@ def _resolve_has_item(ctx: ResolverContext, *, template_id: int) -> bool:
     """
     from world.items.models import ItemInstance  # noqa: PLC0415
 
-    return ItemInstance.objects.filter(
-        holder_character_sheet=ctx.sheet,
-        template_id=template_id,
-    ).exists()
+    return (
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=ctx.sheet, template_id=template_id)
+        .exists()
+    )
 
 
 def _resolve_has_resonance(ctx: ResolverContext, *, name: str) -> bool:

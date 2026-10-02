@@ -467,6 +467,91 @@ class CommitToClashTests(TestCase):
         self.assertEqual(captured, [config.check_type])
         self.assertNotEqual(config.check_type, technique.action_template.check_type)
 
+    # -------------------------------------------------------------------------
+    # 8. #4099 fix round: the clash interaction label uses the caster's own
+    #    display name and carries the price clause, matching the combat
+    #    declaration and outcome narration.
+    # -------------------------------------------------------------------------
+
+    def test_interaction_uses_display_name_and_price_clause(self) -> None:
+        """A clash contribution's Interaction content must show the caster's own
+        custom name (not the catalog name) and the price clause (#4099)."""
+        from world.combat.factories import CombatParticipantFactory
+        from world.magic.factories import CharacterTechniqueFactory, PriceFactory
+
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+        price = PriceFactory()
+        hold = CharacterTechniqueFactory(
+            character=character_sheet, technique=technique, custom_name="Winterbite", price=price
+        )
+        character_sheet.character.techniques.invalidate()
+        clash = ClashFactory()
+        CombatParticipantFactory(encounter=clash.encounter, character_sheet=character_sheet)
+
+        with force_check_outcome(self.success_outcome):
+            result = commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        self.assertIsNotNone(result.clash_interaction)
+        content = result.clash_interaction.content
+        self.assertIn(hold.custom_name, content)
+        self.assertNotIn(technique.name, content)
+        self.assertIn(price.cast_narration, content)
+
+    def _commit_with_component_price(self, *, carried: int):
+        """Commit a clash contribution whose price consumes 2 needles (#4099)."""
+        from world.combat.factories import CombatParticipantFactory
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import CharacterTechniqueFactory, PriceFactory
+        from world.magic.models import PriceComponentRequirement
+        from world.magic.tests.price_cost_helpers import carry
+
+        character_sheet, _anima = self._make_character_with_anima(current=20, maximum=20)
+        technique = self._make_technique_with_template(anima_cost=3)
+        needle = ItemTemplateFactory()
+        price = PriceFactory()
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=needle, quantity=2
+        )
+        CharacterTechniqueFactory(character=character_sheet, technique=technique, price=price)
+        character_sheet.character.techniques.invalidate()
+        stack = carry(character_sheet.character, needle, quantity=carried)
+        clash = ClashFactory()
+        CombatParticipantFactory(encounter=clash.encounter, character_sheet=character_sheet)
+        with force_check_outcome(self.success_outcome):
+            result = commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+        return result, price, stack
+
+    def test_paid_price_consumes_its_component_and_narrates(self) -> None:
+        result, price, stack = self._commit_with_component_price(carried=3)
+        self.assertEqual(result.technique_use_result.price_paid, price)
+        self.assertIn(price.cast_narration, result.clash_interaction.content)
+        stack.refresh_from_db()
+        self.assertEqual(stack.quantity, 1)
+
+    def test_missing_component_contributes_without_the_price(self) -> None:
+        result, price, stack = self._commit_with_component_price(carried=1)
+        self.assertIsNone(result.technique_use_result.price_paid)
+        self.assertNotIn(price.cast_narration, result.clash_interaction.content)
+        stack.refresh_from_db()
+        self.assertEqual(stack.quantity, 1)
+
 
 class CommitToClashLethalFlagTests(TestCase):
     """commit_to_clash threads lethal=clash.encounter.is_lethal into use_technique (#1182).

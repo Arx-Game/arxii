@@ -819,6 +819,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         from world.magic.services.technique_forms import (  # noqa: PLC0415
             available_technique_forms,
         )
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            hold_display_name,
+        )
         from world.scenes.cast_services import (  # noqa: PLC0415
             castable_technique_links_for_sheet,
         )
@@ -832,9 +835,16 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         lines = ["|wYou can cast:|n"]
         for link in links.values():
             technique = link.technique
-            lines.append(f"  |w{technique.name}|n")
+            # #4099: the player's own name, with the catalog name alongside it so
+            # the player always sees what to type — the catalog name stays the
+            # only lookup key.
+            shown = hold_display_name(link, fallback=technique.name)
+            label = shown if shown == technique.name else f"{shown} ({technique.name})"
+            lines.append(f"  |w{label}|n")
             lines.append(f"    {technique.cached_effect_summary['summary']}")
-            if technique.description:
+            if link.custom_description:
+                lines.append(f"    {link.custom_description}")
+            elif technique.description:
                 lines.append(f"    {technique.description}")
             forms_line = self._forms_line(
                 available_technique_forms(

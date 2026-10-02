@@ -67,6 +67,7 @@ from world.magic.models import (
     PathRitualGrant,
     PortalAnchorKind,
     PoseEndorsement,
+    PriceComponentRequirement,
     Reincarnation,
     RelationshipBondPullTuning,
     Resonance,
@@ -247,11 +248,29 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
         return ", ".join(p.name for p in obj.cached_paths[:5])
 
 
+class PriceComponentRequirementInline(admin.TabularInline):
+    """Items a PRICE consumes on every cast that pays it (#4099).
+
+    PRICE rows only: ``PriceComponentRequirement.clean`` refuses a row on a DESIGN
+    restriction. A caster who lacks the items still casts, without the price.
+    """
+
+    model = PriceComponentRequirement
+    extra = 0
+    autocomplete_fields = ["item_template"]
+    raw_id_fields = ["min_quality_tier"]
+    verbose_name = "Consumed component (PRICE only)"
+    verbose_name_plural = "Consumed components (PRICE only)"
+
+
 @admin.register(Restriction)
 class RestrictionAdmin(admin.ModelAdmin):
-    list_display = ["name", "power_bonus", "get_effect_types"]
+    list_display = ["name", "power_bonus", "kind", "creation_point_cost", "get_effect_types"]
+    list_filter = ["kind"]
     search_fields = ["name"]
     filter_horizontal = ["allowed_effect_types"]
+    autocomplete_fields = ["inflicted_condition"]
+    inlines = [PriceComponentRequirementInline]
 
     def get_queryset(self, request):
         return (
@@ -952,8 +971,8 @@ class CharacterTraditionAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterTechnique)
 class CharacterTechniqueAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character"]
-    list_display = ["character", "technique", "acquired_at"]
+    autocomplete_fields = ["character", "price", "early_form"]
+    list_display = ["character", "technique", "custom_name", "price", "acquired_at"]
     list_filter = ["technique__gift", "technique__effect_type"]
     search_fields = ["character__character__db_key", "technique__name"]
     date_hierarchy = "acquired_at"
@@ -1760,6 +1779,7 @@ class SignatureMotifBonusAdmin(admin.ModelAdmin):
         "required_resonance",
         "flat_intensity_delta",
         "min_crossing_level",
+        "creation_point_cost",
     ]
     list_filter = ["required_facet", "required_resonance", "min_crossing_level"]
     search_fields = ["name", "narrative_snippet"]
@@ -2336,6 +2356,7 @@ class TechniqueVariantAdmin(admin.ModelAdmin):
         "unlock_thread_level",
         "intensity_delta",
         "control_delta",
+        "creation_point_cost",
     ]
     list_filter = ["resonance", "unlock_thread_level"]
     search_fields = ["name_override", "parent_technique__name"]

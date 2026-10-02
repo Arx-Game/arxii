@@ -120,7 +120,8 @@ def stage_and_assert_affordable(
         r.material_category_id for r in instance_reqs if r.material_category_id
     ]
     available: list[ItemInstance] = list(
-        ItemInstance.objects.filter(holder_character_sheet=crafter_character_sheet)
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=crafter_character_sheet)
         .filter(
             Q(template_id__in=required_template_ids)
             | Q(template__material_category_id__in=required_category_ids)

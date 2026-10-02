@@ -35,12 +35,22 @@ from typing import TYPE_CHECKING
 from world.magic.constants import TargetKind
 from world.magic.types.technique_effects import (
     TechniqueFormPayload,
+    TechniqueNextSignaturePayload,
+    TechniquePricePayload,
     TechniqueSignaturePayload,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models.techniques import CharacterTechnique, Technique
+    from world.magic.models.signature import SignatureMotifBonus
+    from world.magic.models.techniques import (
+        CharacterTechnique,
+        PriceComponentRequirement,
+        Technique,
+    )
     from world.magic.models.threads import Thread
 
 
@@ -90,6 +100,7 @@ def _base_form(technique: Technique, *, is_default: bool) -> TechniqueFormPayloa
         is_locked=False,
         unlock_thread_level=0,
         thread_level=0,
+        is_early=False,
         effect_summary=technique.cached_effect_summary,
     )
 
@@ -104,13 +115,14 @@ def base_technique_form(technique: Technique) -> list[TechniqueFormPayload]:
     return [_base_form(technique, is_default=True)]
 
 
-def _variant_form(
+def _variant_form(  # noqa: PLR0913
     technique: Technique,
     variant,
     *,
     thread_level: int,
     is_default: bool,
     is_locked: bool,
+    is_early: bool = False,
 ) -> TechniqueFormPayload:
     """One specialized form, unlocked or not.
 
@@ -129,6 +141,7 @@ def _variant_form(
         is_locked=is_locked,
         unlock_thread_level=variant.unlock_thread_level,
         thread_level=thread_level,
+        is_early=is_early,
         effect_summary=variant.cached_effect_summary,
     )
 
@@ -195,6 +208,8 @@ def available_technique_forms(
         default.variant.pk if isinstance(default, _ResolvedTechnique) else None  # type: ignore[union-attr]
     )
 
+    early_form_id = character_technique.early_form_id if character_technique is not None else None
+
     threads = _candidate_threads(character, technique, character_technique)
     forms: list[TechniqueFormPayload] = [
         _base_form(technique, is_default=default_variant_id is None)
@@ -219,6 +234,10 @@ def available_technique_forms(
                     thread_level=thread.level,
                     is_default=resolved.variant.pk == default_variant_id,
                     is_locked=False,
+                    is_early=(
+                        resolved.variant.pk == early_form_id
+                        and resolved.variant.unlock_thread_level > thread.level
+                    ),
                 )
             )
 
@@ -259,3 +278,72 @@ def technique_signature_payload(
         narrative_snippet=bonus.narrative_snippet,
         intensity_delta=bonus.flat_intensity_delta,
     )
+
+
+def technique_price_payload(
+    hold: CharacterTechnique | None,
+    *,
+    components: Mapping[int, list[PriceComponentRequirement]],
+) -> TechniquePricePayload | None:
+    """The hold's price for the sheet, or ``None``. Reads the select_related price.
+
+    ``components`` is ``price_components_by_price`` over the sheet's held prices (one
+    bulk read for the whole sheet), so the real cost shows without a query per hold.
+    """
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        price_consumes_payload,
+        price_inflicts_name,
+    )
+
+    if hold is None or hold.price_id is None:
+        return None
+    price = hold.price
+    return TechniquePricePayload(
+        name=price.name,
+        description=price.description,
+        power_bonus=price.power_bonus,
+        consumes=price_consumes_payload(components.get(price.pk, [])),
+        inflicts=price_inflicts_name(price),
+    )
+
+
+def next_signatures_by_technique(
+    character: Character,
+) -> dict[int, TechniqueNextSignaturePayload]:
+    """Per technique pk, the next flourish its TECHNIQUE thread will unlock (#4099).
+
+    One catalog query per sheet build, and none when the character holds no active
+    TECHNIQUE thread. A character can hold several TECHNIQUE threads on the SAME
+    technique (one per resonance, ``uniq_thread_technique``) — the nearest flourish
+    wins, by ``min_crossing_level``, then name, then pk, so the pick never depends
+    on dict-overwrite order.
+    """
+    from world.magic.models import SignatureMotifBonus  # noqa: PLC0415
+    from world.magic.services.signature import next_signature_bonus  # noqa: PLC0415
+
+    # ``character.threads.all()`` (the cached handler) already filters
+    # ``retired_at__isnull=True`` at the query level — no second filter needed here.
+    threads = [t for t in character.threads.all() if t.target_kind == TargetKind.TECHNIQUE]
+    if not threads:
+        return {}
+    catalog = list(
+        SignatureMotifBonus.objects.filter(
+            required_resonance_id__in={t.resonance_id for t in threads},
+            required_facet__isnull=True,
+        )
+    )
+    candidates: dict[int, list[tuple[SignatureMotifBonus, Thread]]] = {}
+    for thread in threads:
+        bonus = next_signature_bonus(thread, catalog)
+        if bonus is not None:
+            candidates.setdefault(thread.target_technique_id, []).append((bonus, thread))
+
+    result: dict[int, TechniqueNextSignaturePayload] = {}
+    for technique_id, pairs in candidates.items():
+        bonus, thread = min(
+            pairs, key=lambda pair: (pair[0].min_crossing_level, pair[0].name, pair[0].pk)
+        )
+        result[technique_id] = TechniqueNextSignaturePayload(
+            name=bonus.name, min_level=bonus.min_crossing_level, thread_level=thread.level
+        )
+    return result

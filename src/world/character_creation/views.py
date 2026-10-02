@@ -61,6 +61,7 @@ from world.character_creation.serializers import (
     CGOriginTemplateSerializer,
     CGPointBudgetSerializer,
     CGTechniqueOptionSerializer,
+    CGTechniquePersonalizationOptionsSerializer,
     CGVacancySerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
@@ -887,6 +888,26 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             CharacterDraftSerializer(draft, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @extend_schema(responses=CGTechniquePersonalizationOptionsSerializer(many=True))
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="personalization-options")
+    def personalization_options(self, request: Request, pk: int | None = None) -> Response:
+        """The make-it-yours options for each technique this draft has chosen (#4099)."""
+        from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.services.creation_personalization import (  # noqa: PLC0415
+            creation_personalization_options,
+        )
+
+        draft = self.get_object()
+        ids = draft.draft_data.get("selected_technique_ids") or []
+        by_id = Technique.objects.in_bulk(ids)
+        techniques = [by_id[i] for i in ids if i in by_id]
+        resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+        option_sets = creation_personalization_options(techniques, resonance_id=resonance_id)
+        serializer = CGTechniquePersonalizationOptionsSerializer(
+            option_sets, many=True, context={"resonance_id": resonance_id}
+        )
+        return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def submit(self, request: Request, pk: int | None = None) -> Response:

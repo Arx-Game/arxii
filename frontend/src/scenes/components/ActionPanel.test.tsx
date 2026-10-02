@@ -214,6 +214,7 @@ const CASTABLE_BASE_FORM: TechniqueForm = {
   is_locked: false,
   unlock_thread_level: 0,
   thread_level: 0,
+  is_early: false,
   effect_summary: CASTABLE_EFFECT_SUMMARY,
 };
 

@@ -12,6 +12,7 @@ from world.items.exceptions import (
     FacetAlreadyAttached,
     FacetCapacityExceeded,
     InherentFacetNotRemovable,
+    ItemNotInPlay,
 )
 from world.items.models import EquippedItem, ItemFacet, ItemInstance, QualityTier
 
@@ -27,7 +28,10 @@ def assert_facet_attachable(item_instance: ItemInstance, facet: Facet) -> None:
     Raises:
         FacetAlreadyAttached: already present on the item.
         FacetCapacityExceeded: item is at its template's facet_capacity.
+        ItemNotInPlay: the item was destroyed (#4099).
     """
+    if item_instance.destroyed_at is not None:
+        raise ItemNotInPlay
     if item_instance.item_facets.filter(facet=facet).exists():
         raise FacetAlreadyAttached
     # Inherent facets (#3776 Task 4) are the item's own identity, auto-stamped by

@@ -10,7 +10,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
 - [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds the Ultimates terms (#4098):
-  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate
+  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate; and
+  the creation-personalization terms (#4099): Hold, Price, Early form, Personalized name
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md)

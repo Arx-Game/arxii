@@ -8,6 +8,7 @@ import logging
 
 from django.db import transaction
 
+from world.magic.constants import RestrictionKind
 from world.magic.exceptions import (
     DuplicateTechniqueName,
     GiftNotOwned,
@@ -320,7 +321,7 @@ class GMPolicy(AuthoringPolicy):
 def _restriction_bonus_total(design: TechniqueDesignInput) -> int:
     if not design.restriction_ids:
         return 0
-    rows = Restriction.objects.filter(id__in=design.restriction_ids)
+    rows = Restriction.objects.filter(id__in=design.restriction_ids, kind=RestrictionKind.DESIGN)
     return sum(r.power_bonus for r in rows)
 
 
@@ -369,7 +370,9 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
         ),
     )
     if design.restriction_ids:
-        tech.restrictions.add(*Restriction.objects.filter(id__in=design.restriction_ids))
+        tech.restrictions.add(
+            *Restriction.objects.filter(id__in=design.restriction_ids, kind=RestrictionKind.DESIGN)
+        )
     for spec in design.capability_grants:
         TechniqueCapabilityGrant.objects.create(
             technique=tech,

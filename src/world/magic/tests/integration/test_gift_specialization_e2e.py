@@ -39,7 +39,14 @@ from world.magic.factories import (
     ResonanceFactory,
     TechniqueFactory,
 )
-from world.magic.models import CharacterResonance, Gift, Resonance, Technique, Thread
+from world.magic.models import (
+    CharacterResonance,
+    CharacterTechnique,
+    Gift,
+    Resonance,
+    Technique,
+    Thread,
+)
 from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.specialization.models import TechniqueVariant
 from world.magic.specialization.services import (
@@ -341,3 +348,46 @@ class BaseFormCastE2ETest(CastScenarioMixin):
         self.assertIsNotNone(cast_result.outcome_interaction, "cast should resolve immediately")
         content = cast_result.outcome_interaction.content
         self.assertIn("Celestial Form", content, "variant name must appear in default cast pose")
+
+    def test_custom_name_does_not_mask_an_active_form(self) -> None:
+        """#4099 fix (#4110 CI round): a form's own name describes what actually
+        happened in THIS cast, so it wins over the caster's custom name whenever
+        a form applies; the custom name only surfaces on the base form."""
+        hold = CharacterTechnique.objects.get(
+            character=self.caster.character_sheet, technique=self.technique
+        )
+        hold.custom_name = "Winterbite"
+        hold.save(update_fields=["custom_name"])
+        self.caster.character_sheet.character.techniques.invalidate()
+
+        cast_result = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+        )
+        self.assertIsNotNone(cast_result.outcome_interaction, "cast should resolve immediately")
+        content = cast_result.outcome_interaction.content
+        self.assertIn("Celestial Form", content, "the active form's name must win")
+        self.assertNotIn("Winterbite", content, "the custom name must not mask an active form")
+
+    def test_custom_name_applies_to_the_base_form(self) -> None:
+        """#4099 fix (#4110 CI round): with no form in play (``use_base_form=True``),
+        the caster's own name is used — the rule's other half."""
+        hold = CharacterTechnique.objects.get(
+            character=self.caster.character_sheet, technique=self.technique
+        )
+        hold.custom_name = "Winterbite"
+        hold.save(update_fields=["custom_name"])
+        self.caster.character_sheet.character.techniques.invalidate()
+
+        cast_result = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+            use_base_form=True,
+        )
+        self.assertIsNotNone(cast_result.outcome_interaction, "cast should resolve immediately")
+        content = cast_result.outcome_interaction.content
+        self.assertIn("Winterbite", content, "the custom name applies to the base form")
+        self.assertNotIn(self.technique.name, content, "the catalog name must not leak through")
+        self.assertNotIn("Celestial Form", content, "no form applies to a base-form cast")

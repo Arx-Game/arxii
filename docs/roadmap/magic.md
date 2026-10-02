@@ -318,6 +318,36 @@ staff-authored catalog content instead:
   `docs/roadmap/character-creation.md`, `docs/systems/character_creation.md`,
   `docs/systems/magic.md`.
 
+## Personalizing magic from the start (#4099, ADR-4099, BUILT)
+
+A character now personalizes a chosen technique while building it in CG, not only after
+reaching thread level 3 in play. Built:
+
+- **Hold fields.** `CharacterTechnique` (the hold) gained `custom_name`,
+  `custom_description`, `price` (FK `Restriction`, `kind=PRICE`), and `early_form` (FK
+  `TechniqueVariant`). All four live on the hold, never on the shared catalog `Technique`.
+- **Three priced catalogs.** A signature flourish (`SignatureMotifBonus`), an early
+  specialized form (`TechniqueVariant`), and a price (`Restriction`, `kind=PRICE`) are each
+  offered in creation only when staff set that row's `creation_point_cost`; a blank cost
+  means the option is not offered.
+- **The creation panel.** The Gift stage's "make it yours" panel (`PersonalizationPanel`)
+  lets a player name and describe a chosen technique for free, and spend CG points on a
+  flourish, form and/or price, backed by `GET drafts/{id}/personalization-options/`.
+- **Price at cast.** A chosen price's `power_bonus` is added straight to every cast's power
+  (`price_power_term`), and its `cast_narration` joins the cast line.
+- **Gradual flourishes.** The old hard level-3 floor on signing is gone;
+  `SignatureMotifBonus.min_crossing_level` is the only gate, and creation can weave a
+  TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) so an early flourish is
+  reachable without skipping a crossing.
+- **Early forms.** An `early_form` bought in creation applies before the gift thread
+  reaches it, for its buyer only, when the cast's resolved resonance matches the form's
+  own authored resonance (checked after ordinary variant matching, not before falling
+  back — a hold carries no resonance of its own), never for a role-granted hold.
+- Rationale + rejected alternatives: ADR-4099 (supersedes in part ADR-0136's "mechanical
+  personalization starts at level 3" clause). Full model/service/endpoint detail:
+  `docs/systems/magic.md`'s "Technique personalization" section,
+  `docs/systems/character_creation.md`'s Magic API section.
+
 ## Tradition sponsorship, Academy training, and the in-play loop (#2428/#2440/#2441/#2442 — BUILT)
 
 The in-play training loop #2426's roadmap entries deferred as a follow-up is now real —

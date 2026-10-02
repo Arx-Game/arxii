@@ -42,6 +42,7 @@ import {
   getOriginTemplates,
   getPaths,
   getPathSkillSuggestions,
+  getPersonalizationOptions,
   getResonanceAssociations,
   getResonances,
   getRestrictions,
@@ -107,6 +108,17 @@ export const characterCreationKeys = {
       draftId,
       giftId,
       speciesId ?? null,
+    ] as const,
+  // "Make it yours" options for the draft's chosen techniques (#4099). Keyed
+  // by resonance + technique ids too, so a resonance change or a technique
+  // (de)selection refetches instead of serving stale flourish/form offers.
+  personalizationOptions: (draftId: number, resonanceId: number | null, techniqueIds: number[]) =>
+    [
+      ...characterCreationKeys.all,
+      'personalization-options',
+      draftId,
+      resonanceId,
+      techniqueIds,
     ] as const,
   // Glimpse tag catalog (guided Glimpse flow, #2427)
   glimpseTags: (pathId?: number) =>
@@ -466,6 +478,20 @@ export function useCGTechniqueOptions(
     queryKey: characterCreationKeys.cgTechniqueOptions(draftId!, giftId!, speciesId),
     queryFn: () => getCGTechniqueOptions(draftId!, giftId!),
     enabled: !!draftId && !!giftId,
+  });
+}
+
+/**
+ * "Make it yours" options for every technique the draft has chosen so far
+ * (#4099). Empty (never fetched) until at least one technique is picked.
+ */
+export function usePersonalizationOptions(draft: CharacterDraft) {
+  const ids = draft.draft_data.selected_technique_ids ?? [];
+  const resonanceId = draft.draft_data.selected_gift_resonance_id ?? null;
+  return useQuery({
+    queryKey: characterCreationKeys.personalizationOptions(draft.id, resonanceId, ids),
+    queryFn: () => getPersonalizationOptions(draft.id),
+    enabled: ids.length > 0,
   });
 }
 

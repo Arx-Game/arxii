@@ -26,7 +26,7 @@ from world.magic.factories import (
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
-from world.magic.models import Thread
+from world.magic.models import CharacterTechnique, Thread
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.specialization.models import TechniqueVariant
 from world.magic.specialization.services import provision_latent_gift_thread
@@ -79,6 +79,20 @@ class CastListingTests(TestCase):
         self.assertIn("Costs 5 anima.", text)
         self.assertIn("Applies Guarded.", text)
         self.assertIn(technique.description, text)
+
+    def test_bare_cast_shows_the_players_own_name_with_the_catalog_name(self) -> None:
+        """The listing prints ``Winterbite (Scorch Lash)`` so the player always sees
+        what to type (#4099 — the catalog name stays the only lookup key)."""
+        technique = self._technique("Scorch Lash")
+        hold = CharacterTechnique.objects.get(character=self.sheet, technique=technique)
+        hold.custom_name = "Winterbite"
+        hold.save(update_fields=["custom_name"])
+        self.sheet.character.techniques.invalidate()
+
+        cmd = _RecordingCmd(self.character)
+        lines = cmd._castable_listing()
+
+        self.assertIn("Winterbite (Scorch Lash)", "\n".join(lines))
 
     def test_bare_cast_with_no_techniques_says_so(self) -> None:
         cmd = _RecordingCmd(self.character)

@@ -38,6 +38,12 @@ class PathCapExceeded(MagicError):
     user_message = "Your Path stage limits this thread's growth."
 
 
+class CreationThreadLevelTooHigh(MagicError):
+    """A creation pick tried to start a thread at or past the first crossing (#4099)."""
+
+    user_message = "Character creation cannot start a thread that deep."
+
+
 class XPInsufficient(MagicError):
     user_message = "You do not have enough XP for this."
 
@@ -611,12 +617,6 @@ class SignatureBonusNotAvailable(MagicError):
     user_message = "This bonus is not available for your motif."
 
 
-class SignatureBelowCrossing(MagicError):
-    """Raised when set_signature_bonus is called on a thread below the first crossing (level 3)."""
-
-    user_message = "A signature can only be set on a technique thread that has crossed level 3."
-
-
 class SignatureBonusLocked(MagicError):
     """Raised when the bonus requires a higher crossing level than the thread has reached."""
 
@@ -777,3 +777,16 @@ class TechniqueTrainingNotConfigured(MagicError):
     """
 
     user_message = "Technique training is not configured on this server yet."
+
+
+class InvalidPersonalText(MagicError):
+    """A player's own technique name or description breaks a hygiene rule (#4099).
+
+    Carries the specific rule as ``user_message`` (authored at the raise site).
+    """
+
+    user_message = "That text cannot be used."
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message

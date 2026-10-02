@@ -53,18 +53,34 @@ _Avoid_: conflating this with the `Unbound` Tradition row itself (see "Tradition
 The Thread woven into a Gift: its level sets the Gift's strength (more and stronger techniques) and its resonance sets the Gift's affinity. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
 
 **Signature**:
-A Thread woven into a single Technique, deepening just that technique above its Gift baseline. The character applies their Motif to the signed technique via a `SignatureMotifBonus` — an ADDITIVE flourish (intensity delta, conditions, cosmetic prose) that fires alongside the technique at cast time. The bonus is NOT a `TechniqueVariant` and does NOT change the technique's identity. (ADR-0072, supersedes ADR-0056.)
+A Thread woven into a single Technique, deepening just that technique above its Gift baseline. The character applies their Motif to the signed technique via a `SignatureMotifBonus` — an ADDITIVE flourish (intensity delta, conditions, cosmetic prose) that fires alongside the technique at cast time. The bonus is NOT a `TechniqueVariant` and does NOT change the technique's identity. No longer a level-3+ mechanic: `SignatureMotifBonus.min_crossing_level` (default 3, authorable lower or higher) is the only gate on when a given bonus unlocks, and creation can weave a starting thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` so an early flourish is reachable at CG (#4099, ADR-4099). (ADR-0072, supersedes ADR-0056.)
 _Avoid_: technique thread (use "signature"); discordant signature (the resonance-divergence model was closed by ADR-0072).
 
 **Signature Motif Bonus**:
 The staff-authored catalog row (`SignatureMotifBonus`) that a player attaches to a TECHNIQUE-kind Thread to sign that technique. Gated on the character's Motif (facet and/or resonance). Carries `flat_intensity_delta`, `narrative_snippet`, and payload child rows (capability grants, damage profiles, applied conditions) sharing the `Abstract*` bases from `models/techniques.py`. (ADR-0072, #1582.)
 _Avoid_: signature variant, signature specialization (it is additive, not a variant form).
 
+**Hold**:
+`CharacterTechnique`, a character's hold of a Technique. Distinct from the shared catalog `Technique` it points at: a character's own name, description, price and early form all live on the hold, never on the catalog row, so two characters holding the same Technique can personalize it differently. (#4099, ADR-4099.)
+_Avoid_: grant, possession (use "hold").
+
+**Price**:
+A `Restriction` of `kind=PRICE` that a caster chooses for their own hold of a Technique, offered in creation when staff set its `creation_point_cost`. The stronger the power bonus, the more it costs to take. A price costs something real: it may consume carried items on every cast that pays it (`PriceComponentRequirement`) and may inflict an authored condition on the caster (`inflicted_condition`). A cast **pays** its price when the caster carries every component (always, for a price with none); only a paid cast gets the `power_bonus` power-ledger term and the `cast_narration` clause, and only a paid cast spends the components and takes the condition. An unpaid cast still happens, just without the price. `price_paid_for_cast` is the one place that decides. Distinct from a DESIGN-kind `Restriction`, which refunds a technique's design budget in the builder and is never attached to a hold. (#4099, ADR-4099.)
+_Avoid_: cost, drawback, toll.
+
+**Early form**:
+A `TechniqueVariant` bought on a character's hold during creation, before the gift thread has reached the level that would naturally resolve it. Applies only for its buyer, at the hold's own resonance, and never for a role-granted hold. A naturally-reached higher-level form still beats an early pick once the thread catches up. (#4099, ADR-4099.)
+_Avoid_: unlocked form, bonus form.
+
+**Personalized name**:
+A character's own `custom_name`/`custom_description` on their hold of a Technique. Free, unreviewed, and display only: every lookup, cast resolution and prerequisite check keeps reading the catalog `Technique.name`, never the personalized one. (#4099, ADR-4099.)
+_Avoid_: using a personalized name as a lookup key anywhere in code.
+
 **Specialization engine**:
 The one shared `(entity × resonance) → customized capability` resolution (a generalization of covenant sub-role resolution): the same Gift down different Paths, or with a different resonance, yields different specialized techniques, derived on read. (ADR-0055.)
 
 **Technique**:
-A specific magical ability that lives within a Gift, carrying base intensity, control, and anima cost plus a style and effect type. It is the primary unit of magical action. At character creation, players pick 1 + `Tradition Training` bonus Techniques from a staff-authored catalog (their Path × Gift's availability pool, plus their Tradition's signature extras) rather than authoring one; personalization (custom flavor, signature variants) is a level-3+ thread mechanic, not CG. (#2426, ADR-0136.) The rest of a Gift's pool is filled in **play**, not at CG: `charge_and_learn` (`services/gift_acquisition.py`) is the one shared charge+acquire seam behind both player-to-player `TechniqueTeachingOffer` accepts and the Academy's `TRAIN` offers (`world.npc_services`) — the latter additionally spend one Golden Hare per technique (see `currency` glossary), gated on the learner's Academy entrance obligation being settled. Reaching character level 2 requires knowing ≥3 techniques of the character's major Gift (`progression.MajorGiftTechniqueRequirement`, #2440 ruling 4). (#2428, #2440, ADR-0137.)
+A specific magical ability that lives within a Gift, carrying base intensity, control, and anima cost plus a style and effect type. It is the primary unit of magical action. At character creation, players pick 1 + `Tradition Training` bonus Techniques from a staff-authored catalog (their Path × Gift's availability pool, plus their Tradition's signature extras) rather than authoring one. Mechanical personalization (a Price, an Early form, a flourish, a custom name and description) is now offered at CG itself, on the character's own hold, not only once a thread is deep enough (#4099, ADR-4099, supersedes in part ADR-0136). (#2426, ADR-0136.) The rest of a Gift's pool is filled in **play**, not at CG: `charge_and_learn` (`services/gift_acquisition.py`) is the one shared charge+acquire seam behind both player-to-player `TechniqueTeachingOffer` accepts and the Academy's `TRAIN` offers (`world.npc_services`) — the latter additionally spend one Golden Hare per technique (see `currency` glossary), gated on the learner's Academy entrance obligation being settled. Reaching character level 2 requires knowing ≥3 techniques of the character's major Gift (`progression.MajorGiftTechniqueRequirement`, #2440 ruling 4). (#2428, #2440, ADR-0137.)
 _Avoid_: power, spell, ability; **cantrip** (retired #2426 — see ADR-0136; CG used to mint a personal Technique from a staff-curated `Cantrip` template, now it links to catalog `Technique` rows directly, no per-character row created).
 
 **Effect Summary**:

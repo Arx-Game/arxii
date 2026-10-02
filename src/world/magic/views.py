@@ -36,6 +36,7 @@ from world.character_sheets.models import CharacterSheet
 from world.distinctions.models import CharacterDistinction
 from world.magic.constants import (
     PendingAlterationStatus,
+    RestrictionKind,
     RitualExecutionKind,
     SuggestionStatus,
     TargetKind,
@@ -299,11 +300,17 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Restriction lookup records.
 
-    Provides read-only access to restrictions that grant power bonuses.
+    Provides read-only access to the DESIGN restriction catalog — the
+    technique-authoring limitations ("Touch Range", "Undead Only") that refund
+    builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+    table (a caster's own chosen cost, #4099) and must never appear here; no
+    consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+    query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+    model table.
     """
 
     # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
-    queryset = Restriction.objects.prefetch_related(
+    queryset = Restriction.objects.filter(kind=RestrictionKind.DESIGN).prefetch_related(
         Prefetch("allowed_effect_types", to_attr="cached_allowed_effect_types")
     )
     serializer_class = RestrictionSerializer
@@ -2316,6 +2323,10 @@ class ThreadHubSummaryView(APIView):
                 "unlock__unlock_gift",
             )
         )
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            technique_display_name,
+        )
+
         character = sheet.character
         weavable_traits: list[dict] = []
         weavable_techniques: list[dict] = []
@@ -2342,7 +2353,7 @@ class ThreadHubSummaryView(APIView):
                 weavable_techniques.extend(
                     {
                         "technique_id": technique.pk,
-                        "name": technique.name,
+                        "name": technique_display_name(character, technique),
                         "gift_id": gift.pk,
                         "gift_name": gift.name,
                     }

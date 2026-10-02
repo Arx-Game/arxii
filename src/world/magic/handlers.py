@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from typeclasses.characters import Character
     from world.conditions.models import DamageType
-    from world.magic.models import CapabilityPowerConfig, Facet, Resonance
+    from world.magic.models import CapabilityPowerConfig, CharacterTechnique, Facet, Resonance
     from world.magic.types.pull import PullActionContext
 
 logger = logging.getLogger(__name__)
@@ -1028,9 +1028,27 @@ class CharacterTechniqueHandler:
                 eligible.append(t)
         return eligible
 
+    @cached_property
+    def _holds(self) -> dict[int, CharacterTechnique]:
+        """Every hold (``CharacterTechnique``) keyed by technique pk, with what a display or
+        cast reads off it (#4099)."""
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        return {
+            hold.technique_id: hold
+            for hold in CharacterTechnique.objects.filter(
+                character_id=self.character.pk
+            ).select_related("technique", "price", "early_form", "early_form__resonance")
+        }
+
+    def hold_for(self, technique: Technique) -> CharacterTechnique | None:
+        """The character's hold of ``technique``, or ``None``. Reads the cached map."""
+        return self._holds.get(technique.pk)
+
     def invalidate(self) -> None:
-        """Clear the cached technique list. Called by mutation services."""
+        """Clear the cached technique list and holds. Called by mutation services."""
         self.__dict__.pop("_state", None)
+        self.__dict__.pop("_holds", None)
 
 
 class CharacterWeavingUnlockHandler:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -27,11 +28,15 @@ from world.items.exceptions import (
     ItemNotUsable,
     MakeoverNotPermitted,
     NoChargesRemaining,
+    NotReachable,
     StyleChoiceRequired,
     StyleNotKnown,
+    VaultFull,
 )
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
 from world.items.types import UseItemResult
+
+logger = logging.getLogger(__name__)
 
 
 def hard_delete_item_instance(item_instance: ItemInstance) -> None:
@@ -48,12 +53,172 @@ def hard_delete_item_instance(item_instance: ItemInstance) -> None:
         item_instance.delete()
 
 
+def destroy_consumed_item_instance(
+    item_instance: ItemInstance,
+    *,
+    preserve: bool | None = None,
+    note: str,
+    event_type: str = OwnershipEventType.CONSUMED,
+) -> None:
+    """THE rule for an instance used up entirely (#509, #1025, #4099). Call it, never
+    ``ItemInstance.delete()``, whenever consumption empties an instance.
+
+    - ``preserve`` (default ``item_instance.differs_from_template``): the instance carries
+      per-instance data or provenance, so it is SOFT-deleted: ``destroyed_at`` is stamped,
+      its game object leaves play (``location = None``, kept, not deleted) and a CONSUMED
+      ``OwnershipEvent`` records ``note``.
+    - otherwise a bare throwaway: ``hard_delete_item_instance`` removes the whole
+      footprint, game object included.
+
+    Either way nothing is left on the holder: a bare ``ItemInstance.delete()`` leaves the
+    game object (``game_object`` cascades the other way) sitting in the character's
+    inventory as a ghost. The holder's ``carried_items`` cache is invalidated. Pass
+    ``preserve`` explicitly only when the caller knows better than
+    ``differs_from_template``: it captured the answer before writing an event of its own
+    (``consume_item_charges``), or a PROTECT reference forbids a hard delete (a project
+    contribution). ``event_type`` is the ledger entry the soft-delete writes: CONSUMED
+    for use, TRANSFERRED (to no receiver) for an item that changed hands out of play,
+    such as one sold to a fence. Mutates the instance in place and saves with
+    ``update_fields`` (ADR-0008); caller owns the transaction.
+
+    **A soft-deleted item is held by nobody** (#4099 re-review ruling): the soft-delete
+    clears ``holder_character_sheet`` and ``contained_in``, so no "fetch by pk, then
+    compare the holder" check and no container-chain walk can treat it as anyone's.
+    The last holder is the event's ``from_character_sheet`` (read it with
+    ``provenance.last_holder``). A destroyed container's contents are never destroyed
+    with it: they spill to where the container was (``_spill_contents``).
+    """
+    if preserve is None:
+        preserve = item_instance.differs_from_template
+    # An item leaving play is no longer worn: unequip through the canonical service,
+    # which also invalidates the wearer's equipped_items handler.
+    from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+    for equipped in EquippedItem.objects.filter(item_instance=item_instance).select_related(
+        "character"
+    ):
+        unequip_item(equipped_item=equipped)
+    game_object = item_instance.game_object
+    holder_object = game_object.location if game_object is not None else None
+    _spill_contents(item_instance, landing=holder_object)
+    if preserve:
+        _take_out_of_play(item_instance, event_type=event_type, note=note)
+    else:
+        hard_delete_item_instance(item_instance)
+    if holder_object is not None and hasattr(holder_object, "carried_items"):
+        holder_object.carried_items.invalidate()
+
+
+def _take_out_of_play(item_instance: ItemInstance, *, event_type: str, note: str) -> None:
+    """The soft-delete: stamped, held by nobody, uncontained, game object out of play.
+
+    The ledger event records who held it last. Shared by
+    ``destroy_consumed_item_instance`` and ``forfeit_item_instance`` so both soft-delete
+    paths clear the same pointers.
+    """
+    former_holder = item_instance.holder_character_sheet
+    item_instance.destroyed_at = timezone.now()
+    item_instance.holder_character_sheet = None
+    item_instance.contained_in = None
+    item_instance.save(
+        update_fields=[
+            "destroyed_at",
+            "holder_character_sheet",
+            "contained_in",
+            "quantity",
+            "charges",
+        ]
+    )
+    game_object = item_instance.game_object
+    if game_object is not None:
+        # Relocate, never delete: the preserved row keeps its game object. The
+        # location setter persists db_location itself; no second full save.
+        game_object.location = None
+    OwnershipEvent.objects.create(
+        item_instance=item_instance,
+        event_type=event_type,
+        from_character_sheet=former_holder,
+        notes=note,
+    )
+
+
+def _spill_contents(
+    container: ItemInstance,
+    *,
+    # A landing is wherever the container was: a carrying character or a room.
+    landing: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """A destroyed container's contents spill out; they are never destroyed with it.
+
+    Mirrors ``take_out`` (``flows/service_functions/inventory.py``). Each content moves
+    up one level. For a pouch inside a bag, ``contained_in`` becomes the bag and the
+    game object moves into the bag's game object. Otherwise ``contained_in`` is cleared
+    and the game object moves to ``landing``, where the container was: the carrier, so
+    it stays in their inventory, or the room.
+
+    If the container was nowhere (no landing), contents go to the former holder's
+    character, else to their own Evennia ``home``. Holders are untouched. A spill into a
+    vault room respects its capacity, as ``drop`` does (``VaultFull``). A refused
+    ``move_to`` raises ``NotReachable``, as ``take_out`` does. Only containers are
+    queried.
+    """
+    if not container.template.is_container:
+        return
+    contents = list(
+        ItemInstance.objects.filter(contained_in=container).select_related("game_object")
+    )
+    if not contents:
+        return
+    parent = container.contained_in
+    holder_sheet = container.holder_character_sheet
+    fallback = holder_sheet.character if holder_sheet is not None else None
+    for content in contents:
+        content.contained_in = parent
+        content.save(update_fields=["contained_in"])
+        game_object = content.game_object
+        if game_object is None:
+            continue
+        if parent is not None and parent.game_object is not None:
+            target = parent.game_object
+        else:
+            target = landing or fallback or game_object.home
+        if target is None:
+            logger.warning(
+                "Spilled item %s has no landing, holder or home; it stays where it was.",
+                content.pk,
+            )
+            continue
+        _assert_spill_fits(target)
+        if not game_object.move_to(target, quiet=True):
+            raise NotReachable
+
+
+def _assert_spill_fits(
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM - a spill lands on a character or a room
+) -> None:
+    """A spill into a vault room respects its capacity, exactly as ``drop`` does."""
+    if hasattr(target, "carried_items"):
+        return  # a character, not a room
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.room_features.vault_services import (  # noqa: PLC0415
+        vault_capacity_remaining,
+        vault_for_room,
+    )
+
+    profile = RoomProfile.objects.filter(objectdb=target).first()
+    vault = vault_for_room(profile) if profile is not None else None
+    if vault is not None and vault_capacity_remaining(vault) <= 0:
+        raise VaultFull
+
+
 def _invalidate_caches(item_instance: ItemInstance) -> None:
     for attr in ("effective_weapon_damage", "effective_armor_soak"):
         with contextlib.suppress(AttributeError):
             delattr(item_instance, attr)
     for equipped in EquippedItem.objects.filter(item_instance=item_instance):
-        equipped.character.equipped_items.invalidate()
+        # EquippedItem.character is a CharacterSheet; the cached handler hangs off its
+        # Character typeclass, not the sheet's related manager.
+        equipped.character.character.equipped_items.invalidate()
 
 
 @transaction.atomic
@@ -78,27 +243,9 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
     )
     _invalidate_caches(locked)
     if locked.charges == 0:
-        if preserve:
-            locked.destroyed_at = timezone.now()
-            locked.save(update_fields=["destroyed_at"])
-            game_object = locked.game_object
-            if game_object is not None:
-                # Deliberately relocate-but-not-delete the game_object: the
-                # ItemInstance is preserved (soft-delete) for its per-instance
-                # data/provenance, so we keep the row and just pull it out of
-                # play (mirrors the hard-delete branch, which DOES delete).
-                game_object.location = None
-                game_object.save()
-            OwnershipEvent.objects.create(
-                item_instance=locked,
-                event_type=OwnershipEventType.CONSUMED,
-                from_character_sheet=locked.holder_character_sheet,
-                notes="Consumed — final charge spent (preserved).",
-            )
-        else:
-            # Bare throwaway: nothing worth preserving — remove the whole
-            # footprint (no dangling CONSUMED row). #1025 convergence.
-            hard_delete_item_instance(locked)
+        destroy_consumed_item_instance(
+            locked, preserve=preserve, note="Consumed: final charge spent."
+        )
     return locked
 
 
@@ -117,20 +264,13 @@ def forfeit_item_instance(*, item_instance: ItemInstance, note: str = "") -> Ite
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     if locked.destroyed_at is not None:
         return locked
-    holder = locked.holder_character_sheet
-    locked.destroyed_at = timezone.now()
-    locked.save(update_fields=["destroyed_at"])
-    game_object = locked.game_object
-    if game_object is not None:
-        # Relocate-but-not-delete, mirroring the consume soft-delete branch:
-        # the row is preserved for provenance; the object leaves play.
-        game_object.location = None
-        game_object.save()
-    OwnershipEvent.objects.create(
-        item_instance=locked,
+    # Always preserved: a forfeited item is story-significant provenance. The shared
+    # helper clears holder and container (#4099), spills any contents and unequips.
+    destroy_consumed_item_instance(
+        locked,
+        preserve=True,
+        note=note or "Forfeited — staked and lost.",
         event_type=OwnershipEventType.TRANSFERRED,
-        from_character_sheet=holder,
-        notes=note or "Forfeited — staked and lost.",
     )
     _invalidate_caches(locked)
     return locked

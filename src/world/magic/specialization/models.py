@@ -23,6 +23,8 @@ from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
+from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractCapabilityGrant,
@@ -183,7 +185,7 @@ class AbstractSpecializedVariant(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class TechniqueVariant(NaturalKeyMixin, AbstractSpecializedVariant):
+class TechniqueVariant(NaturalKeyMixin, CreditedContent, AbstractSpecializedVariant):
     """A resonance-specialized variant of a Technique.
 
     A parent ``Technique`` has variant rows keyed by ``(parent_technique,
@@ -223,6 +225,16 @@ class TechniqueVariant(NaturalKeyMixin, AbstractSpecializedVariant):
         default=0,
         help_text="Added to the parent technique's control when this variant resolves.",
     )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing gloss for this form, shown where it can be picked (#4099).",
+    )
+    creation_point_cost = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Character-creation points to take this form early (#4099). Blank = not "
+        "offered in creation. Only forms unlocking at thread level 1 or 2 can be offered.",
+    )
 
     objects = NaturalKeyManager()
 
@@ -235,6 +247,14 @@ class TechniqueVariant(NaturalKeyMixin, AbstractSpecializedVariant):
             models.UniqueConstraint(
                 fields=["parent_technique", "resonance", "unlock_thread_level"],
                 name="technique_variant_unique_parent_resonance_level",
+            ),
+            models.CheckConstraint(
+                check=models.Q(creation_point_cost__isnull=True)
+                | models.Q(
+                    unlock_thread_level__gte=1,
+                    unlock_thread_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL,
+                ),
+                name="technique_variant_creation_cost_early_level",
             ),
         ]
 

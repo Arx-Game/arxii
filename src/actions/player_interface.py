@@ -659,11 +659,15 @@ def _combat_actions(
         position_target_shape,
         protective_condition_and_flavor,
     )
+    from world.magic.services.technique_personalization import hold_display_name  # noqa: PLC0415
     from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
 
     # The readied Audere ultimate (if any) joins the known-technique list for
     # this one declaration window -- it never becomes a CharacterTechnique row
     # (Task 2), so it has to be appended here rather than showing up in `grants`.
+    # #4099: the caster's own name for each hold, built once rather than per
+    # technique. A readied ultimate has no hold and keeps its catalog name.
+    holds = {grant.technique_id: grant for grant in grants}
     techniques = [grant.technique for grant in grants]
     readied = readied_ultimate(sheet)
     if readied is not None and readied.technique.action_template_id is not None:
@@ -703,7 +707,7 @@ def _combat_actions(
             PlayerAction(
                 backend=ActionBackend.COMBAT,
                 check_type=check_type,
-                display_name=technique.name,
+                display_name=hold_display_name(holds.get(technique.pk), fallback=technique.name),
                 ref=ref,
                 action_template=template,
                 action_category=technique.action_category,

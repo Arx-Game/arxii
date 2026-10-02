@@ -30,6 +30,7 @@ from world.magic.constants import (
     ALTERATION_TIER_CAPS,
     AnimaContributionKind,
     GlimpseTagAxis,
+    RestrictionKind,
     TargetKind,
     anima_band_for,
     is_imbuing_ritual,
@@ -389,6 +390,9 @@ class TechniqueFormSerializer(serializers.Serializer):
     is_locked = serializers.BooleanField(read_only=True)
     unlock_thread_level = serializers.IntegerField(read_only=True)
     thread_level = serializers.IntegerField(read_only=True)
+    #: True when this form applies because it was bought early (#4099), before the
+    #: caster's own thread reached it.
+    is_early = serializers.BooleanField(read_only=True)
     effect_summary = TechniqueEffectSummarySerializer(read_only=True)
 
 
@@ -403,7 +407,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
     restriction_ids = serializers.PrimaryKeyRelatedField(
         source="restrictions",
         many=True,
-        queryset=Restriction.objects.all(),
+        queryset=Restriction.objects.filter(kind=RestrictionKind.DESIGN),
         required=False,
     )
     target_spec = serializers.SerializerMethodField()

@@ -375,3 +375,36 @@ WHISPERS_FRAME = (
     "Rumors of note about the character, and what they consider vile slander and what "
     "might be pleasant hyperbole."
 )
+
+#: CGExplanation keys the Gift stage's "make it yours" panel reads (#4099). Every
+#: sentence on that panel is one of these rows, authored in admin; none is a string
+#: in the component. A key missing from the database is filled at read time by
+#: `CGExplanationsSerializer.to_dict()` with a visible PLACEHOLDER marker (controller
+#: ruling: no seed-data migration - authored content lives in the database, and the
+#: repo's `check_migration_seed_data` hook forbids seeding it from a migration).
+PERSONALIZATION_COPY_KEYS: tuple[str, ...] = (
+    "personalize_heading",
+    "personalize_name_title",
+    "personalize_name_gloss",
+    "personalize_flourish_title",
+    "personalize_flourish_gloss",
+    "personalize_form_title",
+    "personalize_form_gloss",
+    "personalize_price_title",
+    "personalize_price_gloss",
+    "personalize_name_label",
+    "personalize_description_label",
+    "personalize_free_note",
+    "personalize_mechanics_note",
+    "personalize_needs_resonance",
+    #: The collapsed summary row's label when a section (name/description,
+    #: flourish, form, or price) carries no pick yet (#4099 demo-fidelity fix,
+    #: Screen 1's funnel-door rows) — one generic key shared by all four rows.
+    "personalize_summary_none",
+)
+
+#: ``draft_data`` key for creation-time technique personalization picks (#4099).
+#: Maps a technique id (string key, JSON has no int keys) to its picks — name,
+#: description, flourish/form/price ids. Entries for a technique no longer in
+#: ``selected_technique_ids`` are ignored by costs, validation and finalize alike.
+TECHNIQUE_PERSONALIZATIONS_KEY = "technique_personalizations"

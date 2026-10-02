@@ -10,8 +10,10 @@ from rest_framework import serializers
 
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
+    PERSONALIZATION_COPY_KEYS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    TECHNIQUE_PERSONALIZATIONS_KEY,
     AnchorSource,
     OfferChapter,
     QuestionKind,
@@ -53,6 +55,7 @@ from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.services import get_ic_now
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.magic.serializers import TechniqueEffectSummarySerializer
+from world.magic.types.personalization import PersonalizationOptionSet
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.constants import MembershipBasis
 from world.roster.models import Family, KinSlotPool, Kinsperson
@@ -533,6 +536,108 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     def get_is_species_technique(self, obj: Technique) -> bool:
         """True when this technique belongs to a gift granted by the species."""
         return obj.id in self.context.get("species_technique_ids", set())
+
+
+class CGPriceComponentSerializer(serializers.Serializer):
+    """One item a price consumes on every cast that pays it (#4099). Authored name."""
+
+    name = serializers.CharField()
+    quantity = serializers.IntegerField()
+
+
+class CGPersonalizationOptionSerializer(serializers.Serializer):
+    """One flourish, form or price a CG pick can take (#4099). All text is authored.
+
+    ``consumes`` / ``inflicts`` are a price's real cost (always empty / null for a
+    flourish or a form), so a player sees what a price spends before choosing it.
+    """
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    gloss = serializers.CharField(allow_blank=True)
+    intensity_delta = serializers.IntegerField()
+    control_delta = serializers.IntegerField()
+    power_bonus = serializers.IntegerField()
+    level = serializers.IntegerField()
+    cost = serializers.IntegerField()
+    consumes = CGPriceComponentSerializer(many=True)
+    inflicts = serializers.CharField(allow_null=True)
+
+
+class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
+    """Everything the make-it-yours panel can offer for one chosen technique (#4099)."""
+
+    technique_id = serializers.IntegerField(source="technique.pk")
+    technique_name = serializers.CharField(source="technique.name")
+    needs_resonance = serializers.SerializerMethodField()
+    flourishes = serializers.SerializerMethodField()
+    forms = serializers.SerializerMethodField()
+    prices = serializers.SerializerMethodField()
+
+    def get_needs_resonance(self, obj: PersonalizationOptionSet) -> bool:  # noqa: ARG002
+        return self.context.get("resonance_id") is None
+
+    @extend_schema_field(CGPersonalizationOptionSerializer(many=True))
+    def get_flourishes(self, obj: PersonalizationOptionSet) -> list[dict]:
+        rows = [
+            {
+                "id": b.pk,
+                "name": b.name,
+                "gloss": b.narrative_snippet,
+                "intensity_delta": b.flat_intensity_delta,
+                "control_delta": 0,
+                "power_bonus": 0,
+                "level": b.min_crossing_level,
+                "cost": b.creation_point_cost,
+                "consumes": [],
+                "inflicts": None,
+            }
+            for b in obj.flourishes
+        ]
+        return list(CGPersonalizationOptionSerializer(rows, many=True).data)
+
+    @extend_schema_field(CGPersonalizationOptionSerializer(many=True))
+    def get_forms(self, obj: PersonalizationOptionSet) -> list[dict]:
+        rows = [
+            {
+                "id": v.pk,
+                "name": v.name_override or obj.technique.name,
+                "gloss": v.description,
+                "intensity_delta": v.intensity_delta,
+                "control_delta": v.control_delta,
+                "power_bonus": 0,
+                "level": v.unlock_thread_level,
+                "cost": v.creation_point_cost,
+                "consumes": [],
+                "inflicts": None,
+            }
+            for v in obj.forms
+        ]
+        return list(CGPersonalizationOptionSerializer(rows, many=True).data)
+
+    @extend_schema_field(CGPersonalizationOptionSerializer(many=True))
+    def get_prices(self, obj: PersonalizationOptionSet) -> list[dict]:
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            price_consumes_payload,
+            price_inflicts_name,
+        )
+
+        rows = [
+            {
+                "id": p.pk,
+                "name": p.name,
+                "gloss": p.description,
+                "intensity_delta": 0,
+                "control_delta": 0,
+                "power_bonus": p.power_bonus,
+                "level": 0,
+                "cost": p.creation_point_cost,
+                "consumes": price_consumes_payload(obj.price_components.get(p.pk, [])),
+                "inflicts": price_inflicts_name(p),
+            }
+            for p in obj.prices
+        ]
+        return list(CGPersonalizationOptionSerializer(rows, many=True).data)
 
 
 def _offer_row(offer: DistinctionOffer, *, with_arrival: bool) -> dict:
@@ -1588,6 +1693,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_origin_figures(value)
         self._validate_new_family_name(value)
         self._validate_family_aspect_picks(value)
+        self._validate_technique_personalizations(value)
 
         goals = value.get("goals")
         if goals is not None:
@@ -1595,6 +1701,77 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         self._validate_actor_sheet(value)
         return value
+
+    @staticmethod
+    def _personalization_key_is_valid(key: object) -> bool:
+        """Only a plain base-10 integer string (#4099 fix round 1).
+
+        ``isdigit()`` also accepts non-decimal digit characters (e.g. the
+        superscript "²"), which ``int()`` then rejects — ``isdecimal()`` (plain
+        base-10 digits only) plus an actual ``int()`` parse is the real check.
+        The parser side (``parse_personalization_picks``) must agree with this
+        one, or a key this method lets through could still crash there.
+        """
+        if not isinstance(key, str) or not key.isdecimal():
+            return False
+        try:
+            int(key)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def _personalization_entry_is_well_shaped(entry: object, allowed: set[str]) -> bool:
+        """``entry`` is a dict of only the allowed keys, with plain (non-bool) int ids."""
+        if not isinstance(entry, dict) or set(entry) - allowed:
+            return False
+        for id_field in ("signature_bonus_id", "early_form_id", "price_id"):
+            value = entry.get(id_field)
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+                return False
+        return True
+
+    def _validate_technique_personalizations(self, data: dict) -> None:
+        """Shape + hygiene for ``technique_personalizations`` (#4099); cleans text in place."""
+        from world.magic.exceptions import InvalidPersonalText  # noqa: PLC0415
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            clean_custom_technique_description,
+            clean_custom_technique_name,
+        )
+
+        raw = data.get(TECHNIQUE_PERSONALIZATIONS_KEY)
+        if raw is None:
+            return
+        msg = "technique_personalizations must map a technique id to its picks"
+        if not isinstance(raw, dict):
+            raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
+        allowed = {
+            "custom_name",
+            "custom_description",
+            "signature_bonus_id",
+            "early_form_id",
+            "price_id",
+        }
+        for key, entry in raw.items():
+            if not self._personalization_key_is_valid(
+                key
+            ) or not self._personalization_entry_is_well_shaped(entry, allowed):
+                raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
+            for text_field in ("custom_name", "custom_description"):
+                value = entry.get(text_field)
+                if value is None:
+                    entry[text_field] = ""
+                elif not isinstance(value, str):
+                    raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
+            try:
+                entry["custom_name"] = clean_custom_technique_name(entry["custom_name"])
+                entry["custom_description"] = clean_custom_technique_description(
+                    entry["custom_description"]
+                )
+            except InvalidPersonalText as exc:
+                raise serializers.ValidationError(
+                    {TECHNIQUE_PERSONALIZATIONS_KEY: exc.user_message}
+                ) from exc
 
     def _validate_actor_sheet(self, data: dict) -> None:
         """The Actor's Sheet keys (#3621): three answers, the enemy pick, the Introductions."""
@@ -1985,9 +2162,21 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
 class CGExplanationsSerializer:
     """Serializes all CG explanatory text as a flat dict: {key: text, ...}."""
 
+    #: Mirrors `web.admin.tuning.required_content._PLACEHOLDER_MARK` /
+    #: `core_management.content_fixtures.PLACEHOLDER_MARK` - the same visible marker
+    #: convention, kept as its own copy here rather than importing across the
+    #: world -> web.admin layering boundary (#4099). Controller ruling: no seed-data
+    #: migration for `PERSONALIZATION_COPY_KEYS` - authored content lives in the
+    #: database only, so a key with no row is filled at read time instead.
+    _PLACEHOLDER_MARK = "PLACEHOLDER"
+
     @staticmethod
     def to_dict() -> dict[str, str]:
-        return {obj.key: obj.text for obj in CGExplanation.objects.all()}
+        explanations = {obj.key: obj.text for obj in CGExplanation.objects.all()}
+        for key in PERSONALIZATION_COPY_KEYS:
+            if key not in explanations or not explanations[key].strip():
+                explanations[key] = f"{CGExplanationsSerializer._PLACEHOLDER_MARK}: {key}"
+        return explanations
 
 
 # ---------------------------------------------------------------------------

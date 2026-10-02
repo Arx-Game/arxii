@@ -18,6 +18,7 @@ from world.items.exceptions import (
 )
 from world.items.gems.constants import GemAxis
 from world.items.gems.models import Adornment, GemGrade
+from world.items.services.usage import destroy_consumed_item_instance
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -147,7 +148,11 @@ def pry_adornment(  # noqa: PLR0913 — keyword-only adornment + crafter + check
 
         check_result = perform_check_with_modifiers(crafter_character, check_type, base_difficulty)
         if check_result.success_level < min_success_level:
-            gem_instance.delete()  # CASCADE removes the Adornment + GemInstanceDetails
+            # #4099: the setting goes either way; the stone leaves play by the canonical
+            # destroy rule (soft-delete if it has a history, else its whole footprint),
+            # never a bare delete that would leave its game object behind.
+            adornment.delete()
+            destroy_consumed_item_instance(gem_instance, note="Shattered while being pried.")
             return PryResult(shattered=True, freed_gem=None, worth_removed=worth)
 
         adornment.delete()  # remove the setting; the stone survives
@@ -221,7 +226,8 @@ def cut_gem(
 
     if check_result.success_level < recipe.min_success_level:
         worth_lost = compute_gem_worth(gem)
-        gem_instance.delete()  # CASCADE deletes GemInstanceDetails
+        # #4099: canonical destroy rule, never a bare delete (ghost game object).
+        destroy_consumed_item_instance(gem_instance, note="Shattered while being cut.")
         return CutResult(shattered=True, new_cut_grade=None, worth=0, worth_lost=worth_lost)
 
     new_cut = resolve_cut_grade(gem.cut_grade, check_result.success_level)

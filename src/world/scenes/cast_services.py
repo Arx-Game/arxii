@@ -118,7 +118,9 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
             character_id=character_sheet_id,
             technique__action_template__isnull=False,
         )
-        .select_related("technique", "technique__action_template", "technique__effect_type")
+        .select_related(
+            "technique", "technique__action_template", "technique__effect_type", "price"
+        )
         .prefetch_related(
             # Every payload table the effect summary reads, in one shared
             # definition (#3682) — a surface that misses one pays a query per
@@ -345,6 +347,18 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         caster_persona.character_sheet.character, technique
     )
 
+    # Price clause (#4099): the authored cast-narration line of the price THIS cast
+    # paid (use_technique's one decision), never the hold's price — a cast that
+    # lacked the price's component narrates no cost.
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        paid_price_snippet,
+    )
+
+    technique_result = result.technique_result
+    price_snippet = paid_price_snippet(
+        technique_result.price_paid if technique_result is not None else None
+    )
+
     narration = render_cast_outcome_narration(
         actor_label=caster_persona.name,
         technique_name=technique_name if technique_name is not None else technique.name,
@@ -354,6 +368,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
         signature_snippet=signature_snippet,
+        price_snippet=price_snippet,
     )
 
     # #3807: every row this function creates was persisted and delivered to
@@ -426,7 +441,7 @@ def _conceal_action_interaction(action_interaction: Interaction, audience: CastA
     conceal_action_interaction(action_interaction, audience)
 
 
-def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
+def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolution
     *,
     request: SceneActionRequest,
     scene: Scene,
@@ -478,6 +493,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     if use_base_form:
         resolved_name = technique.name
         resolved_intensity = technique.intensity
+        form_applies = False
     else:
         from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
 
@@ -494,6 +510,27 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         )
         resolved_name = resolved.name
         resolved_intensity = resolved.intensity
+        # ``resolve_specialized_variant`` returns the bare ``Technique`` unchanged
+        # (no ``.variant`` attribute) when nothing covers it — a sheetless caster
+        # or no GIFT thread on this technique's gift — so only a resolved value
+        # exposing a non-None ``.variant`` counts as "a form applies".
+        try:
+            form_applies = resolved.variant is not None
+        except AttributeError:
+            form_applies = False
+
+    # #4099 fix (#4110 CI round): a custom name personalizes the technique, but a
+    # specialized FORM describes what actually happened in THIS cast — so the
+    # form's own name wins whenever one applies, and the caster's own name is
+    # used only for the base form (ADR-4099/docs/systems/magic.md are silent on
+    # this interaction; ruled here). Skip ``technique_display_name`` entirely
+    # when a form applies so a custom name never masks which form was cast.
+    if not form_applies:
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            technique_display_name,
+        )
+
+        resolved_name = technique_display_name(character, technique, fallback=resolved_name)
 
     difficulty = derive_cast_difficulty(technique)
 

@@ -4648,6 +4648,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/OffersResponse'
           description: ''
+  /api/character-creation/drafts/{id}/personalization-options/:
+    get:
+      operationId: character_creation_drafts_personalization_options_list
+      description: The make-it-yours options for each technique this draft has chosen
+        (#4099).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGTechniquePersonalizationOptions'
+          description: ''
   /api/character-creation/drafts/{id}/resubmit/:
     post:
       operationId: character_creation_drafts_resubmit_create
@@ -20478,7 +20502,13 @@ paths:
       description: |-
         ViewSet for Restriction lookup records.
 
-        Provides read-only access to restrictions that grant power bonuses.
+        Provides read-only access to the DESIGN restriction catalog — the
+        technique-authoring limitations ("Touch Range", "Undead Only") that refund
+        builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+        table (a caster's own chosen cost, #4099) and must never appear here; no
+        consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+        query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+        model table.
       parameters:
       - in: query
         name: allowed_effect_types
@@ -20507,7 +20537,13 @@ paths:
       description: |-
         ViewSet for Restriction lookup records.
 
-        Provides read-only access to restrictions that grant power bonuses.
+        Provides read-only access to the DESIGN restriction catalog — the
+        technique-authoring limitations ("Touch Range", "Undead Only") that refund
+        builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+        table (a caster's own chosen cost, #4099) and must never appear here; no
+        consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+        query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+        model table.
       parameters:
       - in: path
         name: id
@@ -43837,6 +43873,48 @@ components:
       - parentage_note
       - slots
       - sort_order
+    CGPersonalizationOption:
+      type: object
+      description: |-
+        One flourish, form or price a CG pick can take (#4099). All text is authored.
+
+        ``consumes`` / ``inflicts`` are a price's real cost (always empty / null for a
+        flourish or a form), so a player sees what a price spends before choosing it.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        gloss:
+          type: string
+        intensity_delta:
+          type: integer
+        control_delta:
+          type: integer
+        power_bonus:
+          type: integer
+        level:
+          type: integer
+        cost:
+          type: integer
+        consumes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPriceComponent'
+        inflicts:
+          type: string
+          nullable: true
+      required:
+      - consumes
+      - control_delta
+      - cost
+      - gloss
+      - id
+      - inflicts
+      - intensity_delta
+      - level
+      - name
+      - power_bonus
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -43864,6 +43942,18 @@ components:
           description: Whether this budget is currently active
       required:
       - id
+    CGPriceComponent:
+      type: object
+      description: One item a price consumes on every cast that pays it (#4099). Authored
+        name.
+      properties:
+        name:
+          type: string
+        quantity:
+          type: integer
+      required:
+      - name
+      - quantity
     CGTechniqueOption:
       type: object
       description: |-
@@ -43917,6 +44007,40 @@ components:
       - is_species_technique
       - is_tradition_technique
       - name
+    CGTechniquePersonalizationOptions:
+      type: object
+      description: Everything the make-it-yours panel can offer for one chosen technique
+        (#4099).
+      properties:
+        technique_id:
+          type: integer
+        technique_name:
+          type: string
+        needs_resonance:
+          type: boolean
+          readOnly: true
+        flourishes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPersonalizationOption'
+          readOnly: true
+        forms:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPersonalizationOption'
+          readOnly: true
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPersonalizationOption'
+          readOnly: true
+      required:
+      - flourishes
+      - forms
+      - needs_resonance
+      - prices
+      - technique_id
+      - technique_name
     CGVacancy:
       type: object
       description: An opening reachable from the draft, priced for it (#3648).
@@ -44146,8 +44270,15 @@ components:
           type: integer
         name:
           type: string
+          description: The owner's own name for this technique, or the catalog's (#4099).
+          readOnly: true
+        catalog_name:
+          type: string
         description:
           type: string
+          description: The owner's own description for this technique, or the catalog's
+            (#4099).
+          readOnly: true
         anima_cost:
           type: integer
         tier:
@@ -44194,6 +44325,7 @@ components:
           readOnly: true
       required:
       - anima_cost
+      - catalog_name
       - control
       - description
       - effect_summary
@@ -76123,7 +76255,9 @@ components:
         power_bonus:
           type: integer
           readOnly: true
-          description: Power bonus granted when this restriction is applied.
+          description: 'DESIGN: refunded against a design''s power cost in the technique
+            builder. PRICE: added to the caster''s power on every cast, as a power-ledger
+            term.'
         allowed_effect_type_ids:
           type: array
           items:
@@ -83241,6 +83375,9 @@ components:
         thread_level:
           type: integer
           readOnly: true
+        is_early:
+          type: boolean
+          readOnly: true
         effect_summary:
           allOf:
           - $ref: '#/components/schemas/TechniqueEffectSummary'
@@ -83250,6 +83387,7 @@ components:
       - effect_summary
       - intensity
       - is_default
+      - is_early
       - is_locked
       - name
       - resonance_id

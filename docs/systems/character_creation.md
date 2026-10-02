@@ -141,6 +141,11 @@ draft.calculate_cg_points_breakdown()   # itemized [{category, item, cost}, ...]
                                          # "species" (SpeciesGiftGrant.cg_point_cost summed
                                          # across the selected species + ancestors -
                                          # see docs/systems/species.md)
+                                         # "magic" (#4099: one line per creation
+                                         # personalization pick, at the option's own
+                                         # creation_point_cost; see
+                                         # docs/systems/magic.md's "Technique
+                                         # personalization" section)
 draft.calculate_final_stats()           # Dict[str, int] with bonuses applied
 draft.enforce_stat_caps()               # Clamp stats after distinction changes
 draft.get_expected_gift_count()         # Base 1 + bonus from distinctions
@@ -512,10 +517,23 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 ### Magic (Gift/Technique Selection, #2426)
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's chosen tradition + path
 - `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
+- `GET /api/character-creation/drafts/{id}/personalization-options/` - For each chosen
+  technique, the flourishes/forms/prices offered in creation at the draft's gift resonance
+  (#4099, `creation_personalization_options`; see `docs/systems/magic.md`'s "Technique
+  personalization" section)
 - Magic selections (`selected_gift_id`, `selected_technique_ids`, `selected_gift_resonance_id`,
   `anima_check_stat_id`, `anima_check_skill_id`, `anima_ritual_name`, `motif_description`,
   `glimpse_story`) are stored in `draft_data` JSON via draft PATCH — see `GiftStage` (frontend)
   and `compute_magic_errors` (validation)
+- `draft_data["technique_personalizations"]` (#4099): a dict keyed by technique id (as a
+  string), one entry per technique the player chose to personalize:
+  `{"<technique_id>": {"custom_name": str, "custom_description": str,
+  "signature_bonus_id": int | None, "early_form_id": int | None, "price_id": int | None}}`.
+  An entry for a technique not in `selected_technique_ids` is ignored by costs, validation
+  and finalize, and the frontend prunes it on deselect. Parsed by
+  `parse_personalization_picks`; validated by `personalization_pick_errors`
+  (`compute_magic_errors`); priced by `priced_personalization_lines`; applied at finalize by
+  `apply_creation_personalizations`.
 
 ### Application Workflow (Player)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review

@@ -8511,20 +8511,33 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
             persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
 
     from world.magic.services.signature_effects import resolve_signature_snippet  # noqa: PLC0415
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        paid_price_snippet,
+        technique_display_name,
+    )
 
     target_label = target.name if target is not None else None
-    signature_snippet = resolve_signature_snippet(participant.character_sheet.character, technique)
+    caster_character = participant.character_sheet.character
+    signature_snippet = resolve_signature_snippet(caster_character, technique)
+    # #4099: the price THIS resolved cast paid (use_technique's one decision, made at
+    # resolution, not declaration), never the hold's price.
+    price_snippet = paid_price_snippet(
+        combat_result.technique_use_result.price_paid
+        if isinstance(combat_result, CombatTechniqueResult)
+        else None
+    )
     interaction_result = next(
         (dr.damage_interaction for dr in outcome.damage_results if dr.damage_interaction),
         None,
     )
     narration = render_action_outcome_narration(
         actor_label=str(participant),
-        technique_name=technique.name,
+        technique_name=technique_display_name(caster_character, technique),
         target_label=target_label,
         outcome=outcome,
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
         signature_snippet=signature_snippet,
+        price_snippet=price_snippet,
         interaction_result=interaction_result,
         hit_text=technique.hit_narration,
         miss_text=technique.miss_narration,
@@ -10406,11 +10419,15 @@ def _narrate_technique_interpose_fizzle(
     Private line carries the why (anima); the room line never carries a number.
     The mechanical no-op shape is unchanged: no roll, no charge, damage proceeds.
     """
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
     from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
+    display_name = technique_display_name(interposer, technique)
     narrate_privately(
         interposer,
-        f"Your {technique.name} gutters for want of anima; {protected} takes the blow unguarded.",
+        f"Your {display_name} gutters for want of anima; {protected} takes the blow unguarded.",
     )
     _broadcast_commitment_line(
         action.participant.encounter,

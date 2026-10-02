@@ -395,6 +395,24 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     teaching structure; `Tradition.society` (no live consumer) was dropped. The `Cantrip`
     model + its full API/admin/frontend stack were removed. See `docs/systems/magic.md`
     and `docs/systems/character_creation.md` for the CG stage/endpoint detail.
+  - **Technique personalization at creation (#4099, ADR-4099) [BUILT & WIRED]:** CG's
+    Gift stage offers, per chosen technique, a free name/description plus a priced
+    flourish (`SignatureMotifBonus`), early form (`TechniqueVariant`), and price
+    (`Restriction`, `kind=PRICE`) whenever staff set that row's `creation_point_cost`.
+    A price may consume carried items (`PriceComponentRequirement`) and inflict a
+    condition (`Restriction.inflicted_condition`) on each cast that pays it;
+    `price_paid_for_cast` (`world/magic/services/technique_personalization.py`), called
+    once in `use_technique`, is the one decision, and a caster lacking a component casts
+    without the price. Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
+    finalize by `apply_creation_personalizations`
+    (`world/magic/services/creation_personalization.py`); the flourish pick also weaves a
+    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) via
+    `weave_creation_technique_thread`, so creation never skips a crossing. The old hard
+    level-3 floor on signing is gone; `SignatureMotifBonus.min_crossing_level` is the only
+    gate, so flourishes keep unlocking in play as the thread is imbued. Endpoint: `GET
+    drafts/{id}/personalization-options/`. Supersedes part of ADR-0136 ("personalization
+    starts at level 3"). See `docs/systems/magic.md`'s "Technique personalization"
+    section and `docs/systems/character_creation.md`'s Magic API section.
   - **Guided Glimpse Story (#2427):** `GlimpseTag` (`models/glimpse.py`, content model —
     `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
     natural key, `description`, `example`, `sort_order`, `is_active`),
@@ -2526,6 +2544,13 @@ Multi-stage character creation flow with draft system.
   otherwise calls `world.missions.services.run.staff_assign_mission()` verbatim (no new
   missions-app surface). Deliberately NOT best-effort — a misconfigured template raises and rolls
   back the whole finalization transaction (a content-authoring bug, not contention).
+- **Technique personalization (#4099, ADR-4099):** the Gift stage's "make it yours"
+  panel (`GET drafts/{id}/personalization-options/`, `draft_data["technique_personalizations"]`,
+  priced via the `"magic"` breakdown category) lets a player name, describe, price and
+  early-form a chosen technique at creation. Full detail lives in `docs/systems/magic.md`'s
+  "Technique personalization" section (service functions, models, visibility); the draft-side
+  shapes are in `docs/systems/character_creation.md`'s "Magic (Gift/Technique Selection,
+  #2426)" API section.
 - **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds the 12 stat Traits unconditionally, plus every `RosterType` shelf via `world.roster.seeds.ensure_rosters()` (#2728 — replaced two name-keyed `Roster.objects.get_or_create` calls that created duplicates of Active/Available while never creating Inactive, Frozen or Restricted at all), so `finalize_character` runs on a fresh DB. Species/Gender/HeightBand/Build/FormTrait family/Distinction family/CGExplanation are all `CONTENT_MODELS` (#2698, ADR-0168) — looked up via `authored_or_sample()` and invented only under `SEED_SAMPLE_CONTENT`; Realm/StartingArea/Beginnings/TarotCard/Path are open-ended world content gated behind the same flag. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Email notifications (#2162):** `world.character_creation.email_service.CGEmailService` —
   submission/approved/revisions-requested/denied notices, called (best-effort) from
@@ -6807,6 +6832,16 @@ holder is never notified a claim exists.
     (no `on_use_pool`) or `NoChargesRemaining` (consumable at 0 charges)
   - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
     deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
+  - `destroy_consumed_item_instance(item_instance, *, preserve=None, note, event_type=CONSUMED) -> None`
+    (`world/items/services/usage.py`, #4099) — THE rule for an item consumption uses up:
+    soft-delete when `differs_from_template` (destroyed_at, game object out of play,
+    CONSUMED event, or `event_type`), else `hard_delete_item_instance`; unequips first
+    and invalidates the holder's `carried_items`. Called by `consume_item_charges`,
+    `consume_materials`, building completion, shattered gems, `sell_to_fence` and
+    `forfeit_item_instance`. A soft-deleted item is held by nobody: holder and
+    `contained_in` are cleared (last holder: `provenance.last_holder`, from the exit
+    event), a container's contents spill to where it was; holder-keyed readers also
+    use `in_play()`
   - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
     — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
     by the `items.soft_delete_cleanup` daily cron task (#1025)
@@ -6834,7 +6869,9 @@ holder is never notified a claim exists.
       ritual path. Matches a requirement by its `material_category_id` (any member template)
       when set, else by `item_template_id` (Build 0a; ritual requirements have no category
       and their caller pre-filters to `item_template_id`, so that path is unchanged)
-    - `consume_materials(allocations) -> None`
+    - `consume_materials(allocations) -> None`: decrements each stack; a stack that
+      reaches 0 goes through `destroy_consumed_item_instance` (`usage.py`, #4099), soft-
+      or hard-delete, never a bare `delete()` that would leave a ghost game object
     - `meets_quality_tier(inst, requirement) -> bool`
   - **Narrative acquisition** (`world.items.services.narrative_grants`, #707 — no shop/
     merchant system exists anywhere in this codebase):

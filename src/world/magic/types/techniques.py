@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.checks.types import CheckResult
-    from world.magic.models import Resonance, Technique
+    from world.magic.models import Resonance, Restriction, Technique
     from world.mechanics.types import AppliedEffect
 
 
@@ -102,3 +102,7 @@ class TechniqueUseResult:
     declared_strain_commitment: int = 0
     effective_strain_commitment: int = 0
     strain_power_bonus: int = 0
+    #: The PRICE this cast paid (#4099), or ``None`` when it paid none: no price on
+    #: the hold, or a consumed component the caster did not carry. Every narration
+    #: seam reads this, never the hold, so a clause appears only for a paid price.
+    price_paid: Restriction | None = None
