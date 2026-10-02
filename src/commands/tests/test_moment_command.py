@@ -17,13 +17,14 @@ from evennia.utils.create import create_object
 from commands.dramatic_moments import CmdMoment
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import SuggestionStatus
+from world.gm.constants import GMPromptStatus
+from world.gm.factories import GMPromptFactory
+from world.gm.models import GMPrompt
 from world.magic.factories import (
     CharacterResonanceFactory,
-    DramaticMomentSuggestionFactory,
     DramaticMomentTypeFactory,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion, DramaticMomentTag
+from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 
 
@@ -53,7 +54,7 @@ class MomentTelnetE2ETest(TestCase):
         self.moment_type = DramaticMomentTypeFactory(
             resonance=self.resonance_holder.resonance, per_scene_cap=1
         )
-        self.suggestion = DramaticMomentSuggestionFactory(
+        self.suggestion = GMPromptFactory(
             moment_type=self.moment_type,
             character_sheet=self.sheet,
             scene=self.scene,
@@ -115,7 +116,7 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.gm_character, f"confirm {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.CONFIRMED)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.CONFIRMED)
         self.assertIsNotNone(self.suggestion.confirmed_tag)
         self.gm_character.msg.assert_called()
         msg = self.gm_character.msg.call_args[0][0]
@@ -125,7 +126,7 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.outsider_character, f"confirm {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.PENDING)
         self.outsider_character.msg.assert_called()
         msg = self.outsider_character.msg.call_args[0][0]
         self.assertIn("gm", msg.lower())
@@ -145,7 +146,7 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.gm_character, f"dismiss {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.DISMISSED)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.DISMISSED)
         self.assertIsNone(self.suggestion.confirmed_tag)
         self.gm_character.msg.assert_called()
         msg = self.gm_character.msg.call_args[0][0]
@@ -155,7 +156,7 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.outsider_character, f"dismiss {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.PENDING)
         self.outsider_character.msg.assert_called()
         msg = self.outsider_character.msg.call_args[0][0]
         self.assertIn("gm", msg.lower())
@@ -165,8 +166,8 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.gm_character, f"confirm {self.suggestion.pk}")
 
         self.assertEqual(
-            DramaticMomentSuggestion.objects.get(pk=self.suggestion.pk).status,
-            SuggestionStatus.CONFIRMED,
+            GMPrompt.objects.get(pk=self.suggestion.pk).status,
+            GMPromptStatus.CONFIRMED,
         )
         msg = self.gm_character.msg.call_args[0][0]
         self.assertIn("already", msg.lower())

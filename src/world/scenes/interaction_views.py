@@ -339,11 +339,9 @@ class InteractionViewSet(
         # Deferred: world.combat imports world.scenes at module scope elsewhere;
         # importing CombatRoundAction lazily keeps this view free of an import cycle.
         from world.combat.models import CombatRoundAction  # noqa: PLC0415
-        from world.magic.constants import SuggestionStatus  # noqa: PLC0415
-        from world.magic.models.dramatic_moment import (  # noqa: PLC0415
-            DramaticMomentSuggestion,
-            DramaticMomentTag,
-        )
+        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
 
         base_qs = Interaction.objects.select_related(
             "persona__character_sheet",
@@ -431,10 +429,10 @@ class InteractionViewSet(
                 to_attr="cached_dramatic_moment_tags",
             ),
             Prefetch(
-                "dramatic_moment_suggestions",
-                queryset=DramaticMomentSuggestion.objects.filter(
-                    status=SuggestionStatus.PENDING
-                ).select_related("moment_type"),
+                "gm_prompts",
+                queryset=GMPrompt.objects.filter(status=GMPromptStatus.PENDING).select_related(
+                    "moment_type"
+                ),
                 to_attr="cached_dramatic_moment_suggestions",
             ),
         )

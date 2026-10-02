@@ -25,6 +25,7 @@ from world.conditions.models import (
     DamageType,
     TreatmentTemplate,
 )
+from world.gm.models import GMPrompt
 from world.items.models import ItemInstance
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
@@ -67,7 +68,6 @@ from world.magic.models import (
     ThreadWeavingTeachingOffer,
 )
 from world.magic.models.dramatic_moment import (
-    DramaticMomentSuggestion,
     DramaticMomentTag,
     DramaticMomentType,
 )
@@ -3775,7 +3775,7 @@ class DramaticMomentSuggestionSerializer(serializers.ModelSerializer):
     moment_type_label = serializers.CharField(source="moment_type.label", read_only=True)
 
     class Meta:
-        model = DramaticMomentSuggestion
+        model = GMPrompt
         fields = [
             "id",
             "moment_type",

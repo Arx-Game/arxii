@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -12,12 +12,14 @@ from django.utils import timezone
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.areas.constants import AreaLevel
 from world.contributors.models import CreditedContent
 from world.gm.constants import (
     CatalogSuggestionProposalKind,
     GMApplicationStatus,
     GMLevel,
+    GMPromptStatus,
     GMTableStatus,
     TableRequestKind,
     TableRequestStatus,
@@ -1123,3 +1125,102 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         else:
             msg = f"Unknown action: {self.action}"
             raise ValidationError(msg)
+
+
+class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
+    """One entry in a GM's prompt queue (#4101; was DramaticMomentSuggestion, #2183).
+
+    The ``dramatic_moment`` kind is the original suggestion: a high-success
+    technique entrance asks the scene's GM to confirm a DramaticMomentType, and
+    confirming mints a DramaticMomentTag (resonance + renown) via
+    ``world.magic.services.gain.resolve_dramatic_moment_suggestion``.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
+
+    moment_type = models.ForeignKey(
+        "arxii.DramaticMomentType",
+        on_delete=models.PROTECT,
+        related_name="suggestions",
+    )
+    character_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="gm_prompts",
+    )
+    scene = models.ForeignKey(
+        "arxii.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text="Scene context; nullable for resilience to scene cleanup.",
+    )
+    interaction = models.ForeignKey(
+        "arxii.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
+        help_text="The entrance pose that triggered this prompt; nullable.",
+    )
+    interaction_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
+    )
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text=(
+            "The technique the entrance was cast with. Carried so that confirming "
+            "the suggestion can resolve the resonance from the thread the character "
+            "wove into that technique's gift. Null for a manual GM tag with no "
+            "technique behind it."
+        ),
+    )
+    success_level = models.PositiveSmallIntegerField(
+        help_text="Cast success level that triggered this suggestion.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=GMPromptStatus.choices,
+        default=GMPromptStatus.PENDING,
+        db_index=True,
+    )
+    resolved_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gm_prompts_resolved",
+        help_text="GM account that confirmed or dismissed this prompt.",
+    )
+    confirmed_tag = models.OneToOneField(
+        "arxii.DramaticMomentTag",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="source_suggestion",
+        help_text="The DramaticMomentTag minted on confirmation, if any.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "GM Prompt"
+        verbose_name_plural = "GM Prompts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["moment_type", "character_sheet", "scene"],
+                condition=Q(status="pending"),
+                name="one_pending_suggestion_per_type_sheet_scene",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"GMPrompt({self.character_sheet_id}, {self.status})"

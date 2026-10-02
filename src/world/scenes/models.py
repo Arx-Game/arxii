@@ -41,11 +41,9 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.combat.models import CombatRoundAction
+    from world.gm.models import GMPrompt
     from world.magic.models import PoseEndorsement
-    from world.magic.models.dramatic_moment import (
-        DramaticMomentSuggestion,
-        DramaticMomentTag,
-    )
+    from world.magic.models.dramatic_moment import DramaticMomentTag
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
@@ -1216,16 +1214,16 @@ class Interaction(SharedMemoryModel):
         )
 
     @PrunedCachedProperty
-    def cached_dramatic_moment_suggestions(self) -> list[DramaticMomentSuggestion]:
+    def cached_dramatic_moment_suggestions(self) -> list[GMPrompt]:
         """Pending dramatic-moment suggestions, fed by the ``to_attr``
         "cached_dramatic_moment_suggestions" Prefetch."""
-        from world.magic.constants import SuggestionStatus  # noqa: PLC0415
-        from world.magic.models.dramatic_moment import DramaticMomentSuggestion  # noqa: PLC0415
+        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
 
         return list(
-            DramaticMomentSuggestion.objects.filter(
-                interaction=self, status=SuggestionStatus.PENDING
-            ).select_related("moment_type")
+            GMPrompt.objects.filter(interaction=self, status=GMPromptStatus.PENDING).select_related(
+                "moment_type"
+            )
         )
 
     @PrunedCachedProperty

@@ -11,7 +11,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import SuggestionStatus
+from world.gm.constants import GMPromptStatus
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTypeFactory,
@@ -104,7 +104,7 @@ class DramaticMomentSuggestionCachedPropertyTest(TestCase):
         self.assertEqual(len(created), 1)
         # assertNumQueries(0) is the actual proof: it also exercises the in-loop
         # peek inside maybe_suggest_dramatic_moments (re-peeked fresh each
-        # iteration, since DramaticMomentSuggestion's RelatedCacheClearingMixin
+        # iteration, since GMPrompt's RelatedCacheClearingMixin
         # clears the cache on every get_or_create that creates a row) -- without
         # the write-site mutation, this read would fall back to a fresh query and
         # still report the same length, masking the missing mutation.
@@ -128,7 +128,7 @@ class DramaticMomentSuggestionCachedPropertyTest(TestCase):
             suggestion, confirm=False, resolver=self.resolver
         )
 
-        self.assertEqual(resolved.status, SuggestionStatus.DISMISSED)
+        self.assertEqual(resolved.status, GMPromptStatus.DISMISSED)
         # assertNumQueries(0) proves the empty list is the write-site filter, not a
         # fresh PENDING-filtered requery that happens to also come back empty.
         with self.assertNumQueries(0):

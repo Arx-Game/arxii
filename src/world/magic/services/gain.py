@@ -66,9 +66,9 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from world.gm.models import GMPrompt
     from world.items.models import Style
     from world.magic.models.dramatic_moment import (
-        DramaticMomentSuggestion,
         DramaticMomentTag,
         DramaticMomentType,
     )
@@ -1019,14 +1019,14 @@ def maybe_suggest_dramatic_moments(
     success_level: int,
     interaction: Interaction | None = None,
     technique: Technique | None = None,
-) -> list[DramaticMomentSuggestion]:
+) -> list[GMPrompt]:
     """Create PENDING GM suggestions for a high-success technique entrance (#2183).
 
     Bridges the technique-entrance deferral markers (Tasks 1-2) to the existing
     DramaticMomentTag machinery without auto-tagging: for every flagged
     DramaticMomentType whose threshold the success level clears, and whose
     per-scene cap isn't already spent on real tags, creates (idempotently) a
-    PENDING DramaticMomentSuggestion for a GM to later confirm or dismiss via
+    PENDING GMPrompt for a GM to later confirm or dismiss via
     ``resolve_dramatic_moment_suggestion``.
 
     *technique* is the technique the entrance was cast with. It is stored on the
@@ -1043,9 +1043,9 @@ def maybe_suggest_dramatic_moments(
     No-ops (returns []) when scene is None — a suggestion is scoped to a scene, same
     as the DramaticMomentTag per-scene cap it mirrors.
     """
-    from world.magic.constants import SuggestionStatus  # noqa: PLC0415
+    from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+    from world.gm.models import GMPrompt  # noqa: PLC0415
     from world.magic.models.dramatic_moment import (  # noqa: PLC0415
-        DramaticMomentSuggestion,
         DramaticMomentTag,
         DramaticMomentType,
     )
@@ -1053,7 +1053,7 @@ def maybe_suggest_dramatic_moments(
     if scene is None:
         return []
 
-    created: list[DramaticMomentSuggestion] = []
+    created: list[GMPrompt] = []
     flagged = DramaticMomentType.objects.filter(
         suggest_on_technique_entrance=True,
         suggestion_min_success_level__lte=success_level,
@@ -1067,7 +1067,7 @@ def maybe_suggest_dramatic_moments(
         ):
             continue
         # Peek (not read) BEFORE get_or_create — a row it creates fires
-        # DramaticMomentSuggestion's RelatedCacheClearingMixin, which clears every
+        # GMPrompt's RelatedCacheClearingMixin, which clears every
         # cached_* attribute on `interaction` as a side effect. Peeked fresh each
         # loop iteration so a suggestion appended on a prior pass isn't lost to the
         # next iteration's clear.
@@ -1076,11 +1076,11 @@ def maybe_suggest_dramatic_moments(
             if interaction is not None
             else None
         )
-        suggestion, was_created = DramaticMomentSuggestion.objects.get_or_create(
+        suggestion, was_created = GMPrompt.objects.get_or_create(
             moment_type=moment_type,
             character_sheet=character_sheet,
             scene=scene,
-            status=SuggestionStatus.PENDING,
+            status=GMPromptStatus.PENDING,
             defaults={
                 "success_level": success_level,
                 "interaction": interaction,
@@ -1096,9 +1096,9 @@ def maybe_suggest_dramatic_moments(
 
 
 def resolve_dramatic_moment_suggestion(
-    suggestion: DramaticMomentSuggestion, *, resolver: AccountDB, confirm: bool
-) -> DramaticMomentSuggestion:
-    """Confirm or dismiss a PENDING DramaticMomentSuggestion (#2183).
+    suggestion: GMPrompt, *, resolver: AccountDB, confirm: bool
+) -> GMPrompt:
+    """Confirm or dismiss a PENDING GMPrompt (#2183).
 
     Confirming mints a real DramaticMomentTag via ``create_dramatic_moment_tag``
     (which fires the resonance grant + renown award); its EndorsementValidationError
@@ -1108,10 +1108,10 @@ def resolve_dramatic_moment_suggestion(
     Raises:
         DramaticMomentSuggestionAlreadyResolved: If the suggestion isn't PENDING.
     """
-    from world.magic.constants import SuggestionStatus  # noqa: PLC0415
+    from world.gm.constants import GMPromptStatus  # noqa: PLC0415
     from world.magic.exceptions import DramaticMomentSuggestionAlreadyResolved  # noqa: PLC0415
 
-    if suggestion.status != SuggestionStatus.PENDING:
+    if suggestion.status != GMPromptStatus.PENDING:
         raise DramaticMomentSuggestionAlreadyResolved
 
     # Peek (not read) BEFORE any of the writes below — both the confirm branch's
@@ -1138,9 +1138,9 @@ def resolve_dramatic_moment_suggestion(
                 technique=suggestion.technique,
             )
             suggestion.confirmed_tag = tag
-            suggestion.status = SuggestionStatus.CONFIRMED
+            suggestion.status = GMPromptStatus.CONFIRMED
         else:
-            suggestion.status = SuggestionStatus.DISMISSED
+            suggestion.status = GMPromptStatus.DISMISSED
         suggestion.resolved_by = resolver
         suggestion.save()
 

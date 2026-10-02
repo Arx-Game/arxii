@@ -1870,21 +1870,6 @@ class DramaticMomentTagFactory(factory.django.DjangoModelFactory):
     interaction_timestamp = None
 
 
-class DramaticMomentSuggestionFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = "arxii.DramaticMomentSuggestion"
-
-    moment_type = factory.SubFactory(DramaticMomentTypeFactory)
-    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
-    scene = None
-    interaction = None
-    interaction_timestamp = None
-    success_level = 3
-    status = "pending"
-    resolved_by = None
-    confirmed_tag = None
-
-
 THREAD_SURGE_NAME = "Thread Surge"
 
 

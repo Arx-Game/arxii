@@ -34,11 +34,12 @@ from rest_framework.viewsets import GenericViewSet
 
 from world.character_sheets.models import CharacterSheet
 from world.distinctions.models import CharacterDistinction
+from world.gm.constants import GMPromptStatus
+from world.gm.models import GMPrompt
 from world.magic.constants import (
     PendingAlterationStatus,
     RestrictionKind,
     RitualExecutionKind,
-    SuggestionStatus,
     TargetKind,
     is_ghost_tutor_ritual,
     is_imbuing_ritual,
@@ -82,7 +83,6 @@ from world.magic.models import (
     ThreadWeavingTeachingOffer,
 )
 from world.magic.models.dramatic_moment import (
-    DramaticMomentSuggestion,
     DramaticMomentTag,
     DramaticMomentType,
 )
@@ -2832,7 +2832,7 @@ class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
     (which independently re-checks it again — defense in depth for a direct-call caller).
     """
 
-    queryset = DramaticMomentSuggestion.objects.select_related(
+    queryset = GMPrompt.objects.select_related(
         "moment_type", "character_sheet", "scene", "interaction"
     ).order_by("-created_at")
     serializer_class = DramaticMomentSuggestionSerializer
@@ -2855,7 +2855,7 @@ class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
             raise PermissionDenied(_ERR_SUGGESTION_PERMISSION)
 
         qs = self.filter_queryset(
-            self.get_queryset().filter(scene=scene, status=SuggestionStatus.PENDING)
+            self.get_queryset().filter(scene=scene, status=GMPromptStatus.PENDING)
         )
         page = self.paginate_queryset(qs)
         serializer = self.get_serializer(page if page is not None else qs, many=True)
@@ -2870,7 +2870,7 @@ class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
         )
         from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
 
-        suggestion = get_object_or_404(DramaticMomentSuggestion, pk=pk)
+        suggestion = get_object_or_404(GMPrompt, pk=pk)
         if not IsSceneGMOrOwnerOrStaff().has_object_permission(request, self, suggestion.scene):
             raise PermissionDenied(_ERR_SUGGESTION_PERMISSION)
 

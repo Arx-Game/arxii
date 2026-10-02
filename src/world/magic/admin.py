@@ -125,7 +125,6 @@ from world.magic.models.appetites import (
     FeedingRecord,
 )
 from world.magic.models.dramatic_moment import (
-    DramaticMomentSuggestion,
     DramaticMomentTag,
     DramaticMomentType,
 )
@@ -1641,31 +1640,6 @@ class DramaticMomentTagAdmin(admin.ModelAdmin):
     readonly_fields = tuple(f.name for f in DramaticMomentTag._meta.fields)  # noqa: SLF001
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
-        return False
-
-    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
-        return False
-
-
-@admin.register(DramaticMomentSuggestion)
-class DramaticMomentSuggestionAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character_sheet", "interaction", "resolved_by", "scene"]
-    list_display = (
-        "id",
-        "character_sheet",
-        "moment_type",
-        "scene",
-        "status",
-        "success_level",
-        "resolved_by",
-        "created_at",
-    )
-    list_filter = ("status", "moment_type")
-    readonly_fields = tuple(f.name for f in DramaticMomentSuggestion._meta.fields)  # noqa: SLF001
-
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002
-        # Suggestions are only ever created by maybe_suggest_dramatic_moments() and
-        # resolved via resolve_dramatic_moment_suggestion() — no admin-authored rows.
         return False
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002

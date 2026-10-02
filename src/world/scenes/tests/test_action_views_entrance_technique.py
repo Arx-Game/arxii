@@ -6,7 +6,7 @@ has no "entrance" enhancement row and therefore always 400ed for the frontend's
 technique-driven entrance call. This module proves the new branch
 (``_create_technique_entrance``) dispatches straight through ``EntranceAction``
 (mirroring telnet ``CmdEnter``) and that ``entry_interaction_id`` survives the
-serializer to land on the created ``DramaticMomentSuggestion.interaction``.
+serializer to land on the created ``GMPrompt.interaction``.
 """
 
 from __future__ import annotations
@@ -19,12 +19,12 @@ from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from evennia_extensions.factories import AccountFactory
+from world.gm.models import GMPrompt
 from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
     ensure_dramatic_entrance_content,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
 from world.scenes.action_views import SceneActionRequestViewSet
@@ -101,7 +101,7 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
 
     def test_entrance_technique_dispatches_and_carries_interaction(self) -> None:
         """A successful entrance-technique REST call threads entry_interaction_id
-        through to the created DramaticMomentSuggestion."""
+        through to the created GMPrompt."""
         technique = make_benign_castable_technique()
         grant_technique(self.caster, technique)
 
@@ -123,9 +123,7 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
             )
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
-        suggestion = DramaticMomentSuggestion.objects.get(
-            character_sheet=self.caster.character_sheet
-        )
+        suggestion = GMPrompt.objects.get(character_sheet=self.caster.character_sheet)
         assert suggestion.interaction_id == entry_interaction.pk
 
     def test_entrance_technique_without_interaction_id_still_dispatches(self) -> None:
@@ -143,9 +141,7 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
             )
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
-        suggestion = DramaticMomentSuggestion.objects.get(
-            character_sheet=self.caster.character_sheet
-        )
+        suggestion = GMPrompt.objects.get(character_sheet=self.caster.character_sheet)
         assert suggestion.interaction_id is None
 
     def test_no_puppet_returns_400(self) -> None:

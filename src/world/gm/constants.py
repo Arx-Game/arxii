@@ -117,3 +117,11 @@ class TableRequestRole(models.TextChoices):
 
     MINE = "mine", "Mine"
     GM = "gm", "GM"
+
+
+class GMPromptStatus(models.TextChoices):
+    """Lifecycle of a GMPrompt (#2183; generalized #4101)."""
+
+    PENDING = "pending", "Pending"
+    CONFIRMED = "confirmed", "Confirmed"
+    DISMISSED = "dismissed", "Dismissed"

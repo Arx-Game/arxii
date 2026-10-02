@@ -12,10 +12,10 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import SuggestionStatus
+from world.gm.constants import GMPromptStatus
+from world.gm.factories import GMPromptFactory
 from world.magic.factories import (
     CharacterResonanceFactory,
-    DramaticMomentSuggestionFactory,
     DramaticMomentTagFactory,
     DramaticMomentTypeFactory,
 )
@@ -41,7 +41,7 @@ class DramaticMomentSuggestionListTest(APITestCase):
         self.scene = SceneFactory()
         self.gm = AccountFactory()
         SceneGMParticipationFactory(scene=self.scene, account=self.gm)
-        self.suggestion = DramaticMomentSuggestionFactory(
+        self.suggestion = GMPromptFactory(
             moment_type=self.moment_type,
             character_sheet=self.sheet,
             scene=self.scene,
@@ -57,11 +57,11 @@ class DramaticMomentSuggestionListTest(APITestCase):
         self.assertEqual(results[0]["moment_type_label"], self.moment_type.label)
 
     def test_resolved_suggestion_is_excluded(self):
-        DramaticMomentSuggestionFactory(
+        GMPromptFactory(
             moment_type=self.moment_type,
             character_sheet=self.sheet,
             scene=self.scene,
-            status=SuggestionStatus.DISMISSED,
+            status=GMPromptStatus.DISMISSED,
         )
         self.client.force_authenticate(self.gm)
         resp = self.client.get(self.list_url, {"scene": self.scene.pk})
@@ -101,7 +101,7 @@ class DramaticMomentSuggestionConfirmDismissTest(APITestCase):
         self.scene = SceneFactory()
         self.gm = AccountFactory()
         SceneGMParticipationFactory(scene=self.scene, account=self.gm)
-        self.suggestion = DramaticMomentSuggestionFactory(
+        self.suggestion = GMPromptFactory(
             moment_type=self.moment_type,
             character_sheet=self.sheet,
             scene=self.scene,
@@ -117,9 +117,9 @@ class DramaticMomentSuggestionConfirmDismissTest(APITestCase):
         self.client.force_authenticate(self.gm)
         resp = self.client.post(self._url("confirm"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        self.assertEqual(resp.data["status"], SuggestionStatus.CONFIRMED)
+        self.assertEqual(resp.data["status"], GMPromptStatus.CONFIRMED)
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.CONFIRMED)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.CONFIRMED)
         self.assertIsNotNone(self.suggestion.confirmed_tag)
         self.assertTrue(
             DramaticMomentTag.objects.filter(pk=self.suggestion.confirmed_tag_id).exists()
@@ -133,7 +133,7 @@ class DramaticMomentSuggestionConfirmDismissTest(APITestCase):
         resp = self.client.post(self._url("dismiss"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.DISMISSED)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.DISMISSED)
         self.assertIsNone(self.suggestion.confirmed_tag)
 
     def test_non_gm_participant_confirm_is_forbidden(self):
@@ -143,7 +143,7 @@ class DramaticMomentSuggestionConfirmDismissTest(APITestCase):
         resp = self.client.post(self._url("confirm"))
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, resp.data)
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.PENDING)
 
     def test_confirm_after_cap_returns_400_with_user_message(self):
         DramaticMomentTagFactory(
@@ -157,7 +157,7 @@ class DramaticMomentSuggestionConfirmDismissTest(APITestCase):
         self.assertIn("detail", resp.data)
         self.assertTrue(resp.data["detail"])
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.PENDING)
 
     def test_double_confirm_returns_400(self):
         self.client.force_authenticate(self.gm)
@@ -178,7 +178,7 @@ class DramaticMomentSuggestionsOnInteractionTest(APITestCase):
         self.moment_type = DramaticMomentTypeFactory(resonance=self.resonance_holder.resonance)
         self.scene = SceneFactory()
         self.interaction = InteractionFactory(scene=self.scene)
-        self.suggestion = DramaticMomentSuggestionFactory(
+        self.suggestion = GMPromptFactory(
             moment_type=self.moment_type,
             character_sheet=self.sheet,
             scene=self.scene,
@@ -212,7 +212,7 @@ class DramaticMomentSuggestionsOnInteractionTest(APITestCase):
         self.assertEqual(results[0]["dramatic_moment_suggestions"], [])
 
     def test_resolved_suggestion_absent_even_for_gm(self):
-        self.suggestion.status = SuggestionStatus.CONFIRMED
+        self.suggestion.status = GMPromptStatus.CONFIRMED
         self.suggestion.save()
         gm = AccountFactory()
         SceneGMParticipationFactory(scene=self.scene, account=gm)

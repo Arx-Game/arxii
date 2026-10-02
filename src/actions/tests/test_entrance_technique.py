@@ -32,13 +32,13 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
+from world.gm.models import GMPrompt
 from world.magic.entry_flourish import PendingEntryFlourishOffer
 from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
     ensure_dramatic_entrance_content,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion
 from world.scenes.constants import RoundStatus
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
@@ -219,9 +219,7 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
             ).exists()
         )
         self.assertTrue(
-            DramaticMomentSuggestion.objects.filter(
-                character_sheet=self.caster.character_sheet
-            ).exists()
+            GMPrompt.objects.filter(character_sheet=self.caster.character_sheet).exists()
         )
 
     # -------------------------------------------------------------------------
@@ -247,9 +245,7 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
             ).exists()
         )
         self.assertTrue(
-            DramaticMomentSuggestion.objects.filter(
-                character_sheet=self.caster.character_sheet
-            ).exists()
+            GMPrompt.objects.filter(character_sheet=self.caster.character_sheet).exists()
         )
 
     # -------------------------------------------------------------------------
@@ -272,9 +268,7 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
             ).exists()
         )
         self.assertFalse(
-            DramaticMomentSuggestion.objects.filter(
-                character_sheet=self.caster.character_sheet
-            ).exists()
+            GMPrompt.objects.filter(character_sheet=self.caster.character_sheet).exists()
         )
 
     # -------------------------------------------------------------------------

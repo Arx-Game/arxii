@@ -91,7 +91,6 @@ from world.magic.models.crossing import (
 )
 from world.magic.models.crossings import ThreadCrossingThreshold
 from world.magic.models.dramatic_moment import (
-    DramaticMomentSuggestion,
     DramaticMomentTag,
     DramaticMomentType,
 )
@@ -321,8 +320,6 @@ __all__ = [
     "DistinctionResonanceRankThreshold",
     # dramatic moment tagging (#545)
     "DistinctionRitualGrant",
-    # dramatic moment GM suggestion bridge (#2183)
-    "DramaticMomentSuggestion",
     "DramaticMomentTag",
     "DramaticMomentType",
     "EffectType",

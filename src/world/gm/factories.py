@@ -20,6 +20,7 @@ from world.gm.models import (
     GMLevelCap,
     GMLevelChange,
     GMProfile,
+    GMPrompt,
     GMRosterInvite,
     GMTable,
     GMTableMembership,
@@ -28,6 +29,7 @@ from world.gm.models import (
     StoryArea,
     StoryRoomGrant,
 )
+from world.magic.factories import DramaticMomentTypeFactory
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.factories import RosterEntryFactory
 from world.scenes.action_constants import DifficultyChoice
@@ -384,3 +386,18 @@ def seed_catalog_starter_content() -> dict[str, SituationKind]:
             )
 
     return kinds
+
+
+class GMPromptFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GMPrompt
+
+    moment_type = factory.SubFactory(DramaticMomentTypeFactory)
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    scene = None
+    interaction = None
+    interaction_timestamp = None
+    success_level = 3
+    status = "pending"
+    resolved_by = None
+    confirmed_tag = None

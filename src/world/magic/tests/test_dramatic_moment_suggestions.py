@@ -1,7 +1,7 @@
 """Tests for the technique-entrance suggestion bridge (#2183).
 
 Task 3 of the dramatic-technique-driven-combat-entrance feature: the
-DramaticMomentSuggestion model + maybe_suggest_dramatic_moments /
+GMPrompt model + maybe_suggest_dramatic_moments /
 resolve_dramatic_moment_suggestion services + the "Grand Entrance" seed. Nothing
 calls these services yet — Tasks 4/5/6 wire the actual technique-entrance cast
 path to maybe_suggest_dramatic_moments and a GM-facing resolve surface to
@@ -12,7 +12,9 @@ from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import GainSource, SuggestionStatus
+from world.gm.constants import GMPromptStatus
+from world.gm.models import GMPrompt
+from world.magic.constants import GainSource
 from world.magic.exceptions import DramaticMomentSuggestionAlreadyResolved
 from world.magic.factories import (
     CharacterResonanceFactory,
@@ -22,7 +24,7 @@ from world.magic.factories import (
     ensure_dramatic_entrance_content,
 )
 from world.magic.models import CharacterResonance, ResonanceGrant
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion, DramaticMomentType
+from world.magic.models.dramatic_moment import DramaticMomentType
 from world.magic.services.gain import (
     maybe_suggest_dramatic_moments,
     resolve_dramatic_moment_suggestion,
@@ -58,14 +60,12 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
         )
         self.assertEqual(len(created), 1)
         suggestion = created[0]
-        self.assertEqual(suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(suggestion.status, GMPromptStatus.PENDING)
         self.assertEqual(suggestion.success_level, 3)
         self.assertEqual(suggestion.scene, self.scene)
         self.assertEqual(suggestion.interaction, self.interaction)
         self.assertEqual(suggestion.interaction_timestamp, self.interaction.timestamp)
-        self.assertEqual(
-            DramaticMomentSuggestion.objects.filter(status=SuggestionStatus.PENDING).count(), 1
-        )
+        self.assertEqual(GMPrompt.objects.filter(status=GMPromptStatus.PENDING).count(), 1)
 
     def test_suggest_respects_threshold(self):
         created = maybe_suggest_dramatic_moments(
@@ -74,7 +74,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=2,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
 
     def test_suggest_skips_unflagged(self):
         self.moment_type.suggest_on_technique_entrance = False
@@ -85,7 +85,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=5,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
 
     def test_suggest_does_not_filter_on_claimed_resonance(self):
         """Eligibility is the success threshold and the per-scene cap, nothing else.
@@ -103,7 +103,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
         )
         self.assertEqual(len(created), 1)
         self.assertEqual(created[0].character_sheet, other_sheet)
-        self.assertTrue(DramaticMomentSuggestion.objects.exists())
+        self.assertTrue(GMPrompt.objects.exists())
 
     def test_suggest_records_the_entrance_technique(self):
         """The technique is carried so confirm-time can read its woven thread."""
@@ -131,7 +131,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=5,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
 
     def test_suggest_idempotent_per_scene(self):
         first = maybe_suggest_dramatic_moments(
@@ -146,9 +146,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=4,
         )
         self.assertEqual(second, [])
-        self.assertEqual(
-            DramaticMomentSuggestion.objects.filter(status=SuggestionStatus.PENDING).count(), 1
-        )
+        self.assertEqual(GMPrompt.objects.filter(status=GMPromptStatus.PENDING).count(), 1)
 
     def test_suggest_returns_empty_without_scene(self):
         created = maybe_suggest_dramatic_moments(
@@ -157,7 +155,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=5,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
 
 
 class ResolveDramaticMomentSuggestionTest(TestCase):
@@ -188,7 +186,7 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
         resolved = resolve_dramatic_moment_suggestion(
             self.suggestion, resolver=self.resolver, confirm=True
         )
-        self.assertEqual(resolved.status, SuggestionStatus.CONFIRMED)
+        self.assertEqual(resolved.status, GMPromptStatus.CONFIRMED)
         self.assertIsNotNone(resolved.confirmed_tag)
         self.assertEqual(resolved.resolved_by, self.resolver)
         cr = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
@@ -200,7 +198,7 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
         resolved = resolve_dramatic_moment_suggestion(
             self.suggestion, resolver=self.resolver, confirm=False
         )
-        self.assertEqual(resolved.status, SuggestionStatus.DISMISSED)
+        self.assertEqual(resolved.status, GMPromptStatus.DISMISSED)
         self.assertIsNone(resolved.confirmed_tag)
         self.assertEqual(resolved.resolved_by, self.resolver)
         self.assertFalse(ResonanceGrant.objects.filter(source=GainSource.DRAMATIC_MOMENT).exists())

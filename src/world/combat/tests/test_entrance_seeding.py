@@ -29,6 +29,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import resolve_round
+from world.gm.models import GMPrompt
 from world.magic.factories import (
     CharacterAnimaFactory,
     EffectTypeFactory,
@@ -36,7 +37,6 @@ from world.magic.factories import (
     TechniqueFactory,
     ensure_dramatic_entrance_content,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
@@ -307,7 +307,7 @@ class EntranceDeclarationSuggestsOnResolutionTests(TestCase):
 
         resolve_round(encounter, offense_check_fn=mock_check_fn)
 
-        self.assertTrue(DramaticMomentSuggestion.objects.filter(character_sheet=sheet).exists())
+        self.assertTrue(GMPrompt.objects.filter(character_sheet=sheet).exists())
 
     def test_non_entrance_declaration_suggests_nothing(self) -> None:
         encounter, sheet = self._setup_encounter(from_entrance=False)
@@ -317,4 +317,4 @@ class EntranceDeclarationSuggestsOnResolutionTests(TestCase):
 
         resolve_round(encounter, offense_check_fn=mock_check_fn)
 
-        self.assertFalse(DramaticMomentSuggestion.objects.filter(character_sheet=sheet).exists())
+        self.assertFalse(GMPrompt.objects.filter(character_sheet=sheet).exists())

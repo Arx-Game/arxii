@@ -1,6 +1,6 @@
 """Dramatic-moment suggestion confirm/dismiss actions (#2183).
 
-Bridges the GM-facing ``DramaticMomentSuggestion`` inbox (Task 3's
+Bridges the GM-facing ``GMPrompt`` inbox (Task 3's
 ``resolve_dramatic_moment_suggestion``) to a shared web+telnet dispatch seam.
 
 Both actions are **account-authorized** (mirroring ``actions/definitions/events.py``'s
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
-    from world.magic.models.dramatic_moment import DramaticMomentSuggestion
+    from world.gm.models import GMPrompt
     from world.scenes.models import Scene
 
 _MSG_WHICH_SUGGESTION = "Which suggestion? Provide a suggestion id."
@@ -44,16 +44,16 @@ _RESOLVE_EXCEPTIONS = (
 )
 
 
-def _suggestion_or_none(suggestion_id: Any) -> DramaticMomentSuggestion | None:
-    from world.magic.models.dramatic_moment import DramaticMomentSuggestion  # noqa: PLC0415
+def _suggestion_or_none(suggestion_id: Any) -> GMPrompt | None:
+    from world.gm.models import GMPrompt  # noqa: PLC0415
 
     if suggestion_id is None:
         return None
     try:
-        return DramaticMomentSuggestion.objects.select_related(
-            "scene", "moment_type", "character_sheet"
-        ).get(pk=int(suggestion_id))
-    except (DramaticMomentSuggestion.DoesNotExist, ValueError, TypeError):
+        return GMPrompt.objects.select_related("scene", "moment_type", "character_sheet").get(
+            pk=int(suggestion_id)
+        )
+    except (GMPrompt.DoesNotExist, ValueError, TypeError):
         return None
 
 
