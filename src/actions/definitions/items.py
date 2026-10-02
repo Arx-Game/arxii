@@ -23,8 +23,10 @@ from actions.prerequisites import (
     OnUseTargetPrerequisite,
     Prerequisite,
 )
-from actions.target_menu_types import MenuTargetKind
+from actions.target_menu_types import MenuTargetKind, MenuTargetRequest
+from actions.target_resolution import resolve_menu_target
 from actions.types import ActionContext, ActionResult, TargetType
+from flows.events.payloads import ActionIntentPayload
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
@@ -38,6 +40,8 @@ from flows.service_functions.inventory import (
     take_requires_steal,
     unequip,
     validate_equip,
+    validate_put_in,
+    validate_put_in_item,
     validate_steal,
     validate_take_out,
     validate_unequip,
@@ -45,6 +49,7 @@ from flows.service_functions.inventory import (
 from world.gm.constants import GMLevel
 from world.items.constants import ContainerAccessPolicy
 from world.items.exceptions import InventoryError, ItemError, NotReachable
+from world.items.models import ItemInstance
 from world.items.services.usage import use_item
 
 _EQUIPMENT_TARGET_UNAVAILABLE = "That isn't available."
@@ -182,9 +187,105 @@ class UnequipAction(_EquipmentAction):
         )
 
 
+_PUT_UNAVAILABLE = "That isn't available."
+_PUT_CONTAINER = "container_item_id"
+_PUT_LEGACY_CONTAINERS = frozenset({"container", "container_id"})
+
+
+@dataclass
+class _PutInIntentPayload(ActionIntentPayload):
+    """Typed insertion intent exposes its selected destination item."""
+
+    container_item_id: Any = None
+
+
+def _put_source_kwargs(kwargs):
+    return {key: value for key, value in kwargs.items() if key != _PUT_CONTAINER}
+
+
+def _put_item(actor, kwargs):
+    if MENU_TARGET_KEY in kwargs:
+        if _PUT_LEGACY_CONTAINERS.intersection(kwargs):
+            return None
+        resolved = resolve_typed_item(actor, _put_source_kwargs(kwargs))
+        return resolved.item if resolved is not None else None
+    return resolve_item_instance(kwargs.get("target"))
+
+
+def _put_container(actor, kwargs, item):
+    if MENU_TARGET_KEY not in kwargs:
+        return resolve_item_instance(kwargs.get("container"))
+    if _PUT_LEGACY_CONTAINERS.intersection(kwargs):
+        return None
+    value = kwargs.get(_PUT_CONTAINER)
+    if type(value) is not int or value <= 0:
+        return None
+    resolved = resolve_menu_target(actor, MenuTargetRequest(MenuTargetKind.ITEMS, value))
+    if resolved is None or resolved.item is None or resolved.game_object is None:
+        return None
+    container = resolved.item
+    if container == item or not container.template.is_container:
+        return None
+    return container
+
+
+def _put_pair(action, actor, kwargs):
+    typed = MENU_TARGET_KEY in kwargs
+    if typed and not action.is_applicable(actor, kwargs=kwargs):
+        return None, None, _PUT_UNAVAILABLE
+    if not typed and (kwargs.get("target") is None or kwargs.get("container") is None):
+        return None, None, "Put what into what?"
+    item = _put_item(actor, kwargs)
+    if item is None:
+        return None, None, _PUT_UNAVAILABLE if typed else "That can't be put away."
+    container = _put_container(actor, kwargs, item)
+    if container is None:
+        return None, None, _PUT_UNAVAILABLE if typed else "That isn't a container."
+    return item, container, ""
+
+
+@dataclass
+class _PutInItemPrerequisite(Prerequisite):
+    action: Any = None
+
+    def is_met(self, actor, target=None, context=None):
+        kwargs = (context or {}).get("kwargs", {})
+        if MENU_TARGET_KEY in kwargs and not self.action.is_applicable(actor, kwargs=kwargs):
+            return False, _PUT_UNAVAILABLE
+        return True, ""
+
+
+@dataclass
+class _PutInContainerPrerequisite(Prerequisite):
+    required_input_names: ClassVar[frozenset[str]] = frozenset({_PUT_CONTAINER})
+    action: Any = None
+
+    def is_met(self, actor, target=None, context=None):
+        context = context or {}
+        kwargs = dict(context.get("kwargs", {}))
+        if MENU_TARGET_KEY not in kwargs and _EQUIPMENT_TARGET_KEY not in kwargs:
+            kwargs[_EQUIPMENT_TARGET_KEY] = target
+        if MENU_TARGET_KEY in kwargs and not self.action.is_applicable(actor, kwargs=kwargs):
+            return True, ""
+        item, container, reason = _put_pair(self.action, actor, kwargs)
+        if reason:
+            return False, reason
+        sdm = context.get("scene_data")
+        sdm = sdm if sdm is not None else SceneDataManager()
+        try:
+            validate_put_in(
+                CharacterState(actor, context=sdm),
+                ItemState(item, context=sdm),
+                ItemState(container, context=sdm),
+            )
+        except InventoryError as exc:
+            return False, exc.user_message
+        return True, ""
+
+
 @dataclass
 class PutInAction(Action):
-    """Place an item into a container."""
+    """Insert a physical directly carried item with a declared container choice."""
 
     key: str = "put_in"
     name: str = "Put In"
@@ -192,47 +293,129 @@ class PutInAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target", "container"})
+    required_input_names: ClassVar[frozenset[str]] = frozenset({_PUT_CONTAINER})
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [
+            *super().get_prerequisites(),
+            _PutInItemPrerequisite(action=self),
+            _PutInContainerPrerequisite(action=self),
+        ]
+
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _put_item(actor, kwargs)
+        if item is None:
+            return False
+        sdm = SceneDataManager()
+        try:
+            validate_put_in_item(CharacterState(actor, context=sdm), ItemState(item, context=sdm))
+        except InventoryError:
+            return False
+        return True
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        if actor is None or MENU_TARGET_KEY not in context.kwargs:
+            return super()._emit_intent(context, actor)
+        # Only the selected destination is separated; source assertions remain.
+        source_context = ActionContext(
+            action=self,
+            actor=actor,
+            target=context.target,
+            kwargs=_put_source_kwargs(context.kwargs),
+            scene_data=context.scene_data,
+        )
+
+        def emit_put_intent(bound_context, bound_actor):
+            from flows.constants import EventName  # noqa: PLC0415
+            from flows.emit import emit_event  # noqa: PLC0415
+
+            original = bound_context.kwargs.get("target")
+            intent = _PutInIntentPayload(
+                actor=bound_actor,
+                action_key=self.key,
+                target=original,
+                container_item_id=context.kwargs.get(_PUT_CONTAINER),
+            )
+            stack = emit_event(EventName.ACTION_INTENT, intent, location=bound_actor.location)
+            if stack.was_cancelled():
+                return ActionResult(
+                    success=False, message=intent.cancel_message or "Something prevents you."
+                )
+            if intent.target is not original:
+                bound_context.kwargs["target"] = intent.target
+            context.kwargs[_PUT_CONTAINER] = intent.container_item_id
+            return None
+
+        cancelled = emit_typed_item_intent(source_context, actor, emit_put_intent)
+        context.kwargs[MENU_TARGET_KEY] = source_context.kwargs.get(MENU_TARGET_KEY)
+        return cancelled
+
+    def container_candidates(
+        self, actor: ObjectDB, *, kwargs: dict[str, Any]
+    ) -> tuple[dict[str, Any], ...]:
+        """Read visible root containers with this action's complete pair checks."""
+        if MENU_TARGET_KEY not in kwargs or not self.is_applicable(actor, kwargs=kwargs):
+            return ()
+        from django.db.models import Q  # noqa: PLC0415
+
+        scope = Q(game_object__db_location=actor)
+        if actor.location is not None:
+            scope |= Q(game_object__db_location=actor.location)
+        rows = []
+        item = _put_item(actor, kwargs)
+        for container in (
+            ItemInstance.objects.in_play()
+            .filter(scope, contained_in__isnull=True, template__is_container=True)
+            .order_by("pk")
+        ):
+            values = {**kwargs, _PUT_CONTAINER: container.pk}
+            if _put_container(actor, values, item) is None:
+                continue
+            resolved = resolve_menu_target(
+                actor, MenuTargetRequest(MenuTargetKind.ITEMS, container.pk)
+            )
+            if resolved is None:
+                continue
+            checked = self.check_availability(
+                actor, context={"kwargs": values}, pending_inputs=frozenset()
+            )
+            rows.append(
+                {
+                    "container_item_id": container.pk,
+                    "name": resolved.label,
+                    "available": checked.available,
+                    "reasons": list(checked.reasons),
+                }
+            )
+        return tuple(rows)
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        target = kwargs.get("target")
-        container = kwargs.get("container")
-        if target is None or container is None:
-            return ActionResult(success=False, message="Put what into what?")
-
-        item_instance = resolve_item_instance(target)
-        if item_instance is None:
-            return ActionResult(success=False, message="That can't be put away.")
-
-        container_instance = resolve_item_instance(container)
-        if container_instance is None:
-            return ActionResult(success=False, message="That isn't a container.")
-
+        item, container, reason = _put_pair(self, actor, kwargs)
+        if reason:
+            return ActionResult(success=False, message=reason)
         sdm = context.scene_data if context else SceneDataManager()
+        item_state = ItemState(item, context=sdm)
+        container_state = ItemState(container, context=sdm)
+        try:
+            validate_put_in(CharacterState(actor, context=sdm), item_state, container_state)
+        except InventoryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         actor_state = sdm.initialize_state_for_object(actor)
-        item_state = ItemState(item_instance, context=sdm)
-        container_state = ItemState(container_instance, context=sdm)
-
         try:
             put_in(actor_state, item_state, container_state)
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
-
         message_location(
             actor_state,
             "$You() $conj(put) {target} into {container}.",
             mapping={
-                "target": item_state,
-                "container": container_state,
+                "target": item_state.instance.display_name,
+                "container": container_state.instance.display_name,
             },
         )
-
         return ActionResult(success=True)
 
 

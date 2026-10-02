@@ -506,25 +506,16 @@ def unequip(character: CharacterState, item: ItemState) -> None:
         unequip_item(equipped_item=row)
 
 
-@transaction.atomic
-def put_in(
-    character: CharacterState,
-    item: ItemState,
-    container: ItemState,
-) -> None:
-    """Move ``item`` into ``container`` (an item that is itself a container).
+def validate_put_in_item(character: CharacterState, item: ItemState) -> None:
+    """Check the physical source and direct possession without a destination."""
+    if item.instance.game_object is None:
+        raise NotInPossession
+    if item.instance.game_object.location != character.obj:
+        raise NotInPossession
 
-    Validates the container is reachable by ``character``, the container's
-    template/state, and the item's possession by ``character``. Sets
-    ``item.contained_in = container`` and moves the underlying ``ObjectDB``
-    into the container's ``ObjectDB`` so Evennia's ``look``/contents traversal
-    sees the item as being inside the container.
 
-    Row-only instances (``game_object`` null — the narrative-grant pattern)
-    fail cleanly up front rather than dereferencing a null object below
-    (#1909): a row-only item is not in anyone's physical possession, and a
-    row-only container has no physical inside to put things into.
-    """
+def validate_put_in(character: CharacterState, item: ItemState, container: ItemState) -> None:
+    """Check existing insertion gates in their original service order."""
     if item.instance.game_object is None:
         raise NotInPossession
     if container.instance.game_object is None:
@@ -546,8 +537,29 @@ def put_in(
         and item.instance.template.size > container_template.container_max_item_size
     ):
         raise ItemTooLarge
-    if item.instance.game_object.location != character.obj:
-        raise NotInPossession
+    validate_put_in_item(character, item)
+
+
+@transaction.atomic
+def put_in(
+    character: CharacterState,
+    item: ItemState,
+    container: ItemState,
+) -> None:
+    """Move ``item`` into ``container`` (an item that is itself a container).
+
+    Validates the container is reachable by ``character``, the container's
+    template/state, and the item's possession by ``character``. Sets
+    ``item.contained_in = container`` and moves the underlying ``ObjectDB``
+    into the container's ``ObjectDB`` so Evennia's ``look``/contents traversal
+    sees the item as being inside the container.
+
+    Row-only instances (``game_object`` null — the narrative-grant pattern)
+    fail cleanly up front rather than dereferencing a null object below
+    (#1909): a row-only item is not in anyone's physical possession, and a
+    row-only container has no physical inside to put things into.
+    """
+    validate_put_in(character, item, container)
 
     item.instance.contained_in = container.instance
     item.instance.save(update_fields=["contained_in"])
