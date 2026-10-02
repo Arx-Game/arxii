@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
 if TYPE_CHECKING:
@@ -33,7 +32,7 @@ from world.gm.models import (
     StoryRoomGrant,
     TableUpdateRequest,
 )
-from world.gm.prompt_services import prompt_subject_name
+from world.gm.prompt_services import present_characters_in_room, prompt_subject_name
 from world.instances.models import InstancedRoom
 from world.mechanics.serializers import (
     ChallengeTemplateListSerializer,
@@ -1068,16 +1067,13 @@ class NarrateGMPromptSerializer(serializers.Serializer):
                 # whose own character also happens to have no location.
                 msg = "There's no room to narrate from right now."
                 raise serializers.ValidationError(msg)
-            # One batched query, not one per persona: CharacterSheet shares
-            # ObjectDB's pk (#2608), so `character_sheet_id` IS the character's
-            # own ObjectDB pk -- no extra join needed to resolve the room.
-            present_characters = {
-                obj.pk: obj
-                for obj in ObjectDB.objects.filter(
-                    pk__in=[p.character_sheet_id for p in personas],
-                    db_location_id=location.pk,
-                )
-            }
+            # The shared presence check (#4101 fix round 1) -- also used by
+            # telnet's `gm prompt send` subject-presence check, so "is this
+            # character actually in the room" is answered the same way
+            # everywhere rather than re-derived per call site.
+            present_characters = present_characters_in_room(
+                [p.character_sheet_id for p in personas], location
+            )
             receivers = []
             for persona in personas:
                 character = present_characters.get(persona.character_sheet_id)

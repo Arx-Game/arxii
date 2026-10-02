@@ -480,19 +480,22 @@ class CmdGMDashboard(ArxCommand):
             self.msg(result.message)
 
     def _list_prompts(self, _rest: str = "") -> None:
-        """``gm prompts`` -- PENDING and NARRATED narration prompts addressed to the
-        caller (#4101). Controller amendment R6-2: a NARRATED prompt stays listed,
-        marked as such, until the GM closes it with ``send``/``dismiss``/``done``.
+        """``gm prompts`` -- PENDING and NARRATED prompts visible to the caller
+        in whatever scene is active where they stand (#4101). Controller
+        amendment R6-2: a NARRATED prompt stays listed, marked as such, until
+        the GM closes it with ``send``/``dismiss``/``done``. Ruling R12-2: one
+        visibility source -- ``visible_prompts_for_location`` defers entirely to
+        ``visible_prompts_for``, the same function the REST queue
+        (``GET /api/gm/prompts/?scene=``) uses, so a muted GM, or one standing
+        outside any scene, sees on telnet exactly what the web would show.
         """
-        from world.gm.constants import NARRATION_PROMPT_KINDS, GMPromptStatus  # noqa: PLC0415
-        from world.gm.models import GMPrompt  # noqa: PLC0415
-        from world.gm.prompt_services import prompt_subject_name  # noqa: PLC0415
+        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        from world.gm.prompt_services import (  # noqa: PLC0415
+            prompt_subject_name,
+            visible_prompts_for_location,
+        )
 
-        prompts = GMPrompt.objects.filter(
-            addressed_to=self.caller.account,
-            status__in=(GMPromptStatus.PENDING, GMPromptStatus.NARRATED),
-            kind__in=NARRATION_PROMPT_KINDS,
-        ).select_related("character_sheet", "technique", "stake_outcome__stake")
+        prompts = visible_prompts_for_location(self.caller.account, self.caller.location)
         if not prompts:
             self.msg("No GM prompts are waiting.")
             return
@@ -538,35 +541,66 @@ class CmdGMDashboard(ArxCommand):
         self.msg(result.message or fallback)
 
     def _send_prompt_defaults(self, prompt_id: int) -> None:
-        """``gm prompt send <id>`` -- ruling R12-1 (#4101).
+        """``gm prompt send <id>`` -- rulings R12-1 and R12-3 (#4101).
 
-        Narrates both of a prompt's authored defaults through the linked
-        emit/pemit (skipping a blank one), then closes the prompt itself via
-        the dismiss action. Every line it sent is already covered when the
-        close runs, so closing releases nothing extra and the GM never needs
-        a separate ``done`` for a prompt they just sent through this verb.
+        Narrates whichever of a prompt's two authored defaults isn't already
+        covered (skipping a blank one too), through the linked emit/pemit,
+        then closes the prompt itself via the dismiss action. Every line it
+        sends is covered by the time the close runs, so closing releases
+        nothing extra and the GM never needs a separate ``done`` for a prompt
+        sent through this verb.
+
+        R12-3: coverage is read from ``prompt_narration_coverage`` -- the same
+        computation ``_resolve_narration_prompt`` uses to decide what a close
+        releases, never re-derived -- so re-running ``send`` after a partial
+        failure (e.g. the room line landed, then something interrupted before
+        the private one) narrates only the leg still missing.
+
+        Fix round 1, finding 1: the private leg additionally checks the
+        subject is physically present (``present_characters_in_room``, the
+        same presence check ``NarrateGMPromptSerializer`` uses for the REST
+        chosen-receiver audience) -- an absent subject skips the private line
+        and tells the GM; the room line still goes out regardless.
         """
         from actions.definitions.communication import EmitAction, PemitAction  # noqa: PLC0415
         from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.gm.prompt_services import (  # noqa: PLC0415
+            narration_location_for,
+            present_characters_in_room,
+            prompt_narration_coverage,
+            prompt_subject_name,
+            prompt_visible_to,
+        )
 
         prompt = (
             GMPrompt.objects.filter(pk=prompt_id)
-            .select_related("character_sheet__character")
+            .select_related("character_sheet__character", "scene")
             .first()
         )
-        if prompt is None:
+        if prompt is None or not prompt_visible_to(self.caller.account, prompt):
+            # Fix round 1, minor 6: one neutral reply for both "doesn't exist"
+            # and "exists but isn't yours" -- same IDOR-safe shape the REST
+            # object lookup already uses.
             msg = "There is no such GM prompt."
             raise CommandError(msg)
-        if prompt.private_text.strip() and prompt.character_sheet_id:
-            result = PemitAction().run(
-                actor=self.caller,
-                text=prompt.private_text,
-                receivers=[prompt.character_sheet.character],
-                gm_prompt_id=prompt.pk,
-            )
-            if not result.success:
-                raise CommandError(result.message or "Action failed")
-        if prompt.room_text.strip():
+        room_covered, private_covered = prompt_narration_coverage(prompt)
+        if not private_covered and prompt.private_text.strip() and prompt.character_sheet_id:
+            location = narration_location_for(prompt, self.caller)
+            present = present_characters_in_room([prompt.character_sheet_id], location)
+            subject_character = present.get(prompt.character_sheet_id)
+            if subject_character is None:
+                subject = prompt_subject_name(prompt) or "The subject"
+                self.msg(f"{subject} isn't here; skipping the private line.")
+            else:
+                result = PemitAction().run(
+                    actor=self.caller,
+                    text=prompt.private_text,
+                    receivers=[subject_character],
+                    gm_prompt_id=prompt.pk,
+                )
+                if not result.success:
+                    raise CommandError(result.message or "Action failed")
+        if not room_covered and prompt.room_text.strip():
             result = EmitAction().run(
                 actor=self.caller, text=prompt.room_text, gm_prompt_id=prompt.pk
             )

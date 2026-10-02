@@ -12,9 +12,13 @@ dispatch (``actor=None, account=self.caller.account``).
     moment dismiss <id>  — dismiss one
 
 No business logic lives here; the GM gate and resolution live entirely in the Actions
-and service functions. ``moment suggestions`` reuses the same
-``_account_can_gm_scene`` predicate the confirm/dismiss Actions gate on — a non-GM
-player must never see pending suggestions about themselves (oracle leak, #2183 review).
+and service functions. ``moment suggestions`` lists via ``visible_prompts_for``
+(#4101 fix round 1, ruling R12-2) — the ONE visibility source every GM-prompt
+listing surface (REST and telnet alike) reads, so a GM who muted the
+dramatic_moment group sees telnet match the web exactly. A non-GM's query is
+simply empty (``account_can_gm_scene`` gates the dramatic_moment branch inside
+it) — a non-GM player must never see pending suggestions about themselves
+(oracle leak, #2183 review), just with no separate denial naming who may look.
 """
 
 from __future__ import annotations
@@ -104,26 +108,20 @@ class CmdMoment(ArxCommand):
     # -- subverb handlers -------------------------------------------------------
 
     def _list_suggestions(self) -> None:
-        from actions.definitions.dramatic_moments import (  # noqa: PLC0415
-            _account_can_gm_scene,
-        )
-        from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
-        from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.gm.constants import GMPromptKind  # noqa: PLC0415
+        from world.gm.prompt_services import visible_prompts_for  # noqa: PLC0415
 
         scene = self._active_scene()
-        if not _account_can_gm_scene(self.caller.account, scene):
-            msg = "Only the scene's GM, owner, or staff may view pending suggestions."
-            raise CommandError(msg)
-        # #4101 fix round 1: GMPrompt also carries narration kinds now, each addressed
-        # to one specific GM -- the kind filter keeps this listing to the dramatic_moment
-        # inbox only (narration prompts also lack a moment_type, which `.label` below
-        # would crash on).
+        # #4101 fix round 1: reuses `visible_prompts_for` -- the ONE visibility
+        # source for a GM-prompt listing (ruling R12-2) -- rather than a private
+        # query, so a GM who muted the dramatic_moment group sees telnet match
+        # the web exactly. The query itself already excludes anyone who isn't the
+        # scene's GM/owner/staff (``account_can_gm_scene``), so a non-GM simply
+        # sees an empty queue -- no separate denial message naming who may look.
         suggestions = list(
-            GMPrompt.objects.filter(
-                scene=scene, status=GMPromptStatus.PENDING, kind=GMPromptKind.DRAMATIC_MOMENT
-            )
-            .select_related("moment_type", "character_sheet", "character_sheet__character")
-            .order_by("-created_at")
+            visible_prompts_for(self.caller.account, scene=scene)
+            .filter(kind=GMPromptKind.DRAMATIC_MOMENT)
+            .select_related("character_sheet__character")
         )
         if not suggestions:
             self.msg("No pending dramatic-moment suggestions in this scene.")

@@ -84,7 +84,7 @@ def account_can_gm_scene(account: AccountDB, scene: Scene) -> bool:
     return bool(account.is_staff or scene.is_gm(account) or scene.is_owner(account))
 
 
-def _prompt_visibility_query(account: AccountDB, scene: Scene) -> Q:
+def _prompt_visibility_query(account: AccountDB, scene: Scene | None) -> Q:
     """The identity/kind/scene-permission shape ``account`` may act within -- status-agnostic.
 
     Split out from ``visible_prompts_for`` (#4101 fix round 2, finding 6) so
@@ -92,19 +92,30 @@ def _prompt_visibility_query(account: AccountDB, scene: Scene) -> Q:
     baking in the PENDING/NARRATED status filter -- an already-resolved prompt
     (e.g. re-confirming a CONFIRMED dramatic moment) must still reach the
     action for its own "already resolved" message, not 404 here first.
+
+    ``scene=None`` (#4101 fix round 1, ruling R12-2): a GM standing outside any
+    scene still sees their own scene-less narration prompts (stake outcomes
+    follow their GM everywhere), so the narration half narrows to scene-less
+    only. The dramatic_moment branch always needs a real scene to gate
+    ``account_can_gm_scene`` against, so it contributes nothing when ``scene``
+    is ``None``.
     """
-    narration = Q(kind__in=NARRATION_PROMPT_KINDS, addressed_to=account) & (
-        Q(scene=scene) | Q(scene__isnull=True)
-    )
+    narration = Q(kind__in=NARRATION_PROMPT_KINDS, addressed_to=account)
+    if scene is not None:
+        narration &= Q(scene=scene) | Q(scene__isnull=True)
+    else:
+        narration &= Q(scene__isnull=True)
     query = narration
-    if account_can_gm_scene(account, scene) and prompts_enabled(
-        account, GMPromptKind.DRAMATIC_MOMENT
+    if (
+        scene is not None
+        and account_can_gm_scene(account, scene)
+        and prompts_enabled(account, GMPromptKind.DRAMATIC_MOMENT)
     ):
         query |= Q(kind=GMPromptKind.DRAMATIC_MOMENT, scene=scene)
     return query
 
 
-def visible_prompts_for(account: AccountDB, *, scene: Scene) -> QuerySet[GMPrompt]:
+def visible_prompts_for(account: AccountDB, *, scene: Scene | None) -> QuerySet[GMPrompt]:
     """OPEN (PENDING or NARRATED) prompts ``account`` may act on in ``scene``'s queue (#4101).
 
     Narration kinds: only the addressed GM, for this scene or scene-less (stake
@@ -115,6 +126,13 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene) -> QuerySet[GMPromp
     this filters on ``_NARRATABLE_STATUSES`` rather than PENDING alone -- a
     dramatic_moment prompt never reaches NARRATED in practice (only a narration
     kind transitions there), so this is a no-op widening for that half of the query.
+
+    ``scene=None`` (#4101 fix round 1, ruling R12-2): returns only ``account``'s
+    own scene-less narration prompts -- see ``_prompt_visibility_query``. This is
+    the ONE visibility source for every GM-prompt listing surface, REST
+    (``GMPromptViewSet.get_queryset``) and telnet (``visible_prompts_for_location``)
+    alike, so a muted GM, or one standing outside any scene, sees the same thing
+    everywhere.
     """
     return (
         GMPrompt.objects.filter(
@@ -125,6 +143,25 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene) -> QuerySet[GMPromp
         )
         .order_by("-created_at")
     )
+
+
+def visible_prompts_for_location(
+    account: AccountDB,
+    location: ObjectDB | None,  # noqa: OBJECTDB_PARAM - any room the GM stands in
+) -> QuerySet[GMPrompt]:
+    """``visible_prompts_for``, scoped to whatever scene is active at ``location`` (#4101
+    fix round 1, ruling R12-2).
+
+    The telnet seam for every GM-prompt listing that isn't already handed a
+    specific scene id: resolves the active scene at ``location`` the same way
+    every other GM-prompt command does (``get_active_scene``), then defers
+    entirely to ``visible_prompts_for`` -- the one visibility source the REST
+    queue (``GET /api/gm/prompts/?scene=``) already uses -- rather than a
+    second, hand-rolled query. A GM standing outside any scene
+    (``get_active_scene`` returns ``None``) still sees their own scene-less
+    prompts, never a crash and never everything.
+    """
+    return visible_prompts_for(account, scene=get_active_scene(location))
 
 
 def prompt_visible_to(account: AccountDB, prompt: GMPrompt) -> bool:
@@ -433,6 +470,61 @@ def _narration_coverage(event_group: uuid.UUID) -> tuple[bool, bool]:
         if room and private:
             break
     return room, private
+
+
+def prompt_narration_coverage(prompt: GMPrompt) -> tuple[bool, bool]:
+    """Public ``(room_covered, private_covered)`` wrapper over ``_narration_coverage``
+    (#4101 fix round 1, ruling R12-3).
+
+    The one coverage computation every caller that needs to know "has this leg
+    already gone out" reads -- never re-derived. Telnet's ``gm prompt send``
+    calls this before narrating so a re-run after a partial failure (e.g. the
+    room EMIT landed, then something interrupted before the pemit) narrates
+    only the leg that's still missing, the same rule
+    ``_resolve_narration_prompt`` already applies when deciding what a close
+    releases.
+    """
+    return _narration_coverage(prompt.event_group)
+
+
+def narration_location_for(
+    prompt: GMPrompt,
+    actor: ObjectDB,  # noqa: OBJECTDB_PARAM - any room the GM stands in
+) -> ObjectDB | None:
+    """The room to test physical presence against for ``prompt`` (#4101 fix round 1).
+
+    The prompt's own scene location, falling back to ``actor``'s current
+    location when the scene has none (a location-less Battle scene, fix round
+    3 finding N3) or the prompt is scene-less entirely. Shared by the REST
+    ``GMPromptViewSet.narrate`` chosen-receiver presence check and telnet's
+    ``gm prompt send`` subject-presence check -- the one place this resolution
+    is written, not re-derived per call site.
+    """
+    scene_location = prompt.scene.location if prompt.scene_id else None
+    return scene_location or actor.location
+
+
+def present_characters_in_room(
+    character_sheet_ids: list[int],
+    location: ObjectDB | None,  # noqa: OBJECTDB_PARAM - any room to test presence against
+) -> dict[int, ObjectDB]:
+    """Sheet id (== ObjectDB pk, #2608) -> ObjectDB, for each of ``character_sheet_ids``
+    physically present in ``location`` (#4101 fix round 1).
+
+    One batched query, not one per character -- shared by the REST
+    ``NarrateGMPromptSerializer`` chosen-receiver presence check and telnet's
+    ``gm prompt send`` subject-presence check, so "is this character actually
+    in the room" is answered the same way everywhere rather than re-derived.
+    ``location=None`` (no room to test against) answers "nobody is present."
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    if location is None or not character_sheet_ids:
+        return {}
+    return {
+        obj.pk: obj
+        for obj in ObjectDB.objects.filter(pk__in=character_sheet_ids, db_location_id=location.pk)
+    }
 
 
 def release_prompt_defaults(
@@ -747,8 +839,11 @@ __all__ = [
     "link_prompt_narration",
     "narrated_event_payload",
     "narrated_event_subject_persona",
+    "narration_location_for",
     "narration_prompt_for",
     "notify_gm_prompt",
+    "present_characters_in_room",
+    "prompt_narration_coverage",
     "prompt_recipients",
     "prompt_subject_name",
     "prompt_visible_to",
@@ -758,4 +853,5 @@ __all__ = [
     "route_narratable_event",
     "scene_gm_accounts",
     "visible_prompts_for",
+    "visible_prompts_for_location",
 ]

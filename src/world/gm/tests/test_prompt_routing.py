@@ -8,7 +8,7 @@ from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMPromptGroup, GMPromptKind, GMPromptStatus
 from world.gm.exceptions import GMPromptError
-from world.gm.factories import GMPromptFilterFactory
+from world.gm.factories import GMPromptFactory, GMPromptFilterFactory
 from world.gm.models import GMPrompt, GMPromptNarration
 from world.gm.prompt_services import (
     dismiss_gm_prompt,
@@ -16,6 +16,8 @@ from world.gm.prompt_services import (
     link_prompt_narration,
     prompt_recipients,
     route_narratable_event,
+    visible_prompts_for,
+    visible_prompts_for_location,
 )
 from world.gm.types import NarratableEvent
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
@@ -702,3 +704,58 @@ class SiblingReleaseTest(TestCase):
         prompt.refresh_from_db()
         self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
         self._assert_link_written_under_lock(prompt)
+
+
+class VisiblePromptsForScopeTest(TestCase):
+    """``visible_prompts_for(scene=None)`` and ``visible_prompts_for_location`` (#4101
+    fix round 1, ruling R12-2): a GM standing outside any scene still sees their own
+    scene-less narration prompts, never a crash and never everything."""
+
+    def setUp(self):
+        self.gm = AccountFactory()
+        self.sheet = CharacterSheetFactory()
+        self.scene = SceneFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        self.sceneless_prompt = GMPromptFactory(
+            kind=GMPromptKind.STAKE_OUTCOME,
+            scene=None,
+            character_sheet=self.sheet,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+            private_text="a stake resolves",
+        )
+        self.scened_prompt = GMPromptFactory(
+            kind=GMPromptKind.MIRACLE,
+            scene=self.scene,
+            character_sheet=self.sheet,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+            room_text="a wonder occurs",
+        )
+
+    def test_scene_none_returns_only_scene_less_prompts(self):
+        visible = list(visible_prompts_for(self.gm, scene=None))
+        self.assertEqual(visible, [self.sceneless_prompt])
+
+    def test_scene_none_does_not_crash_for_a_non_staff_account(self):
+        """Before this fix, ``account_can_gm_scene(account, None)`` would raise
+        ``AttributeError`` for any non-staff account -- ``scene=None`` must never
+        reach it."""
+        outsider = AccountFactory()
+        self.assertFalse(outsider.is_staff)
+        self.assertEqual(list(visible_prompts_for(outsider, scene=None)), [])
+
+    def test_visible_prompts_for_location_resolves_the_active_scene(self):
+        with mock.patch("world.gm.prompt_services.get_active_scene", return_value=self.scene):
+            visible = list(visible_prompts_for_location(self.gm, None))
+        # Both the scene's own prompt AND the scene-less one are visible once
+        # a real scene is resolved -- mirrors ``visible_prompts_for``'s own
+        # "this scene or scene-less" narration rule.
+        self.assertCountEqual(visible, [self.sceneless_prompt, self.scened_prompt])
+
+    def test_visible_prompts_for_location_with_no_active_scene(self):
+        with mock.patch("world.gm.prompt_services.get_active_scene", return_value=None):
+            visible = list(visible_prompts_for_location(self.gm, None))
+        self.assertEqual(visible, [self.sceneless_prompt])

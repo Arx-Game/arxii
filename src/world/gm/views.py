@@ -54,7 +54,11 @@ from world.gm.models import (
     TableUpdateRequest,
 )
 from world.gm.permissions import CanViewGMPromptQueue, IsGM, IsGMOrStaff
-from world.gm.prompt_services import prompt_visible_to, visible_prompts_for
+from world.gm.prompt_services import (
+    narration_location_for,
+    prompt_visible_to,
+    visible_prompts_for,
+)
 from world.gm.serializers import (
     CatalogSuggestionDetailSerializer,
     DemandRansomSerializer,
@@ -1059,14 +1063,11 @@ class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         if actor is None:
             return Response({"detail": "Play a character to narrate."}, status=400)
         # The receiver-presence check (audience="chosen") needs a room to test
-        # against: the prompt's own scene location, falling back to the
-        # narrating GM's current location when the scene has none (a
-        # location-less Battle scene, #4101 fix round 3, finding N3) or the
-        # prompt is scene-less entirely. May still end up None -- the
-        # serializer refuses "chosen" outright rather than treating "nowhere"
-        # as a room.
-        scene_location = prompt.scene.location if prompt.scene_id else None
-        location = scene_location or actor.location
+        # against -- ``narration_location_for`` (#4101 fix round 1) is the one
+        # place this resolves, shared with telnet's `gm prompt send`. May
+        # still end up None -- the serializer refuses "chosen" outright rather
+        # than treating "nowhere" as a room.
+        location = narration_location_for(prompt, actor)
         body = NarrateGMPromptSerializer(data=request.data, context={"location": location})
         body.is_valid(raise_exception=True)
         data = body.validated_data

@@ -6,12 +6,13 @@ from django.test import TestCase
 
 from commands.evennia_overrides.communication import CmdEmit, CmdPemit
 from commands.gm_ops import CmdGMDashboard
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMPromptKind, GMPromptStatus
 from world.gm.factories import GMProfileFactory, GMPromptFactory
 from world.gm.models import GMPromptNarration
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 from world.scenes.models import Interaction
 
@@ -21,9 +22,16 @@ class GMPromptTelnetTest(TestCase):
     def setUpTestData(cls):
         cls.gm = AccountFactory()
         GMProfileFactory(account=cls.gm)
-        cls.scene = SceneFactory()
+        cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        cls.scene = SceneFactory(location=cls.room)
         SceneGMParticipationFactory(scene=cls.scene, account=cls.gm)
         cls.crosser = CharacterSheetFactory()
+        # Fix round 1, finding 1: the private leg checks the subject is
+        # physically present -- place them in the scene's own room so the
+        # happy-path "both defaults sent" tests actually exercise that check
+        # rather than vacuously skipping it.
+        cls.crosser.character.location = cls.room
+        cls.crosser.character.save()
         cls.gm_sheet = CharacterSheetFactory()
         cls.gm_char = cls.gm_sheet.character
         # PemitAction's MinimumGMLevelPrerequisite reads actor.active_account, which
@@ -93,8 +101,17 @@ class GMPromptTelnetTest(TestCase):
 
     def test_gm_prompt_send_sends_both_defaults_and_closes(self):
         """R12-1: send narrates both defaults, then closes the prompt itself --
-        every line it sent is already covered, so no default is released twice."""
-        self._run(CmdGMDashboard, f"prompt send {self.prompt.pk}")
+        every line it sent is already covered, so no default is released twice.
+
+        Fix round 1: wrapped in ``captureOnCommitCallbacks`` so the close's own
+        deferred release actually runs here -- without it, ``release_prompt_
+        defaults`` never fires inside a plain ``TestCase``, and the "exactly
+        once" assertion below would pass whether or not the dedup logic is
+        correct at all.
+        """
+        with mock.patch("world.gm.prompt_services.narrate_privately") as narrate:
+            with self.captureOnCommitCallbacks(execute=True):
+                self._run(CmdGMDashboard, f"prompt send {self.prompt.pk}")
         self.assertEqual(GMPromptNarration.objects.filter(prompt=self.prompt).count(), 2)
         self.prompt.refresh_from_db()
         self.assertEqual(self.prompt.status, GMPromptStatus.DISMISSED)
@@ -102,21 +119,162 @@ class GMPromptTelnetTest(TestCase):
         # released nothing extra on top of the two linked narrations above.
         self.assertEqual(Interaction.objects.filter(content="vision").count(), 1)
         self.assertEqual(Interaction.objects.filter(content="room line").count(), 1)
+        narrate.assert_not_called()  # the close found both legs already covered
 
-    def test_gm_prompt_dismiss(self):
-        with mock.patch("world.gm.prompt_services.narrate_privately"):
-            self._run(CmdGMDashboard, f"prompt dismiss {self.prompt.pk}")
+    def test_gm_prompt_send_retries_only_the_missing_leg(self):
+        """R12-3: a re-run after a prior partial send narrates only the leg
+        that isn't covered yet, read from the real coverage computation
+        (``prompt_narration_coverage``), never re-derived."""
+        from world.gm.prompt_services import link_prompt_narration
+        from world.scenes.factories import InteractionFactory
+
+        room_interaction = InteractionFactory(
+            mode=InteractionMode.EMIT, content="room line", scene=self.scene
+        )
+        link_prompt_narration(self.prompt, room_interaction)
+        self.prompt.refresh_from_db()
+        self.assertEqual(self.prompt.status, GMPromptStatus.NARRATED)
+
+        with mock.patch("world.gm.prompt_services.narrate_privately") as narrate:
+            with self.captureOnCommitCallbacks(execute=True):
+                self._run(CmdGMDashboard, f"prompt send {self.prompt.pk}")
+
+        # Only ONE additional narration (the private pemit) -- the already-
+        # covered room leg must not be re-sent.
+        self.assertEqual(GMPromptNarration.objects.filter(prompt=self.prompt).count(), 2)
+        self.assertEqual(Interaction.objects.filter(content="room line").count(), 1)
+        self.assertEqual(Interaction.objects.filter(content="vision").count(), 1)
+        narrate.assert_not_called()  # nothing released on close -- both legs covered
         self.prompt.refresh_from_db()
         self.assertEqual(self.prompt.status, GMPromptStatus.DISMISSED)
+
+    def test_gm_prompt_send_skips_blank_default(self):
+        """A blank leg is skipped outright, never sent as an empty line."""
+        prompt = GMPromptFactory(
+            kind=GMPromptKind.CROSSING,
+            scene=self.scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+            private_text="only private",
+            room_text="",
+        )
+        with mock.patch("world.gm.prompt_services.narrate_privately") as narrate:
+            with self.captureOnCommitCallbacks(execute=True):
+                self._run(CmdGMDashboard, f"prompt send {prompt.pk}")
+        self.assertEqual(GMPromptNarration.objects.filter(prompt=prompt).count(), 1)
+        self.assertTrue(
+            GMPromptNarration.objects.filter(
+                prompt=prompt, interaction__content="only private"
+            ).exists()
+        )
+        narrate.assert_not_called()
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+
+    def test_gm_prompt_send_skips_private_when_subject_absent(self):
+        """Fix round 1, finding 1: an absent subject skips the private line and
+        tells the GM; the room line still goes out regardless."""
+        absent_sheet = CharacterSheetFactory()  # never placed in `self.room`
+        prompt = GMPromptFactory(
+            kind=GMPromptKind.CROSSING,
+            scene=self.scene,
+            character_sheet=absent_sheet,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+            private_text="vision",
+            room_text="room line",
+        )
+        with mock.patch("world.gm.prompt_services.narrate_privately") as narrate:
+            with self.captureOnCommitCallbacks(execute=True):
+                cmd = self._run(CmdGMDashboard, f"prompt send {prompt.pk}")
+        # Only the room leg narrated through the command -- the private leg
+        # was skipped, not silently dropped.
+        self.assertEqual(GMPromptNarration.objects.filter(prompt=prompt).count(), 1)
+        self.assertTrue(
+            GMPromptNarration.objects.filter(
+                prompt=prompt, interaction__mode=InteractionMode.EMIT
+            ).exists()
+        )
+        text = " ".join(str(c.args[0]) for c in cmd.msg.call_args_list)
+        self.assertIn("isn't here", text)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        # The skip is not coverage -- closing still releases the uncovered
+        # private default for real.
+        narrate.assert_called_once_with(absent_sheet.character, "vision", scene=self.scene)
+
+    def test_gm_prompt_send_addressed_to_another_gm_refuses(self):
+        other_gm = AccountFactory()
+        other_prompt = GMPromptFactory(
+            kind=GMPromptKind.CROSSING,
+            scene=self.scene,
+            character_sheet=self.crosser,
+            addressed_to=other_gm,
+            moment_type=None,
+            success_level=None,
+            private_text="vision",
+            room_text="room line",
+        )
+        cmd = self._run(CmdGMDashboard, f"prompt send {other_prompt.pk}")
+        self.assertEqual(GMPromptNarration.objects.filter(prompt=other_prompt).count(), 0)
+        text = " ".join(str(c.args[0]) for c in cmd.msg.call_args_list)
+        # Fix round 1, minor 6: one neutral reply, same as an id that doesn't
+        # exist at all -- never names "that prompt is addressed to someone else".
+        self.assertIn("no such gm prompt", text.lower())
+
+    def test_gm_prompt_send_no_active_scene_refuses(self):
+        with mock.patch("world.gm.prompt_services.get_active_scene", return_value=None):
+            cmd = self._run(CmdGMDashboard, f"prompt send {self.prompt.pk}")
+        self.assertEqual(GMPromptNarration.objects.filter(prompt=self.prompt).count(), 0)
+        text = " ".join(str(c.args[0]) for c in cmd.msg.call_args_list)
+        self.assertIn("scene it happened in", text.lower())
+
+    def test_gm_prompt_send_on_closed_prompt_refuses_nothing_sent(self):
+        closed_prompt = GMPromptFactory(
+            kind=GMPromptKind.MIRACLE,
+            scene=self.scene,
+            character_sheet=self.crosser,
+            addressed_to=self.gm,
+            moment_type=None,
+            success_level=None,
+            room_text="a wonder occurs",
+        )
+        with mock.patch("world.gm.prompt_services.narrate_privately"):
+            with self.captureOnCommitCallbacks(execute=True):
+                self._run(CmdGMDashboard, f"prompt dismiss {closed_prompt.pk}")
+        closed_prompt.refresh_from_db()
+        self.assertEqual(closed_prompt.status, GMPromptStatus.DISMISSED)
+        interactions_before = Interaction.objects.count()
+
+        cmd = self._run(CmdGMDashboard, f"prompt send {closed_prompt.pk}")
+
+        self.assertEqual(GMPromptNarration.objects.filter(prompt=closed_prompt).count(), 0)
+        self.assertEqual(Interaction.objects.count(), interactions_before)
+        text = " ".join(str(c.args[0]) for c in cmd.msg.call_args_list)
+        self.assertIn("already been dealt with", text)
+
+    def test_gm_prompt_dismiss(self):
+        with mock.patch("world.gm.prompt_services.narrate_privately") as narrate:
+            with self.captureOnCommitCallbacks(execute=True):
+                self._run(CmdGMDashboard, f"prompt dismiss {self.prompt.pk}")
+        self.prompt.refresh_from_db()
+        self.assertEqual(self.prompt.status, GMPromptStatus.DISMISSED)
+        narrate.assert_called_once_with(self.crosser.character, "vision", scene=self.scene)
+        self.assertTrue(Interaction.objects.filter(content="room line").exists())
 
     def test_gm_prompt_done_closes_a_narrated_prompt(self):
         """R6-2: `gm prompt done <id>` is the same close action as dismiss."""
         self.prompt.status = GMPromptStatus.NARRATED
         self.prompt.save(update_fields=["status"])
-        with mock.patch("world.gm.prompt_services.narrate_privately"):
-            self._run(CmdGMDashboard, f"prompt done {self.prompt.pk}")
+        with mock.patch("world.gm.prompt_services.narrate_privately") as narrate:
+            with self.captureOnCommitCallbacks(execute=True):
+                self._run(CmdGMDashboard, f"prompt done {self.prompt.pk}")
         self.prompt.refresh_from_db()
         self.assertEqual(self.prompt.status, GMPromptStatus.DISMISSED)
+        narrate.assert_called_once_with(self.crosser.character, "vision", scene=self.scene)
 
     def test_dashboard_count_includes_narrated(self):
         """R6-2: the dashboard's waiting count includes NARRATED prompts."""

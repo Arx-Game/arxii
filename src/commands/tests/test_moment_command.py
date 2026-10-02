@@ -90,12 +90,19 @@ class MomentTelnetE2ETest(TestCase):
         self.assertIn(self.moment_type.label, msg)
 
     def test_non_gm_suggestions_refused(self) -> None:
-        """A non-GM must never see pending suggestions (oracle leak, #2183 review)."""
+        """A non-GM must never see pending suggestions (oracle leak, #2183 review).
+
+        #4101 fix round 1: this now lists via ``visible_prompts_for`` (ruling
+        R12-2, one visibility source) rather than a bespoke gate -- a non-GM's
+        query is simply empty, not a special "you may not" denial. The
+        guarantee under test is that no pk/label of the real suggestion ever
+        appears, not the wording of the empty state.
+        """
         _run(self.outsider_character, "suggestions")
 
         self.outsider_character.msg.assert_called()
         msg = self.outsider_character.msg.call_args[0][0]
-        self.assertIn("gm", msg.lower())
+        self.assertIn("no pending", msg.lower())
         self.assertNotIn(str(self.suggestion.pk), msg)
         self.assertNotIn(self.moment_type.label, msg)
 
@@ -122,6 +129,25 @@ class MomentTelnetE2ETest(TestCase):
         self.assertIn(str(self.suggestion.pk), msg)
         self.assertIn(self.moment_type.label, msg)
         self.assertNotIn(f"#{narration_prompt.pk}:", msg)
+
+    def test_suggestions_excluded_when_group_muted(self) -> None:
+        """#4101 fix round 1: the real bug `visible_prompts_for` fixes here -- a
+        GM who muted the dramatic_moment group must see telnet match the web
+        (``prompts_enabled``), not the old private query, which never checked
+        mute at all."""
+        from world.gm.constants import GMPromptGroup
+        from world.gm.factories import GMPromptFilterFactory
+
+        GMPromptFilterFactory(
+            account=self.gm_account, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False
+        )
+
+        _run(self.gm_character, "suggestions")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("no pending", msg.lower())
+        self.assertNotIn(str(self.suggestion.pk), msg)
 
     def test_suggestions_no_active_scene_reports_error(self) -> None:
         lone_room = create_object("typeclasses.rooms.Room", key="LoneRoom", nohome=True)
