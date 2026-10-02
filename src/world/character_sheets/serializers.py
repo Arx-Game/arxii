@@ -955,9 +955,12 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
     # Build a lookup of techniques by gift_id from prefetched character_techniques
     character = sheet.character
     # #4099: the next flourish each TECHNIQUE thread will unlock. One fixed query
-    # for the whole sheet (none when the character holds no TECHNIQUE thread) —
+    # for the whole sheet (none when the character holds no technique at all —
+    # skip the call rather than pay for a Thread fetch nothing below will read) —
     # never per technique.
-    next_signatures = next_signatures_by_technique(character)
+    next_signatures = (
+        next_signatures_by_technique(character) if sheet.cached_character_techniques else {}
+    )
     techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
     for ct in sheet.cached_character_techniques:
         tech = ct.technique
