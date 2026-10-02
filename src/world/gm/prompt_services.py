@@ -57,8 +57,8 @@ _MSG_NO_PROMPT = "There is no such GM prompt."
 _MSG_NOT_YOURS = "That prompt is not addressed to you."
 _MSG_WRONG_SCENE = "Narrate that prompt from the scene it happened in."
 _MSG_EPHEMERAL = (
-    "This scene keeps no record, so a line can't be tied to the prompt. Mark it done to"
-    " send the prepared text, or narrate without the prompt."
+    "This scene keeps no record, so a line can't be tied to the prompt. Dismiss it (or"
+    " mark it done) to send the prepared text, or narrate without the prompt."
 )
 _NARRATABLE_STATUSES = (GMPromptStatus.PENDING, GMPromptStatus.NARRATED)
 
@@ -744,6 +744,11 @@ def _lock_siblings(prompt: GMPrompt) -> list[GMPrompt]:
     lock (a queryset ``update``, another process) would otherwise go unseen. The
     locking query reads ``(pk, status)`` values; the cached instances are then
     brought into line with them before anything reads ``status``.
+
+    One gap stays: a status saved here and then rolled back by an OUTER
+    transaction leaves the cached instance holding the rolled-back value until
+    the next lock re-reads it. A pre-lock check (narration_prompt_for) can
+    therefore refuse once on a stale DISMISSED; the locked paths never act on it.
     """
     locked_status = dict(
         GMPrompt.objects.select_for_update()

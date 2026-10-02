@@ -1098,7 +1098,7 @@ def maybe_suggest_dramatic_moments(
             created.append(suggestion)
             # #4101 final review, F1: reach the scene's GMs live with the same
             # gm_prompt frame a narration prompt gets, once the row is committed.
-            transaction.on_commit(lambda p=suggestion: notify_gm_prompt(p))
+            transaction.on_commit(lambda p=suggestion: notify_gm_prompt(p), robust=True)
     return created
 
 
