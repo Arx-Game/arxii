@@ -1106,8 +1106,8 @@ actions, backends, and service functions.
   dismiss <id>` resolve one. Account-authorized (mirrors `CmdEvent`'s host-lifecycle
   dispatch: `actor=None, account=self.caller.account`) via
   `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
-  (`actions/definitions/dramatic_moments.py`) — the same seam the web
-  `DramaticMomentSuggestionViewSet` uses. GM-gated (scene GM, owner, or staff) entirely in
+  (`actions/definitions/dramatic_moments.py`) — the same seam the web `GMPromptViewSet`
+  (#4101; retired the dedicated `DramaticMomentSuggestionViewSet`) uses. GM-gated (scene GM, owner, or staff) entirely in
   the Actions; no business logic in the command. `moment tag <character>=<type>` (#2227)
   is the direct-tagging telnet parity for the web `DramaticMomentTagDialog` — a thin
   command calling `create_dramatic_moment_tag` directly (the same service the web

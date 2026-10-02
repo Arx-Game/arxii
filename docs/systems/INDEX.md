@@ -151,9 +151,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     suggestion row. Services: `maybe_suggest_dramatic_moments` /
     `resolve_dramatic_moment_suggestion` (`services/gain.py`). Actions:
     `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
-    (account-authorized, `actions/definitions/dramatic_moments.py`). Web:
-    `DramaticMomentSuggestionViewSet` (`/api/magic/dramatic-moment-suggestions/`).
-    Telnet: `CmdMoment` (`moment suggestions|confirm <id>|dismiss <id>`). See
+    (account-authorized, `actions/definitions/dramatic_moments.py`). Web (#4101): the one
+    GM prompt queue, `GMPromptViewSet` (`/api/gm/prompts/?scene=<id>`), replacing the
+    retired `DramaticMomentSuggestionViewSet`. Telnet: `CmdMoment` (`moment
+    suggestions|confirm <id>|dismiss <id>`). See
     magic.md "Technique Entrance" + "Dramatic Moment Suggestion" for the full deferral
     matrix (inline / hostile-seeded / PENDING-consent / soulfray-gated) and the
     combat-side `from_entrance` marker + benign-intervention join (see Combat section).

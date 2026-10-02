@@ -11,13 +11,27 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from actions.definitions.communication import EmitAction, PemitAction
+from actions.definitions.dramatic_moments import (
+    ConfirmDramaticMomentSuggestionAction,
+    DismissDramaticMomentSuggestionAction,
+    DismissGMPromptAction,
+)
+from actions.types import ActionResult
 from world.distinctions.models import CharacterDistinction, Distinction
-from world.gm.constants import GMApplicationStatus, GMTableStatus, TableRequestKind
+from world.gm.constants import (
+    GMApplicationStatus,
+    GMPromptGroup,
+    GMPromptKind,
+    GMTableStatus,
+    TableRequestKind,
+)
 from world.gm.filters import (
     CatalogSuggestionFilter,
     GMApplicationFilter,
@@ -30,6 +44,8 @@ from world.gm.models import (
     CatalogSuggestion,
     GMApplication,
     GMProfile,
+    GMPrompt,
+    GMPromptFilter,
     GMRosterInvite,
     GMSummonOffer,
     GMTable,
@@ -37,6 +53,7 @@ from world.gm.models import (
     TableUpdateRequest,
 )
 from world.gm.permissions import IsGM, IsGMOrStaff
+from world.gm.prompt_services import account_can_gm_scene, visible_prompts_for
 from world.gm.serializers import (
     CatalogSuggestionDetailSerializer,
     DemandRansomSerializer,
@@ -51,12 +68,15 @@ from world.gm.serializers import (
     GMInviteRevokeSerializer,
     GMProfileMineSerializer,
     GMProfileSerializer,
+    GMPromptFilterSerializer,
+    GMPromptSerializer,
     GMRosterInviteSerializer,
     GMSummonOfferSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
     MintGMCharacterRequestSerializer,
     MintGMCharacterResultSerializer,
+    NarrateGMPromptSerializer,
     PromoteGMInputSerializer,
     TableUpdateRequestCreateSerializer,
     TableUpdateRequestSerializer,
@@ -81,6 +101,8 @@ from world.gm.services import (
 )
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.models.applications import RosterApplication
+from world.roster.services.selection import character_for_request
+from world.scenes.models import Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -950,3 +972,129 @@ class DiscoveryView(APIView):
             actor_level_index=user_breadth_index(request.user),
         )
         return Response(DiscoveryResultSerializer(found).data)
+
+
+class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+
+    List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+    a stake outcome, still surfaces for the GM it's addressed to via
+    ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
+    REGISTRY actions that own the real authorization/validation -- this view
+    is dispatch plumbing only.
+    """
+
+    serializer_class = GMPromptSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["kind"]
+    queryset = GMPrompt.objects.none()
+
+    def _scene(self) -> Scene:
+        scene_id = self.request.query_params.get("scene")  # noqa: USE_FILTERSET
+        if not scene_id:
+            raise serializers.ValidationError({"detail": "A scene id is required (?scene=<id>)."})
+        return get_object_or_404(Scene, pk=scene_id)
+
+    def get_queryset(self) -> QuerySet[GMPrompt]:
+        return visible_prompts_for(self.request.user, scene=self._scene())
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        scene = self._scene()
+        qs = self.filter_queryset(visible_prompts_for(request.user, scene=scene))
+        if not qs.exists() and not account_can_gm_scene(request.user, scene):
+            msg = "Only the scene's GM may view its prompts."
+            raise PermissionDenied(msg)
+        page = self.paginate_queryset(qs)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+
+    def _own_prompt(self, pk: str | None) -> GMPrompt:
+        return get_object_or_404(GMPrompt, pk=pk)
+
+    @action(detail=True, methods=["post"])
+    def confirm(self, request: Request, pk: str | None = None) -> Response:
+        prompt = self._own_prompt(pk)
+        if prompt.kind != GMPromptKind.DRAMATIC_MOMENT:
+            return Response({"detail": "Only a dramatic moment is confirmed."}, status=400)
+        result = ConfirmDramaticMomentSuggestionAction().run(
+            actor=None, account=request.user, suggestion_id=prompt.pk
+        )
+        return self._result(result, prompt)
+
+    @action(detail=True, methods=["post"])
+    def dismiss(self, request: Request, pk: str | None = None) -> Response:
+        prompt = self._own_prompt(pk)
+        if prompt.kind == GMPromptKind.DRAMATIC_MOMENT:
+            result = DismissDramaticMomentSuggestionAction().run(
+                actor=None, account=request.user, suggestion_id=prompt.pk
+            )
+        else:
+            result = DismissGMPromptAction().run(
+                actor=None, account=request.user, prompt_id=prompt.pk
+            )
+        return self._result(result, prompt)
+
+    @action(detail=True, methods=["post"])
+    def narrate(self, request: Request, pk: str | None = None) -> Response:
+        prompt = self._own_prompt(pk)
+        body = NarrateGMPromptSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        actor = character_for_request(request, entry_id=None)
+        if actor is None:
+            return Response({"detail": "Play a character to narrate."}, status=400)
+        data = body.validated_data
+        if data["audience"] == NarrateGMPromptSerializer.AUDIENCE_ROOM:
+            result = EmitAction().run(actor=actor, text=data["text"], gm_prompt_id=prompt.pk)
+        else:
+            result = PemitAction().run(
+                actor=actor,
+                text=data["text"],
+                receivers=data["receivers"],
+                gm_prompt_id=prompt.pk,
+            )
+        return self._result(result, prompt)
+
+    def _result(self, result: ActionResult, prompt: GMPrompt) -> Response:
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        prompt.refresh_from_db()
+        return Response(GMPromptSerializer(prompt).data)
+
+
+class GMPromptFilterViewSet(viewsets.GenericViewSet):
+    """A GM's per-group prompt switches (#4101; demo Screen 5).
+
+    Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+    synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+    docstring), so there is nothing to paginate or filter.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = GMPromptFilterSerializer
+    pagination_class = None
+    filter_backends = []
+    queryset = GMPromptFilter.objects.none()
+
+    def list(self, request: Request) -> Response:
+        muted = set(
+            GMPromptFilter.objects.filter(account=request.user, enabled=False).values_list(
+                "group", flat=True
+            )
+        )
+        rows = [
+            {"group": value, "label": label, "enabled": value not in muted}
+            for value, label in GMPromptGroup.choices
+        ]
+        return Response(GMPromptFilterSerializer(rows, many=True).data)
+
+    @action(detail=False, methods=["post"])
+    def set(self, request: Request) -> Response:
+        body = GMPromptFilterSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        GMPromptFilter.objects.update_or_create(
+            account=request.user,
+            group=body.validated_data["group"],
+            defaults={"enabled": body.validated_data["enabled"]},
+        )
+        return self.list(request)

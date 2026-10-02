@@ -1073,16 +1073,6 @@ def maybe_suggest_dramatic_moments(
             >= moment_type.per_scene_cap
         ):
             continue
-        # Peek (not read) BEFORE get_or_create — a row it creates fires
-        # GMPrompt's RelatedCacheClearingMixin, which clears every
-        # cached_* attribute on `interaction` as a side effect. Peeked fresh each
-        # loop iteration so a suggestion appended on a prior pass isn't lost to the
-        # next iteration's clear.
-        cached_suggestions = (
-            interaction.__dict__.get("cached_dramatic_moment_suggestions")
-            if interaction is not None
-            else None
-        )
         suggestion, was_created = GMPrompt.objects.get_or_create(
             moment_type=moment_type,
             character_sheet=character_sheet,
@@ -1098,8 +1088,6 @@ def maybe_suggest_dramatic_moments(
         )
         if was_created:
             created.append(suggestion)
-            if cached_suggestions is not None:
-                interaction.cached_dramatic_moment_suggestions = [*cached_suggestions, suggestion]
     return created
 
 
@@ -1131,17 +1119,6 @@ def resolve_dramatic_moment_suggestion(
     if suggestion.status != GMPromptStatus.PENDING:
         raise DramaticMomentSuggestionAlreadyResolved
 
-    # Peek (not read) BEFORE any of the writes below — both the confirm branch's
-    # create_dramatic_moment_tag (a DramaticMomentTag .create()) and this function's
-    # own suggestion.save() fire RelatedCacheClearingMixin, clearing every cached_*
-    # attribute on `interaction` as a side effect.
-    interaction = suggestion.interaction
-    cached_suggestions = (
-        interaction.__dict__.get("cached_dramatic_moment_suggestions")
-        if interaction is not None
-        else None
-    )
-
     with transaction.atomic():
         if confirm:
             tag = create_dramatic_moment_tag(
@@ -1161,12 +1138,6 @@ def resolve_dramatic_moment_suggestion(
         suggestion.resolved_by = resolver
         suggestion.save()
 
-    # A resolved suggestion is no longer PENDING, so it must drop out of the cached,
-    # PENDING-filtered list rather than being left stale in it.
-    if cached_suggestions is not None:
-        interaction.cached_dramatic_moment_suggestions = [
-            s for s in cached_suggestions if s.pk != suggestion.pk
-        ]
     return suggestion
 
 

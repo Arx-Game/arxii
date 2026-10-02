@@ -19,7 +19,7 @@ from world.scenes.models import (
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.thread_services import thread_anchor_ids, thread_roots
-from world.scenes.types import PersonaPayload, ReactionAggregation
+from world.scenes.types import NarratedEventPayload, PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
@@ -111,7 +111,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         source="cached_action_links",
     )
     dramatic_moment_tags = serializers.SerializerMethodField()
-    dramatic_moment_suggestions = serializers.SerializerMethodField()
+    narrates = serializers.SerializerMethodField()
     endorsee_sheet_id = serializers.SerializerMethodField()
     endorsable_resonances = serializers.SerializerMethodField()
     pose_endorsers = serializers.SerializerMethodField()
@@ -165,7 +165,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "target_persona_ids",
             "action_links",
             "dramatic_moment_tags",
-            "dramatic_moment_suggestions",
+            "narrates",
             "endorsable_resonances",
             "pose_endorsers",
             "my_pose_endorsement",
@@ -853,27 +853,19 @@ class InteractionListSerializer(serializers.ModelSerializer):
         cache[scene.pk] = result
         return result
 
-    def get_dramatic_moment_suggestions(self, obj: Interaction) -> list[dict]:
-        """PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+    def get_narrates(self, obj: Interaction) -> NarratedEventPayload | None:
+        """The event this row narrates (#4101), e.g. "part of X's Crossing".
 
-        GM-gated: a plain participant sees an empty list. Reads
-        ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-        queryset, already filtered to PENDING) — never a fresh query.
+        Not GM-gated (unlike the retired per-pose suggestion embed): a
+        narration row is a GM's own authored line, already delivered to
+        whoever the audience was; tagging it with the event it narrates is
+        plain feed metadata, not a spoiler. Reads from the Prefetch
+        (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+        own docstring for why it must never query.
         """
-        if not self._viewer_can_gm_scene(obj.scene):
-            return []
-        suggestions = obj.cached_dramatic_moment_suggestions
-        return [
-            {
-                "id": s.pk,
-                "moment_type_id": s.moment_type_id,
-                "moment_type_label": s.moment_type.label,
-                "character_sheet_id": s.character_sheet_id,
-                "success_level": s.success_level,
-                "status": s.status,
-            }
-            for s in suggestions
-        ]
+        from world.gm.prompt_services import narrated_event_payload  # noqa: PLC0415
+
+        return narrated_event_payload(obj)
 
     # Reads `CharacterSheet.cached_resonances` (a `PrunedCachedProperty`,
     # #3816 Task 3) -- fed by the prefetched

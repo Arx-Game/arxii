@@ -1432,13 +1432,16 @@ Recognition stays a human-adjudicated nudge, never a mechanical auto-grant (ADR-
   **account-authorized** (mirrors `actions/definitions/events.py`'s host-lifecycle
   actions: `actor=None`, `account=<resolver>`), gated on `_account_can_gm_scene` (staff,
   or `scene.is_gm(account)`, or `scene.is_owner(account)`).
-- **Web:** `DramaticMomentSuggestionViewSet` (`views.py`) — `GET
-  /api/magic/dramatic-moment-suggestions/?scene=<id>` (PENDING list, same GM/owner/staff
-  gate); `POST .../{id}/confirm/` / `POST .../{id}/dismiss/` dispatch the actions above.
+- **Web (#4101):** the dedicated `DramaticMomentSuggestionViewSet` is retired — confirm/dismiss
+  now ride the one GM prompt queue, `GMPromptViewSet` (`world/gm/views.py`): `GET
+  /api/gm/prompts/?scene=<id>` lists every open prompt the viewer may act on (dramatic
+  moments plus narration kinds addressed to them); `POST .../{id}/confirm/` (dramatic moment
+  only) / `POST .../{id}/dismiss/` dispatch the actions above by `GMPrompt.kind`.
 - **Telnet:** `CmdMoment` (`commands/dramatic_moments.py`, key `"moment"`) — `moment
   suggestions|confirm <id>|dismiss <id>`, account-authorized like the web surface.
-- **Frontend:** `DramaticMomentSuggestionChip` (`frontend/src/scenes/components/`),
-  mounted in `PoseUnit` for the caller's own entrance poses.
+- **Frontend:** the per-pose `DramaticMomentSuggestionChip` embed (`frontend/src/scenes/
+  components/`) is retired with the viewset (#4101 Task 9); the GM prompt queue UI is a
+  Task 10/11 follow-up.
 - **Seed content:** `ensure_dramatic_entrance_content()` (`factories.py`) seeds the "Grand
   Entrance" `DramaticMomentType` with `suggest_on_technique_entrance=True` /
   `suggestion_min_success_level=3` and **no resonance**. It used to mint its own "Fervor"

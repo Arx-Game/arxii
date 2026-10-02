@@ -153,3 +153,34 @@ class DismissDramaticMomentSuggestionAction(_DramaticMomentSuggestionActionBase)
             account=kwargs.get("account"),
             confirm=False,
         )
+
+
+@dataclass
+class DismissGMPromptAction(_DramaticMomentSuggestionActionBase):
+    """The addressed GM dismisses a narration prompt; its defaults go out (#4101).
+
+    Expects kwargs: ``prompt_id`` (int), ``account`` (AccountDB -- must be the
+    prompt's own ``addressed_to``). Unlike the dramatic-moment confirm/dismiss
+    actions above (scene-GM/owner/staff gated), a narration prompt is addressed
+    to one specific GM -- only that GM (or staff bypass handled inside
+    ``dismiss_gm_prompt``'s caller) may close it.
+    """
+
+    key: str = "dismiss_gm_prompt"
+    name: str = "Dismiss GM Prompt"
+    icon: str = "x"
+
+    def execute(self, actor, context=None, **kwargs: Any) -> ActionResult:
+        from world.gm.exceptions import GMPromptError  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.gm.prompt_services import dismiss_gm_prompt  # noqa: PLC0415
+
+        account = kwargs.get("account")
+        prompt = GMPrompt.objects.filter(pk=kwargs.get("prompt_id")).first()
+        if prompt is None or account is None or prompt.addressed_to_id != account.pk:
+            return ActionResult(success=False, message="That prompt is not addressed to you.")
+        try:
+            dismiss_gm_prompt(prompt, resolver=account)
+        except GMPromptError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, data={"prompt_id": prompt.pk})

@@ -13,6 +13,7 @@ from world.areas.serializers import WorldBuilderAreaManagerSerializer, WorldBuil
 from world.gm.constants import (
     GMApplicationStatus,
     GMLevel,
+    GMPromptGroup,
     GMTableViewerRole,
     TableRequestKind,
 )
@@ -22,6 +23,7 @@ from world.gm.models import (
     GMApplication,
     GMLevelChange,
     GMProfile,
+    GMPrompt,
     GMRosterInvite,
     GMSummonOffer,
     GMTable,
@@ -30,6 +32,7 @@ from world.gm.models import (
     StoryRoomGrant,
     TableUpdateRequest,
 )
+from world.gm.prompt_services import prompt_subject_name
 from world.instances.models import InstancedRoom
 from world.mechanics.serializers import (
     ChallengeTemplateListSerializer,
@@ -38,6 +41,7 @@ from world.mechanics.serializers import (
 from world.roster.models.applications import RosterApplication
 from world.roster.services.slots import SlotsFullError
 from world.scenes.action_constants import DifficultyChoice
+from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
 
 
@@ -981,3 +985,76 @@ class DiscoveryResultSerializer(serializers.Serializer):
     templates = DiscoveryTemplateSerializer(many=True)
     challenges = DiscoveryChallengeSerializer(many=True)
     kinds = DiscoveryKindSerializer(many=True)
+
+
+class GMPromptSerializer(serializers.ModelSerializer):
+    """One queue row (#4101). Read-only; resolution goes through actions."""
+
+    kind_label = serializers.CharField(source="get_kind_display", read_only=True)
+    subject_name = serializers.SerializerMethodField()
+    subject_persona_id = serializers.SerializerMethodField()
+    moment_type_label = serializers.CharField(
+        source="moment_type.label", read_only=True, default=""
+    )
+    technique_name = serializers.CharField(source="technique.name", read_only=True, default="")
+    stake_summary = serializers.CharField(
+        source="stake_outcome.stake.player_summary", read_only=True, default=""
+    )
+
+    class Meta:
+        model = GMPrompt
+        fields = [
+            "id",
+            "kind",
+            "kind_label",
+            "status",
+            "scene",
+            "character_sheet",
+            "subject_name",
+            "subject_persona_id",
+            "moment_type",
+            "moment_type_label",
+            "technique_name",
+            "stake_summary",
+            "room_text",
+            "private_text",
+            "prepared_for_character",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_subject_name(self, obj: GMPrompt) -> str:
+        return prompt_subject_name(obj)
+
+    def get_subject_persona_id(self, obj: GMPrompt) -> int | None:
+        return obj.character_sheet.primary_persona.pk if obj.character_sheet_id else None
+
+
+class NarrateGMPromptSerializer(serializers.Serializer):
+    """Body for ``POST .../prompts/{id}/narrate/`` (#4101): the line + its audience."""
+
+    AUDIENCE_ROOM = "room"
+    AUDIENCE_CHOSEN = "chosen"
+
+    text = serializers.CharField(trim_whitespace=True)
+    audience = serializers.ChoiceField(choices=[AUDIENCE_ROOM, AUDIENCE_CHOSEN])
+    receiver_persona_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs["audience"] == self.AUDIENCE_CHOSEN:
+            personas = list(Persona.objects.filter(pk__in=attrs["receiver_persona_ids"]))
+            if not personas:
+                msg = "Choose at least one person."
+                raise serializers.ValidationError(msg)
+            attrs["receivers"] = [p.character_sheet.character for p in personas]
+        return attrs
+
+
+class GMPromptFilterSerializer(serializers.Serializer):
+    """One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5)."""
+
+    group = serializers.ChoiceField(choices=GMPromptGroup.choices)
+    label = serializers.CharField(read_only=True)
+    enabled = serializers.BooleanField()

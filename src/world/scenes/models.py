@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.combat.models import CombatRoundAction
-    from world.gm.models import GMPrompt, GMPromptNarration
+    from world.gm.models import GMPromptNarration
     from world.magic.models import PoseEndorsement
     from world.magic.models.dramatic_moment import DramaticMomentTag
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
@@ -1211,28 +1211,6 @@ class Interaction(SharedMemoryModel):
 
         return list(
             DramaticMomentTag.objects.filter(interaction=self).select_related("moment_type")
-        )
-
-    @PrunedCachedProperty
-    def cached_dramatic_moment_suggestions(self) -> list[GMPrompt]:
-        """Pending dramatic-moment suggestions, fed by the ``to_attr``
-        "cached_dramatic_moment_suggestions" Prefetch.
-
-        Filtered to ``kind=GMPromptKind.DRAMATIC_MOMENT`` (#4101 fix round 2):
-        GMPrompt also carries narration kinds now (each addressed to one
-        specific GM, never scene-gated), so without this filter a narration
-        prompt anchored to the same interaction would leak into this
-        dramatic_moment-only field -- and crash on a null ``moment_type``.
-        """
-        from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
-        from world.gm.models import GMPrompt  # noqa: PLC0415
-
-        return list(
-            GMPrompt.objects.filter(
-                interaction=self,
-                status=GMPromptStatus.PENDING,
-                kind=GMPromptKind.DRAMATIC_MOMENT,
-            ).select_related("moment_type")
         )
 
     @PrunedCachedProperty

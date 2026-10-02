@@ -310,8 +310,10 @@ resolving on accept).
   `DramaticMomentSuggestion` (PENDING) a GM later confirms (mints a real
   `DramaticMomentTag`, full resonance + renown award) or dismisses, gated on
   `DramaticMomentType.suggest_on_technique_entrance` / `.suggestion_min_success_level`.
-  Web: `DramaticMomentSuggestionViewSet`. Telnet: `CmdMoment`. Frontend:
-  `DramaticMomentSuggestionChip` in `PoseUnit`.
+  Web (#4101): `GMPromptViewSet`, the one GM prompt queue — replaced the dedicated
+  `DramaticMomentSuggestionViewSet`. Telnet: `CmdMoment`. Frontend: the per-pose
+  `DramaticMomentSuggestionChip` embed is retired with the viewset; the queue UI is a
+  Task 10/11 follow-up.
 - **Combat integration:** `CombatRoundAction.from_entrance` marks a hostile entrance-seeded
   declaration so the suggestion fires at round resolution once the real success level is
   known; a benign entrance cast landing on an embattled ally seats the caster into the fight

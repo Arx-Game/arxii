@@ -23,7 +23,6 @@ from world.magic.views import (
     ChooseUltimateView,
     ConsequencePoolCatalogViewSet,
     CrossingRespondView,
-    DramaticMomentSuggestionViewSet,
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
     EffectTypeViewSet,
@@ -134,12 +133,6 @@ router.register(
     DramaticMomentTagViewSet,
     basename="dramatic-moment-tag",
 )
-router.register(
-    "dramatic-moment-suggestions",
-    DramaticMomentSuggestionViewSet,
-    basename="dramatic-moment-suggestion",
-)
-
 # #4101 — Prepared per-character Audere text (staff or table-GM authoring)
 router.register(
     "prepared-crossing-texts",

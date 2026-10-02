@@ -9486,6 +9486,152 @@ export interface paths {
     patch: operations['gm_profiles_mine_partial_update'];
     trace?: never;
   };
+  '/api/gm/prompt-filters/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A GM's per-group prompt switches (#4101; demo Screen 5).
+     *
+     *     Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+     *     synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+     *     docstring), so there is nothing to paginate or filter.
+     */
+    get: operations['gm_prompt_filters_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompt-filters/set/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description A GM's per-group prompt switches (#4101; demo Screen 5).
+     *
+     *     Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+     *     synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+     *     docstring), so there is nothing to paginate or filter.
+     */
+    post: operations['gm_prompt_filters_set_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
+     *     REGISTRY actions that own the real authorization/validation -- this view
+     *     is dispatch plumbing only.
+     */
+    get: operations['gm_prompts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/{id}/confirm/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
+     *     REGISTRY actions that own the real authorization/validation -- this view
+     *     is dispatch plumbing only.
+     */
+    post: operations['gm_prompts_confirm_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/{id}/dismiss/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
+     *     REGISTRY actions that own the real authorization/validation -- this view
+     *     is dispatch plumbing only.
+     */
+    post: operations['gm_prompts_dismiss_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/{id}/narrate/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
+     *     REGISTRY actions that own the real authorization/validation -- this view
+     *     is dispatch plumbing only.
+     */
+    post: operations['gm_prompts_narrate_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/queue/': {
     parameters: {
       query?: never;
@@ -12587,90 +12733,6 @@ export interface paths {
      *     POST /api/magic/crossing/respond/  {offer_id, option_id}
      */
     post: operations['magic_crossing_respond_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/dramatic-moment-suggestions/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-     *
-     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-     *     POST .../{id}/dismiss/ — dismiss.
-     *
-     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
-     *     (which independently re-checks it again — defense in depth for a direct-call caller).
-     */
-    get: operations['magic_dramatic_moment_suggestions_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/dramatic-moment-suggestions/{id}/confirm/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-     *
-     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-     *     POST .../{id}/dismiss/ — dismiss.
-     *
-     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
-     *     (which independently re-checks it again — defense in depth for a direct-call caller).
-     */
-    post: operations['magic_dramatic_moment_suggestions_confirm_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/dramatic-moment-suggestions/{id}/dismiss/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-     *
-     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-     *     POST .../{id}/dismiss/ — dismiss.
-     *
-     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
-     *     (which independently re-checks it again — defense in depth for a direct-call caller).
-     */
-    post: operations['magic_dramatic_moment_suggestions_dismiss_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -29565,41 +29627,6 @@ export interface components {
       description?: string;
     };
     /**
-     * @description Read-only GM confirm/dismiss inbox row (#2183).
-     *
-     *     List/confirm/dismiss all render this shape; there is no client-writable field —
-     *     resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
-     *     of the REGISTRY actions, never through a serializer ``create``/``update``.
-     */
-    DramaticMomentSuggestion: {
-      readonly id: number;
-      readonly moment_type: number | null;
-      readonly moment_type_label: string;
-      /** @description The character this sheet belongs to */
-      readonly character_sheet: number | null;
-      /** @description Scene context; nullable for resilience to scene cleanup. */
-      readonly scene: number | null;
-      /** @description The entrance pose that triggered this prompt; nullable. */
-      readonly interaction: number | null;
-      /** @description Cast success level that triggered this suggestion. */
-      readonly success_level: number | null;
-      readonly status: components['schemas']['DramaticMomentSuggestionStatusEnum'];
-      /** @description GM account that confirmed or dismissed this prompt. */
-      readonly resolved_by: number | null;
-      /** @description The DramaticMomentTag minted on confirmation, if any. */
-      readonly confirmed_tag: number | null;
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /**
-     * @description * `pending` - Pending
-     *     * `confirmed` - Confirmed
-     *     * `dismissed` - Dismissed
-     *     * `narrated` - Narrated
-     * @enum {string}
-     */
-    DramaticMomentSuggestionStatusEnum: 'pending' | 'confirmed' | 'dismissed' | 'narrated';
-    /**
      * @description Create + read dramatic-moment tags (#1139).
      *
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
@@ -31241,6 +31268,93 @@ export interface components {
       /** @description Whether this GM may author custom (template=null) stakes: True for staff. */
       readonly allow_custom_stakes: boolean;
     };
+    /** @description One queue row (#4101). Read-only; resolution goes through actions. */
+    GMPrompt: {
+      readonly id: number;
+      /**
+       * @description What this prompt is about; dramatic_moment is the confirm kind.
+       *
+       *     * `dramatic_moment` - Dramatic Moment
+       *     * `audere_surge` - Audere
+       *     * `audere_ultimate` - Ultimate
+       *     * `crossing` - Crossing
+       *     * `miracle` - Miracle
+       *     * `death` - Death
+       *     * `stake_outcome` - Stake outcome
+       * @default dramatic_moment
+       */
+      readonly kind: components['schemas']['GMPromptKindEnum'];
+      readonly kind_label: string;
+      /** @default pending */
+      readonly status: components['schemas']['GMPromptStatusEnum'];
+      /** @description Scene context; nullable for resilience to scene cleanup. */
+      readonly scene: number | null;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number | null;
+      readonly subject_name: string;
+      readonly subject_persona_id: number | null;
+      readonly moment_type: number | null;
+      /** @default  */
+      readonly moment_type_label: string;
+      /** @default  */
+      readonly technique_name: string;
+      /** @default  */
+      readonly stake_summary: string;
+      /** @description Resolved authored room line offered in the composer (may be blank). */
+      readonly room_text: string;
+      /** @description Resolved authored private line for the character this concerns, e.g. the Crossing vision. Spoiler-private: shown only to the addressed GM. */
+      readonly private_text: string;
+      /** @description True when the defaults came from the character's prepared text. */
+      readonly prepared_for_character: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5). */
+    GMPromptFilter: {
+      group: components['schemas']['GMPromptFilterGroupEnum'];
+      readonly label: string;
+      enabled: boolean;
+    };
+    /**
+     * @description * `dramatic_moment` - Dramatic Moment
+     *     * `audere` - Audere / Audere Majora
+     *     * `miracle` - Miracles
+     *     * `death` - Deaths
+     *     * `stake_outcome` - Stake outcomes
+     * @enum {string}
+     */
+    GMPromptFilterGroupEnum: 'dramatic_moment' | 'audere' | 'miracle' | 'death' | 'stake_outcome';
+    /** @description One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5). */
+    GMPromptFilterRequest: {
+      group: components['schemas']['GMPromptFilterGroupEnum'];
+      enabled: boolean;
+    };
+    /**
+     * @description * `dramatic_moment` - Dramatic Moment
+     *     * `audere_surge` - Audere
+     *     * `audere_ultimate` - Ultimate
+     *     * `crossing` - Crossing
+     *     * `miracle` - Miracle
+     *     * `death` - Death
+     *     * `stake_outcome` - Stake outcome
+     * @enum {string}
+     */
+    GMPromptKindEnum:
+      | 'dramatic_moment'
+      | 'audere_surge'
+      | 'audere_ultimate'
+      | 'crossing'
+      | 'miracle'
+      | 'death'
+      | 'stake_outcome';
+    /**
+     * @description * `pending` - Pending
+     *     * `confirmed` - Confirmed
+     *     * `dismissed` - Dismissed
+     *     * `narrated` - Narrated
+     * @enum {string}
+     */
+    GMPromptStatusEnum: 'pending' | 'confirmed' | 'dismissed' | 'narrated';
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
       readonly id: number;
@@ -31815,6 +31929,14 @@ export interface components {
       readonly label: string;
       readonly conflict_points: number;
     };
+    /**
+     * @description * `perception` - Perception
+     *     * `conflict` - Conflict
+     *     * `scene` - Scene
+     *     * `social` - Social
+     * @enum {string}
+     */
+    GroupB77Enum: 'perception' | 'conflict' | 'scene' | 'social';
     /** @description Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036). */
     GroupBallotState: {
       character_id: number;
@@ -31845,14 +31967,6 @@ export interface components {
       is_paused: boolean;
       track: components['schemas']['TrackView'] | null;
     };
-    /**
-     * @description * `perception` - Perception
-     *     * `conflict` - Conflict
-     *     * `scene` - Scene
-     *     * `social` - Social
-     * @enum {string}
-     */
-    GroupEnum: 'perception' | 'conflict' | 'scene' | 'social';
     /** @description POST body for the #1036 group-pick endpoint. */
     GroupPickRequestRequest: {
       option_id: number;
@@ -32571,15 +32685,18 @@ export interface components {
         [key: string]: unknown;
       }[];
       /**
-       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       * @description The event this row narrates (#4101), e.g. "part of X's Crossing".
        *
-       *     GM-gated: a plain participant sees an empty list. Reads
-       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-       *     queryset, already filtered to PENDING) — never a fresh query.
+       *     Not GM-gated (unlike the retired per-pose suggestion embed): a
+       *     narration row is a GM's own authored line, already delivered to
+       *     whoever the audience was; tagging it with the event it narrates is
+       *     plain feed metadata, not a spoiler. Reads from the Prefetch
+       *     (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+       *     own docstring for why it must never query.
        */
-      readonly dramatic_moment_suggestions: {
+      readonly narrates: {
         [key: string]: unknown;
-      }[];
+      } | null;
       /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
         [key: string]: unknown;
@@ -32789,15 +32906,18 @@ export interface components {
         [key: string]: unknown;
       }[];
       /**
-       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       * @description The event this row narrates (#4101), e.g. "part of X's Crossing".
        *
-       *     GM-gated: a plain participant sees an empty list. Reads
-       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-       *     queryset, already filtered to PENDING) — never a fresh query.
+       *     Not GM-gated (unlike the retired per-pose suggestion embed): a
+       *     narration row is a GM's own authored line, already delivered to
+       *     whoever the audience was; tagging it with the event it narrates is
+       *     plain feed metadata, not a spoiler. Reads from the Prefetch
+       *     (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+       *     own docstring for why it must never query.
        */
-      readonly dramatic_moment_suggestions: {
+      readonly narrates: {
         [key: string]: unknown;
-      }[];
+      } | null;
       /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
         [key: string]: unknown;
@@ -36998,21 +37118,6 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DraftApplication'][];
     };
-    PaginatedDramaticMomentSuggestionList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['DramaticMomentSuggestion'][];
-    };
     PaginatedDramaticMomentTagList: {
       /** @example 123 */
       count: number;
@@ -37305,6 +37410,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['GMProfile'][];
+    };
+    PaginatedGMPromptList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['GMPrompt'][];
     };
     PaginatedGMRosterInviteList: {
       /** @example 123 */
@@ -41692,7 +41812,14 @@ export interface components {
       readonly boundary_level: number;
       /** @description Human-readable label for the target PathStage. */
       readonly target_stage_display: string;
-      /** @description Return faith variant vision text if set, else the threshold's. */
+      /**
+       * @description Layered: prepared (character), else faith variant, else the threshold's (#4101).
+       *
+       *     Empty while ``manifestation_withheld`` (#4101 fix round 1, controller
+       *     ruling I3): a GM was present at gate-open, so the GM narrates or
+       *     releases the vision -- the offer poll must never show it to the player
+       *     first.
+       */
       readonly vision_text: string;
       /** @description Faith variant selected at offer creation; null = no faith coupling. */
       readonly faith_variant_id: number | null;
@@ -41989,7 +42116,7 @@ export interface components {
     PersonaMenuItem: {
       key: string;
       label: string;
-      group: components['schemas']['GroupEnum'];
+      group: components['schemas']['GroupB77Enum'];
       available: boolean;
       reason: string;
     };
@@ -61586,6 +61713,157 @@ export interface operations {
       };
     };
   };
+  gm_prompt_filters_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPromptFilter'][];
+        };
+      };
+    };
+  };
+  gm_prompt_filters_set_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMPromptFilterRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPromptFilter'];
+        };
+      };
+    };
+  };
+  gm_prompts_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description What this prompt is about; dramatic_moment is the confirm kind.
+         *
+         *     * `dramatic_moment` - Dramatic Moment
+         *     * `audere_surge` - Audere
+         *     * `audere_ultimate` - Ultimate
+         *     * `crossing` - Crossing
+         *     * `miracle` - Miracle
+         *     * `death` - Death
+         *     * `stake_outcome` - Stake outcome
+         */
+        kind?:
+          | 'audere_surge'
+          | 'audere_ultimate'
+          | 'crossing'
+          | 'death'
+          | 'dramatic_moment'
+          | 'miracle'
+          | 'stake_outcome';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMPromptList'];
+        };
+      };
+    };
+  };
+  gm_prompts_confirm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
+  gm_prompts_dismiss_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
+  gm_prompts_narrate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
   gm_queue_list: {
     parameters: {
       query?: {
@@ -65455,83 +65733,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrossingResult'];
-        };
-      };
-    };
-  };
-  magic_dramatic_moment_suggestions_list: {
-    parameters: {
-      query?: {
-        character_sheet?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-        scene?: number;
-        /**
-         * @description * `pending` - Pending
-         *     * `confirmed` - Confirmed
-         *     * `dismissed` - Dismissed
-         *     * `narrated` - Narrated
-         */
-        status?: 'confirmed' | 'dismissed' | 'narrated' | 'pending';
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedDramaticMomentSuggestionList'];
-        };
-      };
-    };
-  };
-  magic_dramatic_moment_suggestions_confirm_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this GM Prompt. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DramaticMomentSuggestion'];
-        };
-      };
-    };
-  };
-  magic_dramatic_moment_suggestions_dismiss_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this GM Prompt. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DramaticMomentSuggestion'];
         };
       };
     };

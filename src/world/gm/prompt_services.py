@@ -15,11 +15,12 @@ from typing import TYPE_CHECKING
 import uuid
 
 from django.db import DatabaseError, transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q, QuerySet
 
 from world.gm.constants import (
     NARRATION_PROMPT_KINDS,
     PROMPT_GROUP_FOR_KIND,
+    GMPromptKind,
     GMPromptStatus,
 )
 from world.gm.exceptions import GMPromptError
@@ -73,6 +74,41 @@ def _muted_account_ids(account_ids: list[int], kind: str) -> set[int]:
 def prompts_enabled(account: AccountDB, kind: str) -> bool:
     """True unless ``account`` muted the group ``kind`` belongs to."""
     return account.pk not in _muted_account_ids([account.pk], kind)
+
+
+def account_can_gm_scene(account: AccountDB, scene: Scene) -> bool:
+    """Staff, the scene's GM, or the scene's owner -- mirrors ``IsSceneGMOrOwnerOrStaff``
+    / ``SceneListSerializer.get_viewer_can_gm`` (#4101)."""
+    return bool(account.is_staff or scene.is_gm(account) or scene.is_owner(account))
+
+
+def visible_prompts_for(account: AccountDB, *, scene: Scene) -> QuerySet[GMPrompt]:
+    """OPEN (PENDING or NARRATED) prompts ``account`` may act on in ``scene``'s queue (#4101).
+
+    Narration kinds: only the addressed GM, for this scene or scene-less (stake
+    outcomes follow their GM into any scene they run). Dramatic moments: the
+    unchanged #2183 gate (scene GM, owner or staff), minus a GM who muted the
+    group. Controller amendment R6-2: a NARRATED prompt stays in the queue (it is
+    released only on close, via ``dismiss_gm_prompt``/``expire_scene_prompts``), so
+    this filters on ``_NARRATABLE_STATUSES`` rather than PENDING alone -- a
+    dramatic_moment prompt never reaches NARRATED in practice (only a narration
+    kind transitions there), so this is a no-op widening for that half of the query.
+    """
+    narration = Q(kind__in=NARRATION_PROMPT_KINDS, addressed_to=account) & (
+        Q(scene=scene) | Q(scene__isnull=True)
+    )
+    query = narration
+    if account_can_gm_scene(account, scene) and prompts_enabled(
+        account, GMPromptKind.DRAMATIC_MOMENT
+    ):
+        query |= Q(kind=GMPromptKind.DRAMATIC_MOMENT, scene=scene)
+    return (
+        GMPrompt.objects.filter(query, status__in=_NARRATABLE_STATUSES)
+        .select_related(
+            "character_sheet", "moment_type", "technique", "stake_outcome__stake", "scene"
+        )
+        .order_by("-created_at")
+    )
 
 
 def prompt_recipients(
@@ -609,6 +645,7 @@ def expire_scene_prompts(scene: Scene) -> int:
 
 
 __all__ = [
+    "account_can_gm_scene",
     "dismiss_gm_prompt",
     "expire_scene_prompts",
     "link_prompt_narration",
@@ -622,4 +659,5 @@ __all__ = [
     "release_prompt_defaults",
     "route_narratable_event",
     "scene_gm_accounts",
+    "visible_prompts_for",
 ]

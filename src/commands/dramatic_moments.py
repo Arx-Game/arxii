@@ -1,9 +1,11 @@
 """Dramatic-moment suggestion telnet command — the ``moment`` namespace (#2183).
 
-The telnet twin of the web ``DramaticMomentSuggestionViewSet``: both converge on the
-account-authorized ``ConfirmDramaticMomentSuggestionAction`` /
-``DismissDramaticMomentSuggestionAction`` (``actions/definitions/dramatic_moments.py``),
-mirroring ``CmdEvent``'s host-lifecycle dispatch (``actor=None, account=self.caller.account``).
+The telnet twin of the web ``GMPromptViewSet`` (``world/gm/views.py``; #4101 retired the
+dedicated ``DramaticMomentSuggestionViewSet``, folding confirm/dismiss into the one GM
+prompt queue): both converge on the account-authorized
+``ConfirmDramaticMomentSuggestionAction`` / ``DismissDramaticMomentSuggestionAction``
+(``actions/definitions/dramatic_moments.py``), mirroring ``CmdEvent``'s host-lifecycle
+dispatch (``actor=None, account=self.caller.account``).
 
     moment suggestions   — list PENDING suggestions for the active scene here (GM/owner/staff only)
     moment confirm <id>  — confirm one (mints a DramaticMomentTag + resonance/renown)

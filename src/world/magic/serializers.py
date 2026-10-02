@@ -27,7 +27,6 @@ from world.conditions.models import (
     DamageType,
     TreatmentTemplate,
 )
-from world.gm.models import GMPrompt
 from world.items.models import ItemInstance
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
@@ -3802,34 +3801,6 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
             )
         except (EndorsementValidationError, DramaticMomentCapExceeded) as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
-
-
-class DramaticMomentSuggestionSerializer(serializers.ModelSerializer):
-    """Read-only GM confirm/dismiss inbox row (#2183).
-
-    List/confirm/dismiss all render this shape; there is no client-writable field —
-    resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
-    of the REGISTRY actions, never through a serializer ``create``/``update``.
-    """
-
-    moment_type_label = serializers.CharField(source="moment_type.label", read_only=True)
-
-    class Meta:
-        model = GMPrompt
-        fields = [
-            "id",
-            "moment_type",
-            "moment_type_label",
-            "character_sheet",
-            "scene",
-            "interaction",
-            "success_level",
-            "status",
-            "resolved_by",
-            "confirmed_tag",
-            "created_at",
-        ]
-        read_only_fields = fields
 
 
 # =============================================================================
