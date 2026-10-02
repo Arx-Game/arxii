@@ -44,6 +44,7 @@ from world.magic.types.techniques import (
     ResonanceInvolvement,
     RuntimeTechniqueStats,
     SoulfrayResult,
+    SoulfrayStageSummary,
     SoulfrayWarning,
     TechniqueUseResult,
 )
@@ -86,6 +87,7 @@ __all__ = [
     "SettlementResult",
     "SoulfrayContent",
     "SoulfrayResult",
+    "SoulfrayStageSummary",
     "SoulfrayWarning",
     "TechniqueUseResult",
     "ThreadAxis",

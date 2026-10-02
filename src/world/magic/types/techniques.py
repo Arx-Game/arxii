@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from actions.models import ConsequencePool
+    from actions.types import WeightedConsequence
     from world.checks.types import CheckResult
+    from world.conditions.models import ConditionStage
     from world.magic.models import Resonance, Restriction, Technique
     from world.mechanics.types import AppliedEffect
 
@@ -47,6 +50,31 @@ class SoulfrayWarning:
     stage_name: str
     stage_description: str
     has_death_risk: bool
+
+
+@dataclass(frozen=True)
+class SoulfrayStageSummary:
+    """One Soulfray stage as the resilience roll sees it (#4089).
+
+    ``consequences`` are the pool's effective rows (parent merged, exclusions
+    and reweights honoured, ``actions.services.merge_pool_entries``);
+    ``shared_consequence_ids`` are the ones that come from the parent pool.
+    Derived on read and never stored, so the Required-content panel, the
+    Soulfray Stage Builder and the game's own cap all read the same thing.
+    """
+
+    stage: ConditionStage
+    pool: ConsequencePool | None
+    consequences: tuple[WeightedConsequence, ...]
+    shared_consequence_ids: frozenset[int]
+
+    @property
+    def consequence_count(self) -> int:
+        return len(self.consequences)
+
+    @property
+    def can_kill(self) -> bool:
+        return any(wc.character_loss for wc in self.consequences)
 
 
 @dataclass

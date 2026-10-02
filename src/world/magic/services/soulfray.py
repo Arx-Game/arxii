@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from world.magic.models import SoulfrayConfig
-from world.magic.types import MishapResult, SoulfrayResult, SoulfrayWarning
+from world.magic.types import MishapResult, SoulfrayResult, SoulfrayStageSummary, SoulfrayWarning
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ConsequencePool
+    from actions.models.consequence_pools import ConsequencePoolEntry
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionStage
     from world.magic.models import CharacterAnima
@@ -153,6 +156,73 @@ def get_soulfray_warning(character: ObjectDB) -> SoulfrayWarning | None:
         stage_description=stage.description,
         has_death_risk=has_death_risk,
     )
+
+
+def soulfray_stages() -> QuerySet[ConditionStage]:
+    """Every stage of the Soulfray template, in ladder order.
+
+    Exact name match, the same lookup every Soulfray consumer in this module uses.
+    """
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
+    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+
+    return ConditionStage.objects.filter(condition__name=SOULFRAY_CONDITION_NAME).order_by(
+        "stage_order"
+    )
+
+
+def is_soulfray_stage(stage: ConditionStage) -> bool:
+    """Whether ``stage`` belongs to the Soulfray template."""
+    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+
+    return stage.condition.name == SOULFRAY_CONDITION_NAME
+
+
+def soulfray_ladder_summary() -> list[SoulfrayStageSummary]:
+    """Each Soulfray stage with its effective consequences, in ladder order (#4089).
+
+    Two queries whatever the ladder size: the stages with their pools, then
+    every entry of those pools and their parents. Never reads
+    ``ConsequencePool.cached_consequences``, which is a cached_property on an
+    identity-mapped row and outlives the request.
+    """
+    from actions.models import ConsequencePoolEntry  # noqa: PLC0415
+    from actions.services import merge_pool_entries  # noqa: PLC0415
+
+    stages = list(soulfray_stages().select_related("condition", "consequence_pool"))
+    pool_ids: set[int] = set()
+    for stage in stages:
+        if stage.consequence_pool_id is not None:
+            pool_ids.add(stage.consequence_pool_id)
+            if stage.consequence_pool.parent_id is not None:
+                pool_ids.add(stage.consequence_pool.parent_id)
+    entries_by_pool: dict[int, list[ConsequencePoolEntry]] = defaultdict(list)
+    if pool_ids:
+        for entry in ConsequencePoolEntry.objects.filter(pool_id__in=pool_ids).select_related(
+            "consequence"
+        ):
+            entries_by_pool[entry.pool_id].append(entry)
+
+    summaries: list[SoulfrayStageSummary] = []
+    for stage in stages:
+        pool = stage.consequence_pool
+        if pool is None:
+            summaries.append(
+                SoulfrayStageSummary(
+                    stage=stage, pool=None, consequences=(), shared_consequence_ids=frozenset()
+                )
+            )
+            continue
+        parent_entries = entries_by_pool[pool.parent_id] if pool.parent_id else None
+        consequences = tuple(merge_pool_entries(entries_by_pool[pool.pk], parent_entries))
+        parent_ids = {e.consequence_id for e in parent_entries or () if not e.is_excluded}
+        shared = frozenset(wc.consequence.pk for wc in consequences) & parent_ids
+        summaries.append(
+            SoulfrayStageSummary(
+                stage=stage, pool=pool, consequences=consequences, shared_consequence_ids=shared
+            )
+        )
+    return summaries
 
 
 def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:

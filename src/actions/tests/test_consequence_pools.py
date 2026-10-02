@@ -4,8 +4,8 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
-from actions.models.consequence_pools import ConsequencePool
-from actions.services import get_effective_consequences
+from actions.models.consequence_pools import ConsequencePool, ConsequencePoolEntry
+from actions.services import get_effective_consequences, merge_pool_entries
 from actions.types import WeightedConsequence
 from world.checks.factories import ConsequenceFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -287,6 +287,31 @@ class CachedConsequencesTests(TestCase):
         result = child.cached_consequences
         relist_entry = next(wc for wc in result if wc.label == "CP_Relist")
         assert relist_entry.weight == 42
+
+
+class MergePoolEntriesTests(TestCase):
+    """merge_pool_entries is the pure rule get_effective_consequences applies (#4089)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.parent = ConsequencePoolFactory()
+        cls.child = ConsequencePoolFactory(parent=cls.parent)
+        cls.kept = ConsequenceFactory(weight=1)
+        cls.dropped = ConsequenceFactory(weight=1)
+        ConsequencePoolEntryFactory(pool=cls.parent, consequence=cls.kept)
+        ConsequencePoolEntryFactory(pool=cls.parent, consequence=cls.dropped)
+        ConsequencePoolEntryFactory(pool=cls.child, consequence=cls.kept, weight_override=5)
+        ConsequencePoolEntryFactory(pool=cls.child, consequence=cls.dropped, is_excluded=True)
+
+    def test_child_reweight_and_exclusion_over_a_parent(self) -> None:
+        own = list(
+            ConsequencePoolEntry.objects.filter(pool=self.child).select_related("consequence")
+        )
+        inherited = list(
+            ConsequencePoolEntry.objects.filter(pool=self.parent).select_related("consequence")
+        )
+        merged = merge_pool_entries(own, inherited)
+        self.assertEqual([(wc.consequence, wc.weight) for wc in merged], [(self.kept, 5)])
 
 
 class ConsequencePoolCachedAllTests(TestCase):
