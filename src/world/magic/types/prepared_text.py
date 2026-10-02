@@ -17,7 +17,7 @@ class CrossingText:
     vision: str
     manifestation: str
     deed_title: str  # "" = compose the generic title
-    prepared: bool
+    prepared: bool  # True iff the VISION specifically came from prepared text (#4101 fix round 1)
 
 
 @dataclass(frozen=True)

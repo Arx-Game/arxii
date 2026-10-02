@@ -2807,7 +2807,15 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
     offer_strip_label = serializers.CharField(source="threshold.offer_strip_label", read_only=True)
 
     def get_vision_text(self, obj) -> str:
-        """Layered: prepared (character), else faith variant, else the threshold's (#4101)."""
+        """Layered: prepared (character), else faith variant, else the threshold's (#4101).
+
+        Empty while ``manifestation_withheld`` (#4101 fix round 1, controller
+        ruling I3): a GM was present at gate-open, so the GM narrates or
+        releases the vision -- the offer poll must never show it to the player
+        first.
+        """
+        if obj.manifestation_withheld:
+            return ""
         from world.magic.services.prepared_text import resolve_crossing_text  # noqa: PLC0415
 
         return resolve_crossing_text(obj.character_sheet, obj.threshold, obj.faith_variant).vision

@@ -47,7 +47,15 @@ def resolve_crossing_text(
     threshold: AudereMajoraThreshold,
     variant: AudereMajoraFaithVariant | None,
 ) -> CrossingText:
-    """Field-by-field layering: character, then patron variant, then tier."""
+    """Field-by-field layering: character, then patron variant, then tier.
+
+    ``prepared`` reflects the VISION field specifically (#4101 fix round 1,
+    controller ruling M3) -- it marks the GM-facing private default as coming
+    from the character's own prepared text, which is what a GM composer shows
+    a "prepared by the player" badge for. A character who only prepared a
+    room line or a deed title (and fell through to the tier/patron vision)
+    must not flip that badge on.
+    """
     prepared = unused_prepared_crossing_text(sheet)
     own_vision = prepared.vision_text if prepared else ""
     own_room = prepared.manifestation_text if prepared else ""
@@ -58,7 +66,7 @@ def resolve_crossing_text(
             own_room, variant.manifestation_text if variant else "", threshold.manifestation_text
         ),
         deed_title=_first(own_title, threshold.deed_title),
-        prepared=bool(_first(own_vision, own_room, own_title)),
+        prepared=bool(own_vision.strip()),
     )
 
 

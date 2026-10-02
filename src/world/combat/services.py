@@ -13,7 +13,7 @@ import random
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from django.db import transaction
-from django.db.models import Case, F, Prefetch, Q, Sum, When
+from django.db.models import Case, F, Prefetch, Q, QuerySet, Sum, When
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     )
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
+    from world.magic.audere import PendingAudereOffer
+    from world.magic.audere_majora import PendingAudereMajoraOffer
     from world.magic.models import FuryTier, Ritual, Technique
     from world.magic.models.anima import CharacterAnima
     from world.magic.models.techniques import AbstractDamageProfile
@@ -9312,6 +9314,54 @@ def _cancel_pending_certain_death_if_abandoned(
         clear_pending_certain_death(participant.character_sheet)
 
 
+def _end_audere_kind_and_delete_offers(
+    condition_name: str,
+    end_fn: Callable[[ObjectDB], None],
+    pending_offer_model: type[PendingAudereOffer | PendingAudereMajoraOffer],
+    participant_targets: list[ObjectDB],
+) -> None:
+    """Revert one Audere-family condition for its holders and clear its pending offers.
+
+    Extracted out of ``cleanup_completed_encounter`` (one call per kind) to keep
+    that function's own branching simple -- this is Audere/Audere Majora's own
+    per-kind unit of work, including the #4101 fix round 1 withheld-manifestation
+    release for the Majora kind specifically.
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
+
+    target_ids = set(
+        ConditionInstance.objects.filter(
+            target__in=participant_targets,
+            condition__name=condition_name,
+        ).values_list("target_id", flat=True)
+    )
+    for target in participant_targets:
+        if target.pk in target_ids:
+            end_fn(target)
+    offers = pending_offer_model.objects.filter(character_sheet__character__in=participant_targets)
+    if pending_offer_model is PendingAudereMajoraOffer:
+        _release_withheld_majora_manifestations(offers)
+    offers.delete()
+
+
+def _release_withheld_majora_manifestations(offers: QuerySet[PendingAudereMajoraOffer]) -> None:
+    """Send every withheld Crossing manifestation in ``offers`` before it is bulk-deleted.
+
+    The gate opened with a GM present, promising a Crossing prompt that will now
+    never exist (the encounter is ending unresolved) -- the held line must not
+    be silently lost (#4101 fix round 1, I1). ``offers`` is bounded to this
+    encounter's own participants, so a per-row send is cheap. Extracted out of
+    ``cleanup_completed_encounter`` to keep that function's branching simple.
+    """
+    from world.magic.audere_majora import release_withheld_crossing_manifestation  # noqa: PLC0415
+
+    for offer in offers.filter(manifestation_withheld=True).select_related(
+        "character_sheet__character", "threshold", "faith_variant"
+    ):
+        release_withheld_crossing_manifestation(offer)
+
+
 def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     """Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs
     are never touched. Layer 5 of the multi-layer guard: defensive re-check
@@ -9367,7 +9417,6 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     # Note: end_audere reverts intensity modifier + anima-pool expansion;
     # end_audere_majora only removes the condition (no modifier reversal needed).
     # The loop preserves this by calling the per-kind end_fn as-is.
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.magic.audere import (  # noqa: PLC0415
         AUDERE_CONDITION_NAME,
         AUDERE_MAJORA_CONDITION_NAME,
@@ -9383,18 +9432,9 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         (AUDERE_CONDITION_NAME, end_audere, PendingAudereOffer),
         (AUDERE_MAJORA_CONDITION_NAME, end_audere_majora, PendingAudereMajoraOffer),
     ]:
-        target_ids = set(
-            ConditionInstance.objects.filter(
-                target__in=participant_targets,
-                condition__name=condition_name,
-            ).values_list("target_id", flat=True)
+        _end_audere_kind_and_delete_offers(
+            condition_name, end_fn, pending_offer_model, participant_targets
         )
-        for target in participant_targets:
-            if target.pk in target_ids:
-                end_fn(target)
-        pending_offer_model.objects.filter(
-            character_sheet__character__in=participant_targets
-        ).delete()
 
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
 

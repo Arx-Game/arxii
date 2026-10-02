@@ -12,12 +12,15 @@ from world.gm.factories import GMPromptFilterFactory
 from world.gm.models import GMPrompt
 from world.gm.prompt_services import (
     dismiss_gm_prompt,
+    link_prompt_narration,
     prompt_recipients,
     route_narratable_event,
 )
 from world.gm.types import NarratableEvent
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import (
+    InteractionFactory,
+    InteractionReceiverFactory,
     SceneFactory,
     SceneGMParticipationFactory,
     SceneOwnerParticipationFactory,
@@ -302,18 +305,69 @@ class SiblingReleaseTest(TestCase):
 
     @mock.patch("world.gm.prompt_services.narrate_privately")
     def test_dismiss_skips_release_when_a_sibling_narrated(self, narrate):
-        """A GM's own narration of the event replaces the default -- the last
-        sibling to dismiss must not also release it."""
+        """A GM's own PRIVATE narration of the event replaces the private
+        default -- the last sibling to dismiss must not also release it.
+
+        #4101 fix round 1 (I2): release is now derived from the actual
+        ``GMPromptNarration``-linked interaction, not a bare status flip --
+        this exercises a real receiver-scoped (pemit-shaped) narration via
+        ``link_prompt_narration`` so the per-line coverage check has real data
+        to read.
+        """
         prompt_a, prompt_b = self._two_gm_prompts(private_text="the vision")
-        # No narration action exists yet in this task (#4101 wires it in a later
-        # task) -- simulate gm_b having narrated by setting the status directly
-        # (a plain .save(), not .update() -- GMPrompt is idmapper-shared, so a
-        # bare QuerySet.update() is disabled; see core.managers).
-        prompt_b.status = GMPromptStatus.NARRATED
-        prompt_b.save(update_fields=["status"])
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="B's private line")
+        InteractionReceiverFactory(interaction=interaction, persona=self.sheet.primary_persona)
+        link_prompt_narration(prompt_b, interaction)
         with self.captureOnCommitCallbacks(execute=True):
             dismiss_gm_prompt(prompt_a, resolver=self.gm_a)
         narrate.assert_not_called()
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_room_only_narration_still_releases_private_default(self, narrate):
+        """#4101 fix round 1 (I2): a GM who sends only a room line on a
+        Crossing prompt leaves the vision to release privately on its own
+        when the prompt closes -- the private default is never silently
+        dropped just because the room line was covered."""
+        [prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.CROSSING,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="the floor groans",
+                private_text="the vision",
+            ),
+            candidates=[self.gm_a],
+        )
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the floor groans")
+        with self.captureOnCommitCallbacks(execute=True):
+            link_prompt_narration(prompt, interaction)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
+        narrate.assert_called_once_with(self.sheet.character, "the vision", scene=self.scene)
+
+    @mock.patch("world.gm.prompt_services.broadcast_scene_emit")
+    def test_private_only_narration_still_releases_room_default(self, broadcast):
+        """The reverse of the above: a GM who only pemits the vision privately
+        leaves the room line (the manifestation) to release on its own."""
+        [prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.CROSSING,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="the floor groans",
+                private_text="the vision",
+            ),
+            candidates=[self.gm_a],
+        )
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the vision")
+        InteractionReceiverFactory(interaction=interaction, persona=self.sheet.primary_persona)
+        with self.captureOnCommitCallbacks(execute=True):
+            link_prompt_narration(prompt, interaction)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
+        broadcast.assert_called_once_with(
+            self.sheet.character, "the floor groans", scene=self.scene
+        )
 
     def test_live_push_reaches_only_the_addressed_gm(self):
         """``route_narratable_event``'s ``transaction.on_commit`` push (#4101)

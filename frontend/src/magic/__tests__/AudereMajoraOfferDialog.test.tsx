@@ -113,6 +113,15 @@ describe('AudereMajoraOfferDialog (via AudereMajoraOfferGate)', () => {
     expect(vision.textContent).toBe('[TEST VISION]');
   });
 
+  it('renders no vision block when vision_text is empty (#4101 fix round 1, I3)', async () => {
+    // The server sends "" while a GM is present and will narrate/release the
+    // vision -- the dialog must degrade cleanly with no hardcoded copy.
+    renderGate([{ ...OFFER, vision_text: '' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.queryByTestId('majora-vision')).not.toBeInTheDocument();
+  });
+
   it('renders offer_title as the dialog heading (#4101)', async () => {
     renderGate([{ ...OFFER, offer_title: 'Authored crossing heading' }]);
 
