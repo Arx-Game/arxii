@@ -20,9 +20,10 @@ from world.gm.constants import (
     GMPromptStatus,
 )
 from world.gm.exceptions import GMPromptError
-from world.gm.models import GMPrompt, GMPromptFilter
+from world.gm.models import GMPrompt, GMPromptFilter, GMPromptNarration
 from world.scenes.interaction_services import (
     broadcast_scene_emit,
+    get_active_scene,
     narrate_privately,
     non_web_sessions,
 )
@@ -30,12 +31,18 @@ from world.scenes.models import Persona
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
+    from evennia.objects.models import ObjectDB
 
     from world.gm.types import NarratableEvent
-    from world.scenes.models import Scene
+    from world.scenes.models import Interaction, Scene
+    from world.scenes.types import NarratedEventPayload
 
 _MSG_NOT_NARRATION = "That prompt is not one you narrate."
 _MSG_RESOLVED = "That prompt has already been dealt with."
+_MSG_NO_PROMPT = "There is no such GM prompt."
+_MSG_NOT_YOURS = "That prompt is not addressed to you."
+_MSG_WRONG_SCENE = "Narrate that prompt from the scene it happened in."
+_NARRATABLE_STATUSES = (GMPromptStatus.PENDING, GMPromptStatus.NARRATED)
 
 
 def scene_gm_accounts(scene: Scene | None) -> list[AccountDB]:
@@ -121,6 +128,35 @@ def prompt_subject_name(prompt: GMPrompt) -> str:
         return ""
 
 
+def narrated_event_payload(interaction: Interaction) -> NarratedEventPayload | None:
+    """The "part of X's Crossing" tag for a row, from the PEEKED link cache only (#4101).
+
+    Reads ``interaction.__dict__`` directly rather than the
+    ``cached_prompt_narrations`` property -- a cache miss there would run its
+    own query, which this seam must never do (it runs on every live push).
+    ``link_prompt_narration`` seeds that same cache key synchronously on the
+    just-created row, so the live push always finds it already populated.
+    """
+    links = interaction.__dict__.get("cached_prompt_narrations") or []
+    if not links:
+        return None
+    prompt = links[0].prompt
+    sheet = prompt.character_sheet
+    subject_persona_id = None
+    if sheet is not None:
+        try:
+            subject_persona_id = sheet.primary_persona.pk
+        except Persona.DoesNotExist:
+            subject_persona_id = None
+    return {
+        "prompt_id": prompt.pk,
+        "kind": prompt.kind,
+        "kind_label": prompt.get_kind_display(),
+        "subject_name": prompt_subject_name(prompt),
+        "subject_persona_id": subject_persona_id,
+    }
+
+
 def _telnet_line(prompt: GMPrompt) -> str:
     subject = prompt_subject_name(prompt)
     head = f"GM prompt [{prompt.pk}] {prompt.get_kind_display()}"
@@ -161,6 +197,41 @@ def release_prompt_defaults(prompt: GMPrompt) -> None:
         broadcast_scene_emit(character, prompt.room_text, scene=prompt.scene)
     if prompt.private_text.strip():
         narrate_privately(character, prompt.private_text, scene=prompt.scene)
+
+
+def narration_prompt_for(
+    account: AccountDB | None,
+    *,
+    location: ObjectDB | None,  # noqa: OBJECTDB_PARAM - any room the GM stands in
+    prompt_id: object,
+) -> GMPrompt:
+    """The prompt ``account`` may narrate right now from ``location``, or GMPromptError.
+
+    Staff bypass the addressed-to gate, like every other GM tool (#4101 Task 3
+    controller ruling) -- everything else (kind, status, scene binding) applies
+    the same to staff and the addressed GM alike. ``_NARRATABLE_STATUSES``
+    includes NARRATED, not just PENDING: a prompt narrated once by its room
+    line is still narratable a second time by its private line (or vice
+    versa) -- ``EmitAction``/``PemitAction`` each resolve this independently
+    before linking their own Interaction.
+    """
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+    try:
+        prompt = GMPrompt.objects.select_related("character_sheet").get(pk=int(prompt_id))
+    except (GMPrompt.DoesNotExist, TypeError, ValueError):
+        raise GMPromptError(_MSG_NO_PROMPT) from None
+    if prompt.kind not in NARRATION_PROMPT_KINDS:
+        raise GMPromptError(_MSG_NOT_NARRATION)
+    if not is_staff_observer(account) and (account is None or prompt.addressed_to_id != account.pk):
+        raise GMPromptError(_MSG_NOT_YOURS)
+    if prompt.status not in _NARRATABLE_STATUSES:
+        raise GMPromptError(_MSG_RESOLVED)
+    if prompt.scene_id is not None:
+        here = get_active_scene(location)
+        if here is None or here.pk != prompt.scene_id:
+            raise GMPromptError(_MSG_WRONG_SCENE)
+    return prompt
 
 
 def _resolve_narration_prompt(
@@ -240,6 +311,32 @@ def dismiss_gm_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> GMProm
     return _resolve_narration_prompt(prompt, new_status=GMPromptStatus.DISMISSED, resolver=resolver)
 
 
+def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromptNarration:
+    """Record ``interaction`` as narrating ``prompt`` (#4101 Task 3).
+
+    The FIRST narration of a still-PENDING prompt resolves it to NARRATED
+    through ``_resolve_narration_prompt``, under the same per-event lock
+    ``dismiss_gm_prompt``/``expire_scene_prompts`` use: the narrating sibling
+    then counts as "narrated" in that function's own re-check, so the event's
+    authored defaults never release once this row exists. A SECOND narration
+    of an already-NARRATED prompt (the room line, then a separate private
+    send, or vice versa) is a plain link with no status change --
+    ``narration_prompt_for`` already let it through via
+    ``_NARRATABLE_STATUSES``, and re-resolving an already-NARRATED prompt
+    would just raise ``_MSG_RESOLVED`` for no reason.
+    """
+    link = GMPromptNarration.objects.create(
+        prompt=prompt, interaction=interaction, interaction_timestamp=interaction.timestamp
+    )
+    # Seed (never read back) the cache so push_interaction's peek finds it with no query.
+    interaction.cached_prompt_narrations = [link]
+    if prompt.status == GMPromptStatus.PENDING:
+        _resolve_narration_prompt(
+            prompt, new_status=GMPromptStatus.NARRATED, resolver=prompt.addressed_to
+        )
+    return link
+
+
 def expire_scene_prompts(scene: Scene) -> int:
     """Scene finished: dismiss its pending narration prompts so no default is lost.
 
@@ -267,6 +364,9 @@ def expire_scene_prompts(scene: Scene) -> int:
 __all__ = [
     "dismiss_gm_prompt",
     "expire_scene_prompts",
+    "link_prompt_narration",
+    "narrated_event_payload",
+    "narration_prompt_for",
     "notify_gm_prompt",
     "prompt_recipients",
     "prompt_subject_name",

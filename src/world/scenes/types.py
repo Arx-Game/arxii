@@ -38,6 +38,16 @@ class ReplyParentPayload(TypedDict):
     timestamp: str
 
 
+class NarratedEventPayload(TypedDict):
+    """The event a GM narration row belongs to (#4101) -- "part of X's Crossing"."""
+
+    prompt_id: int
+    kind: str
+    kind_label: str
+    subject_name: str
+    subject_persona_id: int | None
+
+
 class InteractionPayload(TypedDict):
     """Structured interaction payload for WebSocket delivery."""
 
@@ -62,6 +72,7 @@ class InteractionPayload(TypedDict):
     attributed_companion_id: int | None
     attributed_companion_name: str | None
     reply_to: ReplyParentPayload | None
+    narrates: NarratedEventPayload | None
 
 
 class ReactionAggregation(TypedDict):

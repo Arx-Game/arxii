@@ -1327,3 +1327,39 @@ class GMPromptFilter(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"GMPromptFilter({self.account_id}, {self.group}, {self.enabled})"
+
+
+class GMPromptNarration(SharedMemoryModel):
+    """Links one narration Interaction to the GMPrompt it narrates (#4101).
+
+    A side row, not an Interaction column: the FK lives on the specific side
+    (ADR-0010) and the partitioned Interaction table stays untouched. Composite
+    reference shape per ADR-0293's named precedent, InteractionReceiver. The
+    unique constraint is on ``interaction`` only (never ``prompt``) -- one
+    prompt narrates through both an EMIT (room line) and a PEMIT (private
+    vision), each its own Interaction row linked back to the same prompt.
+    """
+
+    prompt = models.ForeignKey(GMPrompt, on_delete=models.CASCADE, related_name="narrations")
+    interaction = models.ForeignKey(
+        "arxii.Interaction",
+        on_delete=models.CASCADE,
+        related_name="prompt_narrations",
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
+    )
+    interaction_timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "GM Prompt Narration"
+        verbose_name_plural = "GM Prompt Narrations"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction"], name="one_prompt_per_narration_interaction"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"GMPromptNarration(prompt={self.prompt_id}, interaction={self.interaction_id})"

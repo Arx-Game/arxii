@@ -43,10 +43,73 @@ def _parse_reply_target(kwargs: dict[str, Any]) -> tuple[ReplyTarget | None, Act
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.scenes.models import Persona, Scene
+    from world.gm.models import GMPrompt
+    from world.scenes.models import Interaction, Persona, Scene
     from world.scenes.place_models import Place
     from world.species.language_constants import Fluency
     from world.species.models import Language
+
+
+def _narration_prompt(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[GMPrompt | None, ActionResult | None]:
+    """Resolve the optional ``gm_prompt_id`` this emit/pemit narrates (#4101).
+
+    Runs before any message is sent (both ``EmitAction``/``PemitAction`` call this
+    ahead of ``message_location``/``send_message``), so a refused narration delivers
+    nothing. ``NarratesOwnPromptPrerequisite`` already gates this same question in
+    ``check_availability()`` -- this second call is needed because ``execute()``
+    wants the actual resolved ``GMPrompt`` to link, not just a yes/no.
+    """
+    prompt_id = kwargs.get("gm_prompt_id")
+    if prompt_id is None:
+        return None, None
+    from world.gm.exceptions import GMPromptError  # noqa: PLC0415
+    from world.gm.prompt_services import narration_prompt_for  # noqa: PLC0415
+
+    try:
+        prompt = narration_prompt_for(actor.account, location=actor.location, prompt_id=prompt_id)
+    except GMPromptError as exc:
+        return None, ActionResult(success=False, message=exc.user_message)
+    return prompt, None
+
+
+def _prompt_linker(prompt: GMPrompt | None) -> Callable[[Interaction], None] | None:
+    """``record_interaction``'s ``on_created`` hook that links the row to its prompt (#4101)."""
+    if prompt is None:
+        return None
+    from world.gm.prompt_services import link_prompt_narration  # noqa: PLC0415
+
+    return lambda interaction: link_prompt_narration(prompt, interaction)
+
+
+@dataclass
+class NarratesOwnPromptPrerequisite(Prerequisite):
+    """Refuses an emit/pemit's optional ``gm_prompt_id`` kwarg the actor may not narrate (#4101).
+
+    No-ops when the kwarg is absent, so plain emit/pemit stay unaffected. Delegates to
+    ``narration_prompt_for`` -- the same seam ``_narration_prompt`` calls inside
+    ``execute()`` -- so availability and the real resolve can never drift apart; staff
+    bypass the addressed-to gate there, the same as every other GM tool.
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        prompt_id = (context or {}).get("kwargs", {}).get("gm_prompt_id")
+        if prompt_id is None:
+            return True, ""
+        from world.gm.exceptions import GMPromptError  # noqa: PLC0415
+        from world.gm.prompt_services import narration_prompt_for  # noqa: PLC0415
+
+        try:
+            narration_prompt_for(actor.account, location=actor.location, prompt_id=prompt_id)
+        except GMPromptError as exc:
+            return False, exc.user_message
+        return True, ""
 
 
 # Module-level filter constants used as dataclass defaults (RUF009: no calls in defaults).
@@ -554,7 +617,8 @@ class EmitAction(Action):
     Classic MUSH emit: the text appears as-is in the scene feed. The interaction
     metadata still records who wrote it (persona, thumbnail, etc.), but the
     content itself has no automatic name prefix — the writer controls the
-    entire text.
+    entire text. ``gm_prompt_id`` (#4101) links the row to the GM prompt it
+    narrates.
     """
 
     key: str = "emit"
@@ -566,7 +630,7 @@ class EmitAction(Action):
 
     def get_prerequisites(self) -> list[Prerequisite]:
         # #2287 — a dead emitter is bounded to the ghost emit window.
-        return [GhostWindowPrerequisite()]
+        return [GhostWindowPrerequisite(), NarratesOwnPromptPrerequisite()]
 
     def execute(
         self,
@@ -578,6 +642,9 @@ class EmitAction(Action):
         reply_to, reply_error = _parse_reply_target(kwargs)
         if reply_error is not None:
             return reply_error
+        prompt, prompt_error = _narration_prompt(actor, kwargs)
+        if prompt_error is not None:
+            return prompt_error
         targets: list[ObjectDB] = kwargs.get("targets", [])
         place = kwargs.get("place")
         if not text:
@@ -602,6 +669,7 @@ class EmitAction(Action):
             target_personas=target_personas,
             place=place,
             reply_to=reply_to,
+            on_created=_prompt_linker(prompt),
         )
 
         return ActionResult(success=True)
@@ -678,7 +746,8 @@ class PemitAction(Action):
 
     Gated on ``MinimumGMLevelPrerequisite(GMLevel.STARTING)`` (#2117; staff
     bypass preserved) -- pure private narration, no state change beyond a
-    receiver-scoped Interaction row, same risk class as staging.
+    receiver-scoped Interaction row, same risk class as staging. ``gm_prompt_id``
+    (#4101) links the row to the GM prompt it narrates.
     """
 
     key: str = "pemit"
@@ -689,7 +758,7 @@ class PemitAction(Action):
     target_type: TargetType = TargetType.AREA
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [MinimumGMLevelPrerequisite(GMLevel.STARTING)]
+        return [MinimumGMLevelPrerequisite(GMLevel.STARTING), NarratesOwnPromptPrerequisite()]
 
     def execute(
         self,
@@ -701,6 +770,9 @@ class PemitAction(Action):
         reply_to, reply_error = _parse_reply_target(kwargs)
         if reply_error is not None:
             return reply_error
+        prompt, prompt_error = _narration_prompt(actor, kwargs)
+        if prompt_error is not None:
+            return prompt_error
         receivers: list[ObjectDB] = kwargs.get("receivers", [])
         if not text:
             return ActionResult(success=False, message="Pemit what?")
@@ -724,6 +796,7 @@ class PemitAction(Action):
             mode=InteractionMode.EMIT,
             receivers=receiver_personas,
             reply_to=reply_to,
+            on_created=_prompt_linker(prompt),
         )
 
         return ActionResult(success=True)

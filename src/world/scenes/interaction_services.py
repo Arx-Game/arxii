@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from world.companions.models import Companion
     from world.magic.models import FuryTier
     from world.scenes.models import SceneRound
+    from world.scenes.types import NarratedEventPayload
     from world.species.models import Language
 
 DELETION_WINDOW_DAYS = 30
@@ -670,6 +671,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     attributed_companion_id: int | None = None,
     attributed_companion_name: str | None = None,
     reply_to: ReplyParentPayload | None = None,
+    narrates: NarratedEventPayload | None = None,
 ) -> InteractionPayload:
     """Build a structured interaction payload for WebSocket delivery.
 
@@ -703,6 +705,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         attributed_companion_id=attributed_companion_id,
         attributed_companion_name=attributed_companion_name,
         reply_to=reply_to,
+        narrates=narrates,
     )
     payload["line"] = _line_for(payload, content)
     return payload
@@ -898,6 +901,13 @@ def _query_receivers(interaction: Interaction) -> tuple[list[int], list[ObjectDB
     return r_ids, r_chars
 
 
+def _narrates_for(interaction: Interaction) -> NarratedEventPayload | None:
+    """The GM-prompt event this row narrates, if any (#4101) -- peek-only, no query."""
+    from world.gm.prompt_services import narrated_event_payload  # noqa: PLC0415
+
+    return narrated_event_payload(interaction)
+
+
 def push_interaction(
     interaction: Interaction,
     *,
@@ -980,6 +990,7 @@ def push_interaction(
             interaction.attributed_companion.name if interaction.attributed_companion_id else None
         ),
         reply_to=_reply_parent_payload(interaction),
+        narrates=_narrates_for(interaction),
     )
 
     if receiver_scoped:
