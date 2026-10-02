@@ -327,7 +327,7 @@ def validate_item_use_bound(*, item_instance: ItemInstance, user: ObjectDB) -> N
 def validate_item_use_target(
     *, item_instance: ItemInstance, user: ObjectDB, target: ObjectDB | None
 ) -> None:
-    """Retain cosmetic consent; its category lookup can lazily create a row."""
+    """Check cosmetic consent without creating categories or changing state."""
     if item_instance.template.appearance_effects.exists() and target is not None and target != user:
         _require_makeover_consent(user, target)
 
@@ -449,19 +449,17 @@ def use_item(  # noqa: PLR0913
 
 
 def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
-    """Raise MakeoverNotPermitted unless the target consents to styling (#2632).
+    """Require existing makeover consent without seeding policy on a read.
 
-    An NPC target (no active tenure) never blocks; a player target's makeover
-    consent category gates (default allowlist — you opt your stylists in).
+    NPCs without an active tenure bypass consent. A missing category refuses
+    PC styling, matching its unconfigured ALLOWLIST default. Existing category
+    hierarchy and player rules remain governed by the shared consent service.
     """
-    from world.consent.services import (  # noqa: PLC0415
-        consent_blocks_targeting,
-        makeover_category,
-    )
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
     from world.roster.models import RosterTenure  # noqa: PLC0415
 
     def _active_tenure_for_sheet(sheet: object) -> RosterTenure | None:
-        # Mirrors flows.service_functions.inventory's sheet→active-tenure resolution.
         return RosterTenure.objects.filter(
             roster_entry__character_sheet=sheet, end_date__isnull=True
         ).first()
@@ -472,12 +470,15 @@ def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
         raise MakeoverNotPermitted(msg)
     owner_tenure = _active_tenure_for_sheet(target_sheet)
     if owner_tenure is None:
-        return  # NPC — no consent gate
+        return
+    category = SocialConsentCategory.objects.filter(key="makeover").first()
+    if category is None:
+        raise MakeoverNotPermitted
     user_sheet = user.character_sheet
     actor_tenure = _active_tenure_for_sheet(user_sheet) if user_sheet else None
     if consent_blocks_targeting(
         owner_tenure=owner_tenure,
-        category=makeover_category(),
+        category=category,
         actor_tenure=actor_tenure,
     ):
         raise MakeoverNotPermitted
