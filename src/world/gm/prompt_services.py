@@ -361,6 +361,7 @@ def _telnet_line(prompt: GMPrompt) -> str:
     return (
         f"{head} emit/prompt {prompt.pk} <text> | pemit/prompt {prompt.pk} <names>=<text>"
         f" | gm prompt send {prompt.pk} | gm prompt dismiss {prompt.pk}"
+        f" | gm prompt done {prompt.pk}"
     )
 
 
