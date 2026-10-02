@@ -590,7 +590,10 @@ class CmdGMDashboard(ArxCommand):
             subject_character = present.get(prompt.character_sheet_id)
             if subject_character is None:
                 subject = prompt_subject_name(prompt) or "The subject"
-                self.msg(f"{subject} isn't here; skipping the private line.")
+                self.msg(
+                    f"{subject} isn't here; their private line goes out on its own"
+                    " when the prompt closes."
+                )
             else:
                 result = PemitAction().run(
                     actor=self.caller,
