@@ -19,6 +19,24 @@ const shot = (name: string) => path.join(EVIDENCE_DIR, name);
 const ENTRY_ID = 1;
 const SHEET_ID = 20;
 
+function accountPayload() {
+  return {
+    id: 1,
+    username: 'walk-e2e',
+    display_name: 'Walk E2E',
+    email: '',
+    email_verified: true,
+    last_login: null,
+    can_create_characters: true,
+    is_staff: false,
+    is_gm: false,
+    available_characters: [],
+    pending_applications: [],
+    selected_entry_id: null,
+    selected_entry: null,
+  };
+}
+
 // --- the sheet ----------------------------------------------------------------------
 
 const MINE = {
