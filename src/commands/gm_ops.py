@@ -30,6 +30,23 @@ the caller's own account so the persona picker and ``@ic`` work on it
 immediately. ``preset=<name>`` names a curated ``NPCStatlinePreset`` by
 natural key, giving the NPC a real, rollable statline at mint time instead of
 a blank sheet.
+
+``gm prompts`` / ``gm prompt send|dismiss|done <id>`` (#4101) is the telnet
+face of the GM narration-prompt queue -- thin over
+``world.gm.prompt_services`` + ``EmitAction``/``PemitAction``/
+``DismissGMPromptAction``. ``gm prompts`` lists PENDING and NARRATED prompts
+addressed to the caller (narrated ones marked); ``gm prompt send <id>``
+narrates both of a prompt's authored defaults (private via pemit, room via
+emit, each linked and skipping a blank one) and then closes the prompt itself
+(R12-1 -- every line it sent is already covered, so closing releases nothing
+extra and no separate ``done`` is needed); ``gm prompt dismiss <id>`` /
+``gm prompt done <id>`` both close a prompt outright (``done`` is the GM-facing
+name for closing a prompt that has already been narrated -- same action as
+dismiss, R6-2). A dramatic-moment row is labelled with the ``moment
+confirm|dismiss <id>`` verbs that resolve it (#4101 final review, B7), rather
+than ``gm prompt`` growing a second dispatch path for that kind. The dashboard's own render gains a
+``Narration prompts waiting: N`` line counting PENDING + NARRATED prompts
+addressed to the caller.
 """
 
 from __future__ import annotations
@@ -71,10 +88,14 @@ _USAGE_SUMMON = (
     " (consent-prompted -- the character must `accept summon`/`decline summon`)"
 )
 _USAGE_NPC = "Usage: gm npc <name>[=<description>] [preset=<name>] (requires Junior GM+)"
+_USAGE_PROMPT = "Usage: gm prompt send <id> | gm prompt dismiss <id> | gm prompt done <id>"
 _SUBVERB_LIST = "list"
 _SUBVERB_ARM = "arm"
 _SUBVERB_DISARM = "disarm"
 _SUBVERB_REMOVE = "remove"
+_PROMPT_SEND = "send"
+_PROMPT_DISMISS = "dismiss"
+_PROMPT_DONE = "done"
 
 # parse_kv_and_flags key names -- module constants so the STRING_LITERAL lint's
 # comparison/membership check doesn't see bare identifier-shaped literals.
@@ -111,6 +132,10 @@ class CmdGMDashboard(ArxCommand):
       gm trap disarm <id>
       gm summon <character>
       gm npc <name>[=<description>] [preset=<name>]  (requires Junior GM+)
+      gm prompts
+      gm prompt send <id>
+      gm prompt dismiss <id>
+      gm prompt done <id>
     """
 
     key = "gm"
@@ -141,6 +166,8 @@ class CmdGMDashboard(ArxCommand):
                 "trap": self._handle_trap,
                 "summon": self._handle_summon,
                 "npc": self._handle_npc,
+                "prompts": self._list_prompts,
+                "prompt": self._handle_prompt,
             }
             handler = handlers.get(first)
             if handler is None:
@@ -454,6 +481,142 @@ class CmdGMDashboard(ArxCommand):
         if result.message:
             self.msg(result.message)
 
+    def _list_prompts(self, _rest: str = "") -> None:
+        """``gm prompts`` -- PENDING and NARRATED prompts visible to the caller
+        in whatever scene is active where they stand (#4101). Controller
+        amendment R6-2: a NARRATED prompt stays listed, marked as such, until
+        the GM closes it with ``send``/``dismiss``/``done``. Ruling R12-2: one
+        visibility source -- ``visible_prompts_for_location`` defers entirely to
+        ``visible_prompts_for``, the same function the REST queue
+        (``GET /api/gm/prompts/?scene=``) uses, so a muted GM, or one standing
+        outside any scene, sees on telnet exactly what the web would show.
+        """
+        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        from world.gm.prompt_services import (  # noqa: PLC0415
+            prompt_subject_names,
+            prompt_telnet_commands,
+            visible_prompts_for_location,
+        )
+
+        account = self.caller.account
+        prompts = list(visible_prompts_for_location(account, self.caller.location))
+        if not prompts:
+            self.msg("No GM prompts are waiting.")
+            return
+        names = prompt_subject_names(prompts, account)
+        for p in prompts:
+            subject = names[p.pk] or (
+                p.stake_outcome.stake.player_summary if p.stake_outcome_id else ""
+            )
+            status_tag = " (narrated)" if p.status == GMPromptStatus.NARRATED else ""
+            self.msg(f"[{p.pk}] {p.get_kind_display()}{status_tag}: {subject}")
+            if p.private_text:
+                self.msg(f"  private: {p.private_text}")
+            if p.room_text:
+                self.msg(f"  room: {p.room_text}")
+            self.msg(f"  {prompt_telnet_commands(p)}")
+
+    def _handle_prompt(self, rest: str) -> None:
+        """``gm prompt send|dismiss|done <id>`` (#4101).
+
+        ``done`` is the GM-facing name for closing a prompt that has already
+        been narrated -- the same close action as ``dismiss`` (R6-2).
+        """
+        verb, _, raw_id = rest.partition(" ")
+        verb = verb.strip().lower()
+        raw_id = raw_id.strip()
+        if verb not in (_PROMPT_SEND, _PROMPT_DISMISS, _PROMPT_DONE) or not raw_id.isdigit():
+            raise CommandError(_USAGE_PROMPT)
+        prompt_id = int(raw_id)
+        if verb in (_PROMPT_DISMISS, _PROMPT_DONE):
+            self._dismiss_prompt(prompt_id)
+            return
+        self._send_prompt_defaults(prompt_id)
+
+    def _dismiss_prompt(
+        self,
+        prompt_id: int,
+        *,
+        fallback: str = "Dismissed; the authored text goes out on its own.",
+    ) -> None:
+        from actions.definitions.dramatic_moments import DismissGMPromptAction  # noqa: PLC0415
+
+        result = DismissGMPromptAction().run(
+            actor=None, account=self.caller.account, prompt_id=prompt_id
+        )
+        self.msg(result.message or fallback)
+
+    def _send_prompt_defaults(self, prompt_id: int) -> None:
+        """``gm prompt send <id>`` -- rulings R12-1 and R12-3 (#4101).
+
+        Narrates whichever of a prompt's two authored defaults isn't already
+        covered (skipping a blank one too), through the linked emit/pemit,
+        then closes the prompt itself via the dismiss action. Every line it
+        sends is covered by the time the close runs, so closing releases
+        nothing extra and the GM never needs a separate ``done`` for a prompt
+        sent through this verb.
+
+        R12-3: coverage is read from ``prompt_narration_coverage`` -- the same
+        computation ``_resolve_narration_prompt`` uses to decide what a close
+        releases, never re-derived -- so re-running ``send`` after a partial
+        failure (e.g. the room line landed, then something interrupted before
+        the private one) narrates only the leg still missing.
+
+        Fix round 1, finding 1: the private leg additionally checks the
+        subject is physically present (``present_characters_in_room``, the
+        same presence check ``NarrateGMPromptSerializer`` uses for the REST
+        chosen-receiver audience) -- an absent subject skips the private line
+        and tells the GM; the room line still goes out regardless.
+        """
+        from actions.definitions.communication import EmitAction, PemitAction  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.gm.prompt_services import (  # noqa: PLC0415
+            narration_location_for,
+            present_characters_in_room,
+            prompt_narration_coverage,
+            prompt_subject_name,
+            prompt_visible_to,
+        )
+
+        prompt = (
+            GMPrompt.objects.filter(pk=prompt_id)
+            .select_related("character_sheet__character", "scene")
+            .first()
+        )
+        if prompt is None or not prompt_visible_to(self.caller.account, prompt):
+            # Fix round 1, minor 6: one neutral reply for both "doesn't exist"
+            # and "exists but isn't yours" -- same IDOR-safe shape the REST
+            # object lookup already uses.
+            msg = "There is no such GM prompt."
+            raise CommandError(msg)
+        room_covered, private_covered = prompt_narration_coverage(prompt)
+        if not private_covered and prompt.private_text.strip() and prompt.character_sheet_id:
+            location = narration_location_for(prompt, self.caller)
+            present = present_characters_in_room([prompt.character_sheet_id], location)
+            subject_character = present.get(prompt.character_sheet_id)
+            if subject_character is None:
+                subject = prompt_subject_name(prompt) or "The subject"
+                self.msg(
+                    f"{subject} isn't here; their private line goes out on its own"
+                    " when the prompt closes."
+                )
+            else:
+                result = PemitAction().run(
+                    actor=self.caller,
+                    text=prompt.private_text,
+                    receivers=[subject_character],
+                    gm_prompt_id=prompt.pk,
+                )
+                if not result.success:
+                    raise CommandError(result.message or "Action failed")
+        if not room_covered and prompt.room_text.strip():
+            result = EmitAction().run(
+                actor=self.caller, text=prompt.room_text, gm_prompt_id=prompt.pk
+            )
+            if not result.success:
+                raise CommandError(result.message or "Action failed")
+        self._dismiss_prompt(prompt.pk, fallback="Sent and closed.")
+
     def _render(self) -> None:
         raw = (self.args or "").strip().lower()
         if raw and raw != "dashboard":  # noqa: STRING_LITERAL
@@ -492,6 +655,17 @@ class CmdGMDashboard(ArxCommand):
             offered_to=gm_profile, status=StoryGMOfferStatus.PENDING
         ).count()
         lines.append(f"  Pending story offers: {pending_offers}")
+
+        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
+
+        # R6-2: the waiting count includes NARRATED prompts, not just PENDING --
+        # a narrated-but-still-open prompt is still waiting on the GM to close it.
+        waiting_prompts = GMPrompt.objects.filter(
+            addressed_to=self.caller.account,
+            status__in=(GMPromptStatus.PENDING, GMPromptStatus.NARRATED),
+        ).count()
+        lines.append(f"  Narration prompts waiting: {waiting_prompts}")
 
         lines.append(f"  Open group requests: {len(buckets.open_group_requests)}")
         lines.extend(

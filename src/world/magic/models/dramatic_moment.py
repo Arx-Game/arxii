@@ -1,8 +1,9 @@
 """DramaticMomentType and DramaticMomentTag — staff-tagged dramatic scene moments (#545).
 
-Also DramaticMomentSuggestion — a GM-facing recognition bridge (#2183): a high-success
-technique-entrance cast surfaces a PENDING suggestion for a flagged DramaticMomentType
-instead of auto-tagging, so a GM still confirms/dismisses before resonance + renown fire.
+The GM-facing recognition bridge (#2183) — a high-success technique-entrance cast
+surfacing a PENDING prompt for a flagged DramaticMomentType instead of auto-tagging,
+so a GM still confirms/dismisses before resonance + renown fire — is ``GMPrompt``
+(generalized and moved to ``world.gm.models``, #4101).
 """
 
 from __future__ import annotations
@@ -10,13 +11,11 @@ from __future__ import annotations
 from typing import ClassVar
 
 from django.db import models
-from django.db.models import Q
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
-from world.magic.constants import SuggestionStatus
 from world.societies.renown_config import RenownAwardConfig
 
 
@@ -71,7 +70,7 @@ class DramaticMomentType(NaturalKeyMixin, CreditedContent, RenownAwardConfig):
         default=False,
         help_text=(
             "When set, a high-success technique-entrance cast surfaces a PENDING "
-            "DramaticMomentSuggestion for this type instead of nothing (#2183)."
+            "GMPrompt for this type instead of nothing (#2183)."
         ),
     )
     suggestion_min_success_level = models.PositiveSmallIntegerField(
@@ -144,109 +143,4 @@ class DramaticMomentTag(RelatedCacheClearingMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"DramaticMomentTag({self.character_sheet_id} ← {self.moment_type_id}@{self.tagged_at})"
-        )
-
-
-class DramaticMomentSuggestion(RelatedCacheClearingMixin, SharedMemoryModel):
-    """GM-facing PENDING suggestion surfaced by a high-success technique entrance (#2183).
-
-    Bridges the technique-entrance deferral markers (originated_as_entrance /
-    from_entrance, built in Tasks 1-2) to the existing DramaticMomentTag machinery:
-    rather than auto-tagging, a qualifying cast creates a suggestion here that a GM
-    later confirms (minting a real DramaticMomentTag via ``create_dramatic_moment_tag``)
-    or dismisses. Surfaced by ``actions/definitions/social.py`` and
-    ``world/combat/services.py`` (both call ``services/gain.py``'s
-    ``maybe_suggest_dramatic_moments``); resolved via
-    ``actions/definitions/dramatic_moments.py`` (calls
-    ``resolve_dramatic_moment_suggestion``).
-    """
-
-    related_cache_fields: ClassVar[list[str]] = ["interaction"]
-
-    moment_type = models.ForeignKey(
-        DramaticMomentType,
-        on_delete=models.PROTECT,
-        related_name="suggestions",
-    )
-    character_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
-        on_delete=models.CASCADE,
-        related_name="dramatic_moment_suggestions",
-    )
-    scene = models.ForeignKey(
-        "arxii.Scene",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="dramatic_moment_suggestions",
-        help_text="Scene context; nullable for resilience to scene cleanup.",
-    )
-    interaction = models.ForeignKey(
-        "arxii.Interaction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="dramatic_moment_suggestions",
-        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
-        help_text="The entrance pose that triggered this suggestion; nullable.",
-    )
-    interaction_timestamp = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
-    )
-    technique = models.ForeignKey(
-        "arxii.Technique",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="dramatic_moment_suggestions",
-        help_text=(
-            "The technique the entrance was cast with. Carried so that confirming "
-            "the suggestion can resolve the resonance from the thread the character "
-            "wove into that technique's gift. Null for a manual GM tag with no "
-            "technique behind it."
-        ),
-    )
-    success_level = models.PositiveSmallIntegerField(
-        help_text="Cast success level that triggered this suggestion.",
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=SuggestionStatus.choices,
-        default=SuggestionStatus.PENDING,
-        db_index=True,
-    )
-    resolved_by = models.ForeignKey(
-        "accounts.AccountDB",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="dramatic_moment_suggestions_resolved",
-        help_text="GM account that confirmed or dismissed this suggestion.",
-    )
-    confirmed_tag = models.OneToOneField(
-        DramaticMomentTag,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="source_suggestion",
-        help_text="The DramaticMomentTag minted on confirmation, if any.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["moment_type", "character_sheet", "scene"],
-                condition=Q(status="pending"),
-                name="one_pending_suggestion_per_type_sheet_scene",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return (
-            f"DramaticMomentSuggestion({self.character_sheet_id} ← "
-            f"{self.moment_type_id}, {self.status})"
         )

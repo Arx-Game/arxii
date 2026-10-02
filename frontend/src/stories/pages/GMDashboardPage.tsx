@@ -40,6 +40,7 @@ import { apiFetch } from '@/evennia_replacements/api';
 import { parseDispatchBody } from '@/lib/errors';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAccount } from '@/store/hooks';
+import { GMPromptFilterCard } from '../components/GMPromptFilterCard';
 
 // ---------------------------------------------------------------------------
 // Types (manually authored — spectacular can't introspect this APIView)
@@ -298,6 +299,9 @@ function GMDashboardContent() {
           </dd>
         </dl>
       </section>
+
+      {/* GM prompt settings (#4101, demo Screen 5) */}
+      <GMPromptFilterCard />
 
       {/* My tables */}
       <section className="rounded-lg border p-4">

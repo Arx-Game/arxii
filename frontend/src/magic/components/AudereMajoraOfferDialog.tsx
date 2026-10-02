@@ -62,7 +62,7 @@ export function AudereMajoraOfferDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-wide text-amber-400">
             <DoorOpen className="h-7 w-7" />
-            The Threshold Stands Before You
+            {offer.offer_title}
           </AlertDialogTitle>
           <AlertDialogDescription className="text-base">
             Standing at level{' '}

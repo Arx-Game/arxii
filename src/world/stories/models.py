@@ -2561,6 +2561,9 @@ class StakeResolution(SharedMemoryModel):
             "fuse mechanic. Blank = no escalation declared."
         ),
     )
+    # Offered to the story's Lead GM to narrate when this branch fires (#4101);
+    # the stake prompt still goes out when this is blank (ruling R8-2) -- it is
+    # a "this stake resolved" notice even with nothing authored to read aloud.
     narrative_summary = models.TextField(
         blank=True,
         help_text="What happens in the story when this branch fires (GM-authored).",

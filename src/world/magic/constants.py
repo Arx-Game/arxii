@@ -145,14 +145,6 @@ ALTERATION_TIER_CAPS: dict[int, dict[str, int | bool]] = {
 MIN_ALTERATION_DESCRIPTION_LENGTH = 40
 
 
-class SuggestionStatus(models.TextChoices):
-    """Lifecycle status of a DramaticMomentSuggestion (#2183)."""
-
-    PENDING = "pending", "Pending"
-    CONFIRMED = "confirmed", "Confirmed"
-    DISMISSED = "dismissed", "Dismissed"
-
-
 class TargetKind(models.TextChoices):
     TRAIT = "TRAIT", "Trait"
     TECHNIQUE = "TECHNIQUE", "Technique"
@@ -759,3 +751,14 @@ class AudereCeremony(models.TextChoices):
 
     AUDERE = "audere", "Audere"
     AUDERE_MAJORA = "audere_majora", "Audere Majora"
+
+
+class PreparedByRole(models.TextChoices):
+    """Who authored a prepared-text row, surfaced instead of an account name (#4101).
+
+    Never an account name in player-facing output (memory rule) — the API exposes
+    only this role, never ``prepared_by``'s username.
+    """
+
+    STAFF = "staff", "Staff"
+    TABLE_GM = "table_gm", "Table GM"

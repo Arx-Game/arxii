@@ -8,6 +8,7 @@ import { AttachedActionSubmissionGuard } from '../actionSubmissionGuard';
 import { useDetachedActionIds } from '../useDetachedActionIds';
 import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
+import { GMPromptQueue } from '../components/GMPromptQueue';
 import { ActionPanel } from '../components/ActionPanel';
 import { PlaceBar } from '../components/PlaceBar';
 import { TavernGameWidget } from '../components/TavernGameWidget';
@@ -454,6 +455,9 @@ export function SceneDetailPage() {
               canGm={scene?.viewer_can_gm}
               onAvatarClick={setCardPersona}
             />
+
+            {/* GM prompt queue: mechanical events awaiting narration (#4101) */}
+            {scene?.viewer_can_gm && <GMPromptQueue sceneId={id} personas={scene.personas ?? []} />}
 
             {/* Composer + Action Panel */}
             {isActive && (

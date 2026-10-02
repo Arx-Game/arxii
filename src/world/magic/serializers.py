@@ -8,9 +8,11 @@ Affinities and Resonances are proper domain models in the magic app.
 """
 
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field
+from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from actions.models import ConsequencePool
@@ -30,6 +32,7 @@ from world.magic.constants import (
     ALTERATION_TIER_CAPS,
     AnimaContributionKind,
     GlimpseTagAxis,
+    PreparedByRole,
     RestrictionKind,
     TargetKind,
     anima_band_for,
@@ -38,8 +41,10 @@ from world.magic.constants import (
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterResonance,
+    CharacterSurgeText,
     CharacterThreadWeavingUnlock,
     CrossingOption,
     EffectType,
@@ -67,7 +72,6 @@ from world.magic.models import (
     ThreadWeavingTeachingOffer,
 )
 from world.magic.models.dramatic_moment import (
-    DramaticMomentSuggestion,
     DramaticMomentTag,
     DramaticMomentType,
 )
@@ -2530,6 +2534,9 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
     intensity_bonus = serializers.SerializerMethodField()
     anima_pool_bonus = serializers.SerializerMethodField()
     reveal_framing_text = serializers.SerializerMethodField()
+    offer_title = serializers.SerializerMethodField()
+    offer_strip_label = serializers.SerializerMethodField()
+    offer_body_text = serializers.SerializerMethodField()
 
     class Meta:
         from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
@@ -2545,6 +2552,9 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
             "anima_pool_bonus",
             "advisory_text",
             "reveal_framing_text",
+            "offer_title",
+            "offer_strip_label",
+            "offer_body_text",
             "created_at",
         ]
         read_only_fields = fields
@@ -2579,6 +2589,23 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
         if threshold is None or not has_reveal_cards(obj.character_sheet):  # type: ignore[union-attr]
             return ""
         return threshold.reveal_framing_text
+
+    def get_offer_title(self, obj: object) -> str:  # noqa: ARG002
+        """The authored Audere offer dialog heading (#4101); '' when unconfigured."""
+        threshold = self._threshold()
+        return threshold.offer_title if threshold else ""
+
+    def get_offer_strip_label(self, obj: object) -> str:  # noqa: ARG002
+        """The authored Audere gate strip label (#4101); '' when unconfigured."""
+        threshold = self._threshold()
+        return threshold.offer_strip_label if threshold else ""
+
+    def get_offer_body_text(self, obj: object) -> str:
+        """The authored Audere offer line, with {intensity} substituted (#4101)."""
+        threshold = self._threshold()
+        if threshold is None:
+            return ""
+        return threshold.offer_body_text.replace("{intensity}", str(obj.fired_intensity))  # type: ignore[attr-defined]
 
 
 # =============================================================================
@@ -2775,12 +2802,22 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
     risk_text = serializers.SerializerMethodField()
     eligible_paths = serializers.SerializerMethodField()
     intended_path_id = serializers.SerializerMethodField()
+    offer_title = serializers.CharField(source="threshold.offer_title", read_only=True)
+    offer_strip_label = serializers.CharField(source="threshold.offer_strip_label", read_only=True)
 
     def get_vision_text(self, obj) -> str:
-        """Return faith variant vision text if set, else the threshold's."""
-        if obj.faith_variant_id is not None:
-            return obj.faith_variant.vision_text
-        return obj.threshold.vision_text
+        """Layered: prepared (character), else faith variant, else the threshold's (#4101).
+
+        Empty while ``manifestation_withheld`` (#4101 fix round 1, controller
+        ruling I3): a GM was present at gate-open, so the GM narrates or
+        releases the vision -- the offer poll must never show it to the player
+        first.
+        """
+        if obj.manifestation_withheld:
+            return ""
+        from world.magic.services.prepared_text import resolve_crossing_text  # noqa: PLC0415
+
+        return resolve_crossing_text(obj.character_sheet, obj.threshold, obj.faith_variant).vision
 
     class Meta:
         from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
@@ -2800,6 +2837,8 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
             "risk_text",
             "eligible_paths",
             "intended_path_id",
+            "offer_title",
+            "offer_strip_label",
             "created_at",
         ]
         read_only_fields = fields
@@ -3764,32 +3803,150 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
 
 
-class DramaticMomentSuggestionSerializer(serializers.ModelSerializer):
-    """Read-only GM confirm/dismiss inbox row (#2183).
+# =============================================================================
+# Prepared per-character Audere text (#4101)
+# =============================================================================
 
-    List/confirm/dismiss all render this shape; there is no client-writable field —
-    resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
-    of the REGISTRY actions, never through a serializer ``create``/``update``.
+_ERR_CANNOT_PREPARE_TEXT = "You may not prepare text for that character."
+_ERR_TEXT_ALREADY_USED = "That text was used by a crossing and is now a record."
+_ERR_DEED_TITLE_DASH = "Use a hyphen, not a dash, in a deed title."
+
+
+def _character_name_for(sheet: CharacterSheet) -> str:
+    """The sheet's primary-persona IC name, or '' if somehow absent.
+
+    Single-object fallback only (retrieve/create/update) — ``CharacterSheet
+    .primary_persona`` is a ``.get()``, which is NOT prefetch-cacheable, so
+    calling this once per row in a list response is an N+1. List actions
+    must batch via ``primary_persona_names_for`` instead (never a ``to_attr``
+    prefetch on the idmapper-cached ``CharacterSheet``/``Persona`` models).
+    """
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    try:
+        return sheet.primary_persona.name
+    except Persona.DoesNotExist:
+        return ""
+
+
+def primary_persona_names_for(sheet_ids: Iterable[int]) -> dict[int, str]:
+    """Batch ``{character_sheet_id: primary_persona_name}`` for a set of sheets.
+
+    The N+1-avoidance seam for a prepared-text list response: one query for
+    the whole page instead of one ``CharacterSheet.primary_persona`` lookup
+    per row.
+    """
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    rows = Persona.objects.filter(
+        character_sheet_id__in=list(sheet_ids), persona_type=PersonaType.PRIMARY
+    ).values_list("character_sheet_id", "name")
+    return dict(rows)
+
+
+def _prepared_by_role(prepared_by: AccountDB | None) -> str:
+    if prepared_by is not None and prepared_by.is_staff:
+        return PreparedByRole.STAFF
+    return PreparedByRole.TABLE_GM
+
+
+class PreparedCrossingTextSerializer(serializers.ModelSerializer):
+    """A character's own prepared Audere Majora crossing text (#4101).
+
+    Authored by staff or the character's table GM (``may_prepare_text_for``).
+    Never readable by the crossing player themselves — the vision is a spoiler —
+    nor by an unrelated GM; the viewset's queryset is the read-side gate.
     """
 
-    moment_type_label = serializers.CharField(source="moment_type.label", read_only=True)
+    character_name = serializers.SerializerMethodField()
+    prepared_by_role = serializers.SerializerMethodField()
 
     class Meta:
-        model = DramaticMomentSuggestion
+        model = CharacterCrossingText
         fields = [
             "id",
-            "moment_type",
-            "moment_type_label",
             "character_sheet",
-            "scene",
-            "interaction",
-            "success_level",
-            "status",
-            "resolved_by",
-            "confirmed_tag",
-            "created_at",
+            "character_name",
+            "vision_text",
+            "manifestation_text",
+            "deed_title",
+            "prepared_by_role",
+            "crossing",
+            "updated_at",
         ]
-        read_only_fields = fields
+        read_only_fields = ["id", "character_name", "prepared_by_role", "crossing", "updated_at"]
+
+    def get_character_name(self, obj: CharacterCrossingText) -> str:
+        names = self.context.get("character_names")
+        if names is not None:
+            return names.get(obj.character_sheet_id, "")
+        return _character_name_for(obj.character_sheet)
+
+    def get_prepared_by_role(self, obj: CharacterCrossingText) -> str:
+        return _prepared_by_role(obj.prepared_by)
+
+    def validate_character_sheet(self, sheet: CharacterSheet) -> CharacterSheet:
+        from world.magic.services.prepared_text import may_prepare_text_for  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None or not may_prepare_text_for(request.user, sheet):
+            raise serializers.ValidationError(_ERR_CANNOT_PREPARE_TEXT)
+        return sheet
+
+    def validate_deed_title(self, deed_title: str) -> str:
+        if "—" in deed_title or "–" in deed_title:
+            raise serializers.ValidationError(_ERR_DEED_TITLE_DASH)
+        return deed_title
+
+    def validate(self, attrs: dict) -> dict:
+        if self.instance is not None and self.instance.crossing_id is not None:
+            raise serializers.ValidationError(_ERR_TEXT_ALREADY_USED)
+        return attrs
+
+    def create(self, validated_data: dict) -> CharacterCrossingText:
+        validated_data["prepared_by"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class PreparedSurgeTextSerializer(serializers.ModelSerializer):
+    """A character's own prepared Audere surge line (#4101). No patron layer."""
+
+    character_name = serializers.SerializerMethodField()
+    prepared_by_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CharacterSurgeText
+        fields = [
+            "id",
+            "character_sheet",
+            "character_name",
+            "surge_text",
+            "prepared_by_role",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "character_name", "prepared_by_role", "updated_at"]
+
+    def get_character_name(self, obj: CharacterSurgeText) -> str:
+        names = self.context.get("character_names")
+        if names is not None:
+            return names.get(obj.character_sheet_id, "")
+        return _character_name_for(obj.character_sheet)
+
+    def get_prepared_by_role(self, obj: CharacterSurgeText) -> str:
+        return _prepared_by_role(obj.prepared_by)
+
+    def validate_character_sheet(self, sheet: CharacterSheet) -> CharacterSheet:
+        from world.magic.services.prepared_text import may_prepare_text_for  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None or not may_prepare_text_for(request.user, sheet):
+            raise serializers.ValidationError(_ERR_CANNOT_PREPARE_TEXT)
+        return sheet
+
+    def create(self, validated_data: dict) -> CharacterSurgeText:
+        validated_data["prepared_by"] = self.context["request"].user
+        return super().create(validated_data)
 
 
 # =============================================================================

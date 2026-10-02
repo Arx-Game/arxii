@@ -20,6 +20,8 @@ from world.gm.models import (
     GMLevelCap,
     GMLevelChange,
     GMProfile,
+    GMPrompt,
+    GMPromptFilter,
     GMRosterInvite,
     GMTable,
     GMTableMembership,
@@ -28,6 +30,7 @@ from world.gm.models import (
     StoryArea,
     StoryRoomGrant,
 )
+from world.magic.factories import DramaticMomentTypeFactory
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.factories import RosterEntryFactory
 from world.scenes.action_constants import DifficultyChoice
@@ -384,3 +387,37 @@ def seed_catalog_starter_content() -> dict[str, SituationKind]:
             )
 
     return kinds
+
+
+class GMPromptFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GMPrompt
+
+    kind = "dramatic_moment"
+    moment_type = factory.SubFactory(DramaticMomentTypeFactory)
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    # #4101 fix round 3, ruling R9-3: production always freezes a subject_persona
+    # at route_narratable_event's create time; default to the sheet's primary
+    # persona here so existing call sites get a sensible frozen face without
+    # having to pass one explicitly. Override to test a specific disguise, or
+    # pass None directly alongside character_sheet=None for the no-subject case.
+    subject_persona = factory.LazyAttribute(
+        lambda o: o.character_sheet.primary_persona if o.character_sheet else None
+    )
+    scene = None
+    interaction = None
+    interaction_timestamp = None
+    success_level = 3
+    status = "pending"
+    resolved_by = None
+    confirmed_tag = None
+
+
+class GMPromptFilterFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GMPromptFilter
+        django_get_or_create = ("account", "group")
+
+    account = factory.SubFactory(AccountFactory)
+    group = "miracle"
+    enabled = False

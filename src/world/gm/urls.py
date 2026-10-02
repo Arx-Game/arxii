@@ -14,6 +14,8 @@ from world.gm.views import (
     GMDashboardView,
     GMInviteClaimView,
     GMProfileViewSet,
+    GMPromptFilterViewSet,
+    GMPromptViewSet,
     GMRosterInviteViewSet,
     GMSummonOfferViewSet,
     GMTableMembershipViewSet,
@@ -35,6 +37,8 @@ router.register("story-areas", StoryBuilderViewSet, basename="gm-story-area")
 router.register("my-story-grants", MyStoryGrantsViewSet, basename="my-story-grant")
 router.register("table-update-requests", TableUpdateRequestViewSet, basename="table-update-request")
 router.register("summon-offers", GMSummonOfferViewSet, basename="gm-summon-offer")
+router.register("prompts", GMPromptViewSet, basename="gm-prompt")
+router.register("prompt-filters", GMPromptFilterViewSet, basename="gm-prompt-filter")
 
 # Ordering is load-bearing: ``invites/claim/`` MUST be registered before
 # ``router.urls``. DRF's default detail regex for the ``invites`` viewset

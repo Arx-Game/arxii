@@ -13,6 +13,7 @@ from world.areas.serializers import WorldBuilderAreaManagerSerializer, WorldBuil
 from world.gm.constants import (
     GMApplicationStatus,
     GMLevel,
+    GMPromptGroup,
     GMTableViewerRole,
     TableRequestKind,
 )
@@ -22,6 +23,7 @@ from world.gm.models import (
     GMApplication,
     GMLevelChange,
     GMProfile,
+    GMPrompt,
     GMRosterInvite,
     GMSummonOffer,
     GMTable,
@@ -29,6 +31,11 @@ from world.gm.models import (
     ProfileTextRequestDetails,
     StoryRoomGrant,
     TableUpdateRequest,
+)
+from world.gm.prompt_services import (
+    present_characters_in_room,
+    prompt_subject_names,
+    prompt_subject_persona,
 )
 from world.instances.models import InstancedRoom
 from world.mechanics.serializers import (
@@ -38,6 +45,7 @@ from world.mechanics.serializers import (
 from world.roster.models.applications import RosterApplication
 from world.roster.services.slots import SlotsFullError
 from world.scenes.action_constants import DifficultyChoice
+from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
 
 
@@ -981,3 +989,134 @@ class DiscoveryResultSerializer(serializers.Serializer):
     templates = DiscoveryTemplateSerializer(many=True)
     challenges = DiscoveryChallengeSerializer(many=True)
     kinds = DiscoveryKindSerializer(many=True)
+
+
+class GMPromptSerializer(serializers.ModelSerializer):
+    """One queue row (#4101). Read-only; resolution goes through actions."""
+
+    kind_label = serializers.CharField(source="get_kind_display", read_only=True)
+    subject_name = serializers.SerializerMethodField()
+    subject_persona_id = serializers.SerializerMethodField()
+    moment_type_label = serializers.CharField(
+        source="moment_type.label", read_only=True, default=""
+    )
+    technique_name = serializers.CharField(source="technique.name", read_only=True, default="")
+    stake_summary = serializers.CharField(
+        source="stake_outcome.stake.player_summary", read_only=True, default=""
+    )
+
+    class Meta:
+        model = GMPrompt
+        fields = [
+            "id",
+            "kind",
+            "kind_label",
+            "status",
+            "scene",
+            "character_sheet",
+            "subject_name",
+            "subject_persona_id",
+            "moment_type",
+            "moment_type_label",
+            "technique_name",
+            "stake_summary",
+            "room_text",
+            "private_text",
+            "prepared_for_character",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def _subject_names(self) -> dict[int, str]:
+        """The page's subject names for this viewer, resolved once (#4101 ruling RF-2).
+
+        Cached on the shared serializer context, like the interaction feed's
+        ``_persona_display_map``: one ``prompt_subject_names`` call (one batched
+        discovery query) covers every row on the page.
+        """
+        cached = self.context.get("_gm_prompt_subject_names")
+        if cached is not None:
+            return cached
+        if self.parent is not None:
+            rows = list(self.parent.instance or [])
+        elif self.instance is not None:
+            rows = [self.instance]
+        else:
+            rows = []
+        request = self.context.get("request")
+        account = request.user if request is not None else None
+        names = prompt_subject_names(rows, account)
+        self.context["_gm_prompt_subject_names"] = names
+        return names
+
+    def get_subject_name(self, obj: GMPrompt) -> str:
+        return self._subject_names().get(obj.pk, "")
+
+    def get_subject_persona_id(self, obj: GMPrompt) -> int | None:
+        persona = prompt_subject_persona(obj)
+        return persona.pk if persona is not None else None
+
+
+class NarrateGMPromptSerializer(serializers.Serializer):
+    """Body for ``POST .../prompts/{id}/narrate/`` (#4101): the line + its audience.
+
+    ``context["location"]`` (an ``ObjectDB`` room, or ``None``) gates
+    ``audience="chosen"``: the view resolves it as the prompt's own scene
+    location, falling back to the narrating GM's current location when the
+    scene has none (a location-less Battle scene, #4101 fix round 3, finding
+    N3) or the prompt is scene-less entirely -- and only a character
+    physically present there may be chosen, a GM cannot privately address
+    someone who isn't in the room (#4101 fix round 2, finding 1). With no
+    room resolvable either way, ``chosen`` refuses outright (400) rather than
+    treating "nowhere" as a room everyone with no location matches.
+    """
+
+    AUDIENCE_ROOM = "room"
+    AUDIENCE_CHOSEN = "chosen"
+
+    text = serializers.CharField(trim_whitespace=True)
+    audience = serializers.ChoiceField(choices=[AUDIENCE_ROOM, AUDIENCE_CHOSEN])
+    receiver_persona_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs["audience"] == self.AUDIENCE_CHOSEN:
+            personas = list(Persona.objects.filter(pk__in=attrs["receiver_persona_ids"]))
+            if not personas:
+                msg = "Choose at least one person."
+                raise serializers.ValidationError(msg)
+            location = self.context.get("location")
+            if location is None:
+                # #4101 fix round 3, finding N3: a location-less scene (e.g. a
+                # Battle) with no fallback either leaves no room to test presence
+                # against -- refuse rather than silently matching every persona
+                # whose own character also happens to have no location.
+                msg = "There's no room to narrate from right now."
+                raise serializers.ValidationError(msg)
+            # The shared presence check (#4101 fix round 1) -- also used by
+            # telnet's `gm prompt send` subject-presence check, so "is this
+            # character actually in the room" is answered the same way
+            # everywhere rather than re-derived per call site.
+            present_characters = present_characters_in_room(
+                [p.character_sheet_id for p in personas], location
+            )
+            receivers = []
+            for persona in personas:
+                character = present_characters.get(persona.character_sheet_id)
+                if character is None:
+                    # Names no one outside the room -- a non-member of this scene
+                    # must not learn who else the GM considered.
+                    msg = "Choose someone in the room."
+                    raise serializers.ValidationError(msg)
+                receivers.append(character)
+            attrs["receivers"] = receivers
+        return attrs
+
+
+class GMPromptFilterSerializer(serializers.Serializer):
+    """One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5)."""
+
+    group = serializers.ChoiceField(choices=GMPromptGroup.choices)
+    label = serializers.CharField(read_only=True)
+    enabled = serializers.BooleanField()

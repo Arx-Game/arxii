@@ -43,10 +43,18 @@ export class ApiError extends Error {
   }
 }
 
-/** "name: this field is required; tier: must be positive" from a DRF error body. */
+/**
+ * "name: this field is required; tier: must be positive" from a DRF error
+ * body. `non_field_errors` is DRF's bucket for a `validate()` error raised
+ * with a plain string (no field key) — not a real field named "non field
+ * errors" — so it is never prefixed; its messages are joined on their own
+ * (#4101 Task 10 fix round 1: a GM saw the raw "non_field_errors: ..." text).
+ */
 function flattenFieldErrors(fieldErrors: Record<string, string[]>): string {
   return Object.entries(fieldErrors)
-    .map(([field, messages]) => `${field}: ${messages.join(' ')}`)
+    .map(([field, messages]) =>
+      field === 'non_field_errors' ? messages.join(' ') : `${field}: ${messages.join(' ')}`
+    )
     .join('; ');
 }
 

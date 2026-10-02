@@ -44,7 +44,7 @@ export function AudereMajoraOfferGate({
         data-testid="audere-majora-gate-strip"
       >
         <DoorOpen className="h-4 w-4 shrink-0" />
-        The threshold stands open: answer it
+        {offer.offer_strip_label}
       </button>
       <AudereMajoraOfferDialog
         offer={offer}

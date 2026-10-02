@@ -41,11 +41,9 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.combat.models import CombatRoundAction
+    from world.gm.models import GMPromptNarration
     from world.magic.models import PoseEndorsement
-    from world.magic.models.dramatic_moment import (
-        DramaticMomentSuggestion,
-        DramaticMomentTag,
-    )
+    from world.magic.models.dramatic_moment import DramaticMomentTag
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
@@ -1216,16 +1214,20 @@ class Interaction(SharedMemoryModel):
         )
 
     @PrunedCachedProperty
-    def cached_dramatic_moment_suggestions(self) -> list[DramaticMomentSuggestion]:
-        """Pending dramatic-moment suggestions, fed by the ``to_attr``
-        "cached_dramatic_moment_suggestions" Prefetch."""
-        from world.magic.constants import SuggestionStatus  # noqa: PLC0415
-        from world.magic.models.dramatic_moment import DramaticMomentSuggestion  # noqa: PLC0415
+    def cached_prompt_narrations(self) -> list[GMPromptNarration]:
+        """GM-prompt narration links for this row (#4101), fed by a ``to_attr``-targeted Prefetch.
+
+        ``link_prompt_narration`` (``world.gm.prompt_services``) seeds this
+        cache directly on a just-created row, so the live push's
+        ``narrated_event_payload`` peek never queries. A row read back later
+        (REST, a re-fetch) relies on the caller's own ``to_attr``-targeted Prefetch.
+        """
+        from world.gm.models import GMPromptNarration  # noqa: PLC0415
 
         return list(
-            DramaticMomentSuggestion.objects.filter(
-                interaction=self, status=SuggestionStatus.PENDING
-            ).select_related("moment_type")
+            GMPromptNarration.objects.filter(interaction=self).select_related(
+                "prompt__character_sheet"
+            )
         )
 
     @PrunedCachedProperty

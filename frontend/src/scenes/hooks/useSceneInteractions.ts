@@ -35,6 +35,7 @@ export function wsPayloadToInteraction(
     thread_id: payload.thread_id ?? null,
     root_thread_id: payload.root_thread_id ?? null,
     reply_to: payload.reply_to ?? null,
+    narrates: payload.narrates ?? null,
     attributed_companion:
       payload.attributed_companion_id != null
         ? { id: payload.attributed_companion_id, name: payload.attributed_companion_name ?? '' }

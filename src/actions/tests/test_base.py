@@ -234,6 +234,7 @@ class ActionRegistryTests(TestCase):
             # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
             "confirm_dramatic_moment_suggestion",
             "dismiss_dramatic_moment_suggestion",
+            "dismiss_gm_prompt",
             "craft_attach_facet",
             "craft_detach_facet",
             "craft_attach_style",

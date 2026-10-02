@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import models, transaction
@@ -13,6 +14,8 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+
+logger = logging.getLogger(__name__)
 
 AUDERE_CONDITION_NAME = "Audere"
 AUDERE_MAJORA_CONDITION_NAME = "Audere Majora"
@@ -88,6 +91,20 @@ class AudereThreshold(SharedMemoryModel):
         max_length=60,
         default="PLACEHOLDER Crown label",
         help_text="#4098: what players see for an undiscovered Crown ultimate.",
+    )
+    offer_title = models.CharField(
+        max_length=120,
+        default="PLACEHOLDER Audere offer title",
+        help_text="#4101: heading of the Audere offer dialog.",
+    )
+    offer_strip_label = models.CharField(
+        max_length=120,
+        default="PLACEHOLDER Audere gate strip label",
+        help_text="#4101: the pulsing strip that reopens the Audere offer.",
+    )
+    offer_body_text = models.TextField(
+        default="PLACEHOLDER Audere offer line at intensity {intensity}",
+        help_text="#4101: the offer's opening line. {intensity} = the fired intensity.",
     )
     # Deprecated: no longer used by Soulfray severity calculation (Scope #3).
     # Audere naturally drives high Soulfray via intensity boost. Can be removed.
@@ -327,7 +344,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima.maximum += threshold.anima_pool_bonus
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
 
-    _broadcast_surge(character, threshold)
+    _announce_surge(character, threshold)
 
     return AudereOfferResult(
         accepted=True,
@@ -337,28 +354,77 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     )
 
 
-def _broadcast_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
-    """Announce an accepted surge to the room, when the line is authored (#3451).
+def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
+    """Prompt the scene's GMs with the surge, or emit the authored line as today.
 
-    The plain-Audere echo of the Audere Majora manifestation broadcast: an
-    authored ``surge_manifestation_text`` on the threshold config is EMITted to
-    the active scene, with ``{name}`` replaced by the character's primary-persona
-    name (falling back to the object key). Blank text = accepting stays silent —
-    the line is staff-authored content, never code-authored prose.
+    The line is the character's prepared surge text, else the threshold's
+    ``surge_manifestation_text`` (#3451), with ``{name}`` substituted. With no GM
+    and a blank line, accepting stays room-silent exactly as before (#4101).
+
+    The subject exclusion (the surging character is never addressed about their
+    own surge) now lives inside ``route_narratable_event`` itself (#4101 fix
+    round 2, ruling R7-1) -- this just calls the plain candidate path (no
+    ``candidates=``).
+
+    ``offer_audere`` calls this from OUTSIDE its own ``transaction.atomic()``
+    block, but ``resolve_audere_offer`` wraps the whole accept in ITS OWN outer
+    ``transaction.atomic()`` -- so this still runs nested inside a nearly-done
+    transaction. The scene lookup and ``route_narratable_event`` call run inside
+    their own ``transaction.atomic()`` here (#4101 fix round 2, ruling R7-2):
+    that's the savepoint that actually contains a ``DatabaseError`` -- on
+    Postgres, an unguarded failure here would abort the WHOLE enclosing
+    transaction, and the fallback ``_deliver()`` would then raise too, even
+    though it's the RECOVERY path, which would also lose the real Audere
+    acceptance (condition/engagement/anima already written) that transaction
+    was about to commit. ``_deliver()`` runs exactly ONCE, outside the
+    try/except, keyed on whether ``route_narratable_event`` actually produced
+    any prompts.
     """
-    from world.scenes.interaction_services import broadcast_scene_emit
-    from world.scenes.models import Persona
+    from django.db import DatabaseError
 
-    text = threshold.surge_manifestation_text.strip()
-    if not text:
-        return
+    from world.gm.constants import GMPromptKind
+    from world.gm.prompt_services import route_narratable_event
+    from world.gm.types import NarratableEvent
+    from world.magic.services.prepared_text import resolve_surge_text
+    from world.scenes.interaction_services import broadcast_scene_emit
+    from world.scenes.models import Persona, Scene
+
+    sheet = character.character_sheet
+    surge = resolve_surge_text(sheet, threshold)
     try:
         name = character.sheet_data.primary_persona.name
     except (AttributeError, Persona.DoesNotExist):
-        # Missing sheet (plain ObjectDB) or no PRIMARY persona — broadcast_scene_emit
-        # would no-op on the same condition, so there is nothing to announce.
+        return  # broadcast_scene_emit would no-op on the same condition
+    text = surge.text.replace("{name}", name)
+
+    def _deliver() -> None:
+        if text:
+            broadcast_scene_emit(character, text)
+
+    if sheet is None:
+        _deliver()
         return
-    broadcast_scene_emit(character, text.replace("{name}", name))
+    try:
+        with transaction.atomic():
+            scene = Scene.objects.active_for_room(character.location).first()
+            prompts = route_narratable_event(
+                NarratableEvent(
+                    kind=GMPromptKind.AUDERE_SURGE,
+                    scene=scene,
+                    character_sheet=sheet,
+                    room_text=text,
+                    prepared_for_character=surge.prepared,
+                ),
+            )
+    except DatabaseError:
+        logger.exception(
+            "Audere surge routing failed to create GM prompts for sheet %s; "
+            "delivering unprompted instead (#4101).",
+            sheet.pk,
+        )
+        prompts = []
+    if not prompts:
+        _deliver()
 
 
 def end_audere(character: ObjectDB) -> None:

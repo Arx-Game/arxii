@@ -23,7 +23,6 @@ from world.magic.views import (
     ChooseUltimateView,
     ConsequencePoolCatalogViewSet,
     CrossingRespondView,
-    DramaticMomentSuggestionViewSet,
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
     EffectTypeViewSet,
@@ -38,6 +37,8 @@ from world.magic.views import (
     PendingEntryFlourishOfferViewSet,
     PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
+    PreparedCrossingTextViewSet,
+    PreparedSurgeTextViewSet,
     PurchaseGiftUnlockView,
     ResonanceGrantViewSet,
     RestrictionViewSet,
@@ -132,10 +133,16 @@ router.register(
     DramaticMomentTagViewSet,
     basename="dramatic-moment-tag",
 )
+# #4101 — Prepared per-character Audere text (staff or table-GM authoring)
 router.register(
-    "dramatic-moment-suggestions",
-    DramaticMomentSuggestionViewSet,
-    basename="dramatic-moment-suggestion",
+    "prepared-crossing-texts",
+    PreparedCrossingTextViewSet,
+    basename="prepared-crossing-text",
+)
+router.register(
+    "prepared-surge-texts",
+    PreparedSurgeTextViewSet,
+    basename="prepared-surge-text",
 )
 
 # Plan 4 §F — Sanctum (Subsystem F) surface

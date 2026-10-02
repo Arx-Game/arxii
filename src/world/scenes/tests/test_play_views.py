@@ -996,10 +996,10 @@ class PlayPosesQueryBudgetTests(APITestCase):
     joined in by ``select_related``, free to read but backed by two
     denormalized copies that could drift (a stored ``root`` did drift, and
     cost a real bug on this branch) -- deriving them instead costs the two
-    flat queries above, still present in the 27 (and the 8-query warm floor
+    flat queries above, still present in the 26 (and the 8-query warm floor
     below) as (4) and (5).
 
-    That is 27 rather than the 76 this budget carried before #3816: the 5
+    That was 27 rather than the 76 this budget carried before #3816: the 5
     ``Interaction.cached_*`` satellite relations (receivers, target personas,
     favorites, reactions, action links) used to be plain ``@property``/
     ``@x.setter`` pairs whose fallback getter never raised ``AttributeError``,
@@ -1012,6 +1012,14 @@ class PlayPosesQueryBudgetTests(APITestCase):
     flat ones. `/game` is the primary surface where the parent chip renders,
     so this endpoint's own budget is pinned here rather than only inheriting
     ``InteractionViewSet``'s.
+
+    27 -> 26 (#4101): retiring the per-pose dramatic-moment-suggestion embed
+    also retired its one GM/owner-participation fallback check
+    (``InteractionListSerializer._viewer_can_gm_scene``, since deleted). That
+    fallback only ever fired on a COLD request (it read the idmapper-resident
+    ``Scene.participations_cached``, already warm on any later request against
+    the same scene), so only the cold budgets below drop by one; the 8-query
+    warm floor is unaffected.
     """
 
     def setUp(self) -> None:
@@ -1052,7 +1060,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         """Baseline: 6 total poses, 1 of them a reply."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=1)
-        with self.assertNumQueries(27):  # dropped from 76 by #3816 — see the class docstring
+        with self.assertNumQueries(26):  # 76->27 by #3816, 27->26 by #4101 (class docstring)
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1063,7 +1071,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         replies adds no query."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=3)
-        with self.assertNumQueries(27):  # dropped from 76 by #3816 — see the class docstring
+        with self.assertNumQueries(26):  # 76->27 by #3816, 27->26 by #4101 (class docstring)
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1189,7 +1197,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         force_authenticate(django_request, user=self.account)
         request = Request(django_request)
 
-        with self.assertNumQueries(18):
+        with self.assertNumQueries(17):  # 18->17 by #4101: cold-only GM/owner fallback retired
             _, interactions = _rows(request, params={"conversation": f"scene:{scene.pk}"})
 
         pose_ids = {pose.pk for pose in poses}

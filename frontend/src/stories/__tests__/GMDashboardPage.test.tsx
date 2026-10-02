@@ -53,6 +53,16 @@ vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({ data: [] })),
 }));
 
+// GMPromptFilterCard (#4101) fetches its own settings on mount; mock its
+// hooks directly for the same reason — this page's tests assert on an
+// ordered sequence of apiFetch calls (dashboard, presets, dispatch) that
+// the card's own fetch would otherwise shift. GMPromptFilterCard's own
+// behaviour is covered by GMPromptFilterCard.test.tsx.
+vi.mock('@/scenes/gmPromptQueries', () => ({
+  useGMPromptFilters: vi.fn(() => ({ data: [], isLoading: false, isError: false, error: null })),
+  useSetGMPromptFilter: vi.fn(() => ({ mutate: vi.fn(), isError: false, error: null })),
+}));
+
 import { apiFetch } from '@/evennia_replacements/api';
 import { useAccount } from '@/store/hooks';
 

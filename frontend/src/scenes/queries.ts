@@ -362,45 +362,9 @@ export async function postDramaticMomentTag(body: {
   if (!res.ok) throw new Error('Failed to tag dramatic moment');
 }
 
-// ---------------------------------------------------------------------------
-// Dramatic-moment GM suggestion inbox — confirm/dismiss (#2183)
-// ---------------------------------------------------------------------------
-
-export async function confirmDramaticMomentSuggestion(suggestionId: number): Promise<void> {
-  const res = await apiFetch(`/api/magic/dramatic-moment-suggestions/${suggestionId}/confirm/`, {
-    method: 'POST',
-  });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail || 'Failed to confirm dramatic moment');
-  }
-}
-
-export async function dismissDramaticMomentSuggestion(suggestionId: number): Promise<void> {
-  const res = await apiFetch(`/api/magic/dramatic-moment-suggestions/${suggestionId}/dismiss/`, {
-    method: 'POST',
-  });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail || 'Failed to dismiss dramatic moment');
-  }
-}
-
-export function useConfirmDramaticMomentSuggestion(sceneId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: confirmDramaticMomentSuggestion,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
-  });
-}
-
-export function useDismissDramaticMomentSuggestion(sceneId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: dismissDramaticMomentSuggestion,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
-  });
-}
+// Dramatic-moment GM suggestions moved to the one GM prompt queue (#4101) —
+// see `gmPromptQueries.ts` (`useGMPrompts`/`useConfirmGMPrompt`/
+// `useDismissGMPrompt`/`useNarrateGMPrompt`) and `GMPromptQueue`/`GMPromptRow`.
 
 export async function reactToWindow(
   windowId: number,

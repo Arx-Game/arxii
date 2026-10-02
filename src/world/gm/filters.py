@@ -5,11 +5,12 @@ from __future__ import annotations
 from django.db.models import QuerySet
 import django_filters
 
-from world.gm.constants import GMApplicationStatus, GMTableStatus, TableRequestRole
+from world.gm.constants import GMApplicationStatus, GMPromptKind, GMTableStatus, TableRequestRole
 from world.gm.models import (
     CatalogSuggestion,
     GMApplication,
     GMProfile,
+    GMPrompt,
     GMTable,
     GMTableMembership,
     StoryRoomGrant,
@@ -116,3 +117,22 @@ class TableUpdateRequestFilter(django_filters.FilterSet):
                 membership__persona__gm_table_memberships__table__gm__account=user,
             ).distinct()
         return queryset
+
+
+class GMPromptQueueFilter(django_filters.FilterSet):
+    """Narrows the GM prompt queue by kind (#4101 fix round 3, finding M1).
+
+    Scene resolution and the visible-queue predicate (``visible_prompts_for``)
+    now live in ``GMPromptViewSet.get_queryset()``/``get_scene()``; the "only
+    the scene's GM may view an empty queue" 403 moved to
+    ``CanViewGMPromptQueue`` (``world/gm/permissions.py``). This FilterSet only
+    filters what that queryset already contains -- it was briefly the owner of
+    scene resolution + the 403 in fix round 2, which conflated "filter what you
+    scoped" with "scope it" and "may you even look."
+    """
+
+    kind = django_filters.ChoiceFilter(choices=GMPromptKind.choices)
+
+    class Meta:
+        model = GMPrompt
+        fields = ["kind"]

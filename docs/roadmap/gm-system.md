@@ -635,6 +635,51 @@ Delivered:
   flow is the only GM-onboarding path left; `mintBuilderCharacter`
   (`frontend/src/world-builder/api.ts`) and its dead endpoint are both deleted.
 
+### Phase 10: GM Prompt Queue & Narration ✅ (#4101)
+
+Big mechanical moments (an Audere surge, an Audere Majora Crossing, a miracle, a death, a
+resolved stake) used to fire with generic authored text and the GM running the scene got no
+signal and no chance to say something specific.
+
+Delivered:
+- **One queue, seven kinds.** `DramaticMomentSuggestion` (#2183's confirm-only inbox) is
+  renamed `GMPrompt`, moved to `world/gm`, and gains a `kind`: the original `dramatic_moment`
+  confirm kind plus six narration kinds (`audere_surge`, `audere_ultimate`, `crossing`,
+  `miracle`, `death`, `stake_outcome`), each fired by `world.gm.prompt_services
+  .route_narratable_event` from its own event source. With no GM opted in, the resolved
+  text delivers unprompted, byte-identical to pre-#4101 behavior.
+- **Per-GM, per-group filters** (`GMPromptFilter`/`GMPromptGroup`): a GM mutes a whole
+  category (Audere, miracles, deaths, stake outcomes, dramatic moments) rather than every
+  prompt one by one; no row means prompted.
+- **Narration is an ordinary EMIT/PEMIT.** A GM narrates through `EmitAction`/`PemitAction`'s
+  `gm_prompt_id` kwarg (telnet `emit/prompt`/`pemit/prompt`, the web composer's two send
+  buttons); `GMPromptNarration` links the resulting `Interaction` back to the prompt. No cap
+  on how many times a prompt may be narrated.
+- **Release-on-close, never on narration.** A prompt's authored room/private defaults go
+  out at most once each, independently, only when the prompt's event CLOSES (dismissed,
+  marked done, or expired at scene end): a GM covering the room line now and the private
+  line a moment later never double-sends either leg. Computed under a lock on the event's
+  sibling prompts, pk order.
+- **Prepared text** (`CharacterCrossingText`/`CharacterSurgeText`): a character's own
+  authored line for their next surge or Crossing, layered under the patron variant and the
+  tier default, written by staff or that character's table GM.
+- **The subject's own face, frozen.** `GMPrompt.subject_persona` captures the subject's
+  persona at routing time so a later disguise change never rewrites an already-narrated
+  prompt; the player-facing feed tag (`narrates`) shows this frozen face through the same
+  per-viewer masking every other name on the feed gets.
+- **Stake outcomes reach the Lead GM, scene-less:** `StakeResolution.narrative_summary`
+  now prompts the story's Lead GM wherever the stake resolved, not the scene the beat
+  happened in.
+- **Telnet parity:** `gm prompts` / `gm prompt send|dismiss|done <id>` (`commands/gm_ops.py`).
+  `gm prompt send` narrates both authored defaults through the linked emit/pemit, then
+  closes the prompt in one step.
+- Full record: `docs/systems/scenes.md`'s "GM narration of mechanical events" section,
+  `docs/systems/magic.md`'s "GM Prompt Queue" section, ADR-4101.
+
+**Deferred (spec scope, not a gap in this build):** a new mechanical event wanting GM
+narration needs a new `GMPromptKind` + `GMPromptGroup` mapping + event-source call site;
+the queue, filter, and composer surfaces are already generic over `kind`.
+
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows

@@ -9,8 +9,10 @@ from world.magic.constants import ConsequencePoolScope, GainSource, Participatio
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterResonance,
+    CharacterSurgeText,
     ResonanceGrant,
     Thread,
     ThreadWeavingTeachingOffer,
@@ -224,3 +226,29 @@ class RitualSessionFilterSet(django_filters.FilterSet):
         if not sheet_ids:
             return queryset.none()
         return queryset.filter(initiator_id__in=sheet_ids)
+
+
+class PreparedCrossingTextFilter(django_filters.FilterSet):
+    """Filter for CharacterCrossingText. Narrows to a character and/or unused rows (#4101).
+
+    ``unused=true`` narrows to rows with no ``crossing`` set yet (Task 11's picker:
+    "does this character already have prepared text waiting?"); ``unused=false``
+    narrows to already-fired (consumed) rows.
+    """
+
+    character_sheet = django_filters.NumberFilter(field_name="character_sheet_id")
+    unused = django_filters.BooleanFilter(field_name="crossing", lookup_expr="isnull")
+
+    class Meta:
+        model = CharacterCrossingText
+        fields = ["character_sheet", "unused"]
+
+
+class PreparedSurgeTextFilter(django_filters.FilterSet):
+    """Filter for CharacterSurgeText. Narrows to a specific character_sheet (#4101)."""
+
+    character_sheet = django_filters.NumberFilter(field_name="character_sheet_id")
+
+    class Meta:
+        model = CharacterSurgeText
+        fields = ["character_sheet"]

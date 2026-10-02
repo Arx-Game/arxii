@@ -154,6 +154,7 @@ from actions.definitions.doors import BreakExitAction, LockAction, PickLockActio
 from actions.definitions.dramatic_moments import (
     ConfirmDramaticMomentSuggestionAction,
     DismissDramaticMomentSuggestionAction,
+    DismissGMPromptAction,
 )
 from actions.definitions.dreams import (
     AscendAction,
@@ -720,6 +721,8 @@ _ALL_ACTIONS: list[Action] = [
     # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
     ConfirmDramaticMomentSuggestionAction(),
     DismissDramaticMomentSuggestionAction(),
+    # #4101 — the generalized GM prompt queue's dismiss (narration kinds).
+    DismissGMPromptAction(),
     # #1866 — crafting telnet coverage.
     AttachFacetAction(),
     DetachFacetAction(),

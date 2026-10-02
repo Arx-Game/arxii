@@ -772,142 +772,142 @@ describe('PoseUnit reaction regard-bump toast', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// GM dramatic-moment suggestion chip (#2183)
-// ---------------------------------------------------------------------------
-
-describe('PoseUnit — GM dramatic-moment suggestion chip', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+// #3787 Task 7 -- the parent-reply chip (demo Screen 2), replacing the
+// placeholder "Replying to pose {id}".
+describe('parent-reply chip', () => {
+  it('renders nothing when the pose has no reply_to', () => {
+    const interaction = makeInteraction({ reply_to: null });
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+    expect(screen.queryByTestId('parent-reference')).toBeNull();
   });
 
-  it('renders the suggestion chip when canGm=true and a PENDING suggestion is present', () => {
+  it('shows "Answering" plus the resolved parent\'s quoted excerpt, and reveals the parent content on click', () => {
+    const parent = makeInteraction({
+      id: 5,
+      content: "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered.",
+      timestamp: '2026-01-01T00:00:05Z',
+    });
     const interaction = makeInteraction({
-      mode: 'pose',
-      dramatic_moment_suggestions: [
-        {
-          id: 7,
-          moment_type_id: 1,
-          moment_type_label: 'Grand Entrance',
-          character_sheet_id: 10,
-          success_level: 2,
-          status: 'pending',
-        },
-      ],
+      id: 6,
+      reply_to: { id: '5', timestamp: '2026-01-01T00:00:05Z' },
     });
+    const interactionsById = new Map([[parent.id, parent]]);
 
     render(
       <Wrapper>
-        <PoseUnit interaction={interaction} sceneId="1" canGm={true} />
+        <PoseUnit interaction={interaction} sceneId="1" interactionsById={interactionsById} />
       </Wrapper>
     );
 
-    expect(screen.getByTestId('dramatic-moment-suggestion-chip')).toBeInTheDocument();
-    expect(screen.getByText(/Grand Entrance/)).toBeInTheDocument();
+    const chip = screen.getByTestId('parent-chip-5');
+    expect(chip).toHaveTextContent('Answering');
+    expect(chip).toHaveTextContent(
+      "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered."
+    );
+    // The chip never re-derives an actor -- the parent's persona name must
+    // not appear anywhere near it.
+    expect(chip).not.toHaveTextContent(parent.persona.name);
+    expect(screen.queryByTestId('parent-reveal-5')).toBeNull();
+
+    fireEvent.click(chip);
+    const revealed = screen.getByTestId('parent-reveal-5');
+    expect(revealed).toHaveTextContent(
+      "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered."
+    );
+    expect(revealed).not.toHaveTextContent(parent.persona.name);
   });
 
-  it('does not render the suggestion chip when canGm is false, even with suggestions present', () => {
+  it('degrades to a plain chip with no quote when the parent is not in the loaded window', () => {
     const interaction = makeInteraction({
-      mode: 'pose',
-      dramatic_moment_suggestions: [
-        {
-          id: 7,
-          moment_type_id: 1,
-          moment_type_label: 'Grand Entrance',
-          character_sheet_id: 10,
-          success_level: 2,
-          status: 'pending',
-        },
-      ],
+      id: 6,
+      reply_to: { id: '999', timestamp: '2026-01-01T00:00:05Z' },
     });
 
     render(
       <Wrapper>
-        <PoseUnit interaction={interaction} sceneId="1" canGm={false} />
+        <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
 
-    expect(screen.queryByTestId('dramatic-moment-suggestion-chip')).toBeNull();
+    const chip = screen.getByTestId('parent-chip-999');
+    expect(chip).toHaveTextContent('Answering');
+    // Nothing to reveal -- clicking does not throw and nothing appears.
+    fireEvent.click(chip);
+    expect(screen.queryByTestId('parent-reveal-999')).toBeNull();
   });
+});
 
-  it('does not render the suggestion chip when canGm=true but there are no suggestions', () => {
-    const interaction = makeInteraction({ mode: 'pose', dramatic_moment_suggestions: [] });
+// Demo-fidelity fix round: F1 (Screen 3) -- a row carrying `narrates` renders
+// in the narration form, not as a pose bubble with a speaker and Kudos.
+describe('narration rows (#4101, demo Screen 3, F1)', () => {
+  const narratesCrossing = {
+    prompt_id: 1,
+    kind: 'crossing' as const,
+    kind_label: 'Crossing',
+    subject_name: 'Rowan Ashcombe',
+    subject_persona_id: 30,
+  };
+
+  it('renders a room narration line with no speaker name or Kudos, tagged for the narration block', () => {
+    const interaction = makeInteraction({
+      mode: 'emit',
+      content: "The chapel floor groans and settles under Rowan's feet.",
+      narrates: narratesCrossing,
+      receiver_persona_ids: [],
+    });
 
     render(
       <Wrapper>
-        <PoseUnit interaction={interaction} sceneId="1" canGm={true} />
+        <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
 
-    expect(screen.queryByTestId('dramatic-moment-suggestion-chip')).toBeNull();
+    const block = screen.getByTestId('pose-unit-narration');
+    expect(block).toHaveAttribute('role', 'note');
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kudos')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nominate-button')).not.toBeInTheDocument();
+    expect(screen.getByText(/part of Rowan Ashcombe's Crossing/)).toBeInTheDocument();
+
+    // F1b: the left rule lives on the shared wrapper, so the tag sits INSIDE
+    // it alongside the line -- not flush below, outside the rule's box.
+    const tag = screen.getByTestId('narrated-event-tag');
+    expect(block).toContainElement(tag);
+    expect(block.className).toContain('border-l-2');
+    expect(tag.className).toContain('uppercase');
+    expect(tag.className).not.toContain('italic');
   });
 
-  // #3787 Task 7 -- the parent-reply chip (demo Screen 2), replacing the
-  // placeholder "Replying to pose {id}".
-  describe('parent-reply chip', () => {
-    it('renders nothing when the pose has no reply_to', () => {
-      const interaction = makeInteraction({ reply_to: null });
-      render(
-        <Wrapper>
-          <PoseUnit interaction={interaction} sceneId="1" />
-        </Wrapper>
-      );
-      expect(screen.queryByTestId('parent-reference')).toBeNull();
+  it('renders a receiver-scoped narration as its own private block, not a pose bubble', () => {
+    const interaction = makeInteraction({
+      mode: 'whisper',
+      content: "The stone remembers your mother's hand on this rail, Rowan.",
+      narrates: narratesCrossing,
+      receiver_persona_ids: [30],
     });
 
-    it('shows "Answering" plus the resolved parent\'s quoted excerpt, and reveals the parent content on click', () => {
-      const parent = makeInteraction({
-        id: 5,
-        content: "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered.",
-        timestamp: '2026-01-01T00:00:05Z',
-      });
-      const interaction = makeInteraction({
-        id: 6,
-        reply_to: { id: '5', timestamp: '2026-01-01T00:00:05Z' },
-      });
-      const interactionsById = new Map([[parent.id, parent]]);
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
 
-      render(
-        <Wrapper>
-          <PoseUnit interaction={interaction} sceneId="1" interactionsById={interactionsById} />
-        </Wrapper>
-      );
+    expect(screen.queryByTestId('pose-unit-narration')).not.toBeInTheDocument();
+    const block = screen.getByTestId('pose-unit-narration-private');
+    expect(block).toHaveAttribute('role', 'note');
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kudos')).not.toBeInTheDocument();
+    expect(screen.getByText(/visible only to Rowan Ashcombe/)).toBeInTheDocument();
 
-      const chip = screen.getByTestId('parent-chip-5');
-      expect(chip).toHaveTextContent('Answering');
-      expect(chip).toHaveTextContent(
-        "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered."
-      );
-      // The chip never re-derives an actor -- the parent's persona name must
-      // not appear anywhere near it.
-      expect(chip).not.toHaveTextContent(parent.persona.name);
-      expect(screen.queryByTestId('parent-reveal-5')).toBeNull();
-
-      fireEvent.click(chip);
-      const revealed = screen.getByTestId('parent-reveal-5');
-      expect(revealed).toHaveTextContent(
-        "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered."
-      );
-      expect(revealed).not.toHaveTextContent(parent.persona.name);
-    });
-
-    it('degrades to a plain chip with no quote when the parent is not in the loaded window', () => {
-      const interaction = makeInteraction({
-        id: 6,
-        reply_to: { id: '999', timestamp: '2026-01-01T00:00:05Z' },
-      });
-
-      render(
-        <Wrapper>
-          <PoseUnit interaction={interaction} sceneId="1" />
-        </Wrapper>
-      );
-
-      const chip = screen.getByTestId('parent-chip-999');
-      expect(chip).toHaveTextContent('Answering');
-      // Nothing to reveal -- clicking does not throw and nothing appears.
-      fireEvent.click(chip);
-      expect(screen.queryByTestId('parent-reveal-999')).toBeNull();
-    });
+    // F1b: the private block already wraps the tag in its own rule/tint box;
+    // confirm the shared tag styling (uppercase, not italic) applies here too.
+    const tag = screen.getByTestId('narrated-event-tag');
+    expect(block).toContainElement(tag);
+    expect(tag.className).toContain('uppercase');
+    expect(tag.className).not.toContain('italic');
   });
 });

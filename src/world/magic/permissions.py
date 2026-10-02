@@ -97,6 +97,15 @@ class IsRitualSessionInitiator(BasePermission):
         return obj.initiator_id in my_sheet_ids
 
 
+class CanPrepareCharacterText(BasePermission):
+    """Staff, or the character's table GM (#4101 decision 9)."""
+
+    def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
+        from world.magic.services.prepared_text import may_prepare_text_for  # noqa: PLC0415
+
+        return may_prepare_text_for(request.user, obj.character_sheet)
+
+
 class IsInvitedParticipant(BasePermission):
     """accept / decline: the action must target a participant row owned by the user.
 

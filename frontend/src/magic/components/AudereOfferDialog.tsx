@@ -5,6 +5,10 @@
  * AudereThreshold, and — when present — the corruption advisory VERBATIM in a
  * role="alert" block (risk-is-always-explicit; the "character loss" sentence
  * must reach the player unedited).
+ *
+ * The heading is staff-authored (`offer_title`, #4101) and arrives as '' when
+ * no AudereThreshold is configured; the dialog then keeps an accessible name
+ * through a screen-reader-only fallback (#4101 final review, F10).
  */
 
 import { Flame } from 'lucide-react';
@@ -18,6 +22,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import type { PendingAudereOffer } from '@/magic/types';
+
+/** Accessible name for the offer when the server's authored title or strip label is blank. */
+export const AUDERE_OFFER_FALLBACK_NAME = 'Audere offer';
 
 interface AudereOfferDialogProps {
   offer: PendingAudereOffer;
@@ -45,12 +52,10 @@ export function AudereOfferDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-wide text-fuchsia-400">
             <Flame className="h-7 w-7" />
-            The Audere Gate Stands Open
+            {offer.offer_title || <span className="sr-only">{AUDERE_OFFER_FALLBACK_NAME}</span>}
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-base">
-            Battered down. Break through. Your soul strains at intensity{' '}
-            <span className="font-semibold text-fuchsia-400">{offer.fired_intensity}</span>: power
-            beyond your limits waits on the other side.
+          <AlertDialogDescription className="text-base" data-testid="audere-offer-body">
+            {offer.offer_body_text}
             {offer.reveal_framing_text ? (
               <span data-testid="audere-reveal-framing" className="text-fuchsia-300">
                 {' '}

@@ -15023,6 +15023,222 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMProfileMine'
           description: ''
+  /api/gm/prompt-filters/:
+    get:
+      operationId: gm_prompt_filters_list
+      description: |-
+        A GM's per-group prompt switches (#4101; demo Screen 5).
+
+        Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+        synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+        docstring), so there is nothing to paginate or filter.
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GMPromptFilter'
+          description: ''
+  /api/gm/prompt-filters/set/:
+    post:
+      operationId: gm_prompt_filters_set_create
+      description: |-
+        A GM's per-group prompt switches (#4101; demo Screen 5).
+
+        Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+        synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+        docstring), so there is nothing to paginate or filter.
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GMPromptFilterRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMPromptFilter'
+          description: ''
+  /api/gm/prompts/:
+    get:
+      operationId: gm_prompts_list
+      description: |-
+        The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+
+        List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+        a stake outcome, still surfaces for the GM it's addressed to via
+        ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+        the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+        directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+        ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+        scene's GM may view an empty queue" 403 -- authorization lives in a
+        permission class, not inline in the view or the FilterSet (#4101 fix round
+        3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+        actions that own the real authorization/validation -- this view is
+        dispatch plumbing only.
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+          enum:
+          - audere_surge
+          - audere_ultimate
+          - crossing
+          - death
+          - dramatic_moment
+          - miracle
+          - stake_outcome
+        description: |-
+          What this prompt is about; dramatic_moment is the confirm kind.
+
+          * `dramatic_moment` - Dramatic Moment
+          * `audere_surge` - Audere
+          * `audere_ultimate` - Ultimate
+          * `crossing` - Crossing
+          * `miracle` - Miracle
+          * `death` - Death
+          * `stake_outcome` - Stake outcome
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGMPromptList'
+          description: ''
+  /api/gm/prompts/{id}/confirm/:
+    post:
+      operationId: gm_prompts_confirm_create
+      description: |-
+        The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+
+        List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+        a stake outcome, still surfaces for the GM it's addressed to via
+        ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+        the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+        directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+        ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+        scene's GM may view an empty queue" 403 -- authorization lives in a
+        permission class, not inline in the view or the FilterSet (#4101 fix round
+        3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+        actions that own the real authorization/validation -- this view is
+        dispatch plumbing only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMPrompt'
+          description: ''
+  /api/gm/prompts/{id}/dismiss/:
+    post:
+      operationId: gm_prompts_dismiss_create
+      description: |-
+        The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+
+        List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+        a stake outcome, still surfaces for the GM it's addressed to via
+        ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+        the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+        directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+        ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+        scene's GM may view an empty queue" 403 -- authorization lives in a
+        permission class, not inline in the view or the FilterSet (#4101 fix round
+        3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+        actions that own the real authorization/validation -- this view is
+        dispatch plumbing only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMPrompt'
+          description: ''
+  /api/gm/prompts/{id}/narrate/:
+    post:
+      operationId: gm_prompts_narrate_create
+      description: |-
+        The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+
+        List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+        a stake outcome, still surfaces for the GM it's addressed to via
+        ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+        the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+        directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+        ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+        scene's GM may view an empty queue" 403 -- authorization lives in a
+        permission class, not inline in the view or the FilterSet (#4101 fix round
+        3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+        actions that own the real authorization/validation -- this view is
+        dispatch plumbing only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMPrompt'
+          description: ''
   /api/gm/queue/:
     get:
       operationId: gm_queue_list
@@ -19544,128 +19760,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/CrossingResult'
           description: ''
-  /api/magic/dramatic-moment-suggestions/:
-    get:
-      operationId: magic_dramatic_moment_suggestions_list
-      description: |-
-        GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-
-        GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-        POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-        POST .../{id}/dismiss/ — dismiss.
-
-        List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-        .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-        same gate against the suggestion's own scene before dispatching the REGISTRY action
-        (which independently re-checks it again — defense in depth for a direct-call caller).
-      parameters:
-      - in: query
-        name: character_sheet
-        schema:
-          type: integer
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      - in: query
-        name: scene
-        schema:
-          type: integer
-      - in: query
-        name: status
-        schema:
-          type: string
-          enum:
-          - confirmed
-          - dismissed
-          - pending
-        description: |-
-          * `pending` - Pending
-          * `confirmed` - Confirmed
-          * `dismissed` - Dismissed
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedDramaticMomentSuggestionList'
-          description: ''
-  /api/magic/dramatic-moment-suggestions/{id}/confirm/:
-    post:
-      operationId: magic_dramatic_moment_suggestions_confirm_create
-      description: |-
-        GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-
-        GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-        POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-        POST .../{id}/dismiss/ — dismiss.
-
-        List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-        .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-        same gate against the suggestion's own scene before dispatching the REGISTRY action
-        (which independently re-checks it again — defense in depth for a direct-call caller).
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this dramatic moment suggestion.
-        required: true
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DramaticMomentSuggestion'
-          description: ''
-  /api/magic/dramatic-moment-suggestions/{id}/dismiss/:
-    post:
-      operationId: magic_dramatic_moment_suggestions_dismiss_create
-      description: |-
-        GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-
-        GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-        POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-        POST .../{id}/dismiss/ — dismiss.
-
-        List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-        .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-        same gate against the suggestion's own scene before dispatching the REGISTRY action
-        (which independently re-checks it again — defense in depth for a direct-call caller).
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this dramatic moment suggestion.
-        required: true
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DramaticMomentSuggestion'
-          description: ''
   /api/magic/dramatic-moment-tags/:
     get:
       operationId: magic_dramatic_moment_tags_list
@@ -20339,6 +20433,271 @@ paths:
         schema:
           type: integer
         description: A unique integer value identifying this pose endorsement.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/magic/prepared-crossing-texts/:
+    get:
+      operationId: magic_prepared_crossing_texts_list
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPreparedCrossingTextList'
+          description: ''
+    post:
+      operationId: magic_prepared_crossing_texts_create
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreparedCrossingTextRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedCrossingText'
+          description: ''
+  /api/magic/prepared-crossing-texts/{id}/:
+    get:
+      operationId: magic_prepared_crossing_texts_retrieve
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedCrossingText'
+          description: ''
+    patch:
+      operationId: magic_prepared_crossing_texts_partial_update
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPreparedCrossingTextRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedCrossingText'
+          description: ''
+    delete:
+      operationId: magic_prepared_crossing_texts_destroy
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/magic/prepared-surge-texts/:
+    get:
+      operationId: magic_prepared_surge_texts_list
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPreparedSurgeTextList'
+          description: ''
+    post:
+      operationId: magic_prepared_surge_texts_create
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreparedSurgeTextRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedSurgeText'
+          description: ''
+  /api/magic/prepared-surge-texts/{id}/:
+    get:
+      operationId: magic_prepared_surge_texts_retrieve
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedSurgeText'
+          description: ''
+    patch:
+      operationId: magic_prepared_surge_texts_partial_update
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPreparedSurgeTextRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedSurgeText'
+          description: ''
+    delete:
+      operationId: magic_prepared_surge_texts_destroy
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
         required: true
       tags:
       - magic
@@ -50364,83 +50723,6 @@ components:
       - body_region
       - kind
       - name
-    DramaticMomentSuggestion:
-      type: object
-      description: |-
-        Read-only GM confirm/dismiss inbox row (#2183).
-
-        List/confirm/dismiss all render this shape; there is no client-writable field —
-        resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
-        of the REGISTRY actions, never through a serializer ``create``/``update``.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        moment_type:
-          type: integer
-          readOnly: true
-        moment_type_label:
-          type: string
-          readOnly: true
-        character_sheet:
-          type: integer
-          description: The character this sheet belongs to
-          readOnly: true
-        scene:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: Scene context; nullable for resilience to scene cleanup.
-        interaction:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: The entrance pose that triggered this suggestion; nullable.
-        success_level:
-          type: integer
-          readOnly: true
-          description: Cast success level that triggered this suggestion.
-        status:
-          allOf:
-          - $ref: '#/components/schemas/DramaticMomentSuggestionStatusEnum'
-          readOnly: true
-          default: pending
-        resolved_by:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: GM account that confirmed or dismissed this suggestion.
-        confirmed_tag:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: The DramaticMomentTag minted on confirmation, if any.
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - character_sheet
-      - confirmed_tag
-      - created_at
-      - id
-      - interaction
-      - moment_type
-      - moment_type_label
-      - resolved_by
-      - scene
-      - status
-      - success_level
-    DramaticMomentSuggestionStatusEnum:
-      enum:
-      - pending
-      - confirmed
-      - dismissed
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `confirmed` - Confirmed
-        * `dismissed` - Dismissed
     DramaticMomentTag:
       type: object
       description: |-
@@ -53807,6 +54089,177 @@ components:
       - level
       - level_display
       - max_beat_risk
+    GMPrompt:
+      type: object
+      description: One queue row (#4101). Read-only; resolution goes through actions.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/GMPromptKindEnum'
+          readOnly: true
+          default: dramatic_moment
+          description: |-
+            What this prompt is about; dramatic_moment is the confirm kind.
+
+            * `dramatic_moment` - Dramatic Moment
+            * `audere_surge` - Audere
+            * `audere_ultimate` - Ultimate
+            * `crossing` - Crossing
+            * `miracle` - Miracle
+            * `death` - Death
+            * `stake_outcome` - Stake outcome
+        kind_label:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/GMPromptStatusEnum'
+          readOnly: true
+          default: pending
+        scene:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Scene context; nullable for resilience to scene cleanup.
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+          nullable: true
+        subject_name:
+          type: string
+          readOnly: true
+        subject_persona_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        moment_type:
+          type: integer
+          readOnly: true
+          nullable: true
+        moment_type_label:
+          type: string
+          readOnly: true
+          default: ''
+        technique_name:
+          type: string
+          readOnly: true
+          default: ''
+        stake_summary:
+          type: string
+          readOnly: true
+          default: ''
+        room_text:
+          type: string
+          readOnly: true
+          description: Resolved authored room line offered in the composer (may be
+            blank).
+        private_text:
+          type: string
+          readOnly: true
+          description: 'Resolved authored private line for the character this concerns,
+            e.g. the Crossing vision. Spoiler-private: shown only to the addressed
+            GM.'
+        prepared_for_character:
+          type: boolean
+          readOnly: true
+          description: True when the defaults came from the character's prepared text.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_sheet
+      - created_at
+      - id
+      - kind
+      - kind_label
+      - moment_type
+      - moment_type_label
+      - prepared_for_character
+      - private_text
+      - room_text
+      - scene
+      - stake_summary
+      - status
+      - subject_name
+      - subject_persona_id
+      - technique_name
+    GMPromptFilter:
+      type: object
+      description: One per-group row of a GM's prompt-filter switches (#4101; demo
+        Screen 5).
+      properties:
+        group:
+          $ref: '#/components/schemas/GMPromptFilterGroupEnum'
+        label:
+          type: string
+          readOnly: true
+        enabled:
+          type: boolean
+      required:
+      - enabled
+      - group
+      - label
+    GMPromptFilterGroupEnum:
+      enum:
+      - dramatic_moment
+      - audere
+      - miracle
+      - death
+      - stake_outcome
+      type: string
+      description: |-
+        * `dramatic_moment` - Dramatic Moment
+        * `audere` - Audere / Audere Majora
+        * `miracle` - Miracles
+        * `death` - Deaths
+        * `stake_outcome` - Stake outcomes
+    GMPromptFilterRequest:
+      type: object
+      description: One per-group row of a GM's prompt-filter switches (#4101; demo
+        Screen 5).
+      properties:
+        group:
+          $ref: '#/components/schemas/GMPromptFilterGroupEnum'
+        enabled:
+          type: boolean
+      required:
+      - enabled
+      - group
+    GMPromptKindEnum:
+      enum:
+      - dramatic_moment
+      - audere_surge
+      - audere_ultimate
+      - crossing
+      - miracle
+      - death
+      - stake_outcome
+      type: string
+      description: |-
+        * `dramatic_moment` - Dramatic Moment
+        * `audere_surge` - Audere
+        * `audere_ultimate` - Ultimate
+        * `crossing` - Crossing
+        * `miracle` - Miracle
+        * `death` - Death
+        * `stake_outcome` - Stake outcome
+    GMPromptStatusEnum:
+      enum:
+      - pending
+      - confirmed
+      - dismissed
+      - narrated
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `confirmed` - Confirmed
+        * `dismissed` - Dismissed
+        * `narrated` - Narrated
     GMRosterInvite:
       type: object
       description: For GM create/list operations on invites for their own characters.
@@ -55016,6 +55469,18 @@ components:
       - conflict_points
       - id
       - label
+    GroupB77Enum:
+      enum:
+      - perception
+      - conflict
+      - scene
+      - social
+      type: string
+      description: |-
+        * `perception` - Perception
+        * `conflict` - Conflict
+        * `scene` - Scene
+        * `social` - Social
     GroupBallotState:
       type: object
       description: Read-only mirror of :class:`world.missions.types.GroupBallotState`
@@ -55100,18 +55565,6 @@ components:
       - options
       - phase
       - track
-    GroupEnum:
-      enum:
-      - perception
-      - conflict
-      - scene
-      - social
-      type: string
-      description: |-
-        * `perception` - Perception
-        * `conflict` - Conflict
-        * `scene` - Scene
-        * `social` - Social
     GroupPickRequestRequest:
       type: object
       description: 'POST body for the #1036 group-pick endpoint.'
@@ -56586,17 +57039,45 @@ components:
             otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
             still renders, since the moment itself is public.
           readOnly: true
-        dramatic_moment_suggestions:
-          type: array
-          items:
-            type: object
-            additionalProperties: {}
+        narrates:
+          type: object
           description: |-
-            PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+            The event this row narrates (#4101), e.g. "part of X's Crossing".
 
-            GM-gated: a plain participant sees an empty list. Reads
-            ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-            queryset, already filtered to PENDING) — never a fresh query.
+            Not GM-gated (unlike the retired per-pose suggestion embed): a
+            narration row is a GM's own authored line, already delivered to
+            whoever the audience was; tagging it with the event it narrates is
+            plain feed metadata, not a spoiler. Reads from the Prefetch
+            (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+            own docstring for why it must never query.
+
+            ``subject_name`` is overridden here with the page's per-viewer display
+            map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+            value is the subject's FROZEN persona's raw name (correct for the
+            live WebSocket push, which has no per-viewer concept at all), but the
+            REST feed must show is_fake_name/undiscovered faces exactly as the rest
+            of this page shows that same persona -- a disguised subject's line
+            must never unmask them just because this field resolves differently
+            from ``get_persona``. ``_persona_display_map`` already folded this
+            row's subject persona into its one page-wide discovery query.
+          properties:
+            prompt_id:
+              type: integer
+            kind:
+              type: string
+            kind_label:
+              type: string
+            subject_name:
+              type: string
+            subject_persona_id:
+              type: integer
+          required:
+          - kind
+          - kind_label
+          - prompt_id
+          - subject_name
+          - subject_persona_id
+          nullable: true
           readOnly: true
         endorsable_resonances:
           type: array
@@ -56649,7 +57130,6 @@ components:
       - availability
       - content
       - conversation
-      - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
       - endorsee_sheet_id
@@ -56663,6 +57143,7 @@ components:
       - language_name
       - line
       - my_pose_endorsement
+      - narrates
       - persona
       - place_name
       - pose_endorsers
@@ -56952,17 +57433,45 @@ components:
             otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
             still renders, since the moment itself is public.
           readOnly: true
-        dramatic_moment_suggestions:
-          type: array
-          items:
-            type: object
-            additionalProperties: {}
+        narrates:
+          type: object
           description: |-
-            PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+            The event this row narrates (#4101), e.g. "part of X's Crossing".
 
-            GM-gated: a plain participant sees an empty list. Reads
-            ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-            queryset, already filtered to PENDING) — never a fresh query.
+            Not GM-gated (unlike the retired per-pose suggestion embed): a
+            narration row is a GM's own authored line, already delivered to
+            whoever the audience was; tagging it with the event it narrates is
+            plain feed metadata, not a spoiler. Reads from the Prefetch
+            (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+            own docstring for why it must never query.
+
+            ``subject_name`` is overridden here with the page's per-viewer display
+            map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+            value is the subject's FROZEN persona's raw name (correct for the
+            live WebSocket push, which has no per-viewer concept at all), but the
+            REST feed must show is_fake_name/undiscovered faces exactly as the rest
+            of this page shows that same persona -- a disguised subject's line
+            must never unmask them just because this field resolves differently
+            from ``get_persona``. ``_persona_display_map`` already folded this
+            row's subject persona into its one page-wide discovery query.
+          properties:
+            prompt_id:
+              type: integer
+            kind:
+              type: string
+            kind_label:
+              type: string
+            subject_name:
+              type: string
+            subject_persona_id:
+              type: integer
+          required:
+          - kind
+          - kind_label
+          - prompt_id
+          - subject_name
+          - subject_persona_id
+          nullable: true
           readOnly: true
         endorsable_resonances:
           type: array
@@ -57010,7 +57519,6 @@ components:
       - availability
       - content
       - conversation
-      - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
       - endorsee_sheet_id
@@ -57024,6 +57532,7 @@ components:
       - language_name
       - line
       - my_pose_endorsement
+      - narrates
       - persona
       - place_name
       - pose_endorsers
@@ -64998,29 +65507,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DraftApplication'
-    PaginatedDramaticMomentSuggestionList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/DramaticMomentSuggestion'
     PaginatedDramaticMomentTagList:
       type: object
       required:
@@ -65480,6 +65966,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GMProfile'
+    PaginatedGMPromptList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMPrompt'
     PaginatedGMRosterInviteList:
       type: object
       required:
@@ -67172,6 +67681,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Prayer'
+    PaginatedPreparedCrossingTextList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreparedCrossingText'
+    PaginatedPreparedSurgeTextList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreparedSurgeText'
     PaginatedProclamationList:
       type: object
       required:
@@ -70988,6 +71543,43 @@ components:
           description: Room the reporter was in when submitting.
         status:
           $ref: '#/components/schemas/StatusD66Enum'
+    PatchedPreparedCrossingTextRequest:
+      type: object
+      description: |-
+        A character's own prepared Audere Majora crossing text (#4101).
+
+        Authored by staff or the character's table GM (``may_prepare_text_for``).
+        Never readable by the crossing player themselves — the vision is a spoiler —
+        nor by an unrelated GM; the viewset's queryset is the read-side gate.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        vision_text:
+          type: string
+          description: Shown ONLY to the crossing player. Blank = the patron or tier
+            vision.
+        manifestation_text:
+          type: string
+          description: The room line for this crossing. Blank = the patron or tier
+            line.
+        deed_title:
+          type: string
+          description: Public deed name for this crossing. Blank = the tier's deed
+            title.
+          maxLength: 200
+    PatchedPreparedSurgeTextRequest:
+      type: object
+      description: A character's own prepared Audere surge line (#4101). No patron
+        layer.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        surge_text:
+          type: string
+          description: Room line when this character surges. {name} = primary-persona
+            name.
     PatchedRiskCalibrationRequest:
       type: object
       description: |-
@@ -72485,7 +73077,13 @@ components:
           readOnly: true
         vision_text:
           type: string
-          description: Return faith variant vision text if set, else the threshold's.
+          description: |-
+            Layered: prepared (character), else faith variant, else the threshold's (#4101).
+
+            Empty while ``manifestation_withheld`` (#4101 fix round 1, controller
+            ruling I3): a GM was present at gate-open, so the GM narrates or
+            releases the vision -- the offer poll must never show it to the player
+            first.
           readOnly: true
         faith_variant_id:
           type: integer
@@ -72511,6 +73109,12 @@ components:
           description: Return the PathIntent's intended_path_id if it is among eligible
             paths, else None.
           readOnly: true
+        offer_title:
+          type: string
+          readOnly: true
+        offer_strip_label:
+          type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -72526,6 +73130,8 @@ components:
       - fired_intensity
       - id
       - intended_path_id
+      - offer_strip_label
+      - offer_title
       - risk_text
       - soulfray_stage_order
       - target_stage_display
@@ -72575,6 +73181,19 @@ components:
           description: The authored reveal promise, only when accepting would reveal
             something.
           readOnly: true
+        offer_title:
+          type: string
+          description: The authored Audere offer dialog heading (#4101); '' when unconfigured.
+          readOnly: true
+        offer_strip_label:
+          type: string
+          description: The authored Audere gate strip label (#4101); '' when unconfigured.
+          readOnly: true
+        offer_body_text:
+          type: string
+          description: The authored Audere offer line, with {intensity} substituted
+            (#4101).
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -72588,6 +73207,9 @@ components:
       - fired_intensity
       - id
       - intensity_bonus
+      - offer_body_text
+      - offer_strip_label
+      - offer_title
       - reveal_framing_text
       - soulfray_stage_order
     PendingCrossingOffer:
@@ -73136,7 +73758,7 @@ components:
         label:
           type: string
         group:
-          $ref: '#/components/schemas/GroupEnum'
+          $ref: '#/components/schemas/GroupB77Enum'
         available:
           type: boolean
         reason:
@@ -74435,6 +75057,129 @@ components:
         * `outcome_tier` - Outcome tier (machine-graded)
         * `faction_standing_at_least` - Faction standing at least
         * `npc_regard_at_least` - NPC regard at least
+    PreparedCrossingText:
+      type: object
+      description: |-
+        A character's own prepared Audere Majora crossing text (#4101).
+
+        Authored by staff or the character's table GM (``may_prepare_text_for``).
+        Never readable by the crossing player themselves — the vision is a spoiler —
+        nor by an unrelated GM; the viewset's queryset is the read-side gate.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        character_name:
+          type: string
+          readOnly: true
+        vision_text:
+          type: string
+          description: Shown ONLY to the crossing player. Blank = the patron or tier
+            vision.
+        manifestation_text:
+          type: string
+          description: The room line for this crossing. Blank = the patron or tier
+            line.
+        deed_title:
+          type: string
+          description: Public deed name for this crossing. Blank = the tier's deed
+            title.
+          maxLength: 200
+        prepared_by_role:
+          type: string
+          readOnly: true
+        crossing:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Set when a crossing used this text; a used text never fires
+            again.
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_name
+      - character_sheet
+      - crossing
+      - id
+      - prepared_by_role
+      - updated_at
+    PreparedCrossingTextRequest:
+      type: object
+      description: |-
+        A character's own prepared Audere Majora crossing text (#4101).
+
+        Authored by staff or the character's table GM (``may_prepare_text_for``).
+        Never readable by the crossing player themselves — the vision is a spoiler —
+        nor by an unrelated GM; the viewset's queryset is the read-side gate.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        vision_text:
+          type: string
+          description: Shown ONLY to the crossing player. Blank = the patron or tier
+            vision.
+        manifestation_text:
+          type: string
+          description: The room line for this crossing. Blank = the patron or tier
+            line.
+        deed_title:
+          type: string
+          description: Public deed name for this crossing. Blank = the tier's deed
+            title.
+          maxLength: 200
+      required:
+      - character_sheet
+    PreparedSurgeText:
+      type: object
+      description: A character's own prepared Audere surge line (#4101). No patron
+        layer.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        character_name:
+          type: string
+          readOnly: true
+        surge_text:
+          type: string
+          description: Room line when this character surges. {name} = primary-persona
+            name.
+        prepared_by_role:
+          type: string
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_name
+      - character_sheet
+      - id
+      - prepared_by_role
+      - updated_at
+    PreparedSurgeTextRequest:
+      type: object
+      description: A character's own prepared Audere surge line (#4101). No patron
+        layer.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        surge_text:
+          type: string
+          description: Room line when this character surges. {name} = primary-persona
+            name.
+      required:
+      - character_sheet
     PrivacyEnum:
       enum:
       - public
