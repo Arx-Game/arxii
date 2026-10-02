@@ -61,31 +61,46 @@ _TYPED_ITEM_LEGACY_FIELDS = frozenset(
 _TYPED_ITEM_WIRE_FIELDS = frozenset({"kind", "target_id", "owner_persona_id", "container_item_id"})
 
 
-def typed_item_request(kwargs: dict[str, Any]) -> MenuTargetRequest | None:
+_ITEM_TARGET_KINDS = frozenset({MenuTargetKind.ITEMS})
+
+
+def typed_item_request(
+    kwargs: dict[str, Any], *, allowed_kinds: frozenset[MenuTargetKind] = _ITEM_TARGET_KINDS
+) -> MenuTargetRequest | None:
     """Parse a strict typed item request without competing legacy targets."""
     if _TYPED_ITEM_LEGACY_FIELDS.intersection(kwargs):
         return None
     wire = kwargs.get("menu_target")
     if not isinstance(wire, dict) or set(wire).difference(_TYPED_ITEM_WIRE_FIELDS):
         return None
-    if wire.get("kind") != MenuTargetKind.ITEMS.value or _TARGET_ID_KEY not in wire:
+    kind = next((kind for kind in allowed_kinds if wire.get("kind") == kind.value), None)
+    if kind is None or _TARGET_ID_KEY not in wire:
         return None
     for name in ("target_id", "owner_persona_id", "container_item_id"):
         if name in wire and (type(wire[name]) is not int or wire[name] <= 0):
             return None
     if _OWNER_PERSONA_ID_KEY in wire and _CONTAINER_ITEM_ID_KEY in wire:
         return None
+    if kind is MenuTargetKind.OBJECTS and (
+        _OWNER_PERSONA_ID_KEY in wire or _CONTAINER_ITEM_ID_KEY in wire
+    ):
+        return None
     return MenuTargetRequest(
-        MenuTargetKind.ITEMS,
+        kind,
         wire["target_id"],
         owner_persona_id=wire.get("owner_persona_id"),
         container_item_id=wire.get("container_item_id"),
     )
 
 
-def resolve_typed_item(actor: ObjectDB, kwargs: dict[str, Any]) -> ResolvedMenuTarget | None:
+def resolve_typed_item(
+    actor: ObjectDB,
+    kwargs: dict[str, Any],
+    *,
+    allowed_kinds: frozenset[MenuTargetKind] = _ITEM_TARGET_KINDS,
+) -> ResolvedMenuTarget | None:
     """Resolve current readable item scope without retaining permission."""
-    request = typed_item_request(kwargs)
+    request = typed_item_request(kwargs, allowed_kinds=allowed_kinds)
     if request is None:
         return None
     resolved = resolve_menu_target(actor, request)
@@ -96,14 +111,16 @@ def emit_typed_item_intent(
     context: ActionContext,
     actor: ObjectDB | None,
     emit: Callable[[ActionContext, ObjectDB | None], ActionResult | None],
+    *,
+    allowed_kinds: frozenset[MenuTargetKind] = _ITEM_TARGET_KINDS,
 ) -> ActionResult | None:
     """Adapt typed item intent, preserving asserted scope on redirects."""
     if actor is None or MENU_TARGET_KEY not in context.kwargs:
         return emit(context, actor)
-    request = typed_item_request(context.kwargs)
+    request = typed_item_request(context.kwargs, allowed_kinds=allowed_kinds)
     if request is None:
         return emit(context, actor)
-    resolved = resolve_typed_item(actor, context.kwargs)
+    resolved = resolve_typed_item(actor, context.kwargs, allowed_kinds=allowed_kinds)
     original = resolved.game_object if resolved is not None else None
     context.kwargs["target"] = original
     cancelled = emit(context, actor)
@@ -121,7 +138,10 @@ def emit_typed_item_intent(
     if item is None:
         context.kwargs["menu_target"] = None
         return None
-    wire = {"kind": request.kind.value, "target_id": item.pk}
+    wire = {
+        "kind": request.kind.value,
+        "target_id": redirected.pk if request.kind is MenuTargetKind.OBJECTS else item.pk,
+    }
     if request.owner_persona_id is not None:
         wire["owner_persona_id"] = request.owner_persona_id
     if request.container_item_id is not None:

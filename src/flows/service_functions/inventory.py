@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.justice.models import CrimeKind
+    from world.room_features.models import VaultDetails
     from world.roster.models import RosterTenure
     from world.societies.models import LegendSourceType
 
@@ -291,6 +292,32 @@ def _fire_item_acquisition_triggers(acquirer: CharacterState, item: ItemState) -
     transaction.on_commit(_run)
 
 
+def validate_pick_up(character: CharacterState, item: ItemState) -> None:
+    """Check existing reach and layered take rules without mutation."""
+    if not item.can_take(taker=character):
+        raise NotReachable
+    denial = _take_denial(character.obj.character_sheet, item.instance)
+    if denial is not None:
+        raise denial()
+
+
+def validate_drop(character: CharacterState, item: ItemState) -> VaultDetails | None:
+    """Check possession, room and capacity, returning the actual deposit vault."""
+    if not item.can_drop(dropper=character):
+        raise NotInPossession
+    if character.obj.location is None:
+        raise NoDropLocation
+    from world.room_features.vault_services import (  # noqa: PLC0415
+        vault_capacity_remaining,
+        vault_for_location,
+    )
+
+    vault = vault_for_location(character.obj.location)
+    if vault is not None and vault_capacity_remaining(vault) <= 0:
+        raise VaultFull
+    return vault
+
+
 @transaction.atomic
 def pick_up(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` from its current location into ``character``'s possession.
@@ -307,12 +334,8 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     access policy raises ``ContainerAccessDenied``. Steal is the deliberate
     bypass.
     """
-    if not item.can_take(taker=character):
-        raise NotReachable
+    validate_pick_up(character, item)
     taker_sheet = character.obj.character_sheet
-    denial = _take_denial(taker_sheet, item.instance)
-    if denial is not None:
-        raise denial()
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
@@ -345,25 +368,13 @@ def drop(character: CharacterState, item: ItemState) -> None:
     item is in a container in the character's inventory, ``contained_in``
     is cleared as part of the drop.
     """
-    if not item.can_drop(dropper=character):
-        raise NotInPossession
-    if character.obj.location is None:
-        raise NoDropLocation
+    vault = validate_drop(character, item)
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
     # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
-    # Vault capacity check (before move_to so we don't mutate on refusal) (#2179).
-    from world.room_features.vault_services import (  # noqa: PLC0415
-        vault_capacity_remaining,
-        vault_for_location,
-    )
-
-    vault = vault_for_location(character.obj.location)
-    if vault is not None and vault_capacity_remaining(vault) <= 0:
-        raise VaultFull
     if not item.instance.game_object.move_to(character.obj.location, quiet=True):
         raise NotReachable
     # Vault deposit: clear ownership so the item becomes a true unheld

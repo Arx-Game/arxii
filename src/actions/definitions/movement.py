@@ -11,24 +11,107 @@ from evennia.utils import delay
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.definitions.item_helpers import resolve_item_instance
+from actions.definitions.item_helpers import (
+    MENU_TARGET_KEY,
+    emit_typed_item_intent,
+    resolve_item_instance,
+    resolve_typed_item,
+)
+from actions.prerequisites import Prerequisite
+from actions.target_menu_types import MenuTargetKind
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
 from evennia_extensions.models import room_is_publicly_listed
+from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_room_state
-from flows.service_functions.inventory import drop, give, pick_up
+from flows.service_functions.inventory import drop, give, pick_up, validate_drop, validate_pick_up
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
 from world.areas.positioning.travel import find_route
 from world.items.exceptions import InventoryError, NotReachable
 from world.mechanics.constants import ChallengeType
 from world.mechanics.models import ChallengeInstance
 
+_GET_DROP_KINDS = frozenset({MenuTargetKind.ITEMS, MenuTargetKind.OBJECTS})
+_GET_DROP_UNAVAILABLE = "That isn't available."
+_KWARGS_KEY = "kwargs"
+_MOVEMENT_TARGET_KEY = "target"
+
+
+def _movement_item(actor, kwargs):
+    if MENU_TARGET_KEY in kwargs:
+        resolved = resolve_typed_item(actor, kwargs, allowed_kinds=_GET_DROP_KINDS)
+        return resolved.item if resolved is not None else None
+    return resolve_item_instance(kwargs.get("target"))
+
 
 @dataclass
-class GetAction(Action):
-    """Pick up an item."""
+class _ItemMovementPrerequisite(Prerequisite):
+    action: Any = None
+
+    def is_met(self, actor, target=None, context=None):
+        context = context or {}
+        kwargs = dict(context.get(_KWARGS_KEY, {}))
+        if MENU_TARGET_KEY not in kwargs and _MOVEMENT_TARGET_KEY not in kwargs:
+            kwargs[_MOVEMENT_TARGET_KEY] = target
+        item = _movement_item(actor, kwargs)
+        if MENU_TARGET_KEY in kwargs:
+            if item is None or not self.action.is_applicable(actor, kwargs=kwargs):
+                return False, _GET_DROP_UNAVAILABLE
+        elif kwargs.get("target") is None:
+            return False, self.action.missing_target_message
+        elif item is None:
+            return False, self.action.invalid_target_message
+        sdm = context.get("scene_data")
+        sdm = sdm if sdm is not None else SceneDataManager()
+        try:
+            self.action.validate(CharacterState(actor, context=sdm), ItemState(item, context=sdm))
+        except InventoryError as exc:
+            return False, exc.user_message
+        return True, ""
+
+
+class _ItemMovementAction(Action):
+    """Share target lifecycle adaptation for Get and Drop."""
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), _ItemMovementPrerequisite(action=self)]
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        return emit_typed_item_intent(
+            context,
+            actor,
+            super()._emit_intent,
+            allowed_kinds=_GET_DROP_KINDS,
+        )
+
+
+@dataclass
+class GetAction(_ItemMovementAction):
+    """Pick up an item, retaining servant retrieval on failed reach."""
+
+    missing_target_message: ClassVar[str] = "Get what?"
+    invalid_target_message: ClassVar[str] = "That can't be picked up."
+
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _movement_item(actor, kwargs)
+        if item is None or item.game_object is None or item.contained_in is not None:
+            return False
+        if actor.location is None or item.game_object.location != actor.location:
+            return False
+        sheet = actor.character_sheet
+        return sheet is None or item.holder_character_sheet_id != sheet.pk
+
+    @staticmethod
+    def validate(character: CharacterState, item: ItemState) -> None:
+        try:
+            validate_pick_up(character, item)
+        except NotReachable:
+            from world.npc_services.servant_fetch import can_servant_fetch  # noqa: PLC0415
+
+            if not can_servant_fetch(actor=character.obj, item_instance=item.instance):
+                raise
 
     key: str = "get"
     name: str = "Get"
@@ -45,13 +128,14 @@ class GetAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        target = kwargs.get("target")
-        if target is None:
-            return ActionResult(success=False, message="Get what?")
-
-        item_instance = resolve_item_instance(target)
-        if item_instance is None:
-            return ActionResult(success=False, message="That can't be picked up.")
+        item_instance = _movement_item(actor, kwargs)
+        if MENU_TARGET_KEY in kwargs:
+            if item_instance is None or not self.is_applicable(actor, kwargs=kwargs):
+                return ActionResult(success=False, message=_GET_DROP_UNAVAILABLE)
+        elif kwargs.get("target") is None:
+            return ActionResult(success=False, message=self.missing_target_message)
+        elif item_instance is None:
+            return ActionResult(success=False, message=self.invalid_target_message)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
@@ -77,15 +161,27 @@ class GetAction(Action):
         message_location(
             actor_state,
             "$You() $conj(pick) up {target}.",
-            mapping={"target": item_state},
+            mapping={"target": item_instance.display_name},
         )
 
         return ActionResult(success=True)
 
 
 @dataclass
-class DropAction(Action):
-    """Drop an item."""
+class DropAction(_ItemMovementAction):
+    """Drop physically possessed items, including worn equipment."""
+
+    missing_target_message: ClassVar[str] = "Drop what?"
+    invalid_target_message: ClassVar[str] = "That can't be dropped."
+    validate = staticmethod(validate_drop)
+
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _movement_item(actor, kwargs)
+        return (
+            item is not None
+            and item.game_object is not None
+            and ItemState(item, context=SceneDataManager()).is_in_possession(actor)
+        )
 
     key: str = "drop"
     name: str = "Drop"
@@ -102,13 +198,14 @@ class DropAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        target = kwargs.get("target")
-        if target is None:
-            return ActionResult(success=False, message="Drop what?")
-
-        item_instance = resolve_item_instance(target)
-        if item_instance is None:
-            return ActionResult(success=False, message="That can't be dropped.")
+        item_instance = _movement_item(actor, kwargs)
+        if MENU_TARGET_KEY in kwargs:
+            if item_instance is None or not self.is_applicable(actor, kwargs=kwargs):
+                return ActionResult(success=False, message=_GET_DROP_UNAVAILABLE)
+        elif kwargs.get("target") is None:
+            return ActionResult(success=False, message=self.missing_target_message)
+        elif item_instance is None:
+            return ActionResult(success=False, message=self.invalid_target_message)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
@@ -122,7 +219,7 @@ class DropAction(Action):
         message_location(
             actor_state,
             "$You() $conj(drop) {target}.",
-            mapping={"target": item_state},
+            mapping={"target": item_instance.display_name},
         )
 
         return ActionResult(success=True)
