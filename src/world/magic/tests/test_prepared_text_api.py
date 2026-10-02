@@ -169,27 +169,31 @@ class PreparedCrossingTextAPITest(TestCase):
         self.assertTrue(CharacterCrossingText.objects.filter(pk=text.pk).exists())
 
     def test_list_query_count_does_not_scale_with_row_count(self):
-        """N+1 regression guard (fix round 1): character_name must not query per row.
-
-        ``prepared_by`` is left unset on every row so a would-be N+1 on THAT field
-        (a separate, out-of-scope FK — see the fix-round-1 report) can't mask a
-        regression on ``character_name`` here: a null FK never issues a query.
-        The query count is pinned at two different row counts (1 and 5) and must
-        come out identical — if it scaled with row count, it wouldn't.
+        """N+1 regression guard (fix rounds 1-2): neither ``character_name`` (the
+        batched ``primary_persona_names_for`` lookup) nor ``prepared_by`` (now
+        ``select_related`` on the queryset) may query per row. Every row sets
+        ``prepared_by`` so the latter fix is actually exercised, not sidestepped
+        by a null FK. The query count is pinned at two different row counts (1
+        and 5) and must come out identical — if either field scaled with row
+        count, it wouldn't.
         """
         self.client.force_authenticate(self.staff)
         self.client.get(self.list_url)  # warm the session row; not part of either count below
 
         # 1 session lookup + 3 for the view itself (pagination count, pagination
-        # fetch, batched persona-name lookup) — NOT 1 + 3*N for N rows.
-        CharacterCrossingTextFactory(character_sheet=CharacterSheetFactory(), vision_text="hers")
+        # fetch-with-select_related, batched persona-name lookup) — NOT 1 + 3*N.
+        CharacterCrossingTextFactory(
+            character_sheet=CharacterSheetFactory(), vision_text="hers", prepared_by=self.staff
+        )
         with self.assertNumQueries(4):
             resp = self.client.get(self.list_url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertEqual(len(resp.data["results"]), 1)
 
         for _ in range(4):
-            CharacterCrossingTextFactory(character_sheet=CharacterSheetFactory(), vision_text="x")
+            CharacterCrossingTextFactory(
+                character_sheet=CharacterSheetFactory(), vision_text="x", prepared_by=self.staff
+            )
         with self.assertNumQueries(4):
             resp = self.client.get(self.list_url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)

@@ -111,18 +111,26 @@ class PreparedSurgeTextAPITest(TestCase):
         self.assertFalse(CharacterSurgeText.objects.filter(pk=text.pk).exists())
 
     def test_list_query_count_does_not_scale_with_row_count(self):
-        """N+1 regression guard (fix round 1), mirroring the crossing-text version."""
+        """N+1 regression guard (fix rounds 1-2), mirroring the crossing-text version.
+
+        Every row sets ``prepared_by`` so the ``select_related`` fix is actually
+        exercised, not sidestepped by a null FK.
+        """
         self.client.force_authenticate(self.staff)
         self.client.get(self.list_url)  # warm the session row; not part of either count below
 
-        CharacterSurgeTextFactory(character_sheet=CharacterSheetFactory(), surge_text="hers")
+        CharacterSurgeTextFactory(
+            character_sheet=CharacterSheetFactory(), surge_text="hers", prepared_by=self.staff
+        )
         with self.assertNumQueries(4):
             resp = self.client.get(self.list_url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertEqual(len(resp.data["results"]), 1)
 
         for _ in range(4):
-            CharacterSurgeTextFactory(character_sheet=CharacterSheetFactory(), surge_text="x")
+            CharacterSurgeTextFactory(
+                character_sheet=CharacterSheetFactory(), surge_text="x", prepared_by=self.staff
+            )
         with self.assertNumQueries(4):
             resp = self.client.get(self.list_url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)

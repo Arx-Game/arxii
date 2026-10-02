@@ -2957,11 +2957,15 @@ class PreparedCrossingTextViewSet(_BatchedCharacterNameListMixin, viewsets.Model
     def get_queryset(self):
         user = self.request.user
         if user.is_staff:
-            return CharacterCrossingText.objects.all()
-        return CharacterCrossingText.objects.filter(
-            character_sheet__personas__gm_table_memberships__left_at__isnull=True,
-            character_sheet__personas__gm_table_memberships__table__gm__account=user,
-        ).distinct()
+            return CharacterCrossingText.objects.select_related("prepared_by")
+        return (
+            CharacterCrossingText.objects.select_related("prepared_by")
+            .filter(
+                character_sheet__personas__gm_table_memberships__left_at__isnull=True,
+                character_sheet__personas__gm_table_memberships__table__gm__account=user,
+            )
+            .distinct()
+        )
 
     def perform_destroy(self, instance: CharacterCrossingText) -> None:
         if instance.crossing_id is not None:
@@ -2986,8 +2990,12 @@ class PreparedSurgeTextViewSet(_BatchedCharacterNameListMixin, viewsets.ModelVie
     def get_queryset(self):
         user = self.request.user
         if user.is_staff:
-            return CharacterSurgeText.objects.all()
-        return CharacterSurgeText.objects.filter(
-            character_sheet__personas__gm_table_memberships__left_at__isnull=True,
-            character_sheet__personas__gm_table_memberships__table__gm__account=user,
-        ).distinct()
+            return CharacterSurgeText.objects.select_related("prepared_by")
+        return (
+            CharacterSurgeText.objects.select_related("prepared_by")
+            .filter(
+                character_sheet__personas__gm_table_memberships__left_at__isnull=True,
+                character_sheet__personas__gm_table_memberships__table__gm__account=user,
+            )
+            .distinct()
+        )
