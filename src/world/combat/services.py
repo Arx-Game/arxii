@@ -9341,25 +9341,30 @@ def _end_audere_kind_and_delete_offers(
             end_fn(target)
     offers = pending_offer_model.objects.filter(character_sheet__character__in=participant_targets)
     if pending_offer_model is PendingAudereMajoraOffer:
-        _release_withheld_majora_manifestations(offers)
-    offers.delete()
+        _release_and_delete_withheld_majora_offers(offers)
+        offers.filter(manifestation_withheld=False).delete()
+    else:
+        offers.delete()
 
 
-def _release_withheld_majora_manifestations(offers: QuerySet[PendingAudereMajoraOffer]) -> None:
-    """Send every withheld Crossing manifestation in ``offers`` before it is bulk-deleted.
+def _release_and_delete_withheld_majora_offers(offers: QuerySet[PendingAudereMajoraOffer]) -> None:
+    """Lock, release, and delete each withheld-manifestation Majora offer, one row at a time.
 
     The gate opened with a GM present, promising a Crossing prompt that will now
     never exist (the encounter is ending unresolved) -- the held line must not
-    be silently lost (#4101 fix round 1, I1). ``offers`` is bounded to this
-    encounter's own participants, so a per-row send is cheap. Extracted out of
-    ``cleanup_completed_encounter`` to keep that function's branching simple.
+    be silently lost (#4101 fix round 1, I1). Goes through
+    ``release_and_delete_withheld_offer`` (#4101 fix round 2, should-fix 4) --
+    per-row ``select_for_update`` guards against a concurrent accept/decline
+    already having consumed the same offer between this sweep's query and its
+    own delete. ``offers`` is bounded to this encounter's own participants, so
+    a per-row lock+release+delete is cheap. The non-withheld remainder is
+    still bulk-deleted by the caller afterward -- only the withheld rows need
+    this one-at-a-time treatment.
     """
-    from world.magic.audere_majora import release_withheld_crossing_manifestation  # noqa: PLC0415
+    from world.magic.audere_majora import release_and_delete_withheld_offer  # noqa: PLC0415
 
-    for offer in offers.filter(manifestation_withheld=True).select_related(
-        "character_sheet__character", "threshold", "faith_variant"
-    ):
-        release_withheld_crossing_manifestation(offer)
+    for offer_id in list(offers.filter(manifestation_withheld=True).values_list("pk", flat=True)):
+        release_and_delete_withheld_offer(offer_id)
 
 
 def cleanup_completed_encounter(encounter: CombatEncounter) -> None:

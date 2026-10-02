@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import uuid
 
 from django.db import DatabaseError, transaction
+from django.db.models import Exists, OuterRef
 
 from world.gm.constants import (
     NARRATION_PROMPT_KINDS,
@@ -30,6 +31,7 @@ from world.scenes.interaction_services import (
     non_web_sessions,
 )
 from world.scenes.models import Persona
+from world.scenes.place_models import InteractionReceiver
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -91,7 +93,17 @@ def route_narratable_event(
     Every created prompt shares one ``event_group`` (#4101 fix round 1) -- they are
     siblings of the SAME event, one copy per addressed GM. ``dismiss_gm_prompt``
     groups on this field to release the event's authored defaults exactly once,
-    when the last sibling leaves PENDING, rather than once per GM.
+    when the last sibling closes, rather than once per GM.
+
+    The creates run inside one ``transaction.atomic()`` (#4101 fix round 2,
+    must-fix 3) -- without it, a failure partway through the list (e.g. a
+    constraint violation on the Nth recipient) would leave the first N-1
+    prompts committed with no sibling ever able to release their event's
+    defaults: orphaned PENDING rows nothing resolves. Wrapping the whole batch
+    means a mid-batch failure rolls every prompt back together, and the
+    ``on_commit`` notify registrations below are discarded along with it
+    (Django clears pending ``on_commit`` callbacks on rollback) -- so a raise
+    here never leaves a live notify for a prompt that no longer exists.
     """
     recipients = prompt_recipients(event.scene, event.kind, candidates=candidates)
     if not recipients:
@@ -99,23 +111,24 @@ def route_narratable_event(
             deliver_unprompted()
         return []
     event_group = uuid.uuid4()
-    prompts = [
-        GMPrompt.objects.create(
-            kind=event.kind,
-            event_group=event_group,
-            scene=event.scene,
-            character_sheet=event.character_sheet,
-            addressed_to=account,
-            room_text=event.room_text,
-            private_text=event.private_text,
-            prepared_for_character=event.prepared_for_character,
-            technique=event.technique,
-            stake_outcome=event.stake_outcome,
-        )
-        for account in recipients
-    ]
-    for prompt in prompts:
-        transaction.on_commit(lambda p=prompt: notify_gm_prompt(p))
+    with transaction.atomic():
+        prompts = [
+            GMPrompt.objects.create(
+                kind=event.kind,
+                event_group=event_group,
+                scene=event.scene,
+                character_sheet=event.character_sheet,
+                addressed_to=account,
+                room_text=event.room_text,
+                private_text=event.private_text,
+                prepared_for_character=event.prepared_for_character,
+                technique=event.technique,
+                stake_outcome=event.stake_outcome,
+            )
+            for account in recipients
+        ]
+        for prompt in prompts:
+            transaction.on_commit(lambda p=prompt: notify_gm_prompt(p))
     return prompts
 
 
@@ -187,25 +200,53 @@ def _narration_coverage(event_group: uuid.UUID) -> tuple[bool, bool]:
 
     Reads every ``GMPromptNarration`` linked to any sibling prompt sharing
     ``event_group`` (#4101 fix round 1, controller ruling I2). A room EMIT (no
-    receivers) covers the room line; a receiver-scoped EMIT (pemit) or a
-    WHISPER covers the private line -- the two legs are independent, so a GM
-    who only sends a room line leaves the private default (e.g. a Crossing's
-    vision) to release on its own, and the reverse holds too.
+    receivers) covers the room line; a receiver-scoped EMIT (pemit) whose
+    receivers include the event's own subject, or a WHISPER to that subject,
+    covers the private line -- the two legs are independent, so a GM who only
+    sends a room line leaves the private default (e.g. a Crossing's vision) to
+    release on its own, and the reverse holds too.
+
+    A receiver-scoped EMIT to someone OTHER than the subject (an unrelated
+    pemit the GM happens to send while this prompt is open) covers neither leg
+    (#4101 fix round 2, minor fix 6) -- it must never be mistaken for private
+    coverage of THIS event. ``has_subject_receiver``/``has_any_receiver`` are
+    ``Exists`` subquery annotations rather than a per-row ``.exists()`` call,
+    so this runs in one query regardless of how many lines were narrated.
     """
+    narrations = GMPromptNarration.objects.filter(prompt__event_group=event_group)
+    first = narrations.select_related("prompt__character_sheet").first()
+    if first is None:
+        return False, False
+
+    sheet = first.prompt.character_sheet
+    subject_persona_id = None
+    if sheet is not None:
+        with contextlib.suppress(Persona.DoesNotExist):
+            subject_persona_id = sheet.primary_persona.pk
+
+    receiver_qs = InteractionReceiver.objects.filter(interaction_id=OuterRef("interaction_id"))
+    subject_receiver_qs = (
+        receiver_qs.filter(persona_id=subject_persona_id)
+        if subject_persona_id is not None
+        else receiver_qs.none()
+    )
+    annotated = narrations.select_related("interaction").annotate(
+        has_any_receiver=Exists(receiver_qs),
+        has_subject_receiver=Exists(subject_receiver_qs),
+    )
+
     room = False
     private = False
-    narrations = GMPromptNarration.objects.filter(prompt__event_group=event_group).select_related(
-        "interaction"
-    )
-    for link in narrations:
+    for link in annotated:
         interaction = link.interaction
         if interaction.mode == InteractionMode.WHISPER:
-            private = True
-        elif interaction.mode == InteractionMode.EMIT:
-            if interaction.receivers.exists():
+            if link.has_subject_receiver:
                 private = True
-            else:
+        elif interaction.mode == InteractionMode.EMIT:
+            if not link.has_any_receiver:
                 room = True
+            elif link.has_subject_receiver:
+                private = True
         if room and private:
             break
     return room, private
@@ -225,13 +266,20 @@ def release_prompt_defaults(prompt: GMPrompt, *, room: bool = True, private: boo
     still leaves the private default (e.g. a Crossing's vision) to go out on
     its own, and vice versa. Both default True so a direct call with no kwargs
     behaves like the old all-or-nothing release.
+
+    The room EMIT's live push is scene-scoped (``scene_scoped_push=True``, #4101
+    fix round 2, must-fix 2) -- it targets ``prompt.scene``'s own location, never
+    wherever the character currently stands, and is skipped (record-only) once
+    that scene has gone inactive.
     """
     sheet = prompt.character_sheet
     if sheet is None:
         return
     character = sheet.character
     if room and prompt.room_text.strip():
-        broadcast_scene_emit(character, prompt.room_text, scene=prompt.scene)
+        broadcast_scene_emit(
+            character, prompt.room_text, scene=prompt.scene, scene_scoped_push=True
+        )
     if private and prompt.private_text.strip():
         narrate_privately(character, prompt.private_text, scene=prompt.scene)
 
@@ -275,25 +323,42 @@ def narration_prompt_for(
 def _resolve_narration_prompt(
     prompt: GMPrompt, *, new_status: str, resolver: AccountDB | None
 ) -> GMPrompt:
-    """Resolve one narration prompt and release its event's defaults exactly once.
+    """Resolve one narration prompt; release its event's defaults only when it CLOSES.
 
     Siblings routed from the same event (shared ``event_group``) are locked for
     the duration of the transaction via ``select_for_update`` -- a dismiss racing
     scene end's own ``expire_scene_prompts`` sweep, or two tabs dismissing the
     same prompt, serializes against this instead of double-sending (#4101 fix
-    round 1). The event's authored defaults release independently per line, once
-    every sibling has left PENDING: the room default releases unless some
-    sibling narrated a room line, and the private default releases unless some
-    sibling narrated privately (#4101 fix round 1, controller ruling I2) --
-    covering one line never blocks the other from closing out on its own.
+    round 1).
 
-    The still-PENDING/NARRATED re-check above reads ``siblings`` -- the
-    ``select_for_update()`` result, i.e. the identity map's live Python objects,
-    not a fresh row-by-row re-query of the database. That is correct *because*
-    every status change to a GMPrompt goes through this same function under the
-    same lock: no writer can mutate a sibling's status without first taking this
-    exact lock, so the in-memory objects the lock hands back are never stale
-    relative to each other (#4101 fix round 2).
+    ``new_status`` is either NARRATED (a GM's narration; the prompt stays OPEN
+    for more lines) or DISMISSED (the prompt CLOSES -- explicitly dismissed, or
+    marked done after narrating, or expired at scene end). A transition to
+    NARRATED never triggers release: a GM's first narration does not decide the
+    release on its own (#4101 fix round 2, controller ruling R6-1) -- it would
+    double-send a line the GM is still in the middle of covering (e.g. a room
+    line now, a private line a moment later, on the SAME prompt). Only a
+    transition to DISMISSED evaluates release, and only once every sibling in
+    the event has ALSO reached DISMISSED -- a sibling merely NARRATED is still
+    open, so the event isn't closed yet. The gate below accepts either PENDING
+    or NARRATED as the prompt's pre-transition state (``_NARRATABLE_STATUSES``)
+    -- a NARRATED prompt may still be dismissed (closed) once the GM is done
+    adding lines to it.
+
+    Release itself stays per-line (#4101 fix round 1, controller ruling I2): the
+    room default releases unless some sibling narrated a room line, and the
+    private default releases unless some sibling narrated privately --
+    re-derived fresh from the linked ``GMPromptNarration`` rows at CLOSE time,
+    not decided by whichever narration happened to resolve this specific
+    prompt's own status.
+
+    The still-open re-check below reads ``siblings`` -- the ``select_for_update()``
+    result, i.e. the identity map's live Python objects, not a fresh row-by-row
+    re-query of the database. That is correct *because* every status change to a
+    GMPrompt goes through this same function under the same lock: no writer can
+    mutate a sibling's status without first taking this exact lock, so the
+    in-memory objects the lock hands back are never stale relative to each other
+    (#4101 fix round 2).
 
     ``release_prompt_defaults`` is deferred to ``transaction.on_commit`` (#4101
     fix round 2) -- GMPrompt is idmapper-cached, so a Python-level attribute
@@ -302,8 +367,8 @@ def _resolve_narration_prompt(
     *inside* this atomic block risked a delivery failure rolling back the DB
     write while leaving the cached instance's ``status`` stuck at
     DISMISSED/NARRATED in memory -- from then on every future dismiss attempt on
-    that same cached object would see a non-PENDING status and refuse
-    (``_MSG_RESOLVED``), and ``expire_scene_prompts`` would never find it PENDING
+    that same cached object would see a non-open status and refuse
+    (``_MSG_RESOLVED``), and ``expire_scene_prompts`` would never find it open
     again either, silently losing the release forever. Deferring to
     ``transaction.on_commit`` means delivery only ever runs after the status
     change has safely committed, so a failed send can no longer corrupt prompt
@@ -318,7 +383,7 @@ def _resolve_narration_prompt(
     with transaction.atomic():
         siblings = list(GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group))
         this = next(s for s in siblings if s.pk == prompt.pk)
-        if this.status != GMPromptStatus.PENDING:
+        if this.status not in _NARRATABLE_STATUSES:
             raise GMPromptError(_MSG_RESOLVED)
         previous_status, previous_resolver = this.status, this.resolved_by
         this.status = new_status
@@ -329,28 +394,37 @@ def _resolve_narration_prompt(
             this.status = previous_status
             this.resolved_by = previous_resolver
             raise
-        still_pending = any(s.status == GMPromptStatus.PENDING for s in siblings if s.pk != this.pk)
-        if not still_pending:
-            room_covered, private_covered = _narration_coverage(prompt.event_group)
-            release_room = not room_covered
-            release_private = not private_covered
-            if release_room or release_private:
-                transaction.on_commit(
-                    lambda p=this, r=release_room, pv=release_private: release_prompt_defaults(
-                        p, room=r, private=pv
+        if new_status == GMPromptStatus.DISMISSED:
+            still_open = any(s.status != GMPromptStatus.DISMISSED for s in siblings)
+            if not still_open:
+                room_covered, private_covered = _narration_coverage(prompt.event_group)
+                release_room = not room_covered
+                release_private = not private_covered
+                if release_room or release_private:
+                    transaction.on_commit(
+                        lambda p=this, r=release_room, pv=release_private: release_prompt_defaults(
+                            p, room=r, private=pv
+                        )
                     )
-                )
     return this
 
 
 def dismiss_gm_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> GMPrompt:
-    """Close a PENDING narration prompt.
+    """Close an OPEN (PENDING or NARRATED) narration prompt.
+
+    This is the one entry point for BOTH closure shapes (#4101 fix round 2,
+    controller ruling R6-1): dismissing a still-PENDING prompt nobody ever
+    narrated, and marking a NARRATED prompt done once the GM has sent every
+    line they're going to -- the backend close path is identical either way,
+    only the GM-facing wording differs (a UI/telnet concern, not this
+    function's). A NARRATED prompt stays open for MORE narrations until this
+    is called; narrating never closes it by itself.
 
     Each of its event's authored defaults (room line, private line) goes out at
     most once, independently -- when every sibling GM's own copy of the event
-    has also left PENDING, and only for the leg no sibling narrated (see
-    ``_resolve_narration_prompt`` / controller ruling I2) -- never once per
-    dismissing GM.
+    has ALSO closed (reached DISMISSED), and only for the leg no sibling
+    narrated (see ``_resolve_narration_prompt`` / controller ruling I2) --
+    never once per dismissing GM, and never merely because a GM narrated.
 
     Authorization (who may dismiss this prompt) is the CALLER's job -- this
     function only enforces that the prompt is a narration kind and still open.
@@ -411,7 +485,13 @@ def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromp
 
 
 def expire_scene_prompts(scene: Scene) -> int:
-    """Scene finished: dismiss its pending narration prompts so no default is lost.
+    """Scene finished: close its still-open narration prompts so no default is lost.
+
+    Closes BOTH PENDING (never narrated) and NARRATED (narrated but left open
+    for more lines) prompts (#4101 fix round 2, controller ruling R6-1) -- a
+    GM who sent a room line and then the scene ended before they sent the
+    private line must still have that uncovered line released; a NARRATED
+    prompt is not itself a closed event.
 
     Tolerates a prompt a concurrent dismiss already resolved out from under this
     sweep (``GMPromptError`` from ``_resolve_narration_prompt``'s identity-map
@@ -419,13 +499,13 @@ def expire_scene_prompts(scene: Scene) -> int:
     cache there is correct) -- that race is a lost race, not a failure to
     report.
     """
-    pending = list(
+    open_prompts = list(
         GMPrompt.objects.filter(
-            scene=scene, status=GMPromptStatus.PENDING, kind__in=NARRATION_PROMPT_KINDS
+            scene=scene, status__in=_NARRATABLE_STATUSES, kind__in=NARRATION_PROMPT_KINDS
         ).select_related("character_sheet__character")
     )
     expired = 0
-    for prompt in pending:
+    for prompt in open_prompts:
         try:
             dismiss_gm_prompt(prompt, resolver=None)
         except GMPromptError:

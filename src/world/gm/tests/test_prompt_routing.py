@@ -156,7 +156,9 @@ class RouteNarratableEventTest(TestCase):
         )[0]
         with self.captureOnCommitCallbacks(execute=True):
             dismiss_gm_prompt(prompt, resolver=self.gm)
-        broadcast.assert_called_once_with(self.sheet.character, "a wonder occurs", scene=self.scene)
+        broadcast.assert_called_once_with(
+            self.sheet.character, "a wonder occurs", scene=self.scene, scene_scoped_push=True
+        )
 
     def test_release_uses_prompts_own_scene_not_characters_current_location(self):
         """A character who has since moved rooms still gets the room line
@@ -198,6 +200,50 @@ class RouteNarratableEventTest(TestCase):
                 content="a wonder occurs", mode=InteractionMode.EMIT, scene=elsewhere_scene
             ).exists()
         )
+
+    @mock.patch("world.scenes.interaction_services.push_interaction")
+    def test_release_into_finished_scene_is_recorded_not_pushed_live(self, push):
+        """#4101 fix round 2, must-fix 2: a room default releasing into a scene
+        that has since ended is recorded (the Interaction row exists) but never
+        live-pushed -- nobody's watching that room's WebSocket feed for a scene
+        that's already over."""
+        prompt = route_narratable_event(
+            self._event(self.scene, kind=GMPromptKind.MIRACLE, room_text="a wonder occurs")
+        )[0]
+        self.scene.is_active = False
+        self.scene.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
+        push.assert_not_called()
+        self.assertTrue(
+            Interaction.objects.filter(content="a wonder occurs", scene=self.scene).exists()
+        )
+
+    @mock.patch("world.scenes.interaction_services.push_interaction")
+    def test_release_after_character_moved_pushes_to_scenes_own_location(self, push):
+        """#4101 fix round 2, must-fix 2: the live push targets the SCENE's own
+        location, never wherever the character has since wandered off to."""
+        from evennia_extensions.factories import RoomProfileFactory
+
+        scene_room = RoomProfileFactory().objectdb
+        elsewhere_room = RoomProfileFactory().objectdb
+        scene = SceneFactory(location=scene_room)
+        SceneGMParticipationFactory(scene=scene, account=self.gm)
+
+        prompt = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            )
+        )[0]
+        self.sheet.character.location = elsewhere_room
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
+
+        push.assert_called_once()
+        self.assertEqual(push.call_args.kwargs.get("location"), scene_room)
 
     def test_failed_resolve_restores_pending_status_and_a_later_dismiss_still_sends(self):
         """#4101 fix round 2: if the database write inside the resolve-and-
@@ -305,10 +351,11 @@ class SiblingReleaseTest(TestCase):
 
     @mock.patch("world.gm.prompt_services.narrate_privately")
     def test_dismiss_skips_release_when_a_sibling_narrated(self, narrate):
-        """A GM's own PRIVATE narration of the event replaces the private
-        default -- the last sibling to dismiss must not also release it.
+        """Dismissing A while sibling B is still open (NARRATED, not closed)
+        must not release anything yet -- the event isn't closed until every
+        sibling reaches DISMISSED (#4101 fix round 2, controller ruling R6-1).
 
-        #4101 fix round 1 (I2): release is now derived from the actual
+        #4101 fix round 1 (I2): release is derived from the actual
         ``GMPromptNarration``-linked interaction, not a bare status flip --
         this exercises a real receiver-scoped (pemit-shaped) narration via
         ``link_prompt_narration`` so the per-line coverage check has real data
@@ -322,12 +369,7 @@ class SiblingReleaseTest(TestCase):
             dismiss_gm_prompt(prompt_a, resolver=self.gm_a)
         narrate.assert_not_called()
 
-    @mock.patch("world.gm.prompt_services.narrate_privately")
-    def test_room_only_narration_still_releases_private_default(self, narrate):
-        """#4101 fix round 1 (I2): a GM who sends only a room line on a
-        Crossing prompt leaves the vision to release privately on its own
-        when the prompt closes -- the private default is never silently
-        dropped just because the room line was covered."""
+    def _crossing_prompt(self, **kw):
         [prompt] = route_narratable_event(
             NarratableEvent(
                 kind=GMPromptKind.CROSSING,
@@ -335,38 +377,81 @@ class SiblingReleaseTest(TestCase):
                 character_sheet=self.sheet,
                 room_text="the floor groans",
                 private_text="the vision",
+                **kw,
             ),
             candidates=[self.gm_a],
         )
+        return prompt
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_room_narration_does_not_release_private_default_yet(self, narrate):
+        """#4101 fix round 2 (controller ruling R6-1): a GM's first narration
+        does not decide the release -- a room-only narration must not release
+        the vision while the prompt stays open for more lines."""
+        prompt = self._crossing_prompt()
         interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the floor groans")
         with self.captureOnCommitCallbacks(execute=True):
             link_prompt_narration(prompt, interaction)
         prompt.refresh_from_db()
         self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
-        narrate.assert_called_once_with(self.sheet.character, "the vision", scene=self.scene)
+        narrate.assert_not_called()
 
     @mock.patch("world.gm.prompt_services.broadcast_scene_emit")
-    def test_private_only_narration_still_releases_room_default(self, broadcast):
-        """The reverse of the above: a GM who only pemits the vision privately
-        leaves the room line (the manifestation) to release on its own."""
-        [prompt] = route_narratable_event(
-            NarratableEvent(
-                kind=GMPromptKind.CROSSING,
-                scene=self.scene,
-                character_sheet=self.sheet,
-                room_text="the floor groans",
-                private_text="the vision",
-            ),
-            candidates=[self.gm_a],
-        )
+    def test_private_narration_does_not_release_room_default_yet(self, broadcast):
+        """The reverse: a private-only narration must not release the room
+        default while the prompt stays open."""
+        prompt = self._crossing_prompt()
         interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the vision")
         InteractionReceiverFactory(interaction=interaction, persona=self.sheet.primary_persona)
         with self.captureOnCommitCallbacks(execute=True):
             link_prompt_narration(prompt, interaction)
         prompt.refresh_from_db()
         self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
+        broadcast.assert_not_called()
+
+    @mock.patch("world.gm.prompt_services.broadcast_scene_emit")
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_room_then_private_narration_then_close_releases_nothing_extra(
+        self, narrate, broadcast
+    ):
+        """Both lines narrated, then the GM closes the prompt: nothing extra
+        releases -- every leg was already covered by a real narration."""
+        prompt = self._crossing_prompt()
+        room_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the floor groans")
+        vision_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the vision")
+        InteractionReceiverFactory(
+            interaction=vision_interaction, persona=self.sheet.primary_persona
+        )
+        link_prompt_narration(prompt, room_interaction)
+        link_prompt_narration(prompt, vision_interaction)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm_a)
+        narrate.assert_not_called()
+        broadcast.assert_not_called()
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_room_narrated_then_close_releases_vision_once(self, narrate):
+        """Room-only narration, then the GM closes the prompt: the vision
+        (never covered) releases exactly once."""
+        prompt = self._crossing_prompt()
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the floor groans")
+        link_prompt_narration(prompt, interaction)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm_a)
+        narrate.assert_called_once_with(self.sheet.character, "the vision", scene=self.scene)
+
+    @mock.patch("world.gm.prompt_services.broadcast_scene_emit")
+    def test_private_narrated_then_close_releases_room_once(self, broadcast):
+        """Private-only narration, then the GM closes the prompt: the room
+        line (never covered) releases exactly once."""
+        prompt = self._crossing_prompt()
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the vision")
+        InteractionReceiverFactory(interaction=interaction, persona=self.sheet.primary_persona)
+        link_prompt_narration(prompt, interaction)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm_a)
         broadcast.assert_called_once_with(
-            self.sheet.character, "the floor groans", scene=self.scene
+            self.sheet.character, "the floor groans", scene=self.scene, scene_scoped_push=True
         )
 
     def test_live_push_reaches_only_the_addressed_gm(self):

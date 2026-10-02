@@ -147,7 +147,9 @@ def invalidate_active_scene_cache(location: ObjectDB) -> None:
         del location._active_scene_cache  # noqa: SLF001
 
 
-def broadcast_scene_emit(character: ObjectDB, text: str, *, scene: Scene | None = None) -> None:
+def broadcast_scene_emit(
+    character: ObjectDB, text: str, *, scene: Scene | None = None, scene_scoped_push: bool = False
+) -> None:
     """Broadcast ``text`` as a system EMIT to ``scene`` (or the one active at
     ``character``'s location when ``scene`` is omitted).
 
@@ -161,6 +163,18 @@ def broadcast_scene_emit(character: ObjectDB, text: str, *, scene: Scene | None 
     room-text release must land in the scene the prompt belongs to, not
     whatever is active at the character's CURRENT location if they moved since
     the prompt was created.
+
+    ``scene_scoped_push`` (#4101 fix round 2, must-fix 2) governs where the LIVE
+    WebSocket push lands, as opposed to where the row is recorded (always
+    ``scene``, regardless of this flag). Default False preserves the original
+    behavior for every other caller: ``push_interaction`` defaults to the
+    writer's CURRENT location. When True, the push instead targets ``scene``'s
+    OWN location, and is skipped entirely (record-only) when ``scene`` is no
+    longer active -- a released GM-prompt default (a withheld manifestation, an
+    uncovered room default) describes an event anchored to a specific scene and
+    must never live-push into whatever room the character has since wandered
+    into, nor resurrect a WebSocket push into a room that has moved on to other
+    business since that scene ended.
 
     Queries the scene uncached on purpose when resolving by location:
     ``get_active_scene``'s per-location cache is only invalidated by the scene
@@ -188,11 +202,15 @@ def broadcast_scene_emit(character: ObjectDB, text: str, *, scene: Scene | None 
         mode=InteractionMode.EMIT,
         scene=scene,
     )
+    if scene_scoped_push and not scene.is_active:
+        # Recorded above; no live push into a room that has moved on.
+        return
     push_interaction(
         interaction,
         receiver_persona_ids=[],
         target_persona_ids=[],
         receiver_characters=[],
+        location=scene.location if scene_scoped_push else None,
     )
 
 

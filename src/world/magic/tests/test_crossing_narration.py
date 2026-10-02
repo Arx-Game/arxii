@@ -1,5 +1,8 @@
 """The Crossing as a narratable event (#4101 Task 6; spec scenarios 1-2)."""
 
+from unittest import mock
+
+from django.db import DatabaseError
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
@@ -284,3 +287,74 @@ class CrossingNarrationTest(TestCase):
         self.assertTrue(
             Interaction.objects.filter(content="tier vision", mode=InteractionMode.WHISPER).exists()
         )
+
+    # -------------------------------------------------------------------
+    # Fix round 2 (M6 gaps): DatabaseError fallback; decline racing a cross
+    # -------------------------------------------------------------------
+
+    def test_routing_database_error_falls_back_to_unprompted_delivery_once(self):
+        """#4101 fix round 2, must-fix 2/3: a DatabaseError while creating GM
+        prompts falls back to unprompted delivery -- both lines still arrive,
+        exactly once, and no GMPrompt is left behind (no orphan)."""
+        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        offer = self._offer()
+        with mock.patch(
+            "world.gm.prompt_services.route_narratable_event", side_effect=DatabaseError("boom")
+        ):
+            self._cross(offer)
+        self.assertFalse(GMPrompt.objects.filter(kind=GMPromptKind.CROSSING).exists())
+        self.assertEqual(
+            Interaction.objects.filter(content="tier room", mode=InteractionMode.EMIT).count(), 1
+        )
+        self.assertEqual(
+            Interaction.objects.filter(content="tier vision", mode=InteractionMode.WHISPER).count(),
+            1,
+        )
+
+    def test_crossing_with_no_active_scene_falls_back_to_offers_own_scene(self):
+        """#4101 fix round 2, should-fix 5: the scene has ended (and its GM
+        left) between gate-open and the crossing resolving -- the withheld
+        manifestation and vision still deliver, recorded against the offer's
+        own captured scene, never silently dropped."""
+        participation = SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        offer = self._offer()
+        offer.refresh_from_db()
+        self.assertTrue(offer.manifestation_withheld)
+
+        participation.left_at = participation.joined_at
+        participation.save()
+        self.scene.is_active = False
+        self.scene.save()
+
+        self._cross(offer)
+
+        self.assertTrue(
+            Interaction.objects.filter(
+                content="tier room", mode=InteractionMode.EMIT, scene=self.scene
+            ).exists()
+        )
+        self.assertTrue(
+            Interaction.objects.filter(content="tier vision", mode=InteractionMode.WHISPER).exists()
+        )
+        self.assertFalse(GMPrompt.objects.filter(kind=GMPromptKind.CROSSING).exists())
+
+    def test_decline_racing_a_concurrent_accept_is_a_no_op(self):
+        """#4101 fix round 2, should-fix 4: a decline racing a concurrent
+        accept (which already deleted the offer under its own lock) must not
+        re-release the manifestation -- the locked re-fetch finds nothing."""
+        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        offer = self._offer()
+        offer.refresh_from_db()
+        self.assertTrue(offer.manifestation_withheld)
+        offer_id = offer.pk
+        # Simulate a concurrent accept having already consumed (and deleted)
+        # the offer under its own lock, between this decline's initial lookup
+        # and its own locked release-and-delete call.
+        offer.delete()
+
+        from world.magic.audere_majora import release_and_delete_withheld_offer
+
+        with self.captureOnCommitCallbacks(execute=True):
+            release_and_delete_withheld_offer(offer_id)
+
+        self.assertFalse(Interaction.objects.filter(content="tier room").exists())

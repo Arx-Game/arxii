@@ -392,7 +392,9 @@ def check_audere_majora_eligibility(
     return threshold
 
 
-def _broadcast_manifestation(character: ObjectDB, text: str, *, scene=None) -> None:
+def _broadcast_manifestation(
+    character: ObjectDB, text: str, *, scene=None, scene_scoped_push: bool = False
+) -> None:
     """Broadcast the threshold manifestation text as an EMIT.
 
     Pass ``scene`` explicitly (#4101 fix round 1, controller ruling M1) to attach the
@@ -401,11 +403,18 @@ def _broadcast_manifestation(character: ObjectDB, text: str, *, scene=None) -> N
     the destination even if the character has since moved. Omitted, falls back to
     the scene active at the character's current location (pre-#4101 behavior).
 
+    ``scene_scoped_push`` (#4101 fix round 2, must-fix 2): pass True for a
+    RELEASE of a withheld/uncovered manifestation -- the live push then targets
+    ``scene``'s own location (never the character's current one) and is skipped
+    entirely once that scene has gone inactive. Leave False for the ordinary
+    gate-open broadcast, which is synchronous with the cast and has no
+    moved-since-then risk.
+
     No-ops silently when: no scene resolves, or character has no primary persona.
     """
     from world.scenes.interaction_services import broadcast_scene_emit  # noqa: PLC0415
 
-    broadcast_scene_emit(character, text, scene=scene)
+    broadcast_scene_emit(character, text, scene=scene, scene_scoped_push=scene_scoped_push)
 
 
 def _crossing_prompt_candidates(sheet: CharacterSheet, scene) -> list:
@@ -458,8 +467,41 @@ def release_withheld_crossing_manifestation(offer: PendingAudereMajoraOffer) -> 
         return
     character = sheet.character
     transaction.on_commit(
-        lambda: _broadcast_manifestation(character, texts.manifestation, scene=scene)
+        lambda: _broadcast_manifestation(
+            character, texts.manifestation, scene=scene, scene_scoped_push=True
+        )
     )
+
+
+def release_and_delete_withheld_offer(offer_id: int) -> None:
+    """Lock, release any withheld manifestation, and delete one offer row.
+
+    #4101 fix round 2, should-fix 4: wraps the release + delete pair in
+    ``transaction.atomic()`` under ``select_for_update()`` on the offer, and
+    only acts if the locked row still exists. Declining, going stale, and
+    encounter-end cleanup all funnel through this one function -- a concurrent
+    accept (which deletes the offer inside its own locked
+    ``select_for_update`` block, see ``resolve_audere_majora_offer``) or a
+    second decline/stale-check racing this one must never cause the
+    manifestation to be released twice; whichever side's lock wins first, the
+    other finds the row already gone and no-ops cleanly.
+
+    ``release_withheld_crossing_manifestation`` already no-ops when the offer
+    isn't withheld, so this is safe to call unconditionally on every offer a
+    decline/staleness/encounter-end path is about to delete, not just the
+    withheld ones.
+    """
+    with transaction.atomic():
+        locked = (
+            PendingAudereMajoraOffer.objects.select_for_update()
+            .select_related("character_sheet__character", "threshold", "faith_variant", "scene")
+            .filter(pk=offer_id)
+            .first()
+        )
+        if locked is None:
+            return
+        release_withheld_crossing_manifestation(locked)
+        locked.delete()
 
 
 def maybe_create_audere_majora_offer(
@@ -798,8 +840,15 @@ def cross_threshold(
     _mint_crossing_deed(crossing, deed_title=texts.deed_title)
     consume_prepared_crossing_text(sheet, crossing)
     withheld = offer is not None and offer.manifestation_withheld
+    # Captured before the caller deletes the offer -- the scene is the crossing's
+    # own fallback (#4101 fix round 2, should-fix 5) for when there is no active
+    # scene AT crossing time (``scene`` above came back None), so the withheld
+    # line is not silently dropped.
+    offer_scene = offer.scene if offer is not None else None
     transaction.on_commit(
-        lambda: _route_crossing(character, sheet, scene, texts, withheld=withheld)
+        lambda: _route_crossing(
+            character, sheet, scene, texts, withheld=withheld, fallback_scene=offer_scene
+        )
     )
 
     majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
@@ -856,7 +905,9 @@ def cross_threshold(
     )
 
 
-def _route_crossing(character, sheet, scene, texts, *, withheld: bool) -> None:
+def _route_crossing(  # noqa: PLR0913 — one on_commit callback needs every piece of crossing context
+    character, sheet, scene, texts, *, withheld: bool, fallback_scene=None
+) -> None:
     """Prompt the scene's GMs with the Crossing, or deliver it as today (#4101).
 
     ``withheld`` is read from the offer BEFORE ``cross_threshold``'s caller deletes
@@ -864,6 +915,17 @@ def _route_crossing(character, sheet, scene, texts, *, withheld: bool) -> None:
     lifetime. When withheld, the room line is the Crossing prompt's room-text
     default (spec decision 7); otherwise the room line already went out at
     gate-open and this only carries the private vision.
+
+    ``fallback_scene`` (#4101 fix round 2, should-fix 5) is the offer's OWN
+    captured scene, used whenever there is no active scene AT CROSSING time
+    (``scene`` is None -- the scene ended, or the character moved to a
+    scene-less room, between gate-open and the crossing resolving). Without
+    this, a withheld manifestation would silently vanish:
+    ``_broadcast_manifestation(..., scene=None)`` re-resolves by the
+    character's CURRENT location internally and no-ops when that is also
+    scene-less. The vision still logs even with no scene at all
+    (``narrate_privately`` tolerates ``scene=None``) -- only the room
+    broadcast needs this fallback.
 
     Candidates exclude the crossing character's own account (#4101 fix round 1,
     M5) -- a player who also GMs their own scene is never addressed about their
@@ -874,7 +936,10 @@ def _route_crossing(character, sheet, scene, texts, *, withheld: bool) -> None:
     leave the vision and manifestation undelivered if left uncaught. Falls back
     to ``_deliver`` (the unprompted path) on that failure instead (#4101 fix
     round 1, M2), logging the error, so the crossing player's vision is never
-    silently lost to a GM-prompt-creation bug.
+    silently lost to a GM-prompt-creation bug. ``_crossing_prompt_candidates``
+    is computed INSIDE the same ``try`` (#4101 fix round 2, must-fix 3) -- a
+    failure resolving candidates must also fall back to unprompted delivery,
+    not propagate past this on_commit callback uncaught.
     """
     from django.db import DatabaseError  # noqa: PLC0415
 
@@ -883,20 +948,23 @@ def _route_crossing(character, sheet, scene, texts, *, withheld: bool) -> None:
     from world.gm.types import NarratableEvent  # noqa: PLC0415
     from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
+    effective_scene = scene if scene is not None else fallback_scene
     room_text = texts.manifestation if withheld else ""
-    candidates = _crossing_prompt_candidates(sheet, scene)
 
     def _deliver() -> None:
         if room_text.strip():
-            _broadcast_manifestation(character, room_text, scene=scene)
+            _broadcast_manifestation(
+                character, room_text, scene=effective_scene, scene_scoped_push=True
+            )
         if texts.vision.strip():
-            narrate_privately(character, texts.vision, scene=scene)
+            narrate_privately(character, texts.vision, scene=effective_scene)
 
     try:
+        candidates = _crossing_prompt_candidates(sheet, effective_scene)
         route_narratable_event(
             NarratableEvent(
                 kind=GMPromptKind.CROSSING,
-                scene=scene,
+                scene=effective_scene,
                 character_sheet=sheet,
                 room_text=room_text,
                 private_text=texts.vision,
@@ -944,15 +1012,13 @@ def resolve_audere_majora_offer(
 
     if not accept:
         advisory = corruption_advisory_for_character(character)
-        release_withheld_crossing_manifestation(offer)
-        offer.delete()
+        release_and_delete_withheld_offer(offer_id)
         return AudereMajoraCrossingResult(accepted=False, advisory_text=advisory)
 
     # Staleness check OUTSIDE transaction
     threshold = check_audere_majora_eligibility(character, offer.fired_intensity)
     if threshold is None or threshold.pk != offer.threshold_id:
-        release_withheld_crossing_manifestation(offer)
-        offer.delete()
+        release_and_delete_withheld_offer(offer_id)
         raise AudereMajoraOfferStaleError
 
     # Spend guards
