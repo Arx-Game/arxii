@@ -48,8 +48,16 @@ describe('GMPromptFilterCard', () => {
 
     const checkboxes = await screen.findAllByRole('checkbox');
     expect(checkboxes).toHaveLength(5);
-    expect(checkboxes[0]).toBeChecked();
-    expect(checkboxes[1]).not.toBeChecked();
+
+    // Each checkbox has a distinct accessible name ("Prompt me: {label}") --
+    // findable by role+name, not just by DOM order.
+    expect(screen.getByRole('checkbox', { name: 'Prompt me: Dramatic Moment' })).toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: 'Prompt me: Audere / Audere Majora' })
+    ).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Prompt me: Miracles' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Prompt me: Deaths' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Prompt me: Stake outcomes' })).toBeChecked();
 
     expect(screen.getByText('Player actions')).toBeInTheDocument();
     expect(screen.getByText('Never prompt. Players write their own.')).toBeInTheDocument();
@@ -69,15 +77,17 @@ describe('GMPromptFilterCard', () => {
 
     render(<GMPromptFilterCard />, { wrapper: createWrapper() });
 
-    const checkboxes = await screen.findAllByRole('checkbox');
-    await user.click(checkboxes[1]); // 'audere', currently disabled
+    const audereCheckbox = await screen.findByRole('checkbox', {
+      name: 'Prompt me: Audere / Audere Majora',
+    });
+    await user.click(audereCheckbox); // currently disabled
 
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
     const [url, options] = mockApiFetch.mock.calls[1] as [string, RequestInit];
     expect(url).toBe('/api/gm/prompt-filters/set/');
     expect(JSON.parse(options.body as string)).toEqual({ group: 'audere', enabled: true });
 
-    await waitFor(() => expect(checkboxes[1]).toBeChecked());
+    await waitFor(() => expect(audereCheckbox).toBeChecked());
   });
 
   it('shows the load failure in role="alert"', async () => {

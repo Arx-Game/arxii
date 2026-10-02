@@ -21,10 +21,11 @@ export function NarratedEventTag({
   if (!narrates) return null;
   const whose = narrates.subject_name ? `${narrates.subject_name}'s` : 'a';
   const onlySubject =
+    Boolean(narrates.subject_name) &&
     narrates.subject_persona_id != null &&
     receiverPersonaIds.length === 1 &&
     receiverPersonaIds[0] === narrates.subject_persona_id;
-  const suffix = onlySubject ? ` · visible only to ${narrates.subject_name ?? ''}` : '';
+  const suffix = onlySubject ? ` · visible only to ${narrates.subject_name}` : '';
   return (
     <p data-testid="narrated-event-tag" className="mt-1 text-xs italic text-muted-foreground">
       {`✦ part of ${whose} ${narrates.kind_label}${suffix}`}

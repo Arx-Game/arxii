@@ -81,6 +81,11 @@ export function useSavePreparedCrossingText(sheetId: number) {
       return res.json();
     },
     onSuccess: (row) => queryClient.setQueryData(preparedTextKeys.crossing(sheetId), row),
+    // A save can fail because the row raced out from under the dialog (e.g. a
+    // crossing fired between load and save, see `_ERR_TEXT_ALREADY_USED`) --
+    // invalidate so the next read refetches the real current state instead of
+    // the dialog retrying forever against a now-stale "unused" row.
+    onError: () => queryClient.invalidateQueries({ queryKey: preparedTextKeys.crossing(sheetId) }),
   });
 }
 
@@ -118,5 +123,6 @@ export function useSavePreparedSurgeText(sheetId: number) {
       return res.json();
     },
     onSuccess: (row) => queryClient.setQueryData(preparedTextKeys.surge(sheetId), row),
+    onError: () => queryClient.invalidateQueries({ queryKey: preparedTextKeys.surge(sheetId) }),
   });
 }

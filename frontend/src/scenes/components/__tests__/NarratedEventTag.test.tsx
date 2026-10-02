@@ -44,4 +44,13 @@ describe('NarratedEventTag', () => {
     render(<NarratedEventTag narrates={crossing} receiverPersonaIds={[30, 31]} />);
     expect(screen.getByText("✦ part of Rowan Ashcombe's Crossing")).toBeInTheDocument();
   });
+
+  // Fix round 1, item 12: a persona id with no resolved name must not produce
+  // a suffix naming nobody ("visible only to ").
+  it('does not add the private suffix when subject_name is empty, even if the persona id matches', () => {
+    const noName = { ...crossing, subject_name: '' };
+    render(<NarratedEventTag narrates={noName} receiverPersonaIds={[30]} />);
+    expect(screen.getByText('✦ part of a Crossing')).toBeInTheDocument();
+    expect(screen.queryByText(/visible only to/)).toBeNull();
+  });
 });

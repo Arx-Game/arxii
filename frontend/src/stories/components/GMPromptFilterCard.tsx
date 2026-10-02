@@ -64,6 +64,7 @@ function FilterRow({
           type="checkbox"
           checked={row.enabled}
           onChange={() => onToggle({ group: row.group, enabled: !row.enabled })}
+          aria-label={`Prompt me: ${row.label}`}
         />
       </label>
     </li>
