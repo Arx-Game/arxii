@@ -53,6 +53,9 @@ _OPENER_COST = 1
 #: ``ModifierTarget`` the tier value lands on; each is seeded elsewhere
 #: (``allure`` by ``social_relationships``, ``menace``/``regal`` by
 #: ``crafting_materials``) and skipped here when a clone has none.
+#: The four rows' names, for the admin's required-content probe (#4104).
+FEATURE_ROW_NAMES: tuple[str, ...] = ("Make It Distinctive", "Alluring", "Menacing", "Regal")
+
 _AXES: tuple[tuple[str, str, str, str], ...] = (
     (
         "alluring-feature",

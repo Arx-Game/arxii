@@ -765,6 +765,90 @@ def _beginnings_without_upbringing() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _beginnings_without_species() -> ProbeResult:
+    """Every active `Beginnings` row allows at least one species (#4104).
+
+    Consumer: the Heritage stage lists only `Beginnings.get_available_species()`.
+    A beginning that allows none offers an empty species list and the stage never
+    completes; the first Umbral stock-take found both of Tenebrum's this way.
+    """
+    from world.character_creation.models import Beginnings  # noqa: PLC0415
+
+    missing = tuple(
+        Beginnings.objects.filter(is_active=True)
+        .filter(allowed_species__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    detail = "" if not missing else f"{len(missing)} active beginning(s) allow no species."
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _beginnings_without_traditions() -> ProbeResult:
+    """Every active `Beginnings` row carries at least one `BeginningTradition` (#4104).
+
+    Consumer: `compute_magic_errors` requires `selected_tradition` on any draft that
+    reaches submission, and the Gift stage offers only the beginning's slate, so a
+    beginning with no slate rows can never be finished.
+    """
+    from world.character_creation.models import Beginnings  # noqa: PLC0415
+
+    missing = tuple(
+        Beginnings.objects.filter(is_active=True)
+        .filter(beginning_traditions__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    detail = "" if not missing else f"{len(missing)} active beginning(s) offer no tradition."
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _realms_without_nobiliary_particles() -> ProbeResult:
+    """Every realm the canon says has nobility carries its `NobiliaryParticle` rows (#4104).
+
+    Consumer: `full_display_name` (#3261) renders `first + particle + house` from the
+    realm's rows; a realm with none renders every house member's name bare, as if it
+    had no nobility. The realms that do are the keys of the ratified canon table
+    (`CANON_NOBILIARY_PARTICLES`, by theme), so Arx, which has none on purpose, never
+    lists here, and a realm lists even before its first house exists.
+    """
+    from world.realms.models import Realm  # noqa: PLC0415
+    from world.seeds.houses import CANON_NOBILIARY_PARTICLES  # noqa: PLC0415
+
+    missing = tuple(
+        Realm.objects.filter(theme__in=CANON_NOBILIARY_PARTICLES)
+        .filter(nobiliary_particles__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    detail = "" if not missing else f"{len(missing)} realm(s) with nobility have no particle rows."
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _probe_feature_distinctions() -> ProbeResult:
+    """The four per-feature Appearance rows exist and are active (#3739, #4104).
+
+    Consumer: the Appearance stage's distinctive-feature path. Without the opener
+    nothing can be made distinctive; without an axis row the Alluring / Menacing /
+    Regal purchases on a feature do not exist. The seed only invents these under
+    SEED_SAMPLE_CONTENT, so a production database has to author them.
+    """
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.seeds.distinctive_features import FEATURE_ROW_NAMES  # noqa: PLC0415
+
+    active = set(
+        Distinction.objects.filter(name__in=FEATURE_ROW_NAMES, is_active=True).values_list(
+            "name", flat=True
+        )
+    )
+    missing = tuple(name for name in FEATURE_ROW_NAMES if name not in active)
+    detail = "" if not missing else f"Missing or inactive feature row(s): {', '.join(missing)}."
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _probe_tradition_state_lines() -> ProbeResult:
     """Every `TraditionState` value has a `TraditionStateLine` row with a non-blank `entry_line`.
 
@@ -1780,6 +1864,79 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "options and cannot finish CG."
             ),
             probe=CustomProbe(fn=_beginnings_without_upbringing),
+        ),
+        ContentDependency(
+            key="character_creation.beginnings_allow_species",
+            label="Beginnings that allow no species",
+            tier=DependencyTier.REQUIRED,
+            consumer="HeritageStage / Beginnings.get_available_species()",
+            consequence=(
+                "A player who picks this beginning sees an empty species list and the "
+                "Heritage stage never completes."
+            ),
+            probe=CustomProbe(fn=_beginnings_without_species),
+            admin_model="Beginnings",
+        ),
+        ContentDependency(
+            key="character_creation.beginnings_have_traditions",
+            label="Beginnings with no tradition on their slate",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/character_creation/validators.py compute_magic_errors()",
+            consequence=(
+                "The Gift stage offers nothing and submission is refused for want of a "
+                "tradition, so no character from this beginning can be finished."
+            ),
+            probe=CustomProbe(fn=_beginnings_without_traditions),
+            admin_model="BeginningTradition",
+        ),
+        ContentDependency(
+            key="societies.realm_nobiliary_particles",
+            label="Realms with nobility but no nobiliary particle rows",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/societies/houses/services.py full_display_name() (#3261)",
+            consequence=(
+                "Every member of every house in the realm renders a bare name, as if "
+                "the realm had no nobility."
+            ),
+            probe=CustomProbe(fn=_realms_without_nobiliary_particles),
+            admin_model="NobiliaryParticle",
+        ),
+        ContentDependency(
+            key="character_creation.appearance_sections",
+            label="Appearance section headings",
+            tier=DependencyTier.REQUIRED,
+            consumer="AppearanceStage (#3709): one block per AppearanceSection",
+            consequence=(
+                "The Appearance chapter has no block to render an offer in, so nothing "
+                "authored for it can be shown or bought."
+            ),
+            probe=AnyRowProbe(label="AppearanceSection"),
+            admin_model="AppearanceSection",
+        ),
+        ContentDependency(
+            key="distinctions.feature_rows",
+            label="Per-feature Appearance distinctions",
+            tier=DependencyTier.REQUIRED,
+            consumer="AppearanceStage distinctive features (#3739, #3756)",
+            consequence=(
+                "Nothing can be made distinctive and Alluring, Menacing and Regal cannot "
+                "be bought on a feature; the seed only invents these rows under "
+                "SEED_SAMPLE_CONTENT."
+            ),
+            probe=CustomProbe(fn=_probe_feature_distinctions),
+            admin_model="Distinction",
+        ),
+        ContentDependency(
+            key="character_sheets.enemy_reasons",
+            label="Enemy reasons",
+            tier=DependencyTier.REQUIRED,
+            consumer="Final Touches enemy picker (#3621, #3709)",
+            consequence=(
+                "The enemy picker offers no reason, so no enemy can be priced and the "
+                "Actor's Sheet's enemy line is unreachable."
+            ),
+            probe=AnyRowProbe(label="EnemyReason"),
+            admin_model="EnemyReason",
         ),
         ContentDependency(
             key="character_creation.tradition_state_lines",
