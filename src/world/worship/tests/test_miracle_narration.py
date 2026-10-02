@@ -80,6 +80,7 @@ class MiracleNarrationTest(TestCase):
         with (
             mock.patch.object(GMPrompt.objects, "create", side_effect=_raise_on_second),
             mock.patch("world.gm.prompt_services.notify_gm_prompt") as notify,
+            self.captureOnCommitCallbacks(execute=True),
         ):
             perform_divine_intervention(sheet, self.being, self.miracle, scene=scene)
 

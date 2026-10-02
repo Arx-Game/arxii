@@ -45,6 +45,17 @@ class StakeOutcomePromptTest(TestCase):
         self.assertEqual(prompt.stake_outcome, outcome)
         self.assertIsNone(prompt.scene)
 
+    def test_blank_narrative_summary_still_prompts(self):  # ruling R8-2
+        """A blank narrative_summary is still a 'this stake resolved' notice --
+        the prompt goes out to the Lead GM with an empty room_text, not withheld."""
+        stake = self._stake()
+        resolution = StakeResolutionFactory(stake=stake, narrative_summary="")
+        outcome = self._fire(stake, resolution)
+        prompt = GMPrompt.objects.get(kind=GMPromptKind.STAKE_OUTCOME)
+        self.assertEqual(prompt.addressed_to, self.table.gm.account)
+        self.assertEqual(prompt.room_text, "")
+        self.assertEqual(prompt.stake_outcome, outcome)
+
     def test_orphaned_story_prompts_no_one(self):
         stake = StakeFactory()
         self._fire(stake, StakeResolutionFactory(stake=stake))
@@ -72,6 +83,7 @@ class StakeOutcomePromptTest(TestCase):
         with (
             mock.patch.object(GMPrompt.objects, "create", side_effect=DatabaseError("boom")),
             mock.patch("world.gm.prompt_services.notify_gm_prompt") as notify,
+            self.captureOnCommitCallbacks(execute=True),
         ):
             outcome = self._fire(stake, resolution)
 

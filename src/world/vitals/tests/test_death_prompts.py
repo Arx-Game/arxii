@@ -89,6 +89,7 @@ class DeathPromptTest(TestCase):
             mock.patch.object(GMPrompt.objects, "create", side_effect=_raise_on_second),
             mock.patch("world.gm.prompt_services.notify_gm_prompt") as notify,
             mock.patch("world.conditions.services.has_death_deferred", return_value=False),
+            self.captureOnCommitCallbacks(execute=True),
         ):
             defer_or_apply_certain_death(sheet)
 

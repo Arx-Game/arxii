@@ -618,12 +618,23 @@ def _route_stake_outcome(
     """The resolved branch's story line goes to the story's Lead GM (#4101 decision 11).
 
     Scene-less by design: it reaches that GM wherever the stake resolved. An
-    orphaned story (no primary table) prompts no one, as before. There is no
-    authored fallback line to broadcast when nobody is listening (a muted Lead
+    orphaned story (no primary table) prompts no one, as before. A blank
+    ``narrative_summary`` still prompts (#4101 fix round 1, ruling R8-2) -- it
+    is a "this stake resolved" notice even with nothing authored to read aloud,
+    so there is no gate on ``room_text`` being non-empty. There is no authored
+    fallback line to broadcast when nobody is listening at all (a muted Lead
     GM, or a Lead GM who is also the event's own subject) -- ``_deliver`` is a
     no-op, kept only for shape consistency with its siblings
     (``_route_miracle``/``_route_death``/``_route_ultimate_chosen``/
     ``_route_crossing``).
+
+    The Lead GM lookup (``_fire_time_custody_actor``) runs INSIDE the same
+    ``transaction.atomic()`` as ``route_narratable_event`` (#4101 fix round 1,
+    ruling R8-1 shape) -- a ``DatabaseError`` from either is caught by the one
+    ``except`` below, matching ``_route_miracle``'s scene-lookup placement. A
+    bare ``return`` from inside that ``with`` block is a normal, non-exceptional
+    exit (nothing was written yet) and leaves the function via the same path
+    whether or not a GM was found.
 
     The concurrent-loser branch (``except IntegrityError: ... return existing``
     in ``_fire_branch_and_record``) returns before this ever runs, so a stake
@@ -633,15 +644,14 @@ def _route_stake_outcome(
     from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
     from world.gm.types import NarratableEvent  # noqa: PLC0415
 
-    lead_gm = _fire_time_custody_actor(stake.beat.episode.chapter.story)
-    if lead_gm is None:
-        return
-
     def _deliver() -> None:
         return
 
     try:
         with transaction.atomic():
+            lead_gm = _fire_time_custody_actor(stake.beat.episode.chapter.story)
+            if lead_gm is None:
+                return
             prompts = route_narratable_event(
                 NarratableEvent(
                     kind=GMPromptKind.STAKE_OUTCOME,

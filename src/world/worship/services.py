@@ -276,11 +276,15 @@ def _route_miracle(character_sheet: "CharacterSheet", text: str, scene=None) -> 
 
     Follows the shape of ``_announce_surge``/``_route_ultimate_chosen``/``_route_crossing``
     (``world/magic/audere.py`` et al.): the scene lookup and ``route_narratable_event``
-    call run inside their own ``transaction.atomic()``, so a ``DatabaseError`` raised
-    from in there is contained to this savepoint rather than aborting whatever
-    enclosing transaction the caller is in. ``_deliver()`` -- the unprompted
-    broadcast -- runs exactly once, outside the try/except, keyed on whether
-    ``route_narratable_event`` actually produced any prompts.
+    call run inside the same ``transaction.atomic()``, so a ``DatabaseError`` raised
+    from either is contained to this savepoint rather than aborting whatever
+    enclosing transaction the caller is in (#4101 fix round 1, ruling R8-1 shape).
+    ``_deliver()`` -- the unprompted broadcast -- runs exactly once, outside the
+    try/except, keyed on whether ``route_narratable_event`` actually produced any
+    prompts; it passes the caller's own ``scene`` argument (possibly None) rather
+    than a variable resolved inside the try, since that resolution may never have
+    run if the try raised before reaching it -- ``_broadcast_miracle_narrative``
+    re-resolves a None scene by the character's current location itself.
     """
     from django.db import DatabaseError, transaction  # noqa: PLC0415
 
@@ -290,18 +294,21 @@ def _route_miracle(character_sheet: "CharacterSheet", text: str, scene=None) -> 
     from world.scenes.models import Scene  # noqa: PLC0415
 
     character = character_sheet.character
-    if scene is None:
-        scene = Scene.objects.active_for_room(character.location).first()
 
     def _deliver() -> None:
         _broadcast_miracle_narrative(character, text, scene)
 
     try:
         with transaction.atomic():
+            routed_scene = (
+                scene
+                if scene is not None
+                else Scene.objects.active_for_room(character.location).first()
+            )
             prompts = route_narratable_event(
                 NarratableEvent(
                     kind=GMPromptKind.MIRACLE,
-                    scene=scene,
+                    scene=routed_scene,
                     character_sheet=character_sheet,
                     room_text=text,
                 ),
