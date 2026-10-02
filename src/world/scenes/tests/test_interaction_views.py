@@ -1545,7 +1545,7 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(27):  # dropped from 52 by #3816 (see below)
+        with self.assertNumQueries(26):  # 52->27 by #3816, 27->26 by #4101 (see below)
             # #3816 dropped this from 52 to 27: Interaction.cached_receivers /
             # cached_target_personas / cached_favorites / cached_reactions /
             # cached_action_links were plain @property/@x.setter pairs backed by
@@ -1561,6 +1561,10 @@ class InteractionListQueryBudgetTests(APITestCase):
             # correctly for the first time, replacing 5 × N per-row queries
             # with 5 flat ones — the query count no longer scales with the
             # number of interactions on the page.
+            # #4101 dropped this further, 27->26: the per-pose dramatic-moment-
+            # suggestion embed's GM/owner-participation pre-seed query (the
+            # `_viewer_can_gm_cache` context key) was removed along with the
+            # embed's one reader, `InteractionListSerializer._viewer_can_gm_scene`.
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -1640,7 +1644,7 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(27):  # dropped from 52 by #3816 — see the sibling test above
+        with self.assertNumQueries(26):  # 52->27 by #3816, 27->26 by #4101 — see above
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset
@@ -1659,7 +1663,9 @@ class InteractionListQueryBudgetTests(APITestCase):
         only ever reads plain scalars (id/content/mode/timestamp) off the
         already-fetched row. So GET /api/interactions/?scene=<id> was already
         query-flat as action-link count grows; this test pins that
-        ALREADY-correct behavior at the existing 27-query budget instead of
+        ALREADY-correct behavior at the existing 26-query budget (27 until
+        #4101 dropped the retired per-pose suggestion embed's GM/owner
+        pre-seed query — see the sibling tests above) instead of
         adding a batch fetch for a relation nothing reads (a batch-fetch
         commit was reverted in favor of this test).
 
@@ -1687,7 +1693,7 @@ class InteractionListQueryBudgetTests(APITestCase):
         idmapper_models.flush_cache()
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(27):  # unchanged from the sibling tests above
+        with self.assertNumQueries(26):  # unchanged from the sibling tests above (27->26 by #4101)
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         results = response.data["results"]
@@ -1704,16 +1710,21 @@ class InteractionListQueryBudgetTests(APITestCase):
         `PlayPosesQueryBudgetTests` (`test_play_views.py`) for the full mechanism
         explanation; this pins the same behavior for `GET /api/interactions/`.
 
-        7 is the measured floor here (vs. that endpoint's 8): (1) session, (2)
+        6 is the measured floor here (vs. that endpoint's 8): (1) session, (2)
         `Block` list, (3) the outer paginated `Interaction` select, (4) the
         `SceneEntryEndorsement` batch for this scene's ENTRY poses, (5) the
-        GM/owner-participation check that gates PENDING dramatic-moment
-        suggestions, (6) the read-receipt batch, (7) the mute-list batch. None of the 5
+        read-receipt batch, (6) the mute-list batch. None of the 5
         `cached_*` satellite-relation Prefetch queries this plan converted to
         `PrunedCachedProperty` ran a second time -- verified directly against
         the captured query log.
 
-        The 7-vs-8 delta is NOT explained by "this endpoint is missing 3
+        (Until #4101, this floor was 7: a GM/owner-participation check that
+        gated the per-pose dramatic-moment-suggestion embed sat between items
+        (4) and (5) above. Retiring that embed deleted both its serializer
+        reader, `InteractionListSerializer._viewer_can_gm_scene`, and its
+        `get_serializer_context` pre-seed query, dropping this floor by one.)
+
+        The 6-vs-8 delta is NOT explained by "this endpoint is missing 3
         batches" -- and neither of the two sides of it is really a fixed
         endpoint difference; both are shared code that happens to no-op for a
         different reason on each side.
@@ -1727,46 +1738,37 @@ class InteractionListQueryBudgetTests(APITestCase):
         `/api/interactions/?scene=` would pay for all 3 of those batches too:
         pure fixture-shape coincidence, not an endpoint capability gap.
 
-        Both the `SceneEntryEndorsement` batch and the GM/owner check are
-        populated by the same `if scene_id:` block in the shared
-        `InteractionViewSet.get_serializer_context`
-        (`interaction_views.py:236-270`) -- so `/api/interactions/?scene=`
-        pays both on EVERY request, cold and warm (items (4) and (5) above),
-        and `/api/play/poses/?conversation=scene:<id>` pays neither. They
-        differ only in what happens when that context is empty: `_entry_rows`
-        finds an empty dict and the field renders empty, while
-        `_viewer_can_gm_scene` (`interaction_serializers.py:813`) falls
-        through to `scene.is_gm()`/`is_owner()` -- one `SceneParticipation`
-        query on play's cold request, zero warm, since those read
-        `participations_cached`, a `@cached_property` on the same
-        idmapper-resident `Scene` the first request already warmed. Neither
-        half is endpoint-structural; both track the query-param spelling.
-        `/api/play/poses/?scene=<id>` is a real production call shape
-        (`InteractionFilter.scene`, `interaction_filters.py:24`;
-        `frontend/src/game/playQueries.ts:52`, `GamePage.tsx:621`), and
-        issuing it would make play pay both batches on every request, exactly
-        like this endpoint.
+        The `SceneEntryEndorsement` batch is populated by the `if scene_id:`
+        block in the shared `InteractionViewSet.get_serializer_context` --
+        so `/api/interactions/?scene=` pays it on EVERY request, cold and warm
+        (item (4) above), while `/api/play/poses/?conversation=scene:<id>`
+        pays nothing from that block at all (a different viewset, with its
+        own `get_serializer_context`). `/api/play/poses/?scene=<id>` is a
+        real production call shape (`InteractionFilter.scene`,
+        `interaction_filters.py:24`; `frontend/src/game/playQueries.ts:52`,
+        `GamePage.tsx:621`), and issuing it would make play pay that batch on
+        every request too, exactly like this endpoint.
 
         For the same reason, don't read anything structural into the two
-        endpoints' matching COLD budgets (27 and 27, pinned here and in
+        endpoints' matching COLD budgets (26 and 26, pinned here and in
         `PlayPosesQueryBudgetTests`) -- that match is a coincidence of two
         genuinely different pages (3 interactions / 2+2 endorsements here vs.
         6 interactions / 0 endorsements there) landing on the same total by
         chance, not evidence the two endpoints share a query floor or the
-        same batch composition. The warm counts (7 and 8) already prove they
+        same batch composition. The warm counts (6 and 8) already prove they
         don't, and for two different reasons: swap in a fixture with threaded
         replies and this endpoint's warm floor climbs PAST
-        `/api/play/poses/`'s -- 7 (this endpoint's own 2 scene-gated batches,
-        unaffected) + 3 (the reply-chip batches, fixture-shape) = 10, not an
+        `/api/play/poses/`'s -- 6 (this endpoint's own 1 scene-gated batch,
+        unaffected) + 3 (the reply-chip batches, fixture-shape) = 9, not an
         approach toward 8. Separately, calling `/api/play/poses/?scene=<id>`
-        instead of `?conversation=scene:<id>` would add both scene-gated
-        batches to play's warm floor as well -- request-shape, not a
+        instead of `?conversation=scene:<id>` would add that scene-gated
+        batch to play's warm floor as well -- request-shape, not a
         structural property of either endpoint.
         """
         url = reverse("interaction-list")
         first = self.client.get(url, {"scene": self.scene.pk})
         assert first.status_code == 200
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(6):
             second = self.client.get(url, {"scene": self.scene.pk})
         assert second.status_code == 200
         assert len(second.data["results"]) == 3

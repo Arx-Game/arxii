@@ -826,33 +826,6 @@ class InteractionListSerializer(serializers.ModelSerializer):
         self.context[cache_key] = revealed
         return revealed
 
-    def _viewer_can_gm_scene(self, scene: Scene | None) -> bool:
-        """Mirror ``SceneListSerializer.get_viewer_can_gm`` for this interaction's scene (#2183).
-
-        Cached on the serializer context per scene id (a page of interactions can, in
-        principle, span more than one scene). For the common ``?scene=<id>`` list request,
-        ``InteractionViewSet.get_serializer_context`` pre-seeds this cache with the one
-        relevant scene's answer computed via a single targeted ``SceneParticipation``
-        query — so this field never falls through to ``scene.is_gm()``/``scene.is_owner()``
-        (which would cost a fresh ``participations_cached`` query per distinct in-memory
-        Scene instance, since ``select_related`` builds a new one per row). The fallback
-        below only fires for requests without a scene filter.
-        """
-        if scene is None:
-            return False
-        cache: dict[int, bool] = self.context.setdefault("_viewer_can_gm_cache", {})
-        if scene.pk in cache:
-            return cache[scene.pk]
-        request = self.context.get("request")
-        user = request.user if request is not None else None
-        result = bool(
-            user is not None
-            and user.is_authenticated
-            and (user.is_staff or scene.is_gm(user) or scene.is_owner(user))
-        )
-        cache[scene.pk] = result
-        return result
-
     def get_narrates(self, obj: Interaction) -> NarratedEventPayload | None:
         """The event this row narrates (#4101), e.g. "part of X's Crossing".
 

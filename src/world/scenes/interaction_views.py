@@ -5,7 +5,7 @@ from http import HTTPMethod
 from typing import Any
 from uuid import UUID
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -59,7 +59,6 @@ from world.scenes.models import (
     Persona,
     ReactionEmoji,
     Scene,
-    SceneParticipation,
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reachability import UnreachableError
@@ -313,26 +312,6 @@ class InteractionViewSet(
             for r in rows:
                 entry_map.setdefault(r.endorsee_sheet_id, []).append(r)
         context["scene_entry_endorsements"] = entry_map
-        # Viewer's GM/owner status for the ?scene= filter, computed once per
-        # request (not once per interaction row, and not via Scene.is_gm()/
-        # is_owner()'s participations_cached — a fresh query per distinct
-        # in-memory Scene instance since select_related builds a new one per
-        # row). Pre-seeds InteractionListSerializer._viewer_can_gm_scene's
-        # per-scene cache directly so the dramatic_moment_suggestions field
-        # never re-derives it (#2183).
-        viewer_can_gm_cache: dict[int, bool] = {}
-        if scene_id:
-            user = self.request.user
-            if user.is_authenticated:
-                viewer_can_gm_cache[int(scene_id)] = bool(
-                    user.is_staff
-                    or SceneParticipation.objects.filter(
-                        Q(is_gm=True) | Q(is_owner=True),
-                        scene_id=scene_id,
-                        account_id=user.pk,
-                    ).exists()
-                )
-        context["_viewer_can_gm_cache"] = viewer_can_gm_cache
         return context
 
     def get_queryset(self) -> QuerySet[Interaction]:

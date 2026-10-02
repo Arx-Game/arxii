@@ -41,8 +41,11 @@ class NarratedEventFieldTest(APITestCase):
         url = reverse("interaction-list")
         # Pinned count (not a scaling claim): proves the prompt_narrations Prefetch
         # batches both rows in one query (see query #18 of the captured list when this
-        # was derived) rather than issuing one per narrated row.
-        with self.assertNumQueries(26):
+        # was derived) rather than issuing one per narrated row. 25, not 26: the
+        # GM/owner-participation pre-seed query this endpoint used to pay on every
+        # request was removed as dead code (#4101 fix round 1) along with the retired
+        # per-pose suggestion embed, its one reader.
+        with self.assertNumQueries(25):
             resp = self.client.get(url, {"scene": self.scene.pk})
         self.assertEqual(resp.status_code, 200, resp.data)
         rows = {row["id"]: row for row in resp.data["results"]}
