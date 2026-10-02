@@ -174,8 +174,13 @@ Three other ways an item leaves play also go through it:
 the game object to the row, not back, so a bare row delete leaves the item's
 `ObjectDB` on the character as a ghost. `consume_materials` did exactly this until
 #4099, and the `item-destroy-reviewer` agent (`tools/agents/`) exists to catch the
-shape. Because a soft-deleted stack keeps its row at quantity 0, `gather_consumable_pks`
-skips any instance with `quantity <= 0`.
+shape. Because a soft-deleted stack keeps its row (at quantity 0 when used up) **and its
+`holder_character_sheet`**, `gather_consumable_pks` skips any instance that is empty or
+has `destroyed_at` set. Every holder-keyed reader uses `ItemInstance.objects.in_play()`:
+crafting costs and quotes, the fence action, estate inheritance, the has-item predicate,
+boon pointers, showcase and event lookups. `sell_to_fence` also refuses a destroyed row.
+Without this, a fenced item with a history could be fenced again for a second payout.
+The helper also unequips the item (`unequip_item`) before it leaves play.
 
 ### Time-based cleanup of soft-deleted items
 

@@ -6832,11 +6832,13 @@ holder is never notified a claim exists.
     (no `on_use_pool`) or `NoChargesRemaining` (consumable at 0 charges)
   - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
     deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
-  - `destroy_consumed_item_instance(item_instance, *, preserve=None, note) -> None`
+  - `destroy_consumed_item_instance(item_instance, *, preserve=None, note, event_type=CONSUMED) -> None`
     (`world/items/services/usage.py`, #4099) — THE rule for an item consumption uses up:
     soft-delete when `differs_from_template` (destroyed_at, game object out of play,
-    CONSUMED event), else `hard_delete_item_instance`; invalidates the holder's
-    `carried_items`. Called by `consume_item_charges` and `consume_materials`
+    CONSUMED event, or `event_type`), else `hard_delete_item_instance`; unequips first
+    and invalidates the holder's `carried_items`. Called by `consume_item_charges`,
+    `consume_materials`, building completion, shattered gems and `sell_to_fence`. A
+    soft-deleted row keeps its holder, so holder-keyed readers use `in_play()`
   - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
     — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
     by the `items.soft_delete_cleanup` daily cron task (#1025)

@@ -81,7 +81,8 @@ class CmdEvidence(ArxCommand):
             return []
         return list(
             CrimeEvidence.objects.filter(
-                item_instance__holder_character_sheet=sheet
+                item_instance__holder_character_sheet=sheet,
+                item_instance__destroyed_at__isnull=True,
             ).select_related("deed")
         )
 

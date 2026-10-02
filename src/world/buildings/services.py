@@ -468,6 +468,10 @@ def complete_building_construction(
             "item_instance__template__minimum_quality_tier",
             "item_instance__quality_tier",
             "item_instance__holder_character_sheet",
+            # #4099: destroy_consumed_item_instance reads the game object and its
+            # location (the holder whose carried_items it invalidates); load both here
+            # so the per-item loop does writes only.
+            "item_instance__game_object__db_location",
             "contributor_persona",
         )
     )

@@ -401,7 +401,7 @@ def _estate_has_assets(sheet: CharacterSheet) -> bool:
     from world.items.models import ItemInstance  # noqa: PLC0415
     from world.locations.models import LocationOwnership  # noqa: PLC0415
 
-    if ItemInstance.objects.filter(holder_character_sheet=sheet).exists():
+    if ItemInstance.objects.in_play().filter(holder_character_sheet=sheet).exists():
         return True
     purse = CharacterPurse.objects.filter(character_sheet=sheet).first()
     if purse is not None and purse.balance > 0:
@@ -758,8 +758,11 @@ def _sweep_residuary_items(
     """Flip or clear each undelivered item in the estate."""
     from world.items.models import ItemInstance  # noqa: PLC0415
 
-    items = ItemInstance.objects.filter(holder_character_sheet=sheet).exclude(
-        pk__in=delivered_item_ids
+    # #4099: a soft-deleted item keeps its holder; never hand one to an heir.
+    items = (
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=sheet)
+        .exclude(pk__in=delivered_item_ids)
     )
     for item in items:
         if heir_persona is not None and _persona_can_receive_item(heir_persona, item):

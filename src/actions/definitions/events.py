@@ -707,9 +707,11 @@ def _find_local_item(actor: ObjectDB, name: str):
     if not name:
         return None
     sheet = actor.character_sheet
-    held = ItemInstance.objects.filter(
-        holder_character_sheet=sheet, template__name__iexact=name
-    ).first()
+    held = (
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=sheet, template__name__iexact=name)
+        .first()
+    )
     if held is not None:
         return held
     room = actor.location

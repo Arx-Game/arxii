@@ -31,8 +31,11 @@ item, so a name-based lint is not precise without type inference.
 
 ## The canonical helpers (`world/items/services/usage.py`)
 
-- `destroy_consumed_item_instance(item_instance, *, preserve=None, note=...)`: THE rule
-  for an item used up. If the item `differs_from_template` (per-instance data or
+- `destroy_consumed_item_instance(item_instance, *, preserve=None, note, event_type=CONSUMED)`:
+  THE rule for an item that leaves play. It unequips the item through `unequip_item`
+  first. `event_type` is the ledger entry a soft-delete writes: CONSUMED for use,
+  TRANSFERRED (no receiver) for an item that changed hands out of play, such as one sold
+  to a fence. If the item `differs_from_template` (per-instance data or
   provenance) it is soft-deleted: `destroyed_at` is set, its game object gets
   `location = None` and is kept, and a CONSUMED `OwnershipEvent` is logged. Otherwise
   it goes through `hard_delete_item_instance`. Either way it invalidates the holder's
@@ -41,6 +44,23 @@ item, so a name-based lint is not precise without type inference.
   events first, then the game object, which cascades to the row; or the row alone when
   it has no game object). Used by recycling and the soft-delete cleanup.
 - `forfeit_item_instance`: a story consequence (stakes), always a soft-delete.
+
+## The in-play reader rule
+
+**A soft-deleted row keeps its holder. Every holder-keyed reader must use
+`ItemInstance.objects.in_play()`** (or filter `destroyed_at__isnull=True` across a
+relation). Origin, #4099 review: after fencing, consumption and building completion began
+soft-deleting items with a history, the fence action still looked items up with
+`ItemInstance.objects.filter(holder_character_sheet=...)`. It found the fenced row
+again, so the same item could be fenced again for a second payout: a money mint.
+Crafting costs and estate inheritance had the same blind spot.
+
+When a diff adds or touches a query keyed on `holder_character_sheet` (or
+`item_instance__holder_character_sheet`), check that it is in-play-only, unless it
+deliberately wants history: provenance views, admin, ownership logs. Location-keyed
+readers (`game_object__db_location`, `carried_items`) are safe, because a soft-delete
+always takes the game object out of play. Every sell, consume or transfer service should
+also refuse a row with `destroyed_at` set, as `sell_to_fence` now does.
 
 ## What to look for in the diff
 

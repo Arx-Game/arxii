@@ -842,9 +842,9 @@ def pointer_known_items_for_target(
 
     options: list[PointerItemOption] = [
         PointerItemOption(item_instance_id=item.pk, name=str(item), source="held")
-        for item in ItemInstance.objects.filter(
-            holder_character_sheet=target_persona.character_sheet
-        ).filter(pointer_filter)
+        for item in ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=target_persona.character_sheet)
+        .filter(pointer_filter)
     ]
 
     vault_ids = _target_accessible_vault_ids(target_persona)

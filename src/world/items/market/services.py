@@ -432,6 +432,11 @@ def sell_to_fence(seller: Persona, stall: MarketStall, instance: ItemInstance) -
     if stall.stall_kind != MarketStall.StallKind.FENCE:
         msg = "not a fence stall"
         raise MarketServiceError(msg, user_message="That stall does not buy.")
+    if instance.destroyed_at is not None:
+        # #4099: a soft-deleted item keeps its holder; without this a fenced item with
+        # a history could be fenced again for a second payout.
+        msg = "item is no longer in play"
+        raise MarketServiceError(msg, user_message="You no longer have that to sell.")
     holder = instance.holder_character_sheet
     seller_sheet = seller.character_sheet
     if holder is None or seller_sheet is None or holder.pk != seller_sheet.pk:

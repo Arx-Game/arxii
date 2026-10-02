@@ -78,15 +78,23 @@ def destroy_consumed_item_instance(
     """
     if preserve is None:
         preserve = item_instance.differs_from_template
+    # An item leaving play is no longer worn: unequip through the canonical service,
+    # which also invalidates the wearer's equipped_items handler.
+    from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+    for equipped in EquippedItem.objects.filter(item_instance=item_instance).select_related(
+        "character"
+    ):
+        unequip_item(equipped_item=equipped)
     game_object = item_instance.game_object
     holder_object = game_object.location if game_object is not None else None
     if preserve:
         item_instance.destroyed_at = timezone.now()
         item_instance.save(update_fields=["destroyed_at", "quantity", "charges"])
         if game_object is not None:
-            # Relocate, never delete: the preserved row keeps its game object.
+            # Relocate, never delete: the preserved row keeps its game object. The
+            # location setter persists db_location itself; no second full save.
             game_object.location = None
-            game_object.save()
         OwnershipEvent.objects.create(
             item_instance=item_instance,
             event_type=event_type,
@@ -104,7 +112,9 @@ def _invalidate_caches(item_instance: ItemInstance) -> None:
         with contextlib.suppress(AttributeError):
             delattr(item_instance, attr)
     for equipped in EquippedItem.objects.filter(item_instance=item_instance):
-        equipped.character.equipped_items.invalidate()
+        # EquippedItem.character is a CharacterSheet; the cached handler hangs off its
+        # Character typeclass, not the sheet's related manager.
+        equipped.character.character.equipped_items.invalidate()
 
 
 @transaction.atomic
@@ -130,7 +140,7 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
     _invalidate_caches(locked)
     if locked.charges == 0:
         destroy_consumed_item_instance(
-            locked, preserve=preserve, note="Consumed — final charge spent (preserved)."
+            locked, preserve=preserve, note="Consumed: final charge spent."
         )
     return locked
 
