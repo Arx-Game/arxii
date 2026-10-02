@@ -1146,21 +1146,22 @@ costed separately in CG points:
   creation when its `creation_point_cost` is set). Its `power_bonus` is added straight to
   every cast's power as a power-ledger term, and its `cast_narration` joins the cast line;
 - an **early form** (`CharacterTechnique.early_form`, a `TechniqueVariant` bought before
-  the gift thread reaches its level). Honored by the variant resolver only for its buyer, at
-  the hold's own resonance, and never for a role-granted hold.
+  the gift thread reaches its level). Honored by the variant resolver only for its buyer,
+  only when the cast's resolved resonance matches the form's own authored resonance (a hold
+  carries no resonance of its own), and never for a role-granted hold.
 
 **Services** (`src/world/magic/services/technique_personalization.py`, the hold-reading
 seam used everywhere a technique's own name/price appears):
 
 | Function | Purpose |
 |----------|---------|
-| `clean_custom_technique_name(value) -> str` | Hygiene for a player-typed name: strips markup/control characters, collapses whitespace, rejects an em/en-dash, enforces the length cap. Raises `InvalidPersonalText`. |
+| `clean_custom_technique_name(value) -> str` | Hygiene for a player-typed name: collapses whitespace, then REJECTS (raises, does not strip) an em/en-dash, `\|` markup, or a control character, and enforces the length cap. Raises `InvalidPersonalText`. The web client strips those characters client-side before submit (`sanitizeCustomName`, `PersonalizationPanel.tsx`), so this server check is normally unreachable from the UI, but it is what actually rejects a request that skips the client (API/telnet). |
 | `clean_custom_technique_description(value) -> str` | Same hygiene for the description (newlines allowed). |
 | `hold_display_name(hold, *, fallback) -> str` | `hold.custom_name` if set, else `fallback`. |
 | `technique_display_name(character, technique, *, fallback=None) -> str` | Reads the caster's own hold (via the cached handler) and returns its display name, else the catalog name. |
 | `technique_price_for(character, technique) -> Restriction \| None` | The caster's own price for this technique, or `None`. |
 | `resolve_price_snippet(character, technique) -> str \| None` | The price's `cast_narration` (or name) for narration, or `None` when unpriced. |
-| `seed_motif_from_gift_resonance(sheet, resonance) -> MotifResonance` | Seeds a `Motif`/`MotifResonance` for a brand-new character at finalize, so an early flourish or price has a resonance to attach to from the start. |
+| `seed_motif_from_gift_resonance(sheet, resonance) -> MotifResonance` | Seeds a `Motif`/`MotifResonance` for a brand-new character at finalize, so a flourish (resonance-gated via `required_resonance`; a price carries no resonance of its own) can qualify once the gift resonance resolves. |
 
 **Creation services** (`src/world/magic/services/creation_personalization.py`, the
 draft-time half):
@@ -1193,12 +1194,14 @@ in raw cast-power units, never through the technique builder's design-side refun
 multiplier.
 
 **Early form resolution** (`world/magic/specialization/services.py`,
-`_resolve_technique_variant`): before falling back to the thread-derived variant, checks
-the caster's own hold for an `early_form` at the hold's own resonance. Applies only when the
-hold is not role-granted (`role_source_id is None`); a role-granted hold's `early_form`
-never leaks to the role-holder. A naturally-reached higher-level form still beats an early
-pick once the thread catches up; `TechniqueFormSerializer.is_early` marks a payload row
-bought this way.
+`_resolve_technique_variant`): after the ordinary thread-derived variant match, checks the
+caster's own hold for an `early_form` whose OWN authored resonance equals the cast's
+resolved resonance (a hold carries no resonance of its own — only the `TechniqueVariant`
+row does). Applies only when the hold is not role-granted (`role_source_id is None`); a
+role-granted hold's `early_form` never leaks to the role-holder. A naturally-reached
+higher-level form still beats an early pick once the thread catches up (compared by
+`unlock_thread_level`); `TechniqueFormSerializer.is_early` marks a payload row bought this
+way.
 
 **Exceptions** (`exceptions.py`): `CreationThreadLevelTooHigh` (raised by
 `weave_creation_technique_thread`). `InvalidPersonalText` (raised by the name/description

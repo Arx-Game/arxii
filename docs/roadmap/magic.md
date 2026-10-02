@@ -340,8 +340,9 @@ reaching thread level 3 in play. Built:
   TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) so an early flourish is
   reachable without skipping a crossing.
 - **Early forms.** An `early_form` bought in creation applies before the gift thread
-  reaches it, for its buyer only, at the hold's own resonance, never for a role-granted
-  hold.
+  reaches it, for its buyer only, when the cast's resolved resonance matches the form's
+  own authored resonance (checked after ordinary variant matching, not before falling
+  back — a hold carries no resonance of its own), never for a role-granted hold.
 - Rationale + rejected alternatives: ADR-4099 (supersedes in part ADR-0136's "mechanical
   personalization starts at level 3" clause). Full model/service/endpoint detail:
   `docs/systems/magic.md`'s "Technique personalization" section,

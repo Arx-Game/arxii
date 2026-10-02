@@ -9,7 +9,9 @@ the shared catalog `Technique`. The hold carries: the player's own `custom_name`
 `Restriction` with `kind=PRICE`, whose `power_bonus` is added to every cast as a
 power-ledger term and whose `cast_narration` joins the cast narration); and an `early_form`
 (a `TechniqueVariant` bought before the gift thread reaches its level, honored by the
-variant resolver at its own resonance, for its buyer only, never for a role-granted hold).
+variant resolver only when the cast's resolved resonance matches the form's own authored
+resonance, checked after ordinary variant matching, for its buyer only, never for a
+role-granted hold).
 Price lives as a `kind` on the existing `Restriction` model rather than a sibling table, so
 design-side limitation and cast-time price share one catalog with a discriminator instead
 of two parallel mechanisms.
@@ -21,14 +23,15 @@ authored `min_crossing_level` is now the only gate, so flourishes grow as the th
 imbued rather than unlocking in one step at level 3. Each catalog row (price, flourish, or
 early form) is offered in creation only when staff set its `creation_point_cost`; a blank
 cost means the option is not offered, and every creation cost is non-negative. A Motif is
-seeded for every new character at finalize, so an early flourish or price has a resonance to
-attach to from the start. Rename/re-price of a hold is creation-only for this PR (owner
-ruling, 2026-10-01); nothing in play lets a character rename or re-price a technique they
-already hold. The custom name and description are display only and are never used as a
-lookup key anywhere a technique is resolved. A hold's custom description and its price
-follow the same `magic_visibility` tier as the technique itself, per the spec's leak table,
-so neither is stricter nor looser than what the technique's own name and effects already
-reveal to the same viewer.
+seeded for every new character at finalize so a flourish (resonance-gated via its
+`required_resonance`; a price carries no resonance of its own) can qualify once the
+character's gift resonance resolves. Rename/re-price of a hold is creation-only for this
+PR (owner ruling, 2026-10-01); nothing in play lets a character rename or re-price a
+technique they already hold. The custom name and description are display only and are
+never used as a lookup key anywhere a technique is resolved. A hold's custom description
+and its price follow the same `magic_visibility` tier as the technique itself, per the
+spec's leak table, so neither is stricter nor looser than what the technique's own name
+and effects already reveal to the same viewer.
 
 Panel copy (the creation stage's static prose) is seeded at read time through
 `CGExplanation` keys: a missing key renders a visible `PLACEHOLDER: {key}` marker and a

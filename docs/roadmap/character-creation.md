@@ -334,8 +334,9 @@ section for the full #2428/#2440/#2441/#2442 build record.
   /`custom_description`/`price`/`early_form`), never onto the shared catalog
   `Technique`; a flourish pick also weaves a TECHNIQUE thread (up to
   `CREATION_PERSONALIZATION_MAX_LEVEL`, 2) so an early flourish never skips a
-  crossing. A Motif is seeded for every new character at finalize so the pick has a
-  resonance to attach to.
+  crossing. A Motif is seeded for every new character at finalize so a flourish pick
+  (resonance-gated; a price or name/description pick carries no resonance of its own)
+  can qualify once the gift resonance resolves.
 - Personalization is creation-only this release (owner ruling, 2026-10-01); nothing
   in play lets a character rename or re-price a technique they already hold.
 - Play surfaces (the sheet, the castable list, cast and combat narration) now show
