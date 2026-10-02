@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
-from actions.target_resolution import resolve_persona_pk_to_character
+from actions.prerequisites import Prerequisite
+from actions.target_menu_types import MenuTargetKind, MenuTargetRequest, ResolvedMenuTarget
+from actions.target_resolution import resolve_menu_target, resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 
 if TYPE_CHECKING:
+    from typeclasses.types import ArxTypeclass
     from world.items.models import ItemInstance
 
 _LOOK_AT_WHAT_MESSAGE = "Look at what?"
@@ -57,6 +60,26 @@ def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     if target is not None:
         return ObjectDB.objects.filter(pk=target).first()
     return resolve_persona_pk_to_character(kwargs.get("target_persona_id"))
+
+
+def _render_physical_look(
+    actor: ObjectDB,
+    target: ObjectDB,
+    context: ActionContext | None,
+) -> ActionResult:
+    """Render one authorized deliberate physical Look with existing extras."""
+    sdm = context.scene_data if context else SceneDataManager()
+    target_state = sdm.initialize_state_for_object(cast("ArxTypeclass", target))
+    looker_state = sdm.initialize_state_for_object(cast("ArxTypeclass", actor))
+    description = target_state.return_appearance(mode="look", looker=cast(Any, looker_state))
+    from actions.definitions.examine_extras import gather_examine_extras  # noqa: PLC0415
+
+    extras = gather_examine_extras(actor, target)
+    if extras.cancelled:
+        return ActionResult(success=True, message="")
+    if extras.sections:
+        description = f"{description}\n" + "\n".join(extras.sections)
+    return ActionResult(success=True, message=description)
 
 
 @dataclass
@@ -119,29 +142,90 @@ class LookAction(Action):
             if perceives_dreamside(sheet):
                 target = dreamspace_for(sheet) or target
 
-        sdm = context.scene_data if context else SceneDataManager()
-        target_state = sdm.initialize_state_for_object(target)
-        looker_state = sdm.initialize_state_for_object(actor)
-        description = target_state.return_appearance(mode="look", looker=looker_state)
+        return _render_physical_look(actor, target, context)
 
-        # #3084 — every other examine-time display extra (reactive scars, ranking
-        # displays, captivity status, board postings, catering history, crafted
-        # provenance, room functionaries/notice-board hint/heat, and the mission
-        # dispatch #3044 wired here first) lives at this one aggregation seam —
-        # see ADR-0213 and ``actions.definitions.examine_extras``.
-        from actions.definitions.examine_extras import gather_examine_extras  # noqa: PLC0415
 
-        extras = gather_examine_extras(actor, target)
-        if extras.cancelled:
-            # Prior contract: a cancelled examine shows nothing.
-            return ActionResult(success=True, message="")
-        if extras.sections:
-            description = f"{description}\n" + "\n".join(extras.sections)
+ITEM_LOOK_UNAVAILABLE_MESSAGE = "That isn't available to look at."
+_ITEM_LOOK_MENU_TARGET_KEY = "menu_target"
+_ITEM_LOOK_KIND_KEY = "kind"
+_ITEM_LOOK_TARGET_ID_KEY = "target_id"
+_ITEM_LOOK_OWNER_PERSONA_ID_KEY = "owner_persona_id"
+_ITEM_LOOK_CONTAINER_ITEM_ID_KEY = "container_item_id"
+_ITEM_LOOK_LEGACY_FIELDS = frozenset(
+    {
+        "target",
+        _ITEM_LOOK_TARGET_ID_KEY,
+        "item",
+        "item_id",
+        "item_instance_id",
+        "item_name",
+        "owner_id",
+        "container_id",
+        "target_persona_id",
+        _ITEM_LOOK_OWNER_PERSONA_ID_KEY,
+        _ITEM_LOOK_CONTAINER_ITEM_ID_KEY,
+    }
+)
+_ITEM_LOOK_WIRE_FIELDS = frozenset(
+    {
+        _ITEM_LOOK_KIND_KEY,
+        _ITEM_LOOK_TARGET_ID_KEY,
+        _ITEM_LOOK_OWNER_PERSONA_ID_KEY,
+        _ITEM_LOOK_CONTAINER_ITEM_ID_KEY,
+    }
+)
 
-        return ActionResult(
-            success=True,
-            message=description,
-        )
+
+def _item_look_request(kwargs: dict[str, Any]) -> MenuTargetRequest | None:
+    """Parse this action's typed wire input without guessing an ID domain."""
+    if _ITEM_LOOK_LEGACY_FIELDS.intersection(kwargs):
+        return None
+    wire = kwargs.get(_ITEM_LOOK_MENU_TARGET_KEY)
+    if not isinstance(wire, dict) or set(wire).difference(_ITEM_LOOK_WIRE_FIELDS):
+        return None
+    if wire.get(_ITEM_LOOK_KIND_KEY) != MenuTargetKind.ITEMS.value:
+        return None
+    if _ITEM_LOOK_TARGET_ID_KEY not in wire:
+        return None
+    for name in (
+        _ITEM_LOOK_TARGET_ID_KEY,
+        _ITEM_LOOK_OWNER_PERSONA_ID_KEY,
+        _ITEM_LOOK_CONTAINER_ITEM_ID_KEY,
+    ):
+        if name in wire and (type(wire[name]) is not int or wire[name] <= 0):
+            return None
+    if _ITEM_LOOK_OWNER_PERSONA_ID_KEY in wire and _ITEM_LOOK_CONTAINER_ITEM_ID_KEY in wire:
+        return None
+    return MenuTargetRequest(
+        kind=MenuTargetKind.ITEMS,
+        target_id=wire[_ITEM_LOOK_TARGET_ID_KEY],
+        owner_persona_id=wire.get(_ITEM_LOOK_OWNER_PERSONA_ID_KEY),
+        container_item_id=wire.get(_ITEM_LOOK_CONTAINER_ITEM_ID_KEY),
+    )
+
+
+def _resolve_item_look(actor: ObjectDB, kwargs: dict[str, Any]) -> ResolvedMenuTarget | None:
+    """Return this viewer's current authorized item, not cached permission."""
+    request = _item_look_request(kwargs)
+    if request is None:
+        return None
+    resolved = resolve_menu_target(actor, request)
+    if resolved is None or resolved.item is None:
+        return None
+    return resolved
+
+
+@dataclass
+class _TypedItemLookPrerequisite(Prerequisite):
+    """Share typed item visibility between read checks and execution."""
+
+    def is_met(self, actor, target=None, context=None):
+        kwargs = (context or {}).get("kwargs", {})
+        if _ITEM_LOOK_MENU_TARGET_KEY not in kwargs:
+            return True, ""
+        if _resolve_item_look(actor, kwargs) is None:
+            return False, ITEM_LOOK_UNAVAILABLE_MESSAGE
+        return True, ""
 
 
 @dataclass
@@ -169,6 +253,15 @@ class LookAtItemAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        if _ITEM_LOOK_MENU_TARGET_KEY in kwargs:
+            resolved = _resolve_item_look(actor, kwargs)
+            if resolved is None:
+                return ActionResult(success=False, message=ITEM_LOOK_UNAVAILABLE_MESSAGE)
+            if resolved.game_object is not None:
+                return _render_physical_look(actor, resolved.game_object, context)
+            assert resolved.item is not None  # noqa: S101
+            return ActionResult(success=True, message=self._render_item(resolved.item))
+
         item_name = kwargs.get("item_name")
         owner_id = kwargs.get("owner_id")
         container_id = kwargs.get("container_id")
@@ -182,7 +275,48 @@ class LookAtItemAction(Action):
         if owner_id is not None:
             return self._look_at_worn(actor, owner_id, item_name)
 
+        assert container_id is not None  # noqa: S101
         return self._look_at_contained(actor, container_id, item_name)
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), _TypedItemLookPrerequisite()]
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        """Adapt typed item intent and retain the base interception lifecycle."""
+        if actor is None or _ITEM_LOOK_MENU_TARGET_KEY not in context.kwargs:
+            return super()._emit_intent(context, actor)
+        request = _item_look_request(context.kwargs)
+        if request is None:
+            return super()._emit_intent(context, actor)
+        resolved = _resolve_item_look(actor, context.kwargs)
+        original = resolved.game_object if resolved is not None else None
+        context.kwargs["target"] = original
+        cancelled = super()._emit_intent(context, actor)
+        redirected = context.kwargs.pop("target")
+        if cancelled is not None:
+            return cancelled
+        if redirected is original:
+            return None
+        if type(redirected) is int and redirected > 0:
+            redirected = ObjectDB.objects.filter(pk=redirected).first()
+        if not isinstance(redirected, ObjectDB):
+            context.kwargs[_ITEM_LOOK_MENU_TARGET_KEY] = None
+            return None
+        try:
+            item = redirected.item_instance
+        except ObjectDB.item_instance.RelatedObjectDoesNotExist:
+            context.kwargs[_ITEM_LOOK_MENU_TARGET_KEY] = None
+            return None
+        wire = {
+            _ITEM_LOOK_KIND_KEY: MenuTargetKind.ITEMS.value,
+            _ITEM_LOOK_TARGET_ID_KEY: item.pk,
+        }
+        if request.owner_persona_id is not None:
+            wire[_ITEM_LOOK_OWNER_PERSONA_ID_KEY] = request.owner_persona_id
+        if request.container_item_id is not None:
+            wire[_ITEM_LOOK_CONTAINER_ITEM_ID_KEY] = request.container_item_id
+        context.kwargs[_ITEM_LOOK_MENU_TARGET_KEY] = wire
+        return None
 
     def _look_at_worn(
         self,
@@ -229,7 +363,7 @@ class LookAtItemAction(Action):
 
         try:
             container_instance = container_obj.item_instance
-        except ObjectDB.item_instance.RelatedObjectDoesNotExist:  # type: ignore[attr-defined]
+        except ObjectDB.item_instance.RelatedObjectDoesNotExist:
             return ActionResult(success=False, message="That isn't a container.")
 
         # Reach gate: clients can POST any container pk via the action
@@ -318,7 +452,7 @@ class InventoryAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         sdm = context.scene_data if context else SceneDataManager()
-        caller_state = sdm.initialize_state_for_object(actor)
+        caller_state = sdm.initialize_state_for_object(cast("ArxTypeclass", actor))
         items = caller_state.contents
         burden = _burden_line(actor)
         if not items:
