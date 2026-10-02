@@ -22,6 +22,13 @@ It surfaced only when #4099 made price components consumable at every cast. Ever
 test passed, because the tests asserted that the `ItemInstance` row was gone, and it
 was.
 
+**Mechanical half: `tools/lint_destroyed_at_writes.py`** (the `destroyed-at-writes`
+pre-commit hook). It flags any write to `ItemInstance.destroyed_at` outside
+`world/items/services/usage.py`. Hand-rolled soft-deletes in `recycle_item` and
+`redeem_favor_token` (round 3 of #4099) stamped the field and skipped everything else;
+the lint catches that instance, and this agent catches the shape. Suppression needs a
+reason: `# noqa: DESTROYED_AT <reason>`.
+
 **Why the existing gates missed it.** A test that checks "the row no longer exists"
 passes on both the right and the wrong deletion. Only a test that also checks the
 game object (`ObjectDB.objects.filter(pk=...)`), the holder's `carried_items`, or the
@@ -51,7 +58,10 @@ item, so a name-based lint is not precise without type inference.
 (`_take_out_of_play`, shared by `destroy_consumed_item_instance` and
 `forfeit_item_instance`) clears `holder_character_sheet` and `contained_in`; the last
 holder lives on the exit event's `from_character_sheet` (`provenance.last_holder`). A
-destroyed container's contents spill to where it was, still held by their holder. Origin,
+destroyed container's contents spill up one level: into the outer container for a
+pouch-in-a-bag, otherwise to where the container was (carrier or room). If it was
+nowhere, they go to the former holder's character, else their home. They stay held by
+their holder, and a vault room's capacity is respected. Origin,
 #4099 re-review: the in-play reader sweep below caught queries, but not the
 "fetch by pk, then compare `holder_character_sheet_id`" shape. That shape still treated a
 destroyed row as its holder's, which allowed:

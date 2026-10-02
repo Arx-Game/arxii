@@ -182,8 +182,13 @@ never answered by re-pointing the holder. So every "fetch by pk, then compare th
 check refuses a destroyed item by construction: trade, wares, decor, boons, org vault,
 bequests, ritual components and crafting permissions. The same goes for every
 container-chain walk (possession, reach). A destroyed container's contents are never
-destroyed with it: they spill (as `take_out` does) to where the container was, so they
-stay carried by their holder, or stay in the room. Reclamation's `_return_item` refuses
+destroyed with it: they spill (as `take_out` does) up one level. A pouch inside a bag
+leaves its contents in the bag; otherwise they go to where the container was, carried by
+their holder or in the room. A container that was nowhere sends them to its former
+holder's character, else to their own home. A spill into a vault room respects its
+capacity (`VaultFull`, as `drop` does). `recycle_item` and `redeem_favor_token` also go
+through the helper, and the `destroyed-at-writes` pre-commit hook
+(`tools/lint_destroyed_at_writes.py`) rejects any other write to `destroyed_at`. Reclamation's `_return_item` refuses
 a destroyed item, since reclaiming fenced goods is deferred, and
 `file_reclamation_accusation` reads `last_holder`.
 

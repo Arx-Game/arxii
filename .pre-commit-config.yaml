@@ -278,6 +278,22 @@ repos:
         # this codebase is that the function returns the row to a caller that
         # delivers it itself (`world/magic/audere_majora.py`'s `_post_declaration`,
         # whose row `cross_threshold` pushes after finishing the crossing).
+      - id: destroyed-at-writes
+        name: Reject a destroyed_at write outside the canonical destroy helper
+        entry: uv run python tools/lint_destroyed_at_writes.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*\.py$
+        exclude: (/tests/|/migrations/)
+        # #4099 (2026-10-02): the fence, recycle_item and redeem_favor_token each
+        # hand-rolled a soft-delete by stamping ItemInstance.destroyed_at, leaving the
+        # holder and container set. Their old holder could then list, trade or re-fence
+        # the destroyed row. Only `destroy_consumed_item_instance`
+        # (src/world/items/services/usage.py) may write the field; it also clears holder
+        # and container, unequips, spills contents and writes the exit OwnershipEvent.
+        # Tests are excluded: they stage destroyed rows on purpose. Suppress with
+        # `# noqa: DESTROYED_AT <reason>`; a bare token is still a finding.
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
