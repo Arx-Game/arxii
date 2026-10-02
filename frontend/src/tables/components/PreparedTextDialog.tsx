@@ -72,31 +72,45 @@ export function PreparedTextDialog({
   // stomp text the GM is mid-edit on. `data` is `undefined` while loading and
   // resolves to the row or `null`, so `!== undefined` is "this query has
   // answered at least once."
+  //
+  // Fix round 2: `open` is also a dependency of the two seeding effects below
+  // (not just the reset effect), and the reset only fires on the OPENING
+  // transition (guarded by `if (!open) return`). `PreparedTextDialog` can be
+  // rendered by a parent that keeps it mounted and merely toggles `open`
+  // (rather than mounting/unmounting it per-member, as `TableMemberRoster`
+  // happens to do today) -- without `open` in those dependency arrays, a
+  // reopen would never reseed, because `crossing`/`surge` themselves hadn't
+  // changed since the first open. Including `open` means the reset effect
+  // and the seed effects re-run in the same pass on every open, re-pulling
+  // whatever the query's CURRENT cached value is -- an abandoned draft from
+  // a prior open is discarded in favor of the server value, exactly like a
+  // fresh mount would behave.
   const crossingSeeded = useRef(false);
   const surgeSeeded = useRef(false);
 
   useEffect(() => {
-    if (open) {
-      crossingSeeded.current = false;
-      surgeSeeded.current = false;
-    }
+    if (!open) return;
+    crossingSeeded.current = false;
+    surgeSeeded.current = false;
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
     if (!crossingSeeded.current && crossing !== undefined) {
       setVisionText(crossing?.vision_text ?? '');
       setManifestationText(crossing?.manifestation_text ?? '');
       setDeedTitle(crossing?.deed_title ?? '');
       crossingSeeded.current = true;
     }
-  }, [crossing]);
+  }, [open, crossing]);
 
   useEffect(() => {
+    if (!open) return;
     if (!surgeSeeded.current && surge !== undefined) {
       setSurgeText(surge?.surge_text ?? '');
       surgeSeeded.current = true;
     }
-  }, [surge]);
+  }, [open, surge]);
 
   const preparedByLabel = crossing
     ? PREPARED_BY_ROLE_LABEL[crossing.prepared_by_role]

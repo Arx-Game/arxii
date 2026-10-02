@@ -249,6 +249,138 @@ describe('PreparedTextDialog', () => {
     expect(JSON.parse(surgeOptions.body as string)).toEqual({ surge_text: 'New surge line.' });
   });
 
+  it('clearing every field of an existing Crossing row still PATCHes it with blank values', async () => {
+    const user = userEvent.setup();
+    mockApiFetch
+      .mockResolvedValueOnce(
+        okJson({
+          count: 1,
+          results: [
+            {
+              id: 7,
+              character_sheet: 42,
+              character_name: 'Rowan Ashcombe',
+              vision_text: 'A dim room.',
+              manifestation_text: 'The air stills.',
+              deed_title: 'The Still Room',
+              prepared_by_role: 'staff',
+              crossing: null,
+              updated_at: '2026-10-02T00:00:00Z',
+            },
+          ],
+        })
+      ) // GET crossing
+      .mockResolvedValueOnce(emptyList()) // GET surge
+      .mockResolvedValueOnce(
+        okJson({
+          id: 7,
+          character_sheet: 42,
+          character_name: 'Rowan Ashcombe',
+          vision_text: '',
+          manifestation_text: '',
+          deed_title: '',
+          prepared_by_role: 'staff',
+          crossing: null,
+          updated_at: '2026-10-02T00:01:00Z',
+        })
+      ); // PATCH crossing, erased
+
+    renderDialog();
+
+    const vision = await screen.findByLabelText('Vision (private)');
+    await waitFor(() => expect(vision).toHaveValue('A dim room.'));
+    const manifestation = screen.getByLabelText('Manifestation (room)');
+    const deedTitle = screen.getByLabelText('Deed title');
+
+    await user.clear(vision);
+    await user.clear(manifestation);
+    await user.clear(deedTitle);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    // An EXISTING row still PATCHes even cleared back to blank -- "clear it"
+    // is a deliberate edit, not a no-op skipped the way a brand-new all-blank
+    // row is (fix round 1, item 6).
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(3));
+    const [crossingUrl, crossingOptions] = mockApiFetch.mock.calls[2] as [string, RequestInit];
+    expect(crossingUrl).toBe('/api/magic/prepared-crossing-texts/7/');
+    expect(crossingOptions.method).toBe('PATCH');
+    expect(JSON.parse(crossingOptions.body as string)).toEqual({
+      vision_text: '',
+      manifestation_text: '',
+      deed_title: '',
+    });
+  });
+
+  it('reseeds from the server value on reopen, discarding an abandoned draft (fix round 2)', async () => {
+    const user = userEvent.setup();
+    mockApiFetch
+      .mockResolvedValueOnce(
+        okJson({
+          count: 1,
+          results: [
+            {
+              id: 7,
+              character_sheet: 42,
+              character_name: 'Rowan Ashcombe',
+              vision_text: 'Original vision.',
+              manifestation_text: '',
+              deed_title: '',
+              prepared_by_role: 'staff',
+              crossing: null,
+              updated_at: '2026-10-02T00:00:00Z',
+            },
+          ],
+        })
+      ) // GET crossing
+      .mockResolvedValueOnce(emptyList()); // GET surge
+
+    const { rerender } = render(
+      <PreparedTextDialog
+        characterSheetId={42}
+        characterName="Rowan Ashcombe"
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const vision = await screen.findByLabelText('Vision (private)');
+    await waitFor(() => expect(vision).toHaveValue('Original vision.'));
+
+    await user.clear(vision);
+    await user.type(vision, 'Abandoned draft.');
+    expect(screen.getByLabelText('Vision (private)')).toHaveValue('Abandoned draft.');
+
+    // The dialog CLOSES, but -- unlike `TableMemberRoster`'s own usage, which
+    // unmounts it -- this component instance stays mounted, as a parent that
+    // keeps it around and merely toggles `open` would do.
+    rerender(
+      <PreparedTextDialog
+        characterSheetId={42}
+        characterName="Rowan Ashcombe"
+        open={false}
+        onOpenChange={() => {}}
+      />
+    );
+
+    // Reopen.
+    rerender(
+      <PreparedTextDialog
+        characterSheetId={42}
+        characterName="Rowan Ashcombe"
+        open
+        onOpenChange={() => {}}
+      />
+    );
+
+    // No new fetch was needed -- the query's cached value never changed --
+    // but the reopened dialog must show the server value, not the abandoned
+    // in-memory draft.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Vision (private)')).toHaveValue('Original vision.')
+    );
+  });
+
   it('shows a 400 detail in role="alert" and keeps a value the GM typed after load', async () => {
     const user = userEvent.setup();
     const originalRow = {
