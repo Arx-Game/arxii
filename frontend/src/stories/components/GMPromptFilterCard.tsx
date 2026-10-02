@@ -5,6 +5,14 @@
  * a "Prompt me" checkbox, plus a fixed final "Player actions" row with no
  * checkbox — players always write their own lines; a GM is never prompted
  * for those.
+ *
+ * Demo-fidelity fix round (F7): rows are divider-separated (the demo's
+ * `.admin-field` border-bottom), the checkbox sits before its "Prompt me"
+ * label (the demo's "☑ Prompt me"), and the checkbox's accent colour comes
+ * from the theme's `--primary` token (`accent-primary`, the repo's
+ * established checkbox pattern -- see `CategoryMultiSelect.tsx`) instead of
+ * the browser default blue. Each checkbox keeps its own distinct accessible
+ * name via `aria-label`.
  */
 import {
   useGMPromptFilters,
@@ -29,13 +37,13 @@ export function GMPromptFilterCard() {
         </p>
       )}
       {rows && (
-        <ul className="space-y-2 text-sm">
+        <ul className="divide-y divide-border text-sm">
           {rows.map((row) => (
             <FilterRow key={row.group} row={row} onToggle={setFilter.mutate} />
           ))}
-          <li className="flex items-center justify-between gap-2 text-muted-foreground">
+          <li className="flex items-center justify-between gap-2 py-2 text-muted-foreground">
             <span>Player actions</span>
-            <span className="text-xs">Never prompt. Players write their own.</span>
+            <span className="text-xs italic">Never prompt. Players write their own.</span>
           </li>
         </ul>
       )}
@@ -56,16 +64,17 @@ function FilterRow({
   onToggle: (body: { group: string; enabled: boolean }) => void;
 }) {
   return (
-    <li className="flex items-center justify-between gap-2">
+    <li className="flex items-center justify-between gap-2 py-2">
       <span>{row.label}</span>
       <label className="flex items-center gap-2">
-        Prompt me
         <input
           type="checkbox"
           checked={row.enabled}
           onChange={() => onToggle({ group: row.group, enabled: !row.enabled })}
           aria-label={`Prompt me: ${row.label}`}
+          className="h-4 w-4 rounded border-border accent-primary"
         />
+        Prompt me
       </label>
     </li>
   );

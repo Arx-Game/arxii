@@ -90,6 +90,30 @@ describe('GMPromptFilterCard', () => {
     await waitFor(() => expect(audereCheckbox).toBeChecked());
   });
 
+  // Demo-fidelity fix round (F7): checkbox before "Prompt me", theme-accented,
+  // rows divider-separated.
+  it('renders the checkbox before its "Prompt me" label, theme-accented, and rows divider-separated (F7)', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(rows),
+    } as Response);
+
+    render(<GMPromptFilterCard />, { wrapper: createWrapper() });
+
+    const checkbox = await screen.findByRole('checkbox', { name: 'Prompt me: Dramatic Moment' });
+    const label = checkbox.closest('label');
+    expect(label).not.toBeNull();
+    // The checkbox is the first element child of its label -- before the
+    // "Prompt me" text, matching the demo's "☑ Prompt me".
+    expect(label!.firstElementChild).toBe(checkbox);
+    expect(label).toHaveTextContent('Prompt me');
+    expect(checkbox.className).toContain('accent-primary');
+
+    const list = checkbox.closest('ul');
+    expect(list).not.toBeNull();
+    expect(list!.className).toContain('divide-y');
+  });
+
   it('shows the load failure in role="alert"', async () => {
     mockApiFetch.mockResolvedValueOnce({
       ok: false,
