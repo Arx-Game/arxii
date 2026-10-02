@@ -88,7 +88,10 @@ class LethalLadderLiveTest(TestCase):
     def test_kill_odds_by_weight(self) -> None:
         self.assertEqual(
             live.kill_odds(_summary("Unravelling"), self.ladder.outcome_list),
-            ["Chance a Critical Failure here kills: 1 in 4 by weight."],
+            [
+                "Chance a Critical Failure here kills: 1 in 4 by weight. Non-lethal casts "
+                "never draw it."
+            ],
         )
 
     def test_ladder_line_states_the_cap(self) -> None:
@@ -104,16 +107,18 @@ class LethalLadderLiveTest(TestCase):
     def test_checks_pass_and_warn_about_the_stage_below_death(self) -> None:
         summaries = soulfray_ladder_summary()
         result = live.checks(summaries, summaries[-1], self.ladder.outcome_list)
-        self.assertIn(("ok", "a stage can kill (Unravelling)."), result)
-        self.assertIn(("ok", "every roll result draws something here."), result)
-        self.assertIn(("ok", "every stage has consequences."), result)
-        self.assertIn(
-            (
-                "warn",
-                "Sundering can be reached by a non-lethal cast and is one stage below a death "
-                "stage. Check its warning text says so.",
-            ),
+        self.assertEqual(
             result,
+            [
+                ("ok", "every roll result draws something here."),
+                ("ok", "a stage can kill (Unravelling)."),
+                ("ok", "every stage has consequences."),
+                (
+                    "warn",
+                    "Sundering can be reached by a non-lethal cast and is one stage below a "
+                    "death stage. Check its warning text says so.",
+                ),
+            ],
         )
 
     def test_stage_counts_and_table_line(self) -> None:
@@ -157,7 +162,15 @@ class SharedPoolLiveTest(TestCase):
     def test_checks_warn_about_the_result_that_draws_nothing(self) -> None:
         summaries = soulfray_ladder_summary()
         result = live.checks(summaries, _summary("Tearing"), self.ladder.outcome_list)
-        self.assertIn(("warn", "no consequence for Critical Success at this stage."), result)
+        self.assertEqual(
+            result,
+            [
+                ("ok", "the pool has consequences, so this stage does something."),
+                ("warn", "no consequence for Critical Success at this stage."),
+                ("warn", "no Soulfray stage can kill. Soulfray is meant to be able to."),
+                ("warn", "4 stages have no consequences yet."),
+            ],
+        )
 
 
 class SharedStagePoolLiveTest(TestCase):

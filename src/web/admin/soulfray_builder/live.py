@@ -98,14 +98,20 @@ def outcomes_without_draws(
 
 
 def kill_odds(summary: SoulfrayStageSummary, outcomes: Sequence[CheckOutcome]) -> list[str]:
-    """For each roll result with a Can kill row: lethal weight in total weight."""
+    """For each roll result with a Can kill row: lethal weight in total weight.
+
+    A non-lethal cast always filters out the lethal rows (no cap needed to say so).
+    """
     lines = []
     for outcome in outcomes:
         tier = [wc for wc in summary.consequences if wc.consequence.outcome_tier_id == outcome.pk]
         lethal = sum(wc.weight for wc in tier if wc.character_loss)
         if lethal:
             total = sum(wc.weight for wc in tier)
-            lines.append(f"Chance a {outcome.name} here kills: {lethal} in {total} by weight.")
+            lines.append(
+                f"Chance a {outcome.name} here kills: {lethal} in {total} by weight. "
+                "Non-lethal casts never draw it."
+            )
     return lines
 
 
@@ -187,9 +193,9 @@ def checks(
     refused by its own checklist (spec C.6)."""
     result: list[tuple[str, str]] = []
     if summary.consequence_count:
-        result.append(("ok", "the pool has consequences, so this stage does something."))
         gaps = outcomes_without_draws(summary, outcomes)
         if gaps:
+            result.append(("ok", "the pool has consequences, so this stage does something."))
             result.extend(
                 ("warn", f"no consequence for {outcome.name} at this stage.") for outcome in gaps
             )
