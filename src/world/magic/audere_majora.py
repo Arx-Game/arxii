@@ -522,18 +522,21 @@ def maybe_create_audere_majora_offer(
 
     if created:
         from world.gm.constants import GMPromptKind  # noqa: PLC0415
-        from world.gm.prompt_services import prompt_recipients  # noqa: PLC0415
-        from world.magic.services.gain import (  # noqa: PLC0415
-            gm_prompt_candidates_excluding_subject,
-        )
+        from world.gm.prompt_services import recipients_excluding_subject  # noqa: PLC0415
         from world.magic.services.prepared_text import resolve_crossing_text  # noqa: PLC0415
         from world.scenes.models import Scene  # noqa: PLC0415
 
         variant = maybe_apply_audere_faith_coupling(sheet, threshold, offer)
         texts = resolve_crossing_text(sheet, threshold, variant)
         scene = Scene.objects.active_for_room(character.location).first()
-        candidates = gm_prompt_candidates_excluding_subject(sheet, scene)
-        if prompt_recipients(scene, GMPromptKind.CROSSING, candidates=candidates):
+        # Shared subject-exclusion seam (#4101 fix round 2, ruling R7-1) -- this
+        # gate-open check must agree with route_narratable_event's own exclusion
+        # (used later, at crossing time, by _route_crossing) on whether a REAL
+        # GM exists to withhold the manifestation for; otherwise a crosser who
+        # is also their scene's only GM would see the manifestation withheld
+        # here and then delivered unprompted anyway once _route_crossing finds
+        # no real recipients -- a needless round trip (#4101 Task 6 M5 test).
+        if recipients_excluding_subject(scene, GMPromptKind.CROSSING, sheet):
             offer.manifestation_withheld = True
             offer.scene = scene
             offer.save(update_fields=["manifestation_withheld", "scene"])
@@ -912,26 +915,36 @@ def _route_crossing(  # noqa: PLR0913 — one on_commit callback needs every pie
     (``narrate_privately`` tolerates ``scene=None``) -- only the room
     broadcast needs this fallback.
 
-    Candidates exclude the crossing character's own account (#4101 fix round 1,
-    M5) -- a player who also GMs their own scene is never addressed about their
-    own Crossing.
+    The subject exclusion (the crossing character is never addressed about
+    their own Crossing) now lives inside ``route_narratable_event`` itself
+    (#4101 fix round 2, ruling R7-1) -- this just calls the plain candidate path
+    (no ``candidates=``).
 
     Runs inside ``transaction.on_commit`` (the caller's lambda), so a
     ``DatabaseError`` here can no longer corrupt any state -- but it CAN still
     leave the vision and manifestation undelivered if left uncaught. Falls back
     to ``_deliver`` (the unprompted path) on that failure instead (#4101 fix
     round 1, M2), logging the error, so the crossing player's vision is never
-    silently lost to a GM-prompt-creation bug. ``gm_prompt_candidates_excluding_subject``
-    is computed INSIDE the same ``try`` (#4101 fix round 2, must-fix 3) -- a
-    failure resolving candidates must also fall back to unprompted delivery,
-    not propagate past this on_commit callback uncaught.
+    silently lost to a GM-prompt-creation bug.
+
+    ``route_narratable_event`` runs inside an OUTER ``transaction.atomic()``
+    here (#4101 fix round 2, ruling R7-2) -- it already wraps its own
+    prompt-creation in one, but THIS outer one creates the savepoint that
+    actually contains a ``DatabaseError``: on Postgres, an unguarded failure
+    aborts the whole enclosing transaction (``cross_threshold``'s own
+    ``transaction.atomic()``, several frames up), and ``_deliver()`` below
+    would then raise too, even though it's the RECOVERY path. ``_deliver()``
+    is called exactly ONCE, outside this try/except, keyed on whether
+    ``route_narratable_event`` actually produced any prompts -- never from
+    inside the try (where a success-with-prompts path could run it twice: once
+    via a ``deliver_unprompted`` callback, once again from how the caller
+    reads an empty return).
     """
     from django.db import DatabaseError  # noqa: PLC0415
 
     from world.gm.constants import GMPromptKind  # noqa: PLC0415
     from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
     from world.gm.types import NarratableEvent  # noqa: PLC0415
-    from world.magic.services.gain import gm_prompt_candidates_excluding_subject  # noqa: PLC0415
     from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
     effective_scene = scene if scene is not None else fallback_scene
@@ -946,25 +959,25 @@ def _route_crossing(  # noqa: PLR0913 — one on_commit callback needs every pie
             narrate_privately(character, texts.vision, scene=effective_scene)
 
     try:
-        candidates = gm_prompt_candidates_excluding_subject(sheet, effective_scene)
-        route_narratable_event(
-            NarratableEvent(
-                kind=GMPromptKind.CROSSING,
-                scene=effective_scene,
-                character_sheet=sheet,
-                room_text=room_text,
-                private_text=texts.vision,
-                prepared_for_character=texts.prepared,
-            ),
-            deliver_unprompted=_deliver,
-            candidates=candidates,
-        )
+        with transaction.atomic():
+            prompts = route_narratable_event(
+                NarratableEvent(
+                    kind=GMPromptKind.CROSSING,
+                    scene=effective_scene,
+                    character_sheet=sheet,
+                    room_text=room_text,
+                    private_text=texts.vision,
+                    prepared_for_character=texts.prepared,
+                ),
+            )
     except DatabaseError:
         logger.exception(
             "Crossing routing failed to create GM prompts for sheet %s; "
             "delivering unprompted instead (#4101).",
             sheet.pk,
         )
+        prompts = []
+    if not prompts:
         _deliver()
 
 

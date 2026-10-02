@@ -361,19 +361,30 @@ def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
     ``surge_manifestation_text`` (#3451), with ``{name}`` substituted. With no GM
     and a blank line, accepting stays room-silent exactly as before (#4101).
 
-    Mirrors ``_route_crossing`` (``audere_majora.py``, #4101 fix round 1): the
-    scene's GM candidates exclude the surging character's own account (a player
-    who also GMs their own scene is never addressed about their own surge), are
-    resolved INSIDE the same ``try`` that guards prompt creation, and a
-    ``DatabaseError`` there falls back to plain unprompted delivery exactly once
-    rather than leaving the surge silently undelivered.
+    The subject exclusion (the surging character is never addressed about their
+    own surge) now lives inside ``route_narratable_event`` itself (#4101 fix
+    round 2, ruling R7-1) -- this just calls the plain candidate path (no
+    ``candidates=``).
+
+    ``offer_audere`` calls this from OUTSIDE its own ``transaction.atomic()``
+    block, but ``resolve_audere_offer`` wraps the whole accept in ITS OWN outer
+    ``transaction.atomic()`` -- so this still runs nested inside a nearly-done
+    transaction. The scene lookup and ``route_narratable_event`` call run inside
+    their own ``transaction.atomic()`` here (#4101 fix round 2, ruling R7-2):
+    that's the savepoint that actually contains a ``DatabaseError`` -- on
+    Postgres, an unguarded failure here would abort the WHOLE enclosing
+    transaction, and the fallback ``_deliver()`` would then raise too, even
+    though it's the RECOVERY path, which would also lose the real Audere
+    acceptance (condition/engagement/anima already written) that transaction
+    was about to commit. ``_deliver()`` runs exactly ONCE, outside the
+    try/except, keyed on whether ``route_narratable_event`` actually produced
+    any prompts.
     """
     from django.db import DatabaseError
 
     from world.gm.constants import GMPromptKind
     from world.gm.prompt_services import route_narratable_event
     from world.gm.types import NarratableEvent
-    from world.magic.services.gain import gm_prompt_candidates_excluding_subject
     from world.magic.services.prepared_text import resolve_surge_text
     from world.scenes.interaction_services import broadcast_scene_emit
     from world.scenes.models import Persona, Scene
@@ -393,26 +404,26 @@ def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
     if sheet is None:
         _deliver()
         return
-    scene = Scene.objects.active_for_room(character.location).first()
     try:
-        candidates = gm_prompt_candidates_excluding_subject(sheet, scene)
-        route_narratable_event(
-            NarratableEvent(
-                kind=GMPromptKind.AUDERE_SURGE,
-                scene=scene,
-                character_sheet=sheet,
-                room_text=text,
-                prepared_for_character=surge.prepared,
-            ),
-            deliver_unprompted=_deliver,
-            candidates=candidates,
-        )
+        with transaction.atomic():
+            scene = Scene.objects.active_for_room(character.location).first()
+            prompts = route_narratable_event(
+                NarratableEvent(
+                    kind=GMPromptKind.AUDERE_SURGE,
+                    scene=scene,
+                    character_sheet=sheet,
+                    room_text=text,
+                    prepared_for_character=surge.prepared,
+                ),
+            )
     except DatabaseError:
         logger.exception(
             "Audere surge routing failed to create GM prompts for sheet %s; "
             "delivering unprompted instead (#4101).",
             sheet.pk,
         )
+        prompts = []
+    if not prompts:
         _deliver()
 
 

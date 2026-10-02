@@ -1,14 +1,14 @@
 """The GM prompt queue: route narratable events to GMs, or deliver as today (#4101).
 
 ``route_narratable_event`` is the one seam every event source calls. It asks
-``prompt_recipients`` which GMs want this kind; with any, it records one PENDING
-GMPrompt per GM and pushes it live; with none, it runs the caller's
-``deliver_unprompted`` (exactly what the source did before #4101).
+``prompt_recipients`` which GMs want this kind (minus the event's own subject,
+see below); with any, it records one PENDING GMPrompt per GM and pushes it
+live; with none, it returns an empty list and leaves delivery to the caller
+(#4101 fix round 2 -- see the function's own docstring for why).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import contextlib
 import logging
 from typing import TYPE_CHECKING
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.gm.types import NarratableEvent
     from world.scenes.models import Interaction, Scene
     from world.scenes.types import NarratedEventPayload
@@ -85,13 +86,72 @@ def prompt_recipients(
     return [a for a in pool if a.pk not in muted]
 
 
+def _subject_account(sheet: CharacterSheet | None) -> AccountDB | None:
+    """The account currently playing ``sheet``, or None (#4101 fix round 2, ruling R7-1).
+
+    CharacterSheet -> RosterEntry -> current RosterTenure -> PlayerData -> Account,
+    inlined here rather than imported from ``world.magic.services.gain
+    .account_for_sheet`` -- ``world.gm`` is the general event-routing primitive
+    every narratable-event source (not only magic) routes through, so it must
+    not depend on ``world.magic`` (ADR-0010 general-primitive direction).
+    ``world.gm`` already depends on ``world.roster``/``world.character_sheets``
+    elsewhere in this app, so this stays a same-direction dependency.
+    """
+    if sheet is None:
+        return None
+    entry = sheet.roster_entry_or_none
+    if entry is None:
+        return None
+    tenure = entry.current_tenure
+    if tenure is None:
+        return None
+    player_data = tenure.player_data
+    if player_data is None:
+        return None
+    return player_data.account
+
+
+def recipients_excluding_subject(
+    scene: Scene | None,
+    kind: str,
+    sheet: CharacterSheet | None,
+    *,
+    candidates: list[AccountDB] | None = None,
+) -> list[AccountDB]:
+    """``prompt_recipients``, minus ``sheet``'s own currently-playing account.
+
+    #4101 fix round 2, ruling R7-1: the shared subject-exclusion seam -- a
+    player who also GMs their own scene is never counted as a recipient for
+    their own event, whether the caller is about to actually create prompts
+    (``route_narratable_event``, below) or is only asking the same "would a
+    REAL GM be prompted" question ahead of time to decide whether to withhold
+    something now (e.g. ``maybe_create_audere_majora_offer``'s withhold-or-
+    deliver-now gate in ``world/magic/audere_majora.py``). Both must agree, or
+    the gate can withhold a line that the real routing later decides nobody
+    was ever going to see, delaying it for no reason.
+    """
+    recipients = prompt_recipients(scene, kind, candidates=candidates)
+    subject_account = _subject_account(sheet)
+    if subject_account is not None:
+        recipients = [a for a in recipients if a.pk != subject_account.pk]
+    return recipients
+
+
 def route_narratable_event(
     event: NarratableEvent,
     *,
-    deliver_unprompted: Callable[[], None] | None = None,
     candidates: list[AccountDB] | None = None,
 ) -> list[GMPrompt]:
-    """Prompt each opted-in GM, or deliver the authored text as today (spec decision 7).
+    """Prompt each opted-in GM; returns ``[]`` when none want it (spec decision 7).
+
+    The event's own subject -- ``event.character_sheet``'s currently-playing
+    account -- is always dropped from recipients, via ``recipients_excluding_
+    subject`` above (#4101 fix round 2, ruling R7-1): a player who also GMs
+    their own scene must never be prompted about their own event. Centralized
+    here (rather than duplicated per call site, as ``_crossing_prompt_candidates``/
+    ``gm_prompt_candidates_excluding_subject`` did through fix round 1) so every
+    narratable-event source gets the exclusion for free, including ones not yet
+    written.
 
     Every created prompt shares one ``event_group`` (#4101 fix round 1) -- they are
     siblings of the SAME event, one copy per addressed GM. ``dismiss_gm_prompt``
@@ -107,11 +167,19 @@ def route_narratable_event(
     ``on_commit`` notify registrations below are discarded along with it
     (Django clears pending ``on_commit`` callbacks on rollback) -- so a raise
     here never leaves a live notify for a prompt that no longer exists.
+
+    No longer accepts a ``deliver_unprompted`` callback (#4101 fix round 2,
+    ruling R7-2): delivering the event's own default lines when this returns
+    ``[]`` is the CALLER's job now. A caller that needs its delivery to survive
+    a ``DatabaseError`` raised from in here, or to run exactly once across both
+    the no-recipients path and a recovery path, can only guarantee that by
+    owning the one call site itself -- see ``_route_crossing``
+    (``world/magic/audere_majora.py``) for the pattern every caller follows.
     """
-    recipients = prompt_recipients(event.scene, event.kind, candidates=candidates)
+    recipients = recipients_excluding_subject(
+        event.scene, event.kind, event.character_sheet, candidates=candidates
+    )
     if not recipients:
-        if deliver_unprompted is not None:
-            deliver_unprompted()
         return []
     event_group = uuid.uuid4()
     with transaction.atomic():
@@ -570,6 +638,7 @@ __all__ = [
     "prompt_recipients",
     "prompt_subject_name",
     "prompts_enabled",
+    "recipients_excluding_subject",
     "release_prompt_defaults",
     "route_narratable_event",
     "scene_gm_accounts",

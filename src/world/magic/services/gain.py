@@ -124,26 +124,6 @@ def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
     return player_data.account
 
 
-def gm_prompt_candidates_excluding_subject(
-    sheet: CharacterSheet, scene: Scene | None
-) -> list[AccountDB]:
-    """GMs of ``scene``, minus the event's own subject's account (#4101).
-
-    Shared by every ``route_narratable_event`` call site that prompts a scene about
-    one of its own participants (the Crossing, the Audere surge, the chosen
-    ultimate) — a player who also GMs their own scene must never be prompted about
-    their OWN event; they already receive (or will receive) whatever they get
-    through the ordinary player-facing channel.
-    """
-    from world.gm.prompt_services import scene_gm_accounts  # noqa: PLC0415
-
-    subject_account = account_for_sheet(sheet)
-    pool = scene_gm_accounts(scene)
-    if subject_account is None:
-        return pool
-    return [a for a in pool if a.pk != subject_account.pk]
-
-
 def get_resonance_gain_config() -> ResonanceGainConfig:
     """Get-or-create the resonance gain config singleton (pk=1)."""
     with transaction.atomic():

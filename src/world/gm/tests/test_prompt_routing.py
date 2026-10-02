@@ -18,6 +18,7 @@ from world.gm.prompt_services import (
     route_narratable_event,
 )
 from world.gm.types import NarratableEvent
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import (
     InteractionFactory,
@@ -44,10 +45,14 @@ class RouteNarratableEventTest(TestCase):
         return NarratableEvent(kind=kind, scene=scene, character_sheet=self.sheet, **kw)
 
     def test_event_with_gm_creates_prompt_and_skips_delivery(self):
+        """#4101 fix round 2 (ruling R7-2): ``route_narratable_event`` no longer
+        takes a ``deliver_unprompted`` callback -- the caller delivers, exactly
+        once, based on whether the returned list is empty. This exercises that
+        caller-side pattern directly."""
         deliver = mock.Mock()
-        prompts = route_narratable_event(
-            self._event(self.scene, room_text="authored"), deliver_unprompted=deliver
-        )
+        prompts = route_narratable_event(self._event(self.scene, room_text="authored"))
+        if not prompts:
+            deliver()
         self.assertEqual(len(prompts), 1)
         self.assertEqual(prompts[0].addressed_to, self.gm)
         self.assertEqual(prompts[0].room_text, "authored")
@@ -56,7 +61,9 @@ class RouteNarratableEventTest(TestCase):
 
     def test_no_gm_delivers_as_today_and_creates_nothing(self):
         deliver = mock.Mock()
-        prompts = route_narratable_event(self._event(self.quiet_scene), deliver_unprompted=deliver)
+        prompts = route_narratable_event(self._event(self.quiet_scene))
+        if not prompts:
+            deliver()
         self.assertEqual(prompts, [])
         deliver.assert_called_once()
         self.assertFalse(GMPrompt.objects.filter(scene=self.quiet_scene).exists())
@@ -67,10 +74,35 @@ class RouteNarratableEventTest(TestCase):
         SceneGMParticipationFactory(scene=muted_scene, account=gm)
         GMPromptFilterFactory(account=gm, group=GMPromptGroup.MIRACLE, enabled=False)
         deliver = mock.Mock()
-        self.assertEqual(
-            route_narratable_event(self._event(muted_scene), deliver_unprompted=deliver), []
-        )
+        prompts = route_narratable_event(self._event(muted_scene))
+        if not prompts:
+            deliver()
+        self.assertEqual(prompts, [])
         deliver.assert_called_once()
+
+    def test_subjects_own_gm_account_is_excluded_default_goes_out(self):
+        """#4101 fix round 2 (ruling R7-1): ``route_narratable_event`` itself
+        drops the event's own subject from recipients -- every narratable-event
+        source gets this for free now, not just the ones (Crossing, surge,
+        ultimate) that used to duplicate the exclusion by hand per fix round 1."""
+        own_account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=self.sheet)
+        RosterTenureFactory(
+            roster_entry=entry,
+            player_data=PlayerDataFactory(account=own_account),
+            end_date=None,
+        )
+        scene = SceneFactory()
+        SceneGMParticipationFactory(scene=scene, account=own_account)
+        deliver = mock.Mock()
+
+        prompts = route_narratable_event(self._event(scene, room_text="authored"))
+        if not prompts:
+            deliver()
+
+        self.assertEqual(prompts, [])
+        deliver.assert_called_once()
+        self.assertFalse(GMPrompt.objects.filter(scene=scene).exists())
 
     def test_mute_is_per_group(self):
         gm = AccountFactory()
