@@ -495,6 +495,19 @@ class DramaticMomentSuggestionAlreadyResolved(MagicError):
     user_message = "That suggestion has already been resolved."
 
 
+class DramaticMomentSuggestionWrongKind(MagicError):
+    """Raised when resolving a GMPrompt whose kind isn't dramatic_moment (#4101).
+
+    Defense in depth: the web/telnet call sites already filter to
+    ``kind=GMPromptKind.DRAMATIC_MOMENT`` before reaching this service, but the
+    service itself must refuse a narration-kind prompt too, since it is the one
+    place that could mint a stray DramaticMomentTag for an event that was never
+    a dramatic moment at all.
+    """
+
+    user_message = "That isn't a dramatic-moment suggestion."
+
+
 # =============================================================================
 # Technique Builder exceptions (#537)
 # =============================================================================

@@ -212,9 +212,21 @@ def _finish_event_scenes(event: Event) -> None:
     Uses Scene.finish_scene() rather than bulk .update() to properly
     invalidate SharedMemoryModel's identity map cache. Awards scene
     completion rewards (vote budget bonuses) to all participants.
+
+    Calls ``expire_scene_prompts`` (#4101 fix round 1) BEFORE ``finish_scene()``,
+    same ordering and rationale as ``scene_admin_services.finish_scene_full``: a
+    pending narration prompt's room-text release still needs the scene active to
+    broadcast into. This event-completion path is intentionally lighter than
+    ``finish_scene_full`` (no clock-close/hazard-teardown/broadcast) and stays
+    that way -- expiring prompts is the one piece of that orchestration an event
+    scene must not skip, since skipping it would silently drop a GM's pending
+    Crossing vision or miracle outcome.
     """
+    from world.gm.prompt_services import expire_scene_prompts  # noqa: PLC0415
+
     # At most one active scene per event (enforced by unique_active_scene_per_event constraint)
     for scene in Scene.objects.filter(event=event, is_active=True):
+        expire_scene_prompts(scene)
         scene.finish_scene()
         on_scene_finished(scene)
 

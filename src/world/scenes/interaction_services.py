@@ -40,6 +40,7 @@ from world.scenes.types import InteractionPayload, PersonaPayload, ReplyParentPa
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.companions.models import Companion
@@ -145,23 +146,32 @@ def invalidate_active_scene_cache(location: ObjectDB) -> None:
         del location._active_scene_cache  # noqa: SLF001
 
 
-def broadcast_scene_emit(character: ObjectDB, text: str) -> None:
-    """Broadcast ``text`` as a system EMIT to the active scene at ``character``'s location.
+def broadcast_scene_emit(character: ObjectDB, text: str, *, scene: Scene | None = None) -> None:
+    """Broadcast ``text`` as a system EMIT to ``scene`` (or the one active at
+    ``character``'s location when ``scene`` is omitted).
 
     The shared system-announcement seam for character-anchored magic beats (the
     Audere Majora manifestation, the Audere surge line, #3451). No-ops silently
-    when: no active scene at the character's location, or the character has no
-    primary persona (a plain ObjectDB, or a sheet with no PRIMARY row).
+    when: no scene is resolved, or the character has no primary persona (a plain
+    ObjectDB, or a sheet with no PRIMARY row).
 
-    Queries the scene uncached on purpose: ``get_active_scene``'s per-location
-    cache is only invalidated by the scene start/end services, and this seam is
-    reached from cast/accept paths where a scene may have opened through other
-    routes since the location was last resolved.
+    Pass ``scene`` explicitly to announce into a specific scene regardless of
+    where ``character`` currently stands (#4101 fix round 1) — a GM prompt's
+    room-text release must land in the scene the prompt belongs to, not
+    whatever is active at the character's CURRENT location if they moved since
+    the prompt was created.
+
+    Queries the scene uncached on purpose when resolving by location:
+    ``get_active_scene``'s per-location cache is only invalidated by the scene
+    start/end services, and this seam is reached from cast/accept paths where a
+    scene may have opened through other routes since the location was last
+    resolved.
     """
     # No None-guard on location: a location-less character can still share a
     # location-less scene (active_for_room(None) matches it) — the pre-#3451
     # inline behavior, load-bearing for factory-built worlds.
-    scene = Scene.objects.active_for_room(character.location).first()
+    if scene is None:
+        scene = Scene.objects.active_for_room(character.location).first()
     if scene is None:
         return
 
@@ -530,8 +540,13 @@ def _target_character_ids(target_persona_ids: list[int] | None) -> frozenset[int
     )
 
 
-def non_web_sessions(obj: ObjectDB) -> list[Any]:
+def non_web_sessions(obj: ObjectDB | AccountDB) -> list[Any]:
     """Sessions on ``obj`` that do NOT already receive the structured payload.
+
+    ``obj`` is any session-bearing Evennia entity — a character ``ObjectDB``
+    (the usual caller here) or an ``AccountDB`` directly (e.g. a GM prompt's
+    ``addressed_to`` account, #4101), since both expose the same
+    ``.sessions.all()`` handler.
 
     Evennia's webclient protocols stamp ``session.protocol_key`` as
     ``"webclient/websocket"`` or ``"webclient/ajax"`` (see
@@ -1772,7 +1787,9 @@ def record_whisper_interaction(  # noqa: PLR0913 - on_before_push is the #3783 l
 # since the inline form pushes the signature past 100 chars): any character,
 # PC or NPC-run, can be the one addressed here; the function just needs its
 # .location, .msg and the sheet lookup.
-def narrate_privately(character: ObjectDB, text: str) -> Interaction | None:  # noqa: OBJECTDB_PARAM
+def narrate_privately(
+    character: ObjectDB, text: str, *, scene: Scene | None = None
+) -> Interaction | None:  # noqa: OBJECTDB_PARAM
     """Narrator-authored line addressed to ONE character, on both channels (#3574).
 
     The single-recipient sibling of the room-wide combat narration
@@ -1791,6 +1808,13 @@ def narrate_privately(character: ObjectDB, text: str) -> Interaction | None:  # 
     - A direct ``character.msg(text)`` telnet companion (HARD telnet parity).
 
     No-op when the character has no sheet or no primary persona.
+
+    ``scene`` attaches the recorded interaction to a specific scene (e.g. a GM
+    prompt's own ``prompt.scene``, #4101 fix round 1) instead of resolving one
+    from ``character``'s CURRENT location — delivery to ``character`` itself is
+    already location-independent (direct `.msg()`), but the interaction row's
+    scene attribution should follow the event, not wherever the recipient has
+    since wandered.
     """
     try:
         persona = character.sheet_data.primary_persona
@@ -1800,7 +1824,8 @@ def narrate_privately(character: ObjectDB, text: str) -> Interaction | None:  # 
     from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
 
     narrator = get_or_create_narrator_persona()
-    scene = get_active_scene(character.location)
+    if scene is None:
+        scene = get_active_scene(character.location)
     interaction = create_interaction(
         persona=narrator,
         content=text,

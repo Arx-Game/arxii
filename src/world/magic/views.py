@@ -34,7 +34,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from world.character_sheets.models import CharacterSheet
 from world.distinctions.models import CharacterDistinction
-from world.gm.constants import GMPromptStatus
+from world.gm.constants import GMPromptKind, GMPromptStatus
 from world.gm.models import GMPrompt
 from world.magic.constants import (
     PendingAlterationStatus,
@@ -2832,9 +2832,16 @@ class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
     (which independently re-checks it again — defense in depth for a direct-call caller).
     """
 
-    queryset = GMPrompt.objects.select_related(
-        "moment_type", "character_sheet", "scene", "interaction"
-    ).order_by("-created_at")
+    # #4101 fix round 1: GMPrompt now also carries narration kinds (miracle, death,
+    # crossing, ...), each addressed to one specific GM, never scene-gated. This
+    # viewset is the dramatic_moment confirm/dismiss inbox ONLY -- the kind filter
+    # keeps a narration prompt meant for one GM from leaking into the scene's
+    # GM/owner/staff-shared listing, and keeps confirm/dismiss from reaching one at all.
+    queryset = (
+        GMPrompt.objects.filter(kind=GMPromptKind.DRAMATIC_MOMENT)
+        .select_related("moment_type", "character_sheet", "scene", "interaction")
+        .order_by("-created_at")
+    )
     serializer_class = DramaticMomentSuggestionSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
@@ -2870,7 +2877,7 @@ class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
         )
         from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
 
-        suggestion = get_object_or_404(GMPrompt, pk=pk)
+        suggestion = get_object_or_404(GMPrompt, pk=pk, kind=GMPromptKind.DRAMATIC_MOMENT)
         if not IsSceneGMOrOwnerOrStaff().has_object_permission(request, self, suggestion.scene):
             raise PermissionDenied(_ERR_SUGGESTION_PERMISSION)
 

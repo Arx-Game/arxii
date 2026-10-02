@@ -24,6 +24,7 @@ from actions.types import ActionResult, TargetType
 from world.magic.exceptions import (
     DramaticMomentCapExceeded,
     DramaticMomentSuggestionAlreadyResolved,
+    DramaticMomentSuggestionWrongKind,
     EndorsementValidationError,
 )
 
@@ -41,17 +42,23 @@ _RESOLVE_EXCEPTIONS = (
     EndorsementValidationError,
     DramaticMomentCapExceeded,
     DramaticMomentSuggestionAlreadyResolved,
+    DramaticMomentSuggestionWrongKind,
 )
 
 
 def _suggestion_or_none(suggestion_id: Any) -> GMPrompt | None:
+    from world.gm.constants import GMPromptKind  # noqa: PLC0415
     from world.gm.models import GMPrompt  # noqa: PLC0415
 
     if suggestion_id is None:
         return None
     try:
+        # #4101 fix round 1: GMPrompt also carries narration kinds now, each
+        # addressed to one specific GM -- without this filter a scene GM/owner/
+        # staff could confirm/dismiss another GM's own narration prompt by id,
+        # since _account_can_gm_scene gates on the SCENE, not on addressed_to.
         return GMPrompt.objects.select_related("scene", "moment_type", "character_sheet").get(
-            pk=int(suggestion_id)
+            pk=int(suggestion_id), kind=GMPromptKind.DRAMATIC_MOMENT
         )
     except (GMPrompt.DoesNotExist, ValueError, TypeError):
         return None

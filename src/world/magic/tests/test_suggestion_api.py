@@ -234,3 +234,60 @@ class DramaticMomentSuggestionActionsRegistryTest(APITestCase):
 
         self.assertIsNotNone(get_action("confirm_dramatic_moment_suggestion"))
         self.assertIsNotNone(get_action("dismiss_dramatic_moment_suggestion"))
+
+
+class DramaticMomentSuggestionNarrationLeakTest(APITestCase):
+    """A narration-kind GMPrompt (#4101) must never surface through this
+    dramatic_moment-only inbox -- list, confirm, and dismiss all stay blind to it,
+    even for the scene's own owner/GM, since it is addressed to a different GM."""
+
+    def setUp(self):
+        from world.gm.constants import GMPromptKind
+        from world.gm.prompt_services import route_narratable_event
+        from world.gm.types import NarratableEvent
+
+        self.sheet = CharacterSheetFactory()
+        self.scene = SceneFactory()
+        self.owner = AccountFactory()
+        SceneOwnerParticipationFactory(scene=self.scene, account=self.owner)
+        self.addressed_gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=self.addressed_gm)
+        [self.narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            ),
+            candidates=[self.addressed_gm],
+        )
+
+    def test_scene_owner_cannot_list_it(self):
+        self.client.force_authenticate(self.owner)
+        resp = self.client.get(
+            reverse("magic:dramatic-moment-suggestion-list"), {"scene": self.scene.pk}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["results"], [])
+
+    def test_scene_owner_cannot_confirm_it(self):
+        self.client.force_authenticate(self.owner)
+        resp = self.client.post(
+            reverse(
+                "magic:dramatic-moment-suggestion-confirm",
+                kwargs={"pk": self.narration_prompt.pk},
+            )
+        )
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND, resp.data)
+
+    def test_scene_owner_cannot_dismiss_it(self):
+        self.client.force_authenticate(self.owner)
+        resp = self.client.post(
+            reverse(
+                "magic:dramatic-moment-suggestion-dismiss",
+                kwargs={"pk": self.narration_prompt.pk},
+            )
+        )
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND, resp.data)
+        self.narration_prompt.refresh_from_db()
+        self.assertEqual(self.narration_prompt.status, GMPromptStatus.PENDING)

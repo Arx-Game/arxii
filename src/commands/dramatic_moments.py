@@ -105,15 +105,21 @@ class CmdMoment(ArxCommand):
         from actions.definitions.dramatic_moments import (  # noqa: PLC0415
             _account_can_gm_scene,
         )
-        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
         from world.gm.models import GMPrompt  # noqa: PLC0415
 
         scene = self._active_scene()
         if not _account_can_gm_scene(self.caller.account, scene):
             msg = "Only the scene's GM, owner, or staff may view pending suggestions."
             raise CommandError(msg)
+        # #4101 fix round 1: GMPrompt also carries narration kinds now, each addressed
+        # to one specific GM -- the kind filter keeps this listing to the dramatic_moment
+        # inbox only (narration prompts also lack a moment_type, which `.label` below
+        # would crash on).
         suggestions = list(
-            GMPrompt.objects.filter(scene=scene, status=GMPromptStatus.PENDING)
+            GMPrompt.objects.filter(
+                scene=scene, status=GMPromptStatus.PENDING, kind=GMPromptKind.DRAMATIC_MOMENT
+            )
             .select_related("moment_type", "character_sheet", "character_sheet__character")
             .order_by("-created_at")
         )

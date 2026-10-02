@@ -155,17 +155,20 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     (``scene.is_finished`` is True), so calling twice is safe.
 
     Steps (in order):
-    1. ``scene.finish_scene()`` — sets ``date_finished`` + ``is_active=False``.
-    2. Clear ``scene.running_beat`` if set (#3425) — the session-prep run pointer
+    1. ``expire_scene_prompts(scene)`` (#4101) — dismisses any pending narration
+       GMPrompt for this scene while it is still active, so a room-text release
+       still has a live scene to broadcast into.
+    2. ``scene.finish_scene()`` — sets ``date_finished`` + ``is_active=False``.
+    3. Clear ``scene.running_beat`` if set (#3425) — the session-prep run pointer
        ``RunBeatAction`` wrote only lives for the scene's duration.
-    3. ``on_scene_finished(scene)`` — awards scene-completion progression rewards.
-    4. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
+    4. ``on_scene_finished(scene)`` — awards scene-completion progression rewards.
+    5. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
        tasks for all participant accounts.
-    5. ``teardown_conjured_hazards`` (alongside ``teardown_conjured_obstacles`` /
+    6. ``teardown_conjured_hazards`` (alongside ``teardown_conjured_obstacles`` /
        ``teardown_ramparts``): disarms any Trap the scene's room holds whose
        ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
        staff-authored one.
-    6. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
+    7. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
        event over the scene's WebSocket channel.
 
     ``by_account`` is accepted for call-site symmetry (so both the web viewset
@@ -176,17 +179,21 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     if scene.is_finished:
         return
 
+    # #4101 fix round 1: a pending narration prompt left when the scene finishes
+    # releases its authored defaults the unprompted way rather than being silently
+    # lost. Must run BEFORE scene.finish_scene() below -- release_prompt_defaults's
+    # room-text leg (broadcast_scene_emit) still resolves this scene as the active
+    # one at the character's location while it's intact; finishing it first would
+    # make the room announcement find nothing to broadcast into.
+    from world.gm.prompt_services import expire_scene_prompts  # noqa: PLC0415
+
+    expire_scene_prompts(scene)
+
     scene.finish_scene()
 
     # #3567: clocks opened in this scene stop with it; a battle scene running the
     # same beat has its own row and keeps the GM scene's clock alive.
     close_scene_clocks(scene, SceneClockClosedReason.SCENE_ENDED)
-
-    # #4101: a pending narration prompt left when the scene finishes releases its
-    # authored defaults the unprompted way rather than being silently lost.
-    from world.gm.prompt_services import expire_scene_prompts  # noqa: PLC0415
-
-    expire_scene_prompts(scene)
 
     if scene.running_beat_id is not None:
         # #3425: a beat's session-prep run pointer only lives for the scene's

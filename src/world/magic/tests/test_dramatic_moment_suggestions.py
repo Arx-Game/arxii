@@ -12,7 +12,8 @@ from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.gm.constants import GMPromptStatus
+from world.gm.constants import GMPromptGroup, GMPromptStatus
+from world.gm.factories import GMPromptFilterFactory
 from world.gm.models import GMPrompt
 from world.magic.constants import GainSource
 from world.magic.exceptions import DramaticMomentSuggestionAlreadyResolved
@@ -29,7 +30,7 @@ from world.magic.services.gain import (
     maybe_suggest_dramatic_moments,
     resolve_dramatic_moment_suggestion,
 )
-from world.scenes.factories import InteractionFactory, SceneFactory
+from world.scenes.factories import InteractionFactory, SceneFactory, SceneGMParticipationFactory
 
 
 class MaybeSuggestDramaticMomentsTest(TestCase):
@@ -157,6 +158,44 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
         self.assertEqual(created, [])
         self.assertFalse(GMPrompt.objects.exists())
 
+    def test_suggest_skips_when_every_scene_gm_muted_dramatic_moment(self):
+        """#4101 fix round 1: the group-mute check is now one batched query
+        (prompt_recipients) instead of a per-GM prompts_enabled() loop -- same
+        semantics, proven here: every scene GM muted the group means no suggestion."""
+        gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=gm)
+        GMPromptFilterFactory(account=gm, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False)
+        created = maybe_suggest_dramatic_moments(
+            character_sheet=self.sheet,
+            scene=self.scene,
+            success_level=5,
+        )
+        self.assertEqual(created, [])
+        self.assertFalse(GMPrompt.objects.exists())
+
+    def test_suggest_proceeds_when_one_of_two_gms_unmuted(self):
+        muted_gm = AccountFactory()
+        unmuted_gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=muted_gm)
+        SceneGMParticipationFactory(scene=self.scene, account=unmuted_gm)
+        GMPromptFilterFactory(account=muted_gm, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False)
+        created = maybe_suggest_dramatic_moments(
+            character_sheet=self.sheet,
+            scene=self.scene,
+            success_level=5,
+        )
+        self.assertEqual(len(created), 1)
+
+    def test_suggest_proceeds_with_no_scene_gms(self):
+        """No GM participations at all -- the gate only screens an existing,
+        fully-muted GM pool, never an empty one (matches the pre-fix behavior)."""
+        created = maybe_suggest_dramatic_moments(
+            character_sheet=self.sheet,
+            scene=self.scene,
+            success_level=5,
+        )
+        self.assertEqual(len(created), 1)
+
 
 class ResolveDramaticMomentSuggestionTest(TestCase):
     def setUp(self):
@@ -208,6 +247,26 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
         with self.assertRaises(DramaticMomentSuggestionAlreadyResolved):
             resolve_dramatic_moment_suggestion(
                 self.suggestion, resolver=self.resolver, confirm=True
+            )
+
+    def test_resolve_refuses_non_dramatic_moment_kind(self):
+        """#4101 fix round 1: this service must never act on a narration prompt."""
+        from world.gm.constants import GMPromptKind
+        from world.gm.prompt_services import route_narratable_event
+        from world.gm.types import NarratableEvent
+        from world.magic.exceptions import DramaticMomentSuggestionWrongKind
+
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.DEATH,
+                scene=self.scene,
+                character_sheet=self.sheet,
+            ),
+            candidates=[self.resolver],
+        )
+        with self.assertRaises(DramaticMomentSuggestionWrongKind):
+            resolve_dramatic_moment_suggestion(
+                narration_prompt, resolver=self.resolver, confirm=False
             )
 
 

@@ -1045,7 +1045,7 @@ def maybe_suggest_dramatic_moments(
     """
     from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
     from world.gm.models import GMPrompt  # noqa: PLC0415
-    from world.gm.prompt_services import prompts_enabled, scene_gm_accounts  # noqa: PLC0415
+    from world.gm.prompt_services import prompt_recipients, scene_gm_accounts  # noqa: PLC0415
     from world.magic.models.dramatic_moment import (  # noqa: PLC0415
         DramaticMomentTag,
         DramaticMomentType,
@@ -1055,7 +1055,9 @@ def maybe_suggest_dramatic_moments(
         return []
 
     gms = scene_gm_accounts(scene)
-    if gms and not any(prompts_enabled(gm, GMPromptKind.DRAMATIC_MOMENT) for gm in gms):
+    # #4101 fix round 1: one batched mute query over every scene GM
+    # (prompt_recipients), not a per-GM prompts_enabled() call in a loop.
+    if gms and not prompt_recipients(scene, GMPromptKind.DRAMATIC_MOMENT, candidates=gms):
         return []
 
     created: list[GMPrompt] = []
@@ -1113,10 +1115,19 @@ def resolve_dramatic_moment_suggestion(
 
     Raises:
         DramaticMomentSuggestionAlreadyResolved: If the suggestion isn't PENDING.
+        DramaticMomentSuggestionWrongKind: If ``suggestion.kind`` isn't
+            ``dramatic_moment`` (#4101 fix round 1) -- this service mints/dismisses
+            dramatic-moment tags specifically and must never act on a narration
+            prompt (miracle/death/crossing/...) even if one somehow reaches it.
     """
-    from world.gm.constants import GMPromptStatus  # noqa: PLC0415
-    from world.magic.exceptions import DramaticMomentSuggestionAlreadyResolved  # noqa: PLC0415
+    from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        DramaticMomentSuggestionAlreadyResolved,
+        DramaticMomentSuggestionWrongKind,
+    )
 
+    if suggestion.kind != GMPromptKind.DRAMATIC_MOMENT:
+        raise DramaticMomentSuggestionWrongKind
     if suggestion.status != GMPromptStatus.PENDING:
         raise DramaticMomentSuggestionAlreadyResolved
 
