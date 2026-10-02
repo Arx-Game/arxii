@@ -153,7 +153,7 @@ git show-ref --verify --quiet "refs/heads/$BRANCH" || git branch "$BRANCH" origi
 URL=$(jq -r '.url' <<<"$ISSUE_JSON")
 COMPLEXITY=$(jq -r '.labels[] | select(.name | startswith("complexity:")) | .name' <<<"$ISSUE_JSON" | head -1)
 # Model selection is harness-dependent. Claude Code uses claude-* models; this
-# repo's Polytoken config uses umans-* models. The model name for each
+# repo's Polytoken config uses codex/* model selectors. The model name for each
 # complexity tier is overridable via env var so neither harness is hardcoded:
 #   ISSUE_MODEL_HIGH / ISSUE_MODEL_MEDIUM / ISSUE_MODEL_LOW
 # Defaults are the Claude Code tiers (backwards-compatible with the prior

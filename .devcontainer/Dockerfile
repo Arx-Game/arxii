@@ -115,13 +115,20 @@ RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g "playwright@${PLAYWRIG
 # PATH for any shell that activates mise (via ~/.bashrc).
 RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-code
 
+# Language servers for coding agents (polytoken's LSP tools look them up on
+# PATH): TypeScript for .ts/.tsx, and the vscode-langservers-extracted set for
+# CSS, HTML, JSON and ESLint. typescript-language-server uses the project's
+# own TypeScript from frontend/node_modules.
+RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g \
+    typescript-language-server vscode-langservers-extracted
+
 # Install polytoken — a separate coding-agent harness (daemon + CLI/TUI) run
 # alongside Claude Code. Same build-time rationale as Claude Code above: latest
 # at build, no churn on container recreate, explicit upgrades via `just dc-build`.
 # The installer fetches a static linux/amd64 binary into ~/.local/bin (already
 # on PATH) with no sudo. Build-time network is open, so the runtime firewall
-# never needs get/dl.polytoken.dev — only the model-provider host
-# (api.code.umans.ai) is allowlisted in init-firewall.sh.
+# never needs get/dl.polytoken.dev — only the model provider (OpenAI, via the
+# Cloudflare ranges in init-firewall.sh) must be reachable at runtime.
 RUN curl -fsS https://get.polytoken.dev | bash
 
 # Terminal multiplexer for long-lived agent sessions. `just dc-shell` attaches
