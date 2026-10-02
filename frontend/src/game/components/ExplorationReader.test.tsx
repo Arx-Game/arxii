@@ -152,6 +152,8 @@ describe('ExplorationReader', () => {
       arrive([note('n1'), note('n2')], 1000);
       expect(reader.scrollTop).toBe(1000);
 
+      // The reader turns the wheel; a move with no input behind it is not theirs.
+      fireEvent.wheel(reader);
       reader.scrollTop = 200;
       fireEvent.scroll(reader);
       arrive([note('n1'), note('n2'), note('n3')], 1200);

@@ -110,8 +110,12 @@ rule in a file is not a gate; you are the gate.
   tests like these are worth keeping for the rule itself; the finding is a
   diff whose **only** evidence for scroll, size, visibility or width behaviour
   is one of them. Ask for a Playwright spec that drives the built page
-  (`frontend/e2e/feed-follow.spec.ts` is the worked example), and ask whether
-  that spec was seen to fail against the code before the change.
+  (`frontend/e2e/feed-follow.spec.ts` is the worked example), ask whether
+  that spec was seen to fail against the code before the change, and ask
+  whether it was repeated (`--repeat-each`, one worker). The first version of
+  that fix passed its unit tests and one browser run, then failed
+  Chronological three runs in six: the virtualised list moved the scroll
+  position itself and the hook took it for the reader scrolling away.
 
 ## How to report
 

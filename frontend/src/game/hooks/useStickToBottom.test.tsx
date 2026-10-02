@@ -21,8 +21,15 @@ function setContentHeight(container: HTMLElement, height: number): void {
   Object.defineProperty(container, 'clientHeight', { value: VIEWPORT, configurable: true });
 }
 
-/** The reader moves the scrollbar: the position changes, then the event fires. */
+/** The reader turns the wheel: the input arrives, the position changes, then the scroll event fires. */
 function scrollTo(container: HTMLElement, top: number): void {
+  fireEvent.wheel(container);
+  container.scrollTop = top;
+  fireEvent.scroll(container);
+}
+
+/** Something other than the reader moves the position: a scroll event with no input before it. */
+function moveWithoutInput(container: HTMLElement, top: number): void {
   container.scrollTop = top;
   fireEvent.scroll(container);
 }
@@ -31,10 +38,14 @@ describe('useStickToBottom', () => {
   let observer: ResizeObserverStub;
 
   beforeEach(() => {
+    // The hook reads the clock to tell the reader's scrolling from a move
+    // nobody made; a faked clock lets a test put time between the two.
+    vi.useFakeTimers();
     observer = stubResizeObserver();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -108,6 +119,43 @@ describe('useStickToBottom', () => {
     act(() => observer.resize());
 
     expect(container.scrollTop).toBe(1200);
+  });
+
+  it('keeps following when the position moves up and the reader did not move it', () => {
+    const container = renderAtBottom();
+    // The reader's last input is well in the past by the time this happens.
+    vi.advanceTimersByTime(2000);
+
+    // A virtualised list measures its rows shorter than it estimated and pulls
+    // the position up to compensate, while new rows have already made the
+    // content taller. Nobody scrolled. This is the sequence that stopped
+    // Chronological from following in a browser about one run in two.
+    setContentHeight(container, 1600);
+    moveWithoutInput(container, 564);
+    grow(container, 1800);
+
+    expect(container.scrollTop).toBe(1800);
+  });
+
+  it('counts a scrollbar drag as the reader moving', () => {
+    const container = renderAtBottom();
+
+    // No wheel and no key: the pointer goes down on the scrollbar and stays down.
+    fireEvent.pointerDown(container);
+    moveWithoutInput(container, 200);
+    grow(container, 1200);
+
+    expect(container.scrollTop).toBe(200);
+  });
+
+  it('counts a key press inside the feed as the reader moving', () => {
+    const container = renderAtBottom();
+
+    fireEvent.keyDown(container, { key: 'PageUp' });
+    moveWithoutInput(container, 200);
+    grow(container, 1200);
+
+    expect(container.scrollTop).toBe(200);
   });
 
   it('stays off the bottom while the reader scrolls back down without reaching it', () => {

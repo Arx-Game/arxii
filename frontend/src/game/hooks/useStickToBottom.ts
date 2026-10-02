@@ -3,6 +3,13 @@ import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 /** How close to the end still counts as reading the newest line. */
 const NEAR_BOTTOM_PX = 24;
 
+/**
+ * How long after a wheel turn, a touch or a key press a move up is still the
+ * reader's. A scroll the reader starts keeps moving for a few frames after
+ * the input that started it.
+ */
+const READER_INPUT_WINDOW_MS = 500;
+
 /** Whether a scroll container is showing the end of its content. */
 export function isNearBottom(container: HTMLElement): boolean {
   return container.scrollHeight - container.scrollTop - container.clientHeight < NEAR_BOTTOM_PX;
@@ -31,6 +38,14 @@ export interface StickToBottom {
  * content sees all of them; one on the container keeps the last line in view
  * when the composer grows and the feed above it gets shorter.
  *
+ * Only the reader takes the feed off the bottom: a move up that follows a
+ * wheel turn, a touch, a key press, or a pointer held down on the scrollbar.
+ * The position also moves up with nobody touching it, when a virtualised list
+ * measures rows shorter than it estimated and corrects for the difference,
+ * and it can be far from the bottom at that moment because newer rows have
+ * not been followed yet. Reading that as "scrolled away" stopped
+ * Chronological from following in about one run in two.
+ *
  * `enabled` false stops both the following and the tracking, for a view that
  * is not live (a historical reference).
  */
@@ -42,6 +57,23 @@ export function useStickToBottom(enabled = true): StickToBottom {
   useEffect(() => {
     if (!container || !enabled) return;
     let lastTop = container.scrollTop;
+    let lastInputAt = Number.NEGATIVE_INFINITY;
+    let pointerHeld = false;
+
+    const noteInput = () => {
+      lastInputAt = performance.now();
+    };
+    const holdPointer = () => {
+      pointerHeld = true;
+    };
+    const releasePointer = () => {
+      if (!pointerHeld) return;
+      pointerHeld = false;
+      // A drag that is let go can still be settling.
+      lastInputAt = performance.now();
+    };
+    const readerIsScrolling = () =>
+      pointerHeld || performance.now() - lastInputAt < READER_INPUT_WINDOW_MS;
 
     const follow = () => {
       if (!pinnedRef.current) return;
@@ -54,11 +86,7 @@ export function useStickToBottom(enabled = true): StickToBottom {
       const top = container.scrollTop;
       if (isNearBottom(container)) {
         pinnedRef.current = true;
-      } else if (top < lastTop) {
-        // Only a move up takes the reader off the bottom. Being away from it
-        // without one is new content that has not been followed yet: the
-        // event from an earlier follow can fire after the next line landed,
-        // and reading that as "scrolled away" would stop the feed for good.
+      } else if (top < lastTop && readerIsScrolling()) {
         pinnedRef.current = false;
       }
       lastTop = top;
@@ -68,11 +96,23 @@ export function useStickToBottom(enabled = true): StickToBottom {
     // newest line if that is where the reader was.
     follow();
     container.addEventListener('scroll', track, { passive: true });
+    container.addEventListener('wheel', noteInput, { passive: true });
+    container.addEventListener('touchmove', noteInput, { passive: true });
+    container.addEventListener('keydown', noteInput);
+    container.addEventListener('pointerdown', holdPointer);
+    window.addEventListener('pointerup', releasePointer);
+    window.addEventListener('pointercancel', releasePointer);
     const observer = new ResizeObserver(follow);
     observer.observe(container);
     if (content) observer.observe(content);
     return () => {
       container.removeEventListener('scroll', track);
+      container.removeEventListener('wheel', noteInput);
+      container.removeEventListener('touchmove', noteInput);
+      container.removeEventListener('keydown', noteInput);
+      container.removeEventListener('pointerdown', holdPointer);
+      window.removeEventListener('pointerup', releasePointer);
+      window.removeEventListener('pointercancel', releasePointer);
       observer.disconnect();
     };
   }, [container, content, enabled]);

@@ -280,9 +280,14 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   when a note arrives, when a virtualised row is measured taller than its
   estimate and when an image loads, and the count-based effect this replaced
   followed none of those (and the quiet-room reader had no following at all).
-  Only a move **up** unpins: the scroll event from an earlier follow can fire
-  after the next line has landed, and reading that distance as "scrolled away"
-  stopped the feed for good. Callers: `GameWindow` (the scene feed's container;
+  **Only the reader unpins it**: a move up that follows a wheel turn, a touch, a
+  key press, or a pointer held on the scrollbar. Distance from the bottom alone
+  proves nothing (the event from an earlier follow can fire after the next line
+  landed), and neither does a move up alone: a virtualised list pulls the
+  position up by itself when rows measure shorter than their estimate. Treating
+  that as the reader scrolling stopped Chronological following in about one
+  browser run in two, with every jsdom test green; `e2e/feed-follow.spec.ts`
+  found it, and only when repeated. Callers: `GameWindow` (the scene feed's container;
   off for a reference view), `ExplorationReader`, and `ThreadedNarrativeReader`
   for Chronological's inner container. A caller that places the reader itself
   (a tab switch, a restored anchor) writes `pinnedRef`. Tests fire the observer

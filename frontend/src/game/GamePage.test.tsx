@@ -2600,6 +2600,8 @@ describe('GamePage', () => {
       growFeed(feed, observer, 2000);
       expect(feed.scrollTop).toBe(2000);
 
+      // The reader turns the wheel; a move with no input behind it is not theirs.
+      fireEvent.wheel(feed);
       feed.scrollTop = 300;
       fireEvent.scroll(feed);
       growFeed(feed, observer, 2400);

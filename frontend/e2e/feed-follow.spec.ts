@@ -100,6 +100,28 @@ test.describe('the feed follows its newest line', () => {
     await page.waitForTimeout(500);
     expect(await feed.evaluate((el) => el.scrollTop)).toBe(readingAt);
   });
+
+  test('scene, Chronological: its own scroll container follows too', async ({ page }) => {
+    const [connection] = await reachReadySession(page);
+    await page.getByText('Display settings').click();
+    await page.getByLabel('Reader order').selectOption('chronological');
+    // Chronological scrolls inside this container, not the feed around it.
+    const timeline = page.getByTestId('chrono-scroll-container');
+
+    for (let pose = 1; pose <= 40; pose += 1) {
+      pushForeignPose(connection, { id: 900 + pose, content: `Nyx counts ${pose}.` });
+    }
+    await expect(timeline.getByText('Nyx counts 40.')).toBeInViewport();
+    expect(await overflows(timeline)).toBe(true);
+    await expect.poll(() => belowTheFold(timeline)).toBeLessThan(2);
+
+    await wheel(page, timeline, -3000);
+    await expect.poll(() => belowTheFold(timeline)).toBeGreaterThan(200);
+    const readingAt = await timeline.evaluate((el) => el.scrollTop);
+    pushForeignPose(connection, { id: 990, content: 'Nyx counts on, unheard.' });
+    await page.waitForTimeout(500);
+    expect(await timeline.evaluate((el) => el.scrollTop)).toBe(readingAt);
+  });
 });
 
 test.describe('the text fills the story pane', () => {
