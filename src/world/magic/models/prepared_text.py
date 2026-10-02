@@ -1,8 +1,11 @@
 """Prepared per-character Audere text (#4101): the layer above patron and tier.
 
-Authored content (durable, ADR-0237): written by staff in admin or by the
-character's table GM. Resolution is field by field (a blank field falls through
-to the patron variant, then the tier) in world.magic.services.prepared_text.
+Written by staff in admin or by the character's table GM, for one specific
+character. This is play-adjacent, not catalog content: it lives and dies with
+the character sheet it was written for (CASCADE), carries no natural key, and
+is never exported through the content pipeline. Resolution is field by field
+(a blank field falls through to the patron variant, then the tier) in
+world.magic.services.prepared_text.
 """
 
 from __future__ import annotations
@@ -14,7 +17,12 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 
 class CharacterCrossingText(SharedMemoryModel):
-    """One character's own text for their next Audere Majora crossing."""
+    """One character's own text for their next Audere Majora crossing.
+
+    Authored per character by staff or that character's table GM — not catalog
+    content. Lives and dies with ``character_sheet`` (CASCADE) and is never
+    exported.
+    """
 
     character_sheet = models.ForeignKey(
         "arxii.CharacterSheet",
@@ -83,7 +91,12 @@ class CharacterCrossingText(SharedMemoryModel):
 
 
 class CharacterSurgeText(SharedMemoryModel):
-    """One character's own Audere surge line (no patron layer exists for surges)."""
+    """One character's own Audere surge line (no patron layer exists for surges).
+
+    Authored per character by staff or that character's table GM — not catalog
+    content. Lives and dies with ``character_sheet`` (CASCADE) and is never
+    exported.
+    """
 
     character_sheet = models.OneToOneField(
         "arxii.CharacterSheet",
