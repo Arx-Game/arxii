@@ -697,6 +697,19 @@ describe('SpellbookTab personalization (#4099)', () => {
     );
   });
 
+  it('shows a bare "Level N" aside for an unpersonalized technique (#4099 parked minor)', () => {
+    renderSheetWith({
+      techniques: [mockTechnique({ name: 'Scorch Lash', catalog_name: 'Scorch Lash', level: 5 })],
+    });
+    const entry = screen.getByTestId('spellbook-technique');
+    const aside = within(entry).getByText('Level 5');
+    expect(aside).toHaveTextContent('Level 5');
+    expect(aside.textContent).not.toContain('·');
+    // Only one occurrence of the technique's name in the entry — no repeated
+    // catalog-name clause alongside it.
+    expect(within(entry).getAllByText('Scorch Lash')).toHaveLength(1);
+  });
+
   it('marks a form bought early', () => {
     renderSheetWith({
       techniques: [
