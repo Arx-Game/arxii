@@ -358,17 +358,17 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     )
     from world.magic.narration import signature_clause  # noqa: PLC0415
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
-        resolve_price_snippet,
+        paid_price_snippet,
         technique_display_name,
     )
 
     recorded_interaction = None
     if participant is not None:
-        # #4099: the caster's own display name + price clause, matching the
-        # combat declaration and outcome narration (not the catalog name with
-        # no price clause).
+        # #4099: the caster's own display name + the clause of the price this
+        # contribution actually paid (use_technique's one decision), matching the
+        # combat outcome narration.
         display_name = technique_display_name(objectdb, technique)
-        price_clause_text = signature_clause(resolve_price_snippet(objectdb, technique))
+        price_clause_text = signature_clause(paid_price_snippet(technique_use_result.price_paid))
         clash_summary_label = f"{display_name} → clash contribution"
         if price_clause_text:
             clash_summary_label = f"{clash_summary_label} {price_clause_text}"

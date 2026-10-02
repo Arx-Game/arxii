@@ -1190,6 +1190,29 @@ class TestPersonalizationRows(TestCase):
         self.assertTrue(_probe_for("creation-forms").resolve(None).present)
 
 
+class TestPriceComponentsActiveProbe(TestCase):
+    """The TUNING row for prices whose consumed item can no longer be made (#4099)."""
+
+    def test_no_component_is_present(self) -> None:
+        self.assertTrue(_probe_for("price-components-active").resolve(None).present)
+
+    def test_a_component_from_an_inactive_template_is_reported(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import PriceFactory
+        from world.magic.models import PriceComponentRequirement
+
+        price = PriceFactory(name="Ash and bone")
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Old bone", is_active=False)
+        )
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Fresh ash")
+        )
+        result = _probe_for("price-components-active").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Ash and bone: Old bone",))
+
+
 class TestPersonalizationCopyProbe(TestCase):
     """The TUNING row for the Gift stage's make-it-yours panel copy (#4099)."""
 
@@ -1208,3 +1231,78 @@ class TestPersonalizationCopyProbe(TestCase):
         for key in PERSONALIZATION_COPY_KEYS:
             CGExplanation.objects.update_or_create(key=key, defaults={"text": f"Authored {key}"})
         self.assertTrue(_probe_personalization_copy().present)
+
+
+class TestCharacterCreationGapProbes(TestCase):
+    """The six probes the first roster PC stock-take asked for (#4104): each names the
+    rows a realm still lacks so a staff member filling it never has to walk a draft
+    into the gap to find it."""
+
+    def test_beginnings_without_species_and_traditions_are_named(self) -> None:
+        from world.character_creation.factories import (
+            BeginningsFactory,
+            BeginningTraditionFactory,
+        )
+        from world.species.factories import SpeciesFactory
+
+        bare = BeginningsFactory(name="Nobility")
+        full = BeginningsFactory(name="Caretaker")
+        full.allowed_species.add(SpeciesFactory(name="Human"))
+        BeginningTraditionFactory(beginning=full)
+        BeginningsFactory(name="Retired", is_active=False)
+
+        species = rc._beginnings_without_species()
+        self.assertFalse(species.present)
+        self.assertEqual(species.missing, ("Nobility",))
+        traditions = rc._beginnings_without_traditions()
+        self.assertFalse(traditions.present)
+        self.assertEqual(traditions.missing, ("Nobility",))
+
+        bare.allowed_species.add(SpeciesFactory(name="Elf"))
+        BeginningTraditionFactory(beginning=bare)
+        self.assertTrue(rc._beginnings_without_species().present)
+        self.assertTrue(rc._beginnings_without_traditions().present)
+
+    def test_realm_with_nobility_but_no_particles_is_named(self) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.roster.constants import NOBLE_KIND_NAME
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.houses.models import NobiliaryParticle
+
+        umbros = RealmFactory(name="Umbros", theme="umbros")
+        # Arx has no nobility by ruling and is not in the canon table, so it never lists.
+        RealmFactory(name="Arx", theme="arx")
+
+        result = rc._realms_without_nobiliary_particles()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Umbros",))
+
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        NobiliaryParticle.objects.create(realm=umbros, kind=noble, particle="arn")
+        self.assertTrue(rc._realms_without_nobiliary_particles().present)
+
+    def test_feature_rows_must_all_exist_and_be_active(self) -> None:
+        from world.distinctions.factories import DistinctionFactory
+        from world.seeds.distinctive_features import FEATURE_ROW_NAMES
+
+        self.assertEqual(set(rc._probe_feature_distinctions().missing), set(FEATURE_ROW_NAMES))
+        for name in FEATURE_ROW_NAMES[:-1]:
+            DistinctionFactory(name=name)
+        DistinctionFactory(name=FEATURE_ROW_NAMES[-1], is_active=False)
+        result = rc._probe_feature_distinctions()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (FEATURE_ROW_NAMES[-1],))
+
+    def test_the_six_are_registered_with_admin_links(self) -> None:
+        keys = {dep.key: dep for dep in rc.build_registry(rc._declarations())}
+        for key in (
+            "character_creation.beginnings_allow_species",
+            "character_creation.beginnings_have_traditions",
+            "societies.realm_nobiliary_particles",
+            "character_creation.appearance_sections",
+            "distinctions.feature_rows",
+            "character_sheets.enemy_reasons",
+        ):
+            self.assertIn(key, keys)
+            self.assertEqual(keys[key].tier, rc.DependencyTier.REQUIRED)
+            self.assertTrue(keys[key].admin_model)

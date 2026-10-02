@@ -213,6 +213,7 @@ class CmdFrame(ArxCommand):
             CrimeEvidence.objects.filter(
                 state=EvidenceState.GATHERED,
                 item_instance__holder_character_sheet=sheet,
+                item_instance__destroyed_at__isnull=True,
             ).select_related("deed")
         )
 

@@ -2965,6 +2965,7 @@
   - conditioninstance_set <- conditions.ConditionInstance
   - treatments <- conditions.TreatmentTemplate
   - treatment_backlash_source <- conditions.TreatmentTemplate
+  - inflicting_prices <- magic.Restriction
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
@@ -4664,6 +4665,7 @@
   - clues_about <- clues.Clue
   - clue_triggers <- clues.ItemClueTrigger
   - codex_entries_about <- codex.CodexEntry
+  - price_requirements <- magic.PriceComponentRequirement
   - class_level_item_requirements <- progression.ItemRequirement
   - ritual_requirements <- magic.RitualComponentRequirement
   - technique_grants <- magic.TechniqueGrant
@@ -5705,6 +5707,12 @@
   - persona_snapshot -> scenes.Persona [FK] (nullable)
   - presentation -> items.FashionPresentation [FK]
 
+### PriceComponentRequirement
+**Foreign Keys:**
+  - restriction -> magic.Restriction [FK]
+  - item_template -> items.ItemTemplate [FK]
+  - min_quality_tier -> items.QualityTier [FK] (nullable)
+
 ### Reincarnation
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -5809,8 +5817,10 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - inflicted_condition -> conditions.ConditionTemplate [FK] (nullable)
   - allowed_effect_types -> magic.EffectType [M2M]
 **Pointed to by:**
+  - component_requirements <- magic.PriceComponentRequirement
   - techniques <- magic.Technique
   - paying_holds <- magic.CharacterTechnique
   - technique_drafts <- magic.TechniqueDraft

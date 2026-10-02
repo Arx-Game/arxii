@@ -111,7 +111,10 @@ from world.magic.services.technique_forms import (
     technique_price_payload,
     technique_signature_payload,
 )
-from world.magic.services.technique_personalization import hold_display_name
+from world.magic.services.technique_personalization import (
+    hold_display_name,
+    price_components_by_price,
+)
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure, TenureMedia
 from world.scenes.constants import PersonaType
@@ -893,6 +896,7 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
             # #4099: the hold's own name/description/price — ride this prefetch
             # rather than a second query per technique.
             "price",
+            "price__inflicted_condition",
             "early_form",
             "early_form__resonance",
         ).prefetch_related(
@@ -961,6 +965,11 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
     next_signatures = (
         next_signatures_by_technique(character) if sheet.cached_character_techniques else {}
     )
+    # #4099: what each held price consumes per paid cast. One fixed query for the
+    # whole sheet, none when no hold carries a price.
+    price_components = price_components_by_price(
+        ct.price_id for ct in sheet.cached_character_techniques if ct.price_id is not None
+    )
     techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
     for ct in sheet.cached_character_techniques:
         tech = ct.technique
@@ -984,7 +993,7 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
                 signature=technique_signature_payload(character, tech),
                 # #4099: the hold's own price and next flourish — ride the
                 # already-prefetched hold and the one fixed catalog query above.
-                price=technique_price_payload(ct),
+                price=technique_price_payload(ct, components=price_components),
                 next_signature=next_signatures.get(tech.pk),
             )
         )

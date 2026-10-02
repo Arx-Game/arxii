@@ -183,11 +183,9 @@ resolve_and_add "sentry.io"
 # endpoint that Claude Code reaches.
 resolve_and_add "statsig.com"
 resolve_and_add "pypi.org"
-# Umans Code — Anthropic-compatible model endpoint (https://api.code.umans.ai).
-# Backs two harnesses: Claude Code via its ANTHROPIC_BASE_URL override, and
-# polytoken's custom Anthropic-compatible provider. Two stable AWS EIPs
-# (eu-west-3); dig-resolved like the other small/stable hosts above.
-resolve_and_add "api.code.umans.ai"
+# OpenAI (chatgpt.com, auth.openai.com, api.openai.com) needs no entry here: it
+# sits behind Cloudflare, whose ranges step (d) already allowlists. Polytoken's
+# Codex provider and Prime Agent both reach it through that.
 # ---- a2) Rotating-pool hosts: union of repeated digs, widened to /24 ----
 # Some endpoints sit behind a GTM that answers with a ROTATING SUBSET of a
 # larger backing pool, so a one-shot resolve_and_add allowlists only whichever

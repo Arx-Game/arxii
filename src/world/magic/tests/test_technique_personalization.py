@@ -14,7 +14,7 @@ from world.magic.models import MotifResonance
 from world.magic.services.technique_personalization import (
     clean_custom_technique_description,
     clean_custom_technique_name,
-    resolve_price_snippet,
+    paid_price_snippet,
     seed_motif_from_gift_resonance,
     technique_display_name,
     technique_price_for,
@@ -89,14 +89,20 @@ class HoldReadTests(TestCase):
     def test_price_and_snippet(self) -> None:
         character = self.sheet.character
         self.assertEqual(technique_price_for(character, self.technique), self.price)
-        self.assertEqual(resolve_price_snippet(character, self.technique), "frost blooms white")
+        self.assertEqual(
+            paid_price_snippet(technique_price_for(character, self.technique)),
+            "frost blooms white",
+        )
 
     def test_snippet_falls_back_to_the_price_name(self) -> None:
         price = PriceFactory(name="Blood drawn", cast_narration="")
         technique = TechniqueFactory()
         CharacterTechniqueFactory(character=self.sheet, technique=technique, price=price)
         self.sheet.character.techniques.invalidate()
-        self.assertEqual(resolve_price_snippet(self.sheet.character, technique), "Blood drawn")
+        self.assertEqual(
+            paid_price_snippet(technique_price_for(self.sheet.character, technique)),
+            "Blood drawn",
+        )
 
     def test_price_flipped_to_design_kind_is_honored_no_longer(self) -> None:
         """A row staff later flip from PRICE to DESIGN grants nothing (#4099 final fix) -
@@ -107,7 +113,6 @@ class HoldReadTests(TestCase):
         self.price.creation_point_cost = None
         self.price.save(update_fields=["kind", "creation_point_cost"])
         self.assertIsNone(technique_price_for(self.sheet.character, self.technique))
-        self.assertIsNone(resolve_price_snippet(self.sheet.character, self.technique))
 
     def test_hold_lookup_is_cached(self) -> None:
         character = self.sheet.character

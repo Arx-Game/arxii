@@ -235,15 +235,16 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
 def render_clash_contribution_label(contribution: ClashContribution) -> str:
     """Render a one-line declaration label for a clash contribution.
 
-    Format: ``<DisplayName> → <ClashFlavor> vs <OpponentName>[ <price clause>]``.
+    Format: ``<DisplayName> → <ClashFlavor> vs <OpponentName>``.
 
-    ``<DisplayName>`` is the caster's own display name and the trailing clause is
-    their chosen price's cosmetic clause (#4099 fix round) — the same resolution
-    ``render_action_declaration_label`` / ``render_action_outcome_narration`` use,
-    so a clash contribution's label agrees with the rest of the round.
+    ``<DisplayName>`` is the caster's own display name (#4099 fix round), the same
+    resolution ``render_action_declaration_label`` uses. Like that label it carries
+    no price clause: whether a cast pays its price is decided only when the cast
+    resolves (``use_technique``, #4099), and a ``ClashContribution`` row does not
+    record that decision. The resolved contribution's own ACTION interaction
+    (``commit_to_clash``) carries the clause of the price it actually paid.
     """
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
-        resolve_price_snippet,
         technique_display_name,
     )
 
@@ -253,9 +254,7 @@ def render_clash_contribution_label(contribution: ClashContribution) -> str:
     opponent_name = clash.npc_opponent.name if clash.npc_opponent_id else "?"
     caster_character = contribution.character.character
     display_name = technique_display_name(caster_character, technique)
-    price_clause_text = signature_clause(resolve_price_snippet(caster_character, technique))
-    label = f"{display_name} → {flavor} vs {opponent_name}"
-    return f"{label} {price_clause_text}" if price_clause_text else label
+    return f"{display_name} → {flavor} vs {opponent_name}"
 
 
 def _build_tail_clauses(

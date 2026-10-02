@@ -12,7 +12,11 @@ from world.magic.services.power_terms import (
     get_power_term_providers,
     price_power_term,
 )
-from world.magic.services.technique_personalization import resolve_price_snippet
+from world.magic.services.technique_personalization import (
+    paid_price_snippet,
+    price_paid_for_cast,
+)
+from world.magic.types.personalization import PricePayment
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
@@ -22,50 +26,41 @@ from world.scenes.tests.cast_test_helpers import (
 
 
 class PricePowerTermTests(TestCase):
+    """The power term adds the bonus of the price the cast PAID (its context's one
+    decision), never re-reading the hold (#4099)."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.technique = TechniqueFactory()
         cls.price = PriceFactory(power_bonus=6)
 
-    def _ctx(self) -> PowerTermContext:
-        self.sheet.character.techniques.invalidate()
-        return PowerTermContext(sheet=self.sheet, technique=self.technique, applicable_threads=[])
+    def _ctx(self, payment: PricePayment | None) -> PowerTermContext:
+        return PowerTermContext(
+            sheet=self.sheet,
+            technique=self.technique,
+            applicable_threads=[],
+            price_payment=payment,
+        )
 
     def test_registered(self) -> None:
         self.assertIn(price_power_term, get_power_term_providers())
 
-    def test_unpriced_hold_adds_nothing(self) -> None:
-        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        self.assertEqual(price_power_term(self._ctx()), 0)
+    def test_unpaid_cast_adds_nothing(self) -> None:
+        self.assertEqual(price_power_term(self._ctx(None)), 0)
 
-    def test_price_adds_its_power_bonus(self) -> None:
-        hold = CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        hold.price = self.price
-        hold.save(update_fields=["price"])
-        self.assertEqual(price_power_term(self._ctx()), 6)
+    def test_paid_price_adds_its_power_bonus(self) -> None:
+        self.assertEqual(price_power_term(self._ctx(PricePayment(price=self.price))), 6)
 
-    def test_no_technique_adds_nothing(self) -> None:
-        ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
-        self.assertEqual(price_power_term(ctx), 0)
-
-    def test_price_flipped_to_design_kind_adds_nothing(self) -> None:
-        """A row staff later flip from PRICE to DESIGN grants nothing (#4099 final fix) -
-        the hold's FK is stale; the row's current kind is checked fresh at read time."""
-        from world.magic.constants import RestrictionKind
-
-        hold = CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        hold.price = self.price
-        hold.save(update_fields=["price"])
-        self.price.kind = RestrictionKind.DESIGN
-        self.price.creation_point_cost = None
-        self.price.save(update_fields=["kind", "creation_point_cost"])
-        self.assertEqual(price_power_term(self._ctx()), 0)
+    def test_reads_the_decision_without_a_query(self) -> None:
+        ctx = self._ctx(PricePayment(price=self.price))
+        with self.assertNumQueries(0):
+            self.assertEqual(price_power_term(ctx), 6)
 
 
-class PriceOwnershipScopingTests(TestCase):
-    """A price belongs to the hold that bought it - never bleeds to another caster's
-    cast of the same technique (#4099 fix round 1)."""
+class PriceDecisionTests(TestCase):
+    """``price_paid_for_cast`` reads the hold: its price, scoped to its owner, and
+    honoured only while the row is still a PRICE (#4099 fix rounds)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -80,53 +75,36 @@ class PriceOwnershipScopingTests(TestCase):
         hold_a.save(update_fields=["price"])
         CharacterTechniqueFactory(character=cls.sheet_b, technique=cls.technique)
 
-    def test_non_owner_power_term_is_zero(self) -> None:
-        self.sheet_b.character.techniques.invalidate()
-        ctx = PowerTermContext(sheet=self.sheet_b, technique=self.technique, applicable_threads=[])
-        self.assertEqual(price_power_term(ctx), 0)
-
-    def test_owner_still_gets_the_power_bonus(self) -> None:
-        """Sanity check alongside the non-owner test: A's own cast is unaffected by B."""
+    def setUp(self) -> None:
         self.sheet_a.character.techniques.invalidate()
-        ctx = PowerTermContext(sheet=self.sheet_a, technique=self.technique, applicable_threads=[])
-        self.assertEqual(price_power_term(ctx), 6)
-
-    def test_non_owner_narration_carries_no_price_clause(self) -> None:
         self.sheet_b.character.techniques.invalidate()
-        snippet = resolve_price_snippet(self.sheet_b.character, self.technique)
-        self.assertIsNone(snippet)
+
+    def test_owner_pays_their_price(self) -> None:
+        payment = price_paid_for_cast(self.sheet_a.character, self.technique)
+        self.assertEqual(payment.price, self.price)
+
+    def test_non_owner_pays_nothing_and_narrates_no_clause(self) -> None:
+        payment = price_paid_for_cast(self.sheet_b.character, self.technique)
+        self.assertIsNone(payment)
         line = render_cast_outcome_narration(
             actor_label="B",
             technique_name=self.technique.name,
             target_label=None,
             outcome_label="Success",
             success_level=1,
-            price_snippet=snippet,
+            price_snippet=paid_price_snippet(None),
         )
         self.assertNotIn("frost blooms white", line)
 
+    def test_price_flipped_to_design_kind_is_not_paid(self) -> None:
+        """A row staff later flip from PRICE to DESIGN grants nothing (#4099 final fix) -
+        the hold's FK is stale; the row's current kind is checked fresh at read time."""
+        from world.magic.constants import RestrictionKind
 
-class PriceHandlerCachingTests(TestCase):
-    """price_power_term reads the hold through the cached handler - one query no
-    matter how many times a single cast context asks for it (#4099 fix round 1)."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.sheet = CharacterSheetFactory()
-        cls.technique = TechniqueFactory()
-        cls.price = PriceFactory(power_bonus=6)
-        hold = CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
-        hold.price = cls.price
-        hold.save(update_fields=["price"])
-
-    def test_hold_is_read_once_and_cached_across_calls(self) -> None:
-        self.sheet.character.techniques.invalidate()
-        ctx = PowerTermContext(sheet=self.sheet, technique=self.technique, applicable_threads=[])
-
-        with self.assertNumQueries(1):
-            self.assertEqual(price_power_term(ctx), 6)
-        with self.assertNumQueries(0):
-            self.assertEqual(price_power_term(ctx), 6)
+        self.price.kind = RestrictionKind.DESIGN
+        self.price.creation_point_cost = None
+        self.price.save(update_fields=["kind", "creation_point_cost"])
+        self.assertIsNone(price_paid_for_cast(self.sheet_a.character, self.technique))
 
 
 class PriceNarrationRenderTests(TestCase):
@@ -177,3 +155,41 @@ class PriceCastNarrationTests(CastScenarioMixin):
         self.assertIn("Winterbite", content)
         self.assertIn("frost blooms white across their hand", content)
         self.assertNotIn(technique.name, content)
+
+    def _priced_with_component(self, *, carried: int):
+        """A cast technique whose price consumes 2 needles; the caster carries ``carried``."""
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.models import PriceComponentRequirement
+        from world.magic.tests.price_cost_helpers import carry
+
+        technique = make_benign_castable_technique()
+        grant_technique(self.caster, technique)
+        needle = ItemTemplateFactory()
+        price = PriceFactory(cast_narration="blood beads on the needle")
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=needle, quantity=2
+        )
+        hold = self.caster.character_sheet.character_techniques.get(technique=technique)
+        hold.price = price
+        hold.save(update_fields=["price"])
+        character = self.caster.character_sheet.character
+        character.techniques.invalidate()
+        stack = carry(character, needle, quantity=carried)
+        cast = request_technique_cast(
+            scene=self.scene, initiator_persona=self.caster, technique=technique
+        )
+        return cast, stack
+
+    def test_scene_cast_with_the_component_spends_it_and_narrates(self) -> None:
+        cast, stack = self._priced_with_component(carried=2)
+        self.assertIn("blood beads on the needle", cast.outcome_interaction.content)
+        from world.items.models import ItemInstance
+
+        self.assertFalse(ItemInstance.objects.filter(pk=stack.pk).exists())
+
+    def test_scene_cast_without_the_component_still_casts_without_the_price(self) -> None:
+        cast, stack = self._priced_with_component(carried=1)
+        self.assertIsNotNone(cast.outcome_interaction)
+        self.assertNotIn("blood beads on the needle", cast.outcome_interaction.content)
+        stack.refresh_from_db()
+        self.assertEqual(stack.quantity, 1)

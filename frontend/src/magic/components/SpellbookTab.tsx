@@ -34,6 +34,7 @@ import {
   Tag,
 } from '@/character_sheets/components/sheet/primitives';
 import type { CharacterSheetAura, CharacterSheetTechnique } from '@/character_sheets/api';
+import { priceCostParts } from '@/magic/priceCost';
 import type { TechniqueForm } from '@/magic/types';
 import { MotifStylePanel } from './MotifStylePanel';
 import { TechniqueEffectSummaryDisplay } from './TechniqueEffectSummary';
@@ -73,6 +74,9 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
   const unlocked = technique.forms.filter((form) => !form.is_locked);
   const locked = technique.forms.filter((form) => form.is_locked);
   const { signature } = technique;
+  const priceCost = technique.price
+    ? priceCostParts(technique.price.consumes, technique.price.inflicts)
+    : [];
 
   if (
     unlocked.length <= 1 &&
@@ -153,6 +157,14 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
       {technique.price && (
         <p className="text-sm" data-testid="technique-price">
           <span className="font-medium">Price:</span> {technique.price.name}
+          {priceCost.length > 0 && (
+            <span
+              className="block text-xs text-muted-foreground"
+              data-testid="technique-price-cost"
+            >
+              {priceCost.join(' · ')}
+            </span>
+          )}
         </p>
       )}
     </div>

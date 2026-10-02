@@ -954,6 +954,8 @@ export const mockPersonalizationOptions: TechniquePersonalizationOptions = {
       power_bonus: 0,
       level: 1,
       cost: 3,
+      consumes: [],
+      inflicts: null,
     },
   ],
   forms: [
@@ -966,6 +968,8 @@ export const mockPersonalizationOptions: TechniquePersonalizationOptions = {
       power_bonus: 0,
       level: 1,
       cost: 4,
+      consumes: [],
+      inflicts: null,
     },
   ],
   prices: [
@@ -978,6 +982,8 @@ export const mockPersonalizationOptions: TechniquePersonalizationOptions = {
       power_bonus: 4,
       level: 0,
       cost: 1,
+      consumes: [{ name: 'Shard of rime', quantity: 2 }],
+      inflicts: 'Frostbitten fingers',
     },
   ],
 };

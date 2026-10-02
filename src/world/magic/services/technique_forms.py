@@ -41,10 +41,16 @@ from world.magic.types.technique_effects import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.signature import SignatureMotifBonus
-    from world.magic.models.techniques import CharacterTechnique, Technique
+    from world.magic.models.techniques import (
+        CharacterTechnique,
+        PriceComponentRequirement,
+        Technique,
+    )
     from world.magic.models.threads import Thread
 
 
@@ -274,13 +280,30 @@ def technique_signature_payload(
     )
 
 
-def technique_price_payload(hold: CharacterTechnique | None) -> TechniquePricePayload | None:
-    """The hold's price for the sheet, or ``None``. Reads the select_related price."""
+def technique_price_payload(
+    hold: CharacterTechnique | None,
+    *,
+    components: Mapping[int, list[PriceComponentRequirement]],
+) -> TechniquePricePayload | None:
+    """The hold's price for the sheet, or ``None``. Reads the select_related price.
+
+    ``components`` is ``price_components_by_price`` over the sheet's held prices (one
+    bulk read for the whole sheet), so the real cost shows without a query per hold.
+    """
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        price_consumes_payload,
+        price_inflicts_name,
+    )
+
     if hold is None or hold.price_id is None:
         return None
     price = hold.price
     return TechniquePricePayload(
-        name=price.name, description=price.description, power_bonus=price.power_bonus
+        name=price.name,
+        description=price.description,
+        power_bonus=price.power_bonus,
+        consumes=price_consumes_payload(components.get(price.pk, [])),
+        inflicts=price_inflicts_name(price),
     )
 
 

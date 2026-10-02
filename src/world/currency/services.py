@@ -429,8 +429,8 @@ def redeem_favor_token(token: FavorTokenDetails, *, redeemer_org: Organization) 
     Raises ``ValidationError`` if already redeemed or if ``redeemer_org`` is
     not the Hare's issuer.
     """
-    from world.items.constants import OwnershipEventType  # noqa: PLC0415
-    from world.items.models import ItemInstance, OwnershipEvent  # noqa: PLC0415
+    from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
 
     with transaction.atomic():
         locked = FavorTokenDetails.objects.select_for_update().get(pk=token.pk)
@@ -441,27 +441,13 @@ def redeem_favor_token(token: FavorTokenDetails, *, redeemer_org: Organization) 
             msg = "Only the issuing organization can redeem this Golden Hare."
             raise ValidationError(msg)
         item = ItemInstance.objects.select_for_update().get(pk=locked.item_instance_id)
-        holder_sheet = item.holder_character_sheet
-        now = timezone.now()
-        item.destroyed_at = now
-        item.save(update_fields=["destroyed_at"])
-        game_object = item.game_object
-        holder = game_object.location if game_object is not None else None
-        if game_object is not None:
-            # Relocate-but-not-delete (mirrors the soft-delete branch): the
-            # coin leaves play but its row — and this detail row — survive
-            # as deed-provenance.
-            game_object.location = None
-            game_object.save()
-        if holder is not None and hasattr(holder, "carried_items"):
-            holder.carried_items.invalidate()
-        OwnershipEvent.objects.create(
-            item_instance=item,
-            event_type=OwnershipEventType.CONSUMED,
-            from_character_sheet=holder_sheet,
-            notes=f"Redeemed with {redeemer_org.name}.",
+        # #4099: the canonical soft-delete. The coin leaves play, held by nobody, but its
+        # row (and this detail row) survive as deed-provenance; the CONSUMED event keeps
+        # the last holder.
+        destroy_consumed_item_instance(
+            item, preserve=True, note=f"Redeemed with {redeemer_org.name}."
         )
-        locked.redeemed_at = now
+        locked.redeemed_at = item.destroyed_at
         locked.save(update_fields=["redeemed_at"])
 
 

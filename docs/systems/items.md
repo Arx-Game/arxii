@@ -128,8 +128,8 @@ Items move through three states:
 **`differs_from_template`** (property) — `True` if the instance carries any
 per-instance data worth preserving: a `custom_name`, `custom_description`, `lore_value`,
 non-default `quality_tier`, any attached facets, or any `OwnershipEvent` beyond
-`CREATED`. Used by `consume_item_charges` to decide soft-delete vs. hard-delete at
-0 charges.
+`CREATED`. Used by `destroy_consumed_item_instance` (see below) to decide soft-delete
+vs. hard-delete when consumption empties an item.
 
 **`is_lore_critical`** (property) — a tighter subset; `True` only if the item must
 *never* be auto-purged. Conditions: `lore_value` is nonzero, OR the item has facets,
@@ -146,6 +146,58 @@ left with a null FK), then deletes the `game_object` (whose CASCADE removes the
 `ItemInstance` row) or the `ItemInstance` row directly if there is no game object.
 This helper is used by both the destruction-at-0-charges path and the time-based
 cleanup, so there is no second code path that could leave dangling rows.
+
+### Destroying a consumed item (#4099)
+
+`destroy_consumed_item_instance(item_instance, *, preserve=None, note)` in
+`world/items/services/usage.py` is the one rule for an item that consumption uses up.
+If the item `differs_from_template` it is soft-deleted: `destroyed_at` is stamped, its
+game object leaves play (`location = None`, kept rather than deleted) and a CONSUMED
+`OwnershipEvent` records `note`. Otherwise `hard_delete_item_instance` removes it,
+game object included. Either way the holder's `carried_items` cache is invalidated.
+Both consumers call it:
+- `consume_item_charges`, at 0 charges;
+- `consume_materials` (`world/items/services/materials.py`), when a stack's quantity
+  reaches 0. This is the shared consumer for crafting costs, ritual components and
+  technique price components.
+
+Three other ways an item leaves play also go through it:
+- **Building completion** (`complete_building_construction`): each contributed item is
+  soft-deleted with `preserve=True`, because its `Contribution` PROTECTs it (the old
+  queryset delete raised `ProtectedError`). `BuildingMaterial` keeps the snapshot.
+- **A shattered gem** (`pry_adornment`, `cut_gem`).
+- **The fence** (`sell_to_fence`). For an item with a history this writes a
+  TRANSFERRED event to no receiver (`event_type=`), so the trail survives for the
+  deferred reclamation of fenced goods.
+
+**Never call `ItemInstance.delete()` to use up an item.** `game_object` cascades from
+the game object to the row, not back, so a bare row delete leaves the item's
+`ObjectDB` on the character as a ghost. `consume_materials` did exactly this until
+#4099, and the `item-destroy-reviewer` agent (`tools/agents/`) exists to catch the
+shape. **A soft-deleted item is held by nobody** (#4099 re-review ruling, recorded in ADR-4099).
+The soft-delete (`_take_out_of_play`, shared with `forfeit_item_instance`) stamps
+`destroyed_at` and clears `holder_character_sheet` and `contained_in`. The last holder is
+the exit event's `from_character_sheet`, which `provenance.last_holder(item)` reads; it is
+never answered by re-pointing the holder. So every "fetch by pk, then compare the holder"
+check refuses a destroyed item by construction: trade, wares, decor, boons, org vault,
+bequests, ritual components and crafting permissions. The same goes for every
+container-chain walk (possession, reach). A destroyed container's contents are never
+destroyed with it: they spill (as `take_out` does) up one level. A pouch inside a bag
+leaves its contents in the bag; otherwise they go to where the container was, carried by
+their holder or in the room. A container that was nowhere sends them to its former
+holder's character, else to their own home. A spill into a vault room respects its
+capacity (`VaultFull`, as `drop` does). `recycle_item` and `redeem_favor_token` also go
+through the helper, and the `destroyed-at-writes` pre-commit hook
+(`tools/lint_destroyed_at_writes.py`) rejects any other write to `destroyed_at`. Reclamation's `_return_item` refuses
+a destroyed item, since reclaiming fenced goods is deferred, and
+`file_reclamation_accusation` reads `last_holder`.
+
+As defense in depth, `gather_consumable_pks` also skips any instance that is empty or
+has `destroyed_at` set, and every holder-keyed reader uses `ItemInstance.objects.in_play()`:
+crafting costs and quotes, the fence action, estate inheritance, the has-item predicate,
+boon pointers, showcase and event lookups. `sell_to_fence` also refuses a destroyed row.
+Without this, a fenced item with a history could be fenced again for a second payout.
+The helper also unequips the item (`unequip_item`) before it leaves play.
 
 ### Time-based cleanup of soft-deleted items
 

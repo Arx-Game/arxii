@@ -682,7 +682,13 @@ describe('SpellbookTab personalization (#4099)', () => {
           name: 'Winterbite',
           catalog_name: 'Scorch Lash',
           description: 'Flame gutters to white.',
-          price: { name: 'Frost on the skin', description: '', power_bonus: 4 },
+          price: {
+            name: 'Frost on the skin',
+            description: '',
+            power_bonus: 4,
+            consumes: [{ name: 'Shard of rime', quantity: 2 }],
+            inflicts: 'Frostbitten fingers',
+          },
           next_signature: { name: 'Rime walks with you', min_level: 3, thread_level: 1 },
         }),
       ],
@@ -692,6 +698,9 @@ describe('SpellbookTab personalization (#4099)', () => {
     expect(within(entry).getByText(/Scorch Lash · Level/)).toBeInTheDocument();
     expect(within(entry).getByText('Flame gutters to white.')).toBeInTheDocument();
     expect(within(entry).getByTestId('technique-price')).toHaveTextContent('Frost on the skin');
+    expect(within(entry).getByTestId('technique-price-cost')).toHaveTextContent(
+      'Consumes 2× Shard of rime · Inflicts Frostbitten fingers'
+    );
     expect(within(entry).getByTestId('technique-next-signature')).toHaveTextContent(
       'Rime walks with you, at thread level 3'
     );

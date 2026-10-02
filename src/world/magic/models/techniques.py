@@ -240,6 +240,17 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="available_restrictions",
         help_text="Effect types this restriction can be applied to.",
     )
+    inflicted_condition = models.ForeignKey(
+        _CONDITION_TEMPLATE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="inflicting_prices",
+        help_text=(
+            "PRICE only: a condition applied to the caster on every cast that pays this "
+            "price. Its own authored rules decide stacking and refreshing. Blank = none."
+        ),
+    )
 
     objects = RestrictionManager()
 
@@ -252,6 +263,11 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 | models.Q(kind=RestrictionKind.PRICE),
                 name="restriction_creation_cost_price_only",
             ),
+            models.CheckConstraint(
+                check=models.Q(inflicted_condition__isnull=True)
+                | models.Q(kind=RestrictionKind.PRICE),
+                name="restriction_inflicted_condition_price_only",
+            ),
         ]
 
     class NaturalKeyConfig:
@@ -260,10 +276,86 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.name} (+{self.power_bonus})"
 
+    def clean(self) -> None:
+        """A consumed component or an inflicted condition belongs to a PRICE only (#4099).
+
+        The condition half is also a DB constraint; the component half spans tables,
+        so it is checked here (for an existing row) and on each requirement row.
+        """
+        super().clean()
+        if self.kind == RestrictionKind.PRICE:
+            return
+        errors: dict[str, str] = {}
+        if self.inflicted_condition_id is not None:
+            errors["inflicted_condition"] = "Only a PRICE restriction can inflict a condition."
+        if self.pk is not None and self.component_requirements.exists():
+            errors["kind"] = "Remove this restriction's consumed components before changing kind."
+        if errors:
+            raise ValidationError(errors)
+
     @cached_property
     def cached_allowed_effect_types(self) -> list:
         """Effect types this restriction can apply to. Supports Prefetch(to_attr=)."""
         return list(self.allowed_effect_types.all())
+
+
+class PriceComponentRequirement(SharedMemoryModel):
+    """An item a PRICE consumes on every cast that pays it (#4099, ADR-4099).
+
+    The price-side sibling of ``RitualComponentRequirement``: the same template /
+    quantity / minimum-quality columns, matched and consumed by the same shared
+    ``gather_consumable_pks`` / ``consume_materials`` helpers. Touchstone mode is
+    deliberately absent: a touchstone is attuned and kept, never spent per cast.
+    """
+
+    restriction = models.ForeignKey(
+        Restriction,
+        on_delete=models.CASCADE,
+        related_name="component_requirements",
+    )
+    item_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        on_delete=models.PROTECT,
+        related_name="price_requirements",
+    )
+    quantity = models.PositiveSmallIntegerField(default=1)
+    min_quality_tier = models.ForeignKey(
+        "arxii.QualityTier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "Price component"
+        verbose_name_plural = "Price components"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restriction", "item_template"],
+                name="pricecomponentrequirement_unique_template",
+            ),
+            models.CheckConstraint(
+                check=models.Q(quantity__gte=1),
+                name="pricecomponentrequirement_quantity_positive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.restriction.name} consumes {self.quantity}x {self.item_template.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        # Read the attached object, not ``restriction_id``: on the admin add form the
+        # parent restriction is still unsaved, so its id is None while its kind is set.
+        try:
+            restriction = self.restriction
+        except Restriction.DoesNotExist:
+            return
+        if restriction.kind != RestrictionKind.PRICE:
+            raise ValidationError(
+                {"restriction": "Only a PRICE restriction can consume components."}
+            )
 
 
 class IntensityTierManager(NaturalKeyManager):

@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0178_technique_personalization_constraints")]
+    dependencies = [("arxii", "0180_price_cost_constraints")]
 
     operations = [
         migrations.RenameModel(old_name="DramaticMomentSuggestion", new_name="GMPrompt"),

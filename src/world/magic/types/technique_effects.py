@@ -165,12 +165,24 @@ class TechniqueSignaturePayload(TypedDict):
     intensity_delta: int
 
 
+class PriceComponentPayload(TypedDict):
+    """One item a price consumes on every cast that pays it (#4099)."""
+
+    #: The authored ``ItemTemplate.name``.
+    name: str
+    quantity: int
+
+
 class TechniquePricePayload(TypedDict):
     """The price a caster pays for a technique (#4099). Authored text only."""
 
     name: str
     description: str
     power_bonus: int
+    #: Items consumed on each cast that pays the price; empty when none.
+    consumes: list[PriceComponentPayload]
+    #: The authored name of the condition each paid cast inflicts, or ``None``.
+    inflicts: str | None
 
 
 class TechniqueNextSignaturePayload(TypedDict):

@@ -58,6 +58,8 @@ describe('PersonalizationPanel', () => {
     await user.click(screen.getByTestId('personalize-summary-price'));
     const price = screen.getByRole('button', { name: /Frost on the skin/ });
     expect(price).toHaveTextContent('+4 power');
+    expect(price).toHaveTextContent('Consumes 2× Shard of rime');
+    expect(price).toHaveTextContent('Inflicts Frostbitten fingers');
     expect(price).toHaveTextContent('1 pt');
     // The demo's Screen 3 rows carry no "level N" segment.
     expect(price).not.toHaveTextContent(/level/i);
@@ -234,6 +236,9 @@ describe('PersonalizationPanel collapsed summary rows (#4099 demo-fidelity fix)'
     // Collapsed by default, but already showing the current pick.
     expect(priceSummary).toHaveAttribute('aria-expanded', 'false');
     expect(priceSummary).toHaveTextContent('Frost on the skin');
+    expect(priceSummary).toHaveTextContent(
+      'Consumes 2× Shard of rime · Inflicts Frostbitten fingers'
+    );
     expect(priceSummary).toHaveTextContent('1 pt');
   });
 });

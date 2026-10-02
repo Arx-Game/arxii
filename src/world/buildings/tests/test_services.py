@@ -392,3 +392,120 @@ class MaterialLoreEffectGuardTests(TestCase):
                 units_per_tier=0,
                 magnitude_per_tier=1,
             )
+
+
+class _ContributionProjectMixin:
+    """A construction project with item contributions, built from factories."""
+
+    def _project(self):
+        """A construction project built straight from factories: ``activate_permit``
+        resolves the ward through the PostgreSQL-only area closure, which the fast tier
+        cannot run, and this test is about what completion does to contributed items."""
+        from world.buildings.factories import BuildingConstructionDetailsFactory
+
+        ensure_building_size_tiers()
+        character, persona = _pc()
+        details = BuildingConstructionDetailsFactory(
+            permit_details__building_kind=ensure_house_kind(),
+            constructed_by_persona=persona,
+        )
+        return details.project, character, persona
+
+    def _contribute(self, project, character, persona, **item_kwargs):
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.tests.price_cost_helpers import carry
+        from world.projects.constants import ContributionKind
+        from world.projects.factories import ContributionFactory
+
+        item = carry(character, ItemTemplateFactory(), quantity=2)
+        for key, value in item_kwargs.items():
+            setattr(item, key, value)
+        if item_kwargs:
+            item.save(update_fields=list(item_kwargs))
+        ContributionFactory(
+            project=project,
+            contributor_persona=persona,
+            kind=ContributionKind.ITEM,
+            ap_amount=None,
+            item_instance=item,
+        )
+        return item
+
+
+class ContributedItemsLeaveNoGhostTests(_ContributionProjectMixin, TestCase):
+    """#4099: completing construction destroys contributed items by the canonical rule,
+    never a queryset delete that leaves their game objects on the contributor."""
+
+    def test_a_carried_contribution_leaves_no_ghost(self) -> None:
+        """Even a bare throwaway is kept (soft-deleted): its Contribution PROTECTs it, which
+        is also why the old queryset delete raised ProtectedError on completion."""
+        from evennia.objects.models import ObjectDB
+
+        from world.buildings.models import BuildingMaterial
+        from world.buildings.services import complete_building_construction
+
+        project, character, persona = self._project()
+        item = self._contribute(project, character, persona)
+
+        complete_building_construction(project)
+
+        material = BuildingMaterial.objects.get(item_instance_pk=item.pk)
+        self.assertEqual(material.units, 2)
+        item.refresh_from_db()
+        self.assertIsNotNone(item.destroyed_at)
+        self.assertEqual(item.quantity, 0)
+        self.assertIsNone(ObjectDB.objects.get(pk=item.game_object_id).location)
+        self.assertEqual(list(character.carried_items), [])
+
+    def test_a_contribution_with_lore_is_kept_out_of_play(self) -> None:
+        from evennia.objects.models import ObjectDB
+
+        from world.buildings.services import complete_building_construction
+        from world.items.constants import OwnershipEventType
+
+        project, character, persona = self._project()
+        item = self._contribute(project, character, persona, lore_value=30)
+
+        complete_building_construction(project)
+
+        item.refresh_from_db()
+        self.assertIsNotNone(item.destroyed_at)
+        self.assertIsNone(ObjectDB.objects.get(pk=item.game_object_id).location)
+        self.assertEqual(
+            item.ownership_events.filter(event_type=OwnershipEventType.CONSUMED).count(), 1
+        )
+
+
+class ContributedItemsQueryScalingTests(_ContributionProjectMixin, TestCase):
+    """#4099 review: destroying contributed items must not read per item. Each item
+    still costs its own writes (the soft-delete save, its game object's save, one
+    CONSUMED event); nothing else may scale with the contribution count."""
+
+    # Per item, inside destroy_consumed_item_instance: the equipped-row check (1 read),
+    # then three writes (item soft-delete, game object relocation, CONSUMED event),
+    # each wrapped by the identity-map save in a SAVEPOINT/RELEASE pair (3 x 3). The
+    # game object and its location ride the contributions select_related; without it
+    # this was 14 per item.
+    PER_ITEM_BUDGET = 10
+
+    def _queries_to_complete(self, contribution_count: int) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.buildings.services import complete_building_construction
+
+        project, character, persona = self._project()
+        for _ in range(contribution_count):
+            self._contribute(project, character, persona)
+        from world.items.models import ItemInstance
+
+        ItemInstance.flush_instance_cache()
+        with CaptureQueriesContext(connection) as ctx:
+            complete_building_construction(project)
+        return len(ctx.captured_queries)
+
+    def test_marginal_queries_per_contribution_stay_bounded(self) -> None:
+        one = self._queries_to_complete(1)
+        three = self._queries_to_complete(3)
+        marginal = (three - one) / 2
+        self.assertLessEqual(marginal, self.PER_ITEM_BUDGET, f"Q(1)={one}, Q(3)={three}")

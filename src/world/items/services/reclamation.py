@@ -224,7 +224,11 @@ def file_reclamation_accusation(claim: ReclamationClaim) -> bool:
     heat actually minted (jurisdiction and local law decide, as ever).
     """
     _require_traced(claim)
-    holder_sheet = claim.item_instance.holder_character_sheet
+    # #4099: a destroyed (fenced) item is held by nobody; its last holder is on the
+    # ledger. Reporting reads that, never the cleared pointer.
+    from world.items.services.provenance import last_holder  # noqa: PLC0415
+
+    holder_sheet = last_holder(claim.item_instance)
     if holder_sheet is None or holder_sheet == claim.original_claimant_sheet:
         msg = f"claim {claim.pk}: no reportable holder"
         raise ReclamationError(msg, user_message="There is no one to report.")
@@ -311,6 +315,11 @@ def _return_item(claim: ReclamationClaim, status: str) -> None:
     hot-goods flag.
     """
     item = claim.item_instance
+    if item.destroyed_at is not None:
+        # #4099: never re-point a holder at a destroyed row. Reclaiming fenced goods is
+        # deferred; when it lands it will bring the item back into play first.
+        msg = f"claim {claim.pk}: item {item.pk} is no longer in play"
+        raise ReclamationError(msg, user_message="That item is gone beyond recovery.")
     previous_holder = item.holder_character_sheet
     item.holder_character_sheet = claim.claimant_sheet
     item.save(update_fields=["holder_character_sheet"])

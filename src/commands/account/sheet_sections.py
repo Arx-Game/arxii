@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from world.character_sheets.types import TechniqueEntry
     from world.magic.types.technique_effects import (
         TechniqueFormPayload,
+        TechniquePricePayload,
         TechniqueSignaturePayload,
     )
     from world.relationships.models import RelationshipLabel
@@ -418,7 +419,18 @@ def _render_technique_forms(technique: TechniqueEntry) -> list[str]:
         lines.extend(_render_signature(signature))
     price = technique["price"]
     if price:
-        lines.append(f"      Price: {price['name']}")
+        lines.extend(_render_price(price))
+    return lines
+
+
+def _render_price(price: TechniquePricePayload) -> list[str]:
+    """The caster's price and its real cost (#4099): what each paid cast spends."""
+    lines = [f"      Price: {price['name']}"]
+    if price["consumes"]:
+        consumed = ", ".join(f"{c['quantity']}x {c['name']}" for c in price["consumes"])
+        lines.append(f"        Consumes: {consumed}")
+    if price["inflicts"]:
+        lines.append(f"        Inflicts: {price['inflicts']}")
     return lines
 
 

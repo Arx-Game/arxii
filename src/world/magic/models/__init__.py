@@ -222,6 +222,7 @@ from world.magic.models.techniques import (
     EffectType,
     EffectTypeManager,
     IntensityTier,
+    PriceComponentRequirement,
     Restriction,
     RestrictionManager,
     StyleCapabilityRequirement,
@@ -390,6 +391,7 @@ __all__ = [
     # endorsement (Outfits Phase C §2.2 — #514)
     "PresentationEndorsement",
     # reincarnation
+    "PriceComponentRequirement",
     "Reincarnation",
     # relationship bond pull modulation (#1849)
     "RelationshipBondPullTuning",
