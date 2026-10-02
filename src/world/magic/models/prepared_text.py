@@ -118,6 +118,7 @@ class CharacterSurgeText(SharedMemoryModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        ordering = ["-updated_at"]
         verbose_name = "Prepared Surge Text"
         verbose_name_plural = "Prepared Surge Texts"
 
