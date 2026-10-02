@@ -25,7 +25,6 @@ import { ActionResult } from './ActionResult';
 import { ActorLine } from './ActorLine';
 import { ReactionStrip } from './ReactionStrip';
 import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
-import { DramaticMomentSuggestionChip } from './DramaticMomentSuggestionChip';
 import { EndorsementControl } from './EndorsementControl';
 import { fetchReactionEmojiCatalog, postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
@@ -329,7 +328,6 @@ export function PoseUnit({
 
   const actionInteractionIds = actionLinks.map((l) => l.action_interaction.id);
   const dramaticTags = interaction.dramatic_moment_tags ?? [];
-  const dramaticSuggestions = interaction.dramatic_moment_suggestions ?? [];
 
   // Resolve the viewer's active persona to detect self-pose — mirrors
   // EndorsementControl's self-endorsement guard (same signal, same source).
@@ -525,11 +523,6 @@ export function PoseUnit({
             sceneId={sceneId}
           />
         </div>
-      )}
-
-      {/* GM confirm/dismiss inbox: technique-driven dramatic-moment suggestions (#2183) */}
-      {canGm && !readOnly && (
-        <DramaticMomentSuggestionChip suggestions={dramaticSuggestions} sceneId={sceneId} />
       )}
 
       <div className="flex items-center gap-1">

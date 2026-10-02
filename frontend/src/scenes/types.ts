@@ -390,20 +390,53 @@ export interface DramaticMomentTagSummary {
   character_sheet_id: number | null;
 }
 
+/** What a GM prompt is about (#4101). Matches GMPromptKind TextChoices (wire values). */
+export type GMPromptKind =
+  | 'dramatic_moment'
+  | 'audere_surge'
+  | 'audere_ultimate'
+  | 'crossing'
+  | 'miracle'
+  | 'death'
+  | 'stake_outcome';
+
 /**
- * GM-only PENDING dramatic-moment suggestion embedded in interaction payloads (#2183).
- * Mirrors `world.scenes.interaction_serializers.InteractionSerializer
- * .get_dramatic_moment_suggestions` — keep in sync. Empty for non-GM viewers
- * (the backend gates it server-side); the frontend still gates its render on
- * `canGm` as defense in depth, mirroring the `dramatic_moment_tags` tag button.
+ * One row of the GM prompt queue (#4101; was the #2183 dramatic-moment
+ * suggestion inbox). Mirrors `world.gm.serializers.GMPromptSerializer`.
+ * `status` includes `narrated` per controller amendment R6-2 — a narrated
+ * prompt stays in the queue until the GM dismisses it.
  */
-export interface DramaticMomentSuggestionSummary {
+export interface GMPrompt {
   id: number;
-  moment_type_id: number;
-  moment_type_label: string;
-  character_sheet_id: number | null;
-  success_level: number;
+  kind: GMPromptKind;
+  kind_label: string;
   status: string;
+  scene: number | null;
+  character_sheet: number | null;
+  subject_name: string;
+  subject_persona_id: number | null;
+  moment_type: number | null;
+  moment_type_label: string;
+  technique_name: string;
+  stake_summary: string;
+  room_text: string;
+  private_text: string;
+  prepared_for_character: boolean;
+  created_at: string;
+}
+
+/**
+ * The GM prompt a feed row narrates (#4101). Mirrors
+ * `world.scenes.types.NarratedEventPayload`. `subject_name`/`subject_persona_id`
+ * are absent entirely (never present-but-null) when the event has no subject
+ * sheet or no presented persona resolves — render `kind_label` alone then.
+ */
+export interface NarratedEvent {
+  prompt_id: number;
+  kind: GMPromptKind;
+  kind_label: string;
+  subject_name?: string;
+  subject_persona_id?: number;
 }
 
 export interface Interaction {
@@ -454,10 +487,12 @@ export interface Interaction {
   /** Dramatic-moment tags on this interaction (#1139); absent/empty for untagged rows. */
   dramatic_moment_tags?: DramaticMomentTagSummary[];
   /**
-   * GM-only PENDING dramatic-moment suggestions anchored to this interaction (#2183).
-   * Empty/absent for non-GM viewers and for rows with no pending suggestion.
+   * The GM prompt this row narrates (#4101), when it narrates one. NOT
+   * GM-gated — a narration row is a GM's own already-delivered line; tagging
+   * it is plain feed metadata every viewer sees. Absent/null for an
+   * un-narrated row.
    */
-  dramatic_moment_suggestions?: DramaticMomentSuggestionSummary[];
+  narrates?: NarratedEvent | null;
   /** Classifies the pose for entry-endorsement filtering. Matches PoseKind TextChoices (lowercase wire format). */
   pose_kind: 'standard' | 'entry' | 'departure';
   endorsee_sheet_id: number | null;

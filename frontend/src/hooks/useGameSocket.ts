@@ -45,6 +45,7 @@ import { handleBattleStatePayload } from './handleBattleStatePayload';
 import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 import { handleMailArrivedPayload } from './handleMailArrivedPayload';
+import { handleGMPromptPayload } from './handleGMPromptPayload';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -442,10 +443,10 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
     case WS_MESSAGE_TYPE.WEBCLIENT_OPTIONS:
       return () => undefined;
 
-    // A new GM prompt landed in this GM's queue (#4101). Task 10 replaces this
-    // with the real handler (queue badge / live insert).
+    // A new GM prompt landed in this GM's queue (#4101): refetch every open
+    // queue for this GM (`GMPromptQueue`'s `useGMPrompts`).
     case WS_MESSAGE_TYPE.GM_PROMPT:
-      return () => undefined;
+      return () => handleGMPromptPayload();
 
     default:
       return undefined;

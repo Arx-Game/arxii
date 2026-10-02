@@ -1085,7 +1085,17 @@ class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         prompt.refresh_from_db()
-        return Response(GMPromptSerializer(prompt).data)
+        data = dict(GMPromptSerializer(prompt).data)
+        # A successful narrate still carries a message when the dispatched
+        # EmitAction/PemitAction has one to report -- e.g. the prompt closed
+        # (a sibling dismiss, scene-end expiry) between resolve and link, so
+        # the line went out in full but unlinked (#4101 Task 10; previously
+        # dropped here, see `_MSG_PROMPT_CLOSED_MEANWHILE`,
+        # `actions/definitions/communication.py`). Confirm/dismiss results
+        # carry no message today, so this is a no-op for them.
+        if result.message:
+            data["message"] = result.message
+        return Response(data)
 
 
 class GMPromptFilterViewSet(viewsets.GenericViewSet):

@@ -7,9 +7,11 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.gm import prompt_services
 from world.gm.constants import GMPromptGroup, GMPromptKind, GMPromptStatus
 from world.gm.factories import GMProfileFactory, GMPromptFactory
-from world.gm.models import GMPromptFilter, GMPromptNarration
+from world.gm.models import GMPrompt, GMPromptFilter, GMPromptNarration
+from world.gm.prompt_services import dismiss_gm_prompt
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTagFactory,
@@ -136,6 +138,40 @@ class GMPromptApiTest(TestCase):
             )
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertTrue(GMPromptNarration.objects.filter(prompt=self.prompt).exists())
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_narrate_already_closed_still_sends_and_says_so(self, narrate_privately):
+        """#4101 Task 10: the view's success response now surfaces the action's own
+        message -- previously ``_result()`` discarded it on success. A narration
+        racing a close (a sibling dismiss between resolve and link,
+        ``link_prompt_narration`` returning None) still delivers the line in full,
+        and the GM is told it went out unlinked (``_MSG_PROMPT_CLOSED_MEANWHILE``,
+        ``actions/definitions/communication.py``)."""
+        original_link = prompt_services.link_prompt_narration
+
+        def _dismiss_then_link(prompt, interaction):
+            dismiss_gm_prompt(GMPrompt.objects.get(pk=prompt.pk), resolver=None)
+            return original_link(prompt, interaction)
+
+        with (
+            mock.patch("world.gm.views.character_for_request", return_value=self._gm_character()),
+            mock.patch("world.gm.prompt_services.get_active_scene", return_value=self.scene),
+            mock.patch.object(
+                prompt_services, "link_prompt_narration", side_effect=_dismiss_then_link
+            ),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            resp = self._client(self.gm).post(
+                f"{URL}{self.prompt.pk}/narrate/",
+                {"text": "The floor groans.", "audience": "room"},
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIn("plain narration", resp.data["message"])
+        self.assertFalse(GMPromptNarration.objects.filter(prompt=self.prompt).exists())
+        self.prompt.refresh_from_db()
+        self.assertEqual(self.prompt.status, GMPromptStatus.DISMISSED)
+        narrate_privately.assert_called_once()
 
     def test_narrate_chosen_refused_without_gm_trust_returns_400(self):
         """A room is required here (#4101 fix round 3, finding N3): with no
