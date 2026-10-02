@@ -31,9 +31,11 @@ from world.magic.models import (
     CapabilityPowerConfig,
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
     CharacterResonance,
+    CharacterSurgeText,
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
     CharacterTradition,
@@ -1644,6 +1646,52 @@ class DramaticMomentTagAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+@admin.register(CharacterCrossingText)
+class CharacterCrossingTextAdmin(admin.ModelAdmin):
+    """A character's own prepared Audere Majora crossing text (#4101).
+
+    Staff may author directly here; a table GM authors the same row through the
+    REST surface instead (``PreparedCrossingTextViewSet``). ``save_model`` stamps
+    ``prepared_by`` to the editing staff account when it isn't already set, so a
+    row authored in admin still carries provenance without a visible field a
+    staffer could spoof on someone else's behalf.
+    """
+
+    autocomplete_fields = ("character_sheet", "prepared_by")
+    list_display = ("character_sheet", "prepared_by", "crossing", "updated_at")
+    readonly_fields = ("crossing", "prepared_by", "created_at", "updated_at")
+    fields = (
+        "character_sheet",
+        "vision_text",
+        "manifestation_text",
+        "deed_title",
+        "prepared_by",
+        "crossing",
+        "created_at",
+        "updated_at",
+    )
+
+    def save_model(self, request, obj, form, change) -> None:
+        if obj.prepared_by_id is None:
+            obj.prepared_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(CharacterSurgeText)
+class CharacterSurgeTextAdmin(admin.ModelAdmin):
+    """A character's own prepared Audere surge line (#4101). No patron layer, no crossing link."""
+
+    autocomplete_fields = ("character_sheet", "prepared_by")
+    list_display = ("character_sheet", "prepared_by", "updated_at")
+    readonly_fields = ("prepared_by", "updated_at")
+    fields = ("character_sheet", "surge_text", "prepared_by", "updated_at")
+
+    def save_model(self, request, obj, form, change) -> None:
+        if obj.prepared_by_id is None:
+            obj.prepared_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(GiftUnlock)

@@ -20,7 +20,11 @@ from world.magic.audere import (
     AudereThreshold,
     PendingAudereOffer,
 )
-from world.magic.audere_majora import AudereMajoraThreshold
+from world.magic.audere_majora import (
+    AudereMajoraCrossing,
+    AudereMajoraFaithVariant,
+    AudereMajoraThreshold,
+)
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -46,10 +50,12 @@ from world.magic.models import (
     AuraPowerConfig,
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
     CharacterGlimpseTag,
     CharacterResonance,
+    CharacterSurgeText,
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
     CharacterTradition,
@@ -4423,3 +4429,77 @@ class PortalAnchorFactory(factory.django.DjangoModelFactory):
     kind = factory.SubFactory(PortalAnchorKindFactory)
     name = factory.Sequence(lambda n: f"a portal anchor {n}")
     is_network_open = True
+
+
+# =============================================================================
+# Prepared per-character Audere text (#4101)
+# =============================================================================
+
+
+class AudereMajoraThresholdFactory(factory.django.DjangoModelFactory):
+    """Factory for AudereMajoraThreshold — a tier-crossing boundary config row."""
+
+    class Meta:
+        model = AudereMajoraThreshold
+
+    boundary_level = factory.Sequence(lambda n: 100 + n)
+    target_stage = PathStage.PUISSANT
+    minimum_intensity_tier = factory.SubFactory(IntensityTierFactory)
+    minimum_warp_stage = factory.SubFactory("world.conditions.factories.ConditionStageFactory")
+    vision_text = "[PLACEHOLDER VISION — real text is authored in the DB]"
+    manifestation_text = "[PLACEHOLDER MANIFESTATION — real text is authored in the DB]"
+    deed_title = ""
+    magnitude = RenownMagnitude.HIGH
+    risk = RenownRisk.HIGH
+    reach = RenownReach.REGIONAL
+
+
+class AudereMajoraFaithVariantFactory(factory.django.DjangoModelFactory):
+    """Factory for AudereMajoraFaithVariant — a faith-specific ceremony override (#2360)."""
+
+    class Meta:
+        model = AudereMajoraFaithVariant
+
+    threshold = factory.SubFactory(AudereMajoraThresholdFactory)
+    being = factory.SubFactory("world.worship.factories.WorshippedBeingFactory")
+    vision_text = "[PLACEHOLDER PATRON VISION]"
+    manifestation_text = "[PLACEHOLDER PATRON MANIFESTATION]"
+    resonance_pool_cost = 10
+
+
+class AudereMajoraCrossingFactory(factory.django.DjangoModelFactory):
+    """Factory for AudereMajoraCrossing — the irreversible crossing receipt."""
+
+    class Meta:
+        model = AudereMajoraCrossing
+
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    threshold = factory.SubFactory(AudereMajoraThresholdFactory)
+    chosen_path = factory.SubFactory("world.classes.factories.PathFactory")
+    level_before = factory.LazyAttribute(lambda o: o.threshold.boundary_level)
+    level_after = factory.LazyAttribute(lambda o: o.threshold.boundary_level + 1)
+    scene = None
+    declaration_interaction = None
+
+
+class CharacterCrossingTextFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterCrossingText — a character's own prepared crossing text."""
+
+    class Meta:
+        model = CharacterCrossingText
+
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    vision_text = ""
+    manifestation_text = ""
+    deed_title = ""
+
+
+class CharacterSurgeTextFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterSurgeText — a character's own prepared surge line."""
+
+    class Meta:
+        model = CharacterSurgeText
+        django_get_or_create = ("character_sheet",)
+
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    surge_text = ""

@@ -68,17 +68,16 @@ def _reviewer_has_table_access(reviewer_account: Any, req: Any) -> bool:
     A GM may review a request iff the requesting character has an ACTIVE
     membership at one of that GM's tables. Shopping among known GMs is fine;
     a GM the player has never sat with must not see their sheet.
+
+    Delegates to ``world.gm.services.account_is_table_gm_for_sheet``, shared
+    with prepared-text authoring (#4101) — do not reimplement this check here.
     """
     if reviewer_account is None or reviewer_account.is_staff:
         return True
 
-    from world.gm.models import GMTableMembership  # noqa: PLC0415
+    from world.gm.services import account_is_table_gm_for_sheet  # noqa: PLC0415
 
-    return GMTableMembership.objects.filter(
-        persona__character_sheet=req.character_sheet,
-        left_at__isnull=True,
-        table__gm__account=reviewer_account,
-    ).exists()
+    return account_is_table_gm_for_sheet(reviewer_account, req.character_sheet)
 
 
 @dataclass

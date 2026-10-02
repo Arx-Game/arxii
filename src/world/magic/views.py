@@ -55,6 +55,8 @@ from world.magic.filters import (
     CharacterGiftFilter,
     CharacterResonanceFilter,
     ConsequencePoolCatalogFilter,
+    PreparedCrossingTextFilter,
+    PreparedSurgeTextFilter,
     ResonanceGrantFilterSet,
     RitualSessionFilterSet,
     ThreadFilter,
@@ -63,8 +65,10 @@ from world.magic.filters import (
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterResonance,
+    CharacterSurgeText,
     EffectType,
     Facet,
     Gift,
@@ -86,7 +90,7 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
 )
-from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
+from world.magic.permissions import CanPrepareCharacterText, IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
@@ -129,6 +133,8 @@ from world.magic.serializers import (
     LibraryEntrySerializer,
     PendingAlterationSerializer,
     PoseEndorsementSerializer,
+    PreparedCrossingTextSerializer,
+    PreparedSurgeTextSerializer,
     ProgressionStageSerializer,
     PurchaseGiftUnlockRequestSerializer,
     ReadiedUltimateSerializer,
@@ -2899,3 +2905,64 @@ class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
     @action(detail=True, methods=["post"])
     def dismiss(self, request: Request, pk: str | None = None) -> Response:
         return self._resolve(request, pk, confirm=False)
+
+
+# =============================================================================
+# Prepared per-character Audere text (#4101)
+# =============================================================================
+
+_ERR_PREPARED_TEXT_ALREADY_USED = "That text was used by a crossing and is now a record."
+
+
+class PreparedCrossingTextViewSet(viewsets.ModelViewSet):
+    """Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+    Private to its author: a player never reads their own unused prepared text (it is
+    a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+    — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+    """
+
+    serializer_class = PreparedCrossingTextSerializer
+    permission_classes = [IsAuthenticated, CanPrepareCharacterText]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PreparedCrossingTextFilter
+    pagination_class = StandardResultsSetPagination
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return CharacterCrossingText.objects.all()
+        return CharacterCrossingText.objects.filter(
+            character_sheet__personas__gm_table_memberships__left_at__isnull=True,
+            character_sheet__personas__gm_table_memberships__table__gm__account=user,
+        ).distinct()
+
+    def perform_destroy(self, instance: CharacterCrossingText) -> None:
+        if instance.crossing_id is not None:
+            raise serializers.ValidationError({"detail": _ERR_PREPARED_TEXT_ALREADY_USED})
+        instance.delete()
+
+
+class PreparedSurgeTextViewSet(viewsets.ModelViewSet):
+    """Staff or the character's table GM prepares a character's own surge line (#4101).
+
+    No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+    reusable (it fires on every surge), so there is no consumed-record refusal here.
+    """
+
+    serializer_class = PreparedSurgeTextSerializer
+    permission_classes = [IsAuthenticated, CanPrepareCharacterText]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PreparedSurgeTextFilter
+    pagination_class = StandardResultsSetPagination
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return CharacterSurgeText.objects.all()
+        return CharacterSurgeText.objects.filter(
+            character_sheet__personas__gm_table_memberships__left_at__isnull=True,
+            character_sheet__personas__gm_table_memberships__table__gm__account=user,
+        ).distinct()

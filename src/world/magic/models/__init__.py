@@ -159,6 +159,9 @@ from world.magic.models.power_config import (
     LevelPowerConfig,
     StandingCapBand,
 )
+
+# prepared per-character Audere text (#4101)
+from world.magic.models.prepared_text import CharacterCrossingText, CharacterSurgeText
 from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.relationship_bond_pull_tuning import RelationshipBondPullTuning
@@ -290,6 +293,8 @@ __all__ = [
     "CapabilityPowerConfig",
     "CharacterAnima",
     "CharacterAura",
+    # prepared per-character Audere text (#4101)
+    "CharacterCrossingText",
     # gifts
     "CharacterGift",
     "CharacterGiftUnlock",
@@ -298,6 +303,8 @@ __all__ = [
     "CharacterResonance",
     # knowledge layer (Anima Ritual UI spec §Decision 6)
     "CharacterRitualKnowledge",
+    # prepared per-character Audere text (#4101)
+    "CharacterSurgeText",
     # techniques
     "CharacterTechnique",
     # weaving

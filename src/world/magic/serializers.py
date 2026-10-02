@@ -11,6 +11,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field
+from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from actions.models import ConsequencePool
@@ -31,6 +32,7 @@ from world.magic.constants import (
     ALTERATION_TIER_CAPS,
     AnimaContributionKind,
     GlimpseTagAxis,
+    PreparedByRole,
     RestrictionKind,
     TargetKind,
     anima_band_for,
@@ -39,8 +41,10 @@ from world.magic.constants import (
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterResonance,
+    CharacterSurgeText,
     CharacterThreadWeavingUnlock,
     CrossingOption,
     EffectType,
@@ -3790,6 +3794,123 @@ class DramaticMomentSuggestionSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+# =============================================================================
+# Prepared per-character Audere text (#4101)
+# =============================================================================
+
+_ERR_CANNOT_PREPARE_TEXT = "You may not prepare text for that character."
+_ERR_TEXT_ALREADY_USED = "That text was used by a crossing and is now a record."
+_ERR_DEED_TITLE_DASH = "Use a hyphen, not a dash, in a deed title."
+
+
+def _character_name_for(sheet: CharacterSheet) -> str:
+    """The sheet's primary-persona IC name, or '' if somehow absent."""
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    try:
+        return sheet.primary_persona.name
+    except Persona.DoesNotExist:
+        return ""
+
+
+def _prepared_by_role(prepared_by: AccountDB | None) -> str:
+    if prepared_by is not None and prepared_by.is_staff:
+        return PreparedByRole.STAFF
+    return PreparedByRole.TABLE_GM
+
+
+class PreparedCrossingTextSerializer(serializers.ModelSerializer):
+    """A character's own prepared Audere Majora crossing text (#4101).
+
+    Authored by staff or the character's table GM (``may_prepare_text_for``).
+    Never readable by the crossing player themselves — the vision is a spoiler —
+    nor by an unrelated GM; the viewset's queryset is the read-side gate.
+    """
+
+    character_name = serializers.SerializerMethodField()
+    prepared_by_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CharacterCrossingText
+        fields = [
+            "id",
+            "character_sheet",
+            "character_name",
+            "vision_text",
+            "manifestation_text",
+            "deed_title",
+            "prepared_by_role",
+            "crossing",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "character_name", "prepared_by_role", "crossing", "updated_at"]
+
+    def get_character_name(self, obj: CharacterCrossingText) -> str:
+        return _character_name_for(obj.character_sheet)
+
+    def get_prepared_by_role(self, obj: CharacterCrossingText) -> str:
+        return _prepared_by_role(obj.prepared_by)
+
+    def validate_character_sheet(self, sheet: CharacterSheet) -> CharacterSheet:
+        from world.magic.services.prepared_text import may_prepare_text_for  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None or not may_prepare_text_for(request.user, sheet):
+            raise serializers.ValidationError(_ERR_CANNOT_PREPARE_TEXT)
+        return sheet
+
+    def validate_deed_title(self, deed_title: str) -> str:
+        if "—" in deed_title or "–" in deed_title:
+            raise serializers.ValidationError(_ERR_DEED_TITLE_DASH)
+        return deed_title
+
+    def validate(self, attrs: dict) -> dict:
+        if self.instance is not None and self.instance.crossing_id is not None:
+            raise serializers.ValidationError(_ERR_TEXT_ALREADY_USED)
+        return attrs
+
+    def create(self, validated_data: dict) -> CharacterCrossingText:
+        validated_data["prepared_by"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class PreparedSurgeTextSerializer(serializers.ModelSerializer):
+    """A character's own prepared Audere surge line (#4101). No patron layer."""
+
+    character_name = serializers.SerializerMethodField()
+    prepared_by_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CharacterSurgeText
+        fields = [
+            "id",
+            "character_sheet",
+            "character_name",
+            "surge_text",
+            "prepared_by_role",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "character_name", "prepared_by_role", "updated_at"]
+
+    def get_character_name(self, obj: CharacterSurgeText) -> str:
+        return _character_name_for(obj.character_sheet)
+
+    def get_prepared_by_role(self, obj: CharacterSurgeText) -> str:
+        return _prepared_by_role(obj.prepared_by)
+
+    def validate_character_sheet(self, sheet: CharacterSheet) -> CharacterSheet:
+        from world.magic.services.prepared_text import may_prepare_text_for  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None or not may_prepare_text_for(request.user, sheet):
+            raise serializers.ValidationError(_ERR_CANNOT_PREPARE_TEXT)
+        return sheet
+
+    def create(self, validated_data: dict) -> CharacterSurgeText:
+        validated_data["prepared_by"] = self.context["request"].user
+        return super().create(validated_data)
 
 
 # =============================================================================

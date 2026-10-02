@@ -1202,3 +1202,17 @@ def find_situations(*, query: str, risk: str | None, actor_level_index: int) -> 
             )
         )
     return DiscoveryResult(templates=templates, challenges=challenges, kinds=results)
+
+
+def account_is_table_gm_for_sheet(account: AccountDB | None, sheet: CharacterSheet) -> bool:
+    """The #2631 table-access rule: an ACTIVE membership for ``sheet`` at one of
+    ``account``'s tables. Shared by sheet-request review (#2631) and prepared
+    text (#4101) — do not reimplement this check at either call site.
+    """
+    if account is None:
+        return False
+    return GMTableMembership.objects.filter(
+        persona__character_sheet=sheet,
+        left_at__isnull=True,
+        table__gm__account=account,
+    ).exists()
