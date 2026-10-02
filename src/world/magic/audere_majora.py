@@ -417,24 +417,6 @@ def _broadcast_manifestation(
     broadcast_scene_emit(character, text, scene=scene, scene_scoped_push=scene_scoped_push)
 
 
-def _crossing_prompt_candidates(sheet: CharacterSheet, scene) -> list:
-    """GMs of ``scene``, minus the crossing character's own account (#4101 fix round 1, M5).
-
-    A player who also GMs their own scene must never be prompted about their OWN
-    Crossing -- they already receive the vision privately, and a self-addressed GM
-    prompt would hand them their own spoiler-private vision through a second,
-    GM-facing surface.
-    """
-    from world.gm.prompt_services import scene_gm_accounts  # noqa: PLC0415
-    from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
-
-    crosser_account = account_for_sheet(sheet)
-    pool = scene_gm_accounts(scene)
-    if crosser_account is None:
-        return pool
-    return [a for a in pool if a.pk != crosser_account.pk]
-
-
 def release_withheld_crossing_manifestation(offer: PendingAudereMajoraOffer) -> None:
     """Send a withheld Crossing manifestation that will never get a crossing.
 
@@ -541,13 +523,16 @@ def maybe_create_audere_majora_offer(
     if created:
         from world.gm.constants import GMPromptKind  # noqa: PLC0415
         from world.gm.prompt_services import prompt_recipients  # noqa: PLC0415
+        from world.magic.services.gain import (  # noqa: PLC0415
+            gm_prompt_candidates_excluding_subject,
+        )
         from world.magic.services.prepared_text import resolve_crossing_text  # noqa: PLC0415
         from world.scenes.models import Scene  # noqa: PLC0415
 
         variant = maybe_apply_audere_faith_coupling(sheet, threshold, offer)
         texts = resolve_crossing_text(sheet, threshold, variant)
         scene = Scene.objects.active_for_room(character.location).first()
-        candidates = _crossing_prompt_candidates(sheet, scene)
+        candidates = gm_prompt_candidates_excluding_subject(sheet, scene)
         if prompt_recipients(scene, GMPromptKind.CROSSING, candidates=candidates):
             offer.manifestation_withheld = True
             offer.scene = scene
@@ -936,7 +921,7 @@ def _route_crossing(  # noqa: PLR0913 — one on_commit callback needs every pie
     leave the vision and manifestation undelivered if left uncaught. Falls back
     to ``_deliver`` (the unprompted path) on that failure instead (#4101 fix
     round 1, M2), logging the error, so the crossing player's vision is never
-    silently lost to a GM-prompt-creation bug. ``_crossing_prompt_candidates``
+    silently lost to a GM-prompt-creation bug. ``gm_prompt_candidates_excluding_subject``
     is computed INSIDE the same ``try`` (#4101 fix round 2, must-fix 3) -- a
     failure resolving candidates must also fall back to unprompted delivery,
     not propagate past this on_commit callback uncaught.
@@ -946,6 +931,7 @@ def _route_crossing(  # noqa: PLR0913 — one on_commit callback needs every pie
     from world.gm.constants import GMPromptKind  # noqa: PLC0415
     from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
     from world.gm.types import NarratableEvent  # noqa: PLC0415
+    from world.magic.services.gain import gm_prompt_candidates_excluding_subject  # noqa: PLC0415
     from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
     effective_scene = scene if scene is not None else fallback_scene
@@ -960,7 +946,7 @@ def _route_crossing(  # noqa: PLR0913 — one on_commit callback needs every pie
             narrate_privately(character, texts.vision, scene=effective_scene)
 
     try:
-        candidates = _crossing_prompt_candidates(sheet, effective_scene)
+        candidates = gm_prompt_candidates_excluding_subject(sheet, effective_scene)
         route_narratable_event(
             NarratableEvent(
                 kind=GMPromptKind.CROSSING,

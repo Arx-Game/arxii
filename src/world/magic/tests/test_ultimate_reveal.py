@@ -31,6 +31,7 @@ from world.mechanics.constants import EngagementType
 from world.mechanics.factories import CharacterEngagementFactory
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import GiftHeldRequirement, TechniqueKnownRequirement
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 from world.scenes.models import Interaction
 from world.worship.factories import DevotionStandingFactory, WorshippedBeingFactory
@@ -458,6 +459,25 @@ class ChooseTests(_RevealFixture):
             choose_ultimate(self.sheet, sword.choice_key)
         self.assertFalse(GMPrompt.objects.exists())
         self.assertFalse(Interaction.objects.exists())
+
+    def test_choosing_an_ultimate_excludes_the_choosers_own_gm_account(self) -> None:
+        """The reveal's own player, who also GMs the scene, is never prompted
+        about their own pick (#4101 fix round 1, mirrors the Crossing's M5
+        exclusion)."""
+        scene = SceneFactory()
+        own_account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=self.sheet)
+        RosterTenureFactory(
+            roster_entry=entry,
+            player_data=PlayerDataFactory(account=own_account),
+            end_date=None,
+        )
+        SceneGMParticipationFactory(scene=scene, account=own_account)
+        reveal = ultimate_reveal_for(self.sheet)
+        sword = next(c for c in reveal.groups[0].cards if c.category == RoleArchetype.SWORD)
+        with self.captureOnCommitCallbacks(execute=True):
+            choose_ultimate(self.sheet, sword.choice_key)
+        self.assertFalse(GMPrompt.objects.filter(kind=GMPromptKind.AUDERE_ULTIMATE).exists())
 
 
 class ChooseMajoraTests(_RevealFixture):

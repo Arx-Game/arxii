@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
@@ -32,6 +33,8 @@ if TYPE_CHECKING:
     from world.companions.models import Companion
     from world.magic.models import Gift, KnownUltimate, Technique
     from world.worship.models import WorshippedBeing
+
+logger = logging.getLogger(__name__)
 
 _CATEGORY_ORDER = (RoleArchetype.SWORD, RoleArchetype.SHIELD, RoleArchetype.CROWN)
 _KEY_SEP = ":"
@@ -432,20 +435,42 @@ def choose_ultimate(sheet: CharacterSheet, choice_key: str) -> KnownUltimate:
 
 
 def _route_ultimate_chosen(sheet: CharacterSheet, technique: Technique) -> None:
-    """The reveal's pick is a narratable Audere moment for the scene GM (#4101)."""
+    """The reveal's pick is a narratable Audere moment for the scene GM (#4101).
+
+    Mirrors ``_route_crossing``/``_announce_surge`` (#4101 fix round 1): GM
+    candidates exclude the choosing character's own account, are resolved INSIDE
+    the same ``try`` that guards prompt creation, and a ``DatabaseError`` there is
+    caught rather than propagating out of the ``transaction.on_commit`` callback.
+    No authored default line exists for an ultimate pick, so there is nothing to
+    fall back to delivering -- catching the error here just keeps a prompt-creation
+    failure from being the thing that surfaces to the player, same as when there
+    are simply no GM candidates at all.
+    """
+    from django.db import DatabaseError  # noqa: PLC0415
+
     from world.gm.constants import GMPromptKind  # noqa: PLC0415
     from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
     from world.gm.types import NarratableEvent  # noqa: PLC0415
+    from world.magic.services.gain import gm_prompt_candidates_excluding_subject  # noqa: PLC0415
     from world.scenes.models import Scene  # noqa: PLC0415
 
-    route_narratable_event(
-        NarratableEvent(
-            kind=GMPromptKind.AUDERE_ULTIMATE,
-            scene=Scene.objects.active_for_room(sheet.character.location).first(),
-            character_sheet=sheet,
-            technique=technique,
+    scene = Scene.objects.active_for_room(sheet.character.location).first()
+    try:
+        candidates = gm_prompt_candidates_excluding_subject(sheet, scene)
+        route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.AUDERE_ULTIMATE,
+                scene=scene,
+                character_sheet=sheet,
+                technique=technique,
+            ),
+            candidates=candidates,
         )
-    )
+    except DatabaseError:
+        logger.exception(
+            "Ultimate-choice routing failed to create GM prompts for sheet %s (#4101).",
+            sheet.pk,
+        )
 
 
 def readied_ultimate(sheet: CharacterSheet) -> KnownUltimate | None:

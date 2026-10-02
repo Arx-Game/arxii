@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import models, transaction
@@ -13,6 +14,8 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+
+logger = logging.getLogger(__name__)
 
 AUDERE_CONDITION_NAME = "Audere"
 AUDERE_MAJORA_CONDITION_NAME = "Audere Majora"
@@ -357,10 +360,20 @@ def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
     The line is the character's prepared surge text, else the threshold's
     ``surge_manifestation_text`` (#3451), with ``{name}`` substituted. With no GM
     and a blank line, accepting stays room-silent exactly as before (#4101).
+
+    Mirrors ``_route_crossing`` (``audere_majora.py``, #4101 fix round 1): the
+    scene's GM candidates exclude the surging character's own account (a player
+    who also GMs their own scene is never addressed about their own surge), are
+    resolved INSIDE the same ``try`` that guards prompt creation, and a
+    ``DatabaseError`` there falls back to plain unprompted delivery exactly once
+    rather than leaving the surge silently undelivered.
     """
+    from django.db import DatabaseError
+
     from world.gm.constants import GMPromptKind
     from world.gm.prompt_services import route_narratable_event
     from world.gm.types import NarratableEvent
+    from world.magic.services.gain import gm_prompt_candidates_excluding_subject
     from world.magic.services.prepared_text import resolve_surge_text
     from world.scenes.interaction_services import broadcast_scene_emit
     from world.scenes.models import Persona, Scene
@@ -372,20 +385,35 @@ def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
     except (AttributeError, Persona.DoesNotExist):
         return  # broadcast_scene_emit would no-op on the same condition
     text = surge.text.replace("{name}", name)
-    if sheet is None:
+
+    def _deliver() -> None:
         if text:
             broadcast_scene_emit(character, text)
+
+    if sheet is None:
+        _deliver()
         return
-    route_narratable_event(
-        NarratableEvent(
-            kind=GMPromptKind.AUDERE_SURGE,
-            scene=Scene.objects.active_for_room(character.location).first(),
-            character_sheet=sheet,
-            room_text=text,
-            prepared_for_character=surge.prepared,
-        ),
-        deliver_unprompted=(lambda: broadcast_scene_emit(character, text)) if text else None,
-    )
+    scene = Scene.objects.active_for_room(character.location).first()
+    try:
+        candidates = gm_prompt_candidates_excluding_subject(sheet, scene)
+        route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.AUDERE_SURGE,
+                scene=scene,
+                character_sheet=sheet,
+                room_text=text,
+                prepared_for_character=surge.prepared,
+            ),
+            deliver_unprompted=_deliver,
+            candidates=candidates,
+        )
+    except DatabaseError:
+        logger.exception(
+            "Audere surge routing failed to create GM prompts for sheet %s; "
+            "delivering unprompted instead (#4101).",
+            sheet.pk,
+        )
+        _deliver()
 
 
 def end_audere(character: ObjectDB) -> None:
