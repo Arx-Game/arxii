@@ -557,6 +557,17 @@ def put_in(
     tag_catered_provision(item.instance, container.instance, character.obj)
 
 
+def validate_take_out(character: CharacterState, item: ItemState) -> None:
+    """Check existing reach, containment and take denial without mutation."""
+    if not item.can_take(taker=character):
+        raise NotReachable
+    if item.instance.contained_in is None:
+        raise NotInContainer
+    denial = _take_denial(character.obj.character_sheet, item.instance)
+    if denial is not None:
+        raise denial()
+
+
 @transaction.atomic
 def take_out(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` out of its container into ``character``'s possession.
@@ -571,14 +582,7 @@ def take_out(character: CharacterState, item: ItemState) -> None:
     belongs to a third party (neither the taker nor the container's owner),
     raises ``OwnedByAnother``. Steal is the deliberate bypass.
     """
-    if not item.can_take(taker=character):
-        raise NotReachable
-    if item.instance.contained_in is None:
-        raise NotInContainer
-    taker_sheet = character.obj.character_sheet
-    denial = _take_denial(taker_sheet, item.instance)
-    if denial is not None:
-        raise denial()
+    validate_take_out(character, item)
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):
@@ -650,6 +654,21 @@ def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
     )
 
 
+def _theft_consent_blocks(owner_tenure: RosterTenure, taker_tenure: RosterTenure | None) -> bool:
+    """Read existing theft consent; an absent lazy category defaults to denial."""
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+
+    category = SocialConsentCategory.objects.filter(key="theft").first()
+    if category is None:
+        # The lazy category has ALLOWLIST default and no parent. No grants can
+        # reference a category that does not exist, so its decision is denial.
+        return True
+    return consent_blocks_targeting(
+        owner_tenure=owner_tenure, category=category, actor_tenure=taker_tenure
+    )
+
+
 def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
     """Target-side-only availability (#1909): NPC-owned always; players by consent.
 
@@ -690,27 +709,14 @@ def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInsta
             founder_tenure = _active_tenure_for_sheet(founder_sheet)
             if founder_tenure is None:
                 return True  # Founder has no active tenure — NPC-like, allow
-            from world.consent.services import (  # noqa: PLC0415
-                consent_blocks_targeting,
-                theft_category,
-            )
-
             taker_tenure = _active_tenure_for_sheet(taker_sheet)
-            return not consent_blocks_targeting(
-                owner_tenure=founder_tenure,
-                category=theft_category(),
-                actor_tenure=taker_tenure,
-            )
+            return not _theft_consent_blocks(founder_tenure, taker_tenure)
         return True  # Non-vault unowned items: unchanged behavior
     owner_tenure = _active_tenure_for_sheet(guarded_sheet)
     if owner_tenure is None:
         return True  # NPC/org holdings: always antagonism-allowed (spec decision 5)
-    from world.consent.services import consent_blocks_targeting, theft_category  # noqa: PLC0415
-
     taker_tenure = _active_tenure_for_sheet(taker_sheet)
-    return not consent_blocks_targeting(
-        owner_tenure=owner_tenure, category=theft_category(), actor_tenure=taker_tenure
-    )
+    return not _theft_consent_blocks(owner_tenure, taker_tenure)
 
 
 @transaction.atomic
@@ -747,6 +753,14 @@ def _unconscious_holder_reachable(character: CharacterState, item: ItemState) ->
     return False
 
 
+def validate_steal(character: CharacterState, item: ItemState) -> None:
+    """Check the existing Steal reach exception and target consent without mutation."""
+    if not item.can_take(taker=character) and not _unconscious_holder_reachable(character, item):
+        raise NotReachable
+    if not steal_permitted(character.obj.character_sheet, item.instance):
+        raise TheftNotPermitted
+
+
 def steal(character: CharacterState, item: ItemState) -> None:
     """Take an item that plain take refuses (#1909) — with consequences.
 
@@ -755,16 +769,8 @@ def steal(character: CharacterState, item: ItemState) -> None:
     ``concealed=True`` rolls Stealth to shed witnesses (#1824), so an
     unwitnessed theft spreads cold until discovered.
     """
-    if not item.can_take(taker=character) and not _unconscious_holder_reachable(character, item):
-        raise NotReachable
-    # getattr, not direct access: sheet-less actors (GM/staff/companion tooling)
-    # have no reverse CharacterSheet row and must reach ``steal_permitted`` with
-    # None rather than raise DoesNotExist — steal_permitted then delegates to
-    # take_requires_steal, which returns False for a None sheet, so a
-    # sheet-less actor always ends up refused here (they free-take instead).
+    validate_steal(character, item)
     taker_sheet = character.obj.character_sheet
-    if not steal_permitted(taker_sheet, item.instance):
-        raise TheftNotPermitted
     previous_holder_sheet = item.instance.holder_character_sheet
     if item.instance.contained_in is not None:
         item.instance.contained_in = None

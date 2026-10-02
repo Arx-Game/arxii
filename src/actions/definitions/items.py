@@ -23,6 +23,7 @@ from actions.prerequisites import (
     OnUseTargetPrerequisite,
     Prerequisite,
 )
+from actions.target_menu_types import MenuTargetKind
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
@@ -34,8 +35,11 @@ from flows.service_functions.inventory import (
     set_container_policy,
     steal,
     take_out,
+    take_requires_steal,
     unequip,
     validate_equip,
+    validate_steal,
+    validate_take_out,
     validate_unequip,
 )
 from world.gm.constants import GMLevel
@@ -232,9 +236,72 @@ class PutInAction(Action):
         return ActionResult(success=True)
 
 
+_TAKING_UNAVAILABLE = "That isn't available."
+_STEAL_TARGET_KINDS = frozenset({MenuTargetKind.ITEMS, MenuTargetKind.OBJECTS})
+_TAKE_OUT_TARGET_KINDS = frozenset({MenuTargetKind.ITEMS})
+
+
+def _taking_item(actor, kwargs, action):
+    if MENU_TARGET_KEY in kwargs:
+        resolved = resolve_typed_item(actor, kwargs, allowed_kinds=action.allowed_target_kinds)
+        return resolved.item if resolved is not None else None
+    return resolve_item_instance(kwargs.get("target"))
+
+
+def _taking_check(action, actor, target=None, context=None):
+    context = context or {}
+    kwargs = dict(context.get("kwargs", {}))
+    if MENU_TARGET_KEY not in kwargs and _EQUIPMENT_TARGET_KEY not in kwargs:
+        kwargs["target"] = target
+    item = _taking_item(actor, kwargs, action)
+    if MENU_TARGET_KEY in kwargs:
+        if item is None or not action.is_applicable(actor, kwargs=kwargs):
+            return False, _TAKING_UNAVAILABLE
+    elif kwargs.get("target") is None:
+        return False, action.missing_target_message
+    elif item is None:
+        return False, action.invalid_target_message
+    sdm = context.get("scene_data")
+    sdm = sdm if sdm is not None else SceneDataManager()
+    try:
+        action.validate(CharacterState(actor, context=sdm), ItemState(item, context=sdm))
+    except InventoryError as exc:
+        return False, exc.user_message
+    return True, ""
+
+
 @dataclass
-class TakeOutAction(Action):
-    """Remove an item from its container into the character's possession."""
+class _TakeOutPrerequisite(Prerequisite):
+    def is_met(self, actor, target=None, context=None):
+        return _taking_check(TakeOutAction(), actor, target, context)
+
+
+class _TakingAction(Action):
+    """Adapt current typed identity without replacing inventory rules."""
+
+    allowed_target_kinds: ClassVar[frozenset[MenuTargetKind]]
+    missing_target_message: ClassVar[str]
+    invalid_target_message: ClassVar[str]
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        return emit_typed_item_intent(
+            context, actor, super()._emit_intent, allowed_kinds=self.allowed_target_kinds
+        )
+
+    def _target_failure(self, actor, kwargs, item):
+        if MENU_TARGET_KEY in kwargs:
+            if item is None or not self.is_applicable(actor, kwargs=kwargs):
+                return ActionResult(success=False, message=_TAKING_UNAVAILABLE)
+        elif kwargs.get("target") is None:
+            return ActionResult(success=False, message=self.missing_target_message)
+        elif item is None:
+            return ActionResult(success=False, message=self.invalid_target_message)
+        return None
+
+
+@dataclass
+class TakeOutAction(_TakingAction):
+    """Remove a contained item, retaining the existing servant reach fallback."""
 
     key: str = "take_out"
     name: str = "Take Out"
@@ -242,27 +309,38 @@ class TakeOutAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+    allowed_target_kinds: ClassVar[frozenset[MenuTargetKind]] = _TAKE_OUT_TARGET_KINDS
+    missing_target_message: ClassVar[str] = "Take what out?"
+    invalid_target_message: ClassVar[str] = "That can't be taken out."
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), _TakeOutPrerequisite()]
+
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _taking_item(actor, kwargs, self)
+        return item is not None and item.game_object is not None and item.contained_in is not None
+
+    @staticmethod
+    def validate(character: CharacterState, item: ItemState) -> None:
+        try:
+            validate_take_out(character, item)
+        except NotReachable:
+            from world.npc_services.servant_fetch import can_servant_fetch  # noqa: PLC0415
+
+            if not can_servant_fetch(actor=character.obj, item_instance=item.instance):
+                raise
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        target = kwargs.get("target")
-        if target is None:
-            return ActionResult(success=False, message="Take what out?")
-
-        item_instance = resolve_item_instance(target)
-        if item_instance is None:
-            return ActionResult(success=False, message="That can't be taken out.")
-
+        item_instance = _taking_item(actor, kwargs, self)
+        failure = self._target_failure(actor, kwargs, item_instance)
+        if failure is not None:
+            return failure
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         item_state = ItemState(item_instance, context=sdm)
-
         try:
             take_out(actor_state, item_state)
         except NotReachable:
@@ -279,24 +357,17 @@ class TakeOutAction(Action):
             return ActionResult(success=False, message=NotReachable.user_message)
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
-
         message_location(
             actor_state,
             "$You() $conj(take) {target} out.",
-            mapping={"target": item_state},
+            mapping={"target": item_instance.display_name},
         )
-
         return ActionResult(success=True)
 
 
 @dataclass
-class StealAction(Action):
-    """Take an item that plain take/take_out refuses — with consequences (#1909).
-
-    ``CanStealPrerequisite`` gates availability on the same target-side
-    ``steal_permitted`` predicate the ``steal`` service re-checks at
-    execution time (visibility = eligibility).
-    """
+class StealAction(_TakingAction):
+    """Deliberate take denial bypass; readable scope is distinct from theft eligibility."""
 
     key: str = "steal"
     name: str = "Steal"
@@ -304,41 +375,45 @@ class StealAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+    allowed_target_kinds: ClassVar[frozenset[MenuTargetKind]] = _STEAL_TARGET_KINDS
+    missing_target_message: ClassVar[str] = "Steal what?"
+    invalid_target_message: ClassVar[str] = "That can't be stolen."
+    validate = staticmethod(validate_steal)
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [CanStealPrerequisite()]
+        return [*super().get_prerequisites(), CanStealPrerequisite()]
+
+    def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
+        item = _taking_item(actor, kwargs, self)
+        if item is None or item.game_object is None:
+            return False
+        sheet = actor.character_sheet
+        if sheet is None or item.holder_character_sheet_id == sheet.pk:
+            return False
+        if ItemState(item, context=SceneDataManager()).is_in_possession(actor):
+            return False
+        return take_requires_steal(sheet, item)
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        target = kwargs.get("target")
-        if target is None:
-            return ActionResult(success=False, message="Steal what?")
-
-        item_instance = resolve_item_instance(target)
-        if item_instance is None:
-            return ActionResult(success=False, message="That can't be stolen.")
-
+        item_instance = _taking_item(actor, kwargs, self)
+        failure = self._target_failure(actor, kwargs, item_instance)
+        if failure is not None:
+            return failure
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         item_state = ItemState(item_instance, context=sdm)
-
         try:
             steal(actor_state, item_state)
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
-
         message_location(
             actor_state,
             "$You() $conj(take) {target}.",
-            mapping={"target": item_state},
+            mapping={"target": item_instance.display_name},
         )
-
         return ActionResult(success=True)
 
 

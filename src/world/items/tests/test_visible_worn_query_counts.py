@@ -232,9 +232,9 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
            owner sheet (``steal_permitted`` -> ``_active_tenure_for_sheet``).
         9. ``can_steal``: active RosterTenure lookup for the viewer/taker
            sheet (same helper, other side).
-        10. ``can_steal``: ``SocialConsentCategory`` lookup for the "theft"
-            key (``consent_blocks_targeting`` -> ``theft_category()``).
-        11. ``can_steal``: theft-category whitelist lookup.
+        10. ``can_steal``: read-only ``SocialConsentCategory`` lookup for the
+            "theft" key. The missing category defaults to denial and short-circuits
+            consent without a preference or whitelist query.
 
         The observer ``ObjectDB.objects.get(pk=...)`` hits the
         SharedMemoryModel identity map (warmed by prior GETs) and runs no
@@ -251,8 +251,8 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         # Warm-up call (loads session, equipment handlers for observable chars).
         self.client.get(url)
 
-        # The five typed worn-scope queries are live authorization checks,
-        # in addition to the six established detail/steal-consent queries.
-        with self.assertNumQueries(11):
+        # Five live worn-scope checks plus five detail/steal-consent reads.
+        # Missing theft category short-circuits consent; do not add a query.
+        with self.assertNumQueries(10):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)

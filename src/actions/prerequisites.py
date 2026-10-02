@@ -704,13 +704,7 @@ class OwnsItemInstancePrerequisite(Prerequisite):
 
 @dataclass
 class CanStealPrerequisite(Prerequisite):
-    """The ``target`` kwarg item must be steal-eligible for the actor (#1909).
-
-    Visibility = eligibility: ``steal_permitted`` is the same target-side
-    predicate the ``steal`` service re-checks at execution time; reading the
-    ``target`` kwarg via the kwargs-via-context convention lets this gate see
-    it before ``execute()`` runs.
-    """
+    """Read the same current target adaptation, reach and consent checks as Steal."""
 
     def is_met(
         self,
@@ -718,20 +712,9 @@ class CanStealPrerequisite(Prerequisite):
         target: ObjectDB | None = None,
         context: dict | None = None,
     ) -> tuple[bool, str]:
-        from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415
-        from flows.service_functions.inventory import steal_permitted  # noqa: PLC0415
-        from world.items.exceptions import TheftNotPermitted  # noqa: PLC0415
+        from actions.definitions.items import StealAction, _taking_check  # noqa: PLC0415
 
-        target_obj = (context or {}).get("kwargs", {}).get("target")
-        if target_obj is None:
-            return False, "Steal what?"
-        instance = resolve_item_instance(target_obj)
-        if instance is None:
-            return False, "That can't be stolen."
-        actor_sheet = resolve_actor_sheet(actor)
-        if steal_permitted(actor_sheet, instance):
-            return True, ""
-        return False, TheftNotPermitted.user_message
+        return _taking_check(StealAction(), actor, target, context)
 
 
 class BlackmailAmmoPrerequisite(Prerequisite):
