@@ -346,7 +346,13 @@ class PriceComponentRequirement(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        if self.restriction_id is not None and self.restriction.kind != RestrictionKind.PRICE:
+        # Read the attached object, not ``restriction_id``: on the admin add form the
+        # parent restriction is still unsaved, so its id is None while its kind is set.
+        try:
+            restriction = self.restriction
+        except Restriction.DoesNotExist:
+            return
+        if restriction.kind != RestrictionKind.PRICE:
             raise ValidationError(
                 {"restriction": "Only a PRICE restriction can consume components."}
             )

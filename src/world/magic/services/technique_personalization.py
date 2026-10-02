@@ -180,13 +180,54 @@ def price_paid_for_cast(character, technique: Technique) -> PricePayment | None:
     return PricePayment(price=price, allocations=tuple(allocations))
 
 
+def confirm_price_payment(character, payment: PricePayment | None) -> PricePayment | None:
+    """Re-lock and re-check a paid decision's allocation at settlement (#4099 review).
+
+    ``price_paid_for_cast`` decides early (power is derived from it), but the cast resolves
+    later. If another cast by the same character spent the component in between, the
+    allocation is stale. This locks the allocated rows (``select_for_update``) and reads
+    their stored values (never the identity-mapped instances, which can be stale). Each
+    row must still be in play, still carried by the caster, and hold enough. On success
+    the cached instances are synced to the locked quantity and the payment is returned.
+    Otherwise this returns ``None`` and the cast settles unpaid without raising. The caller
+    withdraws the price's power from the cast. Must run inside the settlement's
+    transaction so the lock holds through consumption.
+    """
+    from world.items.models import ItemInstance  # noqa: PLC0415
+
+    if payment is None or not payment.allocations:
+        return payment
+    pks = [instance.pk for instance, _ in payment.allocations]
+    if any(pk is None for pk in pks):
+        return None
+    locked = {
+        pk: (quantity, destroyed_at, location_id)
+        for pk, quantity, destroyed_at, location_id in ItemInstance.objects.select_for_update(
+            of=("self",)
+        )
+        .filter(pk__in=pks)
+        .values_list("pk", "quantity", "destroyed_at", "game_object__db_location_id")
+    }
+    for instance, amount in payment.allocations:
+        row = locked.get(instance.pk)
+        if row is None:
+            return None
+        quantity, destroyed_at, location_id = row
+        if destroyed_at is not None or location_id != character.pk or quantity < amount:
+            return None
+    for instance, _ in payment.allocations:
+        instance.quantity = locked[instance.pk][0]
+    return payment
+
+
 def settle_price_payment(*, character, technique: Technique, payment: PricePayment | None) -> None:
     """Spend what a paid price costs, once the cast has resolved (#4099).
 
     Consumes the decision's allocated components through the shared
     ``consume_materials`` and applies the price's inflicted condition to the caster
     through ``apply_condition``. A no-op for an unpaid cast. Called only from inside
-    ``use_technique``'s resolution transaction, never before the cast resolves.
+    ``use_technique``'s resolution savepoint, after ``confirm_price_payment`` has
+    re-locked the allocation, and never before the cast resolves.
     """
     if payment is None:
         return

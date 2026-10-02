@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.forms.models import FormCombatProfile
-    from world.magic.models import Technique
+    from world.magic.models import Restriction, Technique
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult
@@ -1176,6 +1176,58 @@ def _prepare_technique_cast(  # noqa: PLR0913
     )
 
 
+def _withdraw_unpaid_price(preparation: _CastPreparation, price: Restriction) -> None:
+    """Take a price's power back out of a cast that turned out not to pay it.
+
+    The decision is made before the power is derived; if the component is gone by
+    settlement (``confirm_price_payment``), the ledger gets an explicit negative TERM
+    entry and the effective power drops by the same bonus, floored at 0.
+    """
+    if not price.power_bonus:
+        return
+    preparation.effective_ledger = (
+        PowerLedgerBuilder.from_ledger(preparation.effective_ledger)
+        .add(PowerStage.TERM, "price unpaid", -price.power_bonus)
+        .build()
+    )
+    preparation.effective_power = max(0, preparation.effective_power - price.power_bonus)
+
+
+def _resolve_and_settle_price(
+    *,
+    character: ObjectDB,
+    technique: Technique,
+    resolve_fn: Callable[..., Any],
+    preparation: _CastPreparation,
+    price_payment: PricePayment | None,
+) -> tuple[Any, PricePayment | None]:
+    """Resolve the cast and settle its price in ONE savepoint (#4099).
+
+    Only ``resolve_fn`` and the settlement share the transaction, so a paid price is
+    consumed exactly when the cast resolves and rolls back with it, while post-cast
+    emits, Audere offers and notifications behave the same for paid and unpaid casts.
+    An unpaid cast opens no savepoint. The decision is re-locked and re-checked first;
+    a component spent elsewhere in the meantime settles the cast unpaid, without
+    raising, and withdraws the price's power before ``resolve_fn`` sees it.
+    """
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        confirm_price_payment,
+        settle_price_payment,
+    )
+
+    with transaction.atomic() if price_payment is not None else nullcontext():
+        confirmed = confirm_price_payment(character, price_payment)
+        if price_payment is not None and confirmed is None:
+            _withdraw_unpaid_price(preparation, price_payment.price)
+        resolution_result = resolve_fn(
+            power=preparation.effective_power,
+            ledger=preparation.effective_ledger,
+            extra_modifiers=preparation.pull_flat_bonus,
+        )
+        settle_price_payment(character=character, technique=technique, payment=confirmed)
+    return resolution_result, confirmed
+
+
 def _complete_technique_cast(  # noqa: PLR0913
     *,
     character,
@@ -1194,18 +1246,13 @@ def _complete_technique_cast(  # noqa: PLR0913
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
-    resolution_result = resolve_fn(
-        power=preparation.effective_power,
-        ledger=preparation.effective_ledger,
-        extra_modifiers=preparation.pull_flat_bonus,
+    resolution_result, price_payment = _resolve_and_settle_price(
+        character=character,
+        technique=technique,
+        resolve_fn=resolve_fn,
+        preparation=preparation,
+        price_payment=price_payment,
     )
-    # #4099: the cast has resolved, so a paid price is spent now — its components
-    # consumed and its condition inflicted, inside use_technique's transaction.
-    from world.magic.services.technique_personalization import (  # noqa: PLC0415
-        settle_price_payment,
-    )
-
-    settle_price_payment(character=character, technique=technique, payment=price_payment)
     effective_check_result = _resolve_check_result(check_result, resolution_result)
     from world.magic.models import SoulfrayConfig  # noqa: PLC0415
 
@@ -1364,22 +1411,19 @@ def use_technique(  # noqa: PLR0913
         )
     preparation.strain_power_bonus = strain_power_bonus
     # Resolution may supply an explicit check result; retain it over extraction.
-    # One transaction (#4099): a paid price's consumption commits or rolls back with
-    # the cast it paid for. An unpaid cast spends nothing, so it opens no savepoint and
-    # resolves exactly as it did before prices had a cost.
-    with transaction.atomic() if price_payment is not None else nullcontext():
-        return _complete_technique_cast(
-            character=character,
-            technique=technique,
-            resolve_fn=resolve_fn,
-            check_result=check_result,
-            cost=cost,
-            lethal=lethal,
-            anima=anima,
-            stats=stats,
-            preparation=preparation,
-            soulfray_warning=soulfray_warning,
-            declared_strain=strain_commitment,
-            effective_strain=effective_strain,
-            price_payment=price_payment,
-        )
+    # The price settles with resolve_fn in one savepoint (_resolve_and_settle_price).
+    return _complete_technique_cast(
+        character=character,
+        technique=technique,
+        resolve_fn=resolve_fn,
+        check_result=check_result,
+        cost=cost,
+        lethal=lethal,
+        anima=anima,
+        stats=stats,
+        preparation=preparation,
+        soulfray_warning=soulfray_warning,
+        declared_strain=strain_commitment,
+        effective_strain=effective_strain,
+        price_payment=price_payment,
+    )

@@ -351,3 +351,78 @@ class RestrictionAdminPriceCostTests(TestCase):
         price = PriceFactory()
         form = self._change_form(price, inflicted_condition=self.condition.pk)
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_admin_add_form_refuses_a_component_on_a_new_design_restriction(self) -> None:
+        """#4099 review: on the add form the parent restriction is unsaved, so a check
+        keyed on ``restriction_id`` never ran."""
+        from world.magic.models import Restriction
+
+        unsaved = Restriction(name="Brand new design", kind=RestrictionKind.DESIGN)
+        formset = self._inline_formset(unsaved)
+        self.assertFalse(formset.is_valid())
+        self.assertIn("PRICE", str(formset.errors))
+
+    def test_admin_add_form_accepts_a_component_on_a_new_price(self) -> None:
+        from world.magic.models import Restriction
+
+        unsaved = Restriction(name="Brand new price", kind=RestrictionKind.PRICE)
+        formset = self._inline_formset(unsaved)
+        self.assertTrue(formset.is_valid(), formset.errors)
+
+
+class PriceSettlementReviewTests(PriceCostFixture):
+    """#4099 review fix round: the settlement's transaction and its re-check."""
+
+    def test_a_late_post_cast_failure_does_not_undo_a_paid_settlement(self) -> None:
+        """Only resolve_fn and the settlement share the savepoint; a failure in a post-cast
+        step (here an Audere offer) behaves the same for paid and unpaid casts."""
+        stack = carry(self.character, self.needle, quantity=3)
+        with (
+            patch(
+                "world.magic.audere.maybe_create_audere_offer",
+                side_effect=RuntimeError("late"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            use_technique(
+                character=self.character, technique=self.technique, resolve_fn=MagicMock()
+            )
+        # Read the stored value: a rolled-back savepoint does not revert the cached row.
+        self.assertEqual(
+            ItemInstance.objects.filter(pk=stack.pk).values_list("quantity", flat=True).get(),
+            1,
+        )
+
+    def test_a_component_spent_by_another_cast_settles_unpaid_without_raising(self) -> None:
+        """Two casts against one component: the second, holding a stale decision, finds
+        the component gone at settlement, pays nothing and keeps no price power."""
+        unpaid, unpaid_resolve = capture_power()
+        use_technique(character=self.character, technique=self.technique, resolve_fn=unpaid_resolve)
+
+        stack = carry(self.character, self.needle, quantity=2)
+        stack.custom_name = "Needles from a dead aunt"
+        stack.save(update_fields=["custom_name"])
+        stale = price_paid_for_cast(self.character, self.technique)
+        self.assertIsNotNone(stale)
+        first = use_technique(
+            character=self.character, technique=self.technique, resolve_fn=MagicMock()
+        )
+        self.assertEqual(first.price_paid, self.price)
+        stack.refresh_from_db()
+        self.assertIsNotNone(stack.destroyed_at)
+
+        second_power, second_resolve = capture_power()
+        with patch(
+            "world.magic.services.technique_personalization.price_paid_for_cast",
+            return_value=stale,
+        ):
+            second = use_technique(
+                character=self.character, technique=self.technique, resolve_fn=second_resolve
+            )
+
+        self.assertTrue(second.confirmed)
+        self.assertIsNone(second.price_paid)
+        self.assertEqual(second_power["power"], unpaid["power"])
+        stack.refresh_from_db()
+        self.assertEqual(stack.quantity, 0)
+        self.assertEqual(stack.ownership_events.filter(event_type="consumed").count(), 1)
