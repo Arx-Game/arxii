@@ -353,7 +353,7 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "crafter_character_sheet",
     ]
     list_filter = ["quality_tier", "template"]
-    readonly_fields = ["is_broken"]
+    readonly_fields = ["is_broken", "destroyed_at", "last_holder"]
     list_select_related = [
         "template",
         "quality_tier",
@@ -381,11 +381,23 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "is_open",
         "access_policy",
         "holder_character_sheet",
+        "destroyed_at",
+        "last_holder",
         "crafter_character_sheet",
         "crafter_persona_display",
         "image",
     ]
     inlines = [ItemStyleInline]
+
+    @admin.display(description="Last holder")
+    def last_holder(self, obj: ItemInstance) -> str:
+        """Who held it last (#4099). A destroyed item is held by nobody, so this reads
+        the exit event on the ledger; a detail-page field only, so the list stays one
+        query."""
+        from world.items.services.provenance import last_holder  # noqa: PLC0415
+
+        sheet = last_holder(obj)
+        return str(sheet) if sheet is not None else "-"
 
 
 @admin.register(EquippedItem)

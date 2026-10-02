@@ -19,10 +19,10 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from world.items.constants import SALVAGE_FRACTION, OwnershipEventType, RecycleRequestStatus
+from world.items.constants import SALVAGE_FRACTION, RecycleRequestStatus
 from world.items.exceptions import AccentNotPresent, NotItemOwner, RecycleNeedsGMApproval
-from world.items.models import ItemInstance, OwnershipEvent, RecycleRequest
-from world.items.services.usage import hard_delete_item_instance
+from world.items.models import ItemInstance, RecycleRequest
+from world.items.services.usage import destroy_consumed_item_instance
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -162,20 +162,8 @@ def recycle_item(*, item_instance: ItemInstance, actor_sheet: CharacterSheet) ->
         salvaged.append((template.name, amount))
 
     _recompute_wearer_prestige(locked)
-    preserve = locked.differs_from_template
-    if preserve:
-        locked.destroyed_at = timezone.now()
-        locked.save(update_fields=["destroyed_at"])
-        game_object = locked.game_object
-        if game_object is not None:
-            game_object.location = None
-            game_object.save()
-        OwnershipEvent.objects.create(
-            item_instance=locked,
-            event_type=OwnershipEventType.CONSUMED,
-            from_character_sheet=locked.holder_character_sheet,
-            notes="Recycled by its owner (preserved for provenance).",
-        )
-    else:
-        hard_delete_item_instance(locked)
+    # #4099: both branches go through the canonical destroy rule, so a recycled piece is
+    # unequipped, spills its contents, and (when preserved) is held by nobody: it can't
+    # be listed, traded or sold afterwards.
+    destroy_consumed_item_instance(locked, note="Recycled by its owner.")
     return RecycleResult(salvaged=tuple(salvaged))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -27,11 +28,15 @@ from world.items.exceptions import (
     ItemNotUsable,
     MakeoverNotPermitted,
     NoChargesRemaining,
+    NotReachable,
     StyleChoiceRequired,
     StyleNotKnown,
+    VaultFull,
 )
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
 from world.items.types import UseItemResult
+
+logger = logging.getLogger(__name__)
 
 
 def hard_delete_item_instance(item_instance: ItemInstance) -> None:
@@ -145,20 +150,65 @@ def _spill_contents(
 ) -> None:
     """A destroyed container's contents spill out; they are never destroyed with it.
 
-    Mirrors ``take_out`` (``flows/service_functions/inventory.py``): ``contained_in`` is
-    cleared and each content's game object moves to ``landing``, where the container
-    itself was (the carrier, so it stays in their inventory, or the room). Holders are
-    untouched. Only containers are queried.
+    Mirrors ``take_out`` (``flows/service_functions/inventory.py``). Each content moves
+    up one level. For a pouch inside a bag, ``contained_in`` becomes the bag and the
+    game object moves into the bag's game object. Otherwise ``contained_in`` is cleared
+    and the game object moves to ``landing``, where the container was: the carrier, so
+    it stays in their inventory, or the room.
+
+    If the container was nowhere (no landing), contents go to the former holder's
+    character, else to their own Evennia ``home``. Holders are untouched. A spill into a
+    vault room respects its capacity, as ``drop`` does (``VaultFull``). A refused
+    ``move_to`` raises ``NotReachable``, as ``take_out`` does. Only containers are
+    queried.
     """
     if not container.template.is_container:
         return
-    for content in ItemInstance.objects.filter(contained_in=container).select_related(
-        "game_object"
-    ):
-        content.contained_in = None
+    contents = list(
+        ItemInstance.objects.filter(contained_in=container).select_related("game_object")
+    )
+    if not contents:
+        return
+    parent = container.contained_in
+    holder_sheet = container.holder_character_sheet
+    fallback = holder_sheet.character if holder_sheet is not None else None
+    for content in contents:
+        content.contained_in = parent
         content.save(update_fields=["contained_in"])
-        if content.game_object is not None and landing is not None:
-            content.game_object.move_to(landing, quiet=True)
+        game_object = content.game_object
+        if game_object is None:
+            continue
+        if parent is not None and parent.game_object is not None:
+            target = parent.game_object
+        else:
+            target = landing or fallback or game_object.home
+        if target is None:
+            logger.warning(
+                "Spilled item %s has no landing, holder or home; it stays where it was.",
+                content.pk,
+            )
+            continue
+        _assert_spill_fits(target)
+        if not game_object.move_to(target, quiet=True):
+            raise NotReachable
+
+
+def _assert_spill_fits(
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM - a spill lands on a character or a room
+) -> None:
+    """A spill into a vault room respects its capacity, exactly as ``drop`` does."""
+    if hasattr(target, "carried_items"):
+        return  # a character, not a room
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.room_features.vault_services import (  # noqa: PLC0415
+        vault_capacity_remaining,
+        vault_for_room,
+    )
+
+    profile = RoomProfile.objects.filter(objectdb=target).first()
+    vault = vault_for_room(profile) if profile is not None else None
+    if vault is not None and vault_capacity_remaining(vault) <= 0:
+        raise VaultFull
 
 
 def _invalidate_caches(item_instance: ItemInstance) -> None:
