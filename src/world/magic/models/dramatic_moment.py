@@ -70,7 +70,7 @@ class DramaticMomentType(NaturalKeyMixin, CreditedContent, RenownAwardConfig):
         default=False,
         help_text=(
             "When set, a high-success technique-entrance cast surfaces a PENDING "
-            "DramaticMomentSuggestion for this type instead of nothing (#2183)."
+            "GMPrompt for this type instead of nothing (#2183)."
         ),
     )
     suggestion_min_success_level = models.PositiveSmallIntegerField(

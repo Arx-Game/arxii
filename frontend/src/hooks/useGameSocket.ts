@@ -442,6 +442,11 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
     case WS_MESSAGE_TYPE.WEBCLIENT_OPTIONS:
       return () => undefined;
 
+    // A new GM prompt landed in this GM's queue (#4101). Task 10 replaces this
+    // with the real handler (queue badge / live insert).
+    case WS_MESSAGE_TYPE.GM_PROMPT:
+      return () => undefined;
+
     default:
       return undefined;
   }

@@ -182,6 +182,12 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     # same beat has its own row and keeps the GM scene's clock alive.
     close_scene_clocks(scene, SceneClockClosedReason.SCENE_ENDED)
 
+    # #4101: a pending narration prompt left when the scene finishes releases its
+    # authored defaults the unprompted way rather than being silently lost.
+    from world.gm.prompt_services import expire_scene_prompts  # noqa: PLC0415
+
+    expire_scene_prompts(scene)
+
     if scene.running_beat_id is not None:
         # #3425: a beat's session-prep run pointer only lives for the scene's
         # duration -- clear it so a later ``story beats`` listing / #3433 header

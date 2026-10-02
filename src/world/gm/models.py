@@ -19,6 +19,8 @@ from world.gm.constants import (
     CatalogSuggestionProposalKind,
     GMApplicationStatus,
     GMLevel,
+    GMPromptGroup,
+    GMPromptKind,
     GMPromptStatus,
     GMTableStatus,
     TableRequestKind,
@@ -1138,15 +1140,62 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
 
     related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
+    kind = models.CharField(
+        max_length=20,
+        choices=GMPromptKind.choices,
+        default=GMPromptKind.DRAMATIC_MOMENT,
+        db_index=True,
+        help_text="What this prompt is about; dramatic_moment is the confirm kind.",
+    )
+    addressed_to = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="gm_prompts_addressed",
+        help_text=(
+            "The GM this narration prompt is for. Null only on dramatic_moment "
+            "prompts, which keep the scene GM/owner/staff gate."
+        ),
+    )
     moment_type = models.ForeignKey(
         "arxii.DramaticMomentType",
         on_delete=models.PROTECT,
         related_name="suggestions",
+        null=True,
+        blank=True,
     )
     character_sheet = models.ForeignKey(
         "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="gm_prompts",
+        null=True,
+        blank=True,
+    )
+    room_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="Resolved authored room line offered in the composer (may be blank).",
+    )
+    private_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Resolved authored private line for the character this concerns, e.g. "
+            "the Crossing vision. Spoiler-private: shown only to the addressed GM."
+        ),
+    )
+    prepared_for_character = models.BooleanField(
+        default=False,
+        help_text="True when the defaults came from the character's prepared text.",
+    )
+    stake_outcome = models.ForeignKey(
+        "arxii.StakeOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text="The resolved stake, for stake_outcome prompts.",
     )
     scene = models.ForeignKey(
         "arxii.Scene",
@@ -1184,6 +1233,8 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
         ),
     )
     success_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
         help_text="Cast success level that triggered this suggestion.",
     )
     status = models.CharField(
@@ -1217,10 +1268,50 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["moment_type", "character_sheet", "scene"],
-                condition=Q(status="pending"),
-                name="one_pending_suggestion_per_type_sheet_scene",
+                condition=Q(status="pending", kind="dramatic_moment"),
+                name="gm_prompt_one_pending_moment_per_type_sheet_scene",
+            ),
+            models.CheckConstraint(
+                condition=~Q(kind="dramatic_moment")
+                | Q(
+                    moment_type__isnull=False,
+                    success_level__isnull=False,
+                    character_sheet__isnull=False,
+                ),
+                name="gm_prompt_dramatic_moment_fields",
+            ),
+            models.CheckConstraint(
+                condition=Q(kind="dramatic_moment") | Q(addressed_to__isnull=False),
+                name="gm_prompt_narration_is_addressed",
             ),
         ]
 
     def __str__(self) -> str:
         return f"GMPrompt({self.character_sheet_id}, {self.status})"
+
+
+class GMPromptFilter(SharedMemoryModel):
+    """A GM's choice to be prompted (or not) for one group of event kinds (#4101).
+
+    No row = prompted. Keyed by account so a staff member GMing a scene is covered.
+    """
+
+    account = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gm_prompt_filters",
+    )
+    group = models.CharField(max_length=20, choices=GMPromptGroup.choices)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "GM Prompt Filter"
+        verbose_name_plural = "GM Prompt Filters"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "group"], name="unique_gm_prompt_filter_per_group"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"GMPromptFilter({self.account_id}, {self.group}, {self.enabled})"

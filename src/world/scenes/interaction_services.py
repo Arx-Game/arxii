@@ -530,7 +530,7 @@ def _target_character_ids(target_persona_ids: list[int] | None) -> frozenset[int
     )
 
 
-def _non_web_sessions(obj: ObjectDB) -> list[Any]:
+def non_web_sessions(obj: ObjectDB) -> list[Any]:
     """Sessions on ``obj`` that do NOT already receive the structured payload.
 
     Evennia's webclient protocols stamp ``session.protocol_key`` as
@@ -563,7 +563,7 @@ def _send_involvement_mark(obj: ObjectDB) -> None:
     character (no non-web session) gets skipped entirely rather than sent
     with an empty list.
     """
-    non_web = _non_web_sessions(obj)
+    non_web = non_web_sessions(obj)
     if non_web:
         obj.msg(_INVOLVEMENT_MARK_TEXT, session=non_web)
 
@@ -996,7 +996,7 @@ def deliver_outcome_interaction(interaction: Interaction, *, location: ObjectDB 
     1. Pushes the structured payload via ``push_interaction(interaction,
        location=location)``, letting it resolve receivers/targets itself.
     2. Sends ``interaction.content`` as plain text to the non-web sessions
-       (``_non_web_sessions`` — telnet/ssh parity, mirrors ``_send_involvement_mark``)
+       (``non_web_sessions`` — telnet/ssh parity, mirrors ``_send_involvement_mark``)
        of exactly the objects the push reached: a receiver-scoped row reaches its
        writer + receiver characters regardless of ``location`` (a Narrator writer is
        unplaced, and a Battle-backed scene has none either); any other row reaches
@@ -1017,7 +1017,7 @@ def deliver_outcome_interaction(interaction: Interaction, *, location: ObjectDB 
             recipients = []
 
         for obj in recipients:
-            non_web = _non_web_sessions(obj)
+            non_web = non_web_sessions(obj)
             if non_web:
                 obj.msg(interaction.content, session=non_web)
 
@@ -1772,7 +1772,7 @@ def record_whisper_interaction(  # noqa: PLR0913 - on_before_push is the #3783 l
 # since the inline form pushes the signature past 100 chars): any character,
 # PC or NPC-run, can be the one addressed here; the function just needs its
 # .location, .msg and the sheet lookup.
-def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB_PARAM
+def narrate_privately(character: ObjectDB, text: str) -> Interaction | None:  # noqa: OBJECTDB_PARAM
     """Narrator-authored line addressed to ONE character, on both channels (#3574).
 
     The single-recipient sibling of the room-wide combat narration
@@ -1795,7 +1795,7 @@ def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB
     try:
         persona = character.sheet_data.primary_persona
     except (AttributeError, ObjectDoesNotExist):
-        return
+        return None
 
     from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
 
@@ -1827,6 +1827,7 @@ def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB
     )
     _send_to_objects([character], payload)
     character.msg(text)
+    return interaction
 
 
 def mutter_fragment(text: str) -> str:

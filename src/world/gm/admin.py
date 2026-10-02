@@ -256,10 +256,18 @@ class TableUpdateRequestAdmin(admin.ModelAdmin):
 
 @admin.register(GMPrompt)
 class GMPromptAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character_sheet", "interaction", "resolved_by", "scene"]
+    autocomplete_fields = [
+        "addressed_to",
+        "character_sheet",
+        "interaction",
+        "resolved_by",
+        "scene",
+    ]
     list_display = (
         "id",
+        "kind",
         "character_sheet",
+        "addressed_to",
         "moment_type",
         "scene",
         "status",
@@ -267,7 +275,7 @@ class GMPromptAdmin(admin.ModelAdmin):
         "resolved_by",
         "created_at",
     )
-    list_filter = ("status", "moment_type")
+    list_filter = ("status", "kind", "moment_type")
     readonly_fields = tuple(f.name for f in GMPrompt._meta.fields)  # noqa: SLF001
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002

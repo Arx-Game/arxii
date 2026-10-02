@@ -21,6 +21,7 @@ from world.gm.models import (
     GMLevelChange,
     GMProfile,
     GMPrompt,
+    GMPromptFilter,
     GMRosterInvite,
     GMTable,
     GMTableMembership,
@@ -392,6 +393,7 @@ class GMPromptFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = GMPrompt
 
+    kind = "dramatic_moment"
     moment_type = factory.SubFactory(DramaticMomentTypeFactory)
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     scene = None
@@ -401,3 +403,13 @@ class GMPromptFactory(factory_django.DjangoModelFactory):
     status = "pending"
     resolved_by = None
     confirmed_tag = None
+
+
+class GMPromptFilterFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GMPromptFilter
+        django_get_or_create = ("account", "group")
+
+    account = factory.SubFactory(AccountFactory)
+    group = "miracle"
+    enabled = False

@@ -50,6 +50,8 @@ export const WS_MESSAGE_TYPE = {
   OOB: 'oob',
   /** Inbound: Evennia's client-settings frame (#3933). */
   WEBCLIENT_OPTIONS: 'webclient_options',
+  /** Inbound: a new GM prompt landed in this GM's queue (#4101). */
+  GM_PROMPT: 'gm_prompt',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];

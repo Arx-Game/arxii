@@ -1043,14 +1043,19 @@ def maybe_suggest_dramatic_moments(
     No-ops (returns []) when scene is None — a suggestion is scoped to a scene, same
     as the DramaticMomentTag per-scene cap it mirrors.
     """
-    from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+    from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
     from world.gm.models import GMPrompt  # noqa: PLC0415
+    from world.gm.prompt_services import prompts_enabled, scene_gm_accounts  # noqa: PLC0415
     from world.magic.models.dramatic_moment import (  # noqa: PLC0415
         DramaticMomentTag,
         DramaticMomentType,
     )
 
     if scene is None:
+        return []
+
+    gms = scene_gm_accounts(scene)
+    if gms and not any(prompts_enabled(gm, GMPromptKind.DRAMATIC_MOMENT) for gm in gms):
         return []
 
     created: list[GMPrompt] = []
@@ -1081,6 +1086,7 @@ def maybe_suggest_dramatic_moments(
             character_sheet=character_sheet,
             scene=scene,
             status=GMPromptStatus.PENDING,
+            kind=GMPromptKind.DRAMATIC_MOMENT,
             defaults={
                 "success_level": success_level,
                 "interaction": interaction,
