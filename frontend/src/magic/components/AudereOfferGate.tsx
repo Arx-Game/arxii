@@ -43,7 +43,7 @@ export function AudereOfferGate({
         data-testid="audere-gate-strip"
       >
         <Flame className="h-4 w-4 shrink-0" />
-        The Audere gate stands open: answer it
+        {offer.offer_strip_label}
       </button>
       <AudereOfferDialog
         offer={offer}

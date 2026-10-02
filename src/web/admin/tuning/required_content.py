@@ -541,6 +541,32 @@ def _probe_audere_ultimate_copy() -> ProbeResult:
     )
 
 
+_AUDERE_OFFER_COPY_FIELDS = ("offer_title", "offer_strip_label", "offer_body_text")
+
+
+def _probe_audere_offer_copy() -> ProbeResult:
+    """The Audere and crossing offer dialog copy is authored over PLACEHOLDER (#4101)."""
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+    from world.magic.audere_majora import AudereMajoraThreshold  # noqa: PLC0415
+
+    missing: list[str] = []
+    threshold = AudereThreshold.objects.cached_singleton()
+    if threshold is not None:
+        missing.extend(
+            f for f in _AUDERE_OFFER_COPY_FIELDS if _PLACEHOLDER_MARK in getattr(threshold, f)
+        )
+    missing.extend(
+        f"crossing level {row.boundary_level} offer_title"
+        for row in AudereMajoraThreshold.objects.all()
+        if _PLACEHOLDER_MARK in row.offer_title
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False, missing=tuple(missing), detail=f"Still placeholder: {', '.join(missing)}."
+    )
+
+
 def _probe_personalization_copy() -> ProbeResult:
     """Every make-it-yours panel key exists and is authored over its PLACEHOLDER (#4099).
 
@@ -1668,6 +1694,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "framing line and the deferred-death line."
             ),
             probe=CustomProbe(fn=_probe_audere_ultimate_copy),
+            admin_model="AudereThreshold",
+        ),
+        ContentDependency(
+            key="audere-offer-copy",
+            label="Audere and crossing offer dialog copy",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "frontend/src/magic/components/AudereOfferDialog.tsx, "
+                "AudereOfferGate.tsx, AudereMajoraOfferDialog.tsx"
+            ),
+            consequence="Players see PLACEHOLDER headings on the Audere and crossing offers.",
+            probe=CustomProbe(fn=_probe_audere_offer_copy),
             admin_model="AudereThreshold",
         ),
         ContentDependency(

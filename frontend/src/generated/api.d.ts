@@ -13176,6 +13176,135 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/prepared-crossing-texts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    get: operations['magic_prepared_crossing_texts_list'];
+    put?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    post: operations['magic_prepared_crossing_texts_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/prepared-crossing-texts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    get: operations['magic_prepared_crossing_texts_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    delete: operations['magic_prepared_crossing_texts_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    patch: operations['magic_prepared_crossing_texts_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/prepared-surge-texts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    get: operations['magic_prepared_surge_texts_list'];
+    put?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    post: operations['magic_prepared_surge_texts_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/prepared-surge-texts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    get: operations['magic_prepared_surge_texts_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    delete: operations['magic_prepared_surge_texts_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    patch: operations['magic_prepared_surge_texts_partial_update'];
+    trace?: never;
+  };
   '/api/magic/progression/': {
     parameters: {
       query?: never;
@@ -29444,19 +29573,18 @@ export interface components {
      */
     DramaticMomentSuggestion: {
       readonly id: number;
-      readonly moment_type: number;
+      readonly moment_type: number | null;
       readonly moment_type_label: string;
       /** @description The character this sheet belongs to */
-      readonly character_sheet: number;
+      readonly character_sheet: number | null;
       /** @description Scene context; nullable for resilience to scene cleanup. */
       readonly scene: number | null;
-      /** @description The entrance pose that triggered this suggestion; nullable. */
+      /** @description The entrance pose that triggered this prompt; nullable. */
       readonly interaction: number | null;
       /** @description Cast success level that triggered this suggestion. */
-      readonly success_level: number;
-      /** @default pending */
+      readonly success_level: number | null;
       readonly status: components['schemas']['DramaticMomentSuggestionStatusEnum'];
-      /** @description GM account that confirmed or dismissed this suggestion. */
+      /** @description GM account that confirmed or dismissed this prompt. */
       readonly resolved_by: number | null;
       /** @description The DramaticMomentTag minted on confirmation, if any. */
       readonly confirmed_tag: number | null;
@@ -29467,9 +29595,10 @@ export interface components {
      * @description * `pending` - Pending
      *     * `confirmed` - Confirmed
      *     * `dismissed` - Dismissed
+     *     * `narrated` - Narrated
      * @enum {string}
      */
-    DramaticMomentSuggestionStatusEnum: 'pending' | 'confirmed' | 'dismissed';
+    DramaticMomentSuggestionStatusEnum: 'pending' | 'confirmed' | 'dismissed' | 'narrated';
     /**
      * @description Create + read dramatic-moment tags (#1139).
      *
@@ -38243,6 +38372,36 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Prayer'][];
     };
+    PaginatedPreparedCrossingTextList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PreparedCrossingText'][];
+    };
+    PaginatedPreparedSurgeTextList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PreparedSurgeText'][];
+    };
     PaginatedProclamationList: {
       /** @example 123 */
       count: number;
@@ -40598,6 +40757,30 @@ export interface components {
       status?: components['schemas']['StatusD66Enum'];
     };
     /**
+     * @description A character's own prepared Audere Majora crossing text (#4101).
+     *
+     *     Authored by staff or the character's table GM (``may_prepare_text_for``).
+     *     Never readable by the crossing player themselves — the vision is a spoiler —
+     *     nor by an unrelated GM; the viewset's queryset is the read-side gate.
+     */
+    PatchedPreparedCrossingTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description Shown ONLY to the crossing player. Blank = the patron or tier vision. */
+      vision_text?: string;
+      /** @description The room line for this crossing. Blank = the patron or tier line. */
+      manifestation_text?: string;
+      /** @description Public deed name for this crossing. Blank = the tier's deed title. */
+      deed_title?: string;
+    };
+    /** @description A character's own prepared Audere surge line (#4101). No patron layer. */
+    PatchedPreparedSurgeTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description Room line when this character surges. {name} = primary-persona name. */
+      surge_text?: string;
+    };
+    /**
      * @description Full serializer for RiskCalibration (#1770 pillar 5).
      *
      *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
@@ -41520,6 +41703,7 @@ export interface components {
       readonly eligible_paths: components['schemas']['EligiblePath'][];
       /** @description Return the PathIntent's intended_path_id if it is among eligible paths, else None. */
       readonly intended_path_id: number | null;
+      readonly offer_title: string;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -41546,6 +41730,12 @@ export interface components {
       readonly advisory_text: string;
       /** @description The authored reveal promise, only when accepting would reveal something. */
       readonly reveal_framing_text: string;
+      /** @description The authored Audere offer dialog heading (#4101); '' when unconfigured. */
+      readonly offer_title: string;
+      /** @description The authored Audere gate strip label (#4101); '' when unconfigured. */
+      readonly offer_strip_label: string;
+      /** @description The authored Audere offer line, with {intensity} substituted (#4101). */
+      readonly offer_body_text: string;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -42417,6 +42607,66 @@ export interface components {
       | 'outcome_tier'
       | 'faction_standing_at_least'
       | 'npc_regard_at_least';
+    /**
+     * @description A character's own prepared Audere Majora crossing text (#4101).
+     *
+     *     Authored by staff or the character's table GM (``may_prepare_text_for``).
+     *     Never readable by the crossing player themselves — the vision is a spoiler —
+     *     nor by an unrelated GM; the viewset's queryset is the read-side gate.
+     */
+    PreparedCrossingText: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      readonly character_name: string;
+      /** @description Shown ONLY to the crossing player. Blank = the patron or tier vision. */
+      vision_text?: string;
+      /** @description The room line for this crossing. Blank = the patron or tier line. */
+      manifestation_text?: string;
+      /** @description Public deed name for this crossing. Blank = the tier's deed title. */
+      deed_title?: string;
+      readonly prepared_by_role: string;
+      /** @description Set when a crossing used this text; a used text never fires again. */
+      readonly crossing: number | null;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /**
+     * @description A character's own prepared Audere Majora crossing text (#4101).
+     *
+     *     Authored by staff or the character's table GM (``may_prepare_text_for``).
+     *     Never readable by the crossing player themselves — the vision is a spoiler —
+     *     nor by an unrelated GM; the viewset's queryset is the read-side gate.
+     */
+    PreparedCrossingTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description Shown ONLY to the crossing player. Blank = the patron or tier vision. */
+      vision_text?: string;
+      /** @description The room line for this crossing. Blank = the patron or tier line. */
+      manifestation_text?: string;
+      /** @description Public deed name for this crossing. Blank = the tier's deed title. */
+      deed_title?: string;
+    };
+    /** @description A character's own prepared Audere surge line (#4101). No patron layer. */
+    PreparedSurgeText: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      readonly character_name: string;
+      /** @description Room line when this character surges. {name} = primary-persona name. */
+      surge_text?: string;
+      readonly prepared_by_role: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /** @description A character's own prepared Audere surge line (#4101). No patron layer. */
+    PreparedSurgeTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description Room line when this character surges. {name} = primary-persona name. */
+      surge_text?: string;
+    };
     /**
      * @description * `public` - Public
      *     * `private` - Private
@@ -65221,8 +65471,9 @@ export interface operations {
          * @description * `pending` - Pending
          *     * `confirmed` - Confirmed
          *     * `dismissed` - Dismissed
+         *     * `narrated` - Narrated
          */
-        status?: 'confirmed' | 'dismissed' | 'pending';
+        status?: 'confirmed' | 'dismissed' | 'narrated' | 'pending';
       };
       header?: never;
       path?: never;
@@ -65245,7 +65496,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this dramatic moment suggestion. */
+        /** @description A unique integer value identifying this GM Prompt. */
         id: number;
       };
       cookie?: never;
@@ -65267,7 +65518,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this dramatic moment suggestion. */
+        /** @description A unique integer value identifying this GM Prompt. */
         id: number;
       };
       cookie?: never;
@@ -65856,6 +66107,232 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_prepared_crossing_texts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPreparedCrossingTextList'];
+        };
+      };
+    };
+  };
+  magic_prepared_crossing_texts_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreparedCrossingTextRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedCrossingText'];
+        };
+      };
+    };
+  };
+  magic_prepared_crossing_texts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedCrossingText'];
+        };
+      };
+    };
+  };
+  magic_prepared_crossing_texts_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_prepared_crossing_texts_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPreparedCrossingTextRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedCrossingText'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPreparedSurgeTextList'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreparedSurgeTextRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedSurgeText'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedSurgeText'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_prepared_surge_texts_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPreparedSurgeTextRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedSurgeText'];
+        };
       };
     };
   };

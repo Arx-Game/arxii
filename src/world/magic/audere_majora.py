@@ -79,6 +79,11 @@ class AudereMajoraThreshold(RenownAwardConfig):
             "falls back to a generic composed title."
         ),
     )
+    offer_title = models.CharField(
+        max_length=120,
+        default="PLACEHOLDER crossing offer title",
+        help_text="#4101: heading of this threshold's crossing offer dialog.",
+    )
 
     class Meta:
         ordering = ["boundary_level"]

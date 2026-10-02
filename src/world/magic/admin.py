@@ -1092,6 +1092,16 @@ class AudereThresholdAdmin(admin.ModelAdmin):
                 )
             },
         ),
+        (
+            "Offer dialog copy (#4101)",
+            {
+                "fields": (
+                    "offer_title",
+                    "offer_strip_label",
+                    "offer_body_text",
+                )
+            },
+        ),
     )
 
 

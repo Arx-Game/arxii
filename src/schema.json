@@ -19586,11 +19586,13 @@ paths:
           enum:
           - confirmed
           - dismissed
+          - narrated
           - pending
         description: |-
           * `pending` - Pending
           * `confirmed` - Confirmed
           * `dismissed` - Dismissed
+          * `narrated` - Narrated
       tags:
       - magic
       security:
@@ -19621,7 +19623,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this dramatic moment suggestion.
+        description: A unique integer value identifying this GM Prompt.
         required: true
       tags:
       - magic
@@ -19653,7 +19655,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this dramatic moment suggestion.
+        description: A unique integer value identifying this GM Prompt.
         required: true
       tags:
       - magic
@@ -20339,6 +20341,271 @@ paths:
         schema:
           type: integer
         description: A unique integer value identifying this pose endorsement.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/magic/prepared-crossing-texts/:
+    get:
+      operationId: magic_prepared_crossing_texts_list
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPreparedCrossingTextList'
+          description: ''
+    post:
+      operationId: magic_prepared_crossing_texts_create
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreparedCrossingTextRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedCrossingText'
+          description: ''
+  /api/magic/prepared-crossing-texts/{id}/:
+    get:
+      operationId: magic_prepared_crossing_texts_retrieve
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedCrossingText'
+          description: ''
+    patch:
+      operationId: magic_prepared_crossing_texts_partial_update
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPreparedCrossingTextRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedCrossingText'
+          description: ''
+    delete:
+      operationId: magic_prepared_crossing_texts_destroy
+      description: |-
+        Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+        Private to its author: a player never reads their own unused prepared text (it is
+        a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+        — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/magic/prepared-surge-texts/:
+    get:
+      operationId: magic_prepared_surge_texts_list
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPreparedSurgeTextList'
+          description: ''
+    post:
+      operationId: magic_prepared_surge_texts_create
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreparedSurgeTextRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedSurgeText'
+          description: ''
+  /api/magic/prepared-surge-texts/{id}/:
+    get:
+      operationId: magic_prepared_surge_texts_retrieve
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedSurgeText'
+          description: ''
+    patch:
+      operationId: magic_prepared_surge_texts_partial_update
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPreparedSurgeTextRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedSurgeText'
+          description: ''
+    delete:
+      operationId: magic_prepared_surge_texts_destroy
+      description: |-
+        Staff or the character's table GM prepares a character's own surge line (#4101).
+
+        No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+        reusable (it fires on every surge), so there is no consumed-record refusal here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
         required: true
       tags:
       - magic
@@ -50355,6 +50622,7 @@ components:
         moment_type:
           type: integer
           readOnly: true
+          nullable: true
         moment_type_label:
           type: string
           readOnly: true
@@ -50362,6 +50630,7 @@ components:
           type: integer
           description: The character this sheet belongs to
           readOnly: true
+          nullable: true
         scene:
           type: integer
           readOnly: true
@@ -50371,21 +50640,21 @@ components:
           type: integer
           readOnly: true
           nullable: true
-          description: The entrance pose that triggered this suggestion; nullable.
+          description: The entrance pose that triggered this prompt; nullable.
         success_level:
           type: integer
           readOnly: true
+          nullable: true
           description: Cast success level that triggered this suggestion.
         status:
           allOf:
           - $ref: '#/components/schemas/DramaticMomentSuggestionStatusEnum'
           readOnly: true
-          default: pending
         resolved_by:
           type: integer
           readOnly: true
           nullable: true
-          description: GM account that confirmed or dismissed this suggestion.
+          description: GM account that confirmed or dismissed this prompt.
         confirmed_tag:
           type: integer
           readOnly: true
@@ -50412,11 +50681,13 @@ components:
       - pending
       - confirmed
       - dismissed
+      - narrated
       type: string
       description: |-
         * `pending` - Pending
         * `confirmed` - Confirmed
         * `dismissed` - Dismissed
+        * `narrated` - Narrated
     DramaticMomentTag:
       type: object
       description: |-
@@ -67148,6 +67419,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Prayer'
+    PaginatedPreparedCrossingTextList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreparedCrossingText'
+    PaginatedPreparedSurgeTextList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreparedSurgeText'
     PaginatedProclamationList:
       type: object
       required:
@@ -70964,6 +71281,43 @@ components:
           description: Room the reporter was in when submitting.
         status:
           $ref: '#/components/schemas/StatusD66Enum'
+    PatchedPreparedCrossingTextRequest:
+      type: object
+      description: |-
+        A character's own prepared Audere Majora crossing text (#4101).
+
+        Authored by staff or the character's table GM (``may_prepare_text_for``).
+        Never readable by the crossing player themselves — the vision is a spoiler —
+        nor by an unrelated GM; the viewset's queryset is the read-side gate.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        vision_text:
+          type: string
+          description: Shown ONLY to the crossing player. Blank = the patron or tier
+            vision.
+        manifestation_text:
+          type: string
+          description: The room line for this crossing. Blank = the patron or tier
+            line.
+        deed_title:
+          type: string
+          description: Public deed name for this crossing. Blank = the tier's deed
+            title.
+          maxLength: 200
+    PatchedPreparedSurgeTextRequest:
+      type: object
+      description: A character's own prepared Audere surge line (#4101). No patron
+        layer.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        surge_text:
+          type: string
+          description: Room line when this character surges. {name} = primary-persona
+            name.
     PatchedRiskCalibrationRequest:
       type: object
       description: |-
@@ -72487,6 +72841,9 @@ components:
           description: Return the PathIntent's intended_path_id if it is among eligible
             paths, else None.
           readOnly: true
+        offer_title:
+          type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -72502,6 +72859,7 @@ components:
       - fired_intensity
       - id
       - intended_path_id
+      - offer_title
       - risk_text
       - soulfray_stage_order
       - target_stage_display
@@ -72551,6 +72909,19 @@ components:
           description: The authored reveal promise, only when accepting would reveal
             something.
           readOnly: true
+        offer_title:
+          type: string
+          description: The authored Audere offer dialog heading (#4101); '' when unconfigured.
+          readOnly: true
+        offer_strip_label:
+          type: string
+          description: The authored Audere gate strip label (#4101); '' when unconfigured.
+          readOnly: true
+        offer_body_text:
+          type: string
+          description: The authored Audere offer line, with {intensity} substituted
+            (#4101).
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -72564,6 +72935,9 @@ components:
       - fired_intensity
       - id
       - intensity_bonus
+      - offer_body_text
+      - offer_strip_label
+      - offer_title
       - reveal_framing_text
       - soulfray_stage_order
     PendingCrossingOffer:
@@ -74411,6 +74785,129 @@ components:
         * `outcome_tier` - Outcome tier (machine-graded)
         * `faction_standing_at_least` - Faction standing at least
         * `npc_regard_at_least` - NPC regard at least
+    PreparedCrossingText:
+      type: object
+      description: |-
+        A character's own prepared Audere Majora crossing text (#4101).
+
+        Authored by staff or the character's table GM (``may_prepare_text_for``).
+        Never readable by the crossing player themselves — the vision is a spoiler —
+        nor by an unrelated GM; the viewset's queryset is the read-side gate.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        character_name:
+          type: string
+          readOnly: true
+        vision_text:
+          type: string
+          description: Shown ONLY to the crossing player. Blank = the patron or tier
+            vision.
+        manifestation_text:
+          type: string
+          description: The room line for this crossing. Blank = the patron or tier
+            line.
+        deed_title:
+          type: string
+          description: Public deed name for this crossing. Blank = the tier's deed
+            title.
+          maxLength: 200
+        prepared_by_role:
+          type: string
+          readOnly: true
+        crossing:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Set when a crossing used this text; a used text never fires
+            again.
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_name
+      - character_sheet
+      - crossing
+      - id
+      - prepared_by_role
+      - updated_at
+    PreparedCrossingTextRequest:
+      type: object
+      description: |-
+        A character's own prepared Audere Majora crossing text (#4101).
+
+        Authored by staff or the character's table GM (``may_prepare_text_for``).
+        Never readable by the crossing player themselves — the vision is a spoiler —
+        nor by an unrelated GM; the viewset's queryset is the read-side gate.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        vision_text:
+          type: string
+          description: Shown ONLY to the crossing player. Blank = the patron or tier
+            vision.
+        manifestation_text:
+          type: string
+          description: The room line for this crossing. Blank = the patron or tier
+            line.
+        deed_title:
+          type: string
+          description: Public deed name for this crossing. Blank = the tier's deed
+            title.
+          maxLength: 200
+      required:
+      - character_sheet
+    PreparedSurgeText:
+      type: object
+      description: A character's own prepared Audere surge line (#4101). No patron
+        layer.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        character_name:
+          type: string
+          readOnly: true
+        surge_text:
+          type: string
+          description: Room line when this character surges. {name} = primary-persona
+            name.
+        prepared_by_role:
+          type: string
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_name
+      - character_sheet
+      - id
+      - prepared_by_role
+      - updated_at
+    PreparedSurgeTextRequest:
+      type: object
+      description: A character's own prepared Audere surge line (#4101). No patron
+        layer.
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        surge_text:
+          type: string
+          description: Room line when this character surges. {name} = primary-persona
+            name.
+      required:
+      - character_sheet
     PrivacyEnum:
       enum:
       - public

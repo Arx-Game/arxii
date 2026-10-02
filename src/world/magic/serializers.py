@@ -2535,6 +2535,9 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
     intensity_bonus = serializers.SerializerMethodField()
     anima_pool_bonus = serializers.SerializerMethodField()
     reveal_framing_text = serializers.SerializerMethodField()
+    offer_title = serializers.SerializerMethodField()
+    offer_strip_label = serializers.SerializerMethodField()
+    offer_body_text = serializers.SerializerMethodField()
 
     class Meta:
         from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
@@ -2550,6 +2553,9 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
             "anima_pool_bonus",
             "advisory_text",
             "reveal_framing_text",
+            "offer_title",
+            "offer_strip_label",
+            "offer_body_text",
             "created_at",
         ]
         read_only_fields = fields
@@ -2584,6 +2590,23 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
         if threshold is None or not has_reveal_cards(obj.character_sheet):  # type: ignore[union-attr]
             return ""
         return threshold.reveal_framing_text
+
+    def get_offer_title(self, obj: object) -> str:  # noqa: ARG002
+        """The authored Audere offer dialog heading (#4101); '' when unconfigured."""
+        threshold = self._threshold()
+        return threshold.offer_title if threshold else ""
+
+    def get_offer_strip_label(self, obj: object) -> str:  # noqa: ARG002
+        """The authored Audere gate strip label (#4101); '' when unconfigured."""
+        threshold = self._threshold()
+        return threshold.offer_strip_label if threshold else ""
+
+    def get_offer_body_text(self, obj: object) -> str:
+        """The authored Audere offer line, with {intensity} substituted (#4101)."""
+        threshold = self._threshold()
+        if threshold is None:
+            return ""
+        return threshold.offer_body_text.replace("{intensity}", str(obj.fired_intensity))  # type: ignore[attr-defined]
 
 
 # =============================================================================
@@ -2780,6 +2803,7 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
     risk_text = serializers.SerializerMethodField()
     eligible_paths = serializers.SerializerMethodField()
     intended_path_id = serializers.SerializerMethodField()
+    offer_title = serializers.CharField(source="threshold.offer_title", read_only=True)
 
     def get_vision_text(self, obj) -> str:
         """Return faith variant vision text if set, else the threshold's."""
@@ -2805,6 +2829,7 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
             "risk_text",
             "eligible_paths",
             "intended_path_id",
+            "offer_title",
             "created_at",
         ]
         read_only_fields = fields

@@ -89,6 +89,20 @@ class AudereThreshold(SharedMemoryModel):
         default="PLACEHOLDER Crown label",
         help_text="#4098: what players see for an undiscovered Crown ultimate.",
     )
+    offer_title = models.CharField(
+        max_length=120,
+        default="PLACEHOLDER Audere offer title",
+        help_text="#4101: heading of the Audere offer dialog.",
+    )
+    offer_strip_label = models.CharField(
+        max_length=120,
+        default="PLACEHOLDER Audere gate strip label",
+        help_text="#4101: the pulsing strip that reopens the Audere offer.",
+    )
+    offer_body_text = models.TextField(
+        default="PLACEHOLDER Audere offer line at intensity {intensity}",
+        help_text="#4101: the offer's opening line. {intensity} = the fired intensity.",
+    )
     # Deprecated: no longer used by Soulfray severity calculation (Scope #3).
     # Audere naturally drives high Soulfray via intensity boost. Can be removed.
     warp_multiplier = models.PositiveIntegerField(

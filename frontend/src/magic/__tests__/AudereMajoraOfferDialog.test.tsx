@@ -54,6 +54,7 @@ const OFFER: PendingAudereMajoraOffer = {
   boundary_level: 5,
   target_stage_display: 'Ascendant',
   vision_text: '[TEST VISION]',
+  offer_title: 'The Threshold Stands Before You',
   faith_variant_id: null,
   advisory_text: '',
   risk_text: '',
@@ -109,6 +110,13 @@ describe('AudereMajoraOfferDialog (via AudereMajoraOfferGate)', () => {
     const vision = screen.getByTestId('majora-vision');
     expect(vision.tagName.toLowerCase()).toBe('blockquote');
     expect(vision.textContent).toBe('[TEST VISION]');
+  });
+
+  it('renders offer_title as the dialog heading (#4101)', async () => {
+    renderGate([{ ...OFFER, offer_title: 'Authored crossing heading' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByText('Authored crossing heading')).toBeInTheDocument();
   });
 
   it('renders advisory_text and risk_text each in a role="alert" block', async () => {

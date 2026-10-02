@@ -45,12 +45,10 @@ export function AudereOfferDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-wide text-fuchsia-400">
             <Flame className="h-7 w-7" />
-            The Audere Gate Stands Open
+            {offer.offer_title}
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-base">
-            Battered down. Break through. Your soul strains at intensity{' '}
-            <span className="font-semibold text-fuchsia-400">{offer.fired_intensity}</span>: power
-            beyond your limits waits on the other side.
+          <AlertDialogDescription className="text-base" data-testid="audere-offer-body">
+            {offer.offer_body_text}
             {offer.reveal_framing_text ? (
               <span data-testid="audere-reveal-framing" className="text-fuchsia-300">
                 {' '}
