@@ -115,6 +115,13 @@ RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g "playwright@${PLAYWRIG
 # PATH for any shell that activates mise (via ~/.bashrc).
 RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-code
 
+# Language servers for coding agents (polytoken's LSP tools look them up on
+# PATH): TypeScript for .ts/.tsx, and the vscode-langservers-extracted set for
+# CSS, HTML, JSON and ESLint. typescript-language-server uses the project's
+# own TypeScript from frontend/node_modules.
+RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g \
+    typescript-language-server vscode-langservers-extracted
+
 # Install polytoken — a separate coding-agent harness (daemon + CLI/TUI) run
 # alongside Claude Code. Same build-time rationale as Claude Code above: latest
 # at build, no churn on container recreate, explicit upgrades via `just dc-build`.
