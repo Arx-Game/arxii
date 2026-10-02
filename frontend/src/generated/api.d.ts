@@ -9544,9 +9544,15 @@ export interface paths {
      *
      *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
      *     a stake outcome, still surfaces for the GM it's addressed to via
-     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
-     *     REGISTRY actions that own the real authorization/validation -- this view
-     *     is dispatch plumbing only.
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
      */
     get: operations['gm_prompts_list'];
     put?: never;
@@ -9571,9 +9577,15 @@ export interface paths {
      *
      *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
      *     a stake outcome, still surfaces for the GM it's addressed to via
-     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
-     *     REGISTRY actions that own the real authorization/validation -- this view
-     *     is dispatch plumbing only.
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
      */
     post: operations['gm_prompts_confirm_create'];
     delete?: never;
@@ -9596,9 +9608,15 @@ export interface paths {
      *
      *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
      *     a stake outcome, still surfaces for the GM it's addressed to via
-     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
-     *     REGISTRY actions that own the real authorization/validation -- this view
-     *     is dispatch plumbing only.
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
      */
     post: operations['gm_prompts_dismiss_create'];
     delete?: never;
@@ -9621,9 +9639,15 @@ export interface paths {
      *
      *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
      *     a stake outcome, still surfaces for the GM it's addressed to via
-     *     ``visible_prompts_for``). ``confirm``/``dismiss``/``narrate`` dispatch the
-     *     REGISTRY actions that own the real authorization/validation -- this view
-     *     is dispatch plumbing only.
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
      */
     post: operations['gm_prompts_narrate_create'];
     delete?: never;
@@ -32705,9 +32729,23 @@ export interface components {
        *     plain feed metadata, not a spoiler. Reads from the Prefetch
        *     (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
        *     own docstring for why it must never query.
+       *
+       *     ``subject_name`` is overridden here with the page's per-viewer display
+       *     map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+       *     value is the subject's FROZEN persona's raw name (correct for the
+       *     live WebSocket push, which has no per-viewer concept at all), but the
+       *     REST feed must show is_fake_name/undiscovered faces exactly as the rest
+       *     of this page shows that same persona -- a disguised subject's line
+       *     must never unmask them just because this field resolves differently
+       *     from ``get_persona``. ``_persona_display_map`` already folded this
+       *     row's subject persona into its one page-wide discovery query.
        */
       readonly narrates: {
-        [key: string]: unknown;
+        prompt_id: number;
+        kind: string;
+        kind_label: string;
+        subject_name: string;
+        subject_persona_id: number;
       } | null;
       /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
@@ -32926,9 +32964,23 @@ export interface components {
        *     plain feed metadata, not a spoiler. Reads from the Prefetch
        *     (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
        *     own docstring for why it must never query.
+       *
+       *     ``subject_name`` is overridden here with the page's per-viewer display
+       *     map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+       *     value is the subject's FROZEN persona's raw name (correct for the
+       *     live WebSocket push, which has no per-viewer concept at all), but the
+       *     REST feed must show is_fake_name/undiscovered faces exactly as the rest
+       *     of this page shows that same persona -- a disguised subject's line
+       *     must never unmask them just because this field resolves differently
+       *     from ``get_persona``. ``_persona_display_map`` already folded this
+       *     row's subject persona into its one page-wide discovery query.
        */
       readonly narrates: {
-        [key: string]: unknown;
+        prompt_id: number;
+        kind: string;
+        kind_label: string;
+        subject_name: string;
+        subject_persona_id: number;
       } | null;
       /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
