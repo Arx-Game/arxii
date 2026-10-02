@@ -165,6 +165,7 @@ from world.magic.serializers import (
     ThreadPullPreviewResponseSerializer,
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
+    primary_persona_names_for,
 )
 from world.magic.services import (
     get_library_entries,
@@ -2914,7 +2915,31 @@ class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
 _ERR_PREPARED_TEXT_ALREADY_USED = "That text was used by a crossing and is now a record."
 
 
-class PreparedCrossingTextViewSet(viewsets.ModelViewSet):
+class _BatchedCharacterNameListMixin:
+    """Shared ``list()`` override for the two prepared-text ViewSets (#4101).
+
+    ``CharacterSheet.primary_persona`` is a ``.get()``, which is NOT
+    prefetch-cacheable — calling it once per row in a list response is an N+1.
+    This batches the whole page's primary-persona names into one extra query
+    (``primary_persona_names_for``) and hands it to the serializer via context,
+    rather than a ``to_attr`` prefetch on the idmapper-cached ``CharacterSheet``/
+    ``Persona`` models. Non-list actions (retrieve/create/update) are single-row
+    and keep the serializer's own per-object fallback.
+    """
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        objs = page if page is not None else queryset
+        names = primary_persona_names_for(obj.character_sheet_id for obj in objs)
+        context = {**self.get_serializer_context(), "character_names": names}
+        serializer = self.get_serializer(objs, many=True, context=context)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+
+class PreparedCrossingTextViewSet(_BatchedCharacterNameListMixin, viewsets.ModelViewSet):
     """Staff or the character's table GM prepares a character's own Crossing text (#4101).
 
     Private to its author: a player never reads their own unused prepared text (it is
@@ -2944,7 +2969,7 @@ class PreparedCrossingTextViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-class PreparedSurgeTextViewSet(viewsets.ModelViewSet):
+class PreparedSurgeTextViewSet(_BatchedCharacterNameListMixin, viewsets.ModelViewSet):
     """Staff or the character's table GM prepares a character's own surge line (#4101).
 
     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is

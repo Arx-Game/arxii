@@ -19,6 +19,7 @@ from world.magic.factories import (
     AudereMajoraThresholdFactory,
     CharacterCrossingTextFactory,
 )
+from world.magic.models import CharacterCrossingText
 from world.roster.factories import RosterTenureFactory
 
 
@@ -146,3 +147,50 @@ class PreparedCrossingTextAPITest(TestCase):
         used_ids = {row["id"] for row in used_resp.data["results"]}
         self.assertIn(used_text.pk, used_ids)
         self.assertNotIn(unused_text.pk, used_ids)
+
+    def test_destroy_unused_row_succeeds(self):
+        text = CharacterCrossingTextFactory(character_sheet=self.sheet, vision_text="hers")
+        self.client.force_authenticate(self.staff)
+
+        resp = self.client.delete(self._detail_url(text.pk))
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT, resp.data)
+        self.assertFalse(CharacterCrossingText.objects.filter(pk=text.pk).exists())
+
+    def test_destroy_used_row_rejected(self):
+        text = CharacterCrossingTextFactory(character_sheet=self.sheet, vision_text="hers")
+        threshold = AudereMajoraThresholdFactory()
+        crossing = AudereMajoraCrossingFactory(character_sheet=self.sheet, threshold=threshold)
+        text.crossing = crossing
+        text.save(update_fields=["crossing"])
+        self.client.force_authenticate(self.staff)
+
+        resp = self.client.delete(self._detail_url(text.pk))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertTrue(CharacterCrossingText.objects.filter(pk=text.pk).exists())
+
+    def test_list_query_count_does_not_scale_with_row_count(self):
+        """N+1 regression guard (fix round 1): character_name must not query per row.
+
+        ``prepared_by`` is left unset on every row so a would-be N+1 on THAT field
+        (a separate, out-of-scope FK — see the fix-round-1 report) can't mask a
+        regression on ``character_name`` here: a null FK never issues a query.
+        The query count is pinned at two different row counts (1 and 5) and must
+        come out identical — if it scaled with row count, it wouldn't.
+        """
+        self.client.force_authenticate(self.staff)
+        self.client.get(self.list_url)  # warm the session row; not part of either count below
+
+        # 1 session lookup + 3 for the view itself (pagination count, pagination
+        # fetch, batched persona-name lookup) — NOT 1 + 3*N for N rows.
+        CharacterCrossingTextFactory(character_sheet=CharacterSheetFactory(), vision_text="hers")
+        with self.assertNumQueries(4):
+            resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(len(resp.data["results"]), 1)
+
+        for _ in range(4):
+            CharacterCrossingTextFactory(character_sheet=CharacterSheetFactory(), vision_text="x")
+        with self.assertNumQueries(4):
+            resp = self.client.get(self.list_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(len(resp.data["results"]), 5)

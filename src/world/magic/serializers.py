@@ -8,6 +8,7 @@ Affinities and Resonances are proper domain models in the magic app.
 """
 
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field
@@ -3806,13 +3807,36 @@ _ERR_DEED_TITLE_DASH = "Use a hyphen, not a dash, in a deed title."
 
 
 def _character_name_for(sheet: CharacterSheet) -> str:
-    """The sheet's primary-persona IC name, or '' if somehow absent."""
+    """The sheet's primary-persona IC name, or '' if somehow absent.
+
+    Single-object fallback only (retrieve/create/update) — ``CharacterSheet
+    .primary_persona`` is a ``.get()``, which is NOT prefetch-cacheable, so
+    calling this once per row in a list response is an N+1. List actions
+    must batch via ``primary_persona_names_for`` instead (never a ``to_attr``
+    prefetch on the idmapper-cached ``CharacterSheet``/``Persona`` models).
+    """
     from world.scenes.models import Persona  # noqa: PLC0415
 
     try:
         return sheet.primary_persona.name
     except Persona.DoesNotExist:
         return ""
+
+
+def primary_persona_names_for(sheet_ids: Iterable[int]) -> dict[int, str]:
+    """Batch ``{character_sheet_id: primary_persona_name}`` for a set of sheets.
+
+    The N+1-avoidance seam for a prepared-text list response: one query for
+    the whole page instead of one ``CharacterSheet.primary_persona`` lookup
+    per row.
+    """
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    rows = Persona.objects.filter(
+        character_sheet_id__in=list(sheet_ids), persona_type=PersonaType.PRIMARY
+    ).values_list("character_sheet_id", "name")
+    return dict(rows)
 
 
 def _prepared_by_role(prepared_by: AccountDB | None) -> str:
@@ -3848,6 +3872,9 @@ class PreparedCrossingTextSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "character_name", "prepared_by_role", "crossing", "updated_at"]
 
     def get_character_name(self, obj: CharacterCrossingText) -> str:
+        names = self.context.get("character_names")
+        if names is not None:
+            return names.get(obj.character_sheet_id, "")
         return _character_name_for(obj.character_sheet)
 
     def get_prepared_by_role(self, obj: CharacterCrossingText) -> str:
@@ -3895,6 +3922,9 @@ class PreparedSurgeTextSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "character_name", "prepared_by_role", "updated_at"]
 
     def get_character_name(self, obj: CharacterSurgeText) -> str:
+        names = self.context.get("character_names")
+        if names is not None:
+            return names.get(obj.character_sheet_id, "")
         return _character_name_for(obj.character_sheet)
 
     def get_prepared_by_role(self, obj: CharacterSurgeText) -> str:
