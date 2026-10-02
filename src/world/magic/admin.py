@@ -67,6 +67,7 @@ from world.magic.models import (
     PathRitualGrant,
     PortalAnchorKind,
     PoseEndorsement,
+    PriceComponentRequirement,
     Reincarnation,
     RelationshipBondPullTuning,
     Resonance,
@@ -247,12 +248,29 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
         return ", ".join(p.name for p in obj.cached_paths[:5])
 
 
+class PriceComponentRequirementInline(admin.TabularInline):
+    """Items a PRICE consumes on every cast that pays it (#4099).
+
+    PRICE rows only: ``PriceComponentRequirement.clean`` refuses a row on a DESIGN
+    restriction. A caster who lacks the items still casts, without the price.
+    """
+
+    model = PriceComponentRequirement
+    extra = 0
+    autocomplete_fields = ["item_template"]
+    raw_id_fields = ["min_quality_tier"]
+    verbose_name = "Consumed component (PRICE only)"
+    verbose_name_plural = "Consumed components (PRICE only)"
+
+
 @admin.register(Restriction)
 class RestrictionAdmin(admin.ModelAdmin):
     list_display = ["name", "power_bonus", "kind", "creation_point_cost", "get_effect_types"]
     list_filter = ["kind"]
     search_fields = ["name"]
     filter_horizontal = ["allowed_effect_types"]
+    autocomplete_fields = ["inflicted_condition"]
+    inlines = [PriceComponentRequirementInline]
 
     def get_queryset(self, request):
         return (

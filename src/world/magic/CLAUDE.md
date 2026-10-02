@@ -107,7 +107,12 @@ The magic system for Arx II. Power flows from identity and connection.
   A `kind=PRICE` row is a different thing wearing the same table: a cost a caster attaches
   to their own hold (`CharacterTechnique.price`), offered in creation via
   `creation_point_cost`, whose `power_bonus` is added to every cast as a power-ledger term
-  and whose `cast_narration` joins the cast narration (#4099, ADR-4099). `TechniqueSerializer
+  and whose `cast_narration` joins the cast narration (#4099, ADR-4099). A price may
+  consume carried items (`PriceComponentRequirement`, the sibling of
+  `RitualComponentRequirement`) and inflict `inflicted_condition` on every cast that pays
+  it; `price_paid_for_cast` (called once in `use_technique`) is the only decision, and a
+  caster lacking a component casts without the price (no bonus, clause, condition or
+  consumption). `TechniqueSerializer
   .restriction_ids` and the builder's `Restriction.objects.filter(...)` call sites scope to
   `kind=DESIGN`; `CharacterTechnique.clean()` enforces a price can only be `kind=PRICE`.
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)

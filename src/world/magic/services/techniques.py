@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 import logging
 from typing import TYPE_CHECKING
+
+from django.db import transaction
 
 from evennia_extensions.models import RoomProfile
 from flows.constants import EventName
@@ -56,6 +59,7 @@ if TYPE_CHECKING:
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult
+    from world.magic.types.personalization import PricePayment
     from world.magic.types.pull import CastPullDeclaration
     from world.mechanics.models import ModifierTarget
 
@@ -410,8 +414,13 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     environment: ResonanceEnvironmentEffect | None = None,
     situation_ctx: object | None = None,
     target_sheet: CharacterSheet | None = None,
+    price_payment: PricePayment | None = None,
 ) -> PowerLedger:
     """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
+
+    ``price_payment`` (#4099): the cast's one price decision, forwarded unchanged into
+    ``PowerTermContext`` for ``price_power_term``. ``None`` (the default, and every
+    non-cast caller) adds no price power.
 
     ``situation_ctx`` (#2536, Task 4): forwarded unchanged into
     ``PowerTermContext`` for the TERM stage's ``vow_situational_power_term``
@@ -500,6 +509,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
         applicable_threads=applicable_threads or [],
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
+        price_payment=price_payment,
     )
     for provider in get_power_term_providers():
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
@@ -1113,6 +1123,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
     target_sheet,
     cast_pull,
     pull_target,
+    price_payment=None,
 ) -> _CastPreparation | None:
     """Run the pre-cast event and prepare power and pull effects."""
     effective_targets = targets or []
@@ -1126,6 +1137,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
         environment=environment_effect,
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
+        price_payment=price_payment,
     )
     pre_payload = TechniquePreCastPayload(
         caster=character,
@@ -1178,6 +1190,7 @@ def _complete_technique_cast(  # noqa: PLR0913
     soulfray_warning,
     declared_strain,
     effective_strain,
+    price_payment=None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
@@ -1186,6 +1199,13 @@ def _complete_technique_cast(  # noqa: PLR0913
         ledger=preparation.effective_ledger,
         extra_modifiers=preparation.pull_flat_bonus,
     )
+    # #4099: the cast has resolved, so a paid price is spent now — its components
+    # consumed and its condition inflicted, inside use_technique's transaction.
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        settle_price_payment,
+    )
+
+    settle_price_payment(character=character, technique=technique, payment=price_payment)
     effective_check_result = _resolve_check_result(check_result, resolution_result)
     from world.magic.models import SoulfrayConfig  # noqa: PLC0415
 
@@ -1231,6 +1251,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         declared_strain_commitment=declared_strain,
         effective_strain_commitment=effective_strain,
         strain_power_bonus=preparation.strain_power_bonus,
+        price_paid=price_payment.price if price_payment is not None else None,
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 
@@ -1309,6 +1330,15 @@ def use_technique(  # noqa: PLR0913
             effective_strain_commitment=effective_strain,
             strain_power_bonus=strain_power_bonus,
         )
+    # #4099: the ONE decision whether this cast pays the caster's price. Made here, at
+    # resolution (combat calls use_technique when the round resolves, not when the
+    # action is declared), and threaded to the power term, the settlement after
+    # resolve_fn, and TechniqueUseResult.price_paid for every narration seam.
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        price_paid_for_cast,
+    )
+
+    price_payment = price_paid_for_cast(character, technique)
     preparation = _prepare_technique_cast(
         character=character,
         technique=technique,
@@ -1321,6 +1351,7 @@ def use_technique(  # noqa: PLR0913
         target_sheet=target_sheet,
         cast_pull=cast_pull,
         pull_target=pull_target,
+        price_payment=price_payment,
     )
     if preparation is None:
         return TechniqueUseResult(
@@ -1333,17 +1364,22 @@ def use_technique(  # noqa: PLR0913
         )
     preparation.strain_power_bonus = strain_power_bonus
     # Resolution may supply an explicit check result; retain it over extraction.
-    return _complete_technique_cast(
-        character=character,
-        technique=technique,
-        resolve_fn=resolve_fn,
-        check_result=check_result,
-        cost=cost,
-        lethal=lethal,
-        anima=anima,
-        stats=stats,
-        preparation=preparation,
-        soulfray_warning=soulfray_warning,
-        declared_strain=strain_commitment,
-        effective_strain=effective_strain,
-    )
+    # One transaction (#4099): a paid price's consumption commits or rolls back with
+    # the cast it paid for. An unpaid cast spends nothing, so it opens no savepoint and
+    # resolves exactly as it did before prices had a cost.
+    with transaction.atomic() if price_payment is not None else nullcontext():
+        return _complete_technique_cast(
+            character=character,
+            technique=technique,
+            resolve_fn=resolve_fn,
+            check_result=check_result,
+            cost=cost,
+            lethal=lethal,
+            anima=anima,
+            stats=stats,
+            preparation=preparation,
+            soulfray_warning=soulfray_warning,
+            declared_strain=strain_commitment,
+            effective_strain=effective_strain,
+            price_payment=price_payment,
+        )

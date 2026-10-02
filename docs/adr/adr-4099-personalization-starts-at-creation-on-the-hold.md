@@ -16,6 +16,27 @@ Price lives as a `kind` on the existing `Restriction` model rather than a siblin
 design-side limitation and cast-time price share one catalog with a discriminator instead
 of two parallel mechanisms.
 
+A price costs something real (owner rulings, 2026-10-02): it buys power because it makes
+the technique less convenient to use. It may consume carried items on every cast that pays
+it (`PriceComponentRequirement` rows: item template, quantity, optional minimum quality)
+and may inflict an authored `ConditionTemplate` on the caster (`Restriction
+.inflicted_condition`, applied through `apply_condition` on every paid cast; the
+condition's own rules decide stacking and refreshing). Both are PRICE-only (`clean()` on
+both models, plus a DB constraint on the condition column). A caster without the
+components still casts, never refused, just without the price: no power bonus, no
+narration clause, no condition, nothing consumed, so a player never loses a core
+technique by running out of a component. Exactly one service decides whether a cast pays,
+`price_paid_for_cast`, called once inside `use_technique` (the seam every cast path
+shares: scene, social, combat, clash, battle, so a combat cast decides at round
+resolution, never at declaration). Its `PricePayment` threads into the power term, the
+post-resolution settlement (`settle_price_payment`, consumption and condition in the
+cast's transaction, after `resolve_fn`, so a refused or cancelled cast spends nothing) and
+`TechniqueUseResult.price_paid`, which every narration seam reads instead of the hold.
+The component table is a sibling of `RitualComponentRequirement` keyed to `Restriction`,
+matched and consumed by the same shared `gather_consumable_pks` / `consume_materials`
+helpers rituals and crafting already use, against the caster's carried inventory
+(`character.carried_items`).
+
 The early flourish is the existing `Thread.signature_bonus`: creation weaves the TECHNIQUE
 thread at the flourish's own `min_crossing_level`, up to `CREATION_PERSONALIZATION_MAX_LEVEL`
 (2), so it never skips a crossing. The hard level-3 floor on signing is gone; each bonus's
@@ -46,6 +67,14 @@ copy. We rejected:
   apply free to every character at that resonance, not just the one who paid for it);
 - per-technique personalization catalogs (one authored gate per flourish/form/price serves
   every technique, so a per-technique catalog would duplicate authoring for no gain);
+- generalizing `RitualComponentRequirement` to also key on `Restriction` (it would need a
+  nullable `ritual` FK plus an exactly-one-owner constraint, and drag its touchstone mode,
+  which an attuned-and-kept item never fits, onto prices; the matching/consumption code is
+  already duck-typed and shared, so a sibling table reuses it with no parallel consumer, the
+  same way `CraftingMaterialRequirement` does);
+- refusing a cast whose caster lacks the component (a price must never take a core
+  technique away), and re-deciding "is it paid" separately in the power term and each
+  narration seam (they could disagree; one decision is threaded instead);
 - a seed migration for the creation panel's static copy (the repo's
   "no seed data in migrations" hook forbids one, and authored content lives in the database,
   never a migration, per ADR-0238). Instead, a missing `CGExplanation` copy key renders one

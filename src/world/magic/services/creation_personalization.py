@@ -74,9 +74,9 @@ def _offered_prices() -> list[Restriction]:
     from world.magic.models import Restriction  # noqa: PLC0415
 
     return list(
-        Restriction.objects.filter(
-            kind=RestrictionKind.PRICE, creation_point_cost__isnull=False
-        ).order_by("creation_point_cost", "name")
+        Restriction.objects.filter(kind=RestrictionKind.PRICE, creation_point_cost__isnull=False)
+        .select_related("inflicted_condition")
+        .order_by("creation_point_cost", "name")
     )
 
 
@@ -124,8 +124,14 @@ def creation_personalization_options(
 
     techniques = [t for t in techniques if not t.is_ultimate]
     flourishes = _offered_flourishes(resonance_id)
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        price_components_by_price,
+    )
+
     prices = _offered_prices()
     allowed_by_price = _allowed_effect_type_ids_by_price(prices)
+    # #4099: each price's real cost, so the picker shows what it consumes. One query.
+    price_components = price_components_by_price(p.pk for p in prices)
     forms: list[TechniqueVariant] = []
     if resonance_id is not None:
         forms = list(
@@ -143,6 +149,7 @@ def creation_personalization_options(
             flourishes=flourishes,
             forms=[f for f in forms if f.parent_technique_id == technique.pk],
             prices=[p for p in prices if _price_fits(p, allowed_by_price, technique)],
+            price_components=price_components,
         )
         for technique in techniques
     ]

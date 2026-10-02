@@ -8512,14 +8512,20 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
 
     from world.magic.services.signature_effects import resolve_signature_snippet  # noqa: PLC0415
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
-        resolve_price_snippet,
+        paid_price_snippet,
         technique_display_name,
     )
 
     target_label = target.name if target is not None else None
     caster_character = participant.character_sheet.character
     signature_snippet = resolve_signature_snippet(caster_character, technique)
-    price_snippet = resolve_price_snippet(caster_character, technique)
+    # #4099: the price THIS resolved cast paid (use_technique's one decision, made at
+    # resolution, not declaration), never the hold's price.
+    price_snippet = paid_price_snippet(
+        combat_result.technique_use_result.price_paid
+        if isinstance(combat_result, CombatTechniqueResult)
+        else None
+    )
     interaction_result = next(
         (dr.damage_interaction for dr in outcome.damage_results if dr.damage_interaction),
         None,

@@ -399,7 +399,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     Gift stage offers, per chosen technique, a free name/description plus a priced
     flourish (`SignatureMotifBonus`), early form (`TechniqueVariant`), and price
     (`Restriction`, `kind=PRICE`) whenever staff set that row's `creation_point_cost`.
-    Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
+    A price may consume carried items (`PriceComponentRequirement`) and inflict a
+    condition (`Restriction.inflicted_condition`) on each cast that pays it;
+    `price_paid_for_cast` (`world/magic/services/technique_personalization.py`), called
+    once in `use_technique`, is the one decision, and a caster lacking a component casts
+    without the price. Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
     finalize by `apply_creation_personalizations`
     (`world/magic/services/creation_personalization.py`); the flourish pick also weaves a
     TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) via

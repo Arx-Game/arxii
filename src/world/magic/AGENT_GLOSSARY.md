@@ -65,7 +65,7 @@ _Avoid_: signature variant, signature specialization (it is additive, not a vari
 _Avoid_: grant, possession (use "hold").
 
 **Price**:
-A `Restriction` of `kind=PRICE` that a caster chooses for their own hold of a Technique, offered in creation when staff set its `creation_point_cost`. The stronger the power bonus, the more it costs to take. Its `power_bonus` is added straight to every cast's power as a power-ledger term, and its `cast_narration` joins the cast line. Distinct from a DESIGN-kind `Restriction`, which refunds a technique's design budget in the builder and is never attached to a hold. (#4099, ADR-4099.)
+A `Restriction` of `kind=PRICE` that a caster chooses for their own hold of a Technique, offered in creation when staff set its `creation_point_cost`. The stronger the power bonus, the more it costs to take. A price costs something real: it may consume carried items on every cast that pays it (`PriceComponentRequirement`) and may inflict an authored condition on the caster (`inflicted_condition`). A cast **pays** its price when the caster carries every component (always, for a price with none); only a paid cast gets the `power_bonus` power-ledger term and the `cast_narration` clause, and only a paid cast spends the components and takes the condition. An unpaid cast still happens, just without the price. `price_paid_for_cast` is the one place that decides. Distinct from a DESIGN-kind `Restriction`, which refunds a technique's design budget in the builder and is never attached to a hold. (#4099, ADR-4099.)
 _Avoid_: cost, drawback, toll.
 
 **Early form**:

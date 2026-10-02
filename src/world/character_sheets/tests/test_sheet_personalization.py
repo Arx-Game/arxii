@@ -6,6 +6,8 @@ from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.serializers import _build_magic, get_character_sheet_queryset
+from world.conditions.factories import ConditionTemplateFactory
+from world.items.factories import ItemTemplateFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterGiftFactory,
@@ -16,7 +18,7 @@ from world.magic.factories import (
     SignatureMotifBonusFactory,
     TechniqueFactory,
 )
-from world.magic.models import Thread
+from world.magic.models import PriceComponentRequirement, Thread
 from world.magic.services.technique_forms import next_signatures_by_technique
 
 
@@ -28,12 +30,22 @@ class SheetPersonalizationTests(TestCase):
         CharacterGiftFactory(character=cls.sheet, gift=gift)
         cls.resonance = ResonanceFactory()
         cls.technique = TechniqueFactory(gift=gift, name="Scorch Lash", level=1)
+        price = PriceFactory(
+            name="Frost on the skin",
+            power_bonus=4,
+            inflicted_condition=ConditionTemplateFactory(name="Frostbitten fingers"),
+        )
+        PriceComponentRequirement.objects.create(
+            restriction=price,
+            item_template=ItemTemplateFactory(name="Shard of rime"),
+            quantity=2,
+        )
         CharacterTechniqueFactory(
             character=cls.sheet,
             technique=cls.technique,
             custom_name="Winterbite",
             custom_description="Flame gutters to white.",
-            price=PriceFactory(name="Frost on the skin", power_bonus=4),
+            price=price,
         )
         Thread.objects.create(
             owner=cls.sheet,
@@ -61,6 +73,8 @@ class SheetPersonalizationTests(TestCase):
     def test_entry_shows_price_and_next_flourish(self) -> None:
         entry = self._technique_entry()
         self.assertEqual(entry["price"]["name"], "Frost on the skin")
+        self.assertEqual(entry["price"]["consumes"], [{"name": "Shard of rime", "quantity": 2}])
+        self.assertEqual(entry["price"]["inflicts"], "Frostbitten fingers")
         self.assertEqual(entry["next_signature"]["name"], "Rime walks with you")
         self.assertEqual(entry["next_signature"]["min_level"], 3)
 
@@ -72,7 +86,9 @@ class SheetPersonalizationTests(TestCase):
         The original pin (``test_viewset.py``'s ``test_magic_zero_queries``) uses a
         fixture with no price and no TECHNIQUE thread, so it could not prove the
         ``price``/``early_form`` select_related actually rides the existing prefetch
-        once those rows are populated. This fixture has both.
+        once those rows are populated. This fixture has both, and its price consumes a
+        component: ``price_components_by_price`` costs one fixed query for the whole
+        sheet (the price's real cost, #4099), never one per hold.
         """
         sheet = get_character_sheet_queryset().get(pk=self.sheet.pk)
         sheet.character.threads.invalidate()
@@ -80,7 +96,7 @@ class SheetPersonalizationTests(TestCase):
             _build_magic(sheet)
         self.assertLessEqual(
             len(ctx.captured_queries),
-            4,
+            5,
             f"_build_magic issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

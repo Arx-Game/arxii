@@ -347,14 +347,17 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         caster_persona.character_sheet.character, technique
     )
 
-    # Price clause (#4099): the caster's own chosen price's authored cast-narration
-    # line, resolved through the cached hold lookup.
+    # Price clause (#4099): the authored cast-narration line of the price THIS cast
+    # paid (use_technique's one decision), never the hold's price — a cast that
+    # lacked the price's component narrates no cost.
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
-        resolve_price_snippet,
+        paid_price_snippet,
     )
 
-    caster_character = caster_persona.character_sheet.character
-    price_snippet = resolve_price_snippet(caster_character, technique)
+    technique_result = result.technique_result
+    price_snippet = paid_price_snippet(
+        technique_result.price_paid if technique_result is not None else None
+    )
 
     narration = render_cast_outcome_narration(
         actor_label=caster_persona.name,

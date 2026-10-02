@@ -414,6 +414,30 @@ def _probe_path_major_gift_ultimates() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_price_components_active() -> ProbeResult:
+    """Every item a PRICE consumes must come from an active item template (#4099).
+
+    ``ItemTemplate.is_active=False`` means no new items of it can be made, so once the
+    last carried one is spent the price can never be paid again: every cast of every
+    technique holding that price silently loses its power, narration and condition.
+    One ``values_list`` query.
+    """
+    from world.magic.models import PriceComponentRequirement  # noqa: PLC0415
+
+    stale = tuple(
+        f"{price_name}: {template_name}"
+        for price_name, template_name in PriceComponentRequirement.objects.filter(
+            item_template__is_active=False
+        )
+        .order_by("restriction__name", "item_template__name")
+        .values_list("restriction__name", "item_template__name")
+    )
+    if not stale:
+        return ProbeResult(present=True)
+    detail = f"{len(stale)} price component(s) name an inactive item template."
+    return ProbeResult(present=False, missing=stale, detail=detail)
+
+
 def _probe_audere_condition_shape() -> ProbeResult:
     """Audere and Audere Majora must outlast their own round countdown and defer death.
 
@@ -3184,6 +3208,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 filters=(("kind", "price"), ("creation_point_cost__isnull", False)),
                 absent_detail="No PRICE restriction carries a creation_point_cost.",
             ),
+        ),
+        ContentDependency(
+            key="price-components-active",
+            label="Price components from active item templates",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/technique_personalization.py price_paid_for_cast()",
+            consequence=(
+                "A price that consumes an item nobody can make any more stops being paid "
+                "once the last one is spent: its casts lose the price's power, clause and "
+                "condition without a word."
+            ),
+            probe=CustomProbe(fn=_probe_price_components_active),
+            admin_model="Restriction",
         ),
         ContentDependency(
             key="creation-flourishes",

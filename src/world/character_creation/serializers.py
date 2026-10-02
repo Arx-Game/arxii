@@ -538,8 +538,19 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
         return obj.id in self.context.get("species_technique_ids", set())
 
 
+class CGPriceComponentSerializer(serializers.Serializer):
+    """One item a price consumes on every cast that pays it (#4099). Authored name."""
+
+    name = serializers.CharField()
+    quantity = serializers.IntegerField()
+
+
 class CGPersonalizationOptionSerializer(serializers.Serializer):
-    """One flourish, form or price a CG pick can take (#4099). All text is authored."""
+    """One flourish, form or price a CG pick can take (#4099). All text is authored.
+
+    ``consumes`` / ``inflicts`` are a price's real cost (always empty / null for a
+    flourish or a form), so a player sees what a price spends before choosing it.
+    """
 
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -549,6 +560,8 @@ class CGPersonalizationOptionSerializer(serializers.Serializer):
     power_bonus = serializers.IntegerField()
     level = serializers.IntegerField()
     cost = serializers.IntegerField()
+    consumes = CGPriceComponentSerializer(many=True)
+    inflicts = serializers.CharField(allow_null=True)
 
 
 class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
@@ -576,6 +589,8 @@ class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
                 "power_bonus": 0,
                 "level": b.min_crossing_level,
                 "cost": b.creation_point_cost,
+                "consumes": [],
+                "inflicts": None,
             }
             for b in obj.flourishes
         ]
@@ -593,6 +608,8 @@ class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
                 "power_bonus": 0,
                 "level": v.unlock_thread_level,
                 "cost": v.creation_point_cost,
+                "consumes": [],
+                "inflicts": None,
             }
             for v in obj.forms
         ]
@@ -600,6 +617,11 @@ class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
 
     @extend_schema_field(CGPersonalizationOptionSerializer(many=True))
     def get_prices(self, obj: PersonalizationOptionSet) -> list[dict]:
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            price_consumes_payload,
+            price_inflicts_name,
+        )
+
         rows = [
             {
                 "id": p.pk,
@@ -610,6 +632,8 @@ class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
                 "power_bonus": p.power_bonus,
                 "level": 0,
                 "cost": p.creation_point_cost,
+                "consumes": price_consumes_payload(obj.price_components.get(p.pk, [])),
+                "inflicts": price_inflicts_name(p),
             }
             for p in obj.prices
         ]

@@ -164,6 +164,38 @@ class SheetMagicSectionTests(TestCase):
         self.assertIn("Not yet yours:", text)
         self.assertIn("Rime walks with you, at thread level 3", text)
 
+    def test_price_line_shows_what_the_price_costs(self) -> None:
+        """#4099: the telnet price line carries the price's real cost, like the web."""
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            PriceFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models import PriceComponentRequirement
+
+        gift = GiftFactory(name="Bloodwork")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        price = PriceFactory(
+            name="Blood on the needle",
+            inflicted_condition=ConditionTemplateFactory(name="Lightheaded"),
+        )
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Silver needle"), quantity=2
+        )
+        CharacterTechniqueFactory(
+            character=self.sheet,
+            technique=TechniqueFactory(gift=gift, name="Red Thread", level=1),
+            price=price,
+        )
+
+        text = "\n".join(SHEET_SECTIONS["magic"](_command_for(self.character)))
+
+        self.assertIn("Price: Blood on the needle", text)
+        self.assertIn("Consumes: 2x Silver needle", text)
+        self.assertIn("Inflicts: Lightheaded", text)
+
     def test_lists_resonance_balances(self) -> None:
         """#2032 — claimed resonances render with balance + lifetime earned."""
         CharacterResonanceFactory(

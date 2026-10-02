@@ -1190,6 +1190,29 @@ class TestPersonalizationRows(TestCase):
         self.assertTrue(_probe_for("creation-forms").resolve(None).present)
 
 
+class TestPriceComponentsActiveProbe(TestCase):
+    """The TUNING row for prices whose consumed item can no longer be made (#4099)."""
+
+    def test_no_component_is_present(self) -> None:
+        self.assertTrue(_probe_for("price-components-active").resolve(None).present)
+
+    def test_a_component_from_an_inactive_template_is_reported(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import PriceFactory
+        from world.magic.models import PriceComponentRequirement
+
+        price = PriceFactory(name="Ash and bone")
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Old bone", is_active=False)
+        )
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Fresh ash")
+        )
+        result = _probe_for("price-components-active").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Ash and bone: Old bone",))
+
+
 class TestPersonalizationCopyProbe(TestCase):
     """The TUNING row for the Gift stage's make-it-yours panel copy (#4099)."""
 

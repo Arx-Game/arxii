@@ -1143,8 +1143,15 @@ costed separately in CG points:
 - a free **name and description** (`custom_name`/`custom_description`, display only, never
   a lookup key);
 - a **price** (`CharacterTechnique.price`, a `Restriction` of `kind=PRICE`, offered in
-  creation when its `creation_point_cost` is set). Its `power_bonus` is added straight to
-  every cast's power as a power-ledger term, and its `cast_narration` joins the cast line;
+  creation when its `creation_point_cost` is set). A price costs something real: it may
+  consume carried items on each cast that pays it (`PriceComponentRequirement` rows:
+  `item_template`, `quantity`, optional `min_quality_tier`; the sibling of
+  `RitualComponentRequirement`) and may inflict an authored condition on the caster
+  (`Restriction.inflicted_condition`). Both are PRICE-only (`clean()` on both models, DB
+  constraint `restriction_inflicted_condition_price_only`). A cast that **pays** the price
+  gets its `power_bonus` as a power-ledger term and its `cast_narration` in the cast line,
+  spends the components and takes the condition. A caster who lacks a component still
+  casts, without the price: no bonus, no clause, no condition, nothing spent;
 - an **early form** (`CharacterTechnique.early_form`, a `TechniqueVariant` bought before
   the gift thread reaches its level). Honored by the variant resolver only for its buyer,
   only when the cast's resolved resonance matches the form's own authored resonance (a hold
@@ -1159,8 +1166,12 @@ seam used everywhere a technique's own name/price appears):
 | `clean_custom_technique_description(value) -> str` | Same hygiene for the description (newlines allowed). |
 | `hold_display_name(hold, *, fallback) -> str` | `hold.custom_name` if set, else `fallback`. |
 | `technique_display_name(character, technique, *, fallback=None) -> str` | Reads the caster's own hold (via the cached handler) and returns its display name, else the catalog name. |
-| `technique_price_for(character, technique) -> Restriction \| None` | The caster's own price for this technique, or `None`. |
-| `resolve_price_snippet(character, technique) -> str \| None` | The price's `cast_narration` (or name) for narration, or `None` when unpriced. |
+| `technique_price_for(character, technique) -> Restriction \| None` | The hold's price for this technique, or `None` (also `None` once staff re-kind the row away from PRICE). Read by `price_paid_for_cast`; says nothing about whether a cast pays. |
+| `price_paid_for_cast(character, technique) -> PricePayment \| None` | **The one decision** whether this cast pays the price. A price with no components always pays; otherwise it pays only when `gather_consumable_pks` finds every component in `character.carried_items`, and the allocation rides the returned `PricePayment` (`types/personalization.py`). Called once, inside `use_technique`. |
+| `settle_price_payment(*, character, technique, payment) -> None` | Spends a paid price after the cast resolves: `consume_materials` on the decision's allocation, then `apply_condition` for the inflicted condition. No-op for `None`. |
+| `paid_price_snippet(price) -> str \| None` | The narration clause (`cast_narration`, else name) of the price a cast PAID (`TechniqueUseResult.price_paid`), never the hold's. |
+| `price_components_by_price(price_ids) -> dict[int, list[PriceComponentRequirement]]` | One bulk read of each price's components (none for no ids), used by the CG options payload and the sheet. |
+| `price_consumes_payload(components)` / `price_inflicts_name(price)` | Display shapes for a price's cost: `[{name, quantity}]` from authored template names, and the authored condition name or `None`. |
 | `seed_motif_from_gift_resonance(sheet, resonance) -> MotifResonance` | Seeds a `Motif`/`MotifResonance` for a brand-new character at finalize, so a flourish (resonance-gated via `required_resonance`; a price carries no resonance of its own) can qualify once the gift resonance resolves. |
 
 **Creation services** (`src/world/magic/services/creation_personalization.py`, the
@@ -1187,11 +1198,33 @@ draft-time half):
   "Gradual unlock" above: `min_crossing_level` is the only gate on when a flourish
   unlocks, not a hard level-3 floor.
 
-**Price at cast** (`src/world/magic/services/power_terms.py`): `price_power_term(ctx) ->
-int` is a registered power-term provider. It reads the caster's own hold's price (via
-`technique_price_for`) and adds its `power_bonus` (or 0, unpriced) to every cast's power,
-in raw cast-power units, never through the technique builder's design-side refund
-multiplier.
+**Price at cast** (`src/world/magic/services/techniques.py` `use_technique`, the seam
+every cast path shares: scene cast, social enhanced action, combat round, clash, battle).
+After the Soulfray gate, `use_technique` calls `price_paid_for_cast` exactly once. The
+resulting `PricePayment` (or `None`) threads to: `_derive_power(price_payment=...)` →
+`PowerTermContext.price_payment` → `price_power_term` (`services/power_terms.py`), which
+adds the paid price's `power_bonus` in raw cast-power units, never through the builder's
+refund multiplier, and never re-reads the hold; `settle_price_payment`, called right after
+`resolve_fn` inside `transaction.atomic()` (opened only for a paid cast), so a cast
+refused by the Soulfray gate or cancelled at `TECHNIQUE_PRE_CAST` consumes nothing and a
+cast that fails while resolving rolls its consumption back; and
+`TechniqueUseResult.price_paid`, which the scene cast pose
+(`create_cast_outcome_pose`), the combat outcome narration
+(`_record_and_broadcast_pc_action`) and the clash contribution's ACTION interaction
+(`commit_to_clash`) read through `paid_price_snippet`. Combat calls `use_technique` when the
+round resolves, so the component is checked at resolution, not at declaration. Neither
+declaration label (`render_action_declaration_label`, `render_clash_contribution_label`)
+carries a price clause, since nothing is decided yet when they render.
+
+**Showing the cost.** The CG option payload (`CGPersonalizationOptionSerializer`) carries
+`consumes` (`[{name, quantity}]`) and `inflicts` (condition name or null) on every option
+(always empty/null for a flourish or form), and `PersonalizationPanel.tsx` shows them on
+the price rows and the collapsed price summary. The sheet's `TechniquePricePayload` carries
+the same two fields, rendered by `SpellbookTab.tsx` and the telnet `sheet/magic` price
+line (`Consumes:` / `Inflicts:`). Staff author both on the Restriction admin
+(`PriceComponentRequirementInline`, `inflicted_condition` autocomplete). The TUNING
+Required-content row `price-components-active` lists any price component whose item
+template is inactive (no new ones can be made, so the price eventually stops being paid).
 
 **Early form resolution** (`world/magic/specialization/services.py`,
 `_resolve_technique_variant`): after the ordinary thread-derived variant match, checks the

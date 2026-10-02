@@ -43875,8 +43875,11 @@ components:
       - sort_order
     CGPersonalizationOption:
       type: object
-      description: One flourish, form or price a CG pick can take (#4099). All text
-        is authored.
+      description: |-
+        One flourish, form or price a CG pick can take (#4099). All text is authored.
+
+        ``consumes`` / ``inflicts`` are a price's real cost (always empty / null for a
+        flourish or a form), so a player sees what a price spends before choosing it.
       properties:
         id:
           type: integer
@@ -43894,11 +43897,20 @@ components:
           type: integer
         cost:
           type: integer
+        consumes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGPriceComponent'
+        inflicts:
+          type: string
+          nullable: true
       required:
+      - consumes
       - control_delta
       - cost
       - gloss
       - id
+      - inflicts
       - intensity_delta
       - level
       - name
@@ -43930,6 +43942,18 @@ components:
           description: Whether this budget is currently active
       required:
       - id
+    CGPriceComponent:
+      type: object
+      description: One item a price consumes on every cast that pays it (#4099). Authored
+        name.
+      properties:
+        name:
+          type: string
+        quantity:
+          type: integer
+      required:
+      - name
+      - quantity
     CGTechniqueOption:
       type: object
       description: |-

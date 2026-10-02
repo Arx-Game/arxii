@@ -396,6 +396,32 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
         self.assertEqual([f["cost"] for f in entry["flourishes"]], [3])
         self.assertEqual(entry["forms"][0]["name"], "Scorch Lash, frost-formed")
         self.assertEqual(entry["prices"][0]["power_bonus"], 4)
+        self.assertEqual(entry["prices"][0]["consumes"], [])
+        self.assertIsNone(entry["prices"][0]["inflicts"])
+        self.assertEqual(entry["flourishes"][0]["consumes"], [])
+        self.assertIsNone(entry["forms"][0]["inflicts"])
+
+    def test_a_price_option_carries_its_real_cost(self) -> None:
+        """A player sees what a price consumes and inflicts before choosing it (#4099)."""
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.models import PriceComponentRequirement
+
+        self.price.inflicted_condition = ConditionTemplateFactory(name="Numb hands")
+        self.price.save(update_fields=["inflicted_condition"])
+        PriceComponentRequirement.objects.create(
+            restriction=self.price,
+            item_template=ItemTemplateFactory(name="Vial of snowmelt"),
+            quantity=3,
+        )
+        draft = self._draft(self.frost.pk)
+        response = self.client.get(
+            f"/api/character-creation/drafts/{draft.pk}/personalization-options/"
+        )
+        [entry] = response.data
+        [price] = entry["prices"]
+        self.assertEqual(price["consumes"], [{"name": "Vial of snowmelt", "quantity": 3}])
+        self.assertEqual(price["inflicts"], "Numb hands")
 
     def test_without_a_resonance_flourishes_and_forms_wait(self) -> None:
         draft = self._draft(None)
