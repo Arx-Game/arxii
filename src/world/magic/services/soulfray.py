@@ -9,6 +9,8 @@ from world.magic.models import SoulfrayConfig
 from world.magic.types import MishapResult, SoulfrayResult, SoulfrayStageSummary, SoulfrayWarning
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.db.models import QuerySet
     from evennia.objects.models import ObjectDB
 
@@ -20,41 +22,34 @@ if TYPE_CHECKING:
     from world.mechanics.types import AppliedEffect
 
 
+def nonlethal_ceiling_for(summaries: Sequence[SoulfrayStageSummary]) -> int | None:
+    """Highest severity a non-lethal cast may reach, over an already-built ladder summary.
+
+    ``(lowest severity_threshold among stages that can kill) - 1``, floored at 0;
+    ``None`` when no stage with a threshold can kill. A time-based stage (no
+    threshold) never sets the cap. Pure, so the Soulfray Stage Builder's Danger
+    rail shows exactly the cap the game applies (#4089).
+    """
+    thresholds = [
+        summary.stage.severity_threshold
+        for summary in summaries
+        if summary.can_kill and summary.stage.severity_threshold is not None
+    ]
+    if not thresholds:
+        return None
+    return max(min(thresholds) - 1, 0)
+
+
 def nonlethal_severity_ceiling() -> int | None:
     """Highest Soulfray severity that does NOT reach a death-risk stage.
 
-    A death-risk stage is one whose ``consequence_pool`` carries a
-    ``character_loss`` consequence. The ceiling is ``(lowest such threshold) - 1``
-    so a non-lethal cast can never accumulate enough severity to land on (or past)
-    a stage that can kill. Returns ``None`` when no death-risk stage exists, meaning
-    severity needs no bound.
+    A death-risk stage is one whose pool's EFFECTIVE consequences (parent rows
+    merged, exclusions honoured, the same rule the draw uses) include a
+    ``character_loss`` row. Before #4089 this read the stage pool's own entries
+    only, so a lethal row inherited from a shared parent pool was drawn but
+    never capped. Returns ``None`` when no death-risk stage exists.
     """
-    from world.checks.models import Consequence  # noqa: PLC0415
-    from world.conditions.models import ConditionStage  # noqa: PLC0415
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
-
-    death_pool_ids = set(
-        Consequence.objects.filter(
-            character_loss=True,
-            pool_entries__pool__condition_stages__condition__name=SOULFRAY_CONDITION_NAME,
-        ).values_list("pool_entries__pool_id", flat=True)
-    )
-    if not death_pool_ids:
-        return None
-
-    lowest = (
-        ConditionStage.objects.filter(
-            condition__name=SOULFRAY_CONDITION_NAME,
-            consequence_pool_id__in=death_pool_ids,
-            severity_threshold__isnull=False,
-        )
-        .order_by("severity_threshold")
-        .values_list("severity_threshold", flat=True)
-        .first()
-    )
-    if lowest is None:
-        return None
-    return max(lowest - 1, 0)
+    return nonlethal_ceiling_for(soulfray_ladder_summary())
 
 
 def _nonlethal_bounded_advance(
@@ -144,12 +139,11 @@ def get_soulfray_warning(character: ObjectDB) -> SoulfrayWarning | None:
     stage = soulfray_instance.current_stage
     has_death_risk = False
     if stage.consequence_pool_id:
-        from world.checks.models import Consequence  # noqa: PLC0415
+        from actions.services import get_effective_consequences  # noqa: PLC0415
 
-        has_death_risk = Consequence.objects.filter(
-            pool_entries__pool=stage.consequence_pool,
-            character_loss=True,
-        ).exists()
+        has_death_risk = any(
+            wc.character_loss for wc in get_effective_consequences(stage.consequence_pool)
+        )
 
     return SoulfrayWarning(
         stage_name=stage.name,
