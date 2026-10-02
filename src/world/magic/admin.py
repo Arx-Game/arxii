@@ -1658,6 +1658,23 @@ class DramaticMomentTagAdmin(admin.ModelAdmin):
         return False
 
 
+class CharacterCrossingTextAdminForm(forms.ModelForm):
+    """Approved admin-form labels for the two player-facing text fields (#4101, F8).
+
+    The approved demo labels are "Vision (private)" / "Manifestation (room)" --
+    set as ADMIN FORM labels, never ``verbose_name`` on the model field, so no
+    migration is generated for a cosmetic admin-only rename.
+    """
+
+    class Meta:
+        model = CharacterCrossingText
+        fields = "__all__"  # noqa: DJ007 - admin form mirrors the model
+        labels = {
+            "vision_text": "Vision (private)",
+            "manifestation_text": "Manifestation (room)",
+        }
+
+
 @admin.register(CharacterCrossingText)
 class CharacterCrossingTextAdmin(admin.ModelAdmin):
     """A character's own prepared Audere Majora crossing text (#4101).
@@ -1669,8 +1686,12 @@ class CharacterCrossingTextAdmin(admin.ModelAdmin):
     staffer could spoof on someone else's behalf.
     """
 
+    form = CharacterCrossingTextAdminForm
     autocomplete_fields = ("character_sheet", "prepared_by")
     list_display = ("character_sheet", "prepared_by", "crossing", "updated_at")
+    # Names the character in __str__ with no extra query per row (F8) -- the
+    # same chain CharacterSheet.__str__ itself reads (`self.character.key`).
+    list_select_related = ("character_sheet__character",)
     readonly_fields = ("crossing", "prepared_by", "created_at", "updated_at")
     fields = (
         "character_sheet",
@@ -1695,6 +1716,8 @@ class CharacterSurgeTextAdmin(admin.ModelAdmin):
 
     autocomplete_fields = ("character_sheet", "prepared_by")
     list_display = ("character_sheet", "prepared_by", "updated_at")
+    # Names the character in __str__ with no extra query per row (F8).
+    list_select_related = ("character_sheet__character",)
     readonly_fields = ("prepared_by", "updated_at")
     fields = ("character_sheet", "surge_text", "prepared_by", "updated_at")
 

@@ -54,6 +54,18 @@ class CrossingTextLayeringTest(TestCase):
         self.assertEqual(text.manifestation, "patron room")  # blank falls through
         self.assertTrue(text.prepared)
 
+    # Demo-fidelity fix round (#4101, F8): __str__ names the character instead
+    # of printing the sheet pk / crossing pk pair.
+    def test_crossing_text_str_names_the_character(self):
+        sheet = CharacterSheetFactory()
+        text = CharacterCrossingTextFactory(character_sheet=sheet)
+        self.assertEqual(str(text), f"Crossing text for {sheet.character.key}")
+
+    def test_surge_text_str_names_the_character(self):
+        sheet = CharacterSheetFactory()
+        text = CharacterSurgeTextFactory(character_sheet=sheet)
+        self.assertEqual(str(text), f"Surge text for {sheet.character.key}")
+
     def test_consumed_text_no_longer_applies(self):
         sheet = CharacterSheetFactory()
         CharacterCrossingTextFactory(character_sheet=sheet, vision_text="once")

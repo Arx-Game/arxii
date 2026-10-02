@@ -87,7 +87,11 @@ class CharacterCrossingText(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"CharacterCrossingText(sheet={self.character_sheet_id}, used={self.crossing_id})"
+        # Demo-fidelity fix round (#4101, F8): names the character, mirroring
+        # CharacterSheet.__str__'s own `self.character.key` read -- callers
+        # list_select_related `character_sheet__character` to keep this free
+        # of a per-row query (the admin list does; see CharacterCrossingTextAdmin).
+        return f"Crossing text for {self.character_sheet.character.key}"
 
 
 class CharacterSurgeText(SharedMemoryModel):
@@ -123,4 +127,5 @@ class CharacterSurgeText(SharedMemoryModel):
         verbose_name_plural = "Prepared Surge Texts"
 
     def __str__(self) -> str:
-        return f"CharacterSurgeText(sheet={self.character_sheet_id})"
+        # Demo-fidelity fix round (#4101, F8): see CharacterCrossingText.__str__.
+        return f"Surge text for {self.character_sheet.character.key}"
