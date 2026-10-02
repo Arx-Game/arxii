@@ -928,17 +928,20 @@ def _route_crossing(  # noqa: PLR0913 — one on_commit callback needs every pie
     silently lost to a GM-prompt-creation bug.
 
     ``route_narratable_event`` runs inside an OUTER ``transaction.atomic()``
-    here (#4101 fix round 2, ruling R7-2) -- it already wraps its own
-    prompt-creation in one, but THIS outer one creates the savepoint that
-    actually contains a ``DatabaseError``: on Postgres, an unguarded failure
-    aborts the whole enclosing transaction (``cross_threshold``'s own
-    ``transaction.atomic()``, several frames up), and ``_deliver()`` below
-    would then raise too, even though it's the RECOVERY path. ``_deliver()``
-    is called exactly ONCE, outside this try/except, keyed on whether
-    ``route_narratable_event`` actually produced any prompts -- never from
-    inside the try (where a success-with-prompts path could run it twice: once
-    via a ``deliver_unprompted`` callback, once again from how the caller
-    reads an empty return).
+    here (#4101 fix round 2, ruling R7-2) too, even though unlike its two
+    siblings (``_announce_surge``/``_route_ultimate_chosen``) THIS function
+    cannot actually need the savepoint to protect an enclosing transaction:
+    this whole function is itself the ``transaction.on_commit`` callback, which
+    only ever runs AFTER ``cross_threshold``'s transaction has already
+    committed -- there is no enclosing transaction left here for a
+    ``DatabaseError`` to abort (#4101 fix round 3, ruling R7.3-4). The
+    ``transaction.atomic()`` wrap is kept anyway purely for shape-consistency
+    with its two siblings, which DO need it. ``_deliver()`` is called exactly
+    ONCE, outside this try/except, keyed on whether ``route_narratable_event``
+    actually produced any prompts -- never from inside the try (where a
+    success-with-prompts path could run it twice: once via a
+    ``deliver_unprompted`` callback, once again from how the caller reads an
+    empty return).
     """
     from django.db import DatabaseError  # noqa: PLC0415
 

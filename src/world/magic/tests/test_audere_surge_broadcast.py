@@ -12,8 +12,8 @@ idmapper identity map and would leak into sibling tests.
 from unittest import mock
 
 from django.contrib.contenttypes.models import ContentType
-from django.db import DatabaseError, transaction
-from django.test import TestCase
+from django.db import DatabaseError, connection, transaction
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -167,14 +167,78 @@ class AudereSurgeRoutingFailureTests(TestCase):
 
     def test_delivery_failure_raises_once_and_is_not_retried(self) -> None:
         """If the fallback delivery itself raises, ``_announce_surge`` must not
-        retry it -- there is exactly one delivery call site."""
+        retry it -- there is exactly one delivery call site.
+
+        The side effect is ``DatabaseError`` specifically (#4101 fix round 3):
+        the OLD (fix round 1) code wrapped its ENTIRE ``route_narratable_event``
+        call -- including the ``deliver_unprompted`` invocation that call made
+        internally when there were no real GM recipients -- in a single
+        ``try/except DatabaseError``, so a ``DatabaseError`` raised from inside
+        that first delivery attempt was caught and delivery was retried a
+        SECOND time from the except block. A plain ``RuntimeError`` would
+        propagate straight out of that first attempt without ever reaching the
+        old code's ``except DatabaseError``, so it would pass against the old,
+        buggy code too -- it has to be a ``DatabaseError`` to actually exercise
+        (and fail against) the double-delivery bug this test guards."""
         SceneFactory(location=self.character.location, is_active=True)
-        boom = RuntimeError("boom")
+        boom = DatabaseError("boom")
 
         with mock.patch(
             "world.scenes.interaction_services.broadcast_scene_emit", side_effect=boom
         ) as mocked:
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(DatabaseError):
                 offer_audere(self.character, accept=True)
 
         mocked.assert_called_once()
+
+
+@tag("postgres")
+class AudereSurgePostgresSavepointTests(TestCase):
+    """#4101 fix round 2/3: the savepoint ``_announce_surge`` wraps its scene
+    lookup + routing call in must actually contain a REAL database-level
+    failure on Postgres. SQLite's own ``transaction.atomic()`` savepoints
+    don't reproduce Postgres's whole-transaction-abort-on-error semantics, so
+    the mocked-``DatabaseError`` tests above (``AudereSurgeRoutingFailureTests``)
+    can only prove the code's SHAPE is right, never that a real Postgres
+    failure is actually survived. This class forces a genuine database error
+    (invalid SQL through ``connection.cursor()``) from inside the routing call.
+
+    Gated to the Postgres parity tier (CI's ``just test-parity``/``just
+    regression``) via ``@tag("postgres")`` -- Postgres tests are not run
+    locally in this environment, and ``just test-fast`` passes
+    ``--exclude-tag postgres``, so this whole class (including
+    ``setUpTestData``) is skipped entirely under the SQLite fast tier; the
+    deliberately-invalid raw SQL below never executes there.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.threshold = _make_threshold(
+            surge_text="{name} answers the surge.", tier_name="Major_surge_pg_savepoint"
+        )
+
+    def test_real_query_failure_inside_routing_leaves_outer_transaction_usable(self) -> None:
+        character = _make_lifecycle_character("surge_pg_savepoint_char")
+        scene = SceneFactory(location=character.location, is_active=True)
+        persona_name = character.sheet_data.primary_persona.name
+
+        def _break_query(*args, **kwargs):
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT * FROM arxii_this_table_does_not_exist_4101")
+
+        with mock.patch("world.gm.prompt_services.prompt_recipients", side_effect=_break_query):
+            with transaction.atomic():
+                result = offer_audere(character, accept=True)
+                # A further write in the SAME outer transaction (standing in
+                # for resolve_audere_offer's own transaction.atomic()) proves
+                # the connection is still usable: a real Postgres
+                # whole-transaction abort -- which _announce_surge's own
+                # savepoint exists to prevent -- would refuse this with
+                # "current transaction is aborted, commands ignored until end
+                # of transaction block."
+                CharacterAnimaFactory(character=CharacterSheetFactory().character.sheet_data)
+
+        assert result.accepted is True
+        emits = Interaction.objects.filter(scene=scene, mode=InteractionMode.EMIT)
+        assert emits.count() == 1
+        assert emits.first().content == f"{persona_name} answers the surge."

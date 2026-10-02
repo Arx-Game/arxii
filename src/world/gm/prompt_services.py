@@ -86,31 +86,6 @@ def prompt_recipients(
     return [a for a in pool if a.pk not in muted]
 
 
-def _subject_account(sheet: CharacterSheet | None) -> AccountDB | None:
-    """The account currently playing ``sheet``, or None (#4101 fix round 2, ruling R7-1).
-
-    CharacterSheet -> RosterEntry -> current RosterTenure -> PlayerData -> Account,
-    inlined here rather than imported from ``world.magic.services.gain
-    .account_for_sheet`` -- ``world.gm`` is the general event-routing primitive
-    every narratable-event source (not only magic) routes through, so it must
-    not depend on ``world.magic`` (ADR-0010 general-primitive direction).
-    ``world.gm`` already depends on ``world.roster``/``world.character_sheets``
-    elsewhere in this app, so this stays a same-direction dependency.
-    """
-    if sheet is None:
-        return None
-    entry = sheet.roster_entry_or_none
-    if entry is None:
-        return None
-    tenure = entry.current_tenure
-    if tenure is None:
-        return None
-    player_data = tenure.player_data
-    if player_data is None:
-        return None
-    return player_data.account
-
-
 def recipients_excluding_subject(
     scene: Scene | None,
     kind: str,
@@ -129,9 +104,14 @@ def recipients_excluding_subject(
     deliver-now gate in ``world/magic/audere_majora.py``). Both must agree, or
     the gate can withhold a line that the real routing later decides nobody
     was ever going to see, delaying it for no reason.
+
+    ``sheet.character.active_account`` (#4101 fix round 3, ruling R7.3-3) is
+    the existing cached CharacterSheet -> RosterEntry -> current RosterTenure ->
+    PlayerData -> Account walk (``typeclasses/characters.py``) -- reused rather
+    than a second inline copy of the same walk.
     """
     recipients = prompt_recipients(scene, kind, candidates=candidates)
-    subject_account = _subject_account(sheet)
+    subject_account = sheet.character.active_account if sheet is not None else None
     if subject_account is not None:
         recipients = [a for a in recipients if a.pk != subject_account.pk]
     return recipients
