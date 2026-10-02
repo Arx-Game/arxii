@@ -221,6 +221,57 @@ class DramaticMomentSuggestionsOnInteractionTest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertEqual(resp.data["results"][0]["dramatic_moment_suggestions"], [])
 
+    def test_narration_kind_prompt_on_same_interaction_is_excluded(self):
+        """#4101 fix round 2: a narration-kind GMPrompt attached to the SAME
+        interaction (``interaction=``) must never surface through this
+        dramatic_moment-only field, even for a real scene GM -- hardens both
+        the view's Prefetch (``interaction_views.py``) and the model's
+        fallback ``cached_dramatic_moment_suggestions`` property."""
+        from world.gm.constants import GMPromptKind
+        from world.gm.models import GMPrompt
+
+        other_gm = AccountFactory()
+        narration_prompt = GMPrompt.objects.create(
+            kind=GMPromptKind.MIRACLE,
+            scene=self.scene,
+            character_sheet=self.sheet,
+            interaction=self.interaction,
+            addressed_to=other_gm,
+            room_text="a wonder occurs",
+        )
+        gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=gm)
+        self.client.force_authenticate(gm)
+        resp = self.client.get(self._list_url())
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        suggestions = resp.data["results"][0]["dramatic_moment_suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["id"], self.suggestion.pk)
+        self.assertNotIn(narration_prompt.pk, [s["id"] for s in suggestions])
+
+    def test_model_property_fallback_also_excludes_narration_prompts(self):
+        """Direct, unprefetched access to ``cached_dramatic_moment_suggestions``
+        (the ``PrunedCachedProperty`` fallback query, not the view's Prefetch)
+        also filters out a narration-kind prompt on the same interaction."""
+        from world.gm.constants import GMPromptKind
+        from world.gm.models import GMPrompt
+        from world.scenes.models import Interaction
+
+        other_gm = AccountFactory()
+        GMPrompt.objects.create(
+            kind=GMPromptKind.MIRACLE,
+            scene=self.scene,
+            character_sheet=self.sheet,
+            interaction=self.interaction,
+            addressed_to=other_gm,
+            room_text="a wonder occurs",
+        )
+        # Fetch a plain, un-prefetched Interaction so the property's own query
+        # path runs (the Prefetch's to_attr short-circuits it otherwise).
+        plain_interaction = Interaction.objects.get(pk=self.interaction.pk)
+        suggestions = plain_interaction.cached_dramatic_moment_suggestions
+        self.assertEqual([s.pk for s in suggestions], [self.suggestion.pk])
+
 
 class DramaticMomentSuggestionActionsRegistryTest(APITestCase):
     """Registry keys exist and are wired.

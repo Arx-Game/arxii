@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 import uuid
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 
 from world.gm.constants import (
     NARRATION_PROMPT_KINDS,
@@ -175,21 +175,53 @@ def _resolve_narration_prompt(
     round 1). The event's authored defaults release only once every sibling has
     left PENDING, and only when none of them ended up NARRATED -- a GM's own
     narration of the event replaces the default, it doesn't compete with it.
+
+    The still-PENDING/NARRATED re-check above reads ``siblings`` -- the
+    ``select_for_update()`` result, i.e. the identity map's live Python objects,
+    not a fresh row-by-row re-query of the database. That is correct *because*
+    every status change to a GMPrompt goes through this same function under the
+    same lock: no writer can mutate a sibling's status without first taking this
+    exact lock, so the in-memory objects the lock hands back are never stale
+    relative to each other (#4101 fix round 2).
+
+    ``release_prompt_defaults`` is deferred to ``transaction.on_commit`` (#4101
+    fix round 2) -- GMPrompt is idmapper-cached, so a Python-level attribute
+    mutation (``this.status = new_status``) is not automatically undone by a
+    database rollback the way the DB row is. Running delivery (which can raise)
+    *inside* this atomic block risked a delivery failure rolling back the DB
+    write while leaving the cached instance's ``status`` stuck at
+    DISMISSED/NARRATED in memory -- from then on every future dismiss attempt on
+    that same cached object would see a non-PENDING status and refuse
+    (``_MSG_RESOLVED``), and ``expire_scene_prompts`` would never find it PENDING
+    again either, silently losing the release forever. Deferring to
+    ``transaction.on_commit`` means delivery only ever runs after the status
+    change has safely committed, so a failed send can no longer corrupt prompt
+    state -- it can only fail to deliver.
+
+    Separately, a database-level failure writing the status change (e.g. a
+    constraint violation on ``save()``) still mutated ``this`` in Python
+    first, so the ``except`` below puts ``status``/``resolved_by`` back
+    before re-raising, keeping the cached instance consistent with the
+    database row the transaction rollback restores.
     """
     with transaction.atomic():
         siblings = list(GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group))
         this = next(s for s in siblings if s.pk == prompt.pk)
         if this.status != GMPromptStatus.PENDING:
             raise GMPromptError(_MSG_RESOLVED)
+        previous_status, previous_resolver = this.status, this.resolved_by
         this.status = new_status
         this.resolved_by = resolver
-        this.save(update_fields=["status", "resolved_by"])
+        try:
+            this.save(update_fields=["status", "resolved_by"])
+        except DatabaseError:
+            this.status = previous_status
+            this.resolved_by = previous_resolver
+            raise
         still_pending = any(s.status == GMPromptStatus.PENDING for s in siblings if s.pk != this.pk)
-        if still_pending:
-            return this
-        if not any(s.status == GMPromptStatus.NARRATED for s in siblings):
-            release_prompt_defaults(this)
-        return this
+        if not still_pending and not any(s.status == GMPromptStatus.NARRATED for s in siblings):
+            transaction.on_commit(lambda p=this: release_prompt_defaults(p))
+    return this
 
 
 def dismiss_gm_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> GMPrompt:
@@ -212,8 +244,10 @@ def expire_scene_prompts(scene: Scene) -> int:
     """Scene finished: dismiss its pending narration prompts so no default is lost.
 
     Tolerates a prompt a concurrent dismiss already resolved out from under this
-    sweep (``GMPromptError`` from ``_resolve_narration_prompt``'s fresh re-check
-    under lock) -- that race is a lost race, not a failure to report.
+    sweep (``GMPromptError`` from ``_resolve_narration_prompt``'s identity-map
+    re-check under lock -- see that function's docstring for why reading the
+    cache there is correct) -- that race is a lost race, not a failure to
+    report.
     """
     pending = list(
         GMPrompt.objects.filter(

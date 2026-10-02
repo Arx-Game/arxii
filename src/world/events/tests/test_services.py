@@ -216,7 +216,11 @@ class EventLifecycleTest(TestCase):
 class CompleteEventExpiresGMPromptsTest(TestCase):
     """Completing an event whose linked scene carries a pending narration
     GMPrompt releases that prompt's authored text exactly once (#4101 fix
-    round 1) -- the event-completion path in ``_finish_event_scenes``."""
+    round 1) -- the event-completion path in ``_finish_event_scenes``.
+
+    Release is deferred to ``transaction.on_commit`` (#4101 fix round 2), so
+    the triggering call runs inside ``captureOnCommitCallbacks``.
+    """
 
     def test_complete_event_releases_pending_narration_prompt_once(self) -> None:
         sheet = CharacterSheetFactory()
@@ -235,7 +239,8 @@ class CompleteEventExpiresGMPromptsTest(TestCase):
             )
         )
 
-        complete_event(event)
+        with self.captureOnCommitCallbacks(execute=True):
+            complete_event(event)
 
         prompt.refresh_from_db()
         self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)

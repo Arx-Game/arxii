@@ -97,10 +97,13 @@ class RouteNarratableEventTest(TestCase):
 
     @mock.patch("world.gm.prompt_services.narrate_privately")
     def test_dismiss_releases_private_default(self, narrate):
+        """#4101 fix round 2: release is deferred to ``transaction.on_commit``,
+        so the triggering call must run inside ``captureOnCommitCallbacks``."""
         prompt = route_narratable_event(
             self._event(self.scene, kind=GMPromptKind.CROSSING, private_text="vision")
         )[0]
-        dismiss_gm_prompt(prompt, resolver=self.gm)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
         prompt.refresh_from_db()
         self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
         narrate.assert_called_once_with(self.sheet.character, "vision", scene=self.scene)
@@ -111,7 +114,8 @@ class RouteNarratableEventTest(TestCase):
         route_narratable_event(
             self._event(scene, kind=GMPromptKind.CROSSING, private_text="the vision")
         )
-        finish_scene_full(scene)
+        with self.captureOnCommitCallbacks(execute=True):
+            finish_scene_full(scene)
         prompt = GMPrompt.objects.get(scene=scene)
         self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
         self.assertTrue(
@@ -122,6 +126,24 @@ class RouteNarratableEventTest(TestCase):
             ).exists()
         )
 
+    def test_finish_scene_releases_pending_room_text_default(self):
+        """The room-text leg also releases through the real ``finish_scene_full``
+        scene-end path (#4101 fix round 2), not just a plain dismiss."""
+        scene = SceneFactory()
+        SceneGMParticipationFactory(scene=scene, account=self.gm)
+        route_narratable_event(
+            self._event(scene, kind=GMPromptKind.MIRACLE, room_text="a wonder occurs")
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            finish_scene_full(scene)
+        prompt = GMPrompt.objects.get(scene=scene)
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        self.assertTrue(
+            Interaction.objects.filter(
+                content="a wonder occurs", mode=InteractionMode.EMIT, scene=scene
+            ).exists()
+        )
+
     @mock.patch("world.gm.prompt_services.broadcast_scene_emit")
     def test_room_text_release_on_dismiss(self, broadcast):
         """#4101 fix round 1: the room-text leg also releases on dismiss, against
@@ -129,7 +151,8 @@ class RouteNarratableEventTest(TestCase):
         prompt = route_narratable_event(
             self._event(self.scene, kind=GMPromptKind.MIRACLE, room_text="a wonder occurs")
         )[0]
-        dismiss_gm_prompt(prompt, resolver=self.gm)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
         broadcast.assert_called_once_with(self.sheet.character, "a wonder occurs", scene=self.scene)
 
     def test_release_uses_prompts_own_scene_not_characters_current_location(self):
@@ -159,7 +182,8 @@ class RouteNarratableEventTest(TestCase):
         )[0]
 
         self.sheet.character.location = elsewhere_room
-        dismiss_gm_prompt(prompt, resolver=self.gm)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm)
 
         self.assertTrue(
             Interaction.objects.filter(
@@ -171,6 +195,40 @@ class RouteNarratableEventTest(TestCase):
                 content="a wonder occurs", mode=InteractionMode.EMIT, scene=elsewhere_scene
             ).exists()
         )
+
+    def test_failed_resolve_restores_pending_status_and_a_later_dismiss_still_sends(self):
+        """#4101 fix round 2: if the database write inside the resolve-and-
+        release transaction fails (simulated here via a failing
+        ``GMPrompt.save()``), the cached instance's status/resolved_by are put
+        back -- the prompt stays PENDING in both the database and the identity
+        map, and a later, real dismiss still works and still releases.
+
+        A failed *delivery* (``release_prompt_defaults`` itself raising) can no
+        longer produce this symptom at all -- it runs via ``transaction.on_commit``
+        now, strictly after the status change has already committed, so by
+        definition nothing is left to roll back by the time it could fail.
+        """
+        from django.db import IntegrityError
+
+        prompt = route_narratable_event(
+            self._event(self.scene, kind=GMPromptKind.CROSSING, private_text="vision")
+        )[0]
+
+        with mock.patch.object(GMPrompt, "save", side_effect=IntegrityError("boom")):
+            with self.assertRaises(IntegrityError):
+                dismiss_gm_prompt(prompt, resolver=self.gm)
+
+        # The identity-map-cached object (the same instance route_narratable_event
+        # returned) was reverted, not left stuck at DISMISSED.
+        self.assertEqual(prompt.status, GMPromptStatus.PENDING)
+        self.assertIsNone(prompt.resolved_by)
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.PENDING)
+
+        with mock.patch("world.gm.prompt_services.narrate_privately") as narrate:
+            with self.captureOnCommitCallbacks(execute=True):
+                dismiss_gm_prompt(prompt, resolver=self.gm)
+        narrate.assert_called_once_with(self.sheet.character, "vision", scene=self.scene)
 
 
 class SiblingReleaseTest(TestCase):
@@ -206,10 +264,12 @@ class SiblingReleaseTest(TestCase):
     @mock.patch("world.gm.prompt_services.narrate_privately")
     def test_a_dismisses_then_scene_end_sends_exactly_once(self, narrate):
         prompt_a, _prompt_b = self._two_gm_prompts(private_text="the vision")
-        dismiss_gm_prompt(prompt_a, resolver=self.gm_a)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt_a, resolver=self.gm_a)
         narrate.assert_not_called()  # gm_b's sibling is still PENDING
 
-        finish_scene_full(self.scene)
+        with self.captureOnCommitCallbacks(execute=True):
+            finish_scene_full(self.scene)
         narrate.assert_called_once_with(self.sheet.character, "the vision", scene=self.scene)
 
     def test_dismiss_twice_raises(self):
@@ -232,10 +292,12 @@ class SiblingReleaseTest(TestCase):
                 private_text="the vision",
             )
         )
-        dismiss_gm_prompt(prompt, resolver=self.gm_a)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm_a)
         narrate.assert_called_once_with(self.sheet.character, "the vision", scene=solo_scene)
 
-        finish_scene_full(solo_scene)
+        with self.captureOnCommitCallbacks(execute=True):
+            finish_scene_full(solo_scene)
         narrate.assert_called_once()  # still exactly once
 
     @mock.patch("world.gm.prompt_services.narrate_privately")
@@ -249,7 +311,8 @@ class SiblingReleaseTest(TestCase):
         # bare QuerySet.update() is disabled; see core.managers).
         prompt_b.status = GMPromptStatus.NARRATED
         prompt_b.save(update_fields=["status"])
-        dismiss_gm_prompt(prompt_a, resolver=self.gm_a)
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt_a, resolver=self.gm_a)
         narrate.assert_not_called()
 
     def test_live_push_reaches_only_the_addressed_gm(self):

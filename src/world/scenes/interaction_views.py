@@ -339,7 +339,7 @@ class InteractionViewSet(
         # Deferred: world.combat imports world.scenes at module scope elsewhere;
         # importing CombatRoundAction lazily keeps this view free of an import cycle.
         from world.combat.models import CombatRoundAction  # noqa: PLC0415
-        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
         from world.gm.models import GMPrompt  # noqa: PLC0415
         from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
 
@@ -430,9 +430,13 @@ class InteractionViewSet(
             ),
             Prefetch(
                 "gm_prompts",
-                queryset=GMPrompt.objects.filter(status=GMPromptStatus.PENDING).select_related(
-                    "moment_type"
-                ),
+                # #4101 fix round 2: GMPrompt also carries narration kinds now (each
+                # addressed to one specific GM, never scene-gated) -- the kind filter
+                # keeps this dramatic_moment-only field from leaking one, and from
+                # crashing the serializer on a null moment_type.
+                queryset=GMPrompt.objects.filter(
+                    status=GMPromptStatus.PENDING, kind=GMPromptKind.DRAMATIC_MOMENT
+                ).select_related("moment_type"),
                 to_attr="cached_dramatic_moment_suggestions",
             ),
         )

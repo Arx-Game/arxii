@@ -1216,14 +1216,23 @@ class Interaction(SharedMemoryModel):
     @PrunedCachedProperty
     def cached_dramatic_moment_suggestions(self) -> list[GMPrompt]:
         """Pending dramatic-moment suggestions, fed by the ``to_attr``
-        "cached_dramatic_moment_suggestions" Prefetch."""
-        from world.gm.constants import GMPromptStatus  # noqa: PLC0415
+        "cached_dramatic_moment_suggestions" Prefetch.
+
+        Filtered to ``kind=GMPromptKind.DRAMATIC_MOMENT`` (#4101 fix round 2):
+        GMPrompt also carries narration kinds now (each addressed to one
+        specific GM, never scene-gated), so without this filter a narration
+        prompt anchored to the same interaction would leak into this
+        dramatic_moment-only field -- and crash on a null ``moment_type``.
+        """
+        from world.gm.constants import GMPromptKind, GMPromptStatus  # noqa: PLC0415
         from world.gm.models import GMPrompt  # noqa: PLC0415
 
         return list(
-            GMPrompt.objects.filter(interaction=self, status=GMPromptStatus.PENDING).select_related(
-                "moment_type"
-            )
+            GMPrompt.objects.filter(
+                interaction=self,
+                status=GMPromptStatus.PENDING,
+                kind=GMPromptKind.DRAMATIC_MOMENT,
+            ).select_related("moment_type")
         )
 
     @PrunedCachedProperty

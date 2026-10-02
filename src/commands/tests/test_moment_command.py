@@ -17,9 +17,11 @@ from evennia.utils.create import create_object
 from commands.dramatic_moments import CmdMoment
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.gm.constants import GMPromptStatus
+from world.gm.constants import GMPromptKind, GMPromptStatus
 from world.gm.factories import GMPromptFactory
 from world.gm.models import GMPrompt
+from world.gm.prompt_services import route_narratable_event
+from world.gm.types import NarratableEvent
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTypeFactory,
@@ -97,6 +99,30 @@ class MomentTelnetE2ETest(TestCase):
         self.assertNotIn(str(self.suggestion.pk), msg)
         self.assertNotIn(self.moment_type.label, msg)
 
+    def test_suggestions_excludes_narration_prompts(self) -> None:
+        """#4101 fix round 2: a narration-kind GMPrompt (miracle/death/crossing/
+        ...), addressed to a different GM, must never surface in this
+        dramatic_moment-only listing -- and must not crash on ``moment_type.label``
+        (narration prompts carry no moment_type)."""
+        other_gm = AccountFactory()
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            ),
+            candidates=[other_gm],
+        )
+
+        _run(self.gm_character, "suggestions")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn(str(self.suggestion.pk), msg)
+        self.assertIn(self.moment_type.label, msg)
+        self.assertNotIn(f"#{narration_prompt.pk}:", msg)
+
     def test_suggestions_no_active_scene_reports_error(self) -> None:
         lone_room = create_object("typeclasses.rooms.Room", key="LoneRoom", nohome=True)
         self.gm_character.location = lone_room
@@ -160,6 +186,51 @@ class MomentTelnetE2ETest(TestCase):
         self.outsider_character.msg.assert_called()
         msg = self.outsider_character.msg.call_args[0][0]
         self.assertIn("gm", msg.lower())
+
+    def test_confirm_narration_prompt_refused(self) -> None:
+        """#4101 fix round 2: the Action's own lookup (``_suggestion_or_none``)
+        must refuse a narration-kind prompt by id, even for a real scene GM --
+        telnet confirm/dismiss dispatch the Action directly with no prior
+        kind-filtering gate of their own, so this lookup is load-bearing, not
+        just defense in depth."""
+        other_gm = AccountFactory()
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            ),
+            candidates=[other_gm],
+        )
+
+        _run(self.gm_character, f"confirm {narration_prompt.pk}")
+
+        narration_prompt.refresh_from_db()
+        self.assertEqual(narration_prompt.status, GMPromptStatus.PENDING)
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("which suggestion", msg.lower())
+
+    def test_dismiss_narration_prompt_refused(self) -> None:
+        other_gm = AccountFactory()
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            ),
+            candidates=[other_gm],
+        )
+
+        _run(self.gm_character, f"dismiss {narration_prompt.pk}")
+
+        narration_prompt.refresh_from_db()
+        self.assertEqual(narration_prompt.status, GMPromptStatus.PENDING)
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("which suggestion", msg.lower())
 
     def test_double_confirm_second_call_fails(self) -> None:
         _run(self.gm_character, f"confirm {self.suggestion.pk}")
