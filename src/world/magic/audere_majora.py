@@ -475,7 +475,7 @@ def release_and_delete_withheld_offer(offer_id: int) -> None:
     """
     with transaction.atomic():
         locked = (
-            PendingAudereMajoraOffer.objects.select_for_update()
+            PendingAudereMajoraOffer.objects.select_for_update(of=("self",))
             .select_related("character_sheet__character", "threshold", "faith_variant", "scene")
             .filter(pk=offer_id)
             .first()
