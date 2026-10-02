@@ -7,11 +7,13 @@ from django.test import TestCase
 from actions.definitions.communication import EmitAction, PemitAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.gm import prompt_services
 from world.gm.constants import GMPromptKind, GMPromptStatus
 from world.gm.factories import GMProfileFactory, GMPromptFactory
 from world.gm.models import GMPrompt, GMPromptNarration
 from world.gm.prompt_services import dismiss_gm_prompt
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.scenes import interaction_services
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 from world.scenes.models import Interaction
 
@@ -180,30 +182,52 @@ class PromptNarrationTest(TestCase):
         # No default text released for either sibling: only the two narration rows exist.
         self.assertEqual(Interaction.objects.count(), 2)
 
-    def test_narrate_a_prompt_scene_end_just_dismissed(self):
-        """A narration racing a concurrent dismiss is delivered and linked, never raises."""
-        original_create = GMPromptNarration.objects.create
+    def _emit_after_concurrent_dismiss(self, text):
+        """Run EmitAction with the prompt dismissed between resolve and link.
 
-        def _create_then_concurrent_dismiss(*args, **kwargs):
-            link = original_create(*args, **kwargs)
-            # Simulate scene end's expire_scene_prompts dismissing this exact prompt
-            # out from under the still-in-flight narration, via a second resolved
-            # reference (never the stale `self.prompt` the action already fetched).
-            dismiss_gm_prompt(GMPrompt.objects.get(pk=self.prompt.pk), resolver=None)
-            return link
+        ``narration_prompt_for`` (prerequisite + ``execute()``) sees it open; scene
+        end's ``expire_scene_prompts`` then closes it just before the
+        ``on_created`` hook runs, via a second resolved reference.
+        """
+        original_link = prompt_services.link_prompt_narration
 
-        with mock.patch.object(
-            GMPromptNarration.objects, "create", side_effect=_create_then_concurrent_dismiss
+        def _dismiss_then_link(prompt, interaction):
+            dismiss_gm_prompt(GMPrompt.objects.get(pk=prompt.pk), resolver=None)
+            return original_link(prompt, interaction)
+
+        with (
+            mock.patch.object(
+                prompt_services, "link_prompt_narration", side_effect=_dismiss_then_link
+            ),
+            mock.patch.object(
+                interaction_services,
+                "push_interaction",
+                wraps=interaction_services.push_interaction,
+            ) as push,
+            mock.patch.object(prompt_services, "narrate_privately") as narrate,
+            self.captureOnCommitCallbacks(execute=True),
         ):
-            result = EmitAction().run(
-                actor=self.gm_char, text="The ceiling cracks.", gm_prompt_id=self.prompt.pk
-            )
+            result = EmitAction().run(actor=self.gm_char, text=text, gm_prompt_id=self.prompt.pk)
+        return result, push, narrate
+
+    def test_narrate_a_prompt_scene_end_just_dismissed(self):
+        """A narration losing the race to a close is delivered in full, unlinked, never raises.
+
+        #4101 fix round 4: the link is refused under the sibling lock (the close
+        already counted no narration and released the defaults), the GM's line still
+        goes out with its web push, and the GM is told the prompt had closed.
+        """
+        result, push, narrate = self._emit_after_concurrent_dismiss("The ceiling cracks.")
 
         self.assertTrue(result.success, result.message)
-        link = GMPromptNarration.objects.get(prompt=self.prompt)
-        self.assertEqual(link.interaction.content, "The ceiling cracks.")
+        self.assertIn("plain narration", result.message)
+        interaction = Interaction.objects.get(content="The ceiling cracks.")
+        push.assert_called_once()
+        self.assertEqual(push.call_args.args[0], interaction)
+        self.assertFalse(GMPromptNarration.objects.filter(prompt=self.prompt).exists())
         self.prompt.refresh_from_db()
         self.assertEqual(self.prompt.status, GMPromptStatus.DISMISSED)
+        narrate.assert_called_once()  # the uncovered vision default, exactly once
 
 
 class NarratedPushPayloadTest(TestCase):

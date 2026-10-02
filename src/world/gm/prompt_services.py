@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import contextlib
+import logging
 from typing import TYPE_CHECKING
 import uuid
 
@@ -40,6 +41,8 @@ if TYPE_CHECKING:
     from world.gm.types import NarratableEvent
     from world.scenes.models import Interaction, Scene
     from world.scenes.types import NarratedEventPayload
+
+logger = logging.getLogger(__name__)
 
 _MSG_NOT_NARRATION = "That prompt is not one you narrate."
 _MSG_RESOLVED = "That prompt has already been dealt with."
@@ -457,84 +460,61 @@ def dismiss_gm_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> GMProm
     return _resolve_narration_prompt(prompt, new_status=GMPromptStatus.DISMISSED, resolver=resolver)
 
 
-def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromptNarration:
-    """Record ``interaction`` as narrating ``prompt`` (#4101 Task 3).
+def link_prompt_narration(prompt: GMPrompt, interaction: Interaction) -> GMPromptNarration | None:
+    """Record ``interaction`` as narrating ``prompt``; None when the prompt has closed (#4101).
 
     Repeat narrations are allowed, NO CAP BY DESIGN (fix round 1 ruling): a GM
     may send several lines for one event (a room line, then one or more
     private lines to different recipients); each is its own Interaction, each
     gets its own ``GMPromptNarration`` row linked back to the same prompt.
 
-    The FIRST narration of a still-PENDING prompt resolves it to NARRATED
-    through ``_resolve_narration_prompt``, under the same per-event lock
-    ``dismiss_gm_prompt``/``expire_scene_prompts`` use: ``_resolve_narration_prompt``
-    then re-derives coverage straight from the linked ``GMPromptNarration`` rows
-    (controller ruling I2), so only the line THIS narration actually covered
-    (room, or private) stops releasing -- the other leg still closes out
-    normally if no other sibling covers it either.
+    ONE lock-first path for every call, whatever the prompt's status looked
+    like when the caller resolved it (#4101 fix round 4): atomic -> lock every
+    sibling of the event (``event_group``) with ``select_for_update``, the same
+    lock and order ``_resolve_narration_prompt`` takes for a close -> re-read
+    THIS prompt's status from the locked siblings -> only if it is still open
+    (PENDING or NARRATED) insert the link row and, for a PENDING prompt, move
+    it to NARRATED. The link row is therefore never written before the lock:
+    a close racing this narration either runs first (and this call then finds
+    the prompt DISMISSED and refuses to link) or waits on the lock and, once
+    granted, counts this committed link as real coverage in
+    ``_narration_coverage`` -- the default line can never go out alongside a
+    narration that covers it. Taking the lock before the insert also keeps the
+    insert's FK key-share lock on the prompt row from ever being held ahead of
+    a close's ``FOR UPDATE`` on the same rows.
 
-    ``prompt.status`` above is read before the lock ``_resolve_narration_prompt``
-    takes, so it can be stale (fix round 1): a sibling dismiss, scene-end
-    expiry, or a second concurrent narration of the SAME prompt can resolve it
-    out from under this check between the read and the lock. When that
-    happens, ``_resolve_narration_prompt`` raises ``GMPromptError`` for a
-    prompt it finds already resolved under the lock -- a LOST RACE, not a
-    failure. The narration was already sent (the ``Interaction`` row exists),
-    so it must still be delivered: the exception is swallowed here, and the
-    link row stands regardless of which branch ran. The link-row write and the
-    resolve attempt share one ``transaction.atomic()`` block so they commit
-    together (or roll back together on a genuine ``DatabaseError``, which
-    ``_resolve_narration_prompt`` still re-raises past this function) --
-    delivery (the caller's ``record_interaction`` -> ``push_interaction``)
-    always runs after this function returns, following Task 2's
-    ``on_commit`` pattern for ``release_prompt_defaults``.
+    A refused narration (the prompt is DISMISSED by the time the lock is
+    granted -- a sibling dismiss, scene-end expiry, or a narration arriving
+    after the GM closed it) returns None and links nothing. It never raises:
+    this runs as ``record_interaction``'s ``on_created`` hook, after the
+    telnet line already went out, and the caller must still push the
+    Interaction as plain narration. The caller decides what (if anything) to
+    tell the GM.
 
-    A LATER narration of an ALREADY-NARRATED prompt (#4101 fix round 3, ruling
-    N6) now takes the SAME per-event sibling lock, re-checking THIS prompt's
-    status fresh before creating the link row. Previously this branch created
-    its link row with no lock at all, racing a concurrent close's own coverage
-    check unguarded: the close could decide the private (or room) leg was
-    "not covered" and schedule its release in the exact window this
-    narration's link was about to land, double-sending the same line once
-    both committed. Serializing on the shared lock closes that window: a
-    narration that wins the race lands under lock, so a close racing it either
-    sees the lock already held (and, once granted, sees the just-created link
-    row as real coverage) or the close finishes first and this narration finds
-    the prompt already DISMISSED and is rejected outright --
-    ``GMPromptError(_MSG_RESOLVED)``, no link row created. The Interaction
-    itself was already created by the caller and is still delivered by its own
-    send path regardless; only the LINK (and the "this event is still being
-    narrated" signal it carries) is refused once the prompt has closed.
+    The NARRATED transition never releases a default (controller ruling
+    R6-1); only a close does, see ``_resolve_narration_prompt``.
     """
-    if prompt.status != GMPromptStatus.PENDING:
-        # Covers both an already-NARRATED prompt (the case this ruling is
-        # named for) and an already-DISMISSED one (a narration arriving well
-        # after close) -- either way it's not the first, PENDING-resolving
-        # narration the branch below handles, so it must take the lock.
-        with transaction.atomic():
-            siblings = list(
-                GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group)
-            )
-            this = next(s for s in siblings if s.pk == prompt.pk)
-            if this.status not in _NARRATABLE_STATUSES:
-                raise GMPromptError(_MSG_RESOLVED)
-            link = GMPromptNarration.objects.create(
-                prompt=prompt, interaction=interaction, interaction_timestamp=interaction.timestamp
-            )
-            interaction.cached_prompt_narrations = [link]
-        return link
-
     with transaction.atomic():
+        siblings = list(GMPrompt.objects.select_for_update().filter(event_group=prompt.event_group))
+        this = next(s for s in siblings if s.pk == prompt.pk)
+        if this.status not in _NARRATABLE_STATUSES:
+            logger.info(
+                "GM prompt %s closed before narration %s could link; sent as plain narration.",
+                this.pk,
+                interaction.pk,
+            )
+            return None
         link = GMPromptNarration.objects.create(
-            prompt=prompt, interaction=interaction, interaction_timestamp=interaction.timestamp
+            prompt=this, interaction=interaction, interaction_timestamp=interaction.timestamp
         )
         # Seed (never read back) the cache so push_interaction's peek finds it with no query.
         interaction.cached_prompt_narrations = [link]
-        if prompt.status == GMPromptStatus.PENDING:
-            with contextlib.suppress(GMPromptError):
-                _resolve_narration_prompt(
-                    prompt, new_status=GMPromptStatus.NARRATED, resolver=prompt.addressed_to
-                )
+        if this.status == GMPromptStatus.PENDING:
+            # Re-takes the lock this transaction already holds (a no-op wait) and
+            # re-checks the status it just read under it, so this cannot be refused.
+            _resolve_narration_prompt(
+                this, new_status=GMPromptStatus.NARRATED, resolver=this.addressed_to
+            )
     return link
 
 

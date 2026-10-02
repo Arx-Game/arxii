@@ -565,11 +565,9 @@ class SiblingReleaseTest(TestCase):
         owner.msg.assert_not_called()
 
     def test_narration_after_close_is_rejected_not_double_linked(self):
-        """#4101 fix round 3 (ruling N6): a narration arriving for a prompt
-        that has ALREADY closed is rejected outright (``GMPromptError``), not
-        silently linked -- the sibling lock serializes it against the close
-        that already ran, so it can never race a concurrent coverage check
-        into a double-send."""
+        """#4101 fix round 3 (ruling N6), fix round 4: a narration arriving for a
+        prompt that has ALREADY closed is refused -- returns None, no link row --
+        never silently linked and never raised out of the ``on_created`` hook."""
         prompt = self._crossing_prompt()
         room_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the floor groans")
         link_prompt_narration(prompt, room_interaction)
@@ -580,6 +578,63 @@ class SiblingReleaseTest(TestCase):
             dismiss_gm_prompt(prompt, resolver=self.gm_a)
 
         late_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="too late")
-        with self.assertRaises(GMPromptError):
-            link_prompt_narration(prompt, late_interaction)
+        self.assertIsNone(link_prompt_narration(prompt, late_interaction))
         self.assertFalse(GMPromptNarration.objects.filter(interaction=late_interaction).exists())
+
+    @mock.patch("world.gm.prompt_services.narrate_privately")
+    def test_narration_after_pending_close_is_refused_default_released_once(self, narrate):
+        """#4101 fix round 4: a PENDING prompt closed before its narration lands --
+        the narration is refused (no link, prompt stays DISMISSED), and the
+        uncovered default the close released goes out exactly once."""
+        prompt = self._crossing_prompt()
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_gm_prompt(prompt, resolver=self.gm_a)
+        narrate.assert_called_once()
+
+        late_interaction = InteractionFactory(mode=InteractionMode.EMIT, content="the vision")
+        InteractionReceiverFactory(interaction=late_interaction, persona=self.sheet.primary_persona)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertIsNone(link_prompt_narration(prompt, late_interaction))
+        self.assertFalse(GMPromptNarration.objects.filter(prompt=prompt).exists())
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        narrate.assert_called_once()  # never a second send
+
+    def _assert_link_written_under_lock(self, prompt):
+        events: list[str] = []
+        original_lock = GMPrompt.objects.select_for_update
+        original_create = GMPromptNarration.objects.create
+
+        def _lock(*args, **kwargs):
+            events.append("lock")
+            return original_lock(*args, **kwargs)
+
+        def _create(*args, **kwargs):
+            events.append("link")
+            return original_create(*args, **kwargs)
+
+        interaction = InteractionFactory(mode=InteractionMode.EMIT, content="a line")
+        with (
+            mock.patch.object(GMPrompt.objects, "select_for_update", side_effect=_lock),
+            mock.patch.object(GMPromptNarration.objects, "create", side_effect=_create),
+        ):
+            link_prompt_narration(prompt, interaction)
+        self.assertIn("link", events)
+        self.assertEqual(events[0], "lock", events)
+
+    def test_first_narration_takes_sibling_lock_before_linking(self):
+        """#4101 fix round 4: the PENDING (first-narration) path locks the event's
+        siblings BEFORE inserting the link row, so a concurrent close can never
+        compute coverage without seeing it (and the insert's key-share lock is
+        never held ahead of the close's FOR UPDATE)."""
+        prompt = self._crossing_prompt()
+        self.assertEqual(prompt.status, GMPromptStatus.PENDING)
+        self._assert_link_written_under_lock(prompt)
+
+    def test_later_narration_takes_sibling_lock_before_linking(self):
+        """The NARRATED (repeat-narration) path takes the same lock first."""
+        prompt = self._crossing_prompt()
+        link_prompt_narration(prompt, InteractionFactory(mode=InteractionMode.EMIT))
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.NARRATED)
+        self._assert_link_written_under_lock(prompt)

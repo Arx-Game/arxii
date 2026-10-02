@@ -74,13 +74,41 @@ def _narration_prompt(
     return prompt, None
 
 
-def _prompt_linker(prompt: GMPrompt | None) -> Callable[[Interaction], None] | None:
-    """``record_interaction``'s ``on_created`` hook that links the row to its prompt (#4101)."""
+_MSG_PROMPT_CLOSED_MEANWHILE = (
+    "That prompt was closed before your line landed; it went out as plain narration."
+)
+
+
+@dataclass
+class _PromptLinker:
+    """``record_interaction``'s ``on_created`` hook that links the row to its prompt (#4101).
+
+    ``link_prompt_narration`` refuses (returns None, never raises) when the prompt
+    closed between ``_narration_prompt`` resolving it and the row being created --
+    the line has already gone out, so the action still succeeds and delivers in
+    full; ``refused`` records that so ``execute()`` can tell the GM.
+    """
+
+    prompt: GMPrompt
+    refused: bool = False
+
+    def __call__(self, interaction: Interaction) -> None:
+        from world.gm.prompt_services import link_prompt_narration  # noqa: PLC0415
+
+        self.refused = link_prompt_narration(self.prompt, interaction) is None
+
+    def result(self) -> ActionResult:
+        """The action's success result, noting a refused link to the GM."""
+        if self.refused:
+            return ActionResult(success=True, message=_MSG_PROMPT_CLOSED_MEANWHILE)
+        return ActionResult(success=True)
+
+
+def _prompt_linker(prompt: GMPrompt | None) -> _PromptLinker | None:
+    """A ``_PromptLinker`` for ``prompt``, or None for a plain emit/pemit (#4101)."""
     if prompt is None:
         return None
-    from world.gm.prompt_services import link_prompt_narration  # noqa: PLC0415
-
-    return lambda interaction: link_prompt_narration(prompt, interaction)
+    return _PromptLinker(prompt)
 
 
 @dataclass
@@ -659,6 +687,7 @@ class EmitAction(Action):
         # A place-scoped row is receiver-scoped (record_interaction fills its
         # receivers from PlacePresence) while this room line is not, so the line
         # stays untagged there until room delivery is place-aware (#3933).
+        linker = _prompt_linker(prompt)
         message_location(
             caller_state, text, echo_of=InteractionMode.EMIT if place is None else None
         )
@@ -669,10 +698,10 @@ class EmitAction(Action):
             target_personas=target_personas,
             place=place,
             reply_to=reply_to,
-            on_created=_prompt_linker(prompt),
+            on_created=linker,
         )
 
-        return ActionResult(success=True)
+        return linker.result() if linker is not None else ActionResult(success=True)
 
 
 @dataclass
@@ -785,6 +814,7 @@ class PemitAction(Action):
 
         sdm = context.scene_data if context else SceneDataManager()
 
+        linker = _prompt_linker(prompt)
         # Direct delivery to each receiver only — never the whole room.
         for receiver in receivers:
             receiver_state = sdm.initialize_state_for_object(receiver)
@@ -796,10 +826,10 @@ class PemitAction(Action):
             mode=InteractionMode.EMIT,
             receivers=receiver_personas,
             reply_to=reply_to,
-            on_created=_prompt_linker(prompt),
+            on_created=linker,
         )
 
-        return ActionResult(success=True)
+        return linker.result() if linker is not None else ActionResult(success=True)
 
 
 @dataclass
