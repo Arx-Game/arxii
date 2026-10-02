@@ -146,9 +146,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `EntranceAction._execute_technique_entrance`) — one roll drives flourish +
     disposition + a GM-facing recognition nudge instead of a separate social check.
     `DramaticMomentType.suggest_on_technique_entrance` / `.suggestion_min_success_level`
-    opt a moment type into the bridge; `DramaticMomentSuggestion` (PENDING/CONFIRMED/
-    DISMISSED, unique per `(moment_type, character_sheet, scene)` while PENDING) is the
-    suggestion row. Services: `maybe_suggest_dramatic_moments` /
+    opt a moment type into the bridge; a PENDING `GMPrompt` of kind `dramatic_moment`
+    (PENDING/CONFIRMED/DISMISSED/NARRATED, unique per `(moment_type, character_sheet, scene)`
+    while PENDING; was `DramaticMomentSuggestion`, renamed and moved to `world/gm` by
+    #4101) is the suggestion row. Services: `maybe_suggest_dramatic_moments` /
     `resolve_dramatic_moment_suggestion` (`services/gain.py`). Actions:
     `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
     (account-authorized, `actions/definitions/dramatic_moments.py`). Web (#4101): the one
@@ -158,6 +159,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     magic.md "Technique Entrance" + "Dramatic Moment Suggestion" for the full deferral
     matrix (inline / hostile-seeded / PENDING-consent / soulfray-gated) and the
     combat-side `from_entrance` marker + benign-intervention join (see Combat section).
+  - **GM Prompt Queue: narration of mechanical events (#4101, `world/gm`):** the
+    `dramatic_moment` kind above plus six narration kinds (`audere_surge`,
+    `audere_ultimate`, `crossing`, `miracle`, `death`, `stake_outcome`) on one `GMPrompt`
+    model, each fired by `world.gm.prompt_services.route_narratable_event` from its own
+    event source (`world.magic.audere`/`audere_majora`/`services.ultimates`,
+    `world.worship.services`, `world.vitals.services`, `world.stories.services
+    .stake_resolution`). A GM narrates via `EmitAction`/`PemitAction` (`gm_prompt_id`
+    kwarg) linked back by `GMPromptNarration`; the authored room/private defaults
+    release only when the prompt's event CLOSES, never on narration alone. Per-GM
+    opt-out via `GMPromptFilter` (`GMPromptGroup`). Full detail + the release/
+    frozen-persona rules: `docs/systems/scenes.md` "GM narration of mechanical events",
+    `docs/systems/magic.md` "GM Prompt Queue", ADR-4101.
   - **Technique effect summary (#2898):** the one block every technique surface
     shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
     (`services/technique_effects.py`, types in `types/technique_effects.py`)

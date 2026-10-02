@@ -742,6 +742,112 @@ entrance as a state before the first pose (`CommandInput.tsx`, `isEntrance` deri
 `viewer_entered`), with the technique attachment (#2183) beside it; the entry flourish
 (`docs/systems/magic.md`) stays the entrant's own follow-up.
 
+## GM narration of mechanical events (#4101)
+
+Big mechanical moments (an Audere surge, an Audere Majora Crossing, a miracle, a death, a
+resolved stake) used to fire with generic authored text and the GM running the scene got no
+signal. `world.gm.models.GMPrompt` is one queue, carrying a `kind` (`GMPromptKind`): the
+original #2183 confirm-only `dramatic_moment` kind, plus six **narration** kinds
+(`audere_surge`, `audere_ultimate`, `crossing`, `miracle`, `death`, `stake_outcome`). Six
+event sources (`world.magic.audere`, `world.magic.audere_majora`,
+`world.magic.services.ultimates`, `world.worship.services`, `world.vitals.services`,
+`world.stories.services.stake_resolution`) resolve their own authored or prepared text, then
+call `world.gm.prompt_services.route_narratable_event(NarratableEvent(...))`. That function
+asks `recipients_excluding_subject` which GMs opted in (per-`GMPromptGroup` filter via
+`GMPromptFilter`, minus the event's own subject's currently-playing account via the
+roster's `get_account_for_character`); with at least one recipient it creates one PENDING
+`GMPrompt` per GM (sharing one `event_group` UUID) and returns them; with none it returns
+`[]` and the **caller** delivers the resolved text unprompted, byte-identical to
+pre-#4101 behavior.
+
+### Narrating and closing a prompt
+
+A GM narrates a prompt through an ordinary EMIT (room line) or PEMIT (private line, an
+explicit receiver list) `Interaction`, created by `EmitAction`/`PemitAction` with a
+`gm_prompt_id` kwarg (telnet `emit/prompt <id> <text>` / `pemit/prompt <id>
+<name>[,<name>...]=<text>`, or the web composer's two send buttons:
+`NarrationComposer.tsx`, `POST /api/gm/prompts/{id}/narrate/`). A `GMPromptNarration` side
+row (`(prompt, interaction)`, never one-to-one: a GM may narrate one prompt any number of
+times) links the Interaction back to the prompt via
+`world.gm.prompt_services.link_prompt_narration`.
+
+**A GM's narration never releases the prompt's authored defaults by itself (controller
+ruling R6-1).** The room default and the private default go out independently, and only
+once each, when the prompt's event CLOSES: explicitly dismissed, marked "done" after
+narrating, or expired at scene end (`expire_scene_prompts`), never merely because a GM
+narrated one leg. A first narration moves a PENDING prompt to NARRATED and leaves it open
+for more lines (controller ruling R6-2: a NARRATED prompt stays in the GM's queue, listed by
+both `visible_prompts_for` (REST) and `visible_prompts_for_location` (telnet), until closed).
+Close is the one function, `dismiss_gm_prompt`, for both "nobody ever narrated this" and
+"I'm done adding lines"; only the GM-facing label differs. Closing re-derives, fresh, which
+leg(s) still need releasing from the linked `GMPromptNarration` rows (a room EMIT with no
+receivers covers the room leg; an EMIT/WHISPER whose receivers include the subject covers the
+private leg), under a `select_for_update` lock on every sibling prompt of the same
+`event_group`, in pk order (`_lock_siblings`). A dismiss racing scene-end's own sweep, or
+two tabs closing the same prompt, serializes on that lock rather than double-sending.
+Release itself (`release_prompt_defaults`) runs via `transaction.on_commit`, against the
+prompt's own `scene` (never one re-derived from the character's current location), and
+only once every sibling GM's own copy of the event has also reached DISMISSED.
+
+### The frozen subject face
+
+`GMPrompt.subject_persona` (nullable FK, `SET_NULL`) freezes the persona the event's subject
+was presenting as at the moment `route_narratable_event` ran (`active_persona_for_sheet`,
+resolved once per event, shared by every addressed GM's own copy). A later persona switch
+(removing a disguise, wearing a different mask) never rewrites what an already-routed or
+already-narrated prompt says about who it concerns. Null when no character sheet was
+attached at event time (a scene-less `stake_outcome` prompt) or the persona was later
+deleted.
+
+The player-facing `narrates` field on `InteractionListSerializer` (a
+`NarratedEventPayload`: `prompt_id`, `kind`, `kind_label`, and, only when
+`subject_persona` is set, `subject_name`/`subject_persona_id`) names this frozen persona
+through the feed's own per-viewer persona display map
+(`_persona_display_map`/`build_persona_display_map`), the same masking every other name on
+the feed goes through: never the subject's current or primary face. When there is no
+frozen persona, the payload carries `kind`/`kind_label` only; it fails closed to that, never
+to a bare unmasked name. The live WebSocket push (`world.gm.prompt_services
+.narrated_event_payload`, peeked from the `cached_prompt_narrations` link cache seeded
+synchronously by `link_prompt_narration`, never a query on the hot path) carries the same
+unmasked `subject_name`/`subject_persona_id` the REST serializer then overrides per viewer;
+there is no per-viewer concept on the live push today, same as every other field on that
+frame.
+
+### Delivering and viewing a prompt
+
+`notify_gm_prompt` pushes a new prompt to its addressed GM: a `gm_prompt` WS frame
+(`{prompt_id, scene_id, kind}`, `web.webclient.message_types.WebsocketMessageType.GM_PROMPT`,
+`frontend/src/hooks/types.ts`'s `GM_PROMPT`) for a web session, one formatted telnet line for
+a non-web session. `GET /api/gm/prompts/?scene=<id>` (`GMPromptViewSet`) and telnet `gm
+prompts` both read `visible_prompts_for`/`visible_prompts_for_location`, the one visibility
+source for every listing surface: narration kinds show only to their addressed GM (this
+scene, or scene-less: a `stake_outcome` prompt follows its Lead GM anywhere), gated on
+`GMPromptFilter`; `dramatic_moment` keeps the original #2183 scene-GM/owner/staff gate.
+`POST .../{id}/confirm/` / `.../dismiss/` / `.../narrate/` dispatch by `GMPrompt.kind`
+(`ConfirmDramaticMomentSuggestionAction`/`DismissDramaticMomentSuggestionAction` for
+`dramatic_moment`, `DismissGMPromptAction`/`EmitAction`/`PemitAction` for the narration
+kinds). A chosen-receiver ("Chosen people") narration additionally requires the receiver be
+physically present: `narration_location_for` (the prompt's own scene location, falling back
+to the actor's current room for a location-less Battle scene or a scene-less prompt) plus
+`present_characters_in_room`, one batched query, shared by the REST serializer and telnet's
+`gm prompt send`.
+
+**Telnet parity:** `gm prompt send <id>` narrates whichever of the two authored defaults
+(room, private) isn't already covered (`prompt_narration_coverage`, re-derived fresh, never
+re-computed differently from what a close reads) through the linked `EmitAction`/
+`PemitAction`, then closes the prompt. Every line it sends is covered by the time the close
+runs, so a GM using `send` never needs a separate `done`. `gm prompt dismiss|done <id>`
+close directly. See `src/commands/CLAUDE.md` for the full command grammar.
+
+**Composer (`NarrationComposer.tsx`, demo Screen 2):** each send button fixes its own
+audience. "Send to the room" (room EMIT) and "Send privately"/"Send as is" (PEMIT to the
+chosen people) are two independent sends, not a single audience toggle (ruling R10-1); the
+people picker only edits who "Chosen people" means for the private send. A failed send
+keeps its own draft and leaves the dialog open so the GM can retry or make the other send.
+
+Full model reference (fields, migrations, prepared-text layering): `docs/systems/magic.md`'s
+"GM Prompt Queue" section; decision record: ADR-4101.
+
 ## Scene Administration (#1445)
 
 **Source:** `src/world/scenes/scene_admin_services.py`, `src/actions/definitions/scenes.py`,

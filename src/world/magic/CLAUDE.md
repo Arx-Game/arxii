@@ -1403,24 +1403,53 @@ Raises `EndorsementValidationError` (unclaimed resonance) or `DramaticMomentCapE
 - `DramaticMomentTagDialog.tsx` — modal dialog for type selection + confirmation.
 - Badge displayed on tagged interactions in the scene log.
 
-#### Dramatic Moment Suggestion — the technique-entrance recognition bridge (#2183)
+#### GM Prompt Queue: narration of mechanical events (#4101; was Dramatic Moment Suggestion, #2183)
+
+Big mechanical moments used to fire with generic authored text and the GM running the
+scene got no signal. `DramaticMomentSuggestion` (the #2183 technique-entrance confirm
+inbox) is renamed `GMPrompt`, moved to `world/gm/models.py`, and generalized to seven
+kinds (`GMPromptKind` in `world/gm/constants.py`): `dramatic_moment` (the original
+confirm kind, unchanged behavior, see below) plus six narration kinds
+`audere_surge`/`audere_ultimate`/`crossing`/`miracle`/`death`/`stake_outcome`, each
+fired by `world.gm.prompt_services.route_narratable_event`. Full detail (model,
+services, release-on-close rule, telnet/web surfaces): `docs/systems/scenes.md`'s "GM
+narration of mechanical events" section and ADR-4101. The six event sources live
+outside this app (`world/worship/services.py` MIRACLE, `world/stories/services/
+stake_resolution.py` STAKE_OUTCOME, `world/vitals/services.py` DEATH) and inside it
+(`audere.py` AUDERE_SURGE, `audere_majora.py` CROSSING, `services/ultimates.py`
+AUDERE_ULTIMATE); each resolves its own authored/prepared text, then calls
+`route_narratable_event`; with no GM opted in it delivers that same text unprompted,
+byte-identical to pre-#4101 behavior.
+
+**Prepared text (`models/prepared_text.py`, `services/prepared_text.py`):**
+`CharacterCrossingText` / `CharacterSurgeText`: one character's own authored line for
+their next Crossing or surge, written by staff or that character's table GM
+(play-adjacent, never catalog content, never exported). `resolve_crossing_text`/
+`resolve_surge_text` layer field by field: the character's own prepared text, then
+(Crossing only) the patron variant, then the tier default. A Crossing's prepared text
+is consumed on use (`consume_prepared_crossing_text`); a surge's is reusable.
+
+**Dramatic Moment Suggestion: the technique-entrance recognition bridge (#2183)**
 
 A qualifying **Technique Entrance** (see "Technique Entrance" below) does not auto-tag a
-Dramatic Moment — it surfaces a `DramaticMomentSuggestion` a GM later confirms or dismisses.
-Recognition stays a human-adjudicated nudge, never a mechanical auto-grant (ADR-0113).
+Dramatic Moment; it surfaces a PENDING `GMPrompt` of kind `dramatic_moment` a GM later
+confirms or dismisses. Recognition stays a human-adjudicated nudge, never a mechanical
+auto-grant (ADR-0113). This kind's shape is unchanged by the #4101 generalization: no
+`addressed_to` (it keeps the original scene GM/owner/staff gate), no narration, no
+`route_narratable_event` call.
 
 - `DramaticMomentType.suggest_on_technique_entrance` (bool) / `.suggestion_min_success_level`
   (`PositiveSmallIntegerField`) — opts a moment type into the bridge and sets the cast
   success-level floor (`>=`) that must be cleared.
-- `DramaticMomentSuggestion` (`models/dramatic_moment.py`) — FKs `moment_type` (PROTECT),
+- `GMPrompt` (`world/gm/models.py`): FKs `moment_type` (PROTECT),
   `character_sheet` (CASCADE), `scene` (nullable/SET_NULL), `interaction` (nullable/SET_NULL,
-  `db_constraint=False` — the entrance pose), `interaction_timestamp` (denormalized).
-  Fields: `success_level`, `status` (`SuggestionStatus`: PENDING/CONFIRMED/DISMISSED),
-  `resolved_by` (AccountDB, PROTECT), `confirmed_tag` (OneToOne → `DramaticMomentTag`, the
-  tag minted on confirmation). Unique per `(moment_type, character_sheet, scene)` while
-  PENDING.
+  `db_constraint=False`, the entrance pose), `interaction_timestamp` (denormalized).
+  Fields: `success_level`, `status` (`GMPromptStatus`: PENDING/CONFIRMED/DISMISSED/NARRATED;
+  the `dramatic_moment` kind never reaches NARRATED in practice), `resolved_by` (AccountDB,
+  PROTECT), `confirmed_tag` (OneToOne → `DramaticMomentTag`, the tag minted on confirmation).
+  Unique per `(moment_type, character_sheet, scene)` while PENDING.
 - **Services (`services/gain.py`):** `maybe_suggest_dramatic_moments(*, character_sheet,
-  scene, success_level, interaction=None) -> list[DramaticMomentSuggestion]` — scans
+  scene, success_level, interaction=None) -> list[GMPrompt]`: scans
   flagged `DramaticMomentType` rows meeting the success-level floor, skips unclaimed
   resonance / an already-spent `per_scene_cap`, `get_or_create`s idempotently.
   `resolve_dramatic_moment_suggestion(suggestion, *, resolver, confirm)` — confirm mints a
@@ -1431,17 +1460,22 @@ Recognition stays a human-adjudicated nudge, never a mechanical auto-grant (ADR-
   `DismissDramaticMomentSuggestionAction` (key `"dismiss_dramatic_moment_suggestion"`) —
   **account-authorized** (mirrors `actions/definitions/events.py`'s host-lifecycle
   actions: `actor=None`, `account=<resolver>`), gated on `_account_can_gm_scene` (staff,
-  or `scene.is_gm(account)`, or `scene.is_owner(account)`).
-- **Web (#4101):** the dedicated `DramaticMomentSuggestionViewSet` is retired — confirm/dismiss
+  or `scene.is_gm(account)`, or `scene.is_owner(account)`). The same module's
+  `DismissGMPromptAction` (key `"dismiss_gm_prompt"`) closes a narration-kind prompt
+  instead, addressed-GM-or-staff gated, see the scenes doc section above.
+- **Web:** the dedicated `DramaticMomentSuggestionViewSet` is retired; confirm/dismiss
   now ride the one GM prompt queue, `GMPromptViewSet` (`world/gm/views.py`): `GET
   /api/gm/prompts/?scene=<id>` lists every open prompt the viewer may act on (dramatic
   moments plus narration kinds addressed to them); `POST .../{id}/confirm/` (dramatic moment
-  only) / `POST .../{id}/dismiss/` dispatch the actions above by `GMPrompt.kind`.
+  only) / `POST .../{id}/dismiss/` / `POST .../{id}/narrate/` dispatch by `GMPrompt.kind`.
 - **Telnet:** `CmdMoment` (`commands/dramatic_moments.py`, key `"moment"`) — `moment
-  suggestions|confirm <id>|dismiss <id>`, account-authorized like the web surface.
+  suggestions|confirm <id>|dismiss <id>`, account-authorized like the web surface. The
+  narration kinds have their own telnet surface: `gm prompts` / `gm prompt
+  send|dismiss|done <id>` plus `emit/prompt`/`pemit/prompt`, see `src/commands/CLAUDE.md`.
 - **Frontend:** the per-pose `DramaticMomentSuggestionChip` embed (`frontend/src/scenes/
-  components/`) is retired with the viewset (#4101 Task 9); the GM prompt queue UI is a
-  Task 10/11 follow-up.
+  components/`) is retired with the viewset; the GM prompt queue UI
+  (`GMPromptQueue`/`NarrationComposer`, `frontend/src/scenes/components/`) covers both the
+  `dramatic_moment` kind and the six narration kinds.
 - **Seed content:** `ensure_dramatic_entrance_content()` (`factories.py`) seeds the "Grand
   Entrance" `DramaticMomentType` with `suggest_on_technique_entrance=True` /
   `suggestion_min_success_level=3` and **no resonance**. It used to mint its own "Fervor"

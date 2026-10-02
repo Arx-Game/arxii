@@ -155,6 +155,19 @@ default head. `render_unattributed_action_narration` never receives them.
   payload appends to the feed.
 - SQLite tier locally (`just test-fast combat scenes`); PG parity on CI.
 
+## GM narration sits beside the Narrator line, never instead of it (#4101)
+
+A death inside combat (`world.vitals.services._route_death`) may create a `GMPrompt` of
+kind `death` for a GM present to narrate: this rides entirely alongside the Narrator's
+own fixed OUTCOME line above, never replacing or editing it. The Narrator's line is the
+deterministic, data-driven mechanical record (ADR-0270: authored flavor replaces its head
+sentence, never the ledger); a GM's narration (an ordinary EMIT/PEMIT `Interaction`
+linked back to the prompt via `GMPromptNarration`) is a separate, independent row in the
+same scene feed. With no GM opted in, a death today delivers nothing extra (there is no
+authored default death line), so the Narrator's OUTCOME line is the only account of it, same
+as before #4101. See `docs/systems/scenes.md`'s "GM narration of mechanical events" and
+`docs/systems/magic.md`'s "GM Prompt Queue" for the full model.
+
 ## Scope / follow-ups
 
 **In:** ACTION broadcast (PC actions + clash contributions); `InteractionMode.OUTCOME`; Narrator

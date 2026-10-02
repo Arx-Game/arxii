@@ -157,6 +157,21 @@ depth) and skips-and-logs instead of raising. Captivity of a PC is deliberately
 **not** a branch payload — capture arrives via terminal consequence pools
 (`EffectType.CAPTURE`), already wired.
 
+**Delivered to the Lead GM (#4101).** `_route_stake_outcome` calls `route_narratable_event
+(NarratableEvent(kind=GMPromptKind.STAKE_OUTCOME, scene=None, character_sheet=None,
+room_text=resolution.narrative_summary, stake_outcome=outcome), candidates=[lead_gm])` once
+a stake's branch fires. `narrative_summary` itself, and its help text, are unchanged
+(#4101 fix round 1 ruling R8-1 dropped a no-op help-text edit as a migration that would
+collide with every other migration-bearing branch; the pointer lives here instead). The
+prompt is **scene-less by design**: it reaches the story's Lead GM (`_fire_time_custody_actor`)
+wherever the stake resolved, never the scene the beat happened in. A blank
+`narrative_summary` still prompts: "this stake resolved" is itself worth a GM's attention
+even with nothing authored to read aloud. An orphaned story (no `primary_table`) prompts no
+one, same as before; there is no authored fallback broadcast when nobody is listening (a
+muted Lead GM, or a Lead GM who is also the resolving stake's own subject). Unlike the
+other five narration kinds, this one's "nobody opted in" path delivers nothing at all. See
+`docs/systems/magic.md`'s "GM Prompt Queue" section for the model.
+
 ### `StakeRewardLine` (PR3)
 
 One authored win-reward payout on a stake's WIN branch — the contract's

@@ -2473,13 +2473,80 @@ Deferral" section, and ADR-4098.
 
 **Context fields on scenes serializers:** `SceneDetailSerializer.viewer_can_gm` (bool — True when the requesting user is the scene's GM, owner, or staff; controls GM control visibility); `InteractionSerializer.dramatic_moment_tags` (list — tags anchored to the pose; drives the interaction badge); `SceneParticipationSerializer.dramatic_moment_count` (int — per-participant tally in the scene).
 
+### GM Prompt Queue: narration of mechanical events (#4101; `world/gm`)
+
+Big mechanical moments (an Audere surge, an Audere Majora Crossing, a miracle, a death, a
+resolved stake) used to fire with generic authored text and the GM running the scene got no
+signal. `DramaticMomentSuggestion` (the #2183 confirm-only inbox below) is renamed
+`GMPrompt`, moved to `world/gm/models.py`, and gains a `kind` (`GMPromptKind`, in
+`world/gm/constants.py`): the original `dramatic_moment` confirm kind, plus six
+**narration** kinds a GM narrates then closes: `audere_surge`, `audere_ultimate`,
+`crossing`, `miracle`, `death`, `stake_outcome`. Full behavioral detail (release-on-close,
+the frozen subject persona, the telnet/web surfaces): `docs/systems/scenes.md`'s "GM
+narration of mechanical events" section; decision record: ADR-4101.
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `GMPrompt` (`world/gm/models.py`) | One entry in a GM's queue; the `dramatic_moment` kind is the original #2183 suggestion (unchanged shape), the other six are narrated then closed | `kind` (`GMPromptKind`), `event_group` (UUID, shared by every GM's own copy of one event), `addressed_to` FK AccountDB (nullable, null only for `dramatic_moment`, which keeps the scene-GM/owner/staff gate instead), `moment_type`/`character_sheet`/`scene`/`interaction`/`interaction_timestamp`/`technique`/`success_level`/`status`/`resolved_by`/`confirmed_tag` (unchanged from `DramaticMomentSuggestion`; `status` is now `GMPromptStatus`: PENDING/CONFIRMED/DISMISSED/NARRATED), `subject_persona` FK Persona (nullable, SET_NULL; the subject's FACE frozen at routing time, #4101 fix round 3 ruling R9-3), `room_text`/`private_text` (the resolved authored or prepared defaults), `prepared_for_character` (bool), `stake_outcome` FK (nullable) |
+| `GMPromptFilter` (`world/gm/models.py`) | A GM's per-account, per-`GMPromptGroup` opt-out switch; no row = prompted | `account` FK, `group` (`GMPromptGroup`: dramatic_moment/audere/miracle/death/stake_outcome), `enabled` |
+| `GMPromptNarration` (`world/gm/models.py`) | Side row linking one narration `Interaction` back to the `GMPrompt` it narrates (ADR-0010 FK direction; ADR-0293's `InteractionReceiver` precedent for the composite-timestamp shape) | `prompt` FK (CASCADE), `interaction` FK (CASCADE, `db_constraint=False`, the partitioned `arxii_interaction` table), `interaction_timestamp` (denormalized from `interaction.timestamp`, required). Unique on `interaction` only, never `prompt`: a GM may narrate one prompt any number of times |
+
+**Routing (`world.gm.prompt_services.route_narratable_event`):** six event sources resolve
+their own text, build a `NarratableEvent` (kind, scene, character sheet, room/private text,
+whether the text came from the subject's own prepared text, optional technique/stake
+outcome), and call `route_narratable_event`. It asks `recipients_excluding_subject` which
+GMs opted in (per-group `GMPromptFilter`, minus the event's own subject's currently-playing
+account); with any recipient it creates one PENDING `GMPrompt` per GM, sharing one
+`event_group`, and returns them; with none it returns `[]` and the **caller** delivers the
+text unprompted, unchanged from before #4101.
+
+| Kind | Event source | Text resolved by |
+|------|--------------|-------------------|
+| `audere_surge` | `world.magic.audere._announce_surge` | `resolve_surge_text` (character's `CharacterSurgeText`, then `AudereThreshold.surge_manifestation_text`) |
+| `crossing` | `world.magic.audere_majora._route_crossing` | `resolve_crossing_text` (character's `CharacterCrossingText`, then the patron `AudereMajoraFaithVariant`, then `AudereMajoraThreshold`); the vision still logs (`narrate_privately`) even scene-less |
+| `audere_ultimate` | `world.magic.services.ultimates._route_ultimate_chosen` | no authored default line exists for an ultimate pick; this kind is GM-signal-only, `_deliver()` is a no-op |
+| `miracle` | `world.worship.services._route_miracle` | `Miracle.narrative_text` |
+| `death` | `world.vitals.services._route_death` | deaths carry no authored room line today; `_deliver()` is a no-op, kept for shape consistency should one ever be authored |
+| `stake_outcome` | `world.stories.services.stake_resolution._route_stake_outcome` | `StakeResolution.narrative_summary`, scene-less, routed to the story's Lead GM only (see `docs/systems/stakes.md`) |
+
+**Prepared text (`models/prepared_text.py`, `services/prepared_text.py`):** `CharacterCrossingText`
+/ `CharacterSurgeText`: one character's own authored line for their next Crossing or surge,
+written by staff or that character's table GM (play-adjacent: lives and dies with the
+character sheet, carries no natural key, never exported through the content pipeline, not
+catalog content). `resolve_crossing_text`/`resolve_surge_text` layer field by field: the
+character's own prepared text, then (Crossing only) the patron variant, then the tier
+default. A Crossing's prepared text is consumed on use (`consume_prepared_crossing_text`,
+the `crossing` OneToOne back-reference); a surge's is reusable. `prepared_for_character` on
+the resulting `GMPrompt` flags when the vision specifically (not just the room line or deed
+title) came from the character's own prepared text: the composer's "Prepared for this
+character" badge.
+
+**Web:** `GET /api/gm/prompts/?scene=<id>` (`GMPromptViewSet`, `world/gm/views.py`) lists
+every open prompt (PENDING or NARRATED) the viewer may act on, dramatic moments plus
+narration kinds addressed to them; `POST .../{id}/confirm/` / `.../dismiss/` / `.../narrate/`
+dispatch by kind. `GET`/`POST /api/gm/prompt-filters/` (`GMPromptFilterViewSet`) is the
+five-row per-group opt-out surface. **Telnet:** `gm prompts` / `gm prompt
+send|dismiss|done <id>` (`commands/gm_ops.py`) plus `emit/prompt <id> <text>` /
+`pemit/prompt <id> <name>[,<name>...]=<text>` (`commands/evennia_overrides/communication.py`),
+see `src/commands/CLAUDE.md`. **Frontend:** `GMPromptQueue`/`GMPromptRow`/
+`NarrationComposer` (`frontend/src/scenes/components/`) cover both the `dramatic_moment` kind
+and the six narration kinds in one queue UI.
+
+**Deferred (spec scope, not a gap in this build):** a new mechanical event wanting GM
+narration needs a new `GMPromptKind` value plus a `PROMPT_GROUP_FOR_KIND` entry and an
+event-source call site; the queue, filter, and composer surfaces are already generic over
+`kind` and need no further change.
+
 #### Dramatic Moment Suggestion — the technique-entrance recognition bridge (#2183)
 
 A **Technique Entrance** (see below) that clears an authored success-level threshold does not
-auto-tag — it creates a `DramaticMomentSuggestion` a GM later confirms (minting a real
+auto-tag; it creates a PENDING `GMPrompt` of kind `dramatic_moment` (see "GM Prompt Queue"
+above; was `DramaticMomentSuggestion`) a GM later confirms (minting a real
 `DramaticMomentTag`, with the usual resonance grant + renown award) or dismisses. See
 ADR-0113 for why recognition stays a human-adjudicated nudge rather than a mechanical
-auto-grant.
+auto-grant. This kind's shape is unchanged by the #4101 generalization: no `addressed_to`,
+no narration, no `route_narratable_event` call; it keeps its own `maybe_suggest_dramatic_moments`
+seam below.
 
 **Knobs on `DramaticMomentType`:**
 - `suggest_on_technique_entrance` (bool, default False) — opts this moment type into the
@@ -2487,19 +2554,15 @@ auto-grant.
 - `suggestion_min_success_level` (`PositiveSmallIntegerField`) — the cast success level that
   must be cleared (`>=`) for a suggestion to fire.
 
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `DramaticMomentSuggestion` | GM-facing PENDING suggestion surfaced by a high-success technique entrance | `moment_type` FK (PROTECT), `character_sheet` FK (CASCADE), `scene` FK (nullable/SET_NULL), `interaction` FK (nullable/SET_NULL, `db_constraint=False` — the entrance pose that triggered it), `interaction_timestamp` (denormalized), `success_level`, `status` (`SuggestionStatus`: PENDING/CONFIRMED/DISMISSED), `resolved_by` FK AccountDB (PROTECT), `confirmed_tag` OneToOneField → `DramaticMomentTag` (the tag minted on confirmation, if any). Unique constraint: one PENDING suggestion per `(moment_type, character_sheet, scene)`. |
-
 **Services (`services/gain.py`):**
-- `maybe_suggest_dramatic_moments(*, character_sheet, scene, success_level, interaction=None) -> list[DramaticMomentSuggestion]`
+- `maybe_suggest_dramatic_moments(*, character_sheet, scene, success_level, interaction=None) -> list[GMPrompt]`
   — scans `DramaticMomentType` rows flagged `suggest_on_technique_entrance` whose
   `suggestion_min_success_level <= success_level`; for each, skips if the character hasn't
   claimed the type's resonance, or if `per_scene_cap` real tags are already spent for this
   `(moment_type, scene)`; otherwise `get_or_create`s a PENDING suggestion (idempotent — a
   second qualifying cast in the same scene does not duplicate it). No-ops (`[]`) when
   `scene` is `None` — a suggestion is scene-scoped, same as the tag cap it mirrors.
-- `resolve_dramatic_moment_suggestion(suggestion, *, resolver, confirm) -> DramaticMomentSuggestion`
+- `resolve_dramatic_moment_suggestion(suggestion, *, resolver, confirm) -> GMPrompt`
   — confirm mints a real `DramaticMomentTag` via `create_dramatic_moment_tag` (full
   resonance-grant + renown-award side effects); dismiss just closes the suggestion out.
   Raises `DramaticMomentSuggestionAlreadyResolved` on a non-PENDING suggestion; `confirm`'s
@@ -2511,19 +2574,19 @@ auto-grant.
 `actions/definitions/events.py`'s host-lifecycle actions: `actor=None`, `account=<resolver>`,
 since a web GM confirming/dismissing may have no puppeted character). The GM gate
 (`_account_can_gm_scene`) mirrors `IsSceneGMOrOwnerOrStaff` / `SceneDetailSerializer
-.get_viewer_can_gm`: staff, or `scene.is_gm(account)`, or `scene.is_owner(account)`.
+.get_viewer_can_gm`: staff, or `scene.is_gm(account)`, or `scene.is_owner(account)`. The same
+module's `DismissGMPromptAction` (key `"dismiss_gm_prompt"`) closes a narration-kind prompt
+instead, addressed-GM-or-staff gated.
 
-**Web:** `DramaticMomentSuggestionViewSet` (`world/magic/views.py`) —
-`GET /api/magic/dramatic-moment-suggestions/?scene=<id>` (PENDING suggestions for a scene,
-same GM/owner/staff gate as list); `POST .../{id}/confirm/` / `POST .../{id}/dismiss/`
-dispatch the REGISTRY actions above.
+**Web:** the dedicated `DramaticMomentSuggestionViewSet` is retired: confirm/dismiss/narrate
+now ride the one GM prompt queue, `GMPromptViewSet` (see "GM Prompt Queue" above).
 
 **Telnet:** `CmdMoment` (`commands/dramatic_moments.py`, key `"moment"`) — `moment
 suggestions` (PENDING suggestions for the active scene here), `moment confirm <id>`,
 `moment dismiss <id>`. Account-authorized like the web surface (`account=self.caller.account`).
 
-**Frontend:** `DramaticMomentSuggestionChip` (`frontend/src/scenes/components/`), mounted
-in `PoseUnit` for the caller's own entrance poses.
+**Frontend:** the per-pose `DramaticMomentSuggestionChip` embed is retired with the
+viewset; the `GMPromptQueue` UI covers this kind alongside the six narration kinds.
 
 **Seed content:** `ensure_dramatic_entrance_content()` (`world/magic/factories.py`) seeds the
 "Grand Entrance" `DramaticMomentType` with `suggest_on_technique_entrance=True` and

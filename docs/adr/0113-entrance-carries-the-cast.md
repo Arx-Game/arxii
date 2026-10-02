@@ -8,7 +8,8 @@ flourish offer, the peer scene-entry endorsement, social disposition, and (above
 threshold) a GM-facing `DramaticMomentSuggestion` — via `run_entrance_success_hooks` at
 whichever point the real success level becomes known (inline, at combat round resolution, or
 at consent-accept, per the #2183 deferral matrix). Recognition is never automatic: a qualifying
-cast only creates a **suggestion** a GM later confirms (minting a real `DramaticMomentTag`,
+cast only creates a **suggestion** (a PENDING `GMPrompt` of kind `dramatic_moment`, `world/gm`;
+was `DramaticMomentSuggestion`, renamed by #4101) a GM later confirms (minting a real `DramaticMomentTag`,
 which fires the resonance grant + renown award) or dismisses — the existing
 `DramaticMomentType` catalog and its per-scene cap are the sole gate on this reward, exactly as
 they are for any other GM-tagged moment (mirrors ADR-0110: catalog and adaptation, never

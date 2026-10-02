@@ -10,8 +10,9 @@ term is chosen and the rest are listed under `_Avoid_`.
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
 - [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds the Ultimates terms (#4098):
-  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate; and
-  the creation-personalization terms (#4099): Hold, Price, Early form, Personalized name
+  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate; the
+  creation-personalization terms (#4099): Hold, Price, Early form, Personalized name; and
+  Prepared Text (#4101)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md)
@@ -42,7 +43,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [boundaries](src/world/boundaries/AGENT_GLOSSARY.md)
 - [companions](src/world/companions/AGENT_GLOSSARY.md) - also holds Savaged (#3652),
   the companion-defeat pool's condition for surviving a lethal mauling
-- [gm](src/world/gm/AGENT_GLOSSARY.md)
+- [gm](src/world/gm/AGENT_GLOSSARY.md) - also holds the GM Prompt Queue terms (#4101):
+  GM Prompt, Narratable Event, GM Prompt Filter, Prompt Narration
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
 - [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - character slots, original vs roster character, freeze / give up (#3996); also holds the CG Lineage-step
   terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
