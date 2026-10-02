@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
+import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -1147,8 +1148,19 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
         db_index=True,
         help_text="What this prompt is about; dramatic_moment is the confirm kind.",
     )
+    event_group = models.UUIDField(
+        default=uuid.uuid4,
+        db_index=True,
+        help_text=(
+            "Ties this prompt to its sibling GMPrompts routed from the same event "
+            "(#4101) -- route_narratable_event stamps one value per call, shared across "
+            "every addressed GM's own copy. Release-on-last-close (dismiss_gm_prompt) "
+            "groups siblings by this field, not by matching other columns, since two "
+            "events for the same scene/character/kind can carry identical text."
+        ),
+    )
     addressed_to = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.CASCADE,
         null=True,
         blank=True,

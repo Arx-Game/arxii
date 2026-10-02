@@ -5,8 +5,9 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from evennia_extensions.models import ObjectDisplayData
+from world.character_sheets.factories import CharacterSheetFactory
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.factories import (
     EventFactory,
@@ -30,9 +31,12 @@ from world.events.services import (
     validate_location_gap,
 )
 from world.events.types import EventError
-from world.scenes.constants import ScenePrivacyMode
-from world.scenes.factories import PersonaFactory
-from world.scenes.models import Scene
+from world.gm.constants import GMPromptKind, GMPromptStatus
+from world.gm.prompt_services import route_narratable_event
+from world.gm.types import NarratableEvent
+from world.scenes.constants import InteractionMode, ScenePrivacyMode
+from world.scenes.factories import PersonaFactory, SceneGMParticipationFactory
+from world.scenes.models import Interaction, Scene
 from world.societies.factories import (
     OrganizationFactory,
     OrganizationMembershipFactory,
@@ -207,6 +211,42 @@ class EventLifecycleTest(TestCase):
         event = EventFactory(status=EventStatus.CANCELLED)
         with self.assertRaises(EventError):
             cancel_event(event)
+
+
+class CompleteEventExpiresGMPromptsTest(TestCase):
+    """Completing an event whose linked scene carries a pending narration
+    GMPrompt releases that prompt's authored text exactly once (#4101 fix
+    round 1) -- the event-completion path in ``_finish_event_scenes``."""
+
+    def test_complete_event_releases_pending_narration_prompt_once(self) -> None:
+        sheet = CharacterSheetFactory()
+        gm = AccountFactory()
+        event = EventFactory(status=EventStatus.SCHEDULED, is_public=True)
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        SceneGMParticipationFactory(scene=scene, account=gm)
+
+        [prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=scene,
+                character_sheet=sheet,
+                private_text="a quiet miracle",
+            )
+        )
+
+        complete_event(event)
+
+        prompt.refresh_from_db()
+        self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        self.assertEqual(
+            Interaction.objects.filter(
+                content="a quiet miracle",
+                mode=InteractionMode.WHISPER,
+                receivers__persona=sheet.primary_persona,
+            ).count(),
+            1,
+        )
 
 
 class AddHostTest(TestCase):
