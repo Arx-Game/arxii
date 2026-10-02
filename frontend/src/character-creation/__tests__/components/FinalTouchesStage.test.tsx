@@ -147,7 +147,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     expect(screen.getAllByLabelText('Goal 2')).toHaveLength(2);
   });
 
-  it('keeps a goal to yourself on the mark and saves it in the draft (#4106)', async () => {
+  it('marks a goal Secret and saves it in the draft (#4106)', async () => {
     const user = userEvent.setup();
     let save: (() => Promise<boolean>) | null = null;
     const draft = createMockDraft({
@@ -164,10 +164,10 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
         }}
       />
     );
-    const mark = screen.getByRole('button', { name: 'Keep to yourself: goal 1' });
+    const mark = screen.getByRole('button', { name: 'Secret: goal 1' });
     expect(mark).toHaveAttribute('aria-pressed', 'false');
     await user.click(mark);
-    expect(screen.getByRole('button', { name: 'Kept to yourself: goal 1' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Secret: goal 1' })).toHaveAttribute(
       'aria-pressed',
       'true'
     );

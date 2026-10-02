@@ -7,7 +7,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
  * the real `/characters/:entry` sheet on the production bundle, every `/api/**` call
  * answered by fixtures shaped like the serializers.
  *
- * Three readings. At Final Touches a goal row carries the "Keep to yourself" mark and
+ * Three readings. At Final Touches a goal row carries the "Secret" mark and
  * pressing it rides into the draft's PATCH as `is_secret`. On the sheet the owner's
  * payload carries both goals, the secret one marked; a friend's payload (the server
  * dropped the secret goal before the tier applied) carries one. On the Ties tab a
@@ -328,7 +328,7 @@ async function mockSheet(page: Page, owner: boolean) {
 // --- the readings -------------------------------------------------------------------
 
 test.describe('Secret goals and a membership standing (#4106) on the production bundle', () => {
-  test('Final Touches: a goal can be kept to yourself, and the mark rides the PATCH', async ({
+  test('Final Touches: a goal can be marked Secret, and the mark rides the PATCH', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -340,13 +340,13 @@ test.describe('Secret goals and a membership standing (#4106) on the production 
     // Goal keys are the stage's own counter: the second goal in draft_data is key 1.
     const mark = page.getByTestId('goal-1-secret');
     await expect(mark).toHaveAttribute('aria-pressed', 'false');
-    await expect(mark).toHaveText(/Keep to yourself/);
+    await expect(mark).toHaveText(/Secret/);
     await expect(page.getByTestId('goal-0-secret')).toHaveAttribute('aria-pressed', 'false');
     await page.screenshot({ path: shot('final-touches-unmarked-1280.png'), fullPage: true });
 
     await mark.click();
     await expect(mark).toHaveAttribute('aria-pressed', 'true');
-    await expect(mark).toHaveText(/Kept to yourself/);
+    await expect(mark).toHaveText(/Secret/);
     await page.screenshot({ path: shot('final-touches-marked-1280.png'), fullPage: true });
 
     // Leaving the stage saves it in one PATCH; the mark is in the goal it was pressed on.
@@ -369,7 +369,7 @@ test.describe('Secret goals and a membership standing (#4106) on the production 
     await expect(page.getByText('Prove worthy of my house')).toBeVisible();
     await expect(page.getByText('Find out what happened to my sister')).toBeVisible();
     await expect(page.getByTestId('goal-secret')).toHaveCount(1);
-    await expect(page.getByTestId('goal-secret')).toHaveText('kept to yourself');
+    await expect(page.getByTestId('goal-secret')).toHaveText('secret');
     await page.screenshot({ path: shot('sheet-owner-goals-1280.png'), fullPage: true });
   });
 

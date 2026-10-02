@@ -45,7 +45,7 @@ function GoalsPrompt({ question, goals }: { question: string; goals: CharacterSh
                 mark only ever shows the owner which of their own goals is kept. */}
             {goal.is_secret && (
               <span className="refsheet-note ml-2 whitespace-nowrap" data-testid="goal-secret">
-                kept to yourself
+                secret
               </span>
             )}
           </li>

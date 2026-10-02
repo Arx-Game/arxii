@@ -454,7 +454,7 @@ describe('CharacterSheetPage', () => {
     expect(panel).toHaveAttribute('data-ap', '12');
   });
 
-  it('marks a goal the owner kept to themselves, and only that one (#4106)', () => {
+  it("marks the owner's secret goal, and only that one (#4106)", () => {
     // The server already dropped secret goals for anyone else, so the band renders
     // whatever arrives and marks the row whose flag is set.
     setEntry(ENTRY);
