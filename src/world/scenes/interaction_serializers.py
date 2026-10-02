@@ -866,10 +866,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
         payload = narrated_event_payload(obj)
         if payload is None or "subject_persona_id" not in payload:  # noqa: STRING_LITERAL
             return payload
-        name, _is_discovered, _reveal_allowed = self._persona_display_map().get(
-            payload["subject_persona_id"], (payload["subject_name"], False, True)
-        )
-        payload["subject_name"] = name
+        resolved = self._persona_display_map().get(payload["subject_persona_id"])
+        if resolved is None:
+            # Fail closed: a subject this page did not resolve gets no name,
+            # never the frozen persona's raw one.
+            payload.pop("subject_name", None)
+            payload.pop("subject_persona_id", None)
+            return payload
+        payload["subject_name"] = resolved[0]
         return payload
 
     # Reads `CharacterSheet.cached_resonances` (a `PrunedCachedProperty`,
